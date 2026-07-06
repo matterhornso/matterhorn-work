@@ -7,6 +7,14 @@ import { formatRelativeTime } from "../../../../app/utils";
 import { ArtifactIcon } from "./artifact-icon";
 import type { OutputDescriptor } from "./output-descriptor";
 
+function receiptStatusLabel(status: OutputDescriptor["receiptStatus"]): string {
+  if (status === "saved") return "Saved";
+  if (status === "completed") return "Completed";
+  if (status === "failed") return "Failed";
+  if (status === "cancelled") return "Cancelled";
+  return "Receipt";
+}
+
 type OutputListProps = {
   outputs: OutputDescriptor[];
   selectedId?: string;
@@ -29,7 +37,7 @@ export function OutputList({
   if (outputs.length === 0) return null;
 
   return (
-    <div className="shrink-0 border-b border-border/60 bg-background">
+    <div className="shrink-0 border-b border-border/45 bg-background">
       <div className="max-h-48 overflow-y-auto">
         {outputs.map((output) => {
           const isSelected = output.id === selectedId;
@@ -39,8 +47,8 @@ export function OutputList({
               type="button"
               onClick={() => onSelect(output)}
               className={cn(
-                "group flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50",
-                isSelected && "bg-muted/70 hover:bg-muted/70",
+                "group flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/35 focus-visible:bg-muted/35 focus-visible:outline-none",
+                isSelected && "bg-muted/45 hover:bg-muted/45",
               )}
             >
               <span className="mt-0.5 shrink-0 text-muted-foreground">
@@ -58,25 +66,40 @@ export function OutputList({
                 <span className="block truncate text-[11px] text-muted-foreground" title={output.path}>
                   {output.path}
                 </span>
+                {output.receiptTitle ? (
+                  <span className="block truncate text-[11px] text-muted-foreground" title={output.receiptSummary ?? output.receiptTitle}>
+                    Receipt: {output.receiptTitle}
+                  </span>
+                ) : null}
                 <span className="mt-1 flex flex-wrap items-center gap-1.5">
                   {output.desk ? (
-                    <span className="rounded-full border border-border bg-muted px-1.5 py-0 text-[10px] text-muted-foreground">
+                    <span className="text-[10px] font-medium text-muted-foreground">
                       {output.desk}
                     </span>
                   ) : null}
                   {output.sessionSlug ? (
-                    <span className="rounded-full border border-border bg-muted px-1.5 py-0 text-[10px] text-muted-foreground">
+                    <span className="max-w-[120px] truncate text-[10px] font-medium text-muted-foreground">
                       {output.sessionSlug}
                     </span>
                   ) : null}
                   {output.originLabel ? (
                     <span className={cn(
-                      "rounded-full border px-1.5 py-0 text-[10px]",
+                      "text-[10px] font-medium",
                       output.isLegacy
-                        ? "border-amber-500/25 bg-amber-500/10 text-amber-300"
-                        : "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
+                        ? "text-amber-300"
+                        : "text-emerald-300",
                     )}>
                       {output.originLabel}
+                    </span>
+                  ) : null}
+                  {output.receiptStatus ? (
+                    <span className="text-[10px] font-medium text-muted-foreground">
+                      Receipt: {receiptStatusLabel(output.receiptStatus)}
+                    </span>
+                  ) : null}
+                  {output.taskId ? (
+                    <span className="max-w-[120px] truncate text-[10px] text-muted-foreground" title={output.taskId}>
+                      {output.taskId}
                     </span>
                   ) : null}
                   {output.updatedAt ? (

@@ -22,7 +22,7 @@ export const BITTENSOR_CHAT_DRAFT: ChatDraftConfig = {
   deskId: "bittensor",
   promptAction: "draft_only",
   draftStateLabel: "Bittensor Agent ready",
-  confirmCtaLabel: "Open with agent",
+  confirmCtaLabel: "Start task",
 };
 
 export const HYPERLIQUID_CHAT_DRAFT: ChatDraftConfig = {
@@ -30,7 +30,7 @@ export const HYPERLIQUID_CHAT_DRAFT: ChatDraftConfig = {
   deskId: "hyperliquid",
   promptAction: "draft_only",
   draftStateLabel: "Hyperliquid Agent ready",
-  confirmCtaLabel: "Open with agent",
+  confirmCtaLabel: "Start task",
 };
 
 export const POLYMARKET_CHAT_DRAFT: ChatDraftConfig = {
@@ -38,7 +38,7 @@ export const POLYMARKET_CHAT_DRAFT: ChatDraftConfig = {
   deskId: "polymarket",
   promptAction: "draft_only",
   draftStateLabel: "Polymarket Agent ready",
-  confirmCtaLabel: "Open with agent",
+  confirmCtaLabel: "Start task",
 };
 
 export const WELLNESS_CHAT_DRAFT: ChatDraftConfig = {
@@ -62,7 +62,7 @@ export const MCPS_CHAT_DRAFT: ChatDraftConfig = {
   deskId: "mcps",
   promptAction: "draft_only",
   draftStateLabel: "MCP Agent ready",
-  confirmCtaLabel: "Open with agent",
+  confirmCtaLabel: "Start task",
 };
 
 export const CHAT_DRAFT_REGISTRY: Record<string, ChatDraftConfig> = {

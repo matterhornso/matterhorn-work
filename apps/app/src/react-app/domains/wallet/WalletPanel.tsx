@@ -167,12 +167,12 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
         </div>
       )}
 
-      {/* Header — Glass hero card */}
-      <div className="ow-glass-card ow-glow-border p-4 space-y-4">
+      {/* Header */}
+      <div className="ow-soft-card p-4 space-y-4">
         {/* Top row: Brand + Network + Expand */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-lg shadow-violet-500/20">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-dls-surface-muted/35 text-primary">
               <Sparkles className="size-4" />
             </div>
             <div>
@@ -217,7 +217,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
       </div>
 
       {/* Hero Balance Card */}
-      <div className="ow-glass-card p-4 space-y-3">
+      <div className="ow-soft-card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="ow-section-heading">Total Balance</div>
           {prices.length > 0 && (
@@ -227,7 +227,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
             </div>
           )}
         </div>
-        <div className="ow-hero-text bg-gradient-to-r from-white via-white to-violet-300 bg-clip-text text-transparent">
+        <div className="ow-hero-text text-dls-text">
           {totalUsdValue > 0
             ? `$${totalUsdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             : state.ethBalance
@@ -246,7 +246,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
               </div>
               <div className="h-1.5 rounded-full bg-dls-surface-muted overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-blue-400 to-blue-500 transition-all duration-500"
+                  className="h-full rounded-full bg-primary transition-all duration-500"
                   style={{ width: `${totalUsdValue > 0 ? Math.min((ethUsdValue / totalUsdValue) * 100, 100) : state.ethBalance ? Math.min((Number(state.ethBalance) * 2000 / (Number(state.ethBalance) * 2000 + Number(state.usdcBalance ?? 0) + 1)) * 100, 100) : 0}%` }}
                 />
               </div>
@@ -261,7 +261,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
               </div>
               <div className="h-1.5 rounded-full bg-dls-surface-muted overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-sky-400 to-sky-500 transition-all duration-500"
+                  className="h-full rounded-full bg-primary/70 transition-all duration-500"
                   style={{ width: `${totalUsdValue > 0 ? Math.min((usdcUsdValue / totalUsdValue) * 100, 100) : state.usdcBalance ? Math.min((Number(state.usdcBalance) / (Number(state.ethBalance ?? 0) * 2000 + Number(state.usdcBalance) + 1)) * 100, 100) : 0}%` }}
                 />
               </div>
@@ -284,7 +284,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
       {expanded && (
         <>
           {/* Recent Transactions */}
-          <div className="ow-glass-card p-3 space-y-3">
+          <div className="ow-soft-card p-3 space-y-3">
             <div className="flex items-center justify-between">
               <div className="ow-section-heading">Transactions</div>
               <Activity className="size-3.5 text-dls-secondary" />
@@ -293,7 +293,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
           </div>
 
           {/* Security Activity */}
-          <div className="ow-glass-card p-3 space-y-3">
+          <div className="ow-soft-card p-3 space-y-3">
             <div className="flex items-center justify-between">
               <div className="ow-section-heading">Security Log</div>
               <Shield className="size-3.5 text-dls-secondary" />

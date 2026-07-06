@@ -1369,13 +1369,14 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           </div>
           <Button
             variant="ghost"
-            size="sm"
-            className="shrink-0 gap-1.5 text-xs text-dls-secondary"
+            size="icon-sm"
+            className="shrink-0 border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
             onClick={refreshBittensor}
             disabled={loading || marketExecutionReadinessLoading || marketExecutionChainLoading || marketSdkValidationLoading}
+            aria-label="Refresh protocol desk"
+            title="Refresh protocol desk"
           >
             <RefreshCw className={cn("size-3.5", (loading || marketExecutionReadinessLoading || marketExecutionChainLoading || marketSdkValidationLoading) && "animate-spin")} />
-            Refresh
           </Button>
         </div>
         <div className="mb-3 grid grid-cols-1 gap-1 rounded-xl bg-dls-surface-muted/35 p-1 sm:grid-cols-3">
@@ -1399,9 +1400,9 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             </button>
           ))}
         </div>
-        <div className="mb-3 rounded-2xl bg-[linear-gradient(145deg,rgba(var(--protocol-desk-rgb),0.13),rgba(var(--protocol-desk-rgb),0.045)),var(--protocol-desk-soft)] p-3.5">
-          <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--protocol-desk-accent)]">
-            <span>Safety strip</span>
+        <div className="mb-3 rounded-lg bg-dls-surface-muted/20 p-3.5">
+          <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold text-[var(--protocol-desk-accent)]">
+            <span>Boundary</span>
             <span>Protocol manifest</span>
             <span className="rounded-md bg-dls-surface/55 px-2 py-0.5 text-[9px] text-dls-secondary">
               {activeSafetyBadge}
@@ -1808,9 +1809,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 ) : null}
                 {/* Right-rail command groups stay single-column; viewport breakpoints are too wide for this side panel. */}
                 <div className="grid grid-cols-1 gap-2">
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={refreshBittensor} disabled={readinessLoading || cryptoReadinessLoading || marketExecutionReadinessLoading || marketSdkValidationLoading}>
+                  <Button variant="ghost" size="icon-sm" className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text" onClick={refreshBittensor} disabled={readinessLoading || cryptoReadinessLoading || marketExecutionReadinessLoading || marketSdkValidationLoading} aria-label="Refresh readiness" title="Refresh readiness">
                     {readinessLoading || cryptoReadinessLoading || marketExecutionReadinessLoading || marketSdkValidationLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-                    Refresh
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutReadiness} disabled={!readiness}>
                     <BrainCircuit className="size-3.5" />
@@ -1877,9 +1877,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <p className="text-xs leading-5 text-sky-200">Next: {marketExecutionNextAction}</p>
                 ) : null}
                 <div className="grid grid-cols-1 gap-2">
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={loadMarketExecutionReadiness} disabled={marketExecutionReadinessLoading}>
+                  <Button variant="ghost" size="icon-sm" className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text" onClick={loadMarketExecutionReadiness} disabled={marketExecutionReadinessLoading} aria-label="Refresh execution readiness" title="Refresh execution readiness">
                     {marketExecutionReadinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-                    Refresh
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutMarketExecutionReadiness} disabled={!marketExecutionReadiness}>
                     <BrainCircuit className="size-3.5" />
@@ -1917,9 +1916,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   ))}
                 </div>
                 <div className="grid grid-cols-1 gap-2">
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={loadMarketExecutionChain} disabled={marketExecutionChainLoading}>
+                  <Button variant="ghost" size="icon-sm" className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text" onClick={loadMarketExecutionChain} disabled={marketExecutionChainLoading} aria-label="Refresh execution chain" title="Refresh execution chain">
                     {marketExecutionChainLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-                    Refresh
                   </Button>
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChain")}>
                     {copiedCustomerCommand === "executionChain" ? "Copied" : "Chain CLI"}
@@ -1952,9 +1950,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   Official SDK validation is public/redacted evidence only. Fixture mode runs in CI; operator-owned testnet mode validates Hyperliquid testnet and Polygon Amoy artifacts without sending keys, API secrets, raw signatures, signed payloads, wallet exports, or live orders to Matterhorn.
                 </p>
                 <div className="grid grid-cols-1 gap-2">
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={loadMarketSdkValidation} disabled={marketSdkValidationLoading}>
+                  <Button variant="ghost" size="icon-sm" className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text" onClick={loadMarketSdkValidation} disabled={marketSdkValidationLoading} aria-label="Refresh SDK validation" title="Refresh SDK validation">
                     {marketSdkValidationLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-                    Refresh
                   </Button>
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("sdkValidationApi")}>
                     {copiedCustomerCommand === "sdkValidationApi" ? "Copied" : "SDK API"}
@@ -2116,7 +2113,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
         {venue === "bittensor" && tab === "subnets" && (
           <div className="space-y-4">
-            <div className="rounded-2xl bg-dls-card p-3">
+            <div className="rounded-lg bg-dls-card p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="text-sm font-semibold text-dls-text">All Bittensor subnets</div>
@@ -2124,9 +2121,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     Dynamic subnet list from the Matterhorn Bittensor API. {filteredSubnets.length} shown from {subnets.length || "0"} loaded subnets.
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={loadSubnets} disabled={loading}>
+                <Button variant="ghost" size="icon-sm" className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text" onClick={loadSubnets} disabled={loading} aria-label="Refresh subnet list" title="Refresh subnet list">
                   <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
-                  Refresh
                 </Button>
               </div>
               <label className="mt-3 flex items-center gap-2 rounded-xl bg-dls-surface-muted/40 px-3 py-2">
@@ -2396,7 +2392,7 @@ function BittensorStandardActionList({
           </div>
           <div className="flex items-center justify-between gap-2 sm:min-w-[9rem] sm:justify-end">
             <span className="text-xs font-medium text-[var(--protocol-desk-accent)] group-hover:text-dls-text">
-              Open with agent
+              Start task
             </span>
           </div>
         </button>
@@ -2546,7 +2542,7 @@ function SubnetDetailCard({
   }
 
   return (
-    <div className="space-y-3 rounded-2xl bg-dls-card p-4">
+    <div className="space-y-3 rounded-lg bg-dls-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs text-sky-300">Subnet {detail.netuid}</div>

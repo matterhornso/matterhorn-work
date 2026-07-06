@@ -1,6 +1,7 @@
 import type { NoteAttachment, NoteOutputAttachment } from "../../notes/notes-types";
 import { getArtifactNoteContext } from "./artifact-note-context";
 import type { OpenTarget, OpenTargetPreview } from "./open-target";
+import type { WorkflowOutputReceipt, WorkflowOutputReceiptStatus } from "./output-receipts";
 
 export type OutputKind = "file" | "workflow-receipt" | "note-attachment";
 
@@ -29,6 +30,16 @@ export type OutputDescriptor = {
   isLegacy?: boolean;
   /** Customer-facing origin label, e.g. the desk name or "Project note". */
   originLabel?: string;
+  /** Workflow receipt status when this output was observed through project evidence. */
+  receiptStatus?: WorkflowOutputReceiptStatus;
+  /** Workflow receipt title from Project Activity. */
+  receiptTitle?: string;
+  /** Compact workflow receipt detail from Project Activity. */
+  receiptSummary?: string;
+  /** Workflow task id that produced or reported this output. */
+  taskId?: string;
+  /** Number of outputs reported by the same workflow receipt event. */
+  receiptArtifactCount?: number;
 };
 
 function legacyOriginLabel(kind: "opencode" | "openwork" | "outbox" | null | undefined): string {
@@ -38,7 +49,7 @@ function legacyOriginLabel(kind: "opencode" | "openwork" | "outbox" | null | und
   return "Imported";
 }
 
-export function outputDescriptorFromOpenTarget(target: OpenTarget): OutputDescriptor {
+export function outputDescriptorFromOpenTarget(target: OpenTarget, receipt?: WorkflowOutputReceipt): OutputDescriptor {
   const context = getArtifactNoteContext(target.value);
   const title = target.name || context.fileName || target.value;
 
@@ -47,18 +58,26 @@ export function outputDescriptorFromOpenTarget(target: OpenTarget): OutputDescri
     kind: "file",
     title,
     path: context.path,
-    desk: context.desk,
-    sessionSlug: context.sessionSlug,
-    updatedAt: target.updatedAt,
+    desk: receipt?.desk ?? context.desk,
+    sessionSlug: receipt?.sessionSlug ?? context.sessionSlug,
+    sourceId: receipt?.taskId,
+    updatedAt: receipt?.updatedAt ?? target.updatedAt,
     size: target.size,
     exists: target.exists,
     preview: target.preview,
     isLegacy: context.isLegacy,
     originLabel: context.isLegacy
       ? legacyOriginLabel(context.legacyKind)
-      : context.desk
+      : receipt?.desk
+        ? deskLabel(receipt.desk)
+        : context.desk
         ? deskLabel(context.desk)
         : undefined,
+    receiptStatus: receipt?.status,
+    receiptTitle: receipt?.title,
+    receiptSummary: receipt?.summary,
+    taskId: receipt?.taskId,
+    receiptArtifactCount: receipt?.artifactCount,
   };
 }
 

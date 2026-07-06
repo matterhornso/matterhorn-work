@@ -122,7 +122,7 @@ export function TransactionBatch({
   ).length;
 
   return (
-    <div className="mx-auto w-full max-w-lg rounded-2xl border border-dls-border bg-dls-sidebar p-6 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)]">
+    <div className="mx-auto w-full max-w-lg rounded-lg border border-dls-border bg-dls-sidebar p-6 shadow-sm">
       {/* Header */}
       <div className="mb-5 flex items-center justify-between">
         <div className="flex items-center gap-2.5">

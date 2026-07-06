@@ -906,7 +906,7 @@ export function ReactSessionComposer(props: ComposerProps) {
 
   const panelRoundedClass =
     mentionOpen || slashOpen
-      ? "rounded-t-[24px]"
+      ? "rounded-t-lg"
       : "";
 
   const renderSlashMenu = () => {
@@ -1015,7 +1015,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   return (
     <div
       ref={rootRef}
-      className={`sticky bottom-0 ${toolMenuOpen ? "z-50" : "z-20"} bg-gradient-to-t from-dls-surface via-dls-surface/98 to-transparent px-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] md:px-8 ${props.compactTopSpacing ? "pt-0" : "pt-4"}`}
+      className={`sticky bottom-0 ${toolMenuOpen ? "z-50" : "z-20"} bg-dls-surface/96 px-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] md:px-8 ${props.compactTopSpacing ? "pt-0" : "pt-4"}`}
       style={{ contain: "layout style" }}
       onKeyDownCapture={handleKeyDownCapture}
       onCompositionStart={() => {
@@ -1029,7 +1029,7 @@ export function ReactSessionComposer(props: ComposerProps) {
         {/* Main composer panel */}
         <div
           data-testid="session-composer-shell"
-          className={`relative overflow-visible rounded-[24px] border border-[rgba(var(--matterhorn-blue-rgb),0.34)] bg-dls-surface/98 shadow-[0_18px_44px_rgba(0,0,0,0.28)] ring-1 ring-white/5 transition-[border-color,box-shadow] focus-within:border-[rgba(var(--matterhorn-blue-rgb),0.62)] focus-within:shadow-[0_20px_54px_rgba(0,0,0,0.34),0_0_0_1px_rgba(var(--matterhorn-blue-rgb),0.20)] ${panelRoundedClass}`}
+          className={`relative overflow-visible rounded-lg border border-[rgba(var(--matterhorn-blue-rgb),0.24)] bg-dls-surface/98 shadow-none transition-colors focus-within:border-[rgba(var(--matterhorn-blue-rgb),0.54)] ${panelRoundedClass}`}
         >
           {props.topAccessory ? <div className="relative z-10 border-b border-dls-border/25 px-4 py-3 sm:px-5">{props.topAccessory}</div> : null}
           <ReactComposerNotice notice={props.notice} />
@@ -1078,8 +1078,8 @@ export function ReactSessionComposer(props: ComposerProps) {
           */}
 
           {dropzoneActive ? (
-            <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-[20px] border border-dashed border-dls-accent bg-[color:color-mix(in_oklab,var(--dls-accent)_10%,transparent)]">
-              <div className="rounded-lg bg-dls-surface/95 px-5 py-4 text-center shadow-[0_8px_22px_rgba(0,0,0,0.14)] backdrop-blur-sm">
+            <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-lg border border-dashed border-dls-accent bg-[color:color-mix(in_oklab,var(--dls-accent)_10%,transparent)]">
+              <div className="rounded-lg bg-dls-surface/95 px-5 py-4 text-center shadow-sm">
                 <div className="text-sm font-medium text-dls-text">{t("composer.attach_files")}</div>
                 <div className="mt-1 text-xs text-dls-secondary">{t("composer.any_file_type_supported")}</div>
               </div>
@@ -1225,7 +1225,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                     <Plug size={16} />
                   </button>
                   {toolMenuOpen ? (
-                    <div className="absolute bottom-full left-0 z-40 mb-3 w-[min(calc(100vw-2.5rem),34rem)] overflow-hidden rounded-xl bg-dls-surface/98 shadow-[0_18px_42px_rgba(0,0,0,0.22)] ring-1 ring-dls-border/25">
+                    <div className="absolute bottom-full left-0 z-40 mb-3 w-[min(calc(100vw-2.5rem),34rem)] overflow-hidden rounded-lg bg-dls-surface/98 shadow-sm ring-1 ring-dls-border/25">
                       <div className="grid grid-cols-[152px_minmax(0,1fr)] sm:grid-cols-[176px_minmax(0,1fr)]">
                         <div className="border-r border-dls-border bg-gray-2/30 p-2">
                           {([

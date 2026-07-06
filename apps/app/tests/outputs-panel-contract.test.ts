@@ -33,6 +33,23 @@ describe("Outputs panel contract", () => {
     expect(listSource).toContain("formatFileSize");
     expect(listSource).toContain("output.originLabel");
     expect(listSource).toContain("output.isLegacy");
+    expect(listSource).toContain("output.receiptStatus");
+    expect(listSource).toContain("Receipt:");
+  });
+
+  test("workflow output receipts feed the Outputs rail and panel", () => {
+    const sessionSource = readAppSource("domains/session/chat/session-page.tsx");
+    const artifactSource = readAppSource("domains/session/artifacts/artifact-panel.tsx");
+    const receiptSource = readAppSource("domains/session/artifacts/output-receipts.ts");
+
+    expect(sessionSource).toContain("workflowOutputReceiptsFromEvidence");
+    expect(sessionSource).toContain("mergeOpenTargetsWithWorkflowOutputReceipts");
+    expect(sessionSource).toContain("listProjectEvidence(outputReceiptWorkspaceId, { limit: 200 })");
+    expect(artifactSource).toContain("outputReceipts?: WorkflowOutputReceipt[]");
+    expect(artifactSource).toContain("Workflow receipt");
+    expect(receiptSource).toContain('"task.output_saved"');
+    expect(receiptSource).toContain('"task.completed"');
+    expect(receiptSource).toContain("openTargetFromWorkflowOutputReceipt");
   });
 
   test("output actions include copy path, add note, reveal, and open", () => {

@@ -28,7 +28,7 @@ const sectionHeaderClass = "flex flex-col gap-1 pb-2";
 const sectionTitleClass = "text-[15px] font-semibold tracking-[-0.2px] text-dls-text";
 const sectionDescClass = "text-[12px] text-dls-secondary";
 const cardClass =
-  "rounded-2xl border border-dls-border bg-dls-surface/95 p-5 space-y-4";
+  "rounded-lg border border-dls-border bg-dls-surface/95 p-5 space-y-4";
 const subCardClass = "rounded-xl border border-dls-border bg-dls-sidebar/40 p-4 space-y-3";
 const monoPreClass =
   "max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-dls-border bg-dls-sidebar/40 p-3 text-[11px] font-mono text-dls-text";
@@ -1033,7 +1033,7 @@ export function DebugView(props: DebugViewProps) {
 
       {/* Section: Danger zone */}
       {isDesktop ? (
-        <div className="space-y-3 rounded-2xl border border-red-7/30 bg-red-3/10 p-5">
+        <div className="space-y-3 rounded-lg border border-red-7/30 bg-red-3/10 p-5">
           <div className={sectionHeaderClass}>
             <div className="text-[15px] font-semibold tracking-[-0.2px] text-red-11">
               {t("settings.danger_section_title")}

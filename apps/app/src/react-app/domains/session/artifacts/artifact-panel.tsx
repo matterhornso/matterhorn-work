@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Download, ExternalLink, FolderOpen, NotebookPen, X } from "lucide-react";
 
@@ -13,6 +13,7 @@ import { ArtifactIcon } from "./artifact-icon";
 import type { BinaryData, Data, OpenTarget, TextData } from "./open-target";
 import { outputDescriptorFromOpenTarget, type OutputDescriptor } from "./output-descriptor";
 import { OutputList } from "./output-list";
+import { normalizeOutputReceiptPath, type WorkflowOutputReceipt } from "./output-receipts";
 import { HTMLPreview, ImagePreview, MarkdownPreview, PlainText, PreviewError, PreviewLoading, PreviewUnavailable } from "./preview";
 
 const ArtifactTextEditor = lazy(() =>
@@ -30,6 +31,7 @@ type ArtifactPanelProps = {
   isRemoteWorkspace?: boolean;
   target: OpenTarget;
   targets?: OpenTarget[];
+  outputReceipts?: WorkflowOutputReceipt[];
   onSelectTarget?: (target: OpenTarget) => void;
   onAddNote?: (artifactPath: string, desk?: string, sessionSlug?: string) => void;
   onRevealPath?: (path: string, label: string) => Promise<void> | void;
@@ -61,6 +63,7 @@ export function ArtifactPanel({
   isRemoteWorkspace = false,
   target,
   targets = [],
+  outputReceipts = [],
   onSelectTarget,
   onAddNote,
   onRevealPath,
@@ -71,12 +74,26 @@ export function ArtifactPanel({
   const [draft, setDraft] = useState("");
   const [copiedPath, setCopiedPath] = useState(false);
   const isDirectTextEdit = isTextContent(target) && target.preview === "markdown";
-  const externalPath = useMemo(
-    () => (target.kind === "file" ? absoluteWorkspacePath(workspaceRoot, target.value) : target.value),
-    [target.kind, target.value, workspaceRoot],
+  const externalPathForTarget = useCallback(
+    (nextTarget: OpenTarget) => (nextTarget.kind === "file" ? absoluteWorkspacePath(workspaceRoot, nextTarget.value) : nextTarget.value),
+    [workspaceRoot],
   );
+  const externalPath = useMemo(() => externalPathForTarget(target), [externalPathForTarget, target]);
   const noteContext = useMemo(() => getArtifactNoteContext(target.value), [target.value]);
-  const outputs = useMemo(() => (targets ?? []).map(outputDescriptorFromOpenTarget), [targets]);
+  const receiptByPath = useMemo(() => {
+    const next = new Map<string, WorkflowOutputReceipt>();
+    for (const receipt of outputReceipts) {
+      next.set(normalizeOutputReceiptPath(receipt.outputPath).toLowerCase(), receipt);
+    }
+    return next;
+  }, [outputReceipts]);
+  const outputs = useMemo(
+    () => (targets ?? []).map((nextTarget) => outputDescriptorFromOpenTarget(
+      nextTarget,
+      receiptByPath.get(normalizeOutputReceiptPath(nextTarget.value).toLowerCase()),
+    )),
+    [receiptByPath, targets],
+  );
   const selectedOutput = useMemo(
     () => outputs.find((output) => output.id === target.id) ?? outputs[0] ?? null,
     [outputs, target.id],
@@ -160,45 +177,47 @@ export function ArtifactPanel({
     },
   });
 
-  const download = async () => {
-    if (target.kind === "url") {
+  const download = async (nextTarget = target) => {
+    if (nextTarget.kind === "url") {
       return;
     }
 
-    const result = await client.downloadWorkspaceFile(workspaceId, target.value);
+    const result = await client.downloadWorkspaceFile(workspaceId, nextTarget.value);
     const url = URL.createObjectURL(new Blob([result.data], { type: result.contentType ?? "application/octet-stream" }));
     const anchor = document.createElement("a");
 
     anchor.href = url;
-    anchor.download = target.name;
+    anchor.download = nextTarget.name;
     anchor.click();
 
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const openExternal = async () => {
-    if (target.kind === "url") {
-      window.open(target.value, "_blank", "noopener,noreferrer");
+  const openExternal = async (nextTarget = target) => {
+    if (nextTarget.kind === "url") {
+      window.open(nextTarget.value, "_blank", "noopener,noreferrer");
 
       return;
     }
     else if (!isRemoteWorkspace) {
-      void openDesktopPath(externalPath);
+      void openDesktopPath(externalPathForTarget(nextTarget));
 
       return;
     }
 
-    await download();
+    await download(nextTarget);
   };
 
-  const reveal = async () => {
-    if (target.kind !== "file" || !externalPath) return;
+  const reveal = async (nextTarget = target) => {
+    if (nextTarget.kind !== "file") return;
+    const nextExternalPath = externalPathForTarget(nextTarget);
+    if (!nextExternalPath) return;
     if (onRevealPath) {
-      await onRevealPath(externalPath, "Output file");
+      await onRevealPath(nextExternalPath, "Output file");
       return;
     }
     if (!isRemoteWorkspace) {
-      void openDesktopPath(externalPath);
+      void openDesktopPath(nextExternalPath);
     }
   };
 
@@ -247,14 +266,16 @@ export function ArtifactPanel({
 
   const handleOpenOutput = (output: OutputDescriptor) => {
     const match = targets.find((item) => item.id === output.id);
-    if (match) openExternal();
+    if (!match) return;
+    onSelectTarget?.(match);
+    void openExternal(match);
   };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       {targets.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-          <div className="flex size-10 items-center justify-center rounded-xl border border-dls-border bg-dls-surface">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-dls-surface-muted/25">
             <FolderOpen className="size-5 text-muted-foreground" />
           </div>
           <div className="grid gap-1">
@@ -267,7 +288,7 @@ export function ArtifactPanel({
             </p>
           </div>
           {workspaceName && (
-            <div className="mt-1 flex items-center gap-1.5 rounded-full border border-dls-border bg-dls-surface px-3 py-1 text-[11px] text-muted-foreground">
+            <div className="mt-1 flex items-center gap-1.5 rounded-md bg-dls-surface-muted/25 px-3 py-1 text-[11px] text-muted-foreground">
               <FolderOpen className="size-3" />
               {workspaceName}
             </div>
@@ -405,33 +426,43 @@ export function ArtifactPanel({
             {target.kind === "file" && (
               <div className="flex items-center gap-2 border-b border-border/60 px-4 py-1.5">
                 {workspaceName && (
-                  <span className="flex items-center gap-1 rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
                     <FolderOpen className="size-2.5" />
                     {workspaceName}
                   </span>
                 )}
                 {noteContext.desk && (
-                  <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  <span className="text-[10px] font-medium text-muted-foreground">
                     {noteContext.desk}
                   </span>
                 )}
                 {noteContext.sessionSlug && (
-                  <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  <span className="text-[10px] font-medium text-muted-foreground">
                     {noteContext.sessionSlug}
                   </span>
                 )}
                 <span className="truncate text-[11px] text-muted-foreground" title={target.value}>{target.value}</span>
                 {noteContext.isLegacy ? (
-                  <span className="ml-auto shrink-0 rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                  <span className="ml-auto shrink-0 text-[10px] font-medium text-amber-300">
                     Legacy location
                   </span>
                 ) : (
-                  <span className="ml-auto shrink-0 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                  <span className="ml-auto shrink-0 text-[10px] font-medium text-emerald-300">
                     Saved in this project
                   </span>
                 )}
               </div>
             )}
+            {selectedOutput?.receiptTitle ? (
+              <div className="flex min-w-0 items-center gap-2 border-b border-border/60 px-4 py-1.5 text-[11px]">
+                <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
+                  Workflow receipt
+                </span>
+                <span className="truncate text-muted-foreground" title={selectedOutput.receiptSummary ?? selectedOutput.receiptTitle}>
+                  {selectedOutput.receiptTitle}
+                </span>
+              </div>
+            ) : null}
             {outputs.length > 1 ? (
               <OutputList
                 outputs={outputs}
@@ -442,7 +473,10 @@ export function ArtifactPanel({
                   void navigator.clipboard.writeText(output.path);
                 }}
                 onAddNote={onAddNote ? (output) => onAddNote(output.path, output.desk, output.sessionSlug) : undefined}
-                onReveal={!isRemoteWorkspace ? () => void reveal() : undefined}
+                onReveal={!isRemoteWorkspace ? (output) => {
+                  const match = targets.find((item) => item.id === output.id);
+                  if (match) void reveal(match);
+                } : undefined}
               />
             ) : null}
           </div>

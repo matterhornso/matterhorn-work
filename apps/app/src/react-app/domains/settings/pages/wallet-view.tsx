@@ -409,9 +409,8 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
                 <Copy className="size-3" />
                 Copy address
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing}>
+              <Button variant="ghost" size="icon-sm" className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text" onClick={handleRefresh} disabled={refreshing} aria-label="Refresh wallet" title="Refresh wallet">
                 <RefreshCw className={cn("size-3", refreshing && "animate-spin")} />
-                Refresh
               </Button>
               <Button variant="ghost" size="sm" className="text-red-400 hover:bg-red-500/10 hover:text-red-300" onClick={handleDisconnect}>
                 <Unplug className="size-3" />
@@ -602,13 +601,14 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
 
           <Button
             variant="ghost"
-            size="sm"
-            className="w-full h-7 text-xs"
+            size="icon-sm"
+            className="h-7 border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
             onClick={handleRefresh}
             disabled={refreshing}
+            aria-label="Refresh balances"
+            title="Refresh balances"
           >
-            <RefreshCw className={cn("size-3 mr-1", refreshing && "animate-spin")} />
-            Refresh balances
+            <RefreshCw className={cn("size-3", refreshing && "animate-spin")} />
           </Button>
         </CardContent>
       </Card>

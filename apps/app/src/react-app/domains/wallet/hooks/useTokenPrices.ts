@@ -32,7 +32,7 @@ export function useTokenPrices() {
         setPrices(json.prices);
         lastFetchRef.current = now;
       } else {
-        setError(json.error ?? "Failed to fetch prices");
+        setError(json.error ?? "Could not load token prices.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Network error");

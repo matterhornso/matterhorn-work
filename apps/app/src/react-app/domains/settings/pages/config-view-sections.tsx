@@ -9,7 +9,7 @@ import type { MatterhornTestState, TokenVisibilityKey } from "./config-view-stat
 
 export function ConfigWorkspaceSummary(props: { runtimeWorkspaceId: string | null }) {
   return (
-    <div className="bg-gray-2/30 border border-gray-6/50 rounded-2xl p-5 space-y-2">
+    <div className="bg-gray-2/30 border border-gray-6/50 rounded-lg p-5 space-y-2">
       <div className="text-sm font-medium text-gray-12">{t("config.workspace_config_title")}</div>
       <div className="text-xs text-gray-10">{t("config.workspace_config_desc")}</div>
       {props.runtimeWorkspaceId ? (
@@ -33,7 +33,7 @@ export function ConfigEngineReloadSection(props: {
   onReload: () => Promise<void>;
 }) {
   return (
-    <div className="bg-gray-2/30 border border-gray-6/50 rounded-2xl p-5 space-y-4">
+    <div className="bg-gray-2/30 border border-gray-6/50 rounded-lg p-5 space-y-4">
       <div>
         <div className="text-sm font-medium text-gray-12">{t("config.engine_reload_title")}</div>
         <div className="text-xs text-gray-10">{t("config.engine_reload_desc")}</div>
@@ -62,7 +62,7 @@ export function ConfigDiagnosticsSection(props: {
   onCopy: (value: string, field: string) => void | Promise<void>;
 }) {
   return (
-    <div className="bg-gray-2/30 border border-gray-6/50 rounded-2xl p-5 space-y-3">
+    <div className="bg-gray-2/30 border border-gray-6/50 rounded-lg p-5 space-y-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="text-sm font-medium text-gray-12">{t("config.diagnostics_title")}</div>
@@ -128,7 +128,7 @@ export function ConfigServerSharingSection(props: {
       ? t("config.mdns_hint")
       : t("config.local_ip_hint");
   return (
-    <div className="bg-gray-2/30 border border-gray-6/50 rounded-2xl p-5 space-y-4">
+    <div className="bg-gray-2/30 border border-gray-6/50 rounded-lg p-5 space-y-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="text-sm font-medium text-gray-12">{t("config.server_sharing_title")}</div>
@@ -176,7 +176,7 @@ export function ConfigServerConnectionSection(props: {
   onReset: () => void;
 }) {
   return (
-    <div className="bg-gray-2/30 border border-gray-6/50 rounded-2xl p-5 space-y-4">
+    <div className="bg-gray-2/30 border border-gray-6/50 rounded-lg p-5 space-y-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="text-sm font-medium text-gray-12">{t("config.server_section_title")}</div>
@@ -222,7 +222,7 @@ function ConfigConnectionTestStatus(props: { state: MatterhornTestState; message
 
 export function ConfigMessagingIdentitiesSection() {
   return (
-    <div className="bg-gray-2/30 border border-gray-6/50 rounded-2xl p-5 space-y-2">
+    <div className="bg-gray-2/30 border border-gray-6/50 rounded-lg p-5 space-y-2">
       <div className="text-sm font-medium text-gray-12">{t("config.messaging_identities_title")}</div>
       <div className="text-xs text-gray-10">{t("config.messaging_identities_desc")}</div>
     </div>

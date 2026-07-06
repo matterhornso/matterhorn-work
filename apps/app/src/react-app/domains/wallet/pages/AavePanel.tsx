@@ -189,9 +189,9 @@ export default function AavePanel({ store }: { store: WalletStore }) {
   return (
     <div className="flex flex-col gap-4 p-4 h-full overflow-auto animate-fade-in">
       {/* Header */}
-      <div className="ow-glass-card ow-glow-border p-4 space-y-3">
+      <div className="ow-soft-card p-4 space-y-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-500/20">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-dls-surface-muted/35 text-primary">
             <Landmark className="size-5" />
           </div>
           <div>
@@ -234,7 +234,7 @@ export default function AavePanel({ store }: { store: WalletStore }) {
 
       {/* Deposit Tab */}
       {tab === "deposit" && (
-        <div className="ow-glass-card p-4 space-y-4">
+        <div className="ow-soft-card p-4 space-y-4">
           <TokenSelector />
           <AmountInput />
           <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5">
@@ -262,7 +262,7 @@ export default function AavePanel({ store }: { store: WalletStore }) {
 
       {/* Borrow Tab */}
       {tab === "borrow" && (
-        <div className="ow-glass-card p-4 space-y-4">
+        <div className="ow-soft-card p-4 space-y-4">
           <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2.5">
             <div className="flex size-7 items-center justify-center rounded-lg bg-red-500/10">
               <Shield className="size-4 text-red-400" />
@@ -284,7 +284,7 @@ export default function AavePanel({ store }: { store: WalletStore }) {
 
       {/* Repay Tab */}
       {tab === "repay" && (
-        <div className="ow-glass-card p-4 space-y-4">
+        <div className="ow-soft-card p-4 space-y-4">
           <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5">
             <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10">
               <RotateCcw className="size-4 text-emerald-400" />
@@ -306,7 +306,7 @@ export default function AavePanel({ store }: { store: WalletStore }) {
 
       {/* Positions Tab */}
       {tab === "positions" && (
-        <div className="ow-glass-card p-4 space-y-3">
+        <div className="ow-soft-card p-4 space-y-3">
           {positions ? (
             <>
               <div className="grid grid-cols-2 gap-2">

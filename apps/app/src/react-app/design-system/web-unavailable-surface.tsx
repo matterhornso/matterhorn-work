@@ -31,7 +31,7 @@ export function WebUnavailableSurface(props: WebUnavailableSurfaceProps) {
           className={
             props.compact
               ? "mb-3 rounded-xl border border-amber-7/30 bg-amber-2/45 px-3 py-2 text-[11px] text-amber-12"
-              : "mb-4 rounded-2xl border border-amber-7/30 bg-amber-2/45 px-4 py-3 text-[13px] text-amber-12"
+              : "mb-4 rounded-lg border border-amber-7/30 bg-amber-2/45 px-4 py-3 text-[13px] text-amber-12"
           }
         >
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

@@ -6,6 +6,7 @@ import {
   AlertCircle,
   Ban,
   Boxes,
+  BrainCircuit,
   CheckCircle2,
   Circle,
   CircleUser,
@@ -33,7 +34,9 @@ import { formatRelativeTime } from "../../../../app/utils";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useQuickJot } from "../../notes";
-import { workspaceNotesRoute } from "../../../shell/workspace-routes";
+import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
+import { GLOBAL_HOME_SIDE_PANEL_KEY, useUiStateStore } from "../../../shell/ui-state-store";
+import { workspaceNotesRoute, workspaceSessionRoute } from "../../../shell/workspace-routes";
 import type { SettingsTab } from "../../../../app/types";
 import {
   getInitialThemeMode,
@@ -185,7 +188,7 @@ function TaskHistorySection(props: {
           Loading task history…
         </div>
       ) : isError ? (
-        <div className="flex flex-col gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-xs text-red-200">
+        <div className="flex flex-col gap-2 rounded-md bg-red-500/10 px-3 py-3 text-xs text-red-200">
           <div className="flex items-start gap-2">
             <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
             <div className="min-w-0">
@@ -199,7 +202,7 @@ function TaskHistorySection(props: {
             type="button"
             variant="outline"
             size="sm"
-            className="w-fit gap-1.5 border-red-300/35 text-red-100 hover:bg-red-500/15"
+            className="w-fit gap-1.5 border-0 bg-transparent px-0 text-red-100 shadow-none hover:bg-transparent hover:text-red-50"
             onClick={() => void refetch()}
           >
             <RefreshCw className="size-3.5" />
@@ -207,7 +210,7 @@ function TaskHistorySection(props: {
           </Button>
         </div>
       ) : runs.length === 0 ? (
-        <div className="flex items-center gap-2 rounded-xl border border-dls-border bg-dls-surface px-3 py-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 rounded-md bg-dls-surface-muted/20 px-3 py-3 text-xs text-muted-foreground">
           <ListTodo className="size-3.5 shrink-0" />
           Tasks you run from desks will appear here.
         </div>
@@ -224,7 +227,7 @@ function TaskHistorySection(props: {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-xs font-medium capitalize text-dls-text">{run.desk}</span>
-                    <span className="rounded-full border border-dls-border bg-dls-surface px-1.5 py-0.5 text-[10px] text-muted-foreground">{run.sessionSlug}</span>
+                    <span className="max-w-[10rem] truncate text-[10px] font-medium text-muted-foreground">{run.sessionSlug}</span>
                     <span className={cn("ml-auto shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium", meta.bg, meta.border, meta.text)}>
                       {meta.label}
                     </span>
@@ -243,7 +246,7 @@ function TaskHistorySection(props: {
                       ))}
                     </div>
                   )}
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">{formatRelativeTime(run.updatedAt / 1000)}</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">{formatRelativeTime(run.updatedAt)}</p>
                 </div>
               </div>
             );
@@ -262,8 +265,10 @@ export function SettingsOverviewView(props: {
   const { onSelectTab } = props;
   const navigate = useNavigate();
   const { openQuickJot } = useQuickJot();
+  const setSidePanelState = useUiStateStore((state) => state.setSidePanelState);
   const [theme, setTheme] = useState<ThemeMode>(getInitialThemeMode());
   const [density, setDensity] = useState<Density>(readDensity());
+  const [memoryExportStatus, setMemoryExportStatus] = useState<string | null>(null);
   const notesWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
 
   useEffect(() => subscribeToTheme(() => setTheme(getInitialThemeMode())), []);
@@ -277,6 +282,41 @@ export function SettingsOverviewView(props: {
     applyDensity(value);
     setDensity(value);
   }, []);
+
+  const memoryOverviewQuery = useQuery({
+    queryKey: ["settings-memory-overview", props.runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client) return { pending: 0, confirmed: 0 };
+      const [pendingSuggestions, savedRecords] = await Promise.all([
+        client.listMemorySuggestions({ status: "pending", limit: 100 }),
+        client.listMemory({ limit: 100 }),
+      ]);
+      return {
+        pending: (pendingSuggestions.entries ?? []).filter((entry) => entry.status === "pending").length,
+        confirmed: savedRecords.count ?? savedRecords.records.length,
+      };
+    },
+  });
+
+  const openMemoryReview = useCallback(() => {
+    if (!notesWorkspaceId) return;
+    setSidePanelState(GLOBAL_HOME_SIDE_PANEL_KEY, "memory");
+    navigate(workspaceSessionRoute(notesWorkspaceId));
+  }, [navigate, notesWorkspaceId, setSidePanelState]);
+
+  const exportMemory = useCallback(async () => {
+    const client = props.matterhornServerClient;
+    if (!client) return;
+    setMemoryExportStatus("Exporting...");
+    try {
+      const response = await client.exportMemory();
+      setMemoryExportStatus(`Exported ${response.export.recordCount} records.`);
+    } catch (error) {
+      setMemoryExportStatus(error instanceof Error ? error.message : "Could not export memory.");
+    }
+  }, [props.matterhornServerClient]);
 
   const themeOptions: Array<{ id: ThemeMode; label: string }> = [
     { id: "light", label: "Light" },
@@ -334,12 +374,82 @@ export function SettingsOverviewView(props: {
             title="Task History"
             description="Latest desk tasks and their outputs."
           >
-            <div className="flex items-center gap-2 rounded-xl border border-dls-border bg-dls-surface px-3 py-3 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 rounded-lg border border-dls-border bg-dls-surface px-3 py-3 text-xs text-muted-foreground">
               <ListTodo className="size-3.5 shrink-0" />
               Open a workspace to see your task history.
             </div>
           </SettingsCard>
         )}
+
+        {/* 1c. Project Activity */}
+        {props.matterhornServerClient && props.runtimeWorkspaceId ? (
+          <SettingsCard
+            icon={<BrainCircuit size={18} />}
+            title="Project Activity"
+            description="Notes, tasks, outputs, and memory across this workspace."
+          >
+            <div className="pl-0">
+              <RecentActivitySection
+                matterhornServerClient={props.matterhornServerClient}
+                runtimeWorkspaceId={props.runtimeWorkspaceId}
+                limit={10}
+              />
+            </div>
+          </SettingsCard>
+        ) : (
+          <SettingsCard
+            icon={<BrainCircuit size={18} />}
+            title="Project Activity"
+            description="Notes, tasks, outputs, and memory across this workspace."
+          >
+            <div className="flex items-center gap-2 rounded-lg border border-dls-border bg-dls-surface px-3 py-3 text-xs text-muted-foreground">
+              <ListTodo className="size-3.5 shrink-0" />
+              Open a workspace to see project activity.
+            </div>
+          </SettingsCard>
+        )}
+
+        {/* Memory */}
+        <SettingsCard
+          icon={<BrainCircuit size={18} />}
+          title="Memory"
+          description="Review pending suggestions and manage saved memories."
+          status={<StatusBadge tone={memoryOverviewQuery.data?.pending ? "setup" : "ready"}>Memory review</StatusBadge>}
+        >
+          <Row
+            label="Pending suggestions"
+            hint="Items waiting for explicit review."
+            value={memoryOverviewQuery.isLoading ? "Loading" : String(memoryOverviewQuery.data?.pending ?? 0)}
+          />
+          <Row
+            label="Saved memories"
+            hint="Confirmed records available for visible chat context."
+            value={memoryOverviewQuery.isLoading ? "Loading" : String(memoryOverviewQuery.data?.confirmed ?? 0)}
+          />
+          <div className="flex flex-wrap gap-2 px-1 py-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={openMemoryReview}
+              disabled={!notesWorkspaceId}
+            >
+              Open Memory review
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-xs text-dls-secondary"
+              onClick={() => void exportMemory()}
+              disabled={!props.matterhornServerClient}
+            >
+              Export memory
+            </Button>
+          </div>
+          {memoryExportStatus ? (
+            <p className="px-1 py-2 text-xs leading-5 text-dls-secondary">{memoryExportStatus}</p>
+          ) : null}
+        </SettingsCard>
 
         {/* Notes */}
         <SettingsCard

@@ -110,6 +110,7 @@ import {
 } from "../workflows/protocol-desk-ui";
 import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
+import { WorkflowStageCard } from "../workflows/workflow-stage-card";
 import {
   getMatterhornDeskAgent,
   getMatterhornDeskAgentById,
@@ -356,7 +357,7 @@ function MatterhornDeskFocusedEmptyState({
                 <span className="mt-0.5 block text-[11px] leading-4 text-dls-secondary">{item.detail}</span>
               </span>
               <span className="text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
-                Open with agent
+                Start task
               </span>
             </button>
           ))}
@@ -552,31 +553,26 @@ function MatterhornDeskDraftReadyState({ mode }: { mode: MatterhornDeskMode }) {
 }
 
 function LongevityWorkflowStagePreview() {
-  const stages = WELLNESS_CREATOR_SERVICES_WORKFLOW.steps;
+  const manifest = WELLNESS_CREATOR_SERVICES_WORKFLOW;
   return (
-    <section
-      className="matterhorn-longevity-workflow-preview overflow-hidden rounded-xl bg-dls-surface/44 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
-      aria-label="Standardized Longevity workflow"
-    >
-      <div className="flex flex-col gap-1 border-b border-dls-border/35 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-[13px] font-semibold text-dls-text">Standardized Longevity workflow</p>
-          <p className="mt-0.5 text-[11px] leading-4 text-dls-secondary">
-            The agent runs the workflow stages; the composer only carries your public context.
-          </p>
-        </div>
-        <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">7 stages</span>
+    <section aria-label="Standardized Longevity workflow">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-dls-text">Longevity workflow</p>
+        <p className="text-[11px] text-dls-muted">{manifest.steps.length} stages</p>
       </div>
-      <div className="divide-y divide-dls-border/30">
-        {stages.map((stage, index) => (
-          <div key={stage.id} className="grid gap-1 px-3.5 py-2.5 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-3">
-            <span className="text-[12px] font-semibold text-dls-text">{index + 1}. {stage.name}</span>
-            <span className="text-[11px] leading-4 text-dls-secondary">{stage.description}</span>
-          </div>
+      <div className="space-y-2">
+        {manifest.steps.map((stage) => (
+          <WorkflowStageCard
+            key={stage.id}
+            title={stage.name}
+            objective={stage.description}
+            status="idle"
+            outputs={stage.outputArtifactIds
+              .map((id) => manifest.generatedArtifacts.find((a) => a.id === id))
+              .filter(Boolean)
+              .map((a) => ({ name: a!.name, description: a!.description }))}
+          />
         ))}
-      </div>
-      <div className="border-t border-dls-border/35 px-3.5 py-2.5 text-[11px] leading-4 text-dls-secondary">
-        Outputs save in this project under <span className="font-medium text-dls-text">outputs/longevity/&lt;session-slug&gt;/</span>.
       </div>
     </section>
   );
@@ -904,7 +900,7 @@ function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker }
 }) {
   return (
     <div className="mx-auto max-w-[720px] px-3 py-3 sm:px-5">
-      <div className="rounded-2xl border border-red-6/30 bg-red-3/15 px-5 py-4">
+        <div className="rounded-lg bg-red-3/15 px-5 py-4 ring-1 ring-red-6/25">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-red-11">{error.message}</div>
@@ -915,7 +911,7 @@ function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker }
                     <button
                       key={`${s.providerID}/${s.modelID}`}
                       type="button"
-                      className="rounded-full border border-dls-border bg-dls-surface px-3 py-1.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                      className="rounded-md bg-dls-surface-muted/35 px-3 py-1.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
                       onClick={() => {
                         onChangeModel?.(s);
                         onDismiss();
@@ -927,7 +923,7 @@ function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker }
                 ) : null}
                 <button
                   type="button"
-                  className="rounded-full border border-dls-border bg-dls-surface px-3 py-1.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                  className="rounded-md bg-dls-surface-muted/35 px-3 py-1.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
                   onClick={() => {
                     onOpenModelPicker?.();
                     onDismiss();

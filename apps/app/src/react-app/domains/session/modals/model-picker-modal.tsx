@@ -273,7 +273,7 @@ export function ModelPickerModal(props: ModelPickerModalProps) {
           {/* Content */}
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 -mr-1">
             {providerGroups.length === 0 ? (
-              <div className="space-y-3 rounded-2xl border border-dls-border bg-dls-hover/30 px-4 py-6 text-center">
+              <div className="space-y-3 rounded-lg border border-dls-border bg-dls-hover/30 px-4 py-6 text-center">
                 <div className="text-sm text-dls-secondary">
                   {props.query.trim() ? "No models match your search." : "No models available. Connect a provider to get started."}
                 </div>

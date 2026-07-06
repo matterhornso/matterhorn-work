@@ -94,13 +94,13 @@
   --dls-text-secondary: #465064;
   --dls-hover: rgba(56, 189, 248, 0.12);
   --dls-active: rgba(56, 189, 248, 0.2);
-  --dls-radius: 16px;
-  --dls-radius-lg: 24px;
-  --dls-shell-shadow: 0 18px 48px rgba(15, 23, 42, 0.1);
-  --dls-card-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
-  --dls-glass-bg: rgba(255, 255, 255, 0.68);
-  --dls-glass-border: rgba(185, 220, 235, 0.72);
-  --dls-glow: 0 0 26px rgba(56, 189, 248, 0.26);
+  --dls-radius: 10px;
+  --dls-radius-lg: 12px;
+  --dls-shell-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --dls-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --dls-glass-bg: var(--dls-surface);
+  --dls-glass-border: var(--dls-border);
+  --dls-glow: none;
   --background: #f6f9ff;
   --foreground: var(--slate-12);
   --card: #ffffff;
@@ -177,11 +177,11 @@
   --dls-text-secondary: #cbd5e1;
   --dls-hover: rgba(56, 189, 248, 0.13);
   --dls-active: rgba(56, 189, 248, 0.22);
-  --dls-shell-shadow: 0 22px 56px rgba(0, 0, 0, 0.46);
-  --dls-card-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
-  --dls-glass-bg: rgba(12, 18, 30, 0.66);
-  --dls-glass-border: rgba(var(--matterhorn-blue-rgb), 0.24);
-  --dls-glow: 0 0 28px rgba(56, 189, 248, 0.28);
+  --dls-shell-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --dls-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --dls-glass-bg: var(--dls-surface);
+  --dls-glass-border: rgba(var(--matterhorn-blue-rgb), 0.18);
+  --dls-glow: none;
 }
 
 html,
@@ -228,32 +228,32 @@ body {
 .ow-soft-shell {
   border: 1px solid var(--dls-border);
   background: var(--dls-surface);
-  border-radius: 2rem;
+  border-radius: 0.75rem;
   box-shadow: var(--dls-shell-shadow);
 }
 
 .ow-soft-card {
   border: 1px solid var(--dls-border);
   background: var(--dls-surface);
-  border-radius: 1.5rem;
+  border-radius: 0.75rem;
   box-shadow: var(--dls-card-shadow);
 }
 
 .ow-soft-card-quiet {
   border: 1px solid var(--dls-border);
   background: var(--dls-sidebar);
-  border-radius: 1.5rem;
+  border-radius: 0.75rem;
 }
 
 .ow-button-primary {
   display: inline-flex;
-  min-height: 48px;
+  min-height: 40px;
   align-items: center;
   justify-content: center;
-  border-radius: 9999px;
+  border-radius: 0.5rem;
   background: var(--dls-accent);
   color: var(--dls-accent-fg);
-  box-shadow: 0 8px 20px -16px rgba(var(--dls-accent-rgb), 0.45);
+  box-shadow: none;
 }
 
 .ow-button-primary:hover:not(:disabled) {
@@ -262,14 +262,14 @@ body {
 
 .ow-button-secondary {
   display: inline-flex;
-  min-height: 48px;
+  min-height: 40px;
   align-items: center;
   justify-content: center;
-  border-radius: 9999px;
+  border-radius: 0.5rem;
   border: 1px solid var(--dls-border);
   background: var(--dls-surface);
   color: var(--dls-text-primary);
-  box-shadow: var(--dls-card-shadow);
+  box-shadow: none;
 }
 
 .ow-button-secondary:hover:not(:disabled) {
@@ -298,12 +298,12 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 9999px;
+  border-radius: 0.375rem;
   padding: 0.25rem 0.625rem;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .ow-status-pill-positive {
@@ -328,7 +328,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0.85rem;
+  border-radius: 0.625rem;
   background: var(--slate-3);
   color: var(--slate-12);
 }
@@ -337,17 +337,17 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0.85rem;
+  border-radius: 0.625rem;
   background: var(--slate-3);
   color: var(--slate-11);
 }
 
-.ow-glass-card {
+.ow-soft-card {
   background: var(--dls-glass-bg);
   border: 1px solid var(--dls-glass-border);
-  border-radius: 1.25rem;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: 0.75rem;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   box-shadow: var(--dls-glow);
 }
 
@@ -356,7 +356,7 @@ body {
 }
 
 .ow-glow-border::before {
-  content: "";
+  content: none;
   position: absolute;
   inset: -1px;
   border-radius: inherit;
@@ -378,8 +378,8 @@ body {
 .ow-section-heading {
   font-size: 0.8125rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--dls-text-secondary);
 }
 
@@ -388,11 +388,11 @@ body {
   align-items: center;
   gap: 0.375rem;
   padding: 0.25rem 0.625rem;
-  border-radius: 9999px;
+  border-radius: 0.375rem;
   font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .ow-token-badge-eth {
@@ -418,7 +418,7 @@ body {
 .ow-empty-state-icon {
   width: 48px;
   height: 48px;
-  border-radius: 1rem;
+  border-radius: 0.625rem;
   background: var(--dls-surface-muted);
   display: flex;
   align-items: center;
@@ -444,11 +444,11 @@ body {
   align-items: center;
   gap: 0.25rem;
   padding: 0.125rem 0.5rem;
-  border-radius: 9999px;
+  border-radius: 0.375rem;
   font-size: 0.625rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
   background: rgba(52, 211, 153, 0.12);
   color: #34d399;
 }
@@ -488,7 +488,7 @@ body {
   appearance: none;
   width: 100%;
   border: 0;
-  border-radius: 0.9rem;
+  border-radius: 0.5rem;
   background: var(--slate-1);
   box-shadow: inset 0 0 0 1px var(--slate-6);
   color: var(--dls-text-primary);

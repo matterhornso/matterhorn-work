@@ -97,18 +97,19 @@ export default function PortfolioView({
         </div>
         <Button
           variant="ghost"
-          size="sm"
-          className="gap-1.5 text-xs text-dls-secondary"
+          size="icon-sm"
+          className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
           onClick={onRefresh}
           disabled={isLoading}
+          aria-label="Refresh portfolio"
+          title="Refresh portfolio"
         >
           <RefreshCw className={cn("size-3.5", isLoading && "animate-spin")} />
-          Refresh
         </Button>
       </div>
 
       {/* Total balance card */}
-      <div className="mb-4 rounded-2xl border border-dls-border bg-dls-sidebar p-4">
+      <div className="mb-4 rounded-lg border border-dls-border bg-dls-sidebar p-4">
         <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">
           Total Holdings
         </div>

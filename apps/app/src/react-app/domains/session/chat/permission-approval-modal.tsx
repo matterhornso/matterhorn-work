@@ -259,7 +259,7 @@ export function PermissionApprovalModal(props: PermissionApprovalModalProps) {
       >
         <AlertDialogHeader>
           <div className="flex items-start gap-4 text-left">
-            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${iconClass}`}>
+            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ${iconClass}`}>
               <Icon size={23} strokeWidth={1.9} />
             </div>
             <div className="min-w-0 flex-1">
@@ -274,7 +274,7 @@ export function PermissionApprovalModal(props: PermissionApprovalModalProps) {
         </AlertDialogHeader>
 
         <div className="space-y-3 px-6 py-5">
-          <div className="rounded-[20px] border border-dls-border bg-dls-hover/45 p-4">
+          <div className="rounded-lg border border-dls-border bg-dls-hover/45 p-4">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-dls-secondary">
               {t("session.permission_label")}
             </div>
@@ -288,18 +288,18 @@ export function PermissionApprovalModal(props: PermissionApprovalModalProps) {
             ) : null}
           </div>
 
-          <div className="rounded-[20px] border border-dls-border bg-dls-surface p-4">
+          <div className="rounded-lg border border-dls-border bg-dls-surface p-4">
             <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-dls-secondary">
               <HardDrive size={13} />
               {presentation.scopeLabel}
             </div>
-            <div className="mt-3 rounded-2xl border border-dls-border bg-dls-hover/55 px-3.5 py-3 font-mono text-[13px] leading-6 text-dls-text">
+            <div className="mt-3 rounded-lg border border-dls-border bg-dls-hover/55 px-3.5 py-3 font-mono text-[13px] leading-6 text-dls-text">
               <span className="block break-all">{presentation.scopeValue}</span>
             </div>
           </div>
 
           {detailRows.length > 0 ? (
-            <div className="rounded-[20px] border border-dls-border bg-dls-surface p-4">
+            <div className="rounded-lg border border-dls-border bg-dls-surface p-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-dls-secondary">
                 {t("session.permission_review_label")}
               </div>

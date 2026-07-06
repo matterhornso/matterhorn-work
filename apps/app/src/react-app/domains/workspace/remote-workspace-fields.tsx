@@ -81,7 +81,7 @@ export function RemoteWorkspaceFields({
 
         <label className="grid gap-2">
           <span className={inputLabelClass}>Access Token</span>
-          <div className="flex items-center gap-2 rounded-2xl bg-dls-hover/75 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <div className="flex items-center gap-2 rounded-lg bg-dls-hover/75 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
             <input
               type={tokenVisible ? "text" : "password"}
               value={token}

@@ -1,21 +1,14 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Ban,
-  CheckCircle2,
-  Clock3,
+  BrainCircuit,
+  ChevronDown,
   Download,
-  Edit3,
   Eye,
-  Inbox,
-  Info,
   RefreshCw,
   Search,
-  ShieldAlert,
-  Sparkles,
   Trash2,
   X,
-  XCircle,
 } from "lucide-react";
 
 import type {
@@ -40,8 +33,12 @@ import {
   MATTERHORN_MEMORY_SENSITIVITIES,
   sanitizeMemorySuggestionForDisplay,
 } from "@matterhorn-work/types";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { ErrorState } from "../shell/error-state";
 import {
   applyMatterhornMemoryDeskPolicyDefaults,
   getMatterhornMemoryPolicyDecision,
@@ -75,7 +72,7 @@ type SuggestionEditDraft = {
   note: string;
 };
 
-type SuggestionInboxFilter = "all" | MatterhornMemorySuggestionStatus;
+type SuggestionInboxFilter = "needs_review" | "saved" | "not_saved" | "all";
 
 type MemorySuggestionEventDetail = {
   suggestion?: MatterhornMemorySuggestion;
@@ -99,45 +96,48 @@ const SUGGESTION_INBOX_FILTERS: Array<{
   label: string;
   description: string;
 }> = [
+  { id: "needs_review", label: "Needs review", description: "Confirm, edit, or dismiss" },
+  { id: "saved", label: "Saved", description: "Confirmed or saved after editing" },
+  { id: "not_saved", label: "Not saved", description: "Dismissed, expired, or blocked" },
   { id: "all", label: "All", description: "Every visible suggestion" },
-  { id: "pending", label: "New", description: "Needs review" },
-  { id: "edited", label: "Edited", description: "Changed and saved" },
-  { id: "confirmed", label: "Confirmed", description: "Remembered" },
-  { id: "dismissed", label: "Dismissed", description: "Not saved" },
-  { id: "expired", label: "Expired", description: "Stale" },
-  { id: "blocked", label: "Blocked", description: "Policy stopped" },
 ];
+
+const SAVED_SUGGESTION_STATUSES = new Set<MatterhornMemorySuggestionStatus>(["confirmed", "edited"]);
+const NOT_SAVED_SUGGESTION_STATUSES = new Set<MatterhornMemorySuggestionStatus>(["dismissed", "expired", "blocked"]);
+const MEMORY_FIELD_CLASS =
+  "border-transparent bg-dls-surface-muted/25 shadow-none placeholder:text-dls-secondary/80 focus-visible:border-[rgba(var(--dls-accent-rgb),0.45)] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.22)]";
+const MEMORY_SELECT_CLASS =
+  "h-10 rounded-md border border-transparent bg-dls-background/45 px-3 text-sm outline-none transition-colors focus:border-[rgba(var(--dls-accent-rgb),0.45)] focus:ring-1 focus:ring-[rgba(var(--dls-accent-rgb),0.22)]";
+const MEMORY_MUTED_BADGE_CLASS = "border-transparent bg-transparent px-0 text-dls-secondary";
 
 function formatKind(kind: string) {
   return kind.replaceAll("_", " ");
 }
 
 function sensitivityClassName(sensitivity: MatterhornMemorySensitivity) {
-  if (sensitivity === "public") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
-  if (sensitivity === "private") return "border-[rgba(var(--matterhorn-blue-rgb),0.35)] bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary";
-  if (sensitivity === "restricted") return "border-amber-500/35 bg-amber-500/10 text-amber-200";
-  return "border-red-500/35 bg-red-500/10 text-red-200";
+  if (sensitivity === "public") return "border-transparent bg-transparent px-0 text-emerald-200";
+  if (sensitivity === "private") return "border-transparent bg-transparent px-0 text-primary";
+  if (sensitivity === "restricted") return "border-transparent bg-transparent px-0 text-amber-200";
+  return "border-transparent bg-transparent px-0 text-red-200";
 }
 
 function suggestionStatusMeta(status: MatterhornMemorySuggestionStatus) {
   if (status === "confirmed") {
     return {
-      label: "Confirmed",
+      label: "Saved",
       title: "Remembered",
       description: "Saved as visible memory after user confirmation.",
-      icon: CheckCircle2,
-      className: "border-emerald-500/35 bg-emerald-500/10 text-emerald-100",
-      cardClassName: "border-emerald-500/25 bg-emerald-500/5",
+      className: "border-transparent bg-transparent px-0 text-emerald-100",
+      cardClassName: "bg-emerald-500/5",
     };
   }
   if (status === "edited") {
     return {
-      label: "Edited",
+      label: "Saved edited",
       title: "Edited + saved",
       description: "Saved only after the user reviewed and changed it.",
-      icon: Edit3,
-      className: "border-[rgba(var(--matterhorn-blue-rgb),0.42)] bg-[rgba(var(--matterhorn-blue-rgb),0.14)] text-primary",
-      cardClassName: "border-[rgba(var(--matterhorn-blue-rgb),0.32)] bg-[rgba(var(--matterhorn-blue-rgb),0.07)]",
+      className: "border-transparent bg-transparent px-0 text-primary",
+      cardClassName: "bg-[rgba(var(--matterhorn-blue-rgb),0.06)]",
     };
   }
   if (status === "dismissed") {
@@ -145,8 +145,7 @@ function suggestionStatusMeta(status: MatterhornMemorySuggestionStatus) {
       label: "Dismissed",
       title: "Dismissed",
       description: "Kept out of memory and suppressed for this trigger window.",
-      icon: XCircle,
-      className: "border-dls-border bg-dls-surface text-dls-secondary",
+      className: MEMORY_MUTED_BADGE_CLASS,
       cardClassName: "opacity-75",
     };
   }
@@ -155,37 +154,26 @@ function suggestionStatusMeta(status: MatterhornMemorySuggestionStatus) {
       label: "Expired",
       title: "Expired",
       description: "Needs a fresh suggestion before it can be saved.",
-      icon: Clock3,
-      className: "border-amber-500/35 bg-amber-500/10 text-amber-100",
-      cardClassName: "border-amber-500/25 bg-amber-500/5 opacity-80",
+      className: "border-transparent bg-transparent px-0 text-amber-100",
+      cardClassName: "bg-amber-500/5 opacity-80",
     };
   }
   if (status === "blocked") {
     return {
-      label: "Blocked",
+      label: "Blocked by policy",
       title: "Blocked",
       description: "Policy stopped this suggestion from becoming memory.",
-      icon: Ban,
-      className: "border-red-500/35 bg-red-500/10 text-red-100",
-      cardClassName: "border-red-500/30 bg-red-500/10",
+      className: "border-transparent bg-transparent px-0 text-red-100",
+      cardClassName: "bg-red-500/10",
     };
   }
   return {
-    label: "New",
+    label: "Needs review",
     title: "New suggestion",
-    description: "Review, edit, or dismiss. No hidden save happens here.",
-    icon: Sparkles,
-    className: "border-[rgba(var(--matterhorn-blue-rgb),0.42)] bg-[rgba(var(--matterhorn-blue-rgb),0.14)] text-primary",
+    description: "Review, edit, or dismiss before saving.",
+    className: "border-transparent bg-transparent px-0 text-primary",
     cardClassName: "",
   };
-}
-
-function confidenceSegments(confidence: number) {
-  const bounded = Math.max(0, Math.min(1, confidence));
-  if (bounded >= 0.72) return 3;
-  if (bounded >= 0.42) return 2;
-  if (bounded > 0) return 1;
-  return 0;
 }
 
 function suggestionDeskReason(suggestion: MatterhornMemorySuggestion) {
@@ -199,30 +187,6 @@ function suggestionDeskReason(suggestion: MatterhornMemorySuggestion) {
     return "Longevity memory stays opt-in and restricted by default. It should describe preferences or workflow context, not hidden medical or clinical records.";
   }
   return "This suggestion came from visible workflow context. Confirming it stores only the shown record.";
-}
-
-function suggestionActionMessage(entry: MatterhornMemorySuggestionInboxEntry) {
-  if (entry.status === "confirmed") return "Remembered as visible memory.";
-  if (entry.status === "edited") return "Edited, then saved as visible memory.";
-  if (entry.status === "dismissed") {
-    return `Dismissed. Similar suggestions stay suppressed for ${entry.dismissalWindowDays} days unless created again by new context.`;
-  }
-  if (entry.status === "expired") return "Expired. Ask Matterhorn again to create a fresh suggestion.";
-  if (entry.status === "blocked") return "Blocked by memory policy. It was not saved.";
-  return "Review first. Confirm, edit, or dismiss. Nothing is saved automatically.";
-}
-
-function suggestionAvailableActions(entry: MatterhornMemorySuggestionInboxEntry) {
-  if (entry.status === "pending" && !shouldHideSuggestionContent(entry)) {
-    return "Available actions: Confirm, edit, or dismiss.";
-  }
-  if (entry.status === "expired") {
-    return "Available action: Dismiss from view only. Ask Matterhorn again for fresh context.";
-  }
-  if (entry.status === "blocked") {
-    return "Available action: Dismiss from view only. Content remains redacted.";
-  }
-  return "Available actions: none. This card is read-only lifecycle history.";
 }
 
 function shouldHideSuggestionContent(entry: MatterhornMemorySuggestionInboxEntry) {
@@ -241,7 +205,7 @@ function hiddenSuggestionSummary(entry: MatterhornMemorySuggestionInboxEntry) {
   if (entry.status === "expired") {
     return "This suggestion is stale and cannot be saved. Dismiss it and ask Matterhorn again if the context still matters.";
   }
-  return "Blocked suggestion content hidden. Matterhorn hides the proposed title, body, source, and Why suggested details because the candidate may contain unsafe memory material.";
+  return "Matterhorn blocked this suggestion before it could become memory. The proposed content stays hidden.";
 }
 
 function readableSuggestionNote(record: MatterhornMemoryRecord) {
@@ -330,7 +294,7 @@ function buildMemoryRecord(draft: CaptureDraft, workspaceId: string | null, sess
       capturedAt: now,
       capturedBy: "user",
       confidence: 1,
-      reasonRemembered: "User explicitly clicked Remember this in the Matterhorn Memory panel.",
+      reasonRemembered: "User explicitly clicked Save memory in the Matterhorn Memory panel.",
     },
     sensitivity: draft.sensitivity,
     createdAt: now,
@@ -351,7 +315,7 @@ function useMemoryRecords(client: MatterhornServerClient | null) {
   const refresh = useCallback(async () => {
     if (!client) {
       setRecords([]);
-      setError("Memory API unavailable. Connect to the local Matterhorn server.");
+      setError("Matterhorn Work engine is offline. Check that Matterhorn Work is running and the workspace is connected.");
       return;
     }
     setLoading(true);
@@ -362,7 +326,7 @@ function useMemoryRecords(client: MatterhornServerClient | null) {
         : await client.listMemory({ limit: 80 });
       setRecords(response.records ?? []);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not load Matterhorn Memory.");
+      setError(nextError instanceof Error ? nextError.message : "Could not load memory.");
     } finally {
       setLoading(false);
     }
@@ -416,7 +380,7 @@ function useMemorySuggestionInbox(client: MatterhornServerClient | null) {
       const response = await client.listMemorySuggestions({ includeResolved: true, limit: 40 });
       setEntries(response.entries ?? []);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not load Memory suggestions.");
+      setError(nextError instanceof Error ? nextError.message : "Could not load memory review.");
     } finally {
       setLoading(false);
     }
@@ -461,7 +425,8 @@ export function MemoryPanel(props: MemoryPanelProps) {
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [editingSuggestionId, setEditingSuggestionId] = useState<string | null>(null);
   const [suggestionEditDraft, setSuggestionEditDraft] = useState<SuggestionEditDraft | null>(null);
-  const [suggestionStatusFilter, setSuggestionStatusFilter] = useState<SuggestionInboxFilter>("all");
+  const [suggestionStatusFilter, setSuggestionStatusFilter] = useState<SuggestionInboxFilter>("needs_review");
+  const [manualCaptureOpen, setManualCaptureOpen] = useState(false);
 
   useEffect(() => {
     const handleSuggestions = (event: Event) => {
@@ -496,24 +461,26 @@ export function MemoryPanel(props: MemoryPanelProps) {
 
   const suggestionStatusCounts = useMemo(() => {
     const counts: Record<SuggestionInboxFilter, number> = {
+      needs_review: 0,
+      saved: 0,
+      not_saved: 0,
       all: suggestionEntries.length,
-      pending: 0,
-      confirmed: 0,
-      edited: 0,
-      dismissed: 0,
-      expired: 0,
-      blocked: 0,
     };
     for (const entry of suggestionEntries) {
-      counts[entry.status] += 1;
+      if (entry.status === "pending") counts.needs_review += 1;
+      if (SAVED_SUGGESTION_STATUSES.has(entry.status)) counts.saved += 1;
+      if (NOT_SAVED_SUGGESTION_STATUSES.has(entry.status)) counts.not_saved += 1;
     }
     return counts;
   }, [suggestionEntries]);
 
   const filteredSuggestionEntries = useMemo(
-    () => suggestionStatusFilter === "all"
-      ? suggestionEntries
-      : suggestionEntries.filter((entry) => entry.status === suggestionStatusFilter),
+    () => {
+      if (suggestionStatusFilter === "all") return suggestionEntries;
+      if (suggestionStatusFilter === "needs_review") return suggestionEntries.filter((entry) => entry.status === "pending");
+      if (suggestionStatusFilter === "saved") return suggestionEntries.filter((entry) => SAVED_SUGGESTION_STATUSES.has(entry.status));
+      return suggestionEntries.filter((entry) => NOT_SAVED_SUGGESTION_STATUSES.has(entry.status));
+    },
     [suggestionEntries, suggestionStatusFilter],
   );
 
@@ -726,14 +693,10 @@ export function MemoryPanel(props: MemoryPanelProps) {
     <div className="flex h-full min-h-0 flex-col bg-dls-background text-dls-text">
       <header className="flex shrink-0 items-start justify-between gap-3 px-5 pb-4 pt-5">
         <div className="min-w-0">
-          <div className="text-lg font-semibold tracking-[-0.01em]">Matterhorn Memory</div>
+          <div className="text-lg font-semibold">Memory</div>
           <p className="mt-1 max-w-[34rem] text-sm leading-6 text-dls-secondary">
-            Save only what you review; nothing is saved unless you confirm.
+            Review suggestions before saving.
           </p>
-          <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-semibold text-primary">
-            <span className="rounded-md bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-2 py-1">No hidden memory</span>
-            <span className="rounded-md bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-2 py-1">No hidden save</span>
-          </div>
         </div>
         <Button variant="ghost" size="icon-sm" onClick={props.onClose} aria-label="Close Memory panel">
           <X size={16} />
@@ -745,22 +708,25 @@ export function MemoryPanel(props: MemoryPanelProps) {
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <label className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-dls-secondary" />
-              <input
+              <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                className="h-10 w-full rounded-md border border-dls-border/50 bg-dls-surface-muted/20 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-dls-secondary focus:border-primary focus:bg-dls-background"
-                placeholder="Search memories, receipts, addresses..."
+                className={cn("h-10 pl-9", MEMORY_FIELD_CLASS)}
+                placeholder="Search saved memories..."
               />
             </label>
-            <Button className="justify-center rounded-md border-dls-border/60 bg-dls-surface-muted/20 hover:bg-dls-hover/65 sm:w-auto" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
-              <RefreshCw className={cn("mr-2 size-3.5", loading && "animate-spin")} />
-              Refresh
+            <Button className="justify-center border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text sm:w-auto" variant="ghost" size="icon-sm" onClick={() => void refresh()} disabled={loading} aria-label="Refresh saved memories">
+              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
             </Button>
           </div>
           {error ? (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-              {error}
-            </div>
+            <ErrorState
+              error={error}
+              title="Could not load memory"
+              onRetry={() => void refresh()}
+              tone="memory"
+              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"
+            />
           ) : null}
         </section>
 
@@ -782,7 +748,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 <button
                   key={record.id}
                   type="button"
-                  className="rounded-full bg-dls-hover/45 px-3 py-1 text-xs text-dls-text transition-colors hover:bg-red-500/10 hover:text-red-200"
+                  className="rounded-md bg-dls-hover/45 px-3 py-1 text-xs text-dls-text transition-colors hover:bg-red-500/10 hover:text-red-200"
                   onClick={() => toggleSelectedRecord(record)}
                   title="Remove memory from chat context"
                 >
@@ -796,53 +762,32 @@ export function MemoryPanel(props: MemoryPanelProps) {
         <section className="space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
-                <Inbox className="size-4" />
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-md text-dls-secondary">
+                <BrainCircuit className="size-4" />
               </span>
               <div>
-                <div className="text-sm font-semibold">Suggestion inbox</div>
+                <div className="text-sm font-semibold">Memory review</div>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                  Review suggestions before anything is saved.
+                  Nothing is saved until you choose Remember or Save edited.
                 </p>
               </div>
             </div>
-            <Button className="shrink-0 rounded-md border-transparent bg-dls-hover/35 hover:bg-dls-hover/65" variant="outline" size="sm" onClick={() => void refreshSuggestions()} disabled={suggestionsLoading || !props.client}>
-              <RefreshCw className={cn("mr-2 size-3.5", suggestionsLoading && "animate-spin")} />
-              Refresh
+            <Button className="shrink-0 border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text" variant="ghost" size="icon-sm" onClick={() => void refreshSuggestions()} disabled={suggestionsLoading || !props.client} aria-label="Refresh memory review">
+              <RefreshCw className={cn("size-3.5", suggestionsLoading && "animate-spin")} />
             </Button>
           </div>
           {suggestionsError ? (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-              {suggestionsError}
-            </div>
+            <ErrorState
+              error={suggestionsError}
+              title="Could not load memory review"
+              onRetry={() => void refreshSuggestions()}
+              tone="memory"
+              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"
+            />
           ) : null}
 
-          <div className="grid gap-2 sm:grid-cols-3" aria-label="Memory inbox lifecycle summary">
-            <div className="grid min-w-0 grid-cols-[1fr_auto] gap-3 rounded-md bg-dls-surface-muted/22 px-3 py-2">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-dls-secondary">Needs review</div>
-                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Confirm, edit, or dismiss.</p>
-              </div>
-              <div className="text-lg font-semibold">{suggestionStatusCounts.pending}</div>
-            </div>
-            <div className="grid min-w-0 grid-cols-[1fr_auto] gap-3 rounded-md bg-dls-surface-muted/22 px-3 py-2">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-dls-secondary">Saved history</div>
-                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Confirmed or edited.</p>
-              </div>
-              <div className="text-lg font-semibold">{suggestionStatusCounts.confirmed + suggestionStatusCounts.edited}</div>
-            </div>
-            <div className="grid min-w-0 grid-cols-[1fr_auto] gap-3 rounded-md bg-dls-surface-muted/22 px-3 py-2">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-dls-secondary">Not saved</div>
-                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Dismissed, expired, or blocked.</p>
-              </div>
-              <div className="text-lg font-semibold">{suggestionStatusCounts.dismissed + suggestionStatusCounts.expired + suggestionStatusCounts.blocked}</div>
-            </div>
-          </div>
-
           <div aria-label="Memory inbox filters">
-            <div className="grid grid-cols-2 gap-1 rounded-lg bg-dls-surface-muted/35 p-1 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-0.5 rounded-md bg-dls-surface-muted/10 p-0.5 sm:grid-cols-4">
               {SUGGESTION_INBOX_FILTERS.map((filter) => {
                 const selected = suggestionStatusFilter === filter.id;
                 return (
@@ -854,8 +799,8 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     className={cn(
                       "min-w-0 rounded-md px-2 py-1.5 text-center text-[11px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]",
                       selected
-                        ? "bg-[rgba(var(--dls-accent-rgb),0.18)] text-dls-text shadow-sm ring-1 ring-[rgba(var(--dls-accent-rgb),0.35)]"
-                        : "text-dls-secondary hover:bg-dls-hover/65 hover:text-dls-text",
+                        ? "bg-dls-hover/45 text-dls-text"
+                        : "text-dls-secondary hover:bg-dls-hover/35 hover:text-dls-text",
                     )}
                   >
                     <span className="font-semibold">{filter.label}</span>
@@ -868,13 +813,13 @@ export function MemoryPanel(props: MemoryPanelProps) {
           </div>
 
           {suggestionsLoading && !suggestionEntries.length ? (
-            <div className="rounded-lg bg-dls-surface-muted/22 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+            <div className="rounded-lg bg-dls-surface-muted/15 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
               Loading suggestion inbox...
             </div>
           ) : null}
 
           {suggestionEntries.length > 0 && !filteredSuggestionEntries.length ? (
-            <div className="rounded-lg bg-dls-surface-muted/22 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+            <div className="rounded-lg bg-dls-surface-muted/15 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
               No suggestions match this filter. <span className="font-semibold text-dls-text">{selectedSuggestionFilter.label}</span> currently has no visible entries.
             </div>
           ) : null}
@@ -884,143 +829,107 @@ export function MemoryPanel(props: MemoryPanelProps) {
               {filteredSuggestionEntries.map((entry) => {
                 const suggestion = entry.suggestion;
                 const statusMeta = suggestionStatusMeta(entry.status);
-                const StatusIcon = statusMeta.icon;
                 const resolved = entry.status === "confirmed" || entry.status === "edited" || entry.status === "dismissed";
                 const hidesSensitiveContent = shouldHideSuggestionContent(entry);
-                const actionable = canActOnSuggestion(entry);
-                const showActiveSuggestionActions = actionable;
+                const showActiveSuggestionActions = canActOnSuggestion(entry);
                 const showDismissFromViewAction = canDismissSuggestionFromView(entry);
                 const editing = editingSuggestionId === entry.id && suggestionEditDraft;
                 const confidence = Math.round(suggestion.confidence * 100);
-                const activeConfidenceSegments = confidenceSegments(suggestion.confidence);
                 return (
                   <article key={entry.id} className={cn(
-                    "overflow-hidden rounded-lg bg-dls-surface-muted/20 p-3",
+                    "overflow-hidden rounded-md bg-dls-surface-muted/10 p-3.5 ring-1 ring-white/[0.04]",
                     statusMeta.cardClassName,
                     resolved && "shadow-none",
                   )}>
-                    <div className="grid gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", statusMeta.className)}>
-                            <StatusIcon className="size-3" />
-                            {statusMeta.label}
-                          </span>
-                          {hidesSensitiveContent ? (
-                            <span className="rounded-full border border-red-500/25 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-red-100">
-                              Policy protected
-                            </span>
-                          ) : (
-                            <>
-                              <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", sensitivityClassName(suggestion.proposedRecord.sensitivity))}>
-                                {suggestion.proposedRecord.sensitivity}
-                              </span>
-                              <span className="rounded-full border border-transparent bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                                {suggestion.desk}
-                              </span>
-                              <span className="rounded-full border border-transparent bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                                {formatKind(suggestion.proposedRecord.kind)}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                        <h3 className="mt-2 break-words text-sm font-semibold">
-                          {hidesSensitiveContent ? "Blocked suggestion hidden" : suggestion.proposedRecord.title}
-                        </h3>
-                        <p className="mt-1 break-words text-xs leading-5 text-dls-secondary">
-                          {hidesSensitiveContent ? hiddenSuggestionSummary(entry) : suggestion.proposedRecord.summary}
-                        </p>
-                      </div>
-                      {hidesSensitiveContent ? (
-                        <div className="min-w-0 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-100">
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.08em]">Content redacted</div>
-                          <p className="mt-1">No title, body, source, confidence detail, or trigger text is rendered for blocked suggestions.</p>
-                        </div>
-                      ) : (
-                        <div className="min-w-0 rounded-lg bg-dls-hover/25 px-3 py-2">
-                          <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                            <span>Confidence</span>
-                            <span>{confidence}%</span>
-                          </div>
-                          <div className="mt-2 grid grid-cols-3 gap-1" aria-label={`${confidence}% confidence`}>
-                            {[0, 1, 2].map((segment) => (
-                              <span
-                                key={segment}
-                                className={cn(
-                                  "h-1.5 rounded-full bg-dls-hover",
-                                  segment < activeConfidenceSegments && "bg-primary",
-                                )}
-                              />
-                            ))}
-                          </div>
-                          <p className="mt-2 text-[11px] leading-4 text-dls-secondary">{statusMeta.description}</p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-3 rounded-lg bg-dls-hover/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-dls-text">Lifecycle state:</span>
-                        <span>{statusMeta.title}</span>
-                      </div>
-                      <p className="mt-1">{suggestionAvailableActions(entry)}</p>
-                    </div>
-
                     {hidesSensitiveContent ? (
-                      <div className="mt-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-100">
-                        <div className="flex items-center gap-2 font-semibold">
-                          <Ban className="size-3.5" />
-                          Why hidden
-                        </div>
-                        <p className="mt-1">
-                          Matterhorn withheld the trigger, proposed memory, and source metadata before this candidate could become Memory.
+                      <div>
+                          <Badge variant="outline" className={cn("border-transparent bg-transparent px-0 text-red-100", statusMeta.className)}>
+                          Blocked by policy
+                        </Badge>
+                        <h3 className="mt-2 break-words text-sm font-semibold">Blocked by policy</h3>
+                        <p className="mt-1 break-words text-xs leading-5 text-red-100">
+                          {hiddenSuggestionSummary(entry)}
                         </p>
+                        {entry.policyWarnings?.length ? (
+                          <p className="mt-2 text-xs leading-5 text-red-100">
+                            {entry.policyWarnings.slice(0, 2).join(" ")}
+                          </p>
+                        ) : null}
                       </div>
                     ) : (
-                      <div className="mt-3 rounded-lg bg-dls-hover/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
-                        <div className="flex items-center gap-2 font-semibold text-dls-text">
-                          <Info className="size-3.5 text-primary" />
-                          Why suggested
+                      <>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-medium leading-4">
+                          <Badge variant="outline" className={cn("h-auto text-[10px] leading-4", statusMeta.className)}>
+                            {statusMeta.label}
+                          </Badge>
+                          <Badge variant="outline" className={cn("h-auto text-[10px] leading-4", MEMORY_MUTED_BADGE_CLASS)}>
+                            {suggestion.desk}
+                          </Badge>
+                          <Badge variant="outline" className={cn("h-auto text-[10px] leading-4", sensitivityClassName(suggestion.proposedRecord.sensitivity))}>
+                            {suggestion.proposedRecord.sensitivity}
+                          </Badge>
+                          <Badge variant="outline" className={cn("h-auto text-[10px] leading-4", MEMORY_MUTED_BADGE_CLASS)}>
+                            {confidence}% confidence
+                          </Badge>
                         </div>
-                        <p className="mt-1 break-words">
-                          <span className="font-semibold text-dls-text">Trigger:</span> {entry.reason || suggestion.reason}
+                        <h3 className="mt-2 break-words text-sm font-semibold">{suggestion.proposedRecord.title}</h3>
+                        <p className="mt-1 break-words text-xs leading-5 text-dls-secondary">
+                          {suggestion.proposedRecord.summary}
                         </p>
-                        <p className="mt-1 break-words">
-                          <span className="font-semibold text-dls-text">Boundary:</span> {suggestionDeskReason(suggestion)}
-                        </p>
-                        <p className="mt-1 break-words">
-                          <span className="font-semibold text-dls-text">Source:</span> {entry.source}; <span className="font-semibold text-dls-text">scope:</span> {entry.scope}; <span className="font-semibold text-dls-text">dismissal window:</span> {entry.dismissalWindowDays} days.
-                        </p>
-                      </div>
+                        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] leading-4 text-dls-secondary">
+                          <span><span className="font-medium text-dls-text">Source:</span> {entry.source}</span>
+                          <span><span className="font-medium text-dls-text">Scope:</span> {entry.scope}</span>
+                          <span><span className="font-medium text-dls-text">Dismissal window:</span> {entry.dismissalWindowDays} days</span>
+                        </div>
+                        <details className="mt-3 group">
+                          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-dls-secondary transition-colors hover:text-dls-text">
+                            <ChevronDown className="size-3 transition-transform group-open:rotate-180" />
+                            Why suggested
+                          </summary>
+                          <div className="mt-2 space-y-1.5 rounded-md bg-dls-background/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
+                            <p className="break-words">
+                              <span className="font-medium text-dls-text">Trigger:</span> {entry.reason || suggestion.reason}
+                            </p>
+                            <p className="break-words">
+                              <span className="font-medium text-dls-text">Boundary:</span> {suggestionDeskReason(suggestion)}
+                            </p>
+                            <p className="break-words">
+                              <span className="font-medium text-dls-text">Kind:</span> {formatKind(suggestion.proposedRecord.kind)}
+                            </p>
+                            {entry.policyWarnings?.length ? (
+                              <p className="break-words text-amber-100">{entry.policyWarnings.slice(0, 3).join(" ")}</p>
+                            ) : null}
+                          </div>
+                        </details>
+                      </>
                     )}
 
                     {editing ? (
-                      <div className="mt-3 grid gap-2 rounded-lg bg-dls-background/45 p-3 ring-1 ring-dls-border/60">
+                      <div className="mt-3 grid gap-2 rounded-md bg-dls-background/30 p-3 ring-1 ring-dls-border/20">
                         <div className="text-xs font-semibold text-dls-text">Edit before saving</div>
-                        <input
+                        <Input
                           value={suggestionEditDraft.title}
                           onChange={(event) => setSuggestionEditDraft((current) => current ? { ...current, title: event.target.value } : current)}
-                          className="h-10 min-w-0 rounded-md border border-transparent bg-dls-surface px-3 text-sm outline-none focus:border-primary"
+                          className={cn("h-10", MEMORY_FIELD_CLASS)}
                           placeholder="Memory title"
                         />
-                        <input
+                        <Input
                           value={suggestionEditDraft.summary}
                           onChange={(event) => setSuggestionEditDraft((current) => current ? { ...current, summary: event.target.value } : current)}
-                          className="h-10 min-w-0 rounded-md border border-transparent bg-dls-surface px-3 text-sm outline-none focus:border-primary"
+                          className={cn("h-10", MEMORY_FIELD_CLASS)}
                           placeholder="Short summary"
                         />
-                        <textarea
+                        <Textarea
                           value={suggestionEditDraft.note}
                           onChange={(event) => setSuggestionEditDraft((current) => current ? { ...current, note: event.target.value } : current)}
-                          className="min-h-24 min-w-0 resize-y rounded-md border border-transparent bg-dls-surface px-3 py-2 text-sm leading-6 outline-none focus:border-primary"
+                          className={cn("min-h-24 resize-y", MEMORY_FIELD_CLASS)}
                           placeholder="Memory note"
                         />
                         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                           <Button size="sm" onClick={() => void handleSaveEditedSuggestion(entry)} disabled={!props.client}>
-                            <CheckCircle2 className="mr-2 size-3.5" />
-                            Save edited memory
+                            Save edited
                           </Button>
-                          <Button variant="outline" size="sm" onClick={cancelSuggestionEdit}>
+                          <Button variant="ghost" size="sm" className="bg-transparent hover:bg-dls-hover/35" onClick={cancelSuggestionEdit}>
                             Cancel
                           </Button>
                         </div>
@@ -1032,14 +941,6 @@ export function MemoryPanel(props: MemoryPanelProps) {
                         <span className="font-semibold text-dls-text">Resolution:</span> {entry.resolutionReason}
                       </p>
                     ) : null}
-                    {entry.policyWarnings?.length && !hidesSensitiveContent ? (
-                      <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-100">
-                        {entry.policyWarnings.slice(0, 3).join(" ")}
-                      </div>
-                    ) : null}
-                    <div className="mt-3 rounded-lg bg-dls-hover/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
-                      <span className="font-semibold text-dls-text">{statusMeta.title}:</span> {suggestionActionMessage(entry)}
-                    </div>
                     {showActiveSuggestionActions ? (
                       <div className="mt-3 grid gap-2 sm:grid-cols-3">
                         <Button
@@ -1049,55 +950,49 @@ export function MemoryPanel(props: MemoryPanelProps) {
                           disabled={!props.client}
                           aria-label={`Remember visible Memory suggestion: ${suggestion.proposedRecord.title}`}
                         >
-                          <CheckCircle2 className="mr-2 size-3.5" />
-                          Remember this
+                          Remember
                         </Button>
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="justify-center"
+                          className="justify-center bg-transparent hover:bg-dls-hover/35"
                           onClick={() => beginSuggestionEdit(entry)}
                           disabled={!props.client || Boolean(editing)}
                           aria-label={`Edit visible Memory suggestion before saving: ${suggestion.proposedRecord.title}`}
                         >
-                          <Edit3 className="mr-2 size-3.5" />
-                          Edit first
+                          Edit
                         </Button>
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="justify-center"
+                          className="justify-center bg-transparent hover:bg-dls-hover/35"
                           onClick={() => void handleResolveSuggestion(entry, "dismiss")}
                           disabled={!props.client}
                           aria-label={`Dismiss visible Memory suggestion: ${suggestion.proposedRecord.title}`}
                         >
-                          <XCircle className="mr-2 size-3.5" />
                           Dismiss
                         </Button>
                       </div>
                     ) : showDismissFromViewAction ? (
                       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
+                          className="bg-transparent hover:bg-dls-hover/35"
                           onClick={() => handleDismissSuggestionFromView(entry)}
                           aria-label={`Dismiss ${entry.status} Memory suggestion from view`}
                         >
-                          <XCircle className="mr-2 size-3.5" />
                           Dismiss from view
                         </Button>
                       </div>
                     ) : null}
-                    <p className="mt-2 text-[11px] leading-4 text-dls-secondary">
-                      No hidden save. Confirm and edit actions are explicit user choices; edited cards are already saved, and blocked, expired, dismissed, confirmed, and edited cards are read-only history.
-                    </p>
                   </article>
                 );
               })}
             </div>
           ) : (
             !suggestionsLoading && !suggestionEntries.length ? (
-              <div className="rounded-lg bg-dls-surface-muted/22 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+              <div className="rounded-lg bg-dls-surface-muted/15 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
                 No suggestions yet. Matterhorn will show visible candidates here before anything is remembered.
               </div>
             ) : null
@@ -1105,40 +1000,50 @@ export function MemoryPanel(props: MemoryPanelProps) {
         </section>
 
         <section className="space-y-2">
-          {records.length === 0 && !loading ? (
-              <div className="rounded-lg bg-dls-surface-muted/22 px-4 py-8 text-center">
-              <div className="text-sm font-medium">No memories yet</div>
-              <p className="mt-2 text-xs leading-5 text-dls-secondary">
-                Save one manually below. Nothing is stored without confirmation.
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold">Saved memories</div>
+              <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                Confirmed records you can use in chat, forget, or export.
               </p>
+            </div>
+          </div>
+          {records.length === 0 && !loading ? (
+            <div className="rounded-lg bg-dls-surface-muted/15 px-4 py-8 text-center">
+              <div className="text-sm font-medium">No saved memories yet</div>
+              {manualCaptureOpen ? (
+                <p className="mt-2 text-xs leading-5 text-dls-secondary">
+                  Complete the manual capture form below to save a visible memory.
+                </p>
+              ) : null}
             </div>
           ) : null}
           {records.map((record) => {
             const policyDecision = getMatterhornMemoryPolicyDecision(record);
             const selected = visibleSelectedRecords.some((item) => item.id === record.id);
             return (
-              <article key={record.id} className="rounded-lg bg-dls-surface-muted/20 p-3.5">
+              <article key={record.id} className="rounded-md bg-dls-surface-muted/10 p-3.5 ring-1 ring-white/[0.04]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm font-semibold">{record.title}</h3>
-                      <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", sensitivityClassName(record.sensitivity))}>
+                      <Badge variant="outline" className={cn("text-[10px]", sensitivityClassName(record.sensitivity))}>
                         {record.sensitivity}
-                      </span>
-                      <span className="rounded-full border border-transparent bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                      </Badge>
+                      <Badge variant="outline" className={cn("text-[10px]", MEMORY_MUTED_BADGE_CLASS)}>
                         {policyDecision.deskLabel}
-                      </span>
+                      </Badge>
                     </div>
                     <p className="mt-1 text-xs leading-5 text-dls-secondary">{record.summary}</p>
                   </div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.08em] text-dls-secondary">
-                  <span className="rounded-full bg-dls-hover/45 px-2 py-1">{formatKind(record.kind)}</span>
-                  <span className="rounded-full bg-dls-hover/45 px-2 py-1">{record.scope}</span>
-                  <span className="rounded-full bg-dls-hover/45 px-2 py-1">{record.provenance.source}</span>
-                  <span className="rounded-full bg-dls-hover/45 px-2 py-1">{Math.round(record.provenance.confidence * 100)}% confidence</span>
-                  <span className="rounded-full bg-dls-hover/45 px-2 py-1">MCP/API {policyDecision.canSendToMcpApi ? "allowed" : "blocked"}</span>
-                  <span className="rounded-full bg-dls-hover/45 px-2 py-1">Export {policyDecision.canExport ? "allowed" : "blocked"}</span>
+                <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-dls-secondary">
+                  <Badge variant="outline" className={cn("text-[10px]", MEMORY_MUTED_BADGE_CLASS)}>{formatKind(record.kind)}</Badge>
+                  <Badge variant="outline" className={cn("text-[10px]", MEMORY_MUTED_BADGE_CLASS)}>{record.scope}</Badge>
+                  <Badge variant="outline" className={cn("text-[10px]", MEMORY_MUTED_BADGE_CLASS)}>{record.provenance.source}</Badge>
+                  <Badge variant="outline" className={cn("text-[10px]", MEMORY_MUTED_BADGE_CLASS)}>{Math.round(record.provenance.confidence * 100)}% confidence</Badge>
+                  <Badge variant="outline" className={cn("text-[10px]", MEMORY_MUTED_BADGE_CLASS)}>MCP/API {policyDecision.canSendToMcpApi ? "allowed" : "blocked"}</Badge>
+                  <Badge variant="outline" className={cn("text-[10px]", MEMORY_MUTED_BADGE_CLASS)}>Export {policyDecision.canExport ? "allowed" : "blocked"}</Badge>
                 </div>
                 {policyDecision.blockedReasons.length || policyDecision.warnings.length ? (
                   <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100">
@@ -1149,14 +1054,15 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 {record.tags.length ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {record.tags.slice(0, 8).map((tag) => (
-                      <span key={tag} className="rounded-full bg-dls-hover px-2 py-0.5 text-[11px] text-dls-secondary">#{tag}</span>
+                      <Badge key={tag} variant="outline" className={cn("px-2 py-0.5 text-[11px]", MEMORY_MUTED_BADGE_CLASS)}>#{tag}</Badge>
                     ))}
                   </div>
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
-                    variant={selected ? "default" : "outline"}
+                    variant={selected ? "default" : "ghost"}
                     size="sm"
+                    className={cn(!selected && "bg-transparent hover:bg-dls-hover/35")}
                     disabled={!policyDecision.canUseInChat}
                     onClick={() => toggleSelectedRecord(record)}
                     title={policyDecision.canUseInChat ? "Use this visible memory in chat" : `Chat use blocked: ${policyDecision.blockedReasons.join("; ") || policyDecision.warnings.join("; ")}`}
@@ -1165,8 +1071,9 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     {selected ? "Selected" : "Use in chat"}
                   </Button>
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
+                    className="bg-transparent hover:bg-dls-hover/35"
                     disabled={!record.canDelete}
                     onClick={() => void handleForget(record)}
                   >
@@ -1179,73 +1086,72 @@ export function MemoryPanel(props: MemoryPanelProps) {
           })}
         </section>
 
-        <section className="space-y-3 rounded-lg bg-dls-surface-muted/20 p-4">
-          <div className="flex items-start gap-3">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-dls-hover/55 text-primary">
-              <ShieldAlert className="size-4" />
-            </span>
+        <details
+          className="group border-t border-dls-border/25 pt-2"
+          open={manualCaptureOpen}
+          onToggle={(event) => setManualCaptureOpen(event.currentTarget.open)}
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-3">
             <div>
-              <div className="text-sm font-semibold">Remember this</div>
+              <div className="text-sm font-semibold">Add memory manually</div>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
                 Manual capture only. Do not paste secrets or hidden clinical records.
               </p>
             </div>
-          </div>
-          <div className="grid gap-2">
-            <div className="rounded-lg bg-dls-hover/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
-              Tags set desk defaults. Use <span className="font-semibold text-dls-text">bittensor</span>, <span className="font-semibold text-dls-text">hyperliquid</span>, <span className="font-semibold text-dls-text">polymarket</span>, or <span className="font-semibold text-dls-text">longevity</span>.
+            <ChevronDown className="size-4 shrink-0 text-dls-secondary transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="grid gap-2 pb-4 pt-1">
+            <div className="rounded-md bg-dls-background/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
+              Tags set desk defaults. Use <span className="font-medium text-dls-text">bittensor</span>, <span className="font-medium text-dls-text">hyperliquid</span>, <span className="font-medium text-dls-text">polymarket</span>, or <span className="font-medium text-dls-text">longevity</span>.
             </div>
-            <div className="rounded-lg bg-dls-hover/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
-              Longevity becomes restricted by default; market memories cannot be exported or shared with MCP/API.
-            </div>
-            <input
+            <Input
               value={draft.title}
               onChange={(event) => updateDraft("title", event.target.value)}
-              className="h-10 rounded-md border border-transparent bg-dls-background/60 px-3 text-sm outline-none focus:border-primary focus:bg-dls-background"
+              className={cn("h-10", MEMORY_FIELD_CLASS)}
               placeholder="Memory title"
             />
-            <input
+            <Input
               value={draft.summary}
               onChange={(event) => updateDraft("summary", event.target.value)}
-              className="h-10 rounded-md border border-transparent bg-dls-background/60 px-3 text-sm outline-none focus:border-primary focus:bg-dls-background"
+              className={cn("h-10", MEMORY_FIELD_CLASS)}
               placeholder="Short summary"
             />
-            <textarea
+            <Textarea
               value={draft.body}
               onChange={(event) => updateDraft("body", event.target.value)}
-              className="min-h-24 resize-y rounded-md border border-transparent bg-dls-background/60 px-3 py-2 text-sm leading-6 outline-none focus:border-primary focus:bg-dls-background"
+              className={cn("min-h-24 resize-y", MEMORY_FIELD_CLASS)}
               placeholder="What should Matterhorn remember?"
             />
             <div className="grid gap-2 sm:grid-cols-2">
               <select
                 value={draft.kind}
                 onChange={(event) => updateDraft("kind", event.target.value as MatterhornMemoryKind)}
-                className="h-10 rounded-md border border-transparent bg-dls-background/60 px-3 text-sm outline-none focus:border-primary focus:bg-dls-background"
+                className={MEMORY_SELECT_CLASS}
               >
                 {MATTERHORN_MEMORY_KINDS.map((kind) => <option key={kind} value={kind}>{formatKind(kind)}</option>)}
               </select>
               <select
                 value={draft.scope}
                 onChange={(event) => updateDraft("scope", event.target.value as MatterhornMemoryScope)}
-                className="h-10 rounded-md border border-transparent bg-dls-background/60 px-3 text-sm outline-none focus:border-primary focus:bg-dls-background"
+                className={MEMORY_SELECT_CLASS}
               >
                 {MATTERHORN_MEMORY_SCOPES.map((scope) => <option key={scope} value={scope}>{scope}</option>)}
               </select>
               <select
                 value={draft.sensitivity}
                 onChange={(event) => updateDraft("sensitivity", event.target.value as CaptureDraft["sensitivity"])}
-                className="h-10 rounded-md border border-transparent bg-dls-background/60 px-3 text-sm outline-none focus:border-primary focus:bg-dls-background"
+                className={MEMORY_SELECT_CLASS}
               >
                 {SELECTABLE_SENSITIVITIES.map((sensitivity) => <option key={sensitivity} value={sensitivity}>{sensitivity}</option>)}
               </select>
-              <input
+              <Input
                 value={draft.tags}
                 onChange={(event) => updateDraft("tags", event.target.value)}
-                className="h-10 rounded-md border border-transparent bg-dls-background/60 px-3 text-sm outline-none focus:border-primary focus:bg-dls-background"
+                className={cn("h-10", MEMORY_FIELD_CLASS)}
                 placeholder="tags, comma separated"
               />
             </div>
-            <label className="flex items-start gap-2 rounded-lg bg-dls-hover/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
+            <label className="flex items-start gap-2 rounded-md bg-dls-background/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
               <input
                 type="checkbox"
                 checked={draft.confirmed}
@@ -1260,22 +1166,22 @@ export function MemoryPanel(props: MemoryPanelProps) {
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">{captureError}</div>
             ) : null}
             <Button className="rounded-md" onClick={() => void handleCapture()} disabled={captureBusy || !props.client}>
-              {captureBusy ? "Remembering..." : "Remember this"}
+              {captureBusy ? "Saving..." : "Save memory"}
             </Button>
           </div>
-        </section>
+        </details>
 
-        <section className="rounded-lg bg-dls-surface-muted/20 p-4">
+        <section className="border-t border-dls-border/25 pt-4">
           <div className="flex flex-col gap-3">
             <div>
-              <div className="text-sm font-semibold">Export evidence</div>
+              <div className="text-sm font-semibold">Export memory</div>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
                 Exports include only policy-approved public-safe memory metadata.
               </p>
             </div>
-            <Button className="w-full justify-center rounded-md border-transparent bg-dls-hover/35 hover:bg-dls-hover/65" variant="outline" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
+            <Button className="w-full justify-center bg-transparent hover:bg-dls-hover/35" variant="ghost" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
               <Download className="mr-2 size-3.5" />
-              Export
+              Export memory
             </Button>
           </div>
           {exportStatus ? <div className="mt-3 text-xs text-dls-secondary">{exportStatus}</div> : null}

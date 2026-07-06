@@ -70,7 +70,7 @@ type ToastTone = "info" | "success" | "warning" | "error";
 const pageTitleClass = "text-[28px] font-semibold tracking-[-0.5px] text-dls-text";
 const sectionTitleClass = "text-[15px] font-medium tracking-[-0.2px] text-dls-text";
 const panelCardClass =
-  "rounded-[20px] border border-dls-border bg-dls-surface p-5 transition-all hover:border-dls-border hover:shadow-[0_2px_12px_-4px_rgba(0,0,0,0.06)]";
+  "rounded-lg border border-dls-border bg-dls-surface p-5 transition-all hover:border-dls-border hover:shadow-[0_2px_12px_-4px_rgba(0,0,0,0.06)]";
 
 const OPENWORK_DEFAULT_SKILL_NAMES = new Set([
   "workspace-guide",
@@ -791,7 +791,7 @@ export function SkillsView(props: SkillsViewProps) {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 rounded-[20px] border border-dls-border bg-dls-surface p-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border border-dls-border bg-dls-surface p-4 md:flex-row md:items-center md:justify-between">
           <div className="relative min-w-0 flex-1">
             <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-dls-secondary" />
             <input
@@ -829,18 +829,18 @@ export function SkillsView(props: SkillsViewProps) {
       </div>
 
       {props.accessHint ? (
-        <div className="rounded-[20px] border border-dls-border bg-dls-hover px-5 py-4 text-[13px] text-dls-secondary">
+        <div className="rounded-lg border border-dls-border bg-dls-hover px-5 py-4 text-[13px] text-dls-secondary">
           {props.accessHint}
         </div>
       ) : null}
       {!props.accessHint && !props.canInstallSkillCreator && !props.canUseDesktopTools ? (
-        <div className="rounded-[20px] border border-dls-border bg-dls-hover px-5 py-4 text-[13px] text-dls-secondary">
+        <div className="rounded-lg border border-dls-border bg-dls-hover px-5 py-4 text-[13px] text-dls-secondary">
           {t("skills.host_mode_only")}
         </div>
       ) : null}
 
       {skillsStatus ? (
-        <div className="whitespace-pre-wrap break-words rounded-[20px] border border-dls-border bg-dls-hover px-5 py-4 text-[13px] text-dls-secondary">
+        <div className="whitespace-pre-wrap break-words rounded-lg border border-dls-border bg-dls-hover px-5 py-4 text-[13px] text-dls-secondary">
           {skillsStatus}
         </div>
       ) : null}
@@ -856,11 +856,11 @@ export function SkillsView(props: SkillsViewProps) {
           </div>
 
           {filteredSkills.length === 0 ? (
-            <div className="rounded-[20px] border border-dashed border-dls-border bg-dls-surface px-5 py-8 text-[14px] text-dls-secondary">
+            <div className="rounded-lg border border-dashed border-dls-border bg-dls-surface px-5 py-8 text-[14px] text-dls-secondary">
               {t("skills.no_skills")}
             </div>
           ) : (
-            <div className="rounded-[24px] bg-dls-hover p-4">
+            <div className="rounded-lg bg-dls-hover p-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {filteredSkills.map((skill) => (
                   <div
@@ -969,7 +969,7 @@ export function SkillsView(props: SkillsViewProps) {
           </div>
 
           {!cloudSessionReady ? (
-            <div className="rounded-[20px] border border-dashed border-dls-border bg-dls-surface px-5 py-6 text-[14px] text-dls-secondary">
+            <div className="rounded-lg border border-dashed border-dls-border bg-dls-surface px-5 py-6 text-[14px] text-dls-secondary">
               {cloudNeedsSignIn ? (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p>{t("skills.cloud_sign_in_hint")}</p>
@@ -987,17 +987,17 @@ export function SkillsView(props: SkillsViewProps) {
           ) : (
             <>
               {cloudOrgSkillsStatus ? (
-                <div className="whitespace-pre-wrap break-words rounded-[20px] border border-dls-border bg-dls-hover px-5 py-4 text-[13px] text-dls-secondary">
+                <div className="whitespace-pre-wrap break-words rounded-lg border border-dls-border bg-dls-hover px-5 py-4 text-[13px] text-dls-secondary">
                   {cloudOrgSkillsStatus}
                 </div>
               ) : null}
 
               {filteredCloudOrgSkills.length === 0 ? (
-                <div className="rounded-[20px] border border-dashed border-dls-border bg-dls-surface px-5 py-8 text-[14px] text-dls-secondary">
+                <div className="rounded-lg border border-dashed border-dls-border bg-dls-surface px-5 py-8 text-[14px] text-dls-secondary">
                   {cloudOrgSkills.length === 0 ? t("skills.cloud_org_empty") : t("skills.cloud_no_search_matches")}
                 </div>
               ) : (
-                <div className="rounded-[24px] bg-dls-hover p-4">
+                <div className="rounded-lg bg-dls-hover p-4">
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {filteredCloudOrgSkills.map((skill) => {
                       const state = cloudSkillInstallState(skill);
@@ -1095,7 +1095,7 @@ export function SkillsView(props: SkillsViewProps) {
             </div>
           </div>
 
-          <div className="space-y-3 rounded-[20px] border border-dls-border bg-dls-surface p-4">
+          <div className="space-y-3 rounded-lg border border-dls-border bg-dls-surface p-4">
             <div className="text-[12px] text-dls-secondary">
               {t("skills.source_label")}: <span className="font-mono text-dls-text">{activeHubRepoLabel}</span>
             </div>
@@ -1135,17 +1135,17 @@ export function SkillsView(props: SkillsViewProps) {
           </div>
 
           {hubSkillsStatus ? (
-            <div className="whitespace-pre-wrap break-words rounded-[20px] border border-dls-border bg-dls-hover px-5 py-4 text-[13px] text-dls-secondary">
+            <div className="whitespace-pre-wrap break-words rounded-lg border border-dls-border bg-dls-hover px-5 py-4 text-[13px] text-dls-secondary">
               {hubSkillsStatus}
             </div>
           ) : null}
 
           {filteredHubSkills.length === 0 ? (
-            <div className="rounded-[20px] border border-dashed border-dls-border bg-dls-surface px-5 py-8 text-[14px] text-dls-secondary">
+            <div className="rounded-lg border border-dashed border-dls-border bg-dls-surface px-5 py-8 text-[14px] text-dls-secondary">
               {hubRepo ? t("skills.no_hub_skills") : t("skills.no_hub_repo_selected")}
             </div>
           ) : (
-            <div className="rounded-[24px] bg-dls-hover p-4">
+            <div className="rounded-lg bg-dls-hover p-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {filteredHubSkills.map((skill) => (
                   <div key={`${skill.source.owner}/${skill.source.repo}/${skill.name}`} className={`${panelCardClass} flex flex-col gap-4 text-left`}>

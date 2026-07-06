@@ -205,7 +205,7 @@ function ModelPickerSections(props: {
         </section>
       ) : null}
       {props.renderedCount === 0 ? (
-        <div className="rounded-2xl border border-gray-6/70 bg-gray-1/40 px-4 py-6 text-sm text-gray-10">
+        <div className="rounded-lg border border-gray-6/70 bg-gray-1/40 px-4 py-6 text-sm text-gray-10">
           {t("model_picker.no_results")}
         </div>
       ) : null}

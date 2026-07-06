@@ -3,6 +3,7 @@ import type * as React from "react";
 import { Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { ErrorState } from "../../shell/error-state";
 import { MarkdownBlock } from "../surface/markdown";
 
 interface PreviewLoadingProps extends React.ComponentProps<"div"> {}
@@ -20,7 +21,15 @@ interface PreviewErrorProps extends React.ComponentProps<"div"> {
 }
 
 export function PreviewError({ message, className, ...props }: PreviewErrorProps) {
-  return <div className={cn("p-4 text-sm text-muted-foreground", className)} {...props}>{message}</div>;
+  return (
+    <div className={cn("flex h-full flex-col p-4", className)} {...props}>
+      <ErrorState
+        error={new Error(message)}
+        title="Could not load outputs"
+        className="flex-1 rounded-md bg-destructive/10 px-3 py-2"
+      />
+    </div>
+  );
 }
 
 interface PlainTextProps extends React.ComponentProps<"pre"> {

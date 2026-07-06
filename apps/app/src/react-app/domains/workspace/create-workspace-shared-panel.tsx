@@ -1,6 +1,5 @@
 /** @jsxImportSource react */
-import { useMemo } from "react";
-import { Boxes, Cloud, Loader2, RefreshCcw, Search } from "lucide-react";
+import { Boxes, Cloud, Loader2, Search } from "lucide-react";
 
 import type { DenOrgSummary, DenWorkerSummary } from "../../../app/lib/den";
 import {
@@ -60,11 +59,6 @@ export type CreateWorkspaceSharedPanelProps = {
 export function CreateWorkspaceSharedPanel(
   props: CreateWorkspaceSharedPanelProps,
 ) {
-  const activeOrg = useMemo(
-    () => props.orgs.find((org) => org.id === props.activeOrgId) ?? null,
-    [props.activeOrgId, props.orgs],
-  );
-
   if (!props.signedIn) {
     return (
       <div className={modalBodyClass}>
@@ -72,7 +66,7 @@ export function CreateWorkspaceSharedPanel(
           <div
             className={`${surfaceCardClass} w-full max-w-[420px] p-8 text-center`}
           >
-            <div className="mx-auto flex size-14 items-center justify-center rounded-[22px] bg-[rgba(var(--matterhorn-blue-rgb),0.13)] text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+            <div className="mx-auto flex size-14 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.13)] text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
               <Cloud size={24} />
             </div>
             <div className="mt-5 text-[20px] font-semibold tracking-[-0.3px] text-dls-text">
@@ -126,24 +120,11 @@ export function CreateWorkspaceSharedPanel(
                   </option>
                 ))}
               </select>
-              <button
-                type="button"
-                className={pillSecondaryClass}
-                onClick={props.onRefreshWorkers}
-                disabled={props.workersBusy || !props.activeOrgId.trim()}
-                title={activeOrg?.name ?? undefined}
-              >
-                <RefreshCcw
-                  size={13}
-                  className={props.workersBusy ? "animate-spin" : ""}
-                />
-                Refresh
-              </button>
             </div>
           </div>
 
           <div className="mt-4">
-            <label className="flex items-center gap-3 rounded-2xl bg-dls-hover/75 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <label className="flex items-center gap-3 rounded-lg bg-dls-hover/75 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
               <Search size={15} className="shrink-0 text-dls-secondary" />
               <input
                 type="text"

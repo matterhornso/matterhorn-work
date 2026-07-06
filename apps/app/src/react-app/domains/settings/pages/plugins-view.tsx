@@ -62,7 +62,7 @@ export function PluginsView(props: PluginsViewProps) {
   const scope = extensions.pluginScope;
   return (
     <section className="space-y-6 max-w-3xl w-full">
-      <div className="bg-gray-2/30 border border-gray-6/50 rounded-2xl p-5 space-y-4">
+      <div className="bg-gray-2/30 border border-gray-6/50 rounded-lg p-5 space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <div className="text-sm font-medium text-gray-12">
@@ -131,7 +131,7 @@ export function PluginsView(props: PluginsViewProps) {
               return (
                 <div
                   key={plugin.packageName}
-                  className="rounded-2xl border border-gray-6/60 bg-gray-1/40 p-4 space-y-3"
+                  className="rounded-lg border border-gray-6/60 bg-gray-1/40 p-4 space-y-3"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>

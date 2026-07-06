@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 
 import { Suspense, lazy, useEffect, useSyncExternalStore, type ReactNode } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { readDenBootstrapConfig, readDenSettings } from "../../app/lib/den";
 import { denSettingsChangedEvent, denSessionUpdatedEvent } from "../../app/lib/den-session-events";
@@ -17,6 +17,7 @@ import { AppMenuProvider } from "./app-menu";
 import { MatterhornControlProvider, MatterhornRouteControlActions } from "./control/control-provider";
 import { ShellConfigProvider } from "./shell-config";
 import { QuickJotProvider, QuickJotGlobal } from "../domains/notes";
+import { workspaceSessionRoute } from "./workspace-routes";
 
 const OrgOnboardingPageRoute = lazy(() => import("../domains/cloud/org-onboarding-page").then((module) => ({
   default: module.OrgOnboardingPage,
@@ -24,10 +25,6 @@ const OrgOnboardingPageRoute = lazy(() => import("../domains/cloud/org-onboardin
 const SessionRoute = lazy(() => import("./session-route").then((module) => ({ default: module.SessionRoute })));
 const SettingsRoute = lazy(() => import("./settings-route").then((module) => ({ default: module.SettingsRoute })));
 const WelcomeRoute = lazy(() => import("./welcome-route").then((module) => ({ default: module.WelcomeRoute })));
-const NotesPageRoute = lazy(() => import("../domains/notes/notes-page").then((module) => ({
-  default: module.NotesPage,
-})));
-
 type DenSigninGateProps = {
   children: ReactNode;
 };
@@ -41,6 +38,17 @@ function RouteFallback() {
     >
       Loading Matterhorn Work...
     </div>
+  );
+}
+
+function WorkspaceNotesRedirect() {
+  const params = useParams<{ workspaceId?: string }>();
+  const workspaceId = params.workspaceId?.trim();
+  return (
+    <Navigate
+      to={workspaceId ? `${workspaceSessionRoute(workspaceId)}?panel=notes` : "/session?panel=notes"}
+      replace
+    />
   );
 }
 
@@ -259,23 +267,11 @@ export function AppRoot() {
               />
               <Route
                 path="/notes"
-                element={
-                  <DevProfiler id="NotesPage">
-                    <Suspense fallback={<RouteFallback />}>
-                      <NotesPageRoute />
-                    </Suspense>
-                  </DevProfiler>
-                }
+                element={<Navigate to="/session?panel=notes" replace />}
               />
               <Route
                 path="/workspace/:workspaceId/notes"
-                element={
-                  <DevProfiler id="NotesPage">
-                    <Suspense fallback={<RouteFallback />}>
-                      <NotesPageRoute />
-                    </Suspense>
-                  </DevProfiler>
-                }
+                element={<WorkspaceNotesRedirect />}
               />
               {/* Default + fallback: land on the session view. Users open
                   settings deliberately via the sidebar or command palette. */}

@@ -15,12 +15,10 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  RefreshButton,
   SettingsSection,
   SettingsNotice,
   SettingsPill,
   SettingsSectionHeader,
-  SettingsSectionHeaderActions,
   SettingsSectionHeaderContent,
   SettingsSectionHeaderDescription,
   SettingsSectionHeaderTitle,
@@ -543,7 +541,6 @@ export function CloudSkillsSection({
   rows,
   statusError,
   onImportSkill,
-  onRefresh,
   onRemoveSkill,
   onSyncSkill,
 }: CloudSkillsSectionProps) {
@@ -566,15 +563,6 @@ export function CloudSkillsSection({
           </SettingsSectionHeaderTitle>
           <SettingsSectionHeaderDescription>{t("den.cloud_skills_hint")}</SettingsSectionHeaderDescription>
         </SettingsSectionHeaderContent>
-        <SettingsSectionHeaderActions>
-          <RefreshButton
-            busy={busy}
-            disabled={[busy, !hasActiveOrg].some(Boolean)}
-            onRefresh={onRefresh}
-          >
-            {t("den.refresh")}
-          </RefreshButton>
-        </SettingsSectionHeaderActions>
       </SettingsSectionHeader>
 
       {actionError ?? statusError ? (
@@ -658,7 +646,6 @@ export function MarketplacePluginsSection({
   rowsByMarketplace,
   statusError,
   onImportPlugin,
-  onRefresh,
   onSelectMarketplace,
 }: MarketplacePluginsSectionProps) {
   const { hasActiveOrg } = useCloudSession();
@@ -684,15 +671,6 @@ export function MarketplacePluginsSection({
             Browse organization marketplaces and import plugin files into this workspace.
           </SettingsSectionHeaderDescription>
         </SettingsSectionHeaderContent>
-        <SettingsSectionHeaderActions>
-          <RefreshButton
-            busy={busy}
-            disabled={[busy, !hasActiveOrg].some(Boolean)}
-            onRefresh={onRefresh}
-          >
-            {t("den.refresh")}
-          </RefreshButton>
-        </SettingsSectionHeaderActions>
       </SettingsSectionHeader>
 
       {actionError ?? statusError ? (
@@ -790,9 +768,7 @@ export function CloudWorkersSection({
   workersBusy,
   workersError,
   onOpenWorker,
-  onRefreshWorkers,
 }: CloudWorkersSectionProps) {
-  const { hasActiveOrg } = useCloudSession();
   const [searchQuery, setSearchQuery] = React.useState("");
   const visibleWorkers = useSearch({ items: workers, keys: workerSearchKeys, query: searchQuery });
   const workerGroups: { value: string; label: string; rows: CloudWorker[] }[] = [];
@@ -822,15 +798,6 @@ export function CloudWorkersSection({
           </SettingsSectionHeaderTitle>
           <SettingsSectionHeaderDescription>{t("den.cloud_workers_hint")}</SettingsSectionHeaderDescription>
         </SettingsSectionHeaderContent>
-        <SettingsSectionHeaderActions>
-          <RefreshButton
-            busy={workersBusy}
-            disabled={[workersBusy, !hasActiveOrg].some(Boolean)}
-            onRefresh={onRefreshWorkers}
-          >
-            {t("den.refresh")}
-          </RefreshButton>
-        </SettingsSectionHeaderActions>
       </SettingsSectionHeader>
 
       {workersError ? <SettingsNotice tone="error">{workersError}</SettingsNotice> : null}
@@ -906,7 +873,6 @@ export function SkillHubsSection({
   rows,
   statusError,
   onImport,
-  onRefresh,
   onRemove,
   onSync,
 }: SkillHubsSectionProps) {
@@ -929,15 +895,6 @@ export function SkillHubsSection({
           </SettingsSectionHeaderTitle>
           <SettingsSectionHeaderDescription>{t("den.skill_hubs_hint")}</SettingsSectionHeaderDescription>
         </SettingsSectionHeaderContent>
-        <SettingsSectionHeaderActions>
-          <RefreshButton
-            busy={busy}
-            disabled={[busy, !hasActiveOrg].some(Boolean)}
-            onRefresh={onRefresh}
-          >
-            {t("den.refresh")}
-          </RefreshButton>
-        </SettingsSectionHeaderActions>
       </SettingsSectionHeader>
 
       {actionError ?? statusError ? (
@@ -1018,7 +975,6 @@ export function CloudProvidersSection({
   busy,
   rows,
   onImport,
-  onRefresh,
   onRemove,
   onSync,
 }: CloudProvidersSectionProps) {
@@ -1041,15 +997,6 @@ export function CloudProvidersSection({
           </SettingsSectionHeaderTitle>
           <SettingsSectionHeaderDescription>{t("den.cloud_providers_hint")}</SettingsSectionHeaderDescription>
         </SettingsSectionHeaderContent>
-        <SettingsSectionHeaderActions>
-          <RefreshButton
-            busy={busy}
-            disabled={[busy, !hasActiveOrg].some(Boolean)}
-            onRefresh={onRefresh}
-          >
-            {t("den.refresh")}
-          </RefreshButton>
-        </SettingsSectionHeaderActions>
       </SettingsSectionHeader>
 
       {actionError ? <SettingsNotice tone="error">{actionError}</SettingsNotice> : null}

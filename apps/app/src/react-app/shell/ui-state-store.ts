@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 export const PERSISTED_UI_STATE_KEY = "openwork:ui-state:v1";
+export const GLOBAL_HOME_SIDE_PANEL_KEY = "__matterhorn_home__";
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const LEGACY_WORKSPACE_LEFT_SIDEBAR_WIDTH_KEY = "openwork.workspace-shell.left-width.v1";
 const LEGACY_WORKSPACE_RIGHT_SIDEBAR_EXPANDED_KEY = "openwork.workspace-shell.right-expanded.v3";
@@ -21,6 +22,7 @@ export const SIDE_PANEL_ITEMS = [
   "voice",
   "profile",
   "memory",
+  "notes",
   "wallet",
   "bittensor",
   "hyperliquid",

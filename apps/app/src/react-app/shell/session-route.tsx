@@ -10,7 +10,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type {
   AgentPartInput,
   FilePartInput,
@@ -533,6 +533,7 @@ async function draftToParts(draft: ComposerDraft, workspaceRoot: string) {
 
 export function SessionRoute() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { openQuickJot } = useQuickJot();
   const platform = usePlatform();
   const local = useLocal();
@@ -1379,7 +1380,7 @@ export function SessionRoute() {
       return;
     }
     if (!routeWorkspaceId && selectedWorkspaceId) {
-      navigateToWorkspaceSession(selectedWorkspaceId, selectedSessionId, { replace: true });
+      navigate(`${workspaceSessionRoute(selectedWorkspaceId, selectedSessionId)}${location.search}`, { replace: true });
       return;
     }
     // `/workspace/:workspaceId/session` is project Home. Do not auto-open the
@@ -1387,6 +1388,8 @@ export function SessionRoute() {
   }, [
     loading,
     legacySelectedWorkspaceId,
+    location.search,
+    navigate,
     navigateToWorkspaceSession,
     routeWorkspaceId,
     selectedSessionId,

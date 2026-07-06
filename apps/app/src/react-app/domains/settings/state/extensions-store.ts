@@ -1156,7 +1156,7 @@ export function createExtensionsStore(options: {
         { headers: { Accept: "application/vnd.github+json" } },
       );
       if (!listingRes.ok) {
-        throw new Error(`Failed to fetch hub catalog (${listingRes.status})`);
+        throw new Error(`Could not load extensions catalog (${listingRes.status}). Check your connection.`);
       }
       const listing = (await listingRes.json()) as unknown;
       const dirs: string[] = Array.isArray(listing)

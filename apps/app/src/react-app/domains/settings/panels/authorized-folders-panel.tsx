@@ -73,7 +73,7 @@ function AuthorizedFolderItem(props: AuthorizedFolderItemProps) {
   const folderName = getFolderName(props.folder);
 
   return (
-    <li className="flex flex-row items-center justify-between gap-3 rounded-2xl border border-dls-border px-4 py-3">
+    <li className="flex flex-row items-center justify-between gap-3 rounded-lg border border-dls-border px-4 py-3">
       <div className="flex min-w-0 gap-3">
         <div className="min-w-0 flex flex-col gap-2">
           <div className="flex items-center gap-2">

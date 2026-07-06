@@ -205,11 +205,14 @@ export function ComputerUseConfig(props: ComputerUseConfigProps) {
           <div className="flex w-full flex-col gap-2 xl:w-auto xl:flex-row">
             {props.onRefresh ? (
               <Button
-                className="min-h-10 w-full whitespace-normal text-center xl:w-auto"
-                variant="outline"
+                className="min-h-10 w-full gap-1.5 whitespace-normal text-center xl:w-auto"
+                variant="ghost"
                 onClick={() => void props.onRefresh?.()}
+                aria-label="Refresh MCP"
+                title="Refresh MCP"
               >
-                Refresh MCP
+                <RefreshCw className="size-3.5" />
+                <span className="sr-only">Refresh MCP</span>
               </Button>
             ) : null}
             <Button
