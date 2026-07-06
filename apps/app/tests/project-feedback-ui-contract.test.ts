@@ -49,8 +49,11 @@ describe("project feedback UI contract", () => {
     expect(source).toContain("exportProjectLedger");
     expect(source).toContain("client.exportProjectDataLedger(workspaceId, { limit: 300 })");
     expect(source).toContain("exportPayload.manifest.itemCount");
-    expect(source).toContain("Export ledger JSON");
-    expect(source).toContain("Download a redacted workspace ledger snapshot");
+    expect(source).toContain("exportSupportReport");
+    expect(source).toContain("client.workspaceBackendSupportReport(workspaceId)");
+    expect(source).toContain("Ledger JSON");
+    expect(source).toContain("Support report");
+    expect(source).toContain("Download redacted project evidence");
   });
 
   test("settings overview exposes a local feedback review surface", () => {
