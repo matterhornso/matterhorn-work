@@ -99,27 +99,45 @@ function evidenceToLedgerEntry(event: MatterhornProjectEvidenceEvent): Matterhor
   };
 }
 
+function memoryAuditTitle(action: string): string | null {
+  if (action === "memory.suggestions.create") return "Memory review created";
+  if (action === "memory.suggestion.resolve") return "Memory review updated";
+  if (action === "memory.capture") return "Memory saved";
+  if (action === "memory.record.update") return "Memory updated";
+  if (action === "memory.record.forget") return "Memory forgotten";
+  if (action === "memory.export") return "Memory exported";
+  return null;
+}
+
 function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry {
-  const title = scrubString(entry.action);
+  const memoryTitle = memoryAuditTitle(entry.action);
+  const title = scrubString(memoryTitle ?? entry.action);
   const summary = scrubString(entry.summary);
+  const target = scrubString(entry.target);
+  const isMemoryAudit = Boolean(memoryTitle);
   return {
     id: `audit:${entry.id}`,
     workspaceId: entry.workspaceId,
     source: "audit",
-    kind: "audit",
+    kind: isMemoryAudit ? "memory_suggestion" : "audit",
     timestamp: new Date(entry.timestamp).toISOString(),
     title: title.value ?? "Audit event",
     summary: summary.value,
+    href: isMemoryAudit ? `/workspace/${encodeURIComponent(entry.workspaceId)}/session?panel=memory` : undefined,
     actor: actorFromAudit(entry),
     dataClass: "audit_metadata",
-    containsUserContent: false,
-    containsSecrets: "never",
+    containsUserContent: isMemoryAudit,
+    containsSecrets: isMemoryAudit ? "redacted" : "never",
     retention: "append_only",
     exportable: true,
     deletable: false,
-    redactionApplied: title.redacted || summary.redacted,
+    redactionApplied: title.redacted || summary.redacted || target.redacted,
     trainingUse: "none",
     eventType: entry.action,
+    metadata: isMemoryAudit ? {
+      auditAction: entry.action,
+      target: target.value ?? null,
+    } : undefined,
   };
 }
 

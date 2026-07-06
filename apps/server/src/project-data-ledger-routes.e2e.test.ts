@@ -306,6 +306,48 @@ describe("project data ledger routes", () => {
     expect(secondDelete.payload.code).toBe("feedback_not_found");
   });
 
+  test("workspace memory review actions appear in the memory ledger filter", async () => {
+    const { base } = await boot();
+
+    const created = await jsonFetch(base, "/workspace/ws_ledger/memory/suggestions", {
+      method: "POST",
+      body: JSON.stringify({
+        input: {
+          desk: "bittensor",
+          prompt: "Remember 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1routeFixture for TAO reads and subnet 14.",
+          sourceId: "ledger-memory-review-test",
+        },
+      }),
+    });
+    expect(created.response.status).toBe(200);
+    const entry = created.payload.inbox.entries[0];
+
+    const resolved = await jsonFetch(base, `/workspace/ws_ledger/memory/suggestions/${encodeURIComponent(entry.id)}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "confirm",
+        reason: "User confirmed this memory review item.",
+      }),
+    });
+    expect(resolved.response.status).toBe(200);
+    expect(resolved.payload.saved).toBe(true);
+
+    const memoryLedger = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?kind=memory_suggestion&limit=20");
+    expect(memoryLedger.response.status).toBe(200);
+    expect(memoryLedger.payload.summary.memorySuggestions).toBeGreaterThanOrEqual(2);
+    expect(memoryLedger.payload.items.every((item: { kind: string }) => item.kind === "memory_suggestion")).toBe(true);
+    const memoryAuditItems = memoryLedger.payload.items.filter((item: { source: string }) => item.source === "audit");
+    expect(memoryAuditItems.map((item: { title: string }) => item.title)).toEqual(
+      expect.arrayContaining(["Memory review created", "Memory review updated"]),
+    );
+    expect(memoryAuditItems.map((item: { eventType: string }) => item.eventType)).toEqual(
+      expect.arrayContaining(["memory.suggestions.create", "memory.suggestion.resolve"]),
+    );
+    expect(memoryAuditItems.every((item: { href?: string }) => item.href === "/workspace/ws_ledger/session?panel=memory")).toBe(true);
+    expect(memoryAuditItems.every((item: { trainingUse: string }) => item.trainingUse === "none")).toBe(true);
+    expect(memoryAuditItems.every((item: { metadata: { auditAction: string } }) => item.metadata.auditAction.startsWith("memory."))).toBe(true);
+  });
+
   test("data-ledger can filter run history by desk, session, task, and time window", async () => {
     const { base } = await boot();
     const firstRunAt = Date.parse("2026-07-06T08:00:00.000Z");

@@ -161,6 +161,7 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain('queryKey: ["project-history-ledger"');
       expect(source).toContain("activeDesk");
       expect(source).toContain("desk: activeDesk");
+      expect(source).toContain('if (entry.kind === "memory_suggestion") return entry.title || "Memory review";');
       expect(source).toContain("No training by default");
       expect(source).toContain("Exported");
     });

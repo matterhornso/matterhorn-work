@@ -96,7 +96,7 @@ function titleForEntry(entry: MatterhornProjectDataLedgerEntry) {
   if (entry.eventType === "task.completed") return "Run completed";
   if (entry.eventType === "task.failed") return "Run failed";
   if (entry.eventType === "task.cancelled") return "Run cancelled";
-  if (entry.kind === "memory_suggestion") return "Memory review suggested";
+  if (entry.kind === "memory_suggestion") return entry.title || "Memory review";
   return entry.title || "Project event";
 }
 
