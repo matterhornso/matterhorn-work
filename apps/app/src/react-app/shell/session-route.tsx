@@ -17,6 +17,7 @@ import type {
   ProviderListResponse,
   TextPartInput,
 } from "@opencode-ai/sdk/v2/client";
+import type { MatterhornBackendModelSelectionResponse } from "@matterhorn-work/types/backend-models";
 
 import { createClient, unwrap } from "../../app/lib/opencode";
 import { forkSession, listCommands, revertSession, shellInSession } from "../../app/lib/opencode-session";
@@ -627,6 +628,7 @@ export function SessionRoute() {
   const [providerDefaults, setProviderDefaults] = useState<Record<string, string>>({});
   const [providerConnectedIds, setProviderConnectedIds] = useState<string[]>([]);
   const [disabledProviderIds, setDisabledProviderIds] = useState<string[]>([]);
+  const [workspaceModelSelection, setWorkspaceModelSelection] = useState<MatterhornBackendModelSelectionResponse | null>(null);
   // Bump to re-filter provider list when den session changes (sign-in/out)
   const [denSessionVersion, setDenSessionVersion] = useState(0);
   useEffect(() => {
@@ -1581,22 +1583,50 @@ export function SessionRoute() {
     baseUrl: opencodeBaseUrl,
     directory: selectedWorkspaceRoot || undefined,
   });
+  useEffect(() => {
+    let cancelled = false;
+    if (!client || !selectedWorkspaceId) {
+      setWorkspaceModelSelection(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    void client.workspaceModelSelection(selectedWorkspaceId)
+      .then((selection) => {
+        if (!cancelled) setWorkspaceModelSelection(selection);
+      })
+      .catch(() => {
+        if (!cancelled) setWorkspaceModelSelection(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, selectedWorkspaceId]);
+  const workspaceDefaultModel = useMemo<ModelRef | null>(() => {
+    const effective = workspaceModelSelection?.effectiveModel;
+    if (!effective?.providerId || !effective.modelId) return null;
+    return {
+      providerID: effective.providerId,
+      modelID: effective.modelId,
+    };
+  }, [workspaceModelSelection]);
+  const selectedPromptModel = local.prefs.defaultModel ?? workspaceDefaultModel;
   const selectedModelUnavailable = Boolean(
-    local.prefs.defaultModel &&
+    selectedPromptModel &&
       (
         isDesktopProviderBlocked({
-          providerId: local.prefs.defaultModel.providerID,
+          providerId: selectedPromptModel.providerID,
           checkRestriction: checkDesktopRestriction,
         }) ||
         (
           checkDesktopRestriction({ restriction: "allowCustomProviders" }) &&
           !providerConnectedIds.some(
-            (providerId) => providerId.trim() === local.prefs.defaultModel?.providerID.trim(),
+            (providerId) => providerId.trim() === selectedPromptModel.providerID.trim(),
           )
         ) ||
         (
           providerListQuery.data &&
-          !isModelAvailableInConnectedProviders(providerListQuery.data, local.prefs.defaultModel)
+          !isModelAvailableInConnectedProviders(providerListQuery.data, selectedPromptModel)
         )
       ),
   );
@@ -1914,8 +1944,8 @@ export function SessionRoute() {
     };
   }, [opencodeBaseUrl, opencodeClient, selectedWorkspaceRoot, denSessionVersion]);
 
-  const modelLabel = local.prefs.defaultModel
-    ? resolveModelDisplayName(local.prefs.defaultModel.modelID)
+  const modelLabel = selectedPromptModel
+    ? resolveModelDisplayName(selectedPromptModel.modelID)
     : t("session.default_model");
 
   // Prefetch the full provider catalog once so `getModelBehaviorSummary` has
@@ -1935,7 +1965,7 @@ export function SessionRoute() {
   // Compute behavior (reasoning/thinking variant) options for the current
   // default model. This is what the composer renders as its variant pill.
   const { modelVariantLabel, modelBehaviorOptions, modelVariantValue } = useMemo(() => {
-    const ref = local.prefs.defaultModel;
+    const ref = selectedPromptModel;
     const variant = local.prefs.modelVariant ?? null;
     if (!ref) {
       return {
@@ -1958,7 +1988,7 @@ export function SessionRoute() {
       modelBehaviorOptions: summary.options,
       modelVariantValue: summary.value,
     };
-  }, [local.prefs.defaultModel, local.prefs.modelVariant, providerCatalog]);
+  }, [local.prefs.modelVariant, providerCatalog, selectedPromptModel]);
 
   // Load the picker list lazily the first time the modal opens. Uses the
   // cached catalog when available, otherwise re-fetches.
@@ -2135,7 +2165,7 @@ export function SessionRoute() {
       },
       modelPickerOpen: compactModelPickerOpen,
       modelUnavailable: selectedModelUnavailable,
-      selectedModel: local.prefs.defaultModel ?? { providerID: "", modelID: "" },
+      selectedModel: selectedPromptModel ?? { providerID: "", modelID: "" },
       onModelPickerOpenChange: setCompactModelPickerOpen,
       onModelChange: (model: ModelRef) => {
         local.setPrefs((previous) => ({
@@ -2178,7 +2208,7 @@ export function SessionRoute() {
         const result = await opencodeClient.session.promptAsync({
           sessionID: selectedSessionId,
           parts,
-          model: local.prefs.defaultModel ?? undefined,
+          model: selectedPromptModel ?? undefined,
           agent: selectedAgent ?? undefined,
           ...(modelVariantValue ? { variant: modelVariantValue } : {}),
           ...(systemContext ? { system: systemContext } : {}),
@@ -2280,6 +2310,7 @@ export function SessionRoute() {
     selectedAgent,
     selectedSessionId,
     selectedModelUnavailable,
+    selectedPromptModel,
     selectedWorkspace,
     selectedWorkspaceId,
     selectedWorkspaceRoot,
@@ -3009,7 +3040,7 @@ export function SessionRoute() {
                 const result = await workspaceClient.session.promptAsync({
                   sessionID: session.id,
                   parts: [{ type: "text", text: prompt }],
-                  model: local.prefs.defaultModel ?? undefined,
+                  model: selectedPromptModel ?? undefined,
                   agent: agent || undefined,
                   ...(modelVariantValue ? { variant: modelVariantValue } : {}),
                   ...(systemContext ? { system: systemContext } : {}),

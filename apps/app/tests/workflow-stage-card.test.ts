@@ -200,6 +200,9 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("sendImmediately");
     expect(src).toContain("workspaceClient.session.promptAsync");
     expect(src).toContain("sessionID: session.id");
+    expect(src).toContain("selectedPromptModel");
+    expect(src).toContain("client.workspaceModelSelection(selectedWorkspaceId)");
+    expect(src).toContain("model: selectedPromptModel ?? undefined");
     expect(src).toContain("agent: agent || undefined");
     expect(src).toContain("buildSessionSystemContext(prompt, session.id)");
   });
