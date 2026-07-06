@@ -831,7 +831,12 @@ describe("backend control plane routes", () => {
       method: "POST",
       href: "/api/memory/export",
     });
-    expect(result.payload.stores.feedback.deletion.status).toBe("unsupported");
+    expect(result.payload.stores.feedback.deletion.status).toBe("working");
+    expect(result.payload.stores.feedback.deletion.actions[0]).toMatchObject({
+      id: "feedback.delete",
+      method: "DELETE",
+      destructive: true,
+    });
     expect(result.payload.stores.audit.retention.mode).toBe("append_only");
     expect(result.payload.policy.trainingUse).toBe("none_by_default");
     expect(result.payload.policy.limitations.join(" ")).toContain("No bulk delete-all workspace control");
