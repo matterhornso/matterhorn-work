@@ -798,6 +798,15 @@ describe("backend control plane routes", () => {
     expect(outputPaths).toContain(receipt.payload.evidence.outputPath);
     expect(ledger.payload.items.every((item: { desk?: string }) => item.desk === "sui")).toBe(true);
 
+    const walletLedger = await jsonFetch(base, "/workspace/ws_backend/data-ledger?kind=wallet&limit=20");
+    expect(walletLedger.response.status).toBe(200);
+    expect(walletLedger.payload.summary.wallets).toBe(2);
+    expect(walletLedger.payload.items.every((item: { kind: string }) => item.kind === "wallet")).toBe(true);
+    expect(walletLedger.payload.items.map((item: { title: string }) => item.title)).toEqual(
+      expect.arrayContaining(["Sui preview saved", "Sui receipt saved"]),
+    );
+    expect(walletLedger.payload.items.every((item: { href?: string }) => item.href === "/workspace/ws_backend/settings/wallet")).toBe(true);
+
     const serializedItems = JSON.stringify(ledger.payload.items);
     expect(serializedItems).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
     const serialized = JSON.stringify(ledger.payload);

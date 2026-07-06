@@ -115,19 +115,33 @@ function teamAccessAuditTitle(action: string): string | null {
   return null;
 }
 
+function walletAuditTitle(action: string): string | null {
+  if (action === "workspace.sui.preview.create") return "Sui preview saved";
+  if (action === "workspace.sui.receipt.import") return "Sui receipt saved";
+  return null;
+}
+
 function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry {
   const memoryTitle = memoryAuditTitle(entry.action);
   const teamAccessTitle = teamAccessAuditTitle(entry.action);
-  const title = scrubString(memoryTitle ?? teamAccessTitle ?? entry.action);
+  const walletTitle = walletAuditTitle(entry.action);
+  const title = scrubString(memoryTitle ?? teamAccessTitle ?? walletTitle ?? entry.action);
   const summary = scrubString(entry.summary);
   const target = scrubString(entry.target);
   const isMemoryAudit = Boolean(memoryTitle);
   const isTeamAccessAudit = Boolean(teamAccessTitle);
+  const isWalletAudit = Boolean(walletTitle);
   return {
     id: `audit:${entry.id}`,
     workspaceId: entry.workspaceId,
     source: "audit",
-    kind: isMemoryAudit ? "memory_suggestion" : isTeamAccessAudit ? "team_access" : "audit",
+    kind: isMemoryAudit
+      ? "memory_suggestion"
+      : isTeamAccessAudit
+        ? "team_access"
+        : isWalletAudit
+          ? "wallet"
+          : "audit",
     timestamp: new Date(entry.timestamp).toISOString(),
     title: title.value ?? "Audit event",
     summary: summary.value,
@@ -135,18 +149,20 @@ function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry
       ? `/workspace/${encodeURIComponent(entry.workspaceId)}/session?panel=memory`
       : isTeamAccessAudit
         ? `/workspace/${encodeURIComponent(entry.workspaceId)}/settings/overview`
-        : undefined,
+        : isWalletAudit
+          ? `/workspace/${encodeURIComponent(entry.workspaceId)}/settings/wallet`
+          : undefined,
     actor: actorFromAudit(entry),
     dataClass: "audit_metadata",
-    containsUserContent: isMemoryAudit || isTeamAccessAudit,
-    containsSecrets: isMemoryAudit || isTeamAccessAudit ? "redacted" : "never",
+    containsUserContent: isMemoryAudit || isTeamAccessAudit || isWalletAudit,
+    containsSecrets: isMemoryAudit || isTeamAccessAudit || isWalletAudit ? "redacted" : "never",
     retention: "append_only",
     exportable: true,
     deletable: false,
     redactionApplied: title.redacted || summary.redacted || target.redacted,
     trainingUse: "none",
     eventType: entry.action,
-    metadata: isMemoryAudit || isTeamAccessAudit
+    metadata: isMemoryAudit || isTeamAccessAudit || isWalletAudit
       ? {
         auditAction: entry.action,
         target: target.value ?? null,
@@ -209,6 +225,7 @@ function summarize(items: MatterhornProjectDataLedgerEntry[]): MatterhornProject
     notes: items.filter((item) => item.kind === "note").length,
     memorySuggestions: items.filter((item) => item.kind === "memory_suggestion").length,
     teamAccess: items.filter((item) => item.kind === "team_access").length,
+    wallets: items.filter((item) => item.kind === "wallet").length,
     tasks: items.filter((item) => item.kind === "task").length,
     outputs: items.filter((item) => item.kind === "output").length,
     audits: items.filter((item) => item.kind === "audit").length,
