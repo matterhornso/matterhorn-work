@@ -32,6 +32,7 @@ import type { MatterhornBackendTeamAccessResponse } from "@matterhorn-work/types
 import type { MatterhornWorkspaceDataControlsResponse } from "@matterhorn-work/types/backend-data-controls";
 import type { MatterhornBackendReadinessResponse } from "@matterhorn-work/types/backend-readiness";
 import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
+import type { MatterhornBackendSupportReportResponse } from "@matterhorn-work/types/backend-support-report";
 import type {
   MatterhornWorkflowRun,
   MatterhornWorkflowRunListItem,
@@ -1327,6 +1328,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/backend/control-plane`,
         { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    workspaceBackendSupportReport: (workspaceId: string) =>
+      requestJson<MatterhornBackendSupportReportResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/support-report`,
+        { token, hostToken, timeoutMs: timeouts.status },
       ),
     googleWorkspaceStatus: () => requestJson<GoogleWorkspaceAuthStatus>(baseUrl, "/experimental/google-workspace/status", { token, hostToken, timeoutMs: timeouts.status }),
     googleWorkspaceConnectStart: () => requestJson<GoogleWorkspaceConnectStart>(baseUrl, "/experimental/google-workspace/connect/start", { token, hostToken, method: "POST", timeoutMs: timeouts.status }),

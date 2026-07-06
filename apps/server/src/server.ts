@@ -299,6 +299,7 @@ import { MatterhornNotesStore } from "./notes.js";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { buildProjectDataLedger, buildProjectDataLedgerExport, scrubProjectLedgerText } from "./project-data-ledger.js";
 import { buildBackendModels } from "./backend-models.js";
+import { backendControlPlaneExportSnapshot, buildBackendSupportReport } from "./backend-support-report.js";
 import { buildBackendTeamAccess } from "./backend-team-access.js";
 import { projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
 import { TOY_UI_CSS, TOY_UI_FAVICON_SVG, TOY_UI_HTML, TOY_UI_JS, cssResponse, htmlResponse, jsResponse, svgResponse } from "./toy-ui.js";
@@ -3799,6 +3800,12 @@ function createRoutes(
     return jsonResponse(await buildWorkspaceBackendControlPlane(config, workspace, memoryVault));
   });
 
+  addRoute(routes, "GET", "/workspace/:id/backend/support-report", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const controlPlane = await buildWorkspaceBackendControlPlane(config, workspace, memoryVault);
+    return jsonResponse(await buildBackendSupportReport({ workspace, controlPlane }));
+  });
+
   addRoute(routes, "GET", "/workspace/:id/backend/team-access", "host", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     return jsonResponse(await buildBackendTeamAccess(config, workspace, tokens));
@@ -4234,14 +4241,7 @@ function createRoutes(
     const controlPlane = await buildWorkspaceBackendControlPlane(config, workspace, memoryVault);
     return jsonResponse(await buildProjectDataLedgerExport({
       workspace,
-      backendControlPlane: {
-        version: controlPlane.version,
-        generatedAt: controlPlane.generatedAt,
-        workspace: controlPlane.workspace,
-        summary: controlPlane.summary,
-        versions: controlPlane.versions,
-        privacy: controlPlane.privacy,
-      },
+      backendControlPlane: backendControlPlaneExportSnapshot(controlPlane),
       ...projectDataLedgerOptionsFromUrl(ctx.url),
     }));
   });

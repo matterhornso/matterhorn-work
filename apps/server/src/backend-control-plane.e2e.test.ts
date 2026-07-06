@@ -418,6 +418,50 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain("Authorization");
   });
 
+  test("GET /workspace/:id/backend/support-report returns a redacted diagnostic artifact", async () => {
+    const { base } = await boot();
+
+    const feedback = await jsonFetch(base, "/workspace/ws_backend/feedback", {
+      method: "POST",
+      body: JSON.stringify({
+        kind: "comment",
+        target: { sourceType: "settings", sourceId: "backend-support" },
+        comment: "Support should see policy status, not bearer token owt_should_not_leak.",
+      }),
+    });
+    expect(feedback.response.status).toBe(201);
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/support-report");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.version).toBe("matterhorn.backend.support-report.v1");
+    expect(result.payload.filename).toMatch(/^matterhorn-backend-support-ws_backend-/);
+    expect(result.payload.workspace.id).toBe("ws_backend");
+    expect(result.payload.controlPlane.version).toBe("matterhorn.backend.control-plane.v1");
+    expect(result.payload.controlPlane.summary.totalFeatures).toBeGreaterThan(0);
+    expect(result.payload.controlPlane.privacy.secretsReturned).toBe(false);
+    expect(result.payload.controlPlane.capabilities).toBeUndefined();
+    expect(result.payload.controlPlane.models).toBeUndefined();
+    expect(result.payload.controlPlane.dataMap).toBeUndefined();
+    expect(result.payload.dataLedger.version).toBe("matterhorn.project-data-ledger.v1");
+    expect(result.payload.dataLedger.summary.feedback).toBeGreaterThanOrEqual(1);
+    expect(result.payload.dataLedger.export.href).toBe("/workspace/ws_backend/data-ledger/export");
+    expect(result.payload.dataLedger.export.manifest.backendContext.included).toBe(true);
+    expect(result.payload.privacy).toEqual({
+      trainingUse: "none_by_default",
+      feedbackUse: "eval_routing_product_quality_only",
+      secretsReturned: false,
+    });
+    expect(result.payload.warnings.join(" ")).toContain("do not include raw chat transcripts");
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+    expect(serialized).not.toContain("Basic ");
+    expect(serialized).not.toContain("Authorization");
+    expect(serialized).not.toContain("owt_should_not_leak");
+  });
+
   test("GET /workspace/:id/backend/control-plane includes live model catalog counts", async () => {
     const opencodeBaseUrl = await startProviderCatalogServer({
       all: [

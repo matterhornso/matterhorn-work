@@ -130,6 +130,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/readiness`');
     expect(source).toContain("workspaceBackendControlPlane");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/control-plane`');
+    expect(source).toContain("workspaceBackendSupportReport");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/support-report`');
     expect(source).toContain("workspaceDataMap");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`');
     expect(source).toContain("workspaceDataControls");
