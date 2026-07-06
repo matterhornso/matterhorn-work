@@ -1415,18 +1415,6 @@ export function SessionPage(props: SessionPageProps) {
     const prompt = options?.prompt ?? launcher?.prompt;
     const title = options?.title ?? launcher?.title;
     if (!prompt) return;
-    const source = options?.source ?? "protocol-rail";
-    if (props.selectedSessionId && props.surface && typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("matterhorn:crypto-chat-handoff", {
-        detail: {
-          prompt,
-          panel,
-          venue: panel,
-          source,
-        },
-      }));
-      return;
-    }
     pendingProtocolRailPanelRef.current = panel;
     if (props.sidebar.onCreateTaskWithPrompt) {
       props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, prompt, {

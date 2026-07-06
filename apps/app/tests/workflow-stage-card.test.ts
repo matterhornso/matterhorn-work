@@ -176,12 +176,18 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
 
   test("focused desk task cards launch the agent instead of hiding a draft", () => {
     const src = readAppSource("domains/session/chat/session-page.tsx");
+    const surfaceSrc = readAppSource("domains/session/surface/session-surface.tsx");
 
     expect(src).toContain("sendImmediately: true");
     expect(src).toContain("setCurrentSidePanel(null)");
     expect(src).not.toContain("draftedPromptTitle");
     expect(src).not.toContain("Nothing has");
     expect(src).not.toContain("Draft ready");
+    expect(surfaceSrc).toContain("Choose a starter below to run");
+    expect(surfaceSrc).toContain("DeskSafetyInfoButton");
+    expect(surfaceSrc).not.toContain("Ready in composer");
+    expect(surfaceSrc).not.toContain("Composer handoff");
+    expect(surfaceSrc).not.toContain("starters fill the composer");
   });
 
   test("rail and home workflow launchers create running tasks", () => {
@@ -191,6 +197,7 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("agent: agentIdForDesk(panel)");
     expect(src).toContain("sendImmediately: true");
     expect(src).toContain("blankWorkflowLauncher.prompt");
+    expect(src).not.toContain('new CustomEvent("matterhorn:crypto-chat-handoff"');
   });
 
   test("focused desk task cards show readiness blockers before launch", () => {
