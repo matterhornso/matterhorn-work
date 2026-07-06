@@ -59,8 +59,9 @@ describe("Backend capability fixtures", () => {
     expect(f.notes.scope).toBe("workspace");
     expect(f.wallets.families.evm.directConnect).toBe(true);
     expect(f.wallets.families.evm.signing).toBe("client_wallet");
-    expect(f.wallets.families.sui.status).toBe("unsupported");
-    expect(f.wallets.families.sui.directConnect).toBe(false);
+    expect(f.wallets.families.sui.status).toBe("preview");
+    expect(f.wallets.families.sui.directConnect).toBe(true);
+    expect(f.wallets.families.sui.signing).toBe("client_wallet");
     expect(f.wallets.families.bittensor.publicRead).toBe(true);
     expect(f.wallets.families.bittensor.signing).toBe("external_signer");
     expect(f.wallets.families.bittensor.custody).toBe(false);
@@ -117,7 +118,7 @@ describe("Backend capabilities section renders all capability states", () => {
     expect(html).toContain("opencode/big-pickle");
     expect(html).toContain("Direct connect");
     expect(html).toContain("Public read / external signer");
-    expect(html).toContain("Not supported yet");
+    expect(html).toContain("Wallet-standard preview");
     expect(html).toContain("Machine / global");
   });
 

@@ -1878,23 +1878,23 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
   const sui = walletFamily({
     family: "sui",
     ...capability(
-      "unsupported",
-      "Sui not implemented yet",
-      "Sui wallet support should use the current Mysten dApp Kit React packages with explicit user signing; no custody or pasted keys.",
+      "preview",
+      "Sui wallet preview",
+      "Sui wallet-standard connect is wired through the current Mysten dApp Kit React packages for account reads; signing stays in the user's wallet.",
       {
         recommendedPackages: ["@mysten/dapp-kit-react", "@mysten/dapp-kit-core", "@mysten/sui"],
-        plannedNetworks: ["sui-testnet", "sui-mainnet"],
+        configuredNetworks: ["sui-testnet", "sui-mainnet"],
         signingBoundary: "client_wallet",
         docs: ["https://sdk.mystenlabs.com/dapp-kit/getting-started/react"],
       },
       [{ id: "sui.dapp-kit-docs", label: "Sui dApp Kit docs", kind: "external_link", href: "https://sdk.mystenlabs.com/dapp-kit/getting-started/react" }],
     ),
     custody: false,
-    directConnect: false,
-    publicRead: false,
+    directConnect: true,
+    publicRead: true,
     preview: false,
-    signing: "unsupported",
-    supportedChains: [],
+    signing: "client_wallet",
+    supportedChains: ["sui-testnet", "sui-mainnet"],
   });
   const bittensor = walletFamily({
     family: "bittensor",
@@ -1974,7 +1974,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       sources: ["notes", "memory", "task_events", "task_runs", "outputs", "workflow_runs"],
     },
     wallets: {
-      ...capability(walletStatus, "Wallet families", "Wallet support is split by family so unsupported Sui is explicit rather than hidden."),
+      ...capability(walletStatus, "Wallet families", "Wallet support is split by family so EVM, Sui, and Bittensor report separate custody and signing boundaries."),
       families: { evm, sui, bittensor },
     },
     teams: {

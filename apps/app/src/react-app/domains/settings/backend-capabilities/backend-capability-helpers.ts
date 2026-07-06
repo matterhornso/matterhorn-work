@@ -33,6 +33,12 @@ export function walletFamilySigningCopy(family: MatterhornWalletFamilyCapability
   hint: string;
 } {
   if (family.family === "sui") {
+    if (family.status === "preview" || family.status === "working") {
+      return {
+        label: "Wallet-standard preview",
+        hint: "Sui wallet connection uses Mysten dApp Kit. Account reads are available; signing stays in the user's wallet.",
+      };
+    }
     return {
       label: "Not supported yet",
       hint: "Sui wallet support is not implemented yet.",
