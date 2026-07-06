@@ -310,7 +310,7 @@ import { buildProjectDataLedger, buildProjectDataLedgerExport, scrubProjectLedge
 import { buildBackendModels } from "./backend-models.js";
 import { backendControlPlaneExportSnapshot, buildBackendSupportReport } from "./backend-support-report.js";
 import { buildBackendTeamAccess, buildBackendTeamAccessSummary } from "./backend-team-access.js";
-import { deleteProjectFeedbackEntry, projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
+import { deleteAllProjectFeedbackEntries, deleteProjectFeedbackEntry, projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
 import { TOY_UI_CSS, TOY_UI_FAVICON_SVG, TOY_UI_HTML, TOY_UI_JS, cssResponse, htmlResponse, jsResponse, svgResponse } from "./toy-ui.js";
 import { FileSessionStore } from "./file-sessions.js";
 import {
@@ -2776,6 +2776,17 @@ function buildDataControlStore(
           destructive: true,
           requirements: ["collaborator", "writable_server", "specific_feedback_id"],
         }),
+        dataControlAction({
+          id: "feedback.delete-all",
+          label: "Delete all feedback",
+          description: "Deletes all parseable feedback entries for this workspace and records an audit entry.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/feedback`,
+          destructive: true,
+          requirements: ["collaborator", "writable_server"],
+        }),
       ],
     });
   } else if (storeId === "audit" || storeId === "taskEvents" || storeId === "workflowRuns" || storeId === "evidence") {
@@ -4652,6 +4663,26 @@ function createRoutes(
     });
 
     return jsonResponse({ success: true, deleted });
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/feedback", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const deletedCount = await deleteAllProjectFeedbackEntries(workspace.id);
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.feedback.delete_all",
+      target: projectFeedbackLogPath(workspace.id),
+      summary: `Deleted ${deletedCount} feedback entr${deletedCount === 1 ? "y" : "ies"} from project data ledger`,
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({ success: true, deletedCount });
   });
 
   addRoute(routes, "GET", "/workspace/:id/backend/data-map", "client", async (ctx) => {

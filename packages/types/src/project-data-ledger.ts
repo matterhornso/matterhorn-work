@@ -216,3 +216,8 @@ export interface MatterhornProjectFeedbackDeleteResponse {
   success: true;
   deleted: MatterhornProjectFeedbackEntry;
 }
+
+export interface MatterhornProjectFeedbackDeleteAllResponse {
+  success: true;
+  deletedCount: number;
+}

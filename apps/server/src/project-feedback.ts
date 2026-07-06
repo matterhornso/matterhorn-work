@@ -77,3 +77,25 @@ export async function deleteProjectFeedbackEntry(
   await writeFile(path, kept.length ? `${kept.join("\n")}\n` : "", "utf8");
   return deleted;
 }
+
+export async function deleteAllProjectFeedbackEntries(workspaceId: string): Promise<number> {
+  const path = projectFeedbackLogPath(workspaceId);
+  if (!(await exists(path))) return 0;
+  const content = await readFile(path, "utf8");
+  const rawLines = content.trim().split("\n").filter(Boolean);
+  let deletedCount = 0;
+  const malformed: string[] = [];
+
+  for (const line of rawLines) {
+    try {
+      JSON.parse(line);
+      deletedCount += 1;
+    } catch {
+      malformed.push(line);
+    }
+  }
+
+  await ensureDir(dirname(path));
+  await writeFile(path, malformed.length ? `${malformed.join("\n")}\n` : "", "utf8");
+  return deletedCount;
+}

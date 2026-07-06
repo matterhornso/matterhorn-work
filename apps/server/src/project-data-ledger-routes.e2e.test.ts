@@ -203,6 +203,14 @@ describe("project data ledger routes", () => {
     expect(dataControls.payload.stores.feedback.export.actions[0].href).toBe("/workspace/ws_ledger/data-ledger?source=feedback");
     expect(dataControls.payload.stores.feedback.deletion.status).toBe("working");
     expect(dataControls.payload.stores.feedback.deletion.actions[0].href).toBe("/workspace/:workspaceId/feedback/:feedbackId");
+    expect(dataControls.payload.stores.feedback.deletion.actions).toContainEqual(
+      expect.objectContaining({
+        id: "feedback.delete-all",
+        method: "DELETE",
+        href: "/workspace/ws_ledger/feedback",
+        destructive: true,
+      }),
+    );
     expect(dataControls.payload.stores.taskEvents.retention.mode).toBe("append_only");
   });
 
@@ -483,6 +491,45 @@ describe("project data ledger routes", () => {
     }, viewer.payload.token);
     expect(deleteDenied.response.status).toBe(403);
     expect(deleteDenied.payload.code).toBe("forbidden");
+
+    const deleteAllDenied = await jsonFetch(base, "/workspace/ws_ledger/feedback", {
+      method: "DELETE",
+    }, viewer.payload.token);
+    expect(deleteAllDenied.response.status).toBe(403);
+    expect(deleteAllDenied.payload.code).toBe("forbidden");
+  });
+
+  test("DELETE /workspace/:id/feedback clears user feedback and audits the control", async () => {
+    const { base } = await boot();
+
+    const first = await jsonFetch(base, "/workspace/ws_ledger/feedback", {
+      method: "POST",
+      body: JSON.stringify({ kind: "comment", comment: "Delete this feedback batch." }),
+    });
+    const second = await jsonFetch(base, "/workspace/ws_ledger/feedback", {
+      method: "POST",
+      body: JSON.stringify({ kind: "bug", comment: "Delete this too." }),
+    });
+    expect(first.response.status).toBe(201);
+    expect(second.response.status).toBe(201);
+
+    const before = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?source=feedback&limit=20");
+    expect(before.payload.summary.feedback).toBe(2);
+
+    const deleted = await jsonFetch(base, "/workspace/ws_ledger/feedback", {
+      method: "DELETE",
+    });
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload).toEqual({ success: true, deletedCount: 2 });
+
+    const after = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?source=feedback&limit=20");
+    expect(after.response.status).toBe(200);
+    expect(after.payload.summary.feedback).toBe(0);
+    expect(after.payload.items).toEqual([]);
+
+    const audit = await jsonFetch(base, "/workspace/ws_ledger/audit?limit=20");
+    const actions = audit.payload.items.map((item: { action: string }) => item.action);
+    expect(actions).toContain("workspace.feedback.delete_all");
   });
 
   test("feedback writes are blocked when server is read-only", async () => {
@@ -500,5 +547,11 @@ describe("project data ledger routes", () => {
     });
     expect(deleteDenied.response.status).toBe(403);
     expect(deleteDenied.payload.code).toBe("read_only");
+
+    const deleteAllDenied = await jsonFetch(base, "/workspace/ws_ledger/feedback", {
+      method: "DELETE",
+    });
+    expect(deleteAllDenied.response.status).toBe(403);
+    expect(deleteAllDenied.payload.code).toBe("read_only");
   });
 });
