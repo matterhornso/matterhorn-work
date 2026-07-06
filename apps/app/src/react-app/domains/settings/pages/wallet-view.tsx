@@ -38,6 +38,7 @@ import { CHAIN_NAMES, CHAIN_LIST } from "../../../infra/chains";
 import { SUI_NETWORKS, suiDAppKit, type SuiMatterhornNetwork } from "../../../infra/sui-dapp-kit";
 import { SettingsSection, SettingsSectionHeader, SettingsSectionHeaderTitle, SettingsSectionHeaderDescription, SettingsStack } from "../settings-section";
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
+import { SuiWorkflowPanel } from "../../wallet/sui-workflow-panel";
 import {
   backendCapabilityLabel,
   walletFamilySummary,
@@ -84,6 +85,8 @@ function txStatusIcon(status: string) {
 export type WalletSettingsViewProps = {
   store: WalletStore;
   matterhornServerClient?: MatterhornServerClient | null;
+  runtimeWorkspaceId?: string | null;
+  sessionId?: string | null;
   onTxApprove?: (tx: { to: string; value: string; data?: string; chainId: number }) => void;
   onTxReject?: () => void;
   compact?: boolean;
@@ -479,7 +482,15 @@ function WalletRailMetric(props: { label: string; value: string }) {
   );
 }
 
-export function WalletSettingsView({ compact = false, matterhornServerClient, store, onTxApprove, onTxReject }: WalletSettingsViewProps) {
+export function WalletSettingsView({
+  compact = false,
+  matterhornServerClient,
+  runtimeWorkspaceId,
+  sessionId,
+  store,
+  onTxApprove,
+  onTxReject,
+}: WalletSettingsViewProps) {
   const state = useWalletStore(store);
   const { address: wagmiAddress } = useAccount();
   const { connect, connectors } = useConnect();
@@ -685,6 +696,12 @@ export function WalletSettingsView({ compact = false, matterhornServerClient, st
           backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")}
           matterhornServerClient={matterhornServerClient}
         />
+        <SuiWorkflowPanel
+          compact
+          matterhornServerClient={matterhornServerClient}
+          workspaceId={runtimeWorkspaceId}
+          sessionId={sessionId}
+        />
         <WalletProtocolSupportMap capability={capability} connected={state.isConnected} backendWallets={backendWallets} />
         <WalletRuntimeExplainer capability={capability} compact />
 
@@ -759,6 +776,11 @@ export function WalletSettingsView({ compact = false, matterhornServerClient, st
           <SuiWalletPreviewSection
             backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")}
             matterhornServerClient={matterhornServerClient}
+          />
+          <SuiWorkflowPanel
+            matterhornServerClient={matterhornServerClient}
+            workspaceId={runtimeWorkspaceId}
+            sessionId={sessionId}
           />
         </SettingsSection>
         <SettingsSection>
@@ -867,6 +889,11 @@ export function WalletSettingsView({ compact = false, matterhornServerClient, st
         <SuiWalletPreviewSection
           backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")}
           matterhornServerClient={matterhornServerClient}
+        />
+        <SuiWorkflowPanel
+          matterhornServerClient={matterhornServerClient}
+          workspaceId={runtimeWorkspaceId}
+          sessionId={sessionId}
         />
       </SettingsSection>
 

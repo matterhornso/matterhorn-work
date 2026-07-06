@@ -2828,6 +2828,57 @@ async function recordWorkflowTaskEvent(
   });
 }
 
+type SuiWorkspaceEvidenceInput = {
+  workspace: WorkspaceInfo;
+  ctx: RequestContext;
+  taskId: string;
+  sessionSlug: string;
+  outputPath: string;
+  outputPayload: Record<string, unknown>;
+  summary: string;
+  auditAction: string;
+};
+
+async function recordSuiWorkspaceEvidence(input: SuiWorkspaceEvidenceInput): Promise<void> {
+  const timestamp = Date.now();
+  const absPath = resolveSafeChildPath(input.workspace.path, input.outputPath);
+  await ensureDir(dirname(absPath));
+  await writeFile(absPath, JSON.stringify(input.outputPayload, null, 2) + "\n", "utf8");
+
+  const detail = `sui;${input.sessionSlug};sui_wallet_workflow;outputs/sui`;
+  await recordTaskEvent({
+    id: `task_evt_${shortId()}`,
+    workspaceId: input.workspace.id,
+    taskId: input.taskId,
+    type: "artifact_saved",
+    timestamp,
+    summary: input.summary,
+    detail,
+    artifactPath: input.outputPath,
+    stageName: "sui_wallet_evidence",
+  });
+  await recordTaskEvent({
+    id: `task_evt_${shortId()}`,
+    workspaceId: input.workspace.id,
+    taskId: input.taskId,
+    type: "completed",
+    timestamp: timestamp + 1,
+    summary: input.summary,
+    detail,
+    stageName: "sui_wallet_evidence",
+  });
+
+  await recordAudit(input.workspace.path, {
+    id: shortId(),
+    workspaceId: input.workspace.id,
+    actor: input.ctx.actor ?? { type: "remote" },
+    action: input.auditAction,
+    target: absPath,
+    summary: input.summary,
+    timestamp,
+  });
+}
+
 function createRoutes(
   config: ServerConfig,
   approvals: ApprovalService,
@@ -6730,6 +6781,121 @@ function createRoutes(
     try {
       const receipt = buildSuiTransactionReceipt(body as SuiTransactionReceiptInput);
       return jsonResponse({ success: true, receipt, cards: [buildSuiTransactionReceiptCard(receipt)] });
+    } catch (err) {
+      throw suiApiError(err);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/sui/transactions/preview", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const payload = body && typeof body === "object" && !Array.isArray(body) && "payload" in body
+      ? (body as Record<string, unknown>).payload
+      : body;
+    try {
+      const preview = buildSuiTransferPreview(payload as SuiTransferPreviewInput);
+      const cards = [buildSuiTransactionPreviewCard(preview)];
+      const bodyRecord = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {};
+      const requestedSessionId = typeof bodyRecord.sessionId === "string" ? bodyRecord.sessionId.trim() : "";
+      const sessionSlug = normalizeSessionSlug(requestedSessionId || `sui_${preview.id}`);
+      const taskId = preview.id;
+      const outputPath = `outputs/sui/${sessionSlug}/transfer-preview-${preview.previewSha256.slice(0, 16)}.json`;
+
+      await recordSuiWorkspaceEvidence({
+        workspace,
+        ctx,
+        taskId,
+        sessionSlug,
+        outputPath,
+        summary: "Sui transfer preview saved",
+        auditAction: "workspace.sui.preview.create",
+        outputPayload: {
+          version: "matterhorn.sui.workspace-evidence.v1",
+          kind: "transaction_preview",
+          workspaceId: workspace.id,
+          outputPath,
+          preview,
+          cards,
+          safety: {
+            custody: false,
+            canSubmit: false,
+            liveSubmissionEnabled: false,
+            signingInMatterhorn: false,
+          },
+        },
+      });
+
+      return jsonResponse({
+        success: true,
+        preview,
+        cards,
+        evidence: {
+          workspaceId: workspace.id,
+          outputPath,
+          taskId,
+          sessionSlug,
+          source: "task_events",
+        },
+      }, 201);
+    } catch (err) {
+      throw suiApiError(err);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/sui/transactions/receipt", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const payload = body && typeof body === "object" && !Array.isArray(body) && "payload" in body
+      ? (body as Record<string, unknown>).payload
+      : body;
+    try {
+      const receipt = buildSuiTransactionReceipt(payload as SuiTransactionReceiptInput);
+      const cards = [buildSuiTransactionReceiptCard(receipt)];
+      const bodyRecord = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {};
+      const requestedSessionId = typeof bodyRecord.sessionId === "string" ? bodyRecord.sessionId.trim() : "";
+      const sessionSlug = normalizeSessionSlug(requestedSessionId || `sui_${receipt.transactionDigest.slice(0, 16)}`);
+      const taskId = `sui_receipt_${receipt.receiptSha256.slice(0, 16)}`;
+      const outputPath = `outputs/sui/${sessionSlug}/transaction-receipt-${receipt.transactionDigest.slice(0, 16)}.json`;
+
+      await recordSuiWorkspaceEvidence({
+        workspace,
+        ctx,
+        taskId,
+        sessionSlug,
+        outputPath,
+        summary: "Sui transaction receipt saved",
+        auditAction: "workspace.sui.receipt.import",
+        outputPayload: {
+          version: "matterhorn.sui.workspace-evidence.v1",
+          kind: "transaction_receipt",
+          workspaceId: workspace.id,
+          outputPath,
+          receipt,
+          cards,
+          safety: {
+            custody: false,
+            containsSignatureMaterial: false,
+            liveSubmissionByMatterhorn: false,
+          },
+        },
+      });
+
+      return jsonResponse({
+        success: true,
+        receipt,
+        cards,
+        evidence: {
+          workspaceId: workspace.id,
+          outputPath,
+          taskId,
+          sessionSlug,
+          source: "task_events",
+        },
+      }, 201);
     } catch (err) {
       throw suiApiError(err);
     }

@@ -2391,6 +2391,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             compact={props.embedded}
             store={walletProvider.store}
             matterhornServerClient={matterhornClient}
+            runtimeWorkspaceId={runtimeWorkspaceId}
             onTxApprove={() => {}}
             onTxReject={() => {}}
           />

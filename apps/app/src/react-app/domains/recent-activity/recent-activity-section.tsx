@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { useMemo, useState, type ElementType } from "react";
+import { useEffect, useMemo, useState, type ElementType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -341,6 +341,18 @@ export function RecentActivitySection({
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
+
+  useEffect(() => {
+    const refresh = () => {
+      void refetch();
+    };
+    window.addEventListener("matterhorn:task-log-updated", refresh);
+    window.addEventListener("matterhorn:project-evidence-updated", refresh);
+    return () => {
+      window.removeEventListener("matterhorn:task-log-updated", refresh);
+      window.removeEventListener("matterhorn:project-evidence-updated", refresh);
+    };
+  }, [refetch]);
 
   const items: RecentActivityItem[] = data?.items ? normalizeEvidenceEvents(data.items) : [];
   const selectedItem = items.find((item) => item.id === selectedItemId) ?? null;
