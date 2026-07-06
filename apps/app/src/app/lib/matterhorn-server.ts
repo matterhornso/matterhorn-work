@@ -1630,6 +1630,11 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       if (typeof options?.limit === "number") query.set("limit", String(options.limit));
       if (options?.source) query.set("source", options.source);
       if (options?.kind) query.set("kind", options.kind);
+      if (options?.desk?.trim()) query.set("desk", options.desk.trim());
+      if (options?.sessionId?.trim()) query.set("sessionId", options.sessionId.trim());
+      if (options?.taskId?.trim()) query.set("taskId", options.taskId.trim());
+      if (options?.from?.trim()) query.set("from", options.from.trim());
+      if (options?.to?.trim()) query.set("to", options.to.trim());
       const suffix = query.size ? `?${query.toString()}` : "";
       return requestJson<MatterhornProjectDataLedgerResponse>(
         baseUrl,

@@ -124,6 +124,8 @@ function feedbackToLedgerEntry(entry: MatterhornProjectFeedbackEntry): Matterhor
   const title = scrubString(`Feedback: ${entry.kind}`);
   const summary = scrubString(entry.comment);
   const sourceId = scrubString(entry.target?.sourceId);
+  const targetSourceType = entry.target?.sourceType;
+  const targetSourceId = sourceId.value?.trim();
   return {
     id: `feedback:${entry.id}`,
     workspaceId: entry.workspaceId,
@@ -133,6 +135,8 @@ function feedbackToLedgerEntry(entry: MatterhornProjectFeedbackEntry): Matterhor
     title: title.value ?? "Feedback",
     summary: summary.value,
     href: entry.target?.href,
+    taskId: targetSourceType === "task" ? targetSourceId : undefined,
+    noteId: targetSourceType === "note" ? targetSourceId : undefined,
     actor: actorFromFeedback(entry),
     dataClass: "feedback",
     containsUserContent: true,
@@ -146,8 +150,8 @@ function feedbackToLedgerEntry(entry: MatterhornProjectFeedbackEntry): Matterhor
     metadata: {
       feedbackKind: entry.kind,
       rating: entry.rating ?? null,
-      targetSourceType: entry.target?.sourceType ?? null,
-      targetSourceId: sourceId.value ?? null,
+      targetSourceType: targetSourceType ?? null,
+      targetSourceId: targetSourceId ?? null,
     },
   };
 }
@@ -155,6 +159,11 @@ function feedbackToLedgerEntry(entry: MatterhornProjectFeedbackEntry): Matterhor
 function matchesFilters(entry: MatterhornProjectDataLedgerEntry, options: MatterhornProjectDataLedgerListOptions): boolean {
   if (options.source && entry.source !== options.source) return false;
   if (options.kind && entry.kind !== options.kind) return false;
+  if (options.desk && entry.desk !== options.desk) return false;
+  if (options.sessionId && entry.sessionId !== options.sessionId && entry.sessionSlug !== options.sessionId) return false;
+  if (options.taskId && entry.taskId !== options.taskId) return false;
+  if (options.from && Date.parse(entry.timestamp) < Date.parse(options.from)) return false;
+  if (options.to && Date.parse(entry.timestamp) > Date.parse(options.to)) return false;
   return true;
 }
 

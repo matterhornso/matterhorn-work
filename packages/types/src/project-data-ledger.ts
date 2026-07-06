@@ -98,6 +98,11 @@ export interface MatterhornProjectDataLedgerListOptions {
   limit?: number;
   source?: MatterhornProjectDataLedgerSource;
   kind?: MatterhornProjectDataLedgerKind;
+  desk?: string;
+  sessionId?: string;
+  taskId?: string;
+  from?: string;
+  to?: string;
 }
 
 export interface MatterhornProjectDataLedgerResponse {

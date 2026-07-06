@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { startServer } from "./server.js";
+import { recordTaskEvent } from "./task-events.js";
 import type { ServerConfig } from "./types.js";
 
 type Served = {
@@ -213,6 +214,59 @@ describe("project data ledger routes", () => {
     expect(byKind.payload.items.every((item: { kind: string }) => item.kind === "feedback")).toBe(true);
   });
 
+  test("data-ledger can filter run history by desk, session, task, and time window", async () => {
+    const { base } = await boot();
+    const firstRunAt = Date.parse("2026-07-06T08:00:00.000Z");
+    const secondRunAt = Date.parse("2026-07-06T10:00:00.000Z");
+
+    await recordTaskEvent({
+      id: "evt_bittensor_started",
+      workspaceId: "ws_ledger",
+      taskId: "task_bittensor_balance",
+      type: "workflow_started",
+      timestamp: firstRunAt,
+      summary: "Bittensor task started",
+      detail: "bittensor;sess_bittensor_balance",
+    });
+    await recordTaskEvent({
+      id: "evt_bittensor_output",
+      workspaceId: "ws_ledger",
+      taskId: "task_bittensor_balance",
+      type: "artifact_saved",
+      timestamp: firstRunAt + 60_000,
+      summary: "Bittensor output saved",
+      detail: "bittensor;sess_bittensor_balance",
+      artifactPath: "outputs/bittensor/sess_bittensor_balance/receipt.md",
+    });
+    await recordTaskEvent({
+      id: "evt_sui_started",
+      workspaceId: "ws_ledger",
+      taskId: "task_sui_preview",
+      type: "workflow_started",
+      timestamp: secondRunAt,
+      summary: "Sui task started",
+      detail: "sui;sess_sui_preview",
+    });
+
+    const byDesk = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?desk=bittensor&limit=20");
+    expect(byDesk.response.status).toBe(200);
+    expect(byDesk.payload.items.length).toBeGreaterThanOrEqual(2);
+    expect(byDesk.payload.items.every((item: { desk?: string }) => item.desk === "bittensor")).toBe(true);
+
+    const bySession = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?sessionId=sess_bittensor_balance&limit=20");
+    expect(bySession.response.status).toBe(200);
+    expect(bySession.payload.items.length).toBeGreaterThanOrEqual(2);
+    expect(bySession.payload.items.every((item: { sessionSlug?: string }) => item.sessionSlug === "sess_bittensor_balance")).toBe(true);
+
+    const byTask = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?taskId=task_sui_preview&limit=20");
+    expect(byTask.response.status).toBe(200);
+    expect(byTask.payload.items.map((item: { taskId?: string }) => item.taskId)).toEqual(["task_sui_preview"]);
+
+    const byWindow = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?from=2026-07-06T09:30:00.000Z&to=2026-07-06T10:30:00.000Z&limit=20");
+    expect(byWindow.response.status).toBe(200);
+    expect(byWindow.payload.items.map((item: { taskId?: string }) => item.taskId)).toEqual(["task_sui_preview"]);
+  });
+
   test("data-ledger rejects unknown filters", async () => {
     const { base } = await boot();
 
@@ -223,6 +277,10 @@ describe("project data ledger routes", () => {
     const kind = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?kind=seed_phrase");
     expect(kind.response.status).toBe(400);
     expect(kind.payload.code).toBe("invalid_project_data_ledger_kind");
+
+    const time = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?from=tomorrow-ish");
+    expect(time.response.status).toBe(400);
+    expect(time.payload.code).toBe("invalid_project_data_ledger_time");
   });
 
   test("feedback writes require collaborator scope", async () => {

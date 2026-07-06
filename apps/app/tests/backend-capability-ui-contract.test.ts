@@ -126,6 +126,11 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`');
     expect(source).toContain("listProjectDataLedger");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/data-ledger${suffix}`');
+    expect(source).toContain('query.set("desk", options.desk.trim())');
+    expect(source).toContain('query.set("sessionId", options.sessionId.trim())');
+    expect(source).toContain('query.set("taskId", options.taskId.trim())');
+    expect(source).toContain('query.set("from", options.from.trim())');
+    expect(source).toContain('query.set("to", options.to.trim())');
     expect(source).toContain("submitProjectFeedback");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/feedback`');
     expect(source).toContain("suiAccount");

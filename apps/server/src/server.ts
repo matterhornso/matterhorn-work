@@ -1150,6 +1150,17 @@ function parseProjectDataLedgerKind(value: string | null): MatterhornProjectData
   throw new ApiError(400, "invalid_project_data_ledger_kind", "kind must be note, memory_suggestion, task, output, audit, or feedback");
 }
 
+function parseProjectDataLedgerTimestamp(value: string | null, name: "from" | "to"): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const timestamp = Date.parse(trimmed);
+  if (!Number.isFinite(timestamp)) {
+    throw new ApiError(400, "invalid_project_data_ledger_time", `${name} must be a valid ISO timestamp`);
+  }
+  return new Date(timestamp).toISOString();
+}
+
 function parseProjectFeedbackKind(value: unknown): MatterhornProjectFeedbackKind {
   if (
     value === "thumbs_up" ||
@@ -3544,6 +3555,11 @@ function createRoutes(
       limit,
       source: parseProjectDataLedgerSource(ctx.url.searchParams.get("source")?.trim() || null),
       kind: parseProjectDataLedgerKind(ctx.url.searchParams.get("kind")?.trim() || null),
+      desk: ctx.url.searchParams.get("desk")?.trim() || undefined,
+      sessionId: ctx.url.searchParams.get("sessionId")?.trim() || ctx.url.searchParams.get("session_id")?.trim() || undefined,
+      taskId: ctx.url.searchParams.get("taskId")?.trim() || ctx.url.searchParams.get("task_id")?.trim() || undefined,
+      from: parseProjectDataLedgerTimestamp(ctx.url.searchParams.get("from"), "from"),
+      to: parseProjectDataLedgerTimestamp(ctx.url.searchParams.get("to"), "to"),
     }));
   });
 
