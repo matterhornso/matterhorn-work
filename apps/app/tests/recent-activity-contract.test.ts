@@ -85,6 +85,15 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("onOpenOutputPath");
     });
 
+    test("RecentActivitySection supports a collapsed run-history summary", () => {
+      const source = readAppSource("domains/recent-activity/recent-activity-section.tsx");
+      expect(source).toContain("defaultExpanded = true");
+      expect(source).toContain("historyOpen");
+      expect(source).toContain("Run history");
+      expect(source).toContain("LatestActivitySummary");
+      expect(source).toContain("setHistoryOpen(true)");
+    });
+
     test("ActivityDetailSheet does not expose raw prompt fields", () => {
       const source = readAppSource("domains/recent-activity/recent-activity-section.tsx");
       expect(source).not.toContain("item.prompt");
@@ -113,6 +122,7 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("runtimeWorkspaceId={props.runtimeWorkspaceId}");
       expect(source).toContain("limit={8}");
       expect(source).toContain('title="Project Activity"');
+      expect(source).toContain("defaultExpanded={false}");
       expect(source).toContain("onOpenOutputPath={openOutputPathFromActivity}");
     });
 

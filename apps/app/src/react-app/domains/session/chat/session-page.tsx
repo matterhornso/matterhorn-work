@@ -2023,6 +2023,7 @@ export function SessionPage(props: SessionPageProps) {
                             limit={8}
                             title="Project Activity"
                             description="Recent notes, outputs, memory reviews, and desk runs."
+                            defaultExpanded={false}
                             onOpenOutputPath={openOutputPathFromActivity}
                           />
                         ) : null}
