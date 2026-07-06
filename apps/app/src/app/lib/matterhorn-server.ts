@@ -28,6 +28,7 @@ import type {
 } from "@matterhorn-work/types/backend-capabilities";
 import type { MatterhornBackendModelsResponse } from "@matterhorn-work/types/backend-models";
 import type { MatterhornBackendTeamAccessResponse } from "@matterhorn-work/types/backend-team-access";
+import type { MatterhornWorkspaceDataControlsResponse } from "@matterhorn-work/types/backend-data-controls";
 import type {
   MatterhornWorkflowRun,
   MatterhornWorkflowRunListItem,
@@ -1666,6 +1667,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       requestJson<MatterhornWorkspaceDataMapResponse>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    workspaceDataControls: (workspaceId: string) =>
+      requestJson<MatterhornWorkspaceDataControlsResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/data-controls`,
         { token, hostToken, timeoutMs: timeouts.capabilities },
       ),
     workspaceTeamAccess: (workspaceId: string) =>

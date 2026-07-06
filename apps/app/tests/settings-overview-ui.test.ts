@@ -25,6 +25,8 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("client.backendCapabilities()");
     expect(source).toContain("settings-workspace-data-map");
     expect(source).toContain("client.workspaceDataMap(workspaceId)");
+    expect(source).toContain("settings-workspace-data-controls");
+    expect(source).toContain("client.workspaceDataControls(workspaceId)");
     expect(source).toContain("Backend status");
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
@@ -36,9 +38,9 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("DataPolicySection");
     expect(source).toContain("DATA_POLICY_STORE_ORDER");
     expect(source).toContain("storageLocationLabel(store)");
+    expect(source).toContain("controlSummary(props.controls, store, \"export\")");
+    expect(source).toContain("controlSummary(props.controls, store, \"deletion\")");
     expect(source).toContain("retentionLabel(store.retention)");
-    expect(source).toContain("yesNo(store.exportable)");
-    expect(source).toContain("yesNo(store.deletable)");
     expect(source).toContain("secretsLabel(store.containsSecrets)");
     expect(source).toContain("Where workspace data lives, what can be exported, and what can be deleted.");
   });

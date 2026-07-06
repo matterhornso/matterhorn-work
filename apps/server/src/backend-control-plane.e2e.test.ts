@@ -371,6 +371,42 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toMatch(/privateKey|seed phrase|mnemonic|wallet export/i);
   });
 
+  test("GET /workspace/:id/backend/data-controls reports export and deletion controls without secrets", async () => {
+    const { base } = await boot();
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/data-controls");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.version).toBe("matterhorn.backend.data-controls.v1");
+    expect(result.payload.workspace.id).toBe("ws_backend");
+    expect(result.payload.summary.totalStores).toBeGreaterThanOrEqual(8);
+    expect(result.payload.summary.appendOnlyStores).toBeGreaterThanOrEqual(3);
+    expect(result.payload.stores.notes.export.actions[0]).toMatchObject({
+      id: "notes.list",
+      method: "GET",
+      href: "/workspace/ws_backend/notes",
+    });
+    expect(result.payload.stores.notes.deletion.actions[0]).toMatchObject({
+      id: "notes.delete",
+      method: "DELETE",
+      destructive: true,
+    });
+    expect(result.payload.stores.memory.export.actions[0]).toMatchObject({
+      id: "memory.export",
+      method: "POST",
+      href: "/api/memory/export",
+    });
+    expect(result.payload.stores.feedback.deletion.status).toBe("unsupported");
+    expect(result.payload.stores.audit.retention.mode).toBe("append_only");
+    expect(result.payload.policy.trainingUse).toBe("none_by_default");
+    expect(result.payload.policy.limitations.join(" ")).toContain("No bulk delete-all workspace control");
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+    expect(serialized).not.toMatch(/privateKey|seed phrase|mnemonic|wallet export|bearer token/i);
+  });
+
   test("memory write routes require collaborator scope and audit successful writes", async () => {
     const { base } = await boot();
     const viewer = await hostFetch(base, "/tokens", {

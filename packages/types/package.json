@@ -82,6 +82,11 @@
       "types": "./src/backend-team-access.ts",
       "development": "./src/backend-team-access.ts",
       "default": "./src/backend-team-access.ts"
+    },
+    "./backend-data-controls": {
+      "types": "./src/backend-data-controls.ts",
+      "development": "./src/backend-data-controls.ts",
+      "default": "./src/backend-data-controls.ts"
     }
   },
   "files": [

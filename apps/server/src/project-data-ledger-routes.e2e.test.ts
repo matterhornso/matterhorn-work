@@ -193,6 +193,13 @@ describe("project data ledger routes", () => {
     expect(dataMap.payload.stores.feedback.status).toBe("working");
     expect(dataMap.payload.stores.feedback.path).toBe(join(dir, "openwork-data", "feedback", "ws_ledger.jsonl"));
     expect(dataMap.payload.stores.feedback.containsSecrets).toBe("redacted");
+
+    const dataControls = await jsonFetch(base, "/workspace/ws_ledger/backend/data-controls");
+    expect(dataControls.response.status).toBe(200);
+    expect(dataControls.payload.version).toBe("matterhorn.backend.data-controls.v1");
+    expect(dataControls.payload.stores.feedback.export.actions[0].href).toBe("/workspace/ws_ledger/data-ledger?source=feedback");
+    expect(dataControls.payload.stores.feedback.deletion.status).toBe("unsupported");
+    expect(dataControls.payload.stores.taskEvents.retention.mode).toBe("append_only");
   });
 
   test("data-ledger source and kind filters are explicit", async () => {

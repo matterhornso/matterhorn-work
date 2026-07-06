@@ -126,6 +126,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('"/api/backend/models"');
     expect(source).toContain("workspaceDataMap");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`');
+    expect(source).toContain("workspaceDataControls");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/data-controls`');
     expect(source).toContain("workspaceTeamAccess");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/team-access`');
     expect(source).toContain("listProjectDataLedger");
@@ -158,6 +160,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("client.backendCapabilities()");
     expect(source).toContain("settings-workspace-data-map");
     expect(source).toContain("client.workspaceDataMap(workspaceId)");
+    expect(source).toContain("settings-workspace-data-controls");
+    expect(source).toContain("client.workspaceDataControls(workspaceId)");
     expect(source).toContain("settings-team-access");
     expect(source).toContain("client.workspaceTeamAccess(workspaceId)");
     expect(source).toContain("settings-project-data-ledger");
@@ -166,6 +170,7 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("Backend status");
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
+    expect(source).toContain("controls={workspaceDataControlsQuery.data}");
   });
 
   test("AI settings shows backend model routing alongside live provider counts", () => {

@@ -35,6 +35,10 @@ import type {
   MatterhornDataStoreDescriptor,
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
+import type {
+  MatterhornDataControlStore,
+  MatterhornWorkspaceDataControlsResponse,
+} from "@matterhorn-work/types/backend-data-controls";
 import {
   MATTERHORN_PROJECT_FEEDBACK_KINDS,
   type MatterhornProjectDataLedgerEntry,
@@ -240,6 +244,16 @@ function yesNo(value: boolean) {
   return value ? "Yes" : "No";
 }
 
+function controlSummary(
+  controls: MatterhornWorkspaceDataControlsResponse | undefined,
+  store: MatterhornDataStoreDescriptor,
+  kind: "export" | "deletion",
+) {
+  const control = controls?.stores[store.id as keyof MatterhornWorkspaceDataControlsResponse["stores"]];
+  if (!control) return kind === "export" ? yesNo(store.exportable) : yesNo(store.deletable);
+  return kind === "export" ? control.export.summary : control.deletion.summary;
+}
+
 function feedbackKindLabel(value: string | null | undefined) {
   if (value === "thumbs_up") return "Worked well";
   if (value === "thumbs_down") return "Felt rough";
@@ -379,10 +393,17 @@ function TaskHistorySection(props: {
   );
 }
 
-function DataPolicySection(props: { dataMap: MatterhornWorkspaceDataMapResponse }) {
+function DataPolicySection(props: {
+  dataMap: MatterhornWorkspaceDataMapResponse;
+  controls?: MatterhornWorkspaceDataControlsResponse;
+}) {
   const stores = DATA_POLICY_STORE_ORDER
     .map((key) => props.dataMap.stores[key])
     .filter(Boolean);
+  const highlightedControls = stores
+    .map((store) => props.controls?.stores[store.id as keyof MatterhornWorkspaceDataControlsResponse["stores"]])
+    .filter((control): control is MatterhornDataControlStore => Boolean(control))
+    .slice(0, 4);
 
   return (
     <div className="px-1 py-3">
@@ -415,14 +436,30 @@ function DataPolicySection(props: { dataMap: MatterhornWorkspaceDataMapResponse 
                   </span>
                 </td>
                 <td className="border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">{retentionLabel(store.retention)}</td>
-                <td className="border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">{yesNo(store.exportable)}</td>
-                <td className="border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">{yesNo(store.deletable)}</td>
+                <td className="max-w-[220px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
+                  {controlSummary(props.controls, store, "export")}
+                </td>
+                <td className="max-w-[220px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
+                  {controlSummary(props.controls, store, "deletion")}
+                </td>
                 <td className="border-t border-dls-border/45 py-2 text-dls-secondary">{secretsLabel(store.containsSecrets)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {props.controls ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {highlightedControls.map((control) => (
+            <div key={control.storeId} className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
+              <p className="text-xs font-medium text-dls-text">{control.store.label}</p>
+              <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
+                {control.export.label} · {control.deletion.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <p className="mt-3 text-xs leading-5 text-dls-secondary">
         User-controlled stores can be managed from their own surfaces. Append-only rows are retained for accountability and are included in ledger export where available.
       </p>
@@ -573,6 +610,18 @@ export function SettingsOverviewView(props: {
       const workspaceId = props.runtimeWorkspaceId?.trim();
       if (!client || !workspaceId) throw new Error("Open a workspace to see where project data is stored.");
       return client.workspaceDataMap(workspaceId);
+    },
+    staleTime: 30_000,
+  });
+
+  const workspaceDataControlsQuery = useQuery({
+    queryKey: ["settings-workspace-data-controls", props.runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to see project data controls.");
+      return client.workspaceDataControls(workspaceId);
     },
     staleTime: 30_000,
   });
@@ -797,7 +846,7 @@ export function SettingsOverviewView(props: {
           }
         >
           {workspaceDataMapQuery.data ? (
-            <DataPolicySection dataMap={workspaceDataMapQuery.data} />
+            <DataPolicySection dataMap={workspaceDataMapQuery.data} controls={workspaceDataControlsQuery.data} />
           ) : (
             <div className="px-1 py-3 text-sm leading-6 text-dls-secondary">
               {workspaceDataMapQuery.isLoading

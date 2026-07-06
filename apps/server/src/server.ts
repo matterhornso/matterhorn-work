@@ -247,6 +247,13 @@ import type {
   MatterhornWorkspaceDataMapResponse,
   MatterhornWalletFamilyCapability,
 } from "@matterhorn-work/types/backend-capabilities";
+import type {
+  MatterhornDataControlAction,
+  MatterhornDataControlCapability,
+  MatterhornDataControlStore,
+  MatterhornDataControlStoreId,
+  MatterhornWorkspaceDataControlsResponse,
+} from "@matterhorn-work/types/backend-data-controls";
 import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
@@ -2180,6 +2187,291 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   };
 }
 
+function dataControlAction(input: MatterhornDataControlAction): MatterhornDataControlAction {
+  return input;
+}
+
+function dataControlCapability(input: MatterhornDataControlCapability): MatterhornDataControlCapability {
+  return input;
+}
+
+function retentionControl(store: MatterhornDataStoreDescriptor): MatterhornDataControlStore["retention"] {
+  if (store.retention === "user_controlled") {
+    return {
+      mode: store.retention,
+      label: "User controlled",
+      summary: "The user can manage this store from its owning UI or the filesystem.",
+      configurable: false,
+    };
+  }
+  if (store.retention === "append_only") {
+    return {
+      mode: store.retention,
+      label: "Append-only",
+      summary: "Events are retained for accountability and exported through the project ledger.",
+      configurable: false,
+    };
+  }
+  if (store.retention === "runtime_controlled") {
+    return {
+      mode: store.retention,
+      label: "Runtime controlled",
+      summary: "Retention is controlled by the underlying runtime or derived read layer.",
+      configurable: false,
+    };
+  }
+  return {
+    mode: store.retention,
+    label: "Unknown",
+    summary: "Matterhorn cannot yet report retention controls for this store.",
+    configurable: false,
+  };
+}
+
+function buildDataControlStore(
+  workspace: WorkspaceInfo,
+  store: MatterhornDataStoreDescriptor,
+): MatterhornDataControlStore {
+  const storeId = store.id as MatterhornDataControlStoreId;
+  const ledgerRoute = `/workspace/${encodeURIComponent(workspace.id)}/data-ledger`;
+  const notesRoute = `/workspace/${encodeURIComponent(workspace.id)}/notes`;
+
+  let exportCapability: MatterhornDataControlCapability = dataControlCapability({
+    status: store.exportable ? "preview" : "unsupported",
+    label: store.exportable ? "Export available" : "No export route",
+    summary: store.exportable
+      ? "This store is included in a Matterhorn export or can be copied from the filesystem."
+      : "Matterhorn does not expose an export route for this store yet.",
+    actions: [],
+  });
+  let deletionCapability: MatterhornDataControlCapability = dataControlCapability({
+    status: store.deletable ? "preview" : "unsupported",
+    label: store.deletable ? "Delete available" : "Append-only or runtime controlled",
+    summary: store.deletable
+      ? "This store has deletion controls in its owning surface."
+      : "Matterhorn does not expose deletion for this store in v1.",
+    actions: [],
+  });
+
+  if (storeId === "notes") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Notes API",
+      summary: "Notes can be listed and exported from the workspace notes API.",
+      actions: [
+        dataControlAction({
+          id: "notes.list",
+          label: "List notes",
+          description: "Returns workspace note metadata and bodies according to the notes API contract.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: notesRoute,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Individual note delete",
+      summary: "Individual notes can be deleted by collaborators from Notes.",
+      actions: [
+        dataControlAction({
+          id: "notes.delete",
+          label: "Delete note",
+          description: "Deletes one note by id and records an audit entry.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: `${notesRoute}/:noteId`,
+          destructive: true,
+          requirements: ["collaborator", "writable_server", "specific_record_id"],
+        }),
+      ],
+    });
+  } else if (storeId === "memory") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Memory export",
+      summary: "Memory can export a bundle from the local memory vault.",
+      actions: [
+        dataControlAction({
+          id: "memory.export",
+          label: "Export memory",
+          description: "Creates a user-triggered memory export bundle.",
+          kind: "api_route",
+          status: "working",
+          method: "POST",
+          href: "/api/memory/export",
+          requirements: ["collaborator", "writable_server"],
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Forget memory",
+      summary: "Individual saved memories can be forgotten by collaborators.",
+      actions: [
+        dataControlAction({
+          id: "memory.forget",
+          label: "Forget memory",
+          description: "Forgets one memory record by id and records an audit entry when a workspace is resolved.",
+          kind: "api_route",
+          status: "working",
+          method: "POST",
+          href: "/api/memory/forget",
+          destructive: true,
+          requirements: ["collaborator", "writable_server", "specific_record_id"],
+        }),
+        dataControlAction({
+          id: "memory.delete-entity",
+          label: "Delete memory entity",
+          description: "Alias route for deleting one memory record by id.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: "/api/memory/entities/:id",
+          destructive: true,
+          requirements: ["collaborator", "writable_server", "specific_record_id"],
+        }),
+      ],
+    });
+  } else if (storeId === "outputs") {
+    exportCapability = dataControlCapability({
+      status: store.status === "working" ? "working" : "needs_setup",
+      label: "Outputs folder",
+      summary: "Outputs are regular files under the workspace outputs folder.",
+      actions: [
+        dataControlAction({
+          id: "outputs.open-folder",
+          label: "Open outputs folder",
+          description: "Use the app shell or filesystem to open the outputs directory.",
+          kind: "filesystem",
+          status: store.status === "working" ? "working" : "needs_setup",
+          href: store.path,
+          requirements: ["filesystem_access"],
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "preview",
+      label: "Filesystem delete",
+      summary: "Outputs can be deleted manually from the outputs folder; the app does not expose bulk deletion yet.",
+      actions: [
+        dataControlAction({
+          id: "outputs.delete-files",
+          label: "Delete output files",
+          description: "Delete selected output files from the local filesystem.",
+          kind: "filesystem",
+          status: "preview",
+          href: store.path,
+          destructive: true,
+          requirements: ["filesystem_access"],
+        }),
+      ],
+    });
+  } else if (storeId === "feedback") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Ledger export",
+      summary: "Feedback is exportable through the project data ledger and is not used for model training by default.",
+      actions: [
+        dataControlAction({
+          id: "feedback.ledger",
+          label: "Export feedback ledger",
+          description: "Returns redacted feedback entries as part of the project data ledger.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `${ledgerRoute}?source=feedback`,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "unsupported",
+      label: "Append-only feedback",
+      summary: "Feedback deletion is not exposed in v1; entries remain in the local append-only ledger.",
+      actions: [],
+    });
+  } else if (storeId === "audit" || storeId === "taskEvents" || storeId === "workflowRuns" || storeId === "evidence") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Ledger export",
+      summary: "Events are exportable through the redacted project data ledger.",
+      actions: [
+        dataControlAction({
+          id: `${storeId}.ledger`,
+          label: "Export ledger",
+          description: "Returns redacted project ledger entries.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: ledgerRoute,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "unsupported",
+      label: "Append-only events",
+      summary: "Audit, task, workflow, and evidence events are retained for accountability in v1.",
+      actions: [],
+    });
+  }
+
+  return {
+    storeId,
+    store,
+    export: exportCapability,
+    deletion: deletionCapability,
+    retention: retentionControl(store),
+    privacy: {
+      containsUserContent: store.containsUserContent,
+      containsSecrets: store.containsSecrets,
+      trainingUse: storeId === "feedback" ? "eval_routing_product_quality_only" : "none",
+    },
+  };
+}
+
+function summarizeDataControls(stores: MatterhornDataControlStore[]): MatterhornWorkspaceDataControlsResponse["summary"] {
+  return {
+    totalStores: stores.length,
+    exportableStores: stores.filter((store) => store.export.status === "working" || store.export.status === "preview").length,
+    deletableStores: stores.filter((store) => store.deletion.status === "working" || store.deletion.status === "preview").length,
+    appendOnlyStores: stores.filter((store) => store.retention.mode === "append_only").length,
+    userControlledStores: stores.filter((store) => store.retention.mode === "user_controlled").length,
+  };
+}
+
+function buildWorkspaceDataControls(
+  workspace: WorkspaceInfo,
+  memoryVault: MatterhornMemoryVault,
+): MatterhornWorkspaceDataControlsResponse {
+  const dataMap = buildWorkspaceDataMap(workspace, memoryVault);
+  const stores = Object.fromEntries(
+    Object.entries(dataMap.stores).map(([key, store]) => [key, buildDataControlStore(workspace, store)]),
+  ) as MatterhornWorkspaceDataControlsResponse["stores"];
+  const storeList = Object.values(stores);
+
+  return {
+    success: true,
+    version: "matterhorn.backend.data-controls.v1",
+    generatedAt: new Date().toISOString(),
+    workspace: dataMap.workspace,
+    stores,
+    summary: summarizeDataControls(storeList),
+    policy: {
+      trainingUse: dataMap.policy.trainingUse,
+      redaction: dataMap.policy.redaction,
+      export: capability("working", "Export controls", "Notes, memory, outputs, feedback, and event ledgers report their available export paths."),
+      deletion: capability("preview", "Deletion controls", "Notes and memory support individual deletes; append-only logs remain retained for accountability."),
+      limitations: [
+        "No bulk delete-all workspace control is exposed in this v1 contract.",
+        "Chat/session history remains controlled by the OpenCode runtime store.",
+        "Feedback is stored for eval, routing, and product quality only; it is not used for model training by default.",
+      ],
+    },
+  };
+}
+
 function objectField(value: unknown, key: string): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const child = (value as Record<string, unknown>)[key];
@@ -3612,6 +3904,11 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/backend/data-map", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     return jsonResponse(buildWorkspaceDataMap(workspace, memoryVault));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/data-controls", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(buildWorkspaceDataControls(workspace, memoryVault));
   });
 
   addRoute(routes, "GET", "/workspace/:id/notes", "client", async (ctx) => {
