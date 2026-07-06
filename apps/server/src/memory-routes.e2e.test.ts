@@ -365,6 +365,58 @@ describe("Matterhorn memory API routes", () => {
     expect(actions).toContain("memory.record.forget");
   });
 
+  test("workspace memory suggestions resolve into workspace-scoped records", async () => {
+    const { base } = await boot();
+
+    const created = await jsonFetch(base, "/workspace/ws_memory/memory/suggestions", {
+      method: "POST",
+      body: JSON.stringify({
+        input: {
+          desk: "bittensor",
+          prompt: "Remember 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1routeFixture for TAO reads and subnet 14.",
+          sourceId: "workspace-memory-suggestion-test",
+        },
+      }),
+    });
+    expect(created.response.status).toBe(200);
+    expect(created.payload.inbox.count).toBeGreaterThanOrEqual(1);
+    const entry = created.payload.inbox.entries[0];
+    expect(entry.suggestion.proposedRecord.scope).toBe("workspace");
+    expect(entry.suggestion.proposedRecord.tags).toContain("workspace:ws_memory");
+
+    const listed = await jsonFetch(base, "/workspace/ws_memory/memory/suggestions?includeResolved=true&limit=10");
+    expect(listed.response.status).toBe(200);
+    expect(listed.payload.entries.map((item: { id: string }) => item.id)).toContain(entry.id);
+
+    const otherListed = await jsonFetch(base, "/workspace/ws_other/memory/suggestions?includeResolved=true&limit=10");
+    expect(otherListed.response.status).toBe(200);
+    expect(otherListed.payload.entries.map((item: { id: string }) => item.id)).not.toContain(entry.id);
+
+    const otherFetch = await jsonFetch(base, `/workspace/ws_other/memory/suggestions/${encodeURIComponent(entry.id)}`);
+    expect(otherFetch.response.status).toBe(404);
+    expect(otherFetch.payload.code).toBe("memory_suggestion_not_found");
+
+    const resolved = await jsonFetch(base, `/workspace/ws_memory/memory/suggestions/${encodeURIComponent(entry.id)}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "confirm",
+        reason: "User confirmed this workspace-scoped memory suggestion.",
+      }),
+    });
+    expect(resolved.response.status).toBe(200);
+    expect(resolved.payload.saved).toBe(true);
+    expect(resolved.payload.record.scope).toBe("workspace");
+    expect(resolved.payload.record.tags).toContain("workspace:ws_memory");
+
+    const saved = await jsonFetch(base, "/workspace/ws_memory/memory/entities?tags=bittensor&limit=10");
+    expect(saved.response.status).toBe(200);
+    expect(saved.payload.records.map((item: { id: string }) => item.id)).toContain(resolved.payload.record.id);
+
+    const otherSaved = await jsonFetch(base, "/workspace/ws_other/memory/entities?tags=bittensor&limit=10");
+    expect(otherSaved.response.status).toBe(200);
+    expect(otherSaved.payload.records.map((item: { id: string }) => item.id)).not.toContain(resolved.payload.record.id);
+  });
+
   test("stores and resolves pending memory suggestions through the inbox", async () => {
     const { base } = await boot();
 

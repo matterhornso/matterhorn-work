@@ -63,6 +63,19 @@ describe("Memory panel UI contract", () => {
     expect(source).toContain("Add memory manually");
     expect(source).toContain("Save memory");
   });
+
+  test("uses workspace-scoped memory APIs when a workspace id is available", () => {
+    const source = readAppSource("domains/memory/memory-panel.tsx");
+
+    expect(source).toContain("searchWorkspaceMemory");
+    expect(source).toContain("listWorkspaceMemory");
+    expect(source).toContain("captureWorkspaceMemory");
+    expect(source).toContain("forgetWorkspaceMemory");
+    expect(source).toContain("createWorkspaceMemorySuggestions");
+    expect(source).toContain("listWorkspaceMemorySuggestions");
+    expect(source).toContain("resolveStoredWorkspaceMemorySuggestion");
+    expect(source).toContain("resolveWorkspaceMemorySuggestion");
+  });
 });
 
 describe("Settings overview memory contract", () => {

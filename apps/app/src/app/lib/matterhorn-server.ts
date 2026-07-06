@@ -2170,6 +2170,46 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         timeoutMs: timeouts.config,
       }),
 
+    searchWorkspaceMemory: (workspaceId: string, options?: MatterhornMemorySearchOptions) => {
+      const params = new URLSearchParams();
+      if (options?.query?.trim()) params.set("q", options.query.trim());
+      if (options?.kind) params.set("kind", options.kind);
+      if (options?.tags?.length) params.set("tags", options.tags.filter(Boolean).join(","));
+      if (typeof options?.limit === "number") params.set("limit", String(options.limit));
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return requestJson<MatterhornMemoryListResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/search${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
+    },
+
+    listWorkspaceMemory: (workspaceId: string, options?: Omit<MatterhornMemorySearchOptions, "query" | "scope">) => {
+      const params = new URLSearchParams();
+      if (options?.kind) params.set("kind", options.kind);
+      if (options?.tags?.length) params.set("tags", options.tags.filter(Boolean).join(","));
+      if (typeof options?.limit === "number") params.set("limit", String(options.limit));
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return requestJson<MatterhornMemoryListResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/entities${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
+    },
+
+    captureWorkspaceMemory: (workspaceId: string, record: MatterhornMemoryRecord) =>
+      requestJson<MatterhornMemoryCaptureResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/capture`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: { record },
+          timeoutMs: timeouts.config,
+        },
+      ),
+
     planMemorySuggestions: (input: MatterhornMemorySuggestionPlanInput) =>
       requestJson<MatterhornMemorySuggestionPlanResponse>(baseUrl, "/api/memory/suggestions/plan", {
         token,
@@ -2188,6 +2228,19 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         timeoutMs: timeouts.config,
       }),
 
+    createWorkspaceMemorySuggestions: (workspaceId: string, input: MatterhornMemorySuggestionPlanInput) =>
+      requestJson<MatterhornMemorySuggestionInboxResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/suggestions`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: { input },
+          timeoutMs: timeouts.config,
+        },
+      ),
+
     listMemorySuggestions: (options?: {
       status?: MatterhornMemorySuggestionInboxStatus;
       desk?: string;
@@ -2205,6 +2258,25 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         hostToken,
         timeoutMs: timeouts.status,
       });
+    },
+
+    listWorkspaceMemorySuggestions: (workspaceId: string, options?: {
+      status?: MatterhornMemorySuggestionInboxStatus;
+      desk?: string;
+      includeResolved?: boolean;
+      limit?: number;
+    }) => {
+      const params = new URLSearchParams();
+      if (options?.status) params.set("status", options.status);
+      if (options?.desk?.trim()) params.set("desk", options.desk.trim());
+      if (options?.includeResolved) params.set("includeResolved", "true");
+      if (typeof options?.limit === "number") params.set("limit", String(options.limit));
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return requestJson<MatterhornMemorySuggestionListResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/suggestions${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
     },
 
     getMemorySuggestion: (id: string) =>
@@ -2227,6 +2299,23 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         timeoutMs: timeouts.config,
       }),
 
+    resolveStoredWorkspaceMemorySuggestion: (workspaceId: string, id: string, payload: {
+      action?: MatterhornMemorySuggestionAction;
+      patch?: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>;
+      reason?: string;
+    }) =>
+      requestJson<MatterhornMemoryStoredSuggestionResolveResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/suggestions/${encodeURIComponent(id)}/resolve`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: payload,
+          timeoutMs: timeouts.config,
+        },
+      ),
+
     resolveMemorySuggestion: (payload: {
       suggestion: MatterhornMemorySuggestion;
       action?: MatterhornMemorySuggestion["userAction"];
@@ -2241,6 +2330,24 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         timeoutMs: timeouts.config,
       }),
 
+    resolveWorkspaceMemorySuggestion: (workspaceId: string, payload: {
+      suggestion: MatterhornMemorySuggestion;
+      action?: MatterhornMemorySuggestion["userAction"];
+      patch?: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>;
+      reason?: string;
+    }) =>
+      requestJson<MatterhornMemorySuggestionResolveResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/suggestions/resolve`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: payload,
+          timeoutMs: timeouts.config,
+        },
+      ),
+
     forgetMemory: (id: string, reason?: string) =>
       requestJson<MatterhornMemoryForgetResponse>(baseUrl, "/api/memory/forget", {
         token,
@@ -2249,6 +2356,18 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         body: { id, reason: reason ?? "User forgot this memory from the Matterhorn Memory panel." },
         timeoutMs: timeouts.config,
       }),
+
+    forgetWorkspaceMemory: (workspaceId: string, id: string) =>
+      requestJson<MatterhornMemoryForgetResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/entities/${encodeURIComponent(id)}`,
+        {
+          token,
+          hostToken,
+          method: "DELETE",
+          timeoutMs: timeouts.config,
+        },
+      ),
 
     exportMemory: (outputDir?: string) =>
       requestJson<MatterhornMemoryExportResponse>(baseUrl, "/api/memory/export", {

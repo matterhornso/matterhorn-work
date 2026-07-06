@@ -167,6 +167,20 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/sui/transactions/preview`');
     expect(source).toContain("workspaceSuiTransactionReceipt");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/sui/transactions/receipt`');
+    expect(source).toContain("searchWorkspaceMemory");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/memory/search${suffix}`');
+    expect(source).toContain("listWorkspaceMemory");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/memory/entities${suffix}`');
+    expect(source).toContain("captureWorkspaceMemory");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/memory/capture`');
+    expect(source).toContain("createWorkspaceMemorySuggestions");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/memory/suggestions`');
+    expect(source).toContain("listWorkspaceMemorySuggestions");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/memory/suggestions${suffix}`');
+    expect(source).toContain("resolveStoredWorkspaceMemorySuggestion");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/memory/suggestions/${encodeURIComponent(id)}/resolve`');
+    expect(source).toContain("forgetWorkspaceMemory");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/memory/entities/${encodeURIComponent(id)}`');
     expect(source).toContain("MatterhornSuiWorkspaceEvidence");
   });
 

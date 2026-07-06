@@ -213,7 +213,11 @@ import {
   buildMarketExecutionReadinessResponse,
   buildMarketSdkValidationResponse,
 } from "./tools/market-execution-readiness.js";
-import { createMatterhornMemoryVault, type MatterhornMemoryVault } from "@matterhorn-work/memory-vault";
+import {
+  createMatterhornMemoryVault,
+  type MatterhornMemorySuggestionInboxEntry,
+  type MatterhornMemoryVault,
+} from "@matterhorn-work/memory-vault";
 import {
   MATTERHORN_MEMORY_SUGGESTION_VERSION,
   MATTERHORN_MEMORY_DESK_POLICY_MATRIX,
@@ -1258,6 +1262,23 @@ function assertWorkspaceMemoryRecord(record: MatterhornMemoryRecord | null, work
   return record;
 }
 
+function memorySuggestionBelongsToWorkspace(
+  suggestion: MatterhornMemorySuggestion,
+  workspace: WorkspaceInfo,
+): boolean {
+  return memoryRecordBelongsToWorkspace(suggestion.proposedRecord, workspace);
+}
+
+function assertWorkspaceMemorySuggestion(
+  entry: MatterhornMemorySuggestionInboxEntry | null,
+  workspace: WorkspaceInfo,
+): MatterhornMemorySuggestionInboxEntry {
+  if (!entry || !memorySuggestionBelongsToWorkspace(entry.suggestion, workspace)) {
+    throw new ApiError(404, "memory_suggestion_not_found", "Memory suggestion not found for this workspace");
+  }
+  return entry;
+}
+
 function namespaceWorkspaceMemoryRecord(record: MatterhornMemoryRecord, workspace: WorkspaceInfo): MatterhornMemoryRecord {
   const workspaceHref = `/workspace/${encodeURIComponent(workspace.id)}`;
   const links = [...(record.links ?? [])];
@@ -1270,6 +1291,52 @@ function namespaceWorkspaceMemoryRecord(record: MatterhornMemoryRecord, workspac
     tags: workspaceMemoryQueryTags(workspace, record.tags),
     links,
   };
+}
+
+function namespaceWorkspaceMemorySuggestion(
+  suggestion: MatterhornMemorySuggestion,
+  workspace: WorkspaceInfo,
+): MatterhornMemorySuggestion {
+  return {
+    ...suggestion,
+    proposedRecord: namespaceWorkspaceMemoryRecord(suggestion.proposedRecord, workspace),
+  };
+}
+
+function workspaceMemoryRecordWithPatch(
+  record: MatterhornMemoryRecord,
+  patch: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">> | undefined,
+): MatterhornMemoryRecord {
+  return {
+    ...record,
+    ...(patch ?? {}),
+    id: record.id,
+    createdAt: record.createdAt,
+    updatedAt: patch?.updatedAt ?? new Date().toISOString(),
+    body: patch?.body ?? record.body,
+    tags: patch?.tags ?? record.tags,
+    links: patch?.links ?? record.links,
+    provenance: patch?.provenance ?? record.provenance,
+  };
+}
+
+function workspaceMemoryPatchFromRecord(
+  record: MatterhornMemoryRecord,
+): Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">> {
+  const {
+    id: _id,
+    createdAt: _createdAt,
+    ...patch
+  } = record;
+  return patch;
+}
+
+function namespaceWorkspaceMemoryPatch(
+  record: MatterhornMemoryRecord,
+  patch: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">> | undefined,
+  workspace: WorkspaceInfo,
+): Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">> {
+  return workspaceMemoryPatchFromRecord(namespaceWorkspaceMemoryRecord(workspaceMemoryRecordWithPatch(record, patch), workspace));
 }
 
 function normalizeNoteLimit(value: string | null): number | undefined {
@@ -4631,7 +4698,7 @@ function createRoutes(
       if (!note || note.deletedAt) {
         throw new ApiError(404, "note_not_found", "Note not found");
       }
-      const suggestion = buildNoteMemorySuggestion(note, input);
+      const suggestion = namespaceWorkspaceMemorySuggestion(buildNoteMemorySuggestion(note, input), workspace);
       const inbox = await memoryVault.storeSuggestions([suggestion]);
       const entry = inbox.entries[0];
       if (!entry) {
@@ -7000,6 +7067,166 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "POST", "/workspace/:id/memory/suggestions/plan", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const input = (body.input && typeof body.input === "object" && !Array.isArray(body.input)
+        ? body.input
+        : body) as MatterhornMemorySuggestionPlanInput;
+      const inputWithWorkspace = { ...input, workspaceId: workspace.id };
+      if (hasForbiddenMatterhornMemorySuggestionInput(inputWithWorkspace)) {
+        throw new ApiError(
+          400,
+          "memory_suggestion_secret_rejected",
+          "Memory suggestions cannot be planned from seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, or secret-shaped fields.",
+        );
+      }
+      const plan = planMatterhornMemorySuggestions(inputWithWorkspace);
+      const suggestions = plan.suggestions.map((suggestion) => namespaceWorkspaceMemorySuggestion(suggestion, workspace));
+      return jsonResponse({ success: true, ...plan, suggestions, count: suggestions.length });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/memory/suggestions", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const input = (body.input && typeof body.input === "object" && !Array.isArray(body.input)
+        ? body.input
+        : body) as MatterhornMemorySuggestionPlanInput;
+      const inputWithWorkspace = { ...input, workspaceId: workspace.id };
+      if (hasForbiddenMatterhornMemorySuggestionInput(inputWithWorkspace)) {
+        throw new ApiError(
+          400,
+          "memory_suggestion_secret_rejected",
+          "Memory suggestions cannot be created from seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, or secret-shaped fields.",
+        );
+      }
+      const plan = planMatterhornMemorySuggestions(inputWithWorkspace);
+      const suggestions = plan.suggestions.map((suggestion) => namespaceWorkspaceMemorySuggestion(suggestion, workspace));
+      const inbox = await memoryVault.storeSuggestions(suggestions);
+      await recordMemoryMutationAudit(workspace, ctx, {
+        action: "memory.suggestions.create",
+        target: "memory-suggestions",
+        summary: `Created ${inbox.entries.length} workspace memory suggestion${inbox.entries.length === 1 ? "" : "s"}`,
+      });
+      return jsonResponse({ success: true, ...plan, suggestions, count: suggestions.length, inbox });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/memory/suggestions", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const entries = await memoryVault.listSuggestions({
+        status: coerceMemorySuggestionStatus(ctx.url.searchParams.get("status")),
+        desk: ctx.url.searchParams.get("desk") as MatterhornMemorySuggestion["desk"] | null ?? undefined,
+        includeResolved: ctx.url.searchParams.get("includeResolved") === "true" || ctx.url.searchParams.get("include_resolved") === "true",
+        limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
+      });
+      const filteredEntries = entries.filter((entry) => memorySuggestionBelongsToWorkspace(entry.suggestion, workspace));
+      return jsonResponse({ success: true, entries: filteredEntries, count: filteredEntries.length });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/memory/suggestions/:suggestionId", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const entry = assertWorkspaceMemorySuggestion(await memoryVault.getSuggestion(ctx.params.suggestionId), workspace);
+      return jsonResponse({ success: true, entry });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/memory/suggestions/:suggestionId/resolve", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const action = coerceMemorySuggestionAction(body.action);
+      const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
+        ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
+        : undefined;
+      const entry = assertWorkspaceMemorySuggestion(await memoryVault.getSuggestion(ctx.params.suggestionId), workspace);
+      const effectiveAction = action ?? entry.suggestion.userAction;
+      const namespacedPatch = effectiveAction === "confirm" || effectiveAction === "edit"
+        ? namespaceWorkspaceMemoryPatch(entry.suggestion.proposedRecord, patch, workspace)
+        : patch;
+      if (effectiveAction === "confirm" || effectiveAction === "edit") {
+        assertMemoryRecordAllowedForSurface(
+          workspaceMemoryRecordWithPatch(entry.suggestion.proposedRecord, namespacedPatch),
+          memorySurface(ctx.url),
+        );
+      }
+      const result = await memoryVault.resolveStoredSuggestion(ctx.params.suggestionId, {
+        action,
+        patch: namespacedPatch,
+        reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
+      });
+      await recordMemoryMutationAudit(workspace, ctx, {
+        action: "memory.suggestion.resolve",
+        target: ctx.params.suggestionId,
+        summary: `Resolved workspace memory suggestion ${ctx.params.suggestionId} as ${effectiveAction}`,
+      });
+      return jsonResponse({ success: true, ...result });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/memory/suggestions/resolve", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const suggestion = namespaceWorkspaceMemorySuggestion(coerceMemorySuggestion(body.suggestion ?? body), workspace);
+      const action = coerceMemorySuggestionAction(body.action);
+      const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
+        ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
+        : undefined;
+      const effectiveAction = action ?? suggestion.userAction;
+      const namespacedPatch = effectiveAction === "confirm" || effectiveAction === "edit"
+        ? namespaceWorkspaceMemoryPatch(suggestion.proposedRecord, patch, workspace)
+        : patch;
+      if (effectiveAction === "confirm" || effectiveAction === "edit") {
+        assertMemoryRecordAllowedForSurface(
+          workspaceMemoryRecordWithPatch(suggestion.proposedRecord, namespacedPatch),
+          memorySurface(ctx.url),
+        );
+      }
+      const result = await memoryVault.resolveSuggestion(suggestion, {
+        action,
+        patch: namespacedPatch,
+        reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
+      });
+      await recordMemoryMutationAudit(workspace, ctx, {
+        action: "memory.suggestion.resolve",
+        target: suggestion.id,
+        summary: `Resolved workspace memory suggestion ${suggestion.id} as ${effectiveAction}`,
+      });
+      return jsonResponse({ success: true, ...result });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
   addRoute(routes, "POST", "/api/memory/capture", "client", async (ctx) => {
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
@@ -7047,6 +7274,7 @@ function createRoutes(
     try {
       const body = await readJsonBody(ctx.request);
       const auditWorkspace = await resolveMemoryMutationWorkspace(config, body);
+      const namespaceWorkspace = memoryMutationWorkspaceId(body) ? auditWorkspace : null;
       const input = (body.input && typeof body.input === "object" && !Array.isArray(body.input)
         ? body.input
         : body) as MatterhornMemorySuggestionPlanInput;
@@ -7058,13 +7286,16 @@ function createRoutes(
         );
       }
       const plan = planMatterhornMemorySuggestions(input);
-      const inbox = await memoryVault.storeSuggestions(plan.suggestions);
+      const suggestions = namespaceWorkspace
+        ? plan.suggestions.map((suggestion) => namespaceWorkspaceMemorySuggestion(suggestion, namespaceWorkspace))
+        : plan.suggestions;
+      const inbox = await memoryVault.storeSuggestions(suggestions);
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
         action: "memory.suggestions.create",
         target: "memory-suggestions",
         summary: `Created ${inbox.entries.length} memory suggestion${inbox.entries.length === 1 ? "" : "s"}`,
       });
-      return jsonResponse({ success: true, ...plan, inbox });
+      return jsonResponse({ success: true, ...plan, suggestions, count: suggestions.length, inbox });
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw memoryApiError(error);
@@ -7100,6 +7331,7 @@ function createRoutes(
     try {
       const body = await readJsonBody(ctx.request);
       const auditWorkspace = await resolveMemoryMutationWorkspace(config, body);
+      const namespaceWorkspace = memoryMutationWorkspaceId(body) ? auditWorkspace : null;
       const action = coerceMemorySuggestionAction(body.action);
       const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
         ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
@@ -7109,12 +7341,18 @@ function createRoutes(
         throw new ApiError(404, "memory_suggestion_not_found", "Memory suggestion not found");
       }
       const effectiveAction = action ?? entry.suggestion.userAction;
+      const namespacedPatch = namespaceWorkspace && (effectiveAction === "confirm" || effectiveAction === "edit")
+        ? namespaceWorkspaceMemoryPatch(entry.suggestion.proposedRecord, patch, namespaceWorkspace)
+        : patch;
       if (effectiveAction === "confirm" || effectiveAction === "edit") {
-        assertMemoryRecordAllowedForSurface({ ...entry.suggestion.proposedRecord, ...(patch ?? {}) } as MatterhornMemoryRecord, memorySurface(ctx.url));
+        assertMemoryRecordAllowedForSurface(
+          workspaceMemoryRecordWithPatch(entry.suggestion.proposedRecord, namespacedPatch),
+          memorySurface(ctx.url),
+        );
       }
       const result = await memoryVault.resolveStoredSuggestion(ctx.params.id, {
         action,
-        patch,
+        patch: namespacedPatch,
         reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
       });
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
@@ -7135,18 +7373,28 @@ function createRoutes(
     try {
       const body = await readJsonBody(ctx.request);
       const auditWorkspace = await resolveMemoryMutationWorkspace(config, body);
-      const suggestion = coerceMemorySuggestion(body.suggestion ?? body);
+      const namespaceWorkspace = memoryMutationWorkspaceId(body) ? auditWorkspace : null;
+      const rawSuggestion = coerceMemorySuggestion(body.suggestion ?? body);
       const action = coerceMemorySuggestionAction(body.action);
       const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
         ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
         : undefined;
+      const suggestion = namespaceWorkspace
+        ? namespaceWorkspaceMemorySuggestion(rawSuggestion, namespaceWorkspace)
+        : rawSuggestion;
       const effectiveAction = action ?? suggestion.userAction;
+      const namespacedPatch = namespaceWorkspace && (effectiveAction === "confirm" || effectiveAction === "edit")
+        ? namespaceWorkspaceMemoryPatch(suggestion.proposedRecord, patch, namespaceWorkspace)
+        : patch;
       if (effectiveAction === "confirm" || effectiveAction === "edit") {
-        assertMemoryRecordAllowedForSurface({ ...suggestion.proposedRecord, ...(patch ?? {}) } as MatterhornMemoryRecord, memorySurface(ctx.url));
+        assertMemoryRecordAllowedForSurface(
+          workspaceMemoryRecordWithPatch(suggestion.proposedRecord, namespacedPatch),
+          memorySurface(ctx.url),
+        );
       }
       const result = await memoryVault.resolveSuggestion(suggestion, {
         action,
-        patch,
+        patch: namespacedPatch,
         reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
       });
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
