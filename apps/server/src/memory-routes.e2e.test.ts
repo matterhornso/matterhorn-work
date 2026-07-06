@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +18,7 @@ const priorEnv = {
   envStore: process.env.OPENWORK_ENV_STORE,
   tokenStore: process.env.OPENWORK_TOKEN_STORE,
   memoryRoot: process.env.MATTERHORN_WORK_MEMORY_ROOT,
+  memoryScope: process.env.MATTERHORN_WORK_MEMORY_SCOPE,
 };
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
@@ -68,12 +69,14 @@ async function getFreePort(): Promise<number> {
   });
 }
 
-async function boot() {
+async function boot(options: { workspaceMemoryScope?: string } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "matterhorn-memory-routes-"));
   dirs.push(dir);
   process.env.OPENWORK_ENV_STORE = join(dir, "env.json");
   process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
   process.env.MATTERHORN_WORK_MEMORY_ROOT = join(dir, "memory");
+  if (options.workspaceMemoryScope) process.env.MATTERHORN_WORK_MEMORY_SCOPE = options.workspaceMemoryScope;
+  else delete process.env.MATTERHORN_WORK_MEMORY_SCOPE;
   const server = await startServer(baseConfig(await getFreePort(), dir)) as Served;
   stops.push(() => server.stop(true));
   return { base: `http://127.0.0.1:${server.port}`, dir };
@@ -156,12 +159,21 @@ afterEach(async () => {
   }
   for (const [key, value] of Object.entries(priorEnv)) {
     if (value === undefined) {
-      delete process.env[key === "memoryRoot" ? "MATTERHORN_WORK_MEMORY_ROOT" : key === "envStore" ? "OPENWORK_ENV_STORE" : "OPENWORK_TOKEN_STORE"];
+      delete process.env[
+        key === "memoryRoot"
+          ? "MATTERHORN_WORK_MEMORY_ROOT"
+          : key === "memoryScope"
+            ? "MATTERHORN_WORK_MEMORY_SCOPE"
+            : key === "envStore"
+              ? "OPENWORK_ENV_STORE"
+              : "OPENWORK_TOKEN_STORE"
+      ];
     }
   }
   if (priorEnv.envStore !== undefined) process.env.OPENWORK_ENV_STORE = priorEnv.envStore;
   if (priorEnv.tokenStore !== undefined) process.env.OPENWORK_TOKEN_STORE = priorEnv.tokenStore;
   if (priorEnv.memoryRoot !== undefined) process.env.MATTERHORN_WORK_MEMORY_ROOT = priorEnv.memoryRoot;
+  if (priorEnv.memoryScope !== undefined) process.env.MATTERHORN_WORK_MEMORY_SCOPE = priorEnv.memoryScope;
 });
 
 describe("Matterhorn memory API routes", () => {
@@ -363,6 +375,45 @@ describe("Matterhorn memory API routes", () => {
     const actions = audit.payload.items.map((entry: { action: string }) => entry.action);
     expect(actions).toContain("memory.capture");
     expect(actions).toContain("memory.record.forget");
+  });
+
+  test("workspace memory can use a workspace-local physical vault", async () => {
+    const { base, dir } = await boot({ workspaceMemoryScope: "workspace" });
+    const workspaceMemoryRoot = join(dir, ".matterhorn-work", "memory");
+
+    const dataMap = await jsonFetch(base, "/workspace/ws_memory/backend/data-map");
+    expect(dataMap.response.status).toBe(200);
+    expect(dataMap.payload.stores.memory.scope).toBe("workspace");
+    expect(dataMap.payload.stores.memory.paths[0]).toBe(workspaceMemoryRoot);
+    expect(dataMap.payload.stores.memory.details.mode).toBe("workspace_local_vault");
+    expect(dataMap.payload.stores.memory.details.isolation).toBe("workspace_local_vault");
+    expect(dataMap.payload.stores.memory.details.globalFallbackPath).toBe(join(dir, "memory"));
+
+    const captured = await jsonFetch(base, "/workspace/ws_memory/memory/capture", {
+      method: "POST",
+      body: JSON.stringify({
+        record: record({
+          id: "mem_workspace_local_vault",
+          title: "Workspace-local TAO wallet",
+          tags: ["bittensor"],
+        }),
+      }),
+    });
+    expect(captured.response.status).toBe(201);
+    expect(captured.payload.record.tags).toContain("workspace:ws_memory");
+    expect(existsSync(join(workspaceMemoryRoot, "memory-index.json"))).toBe(true);
+
+    const workspaceListed = await jsonFetch(base, "/workspace/ws_memory/memory/entities?tags=bittensor&limit=10");
+    expect(workspaceListed.response.status).toBe(200);
+    expect(workspaceListed.payload.records.map((item: { id: string }) => item.id)).toContain("mem_workspace_local_vault");
+
+    const globalListed = await jsonFetch(base, "/api/memory/entities?tags=workspace:ws_memory&limit=10");
+    expect(globalListed.response.status).toBe(200);
+    expect(globalListed.payload.records.map((item: { id: string }) => item.id)).not.toContain("mem_workspace_local_vault");
+
+    const otherWorkspace = await jsonFetch(base, "/workspace/ws_other/memory/entities?tags=bittensor&limit=10");
+    expect(otherWorkspace.response.status).toBe(200);
+    expect(otherWorkspace.payload.records.map((item: { id: string }) => item.id)).not.toContain("mem_workspace_local_vault");
   });
 
   test("workspace memory suggestions resolve into workspace-scoped records", async () => {

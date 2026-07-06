@@ -1250,6 +1250,38 @@ function workspaceMemoryTag(workspaceId: string): string {
   return `workspace:${workspaceId}`;
 }
 
+type WorkspaceMemoryStorageMode = "tagged_global_vault" | "workspace_local_vault";
+
+function workspaceMemoryStorageMode(): WorkspaceMemoryStorageMode {
+  const value = process.env.MATTERHORN_WORK_MEMORY_SCOPE?.trim().toLowerCase();
+  if (value === "workspace" || value === "workspace_local" || value === "workspace-local") {
+    return "workspace_local_vault";
+  }
+  return "tagged_global_vault";
+}
+
+function workspaceLocalMemoryRoot(workspace: WorkspaceInfo): string {
+  return join(workspace.path, ".matterhorn-work", "memory");
+}
+
+function memoryVaultForWorkspace(defaultVault: MatterhornMemoryVault, workspace: WorkspaceInfo): MatterhornMemoryVault {
+  if (workspaceMemoryStorageMode() !== "workspace_local_vault") return defaultVault;
+  return createMatterhornMemoryVault(workspaceLocalMemoryRoot(workspace));
+}
+
+function workspaceMemoryStorageDetails(workspace: WorkspaceInfo, defaultVault: MatterhornMemoryVault) {
+  const mode = workspaceMemoryStorageMode();
+  const rootDir = mode === "workspace_local_vault" ? workspaceLocalMemoryRoot(workspace) : defaultVault.rootDir;
+  return {
+    mode,
+    rootDir,
+    scope: mode === "workspace_local_vault" ? "workspace" as const : "machine_global" as const,
+    isolation: mode === "workspace_local_vault" ? "workspace_local_vault" : "tagged_records_in_machine_vault",
+    workspaceNamespaceTag: workspaceMemoryTag(workspace.id),
+    globalFallbackPath: defaultVault.rootDir,
+  };
+}
+
 function uniqueMemoryStrings(values: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -2351,10 +2383,12 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
           ...capability(
             memoryStatus,
             "Memory vault",
-            "Memory is stored in a machine-level vault; workspace memory routes namespace project records with a workspace tag.",
+            "Memory defaults to a machine-level vault; workspace memory routes can use a workspace-local vault when MATTERHORN_WORK_MEMORY_SCOPE=workspace.",
             {
               workspaceRoutePrefix: "/workspace/:id/memory",
               namespace: "workspace_tag",
+              defaultMode: "tagged_global_vault",
+              workspaceLocalMode: "workspace_local_vault",
             },
           ),
           scope: "machine_global",
@@ -2419,8 +2453,9 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   const appendOnlyRetention = buildAppendOnlyRetentionPolicy(workspace.id);
   const notesIndexPath = notes.indexPath;
   const notesDir = notes.notesDir;
-  const memoryRoot = memoryVault.rootDir;
-  const memoryNamespaceTag = workspaceMemoryTag(workspace.id);
+  const memoryStorage = workspaceMemoryStorageDetails(workspace, memoryVault);
+  const memoryRoot = memoryStorage.rootDir;
+  const memoryNamespaceTag = memoryStorage.workspaceNamespaceTag;
   const feedbackPath = projectFeedbackLogPath(workspace.id);
   const evidencePaths = [
     notesIndexPath,
@@ -2515,7 +2550,9 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         ...capability(
           "working",
           "Memory vault",
-          "Memory is stored in a machine-level vault. Workspace memory routes force workspace scope and namespace project records with this workspace tag.",
+          memoryStorage.mode === "workspace_local_vault"
+            ? "Workspace memory routes store records in this workspace under .matterhorn-work/memory."
+            : "Memory is stored in a machine-level vault. Workspace memory routes force workspace scope and namespace project records with this workspace tag.",
           {
             workspaceNamespaceTag: memoryNamespaceTag,
             workspaceRoutes: [
@@ -2523,10 +2560,12 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
               `/workspace/${workspace.id}/memory/entities`,
               `/workspace/${workspace.id}/memory/capture`,
             ],
-            isolation: "tagged_records_in_machine_vault",
+            mode: memoryStorage.mode,
+            isolation: memoryStorage.isolation,
+            globalFallbackPath: memoryStorage.globalFallbackPath,
           },
         ),
-        scope: "machine_global",
+        scope: memoryStorage.scope,
         paths: [memoryRoot, join(memoryRoot, "memory-index.json"), join(memoryRoot, "memory-suggestions.json"), join(memoryRoot, "memory-log.jsonl")],
         format: "mixed",
         containsUserContent: true,
@@ -7445,7 +7484,8 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/memory/search", "client", async (ctx) => {
     try {
       const workspace = await resolveWorkspace(config, ctx.params.id);
-      const records = await memoryVault.searchRecords({
+      const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
+      const records = await workspaceVault.searchRecords({
         query: ctx.url.searchParams.get("q") ?? ctx.url.searchParams.get("query") ?? undefined,
         kind: ctx.url.searchParams.get("kind") as MatterhornMemoryRecord["kind"] | null ?? undefined,
         scope: "workspace",
@@ -7464,7 +7504,8 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/memory/entities", "client", async (ctx) => {
     try {
       const workspace = await resolveWorkspace(config, ctx.params.id);
-      const records = await memoryVault.listRecords({
+      const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
+      const records = await workspaceVault.listRecords({
         kind: ctx.url.searchParams.get("kind") as MatterhornMemoryRecord["kind"] | null ?? undefined,
         scope: "workspace",
         tags: workspaceMemoryQueryTags(workspace, normalizeMemoryTags(ctx.url.searchParams.get("tags"))),
@@ -7482,7 +7523,8 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/memory/entities/:memoryId", "client", async (ctx) => {
     try {
       const workspace = await resolveWorkspace(config, ctx.params.id);
-      const record = assertWorkspaceMemoryRecord(await memoryVault.getRecord(ctx.params.memoryId), workspace);
+      const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
+      const record = assertWorkspaceMemoryRecord(await workspaceVault.getRecord(ctx.params.memoryId), workspace);
       assertMemoryRecordAllowedForSurface(record, memorySurface(ctx.url));
       return jsonResponse({ success: true, record });
     } catch (error) {
@@ -7496,10 +7538,11 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     try {
       const workspace = await resolveWorkspace(config, ctx.params.id);
+      const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
       const body = await readJsonBody(ctx.request);
       const record = namespaceWorkspaceMemoryRecord(coerceMemoryRecord(body.record ?? body), workspace);
       assertMemoryRecordAllowedForSurface(record, memorySurface(ctx.url));
-      const result = await memoryVault.captureRecord(record);
+      const result = await workspaceVault.captureRecord(record);
       await recordMemoryMutationAudit(workspace, ctx, {
         action: "memory.capture",
         target: result.record.id,
@@ -7517,8 +7560,9 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     try {
       const workspace = await resolveWorkspace(config, ctx.params.id);
-      assertWorkspaceMemoryRecord(await memoryVault.getRecord(ctx.params.memoryId), workspace);
-      const result = await memoryVault.forgetRecord(ctx.params.memoryId, "Deleted through Matterhorn Work workspace memory API.");
+      const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
+      assertWorkspaceMemoryRecord(await workspaceVault.getRecord(ctx.params.memoryId), workspace);
+      const result = await workspaceVault.forgetRecord(ctx.params.memoryId, "Deleted through Matterhorn Work workspace memory API.");
       await recordMemoryMutationAudit(workspace, ctx, {
         action: "memory.record.forget",
         target: ctx.params.memoryId,
@@ -7537,7 +7581,8 @@ function createRoutes(
     try {
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const body = await readJsonBody(ctx.request);
-      const result = await exportWorkspaceMemoryRecords(memoryVault, workspace, body.outputDir);
+      const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
+      const result = await exportWorkspaceMemoryRecords(workspaceVault, workspace, body.outputDir);
       await recordMemoryMutationAudit(workspace, ctx, {
         action: "memory.export",
         target: result.outputDir,
@@ -7593,7 +7638,8 @@ function createRoutes(
       }
       const plan = planMatterhornMemorySuggestions(inputWithWorkspace);
       const suggestions = plan.suggestions.map((suggestion) => namespaceWorkspaceMemorySuggestion(suggestion, workspace));
-      const inbox = await memoryVault.storeSuggestions(suggestions);
+      const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
+      const inbox = await workspaceVault.storeSuggestions(suggestions);
       await recordMemoryMutationAudit(workspace, ctx, {
         action: "memory.suggestions.create",
         target: "memory-suggestions",
@@ -7609,7 +7655,8 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/memory/suggestions", "client", async (ctx) => {
     try {
       const workspace = await resolveWorkspace(config, ctx.params.id);
-      const entries = await memoryVault.listSuggestions({
+      const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
+      const entries = await workspaceVault.listSuggestions({
         status: coerceMemorySuggestionStatus(ctx.url.searchParams.get("status")),
         desk: ctx.url.searchParams.get("desk") as MatterhornMemorySuggestion["desk"] | null ?? undefined,
         includeResolved: ctx.url.searchParams.get("includeResolved") === "true" || ctx.url.searchParams.get("include_resolved") === "true",
@@ -7626,7 +7673,8 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/memory/suggestions/:suggestionId", "client", async (ctx) => {
     try {
       const workspace = await resolveWorkspace(config, ctx.params.id);
-      const entry = assertWorkspaceMemorySuggestion(await memoryVault.getSuggestion(ctx.params.suggestionId), workspace);
+      const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
+      const entry = assertWorkspaceMemorySuggestion(await workspaceVault.getSuggestion(ctx.params.suggestionId), workspace);
       return jsonResponse({ success: true, entry });
     } catch (error) {
       if (error instanceof ApiError) throw error;
@@ -7639,12 +7687,13 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     try {
       const workspace = await resolveWorkspace(config, ctx.params.id);
+      const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
       const body = await readJsonBody(ctx.request);
       const action = coerceMemorySuggestionAction(body.action);
       const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
         ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
         : undefined;
-      const entry = assertWorkspaceMemorySuggestion(await memoryVault.getSuggestion(ctx.params.suggestionId), workspace);
+      const entry = assertWorkspaceMemorySuggestion(await workspaceVault.getSuggestion(ctx.params.suggestionId), workspace);
       const effectiveAction = action ?? entry.suggestion.userAction;
       const namespacedPatch = effectiveAction === "confirm" || effectiveAction === "edit"
         ? namespaceWorkspaceMemoryPatch(entry.suggestion.proposedRecord, patch, workspace)
@@ -7655,7 +7704,7 @@ function createRoutes(
           memorySurface(ctx.url),
         );
       }
-      const result = await memoryVault.resolveStoredSuggestion(ctx.params.suggestionId, {
+      const result = await workspaceVault.resolveStoredSuggestion(ctx.params.suggestionId, {
         action,
         patch: namespacedPatch,
         reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
@@ -7677,6 +7726,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     try {
       const workspace = await resolveWorkspace(config, ctx.params.id);
+      const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
       const body = await readJsonBody(ctx.request);
       const suggestion = namespaceWorkspaceMemorySuggestion(coerceMemorySuggestion(body.suggestion ?? body), workspace);
       const action = coerceMemorySuggestionAction(body.action);
@@ -7693,7 +7743,7 @@ function createRoutes(
           memorySurface(ctx.url),
         );
       }
-      const result = await memoryVault.resolveSuggestion(suggestion, {
+      const result = await workspaceVault.resolveSuggestion(suggestion, {
         action,
         patch: namespacedPatch,
         reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
