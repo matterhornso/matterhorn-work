@@ -79,7 +79,7 @@ function capabilities(overrides: Partial<MatterhornBackendCapabilitiesResponse> 
           custody: false,
           directConnect: true,
           publicRead: true,
-          preview: false,
+          preview: true,
           signing: "client_wallet",
           supportedChains: ["sui-testnet", "sui-mainnet"],
           runtimeSupport: {
