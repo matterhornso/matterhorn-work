@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { startServer } from "./server.js";
+import { recordAudit } from "./audit.js";
 import { recordTaskEvent } from "./task-events.js";
 import type { ServerConfig } from "./types.js";
 
@@ -160,6 +161,25 @@ describe("project data ledger routes", () => {
     expect(feedback.payload.feedback.trainingUse).toBe("eval_routing_product_quality_only");
     expect(feedback.payload.feedback.redactionApplied).toBe(true);
 
+    await recordAudit(dir, {
+      id: "audit_session_created",
+      workspaceId: "ws_ledger",
+      actor: { type: "remote", scope: "collaborator" },
+      action: "session.create",
+      target: "ses_ledger_chat",
+      summary: "Created chat session",
+      timestamp: Date.now() - 2_000,
+    });
+    await recordAudit(dir, {
+      id: "audit_session_prompt",
+      workspaceId: "ws_ledger",
+      actor: { type: "remote", scope: "collaborator" },
+      action: "session.prompt",
+      target: "ses_ledger_chat",
+      summary: `Submitted prompt to chat session without exporting private key ${SECRET_HEX}.`,
+      timestamp: Date.now() - 1_000,
+    });
+
     const ledger = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?limit=50");
     expect(ledger.response.status).toBe(200);
     expect(ledger.payload.success).toBe(true);
@@ -169,18 +189,28 @@ describe("project data ledger routes", () => {
     expect(ledger.payload.summary.notes).toBeGreaterThanOrEqual(1);
     expect(ledger.payload.summary.audits).toBeGreaterThanOrEqual(1);
     expect(ledger.payload.summary.feedback).toBe(1);
+    expect(ledger.payload.summary.chats).toBe(2);
     expect(ledger.payload.summary.redacted).toBeGreaterThanOrEqual(1);
 
     const kinds = ledger.payload.items.map((item: { kind: string }) => item.kind);
     expect(kinds).toContain("note");
     expect(kinds).toContain("audit");
     expect(kinds).toContain("feedback");
+    expect(kinds).toContain("chat");
     const feedbackEntry = ledger.payload.items.find((item: { kind: string }) => item.kind === "feedback");
     expect(feedbackEntry).toBeTruthy();
     expect(feedbackEntry.metadata.feedbackId).toBe(feedback.payload.feedback.id);
     expect(feedbackEntry.metadata.feedbackKind).toBe("comment");
     expect(feedbackEntry.metadata.targetSourceType).toBe("task");
     expect(feedbackEntry.metadata.targetSourceId).toBe("task_ledger");
+    const chatEntry = ledger.payload.items.find((item: { kind: string; eventType?: string }) => item.kind === "chat" && item.eventType === "session.prompt");
+    expect(chatEntry).toMatchObject({
+      title: "Chat prompt submitted",
+      sessionId: "ses_ledger_chat",
+      href: "/workspace/ws_ledger/session/ses_ledger_chat",
+      containsSecrets: "redacted",
+      redactionApplied: true,
+    });
 
     const serialized = JSON.stringify(ledger.payload);
     expect(serialized).toContain("[redacted]");
@@ -188,6 +218,11 @@ describe("project data ledger routes", () => {
     expect(serialized).not.toContain(SECRET_HEX);
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
+
+    const chatLedger = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?kind=chat&limit=20");
+    expect(chatLedger.response.status).toBe(200);
+    expect(chatLedger.payload.summary.chats).toBe(2);
+    expect(chatLedger.payload.items.every((item: { kind: string }) => item.kind === "chat")).toBe(true);
 
     const dataMap = await jsonFetch(base, "/workspace/ws_ledger/backend/data-map");
     expect(dataMap.response.status).toBe(200);

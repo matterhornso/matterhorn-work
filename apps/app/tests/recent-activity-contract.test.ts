@@ -159,6 +159,7 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain('label: "Runs", kind: "task"');
       expect(source).toContain('label: "Access", kind: "team_access"');
       expect(source).toContain('label: "Wallet", kind: "wallet"');
+      expect(source).toContain('label: "Chats", kind: "chat"');
       expect(source).toContain("listProjectDataLedger");
       expect(source).toContain('queryKey: ["project-history-ledger"');
       expect(source).toContain("activeDesk");
@@ -166,6 +167,7 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain('if (entry.kind === "memory_suggestion") return entry.title || "Memory review";');
       expect(source).toContain('team_access: { icon: Users');
       expect(source).toContain('wallet: { icon: WalletCards');
+      expect(source).toContain('chat: { icon: MessageSquareText');
       expect(source).toContain("No training by default");
       expect(source).toContain("Exported");
     });

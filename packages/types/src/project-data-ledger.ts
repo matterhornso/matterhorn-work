@@ -18,6 +18,7 @@ export type MatterhornProjectDataLedgerKind =
   | "memory_suggestion"
   | "team_access"
   | "wallet"
+  | "chat"
   | "task"
   | "output"
   | "audit"
@@ -83,6 +84,7 @@ export interface MatterhornProjectDataLedgerSummary {
   memorySuggestions: number;
   teamAccess: number;
   wallets: number;
+  chats: number;
   tasks: number;
   outputs: number;
   audits: number;

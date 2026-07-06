@@ -43,6 +43,7 @@ export const PROJECT_HISTORY_FILTERS: Array<{
   { id: "memory_suggestion", label: "Memory", kind: "memory_suggestion" },
   { id: "team_access", label: "Access", kind: "team_access" },
   { id: "wallet", label: "Wallet", kind: "wallet" },
+  { id: "chat", label: "Chats", kind: "chat" },
   { id: "feedback", label: "Feedback", kind: "feedback" },
   { id: "audit", label: "Audit", kind: "audit" },
   { id: "all", label: "All" },
@@ -53,6 +54,7 @@ const KIND_META: Record<MatterhornProjectDataLedgerKind, { icon: ElementType; to
   memory_suggestion: { icon: BrainCircuit, tone: "text-amber-300" },
   team_access: { icon: Users, tone: "text-indigo-300" },
   wallet: { icon: WalletCards, tone: "text-cyan-300" },
+  chat: { icon: MessageSquareText, tone: "text-blue-300" },
   task: { icon: Play, tone: "text-violet-300" },
   output: { icon: Save, tone: "text-emerald-300" },
   audit: { icon: ShieldCheck, tone: "text-dls-secondary" },
@@ -113,6 +115,7 @@ function kindCount(data: MatterhornProjectDataLedgerResponse | undefined, filter
   if (filter === "memory_suggestion") return data.summary.memorySuggestions;
   if (filter === "team_access") return data.summary.teamAccess;
   if (filter === "wallet") return data.summary.wallets;
+  if (filter === "chat") return data.summary.chats;
   if (filter === "task") return data.summary.tasks;
   if (filter === "output") return data.summary.outputs;
   if (filter === "audit") return data.summary.audits;
