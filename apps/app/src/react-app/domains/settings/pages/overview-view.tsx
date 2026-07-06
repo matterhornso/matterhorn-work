@@ -39,6 +39,10 @@ import type {
   MatterhornDataControlStore,
   MatterhornWorkspaceDataControlsResponse,
 } from "@matterhorn-work/types/backend-data-controls";
+import type {
+  MatterhornBackendTeamAccessResponse,
+  MatterhornTeamShareableTokenScope,
+} from "@matterhorn-work/types/backend-team-access";
 import {
   MATTERHORN_PROJECT_FEEDBACK_KINDS,
   type MatterhornProjectDataLedgerEntry,
@@ -47,6 +51,7 @@ import {
 import { t } from "../../../../i18n";
 import { formatRelativeTime } from "../../../../app/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useQuickJot } from "../../notes";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
@@ -584,6 +589,189 @@ function FeedbackReviewSection(props: {
   );
 }
 
+function TeamAccessControls(props: {
+  client?: MatterhornServerClient | null;
+  workspaceId: string;
+  data?: MatterhornBackendTeamAccessResponse;
+  error: unknown;
+  isError: boolean;
+  isLoading: boolean;
+  refetch: () => Promise<unknown>;
+}) {
+  const { client, workspaceId, refetch } = props;
+  const [scope, setScope] = useState<MatterhornTeamShareableTokenScope>("viewer");
+  const [label, setLabel] = useState("");
+  const [createdToken, setCreatedToken] = useState<{
+    id: string;
+    token: string;
+    scope: MatterhornTeamShareableTokenScope;
+    label?: string;
+    createdAt: number;
+  } | null>(null);
+  const [busyTokenId, setBusyTokenId] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const sharedTokens = props.data?.localAccess.tokens.filter((token) => token.source === "token_store") ?? [];
+  const canUseTokenControls = Boolean(client && workspaceId && !props.isLoading);
+
+  const createToken = useCallback(async () => {
+    if (!client || !workspaceId) {
+      setStatus("Open a connected workspace to create a local access token.");
+      return;
+    }
+    setBusyTokenId("create");
+    setStatus(null);
+    try {
+      const response = await client.createWorkspaceTeamAccessToken(workspaceId, {
+        scope,
+        label: label.trim() || undefined,
+      });
+      setCreatedToken({
+        id: response.token.id,
+        token: response.token.token,
+        scope,
+        label: response.token.label,
+        createdAt: response.token.createdAt,
+      });
+      setLabel("");
+      setStatus("Local access token created. Copy it now; it will not be shown again.");
+      await refetch();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not create a local access token.");
+    } finally {
+      setBusyTokenId(null);
+    }
+  }, [client, label, refetch, scope, workspaceId]);
+
+  const revokeToken = useCallback(async (tokenId: string, tokenLabel?: string) => {
+    if (!client || !workspaceId) {
+      setStatus("Open a connected workspace to revoke a local access token.");
+      return;
+    }
+    setBusyTokenId(tokenId);
+    setStatus(null);
+    try {
+      await client.revokeWorkspaceTeamAccessToken(workspaceId, tokenId);
+      if (createdToken?.id === tokenId) setCreatedToken(null);
+      setStatus(`Revoked ${tokenLabel || "local access token"}.`);
+      await refetch();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not revoke the local access token.");
+    } finally {
+      setBusyTokenId(null);
+    }
+  }, [client, createdToken?.id, refetch, workspaceId]);
+
+  if (props.isLoading) {
+    return <p className="px-1 py-3 text-sm leading-6 text-dls-secondary">Loading local access tokens...</p>;
+  }
+
+  if (props.isError) {
+    return (
+      <div className="flex flex-col gap-2 px-1 py-3 text-sm text-dls-secondary sm:flex-row sm:items-center sm:justify-between">
+        <span>{props.error instanceof Error ? props.error.message : "Local access tokens could not load."}</span>
+        <Button variant="ghost" size="sm" className="w-fit px-2 text-xs" onClick={() => void props.refetch()}>
+          Refresh
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-1 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-dls-text">Local access tokens</p>
+          <p className="mt-0.5 text-xs leading-5 text-dls-secondary">
+            Create a viewer or collaborator token for this local workspace server.
+          </p>
+        </div>
+        <span className="ml-auto text-xs text-dls-secondary">
+          {sharedTokens.length} shared
+        </span>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex rounded-lg bg-dls-surface/70 p-0.5">
+          {(["viewer", "collaborator"] as const).map((item) => (
+            <Button
+              key={item}
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-7 flex-1 rounded-md px-2 text-xs capitalize text-dls-secondary hover:text-dls-text sm:flex-none",
+                scope === item && "bg-dls-hover text-dls-text",
+              )}
+              onClick={() => setScope(item)}
+            >
+              {item}
+            </Button>
+          ))}
+        </div>
+        <Input
+          value={label}
+          onChange={(event) => setLabel(event.target.value)}
+          placeholder="Label optional"
+          className="h-8 min-w-0 flex-1 text-xs"
+          maxLength={80}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 text-xs"
+          disabled={!canUseTokenControls || busyTokenId === "create"}
+          onClick={() => void createToken()}
+        >
+          {busyTokenId === "create" ? "Creating" : "Create token"}
+        </Button>
+      </div>
+
+      {createdToken ? (
+        <div className="mt-3 rounded-lg bg-dls-surface/70 px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium capitalize text-dls-text">{createdToken.scope}</span>
+            <span className="text-xs text-dls-secondary">
+              {createdToken.label || createdToken.id}
+            </span>
+            <span className="text-xs text-dls-secondary">{formatRelativeTime(createdToken.createdAt)}</span>
+            <div className="ml-auto">
+              <CopyButton text={createdToken.token} label="Copy token" />
+            </div>
+          </div>
+          <p className="mt-2 break-all font-mono text-[11px] leading-5 text-dls-secondary">{createdToken.token}</p>
+        </div>
+      ) : null}
+
+      <div className="mt-3 space-y-1">
+        {sharedTokens.length ? sharedTokens.map((token) => (
+          <div key={token.id} className="flex flex-wrap items-center gap-2 rounded-lg px-2 py-2 hover:bg-dls-hover/60">
+            <span className="text-xs font-medium capitalize text-dls-text">{token.scope}</span>
+            <span className="min-w-0 max-w-[18rem] truncate text-xs text-dls-secondary">
+              {token.label || token.id}
+            </span>
+            <span className="text-xs text-dls-secondary">{formatRelativeTime(token.createdAt)}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-6 px-1.5 text-xs text-dls-secondary hover:text-dls-text"
+              disabled={busyTokenId === token.id}
+              onClick={() => void revokeToken(token.id, token.label || token.id)}
+            >
+              {busyTokenId === token.id ? "Revoking" : "Revoke"}
+            </Button>
+          </div>
+        )) : (
+          <p className="rounded-lg px-2 py-2 text-xs leading-5 text-dls-secondary">
+            No shared local tokens created yet.
+          </p>
+        )}
+      </div>
+
+      {status ? <p className="mt-3 text-xs leading-5 text-dls-secondary">{status}</p> : null}
+    </div>
+  );
+}
+
 export function SettingsOverviewView(props: {
   onSelectTab: (tab: SettingsTab) => void;
   matterhornServerClient?: MatterhornServerClient | null;
@@ -946,6 +1134,15 @@ export function SettingsOverviewView(props: {
                     ? "Loading local access status."
                     : summarizeCapability(backendCapabilities.teams)}
                 value={<CapabilityBadge status={backendCapabilities.teams.status} />}
+              />
+              <TeamAccessControls
+                client={props.matterhornServerClient}
+                workspaceId={backendWorkspaceId}
+                data={teamAccessQuery.data}
+                error={teamAccessQuery.error}
+                isError={teamAccessQuery.isError}
+                isLoading={teamAccessQuery.isLoading}
+                refetch={teamAccessQuery.refetch}
               />
               <Row
                 label="Write guards"
