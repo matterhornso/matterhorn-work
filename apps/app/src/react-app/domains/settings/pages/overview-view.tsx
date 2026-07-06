@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Ban,
@@ -40,6 +40,10 @@ import type {
   MatterhornWorkspaceDataControlsResponse,
 } from "@matterhorn-work/types/backend-data-controls";
 import type {
+  MatterhornWorkspaceDataPolicyResponse,
+  MatterhornWorkspaceFeedbackUse,
+} from "@matterhorn-work/types/backend-data-policy";
+import type {
   MatterhornBackendTeamAccessResponse,
   MatterhornBackendTeamAccessSummaryResponse,
   MatterhornTeamShareableTokenScope,
@@ -53,6 +57,7 @@ import { t } from "../../../../i18n";
 import { formatRelativeTime } from "../../../../app/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useQuickJot } from "../../notes";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
@@ -408,6 +413,10 @@ function TaskHistorySection(props: {
 function DataPolicySection(props: {
   dataMap: MatterhornWorkspaceDataMapResponse;
   controls?: MatterhornWorkspaceDataControlsResponse;
+  dataPolicy?: MatterhornWorkspaceDataPolicyResponse;
+  feedbackPolicySaving?: boolean;
+  feedbackPolicyError?: string | null;
+  onFeedbackPolicyChange?: (enabled: boolean) => void;
 }) {
   const stores = DATA_POLICY_STORE_ORDER
     .map((key) => props.dataMap.stores[key])
@@ -422,6 +431,39 @@ function DataPolicySection(props: {
       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm font-medium text-dls-text">Storage and retention</p>
         <StatusBadge tone="ready">{workspaceDataPolicySummary(props.dataMap)}</StatusBadge>
+      </div>
+      <div className="mb-4 grid gap-2 sm:grid-cols-2">
+        <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-medium text-dls-text">Model training</p>
+            <StatusBadge>Off</StatusBadge>
+          </div>
+          <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
+            Workspace data is not used for RL or model training.
+          </p>
+        </div>
+        <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-dls-text">Feedback collection</p>
+              <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
+                Explicit feedback only. Product quality and routing, not training.
+              </p>
+            </div>
+            <Switch
+              size="sm"
+              checked={(props.dataPolicy?.policy.feedbackUse ?? props.dataMap.policy.feedbackUse) !== "disabled"}
+              disabled={!props.onFeedbackPolicyChange || props.feedbackPolicySaving}
+              onCheckedChange={(checked) => props.onFeedbackPolicyChange?.(checked)}
+              aria-label="Toggle workspace feedback collection"
+            />
+          </div>
+          {props.feedbackPolicyError ? (
+            <p className="mt-2 text-[11px] leading-4 text-destructive">{props.feedbackPolicyError}</p>
+          ) : props.feedbackPolicySaving ? (
+            <p className="mt-2 text-[11px] leading-4 text-dls-secondary">Saving...</p>
+          ) : null}
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[680px] border-separate border-spacing-0 text-left text-xs">
@@ -829,6 +871,7 @@ export function SettingsOverviewView(props: {
 }) {
   const { onSelectTab } = props;
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { openQuickJot } = useQuickJot();
   const setSidePanelState = useUiStateStore((state) => state.setSidePanelState);
   const [theme, setTheme] = useState<ThemeMode>(getInitialThemeMode());
@@ -926,10 +969,41 @@ export function SettingsOverviewView(props: {
     staleTime: 30_000,
   });
 
+  const workspaceDataPolicyQuery = useQuery({
+    queryKey: ["settings-workspace-data-policy", props.runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId && workspaceBackendControlPlaneQuery.isError),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to see data policy.");
+      return client.workspaceDataPolicy(workspaceId);
+    },
+    staleTime: 30_000,
+  });
+
   const backendCapabilities = workspaceBackendControlPlaneQuery.data?.capabilities ?? backendCapabilitiesQuery.data;
   const workspaceReadiness = workspaceBackendControlPlaneQuery.data?.readiness ?? workspaceReadinessQuery.data;
   const workspaceDataMap = workspaceBackendControlPlaneQuery.data?.dataMap ?? workspaceDataMapQuery.data;
   const workspaceDataControls = workspaceBackendControlPlaneQuery.data?.dataControls ?? workspaceDataControlsQuery.data;
+  const workspaceDataPolicy = workspaceBackendControlPlaneQuery.data?.dataPolicy ?? workspaceDataPolicyQuery.data;
+  const updateWorkspaceDataPolicyMutation = useMutation({
+    mutationFn: async (feedbackUse: MatterhornWorkspaceFeedbackUse) => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to update data policy.");
+      return client.updateWorkspaceDataPolicy(workspaceId, { feedbackUse });
+    },
+    onSuccess: (policy) => {
+      queryClient.setQueryData(["settings-workspace-data-policy", props.runtimeWorkspaceId], policy);
+      void queryClient.invalidateQueries({ queryKey: ["settings-workspace-backend-control-plane", backendWorkspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["settings-workspace-data-map", props.runtimeWorkspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["settings-workspace-data-controls", props.runtimeWorkspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["settings-project-data-ledger", props.runtimeWorkspaceId] });
+    },
+  });
+  const handleFeedbackPolicyChange = useCallback((enabled: boolean) => {
+    updateWorkspaceDataPolicyMutation.mutate(enabled ? "eval_routing_product_quality_only" : "disabled");
+  }, [updateWorkspaceDataPolicyMutation]);
   const backendCapabilitiesLoading = backendWorkspaceId
     ? workspaceBackendControlPlaneQuery.isLoading || (workspaceBackendControlPlaneQuery.isError && backendCapabilitiesQuery.isLoading)
     : backendCapabilitiesQuery.isLoading;
@@ -1242,7 +1316,14 @@ export function SettingsOverviewView(props: {
           }
         >
           {workspaceDataMap ? (
-            <DataPolicySection dataMap={workspaceDataMap} controls={workspaceDataControls} />
+            <DataPolicySection
+              dataMap={workspaceDataMap}
+              controls={workspaceDataControls}
+              dataPolicy={workspaceDataPolicy}
+              feedbackPolicySaving={updateWorkspaceDataPolicyMutation.isPending}
+              feedbackPolicyError={updateWorkspaceDataPolicyMutation.error instanceof Error ? updateWorkspaceDataPolicyMutation.error.message : null}
+              onFeedbackPolicyChange={props.matterhornServerClient && props.runtimeWorkspaceId ? handleFeedbackPolicyChange : undefined}
+            />
           ) : (
             <div className="px-1 py-3 text-sm leading-6 text-dls-secondary">
               {workspaceDataMapLoading
