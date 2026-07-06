@@ -3,7 +3,7 @@
  * Requests permission once, sends notifications when jobs complete.
  */
 
-const NOTIFICATION_ICON = "/favicon.ico";
+const NOTIFICATION_ICON = "/matterhorn-logo.png";
 
 export async function requestNotificationPermission(): Promise<boolean> {
   if (!("Notification" in window)) return false;
