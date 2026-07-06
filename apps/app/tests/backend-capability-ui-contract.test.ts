@@ -255,9 +255,14 @@ describe("backend capability UI contract", () => {
 
   test("Profile readiness copy does not claim memory sync before data policy supports it", () => {
     const source = readRepoSource("packages/types/src/profile-readiness.ts");
+    const viewSource = readAppSource("react-app/domains/settings/pages/cloud-account-view.tsx");
     expect(source).not.toContain("Preferences and memory are synced");
     expect(source).not.toContain("sync preferences and memory");
     expect(source).toContain("Local project memory stays on this device");
+    expect(viewSource).toContain("ProfileCapabilityStatus");
+    expect(viewSource).toContain("profile-backend-control-plane");
+    expect(viewSource).toContain("matterhornServerClient.workspaceBackendControlPlane(workspaceIdForBackend)");
+    expect(viewSource).toContain("matterhornServerClient.backendCapabilities()");
   });
 
   test("status helpers use truthful user-facing labels", () => {
