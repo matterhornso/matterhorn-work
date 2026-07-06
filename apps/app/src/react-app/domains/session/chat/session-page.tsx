@@ -1428,7 +1428,11 @@ export function SessionPage(props: SessionPageProps) {
     }
     pendingProtocolRailPanelRef.current = panel;
     if (props.sidebar.onCreateTaskWithPrompt) {
-      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, prompt, { title, agent: agentIdForDesk(panel) });
+      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, prompt, {
+        title,
+        agent: agentIdForDesk(panel),
+        sendImmediately: true,
+      });
       return;
     }
     props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
@@ -1982,7 +1986,10 @@ export function SessionPage(props: SessionPageProps) {
                                 disabled={props.sidebar.newTaskDisabled}
                                 onClick={() => {
                                   if (blankWorkflowLauncher && props.sidebar.onCreateTaskWithPrompt) {
-                                    props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, { title: blankWorkflowLauncher.title });
+                                    props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, {
+                                      title: blankWorkflowLauncher.title,
+                                      sendImmediately: true,
+                                    });
                                     return;
                                   }
                                   props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
@@ -2143,6 +2150,7 @@ export function SessionPage(props: SessionPageProps) {
                                         props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt, {
                                           title: demo.title,
                                           agent: demo.agentId ?? agentIdForDesk(demo.iconHint),
+                                          sendImmediately: true,
                                         });
                                       }}
                                     >
@@ -2256,7 +2264,10 @@ export function SessionPage(props: SessionPageProps) {
                               type="button"
                               className="flex min-h-[92px] w-full items-start gap-3 rounded-xl bg-dls-surface-muted/70 p-3.5 text-left transition-colors hover:bg-dls-hover"
                               onClick={() => {
-                                props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, { title: blankWorkflowLauncher.title });
+                                props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, {
+                                  title: blankWorkflowLauncher.title,
+                                  sendImmediately: true,
+                                });
                               }}
                             >
                               <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">

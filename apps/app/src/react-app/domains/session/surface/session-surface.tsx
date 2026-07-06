@@ -326,13 +326,13 @@ function MatterhornDeskFocusedEmptyState({
                 </div>
                 <p className="mt-1.5 max-w-2xl text-[12px] leading-5 text-dls-secondary">
                   {visual?.shortDescription ?? "Focused Matterhorn desk."} Choose a starter below to hand the task to
-                  {` ${agent?.displayName ?? visual?.agentName ?? "this desk agent"}`}. Nothing sends until you press Ask.
+                  {` ${agent?.displayName ?? visual?.agentName ?? "this desk agent"}`}. In an open chat, starters fill the composer so you can add context before sending.
                 </p>
                 <p className="mt-1 text-[11px] leading-4 text-dls-secondary">{boundary}</p>
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap gap-1.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)] sm:max-w-48 sm:justify-end">
-              {[agent?.displayName ?? "Desk agent", "Editable", "No auto-send"].map((label) => (
+              {[agent?.displayName ?? "Desk agent", "Editable", "Composer handoff"].map((label) => (
                 <span
                   key={label}
                   className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-2 py-1"
@@ -439,7 +439,7 @@ function LongevityDeskEmptyState({
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap gap-1.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)] sm:max-w-48 sm:justify-end">
-              {[agent?.displayName ?? "Longevity Agent", "Editable", "No auto-send"].map((label) => (
+              {[agent?.displayName ?? "Longevity Agent", "Editable", "Composer handoff"].map((label) => (
                 <span
                   key={label}
                   className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-2 py-1"
@@ -539,11 +539,11 @@ function MatterhornDeskDraftReadyState({ mode }: { mode: MatterhornDeskMode }) {
               {agent?.displayName ?? visual?.agentName ?? "Matterhorn Agent"} ready
             </span>
             <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-2 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
-              Review before sending
+              Ready in composer
             </span>
           </div>
           <p className="mt-1 text-[12px] leading-5 text-dls-secondary">
-            The task is staged for this desk agent. Edit it, add public context, then press Ask when you are ready.
+            The task is in the composer for this desk agent. Add public context, then press Ask.
           </p>
         </div>
       </div>

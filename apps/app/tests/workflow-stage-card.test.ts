@@ -184,6 +184,15 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).not.toContain("Draft ready");
   });
 
+  test("rail and home workflow launchers create running tasks", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(src).toContain("primeProtocolRailPrompt");
+    expect(src).toContain("agent: agentIdForDesk(panel)");
+    expect(src).toContain("sendImmediately: true");
+    expect(src).toContain("blankWorkflowLauncher.prompt");
+  });
+
   test("focused desk task cards show readiness blockers before launch", () => {
     const src = readAppSource("domains/session/chat/session-page.tsx");
 
