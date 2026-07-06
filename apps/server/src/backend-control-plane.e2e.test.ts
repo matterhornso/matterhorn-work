@@ -452,6 +452,13 @@ describe("backend control plane routes", () => {
     expect(result.payload.wallets.families.bittensor.signing).toBe("external_signer");
     expect(result.payload.teams.localTokenSharing.status).toBe("working");
     expect(result.payload.teams.cloudTeams.status).toBe("needs_setup");
+    expect(result.payload.teamAccess.policy).toMatchObject({
+      secretsReturned: false,
+      hostProtected: false,
+      fullTokenListRequiresHost: true,
+    });
+    expect(result.payload.teamAccess.localAccess.tokenCount).toBeGreaterThanOrEqual(1);
+    expect(result.payload.teamAccess.localAccess.tokens).toBeUndefined();
     expect(result.payload.security.memoryWriteGuards.status).toBe("working");
     expect(result.payload.models.defaultModel).toMatchObject({
       providerId: "opencode",

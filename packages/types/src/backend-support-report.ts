@@ -1,6 +1,7 @@
 import type { MatterhornBackendControlPlaneResponse } from "./backend-control-plane.js";
 import type { MatterhornBackendCapabilitiesResponse } from "./backend-capabilities.js";
 import type { MatterhornBackendModelsResponse } from "./backend-models.js";
+import type { MatterhornBackendTeamAccessSummaryResponse } from "./backend-team-access.js";
 import type { MatterhornWorkspaceDataControlsResponse } from "./backend-data-controls.js";
 import type {
   MatterhornProjectDataLedgerExportControlPlaneSnapshot,
@@ -19,6 +20,7 @@ export interface MatterhornBackendSupportReportResponse {
   controlPlane: MatterhornProjectDataLedgerExportControlPlaneSnapshot;
   wallets: MatterhornBackendCapabilitiesResponse["wallets"];
   teams: MatterhornBackendCapabilitiesResponse["teams"];
+  teamAccess: MatterhornBackendTeamAccessSummaryResponse;
   security: MatterhornBackendCapabilitiesResponse["security"];
   models: {
     defaultModel: MatterhornBackendModelsResponse["defaultModel"];

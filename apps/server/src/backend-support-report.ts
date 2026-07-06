@@ -1,5 +1,6 @@
 import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
 import type { MatterhornBackendSupportReportResponse } from "@matterhorn-work/types/backend-support-report";
+import type { MatterhornBackendTeamAccessSummaryResponse } from "@matterhorn-work/types/backend-team-access";
 import type { MatterhornProjectDataLedgerExportControlPlaneSnapshot } from "@matterhorn-work/types/project-data-ledger";
 import type { WorkspaceInfo } from "./types.js";
 import { buildProjectDataLedgerExport } from "./project-data-ledger.js";
@@ -24,6 +25,7 @@ export function backendControlPlaneExportSnapshot(
 export async function buildBackendSupportReport(options: {
   workspace: WorkspaceInfo;
   controlPlane: MatterhornBackendControlPlaneResponse;
+  teamAccess: MatterhornBackendTeamAccessSummaryResponse;
 }): Promise<MatterhornBackendSupportReportResponse> {
   const generatedAt = new Date().toISOString();
   const controlPlaneSnapshot = backendControlPlaneExportSnapshot(options.controlPlane);
@@ -42,6 +44,7 @@ export async function buildBackendSupportReport(options: {
     controlPlane: controlPlaneSnapshot,
     wallets: options.controlPlane.capabilities.wallets,
     teams: options.controlPlane.capabilities.teams,
+    teamAccess: options.teamAccess,
     security: options.controlPlane.capabilities.security,
     models: {
       defaultModel: options.controlPlane.models.defaultModel,
@@ -90,7 +93,7 @@ export async function buildBackendSupportReport(options: {
       secretsReturned: false,
     },
     warnings: [
-      "Support reports include backend status, readiness, sanitized storage locations, and data-policy summaries.",
+      "Support reports include backend status, readiness, sanitized storage locations, local access counts, and data-policy summaries.",
       "Support reports do not include raw chat transcripts, provider credentials, bearer tokens, host tokens, or full model provider payloads.",
       "Open the project data ledger export separately when row-level redacted evidence is needed.",
     ],

@@ -4044,7 +4044,8 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/backend/support-report", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const controlPlane = await buildWorkspaceBackendControlPlane(config, workspace, memoryVault);
-    return jsonResponse(await buildBackendSupportReport({ workspace, controlPlane }));
+    const teamAccess = await buildBackendTeamAccessSummary(config, workspace, tokens);
+    return jsonResponse(await buildBackendSupportReport({ workspace, controlPlane, teamAccess }));
   });
 
   addRoute(routes, "GET", "/workspace/:id/backend/team-access", "host", async (ctx) => {
