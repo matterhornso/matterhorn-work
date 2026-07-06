@@ -3182,6 +3182,7 @@ export function SessionRoute() {
       }}
       onOpenSession={(workspaceId, sessionId) => navigateToWorkspaceSession(workspaceId, sessionId)}
       onOpenSettings={(route) => handleOpenSettings(route ?? "/settings/general")}
+      onSendFeedback={() => setFeedbackDialogOpen(true)}
       onOpenNotes={() => {
         navigate(selectedWorkspaceId ? workspaceNotesRoute(selectedWorkspaceId) : "/notes");
       }}

@@ -21,11 +21,15 @@ describe("project feedback UI contract", () => {
 
   test("session feedback opens the local dialog instead of an external URL", () => {
     const source = readReactSource("shell/session-route.tsx");
+    const paletteSource = readReactSource("shell/command-palette.tsx");
 
     expect(source).toContain("ProjectFeedbackDialog");
     expect(source).toContain("setFeedbackDialogOpen(true)");
     expect(source).toContain('entrypoint="status-bar"');
     expect(source).toContain('sourceType: selectedSessionId ? "chat" : "other"');
+    expect(source).toContain("onSendFeedback={() => setFeedbackDialogOpen(true)}");
+    expect(paletteSource).toContain("onSendFeedback?: () => void");
+    expect(paletteSource).toContain("props.onSendFeedback()");
     expect(source).not.toContain("buildFeedbackUrl");
   });
 
