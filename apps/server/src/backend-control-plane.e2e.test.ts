@@ -176,6 +176,8 @@ describe("backend control plane routes", () => {
     expect(result.payload.wallets.families.sui.directConnect).toBe(true);
     expect(result.payload.wallets.families.sui.signing).toBe("client_wallet");
     expect(result.payload.wallets.families.sui.details.recommendedPackages).toContain("@mysten/dapp-kit-react");
+    expect(result.payload.wallets.families.sui.details.publicReadRoutes).toContain("/api/sui/account/:address");
+    expect(result.payload.wallets.families.sui.details.publicReadRoutes).toContain("/api/sui/balance/:address");
     expect(result.payload.wallets.families.sui.actions[0].href).toBe("https://sdk.mystenlabs.com/dapp-kit/getting-started/react");
     expect(result.payload.security.cors.status).toBe("needs_setup");
     expect(result.payload.security.memoryWriteGuards.status).toBe("working");
@@ -184,6 +186,24 @@ describe("backend control plane routes", () => {
     const serialized = JSON.stringify(result.payload);
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
+    expect(serialized).not.toContain("Sui is not implemented yet");
+  });
+
+  test("Sui public read routes reject invalid public input before provider calls", async () => {
+    const { base } = await boot();
+
+    const invalidNetwork = await jsonFetch(base, "/api/sui/account/0x2?network=devnet");
+    expect(invalidNetwork.response.status).toBe(400);
+    expect(invalidNetwork.payload.code).toBe("invalid_sui_network");
+
+    const invalidAddress = await jsonFetch(base, "/api/sui/balance/not-a-sui-address");
+    expect(invalidAddress.response.status).toBe(400);
+    expect(invalidAddress.payload.code).toBe("invalid_sui_address");
+
+    const secretAddress = encodeURIComponent("seed phrase: fake words for signing");
+    const rejectedSecret = await jsonFetch(base, `/api/sui/account/${secretAddress}`);
+    expect(rejectedSecret.response.status).toBe(400);
+    expect(rejectedSecret.payload.code).toBe("sui_secret_rejected");
   });
 
   test("GET /workspace/:id/backend/data-map returns sanitized storage locations", async () => {
