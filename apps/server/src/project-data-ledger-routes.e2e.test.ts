@@ -202,6 +202,40 @@ describe("project data ledger routes", () => {
     expect(dataControls.payload.stores.taskEvents.retention.mode).toBe("append_only");
   });
 
+  test("GET /workspace/:id/data-ledger/export returns a redacted export manifest", async () => {
+    const { base } = await boot();
+
+    await jsonFetch(base, "/workspace/ws_ledger/feedback", {
+      method: "POST",
+      body: JSON.stringify({
+        kind: "bug",
+        target: { sourceType: "task", sourceId: "task_export" },
+        comment: `Export this feedback but redact private key ${SECRET_HEX}.`,
+      }),
+    });
+
+    const result = await jsonFetch(base, "/workspace/ws_ledger/data-ledger/export?source=feedback&limit=50");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.version).toBe("matterhorn.project-data-ledger-export.v1");
+    expect(result.payload.filename).toMatch(/^matterhorn-project-ledger-ws_ledger-/);
+    expect(result.payload.manifest.workspaceId).toBe("ws_ledger");
+    expect(result.payload.manifest.itemCount).toBe(1);
+    expect(result.payload.manifest.filters.source).toBe("feedback");
+    expect(result.payload.manifest.filters.limit).toBe(50);
+    expect(result.payload.manifest.includes).toEqual(["feedback"]);
+    expect(result.payload.manifest.trainingUse).toBe("none_by_default");
+    expect(result.payload.manifest.feedbackUse).toBe("eval_routing_product_quality_only");
+    expect(result.payload.warnings.join(" ")).toContain("redacted");
+    expect(result.payload.ledger.items.every((item: { source: string }) => item.source === "feedback")).toBe(true);
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).toContain("[redacted]");
+    expect(serialized).not.toContain(SECRET_HEX);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+  });
+
   test("data-ledger source and kind filters are explicit", async () => {
     const { base } = await boot();
 

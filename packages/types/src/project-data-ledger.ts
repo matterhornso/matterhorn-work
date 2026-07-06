@@ -1,6 +1,7 @@
 import type { MatterhornCapability } from "./backend-capabilities.js";
 
 export const MATTERHORN_PROJECT_DATA_LEDGER_VERSION = "matterhorn.project-data-ledger.v1" as const;
+export const MATTERHORN_PROJECT_DATA_LEDGER_EXPORT_VERSION = "matterhorn.project-data-ledger-export.v1" as const;
 
 export const MATTERHORN_PROJECT_DATA_LEDGER_SOURCES = [
   "project_evidence",
@@ -120,6 +121,35 @@ export interface MatterhornProjectDataLedgerResponse {
   count: number;
   summary: MatterhornProjectDataLedgerSummary;
   policy: MatterhornProjectDataLedgerPolicy;
+}
+
+export interface MatterhornProjectDataLedgerExportResponse {
+  success: true;
+  version: typeof MATTERHORN_PROJECT_DATA_LEDGER_EXPORT_VERSION;
+  generatedAt: string;
+  filename: string;
+  ledger: MatterhornProjectDataLedgerResponse;
+  manifest: {
+    exportedAt: string;
+    workspaceId: string;
+    itemCount: number;
+    redactedCount: number;
+    filters: {
+      source?: MatterhornProjectDataLedgerSource;
+      kind?: MatterhornProjectDataLedgerKind;
+      desk?: string;
+      sessionId?: string;
+      taskId?: string;
+      from?: string;
+      to?: string;
+      limit: number;
+    };
+    includes: Array<"project_evidence" | "audit" | "feedback">;
+    trainingUse: "none_by_default";
+    feedbackUse: "eval_routing_product_quality_only";
+    limitations: string[];
+  };
+  warnings: string[];
 }
 
 export const MATTERHORN_PROJECT_FEEDBACK_KINDS = [

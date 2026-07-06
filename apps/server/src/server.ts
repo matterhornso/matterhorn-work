@@ -284,7 +284,7 @@ import { TokenService } from "./tokens.js";
 import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from "./env-file.js";
 import { MatterhornNotesStore } from "./notes.js";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
-import { buildProjectDataLedger, scrubProjectLedgerText } from "./project-data-ledger.js";
+import { buildProjectDataLedger, buildProjectDataLedgerExport, scrubProjectLedgerText } from "./project-data-ledger.js";
 import { buildBackendModels } from "./backend-models.js";
 import { buildBackendTeamAccess } from "./backend-team-access.js";
 import { projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
@@ -1168,6 +1168,22 @@ function parseProjectDataLedgerTimestamp(value: string | null, name: "from" | "t
     throw new ApiError(400, "invalid_project_data_ledger_time", `${name} must be a valid ISO timestamp`);
   }
   return new Date(timestamp).toISOString();
+}
+
+function projectDataLedgerOptionsFromUrl(url: URL) {
+  const limitParam = url.searchParams.get("limit");
+  const parsed = limitParam ? Number(limitParam) : NaN;
+  const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 300) : 100;
+  return {
+    limit,
+    source: parseProjectDataLedgerSource(url.searchParams.get("source")?.trim() || null),
+    kind: parseProjectDataLedgerKind(url.searchParams.get("kind")?.trim() || null),
+    desk: url.searchParams.get("desk")?.trim() || undefined,
+    sessionId: url.searchParams.get("sessionId")?.trim() || url.searchParams.get("session_id")?.trim() || undefined,
+    taskId: url.searchParams.get("taskId")?.trim() || url.searchParams.get("task_id")?.trim() || undefined,
+    from: parseProjectDataLedgerTimestamp(url.searchParams.get("from"), "from"),
+    to: parseProjectDataLedgerTimestamp(url.searchParams.get("to"), "to"),
+  };
 }
 
 function parseProjectFeedbackKind(value: unknown): MatterhornProjectFeedbackKind {
@@ -3850,19 +3866,17 @@ function createRoutes(
 
   addRoute(routes, "GET", "/workspace/:id/data-ledger", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    const limitParam = ctx.url.searchParams.get("limit");
-    const parsed = limitParam ? Number(limitParam) : NaN;
-    const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 300) : 100;
     return jsonResponse(await buildProjectDataLedger({
       workspace,
-      limit,
-      source: parseProjectDataLedgerSource(ctx.url.searchParams.get("source")?.trim() || null),
-      kind: parseProjectDataLedgerKind(ctx.url.searchParams.get("kind")?.trim() || null),
-      desk: ctx.url.searchParams.get("desk")?.trim() || undefined,
-      sessionId: ctx.url.searchParams.get("sessionId")?.trim() || ctx.url.searchParams.get("session_id")?.trim() || undefined,
-      taskId: ctx.url.searchParams.get("taskId")?.trim() || ctx.url.searchParams.get("task_id")?.trim() || undefined,
-      from: parseProjectDataLedgerTimestamp(ctx.url.searchParams.get("from"), "from"),
-      to: parseProjectDataLedgerTimestamp(ctx.url.searchParams.get("to"), "to"),
+      ...projectDataLedgerOptionsFromUrl(ctx.url),
+    }));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/data-ledger/export", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(await buildProjectDataLedgerExport({
+      workspace,
+      ...projectDataLedgerOptionsFromUrl(ctx.url),
     }));
   });
 

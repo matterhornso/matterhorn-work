@@ -18,6 +18,7 @@ import type {
 } from "@matterhorn-work/types/project-evidence";
 import type {
   MatterhornProjectDataLedgerListOptions,
+  MatterhornProjectDataLedgerExportResponse,
   MatterhornProjectDataLedgerResponse,
   MatterhornProjectFeedbackRequest,
   MatterhornProjectFeedbackResponse,
@@ -1648,6 +1649,23 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       return requestJson<MatterhornProjectDataLedgerResponse>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/data-ledger${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
+    },
+    exportProjectDataLedger: (workspaceId: string, options?: MatterhornProjectDataLedgerListOptions) => {
+      const query = new URLSearchParams();
+      if (typeof options?.limit === "number") query.set("limit", String(options.limit));
+      if (options?.source) query.set("source", options.source);
+      if (options?.kind) query.set("kind", options.kind);
+      if (options?.desk?.trim()) query.set("desk", options.desk.trim());
+      if (options?.sessionId?.trim()) query.set("sessionId", options.sessionId.trim());
+      if (options?.taskId?.trim()) query.set("taskId", options.taskId.trim());
+      if (options?.from?.trim()) query.set("from", options.from.trim());
+      if (options?.to?.trim()) query.set("to", options.to.trim());
+      const suffix = query.size ? `?${query.toString()}` : "";
+      return requestJson<MatterhornProjectDataLedgerExportResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/data-ledger/export${suffix}`,
         { token, hostToken, timeoutMs: timeouts.status },
       );
     },

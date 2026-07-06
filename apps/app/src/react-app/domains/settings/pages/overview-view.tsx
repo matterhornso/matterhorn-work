@@ -659,13 +659,12 @@ export function SettingsOverviewView(props: {
     }
     setLedgerExportStatus("Exporting...");
     try {
-      const ledger = await client.listProjectDataLedger(workspaceId, { limit: 300 });
-      const datePart = new Date().toISOString().slice(0, 10);
+      const exportPayload = await client.exportProjectDataLedger(workspaceId, { limit: 300 });
       downloadJsonFile(
-        `matterhorn-project-ledger-${safeDownloadFilePart(workspaceId)}-${datePart}.json`,
-        JSON.stringify(ledger, null, 2),
+        exportPayload.filename || `matterhorn-project-ledger-${safeDownloadFilePart(workspaceId)}-${new Date().toISOString().slice(0, 10)}.json`,
+        JSON.stringify(exportPayload, null, 2),
       );
-      setLedgerExportStatus(`Exported ${ledger.count} ledger events.`);
+      setLedgerExportStatus(`Exported ${exportPayload.manifest.itemCount} ledger events.`);
     } catch (error) {
       setLedgerExportStatus(error instanceof Error ? error.message : "Could not export the project ledger.");
     }

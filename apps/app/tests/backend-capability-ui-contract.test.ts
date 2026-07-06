@@ -132,6 +132,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/team-access`');
     expect(source).toContain("listProjectDataLedger");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/data-ledger${suffix}`');
+    expect(source).toContain("exportProjectDataLedger");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/data-ledger/export${suffix}`');
     expect(source).toContain('query.set("desk", options.desk.trim())');
     expect(source).toContain('query.set("sessionId", options.sessionId.trim())');
     expect(source).toContain('query.set("taskId", options.taskId.trim())');
@@ -166,6 +168,7 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("client.workspaceTeamAccess(workspaceId)");
     expect(source).toContain("settings-project-data-ledger");
     expect(source).toContain("client.listProjectDataLedger(workspaceId");
+    expect(source).toContain("client.exportProjectDataLedger(workspaceId");
     expect(source).toContain("summarizeModelRoutingPolicy");
     expect(source).toContain("Backend status");
     expect(source).toContain("Wallet families");

@@ -1,5 +1,6 @@
 import type {
   MatterhornProjectDataLedgerEntry,
+  MatterhornProjectDataLedgerExportResponse,
   MatterhornProjectDataLedgerListOptions,
   MatterhornProjectDataLedgerPolicy,
   MatterhornProjectDataLedgerResponse,
@@ -232,6 +233,51 @@ export async function buildProjectDataLedger(options: BuildProjectDataLedgerOpti
     count: items.length,
     summary: summarize(allItems),
     policy: ledgerPolicy(),
+  };
+}
+
+function safeExportFilePart(value: string): string {
+  return value.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "workspace";
+}
+
+export async function buildProjectDataLedgerExport(
+  options: BuildProjectDataLedgerOptions,
+): Promise<MatterhornProjectDataLedgerExportResponse> {
+  const limit = Math.max(1, Math.min(options.limit ?? 300, 300));
+  const ledger = await buildProjectDataLedger({ ...options, limit });
+  const generatedAt = new Date().toISOString();
+  const includes = Array.from(new Set(ledger.items.map((item) => item.source))).sort() as Array<"project_evidence" | "audit" | "feedback">;
+
+  return {
+    success: true,
+    version: "matterhorn.project-data-ledger-export.v1",
+    generatedAt,
+    filename: `matterhorn-project-ledger-${safeExportFilePart(options.workspace.id)}-${generatedAt.slice(0, 10)}.json`,
+    ledger,
+    manifest: {
+      exportedAt: generatedAt,
+      workspaceId: options.workspace.id,
+      itemCount: ledger.count,
+      redactedCount: ledger.summary.redacted,
+      filters: {
+        source: options.source,
+        kind: options.kind,
+        desk: options.desk,
+        sessionId: options.sessionId,
+        taskId: options.taskId,
+        from: options.from,
+        to: options.to,
+        limit,
+      },
+      includes,
+      trainingUse: ledger.policy.trainingUse,
+      feedbackUse: ledger.policy.feedbackUse,
+      limitations: ledger.policy.limitations,
+    },
+    warnings: [
+      "Export payloads are redacted for known secret-shaped text fields.",
+      "Chat/session history remains in the OpenCode runtime store and is not fully included in this v1 ledger export.",
+    ],
   };
 }
 
