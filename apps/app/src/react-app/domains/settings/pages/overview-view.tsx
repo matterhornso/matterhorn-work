@@ -561,6 +561,7 @@ export function SettingsOverviewView(props: {
   const [memoryExportStatus, setMemoryExportStatus] = useState<string | null>(null);
   const [ledgerExportStatus, setLedgerExportStatus] = useState<string | null>(null);
   const notesWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
+  const backendWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
 
   useEffect(() => subscribeToTheme(() => setTheme(getInitialThemeMode())), []);
 
@@ -591,9 +592,20 @@ export function SettingsOverviewView(props: {
     },
   });
 
+  const workspaceBackendControlPlaneQuery = useQuery({
+    queryKey: ["settings-workspace-backend-control-plane", backendWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && backendWorkspaceId),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client || !backendWorkspaceId) throw new Error("Open a workspace to check backend status.");
+      return client.workspaceBackendControlPlane(backendWorkspaceId);
+    },
+    staleTime: 30_000,
+  });
+
   const backendCapabilitiesQuery = useQuery({
     queryKey: ["settings-backend-capabilities"],
-    enabled: Boolean(props.matterhornServerClient),
+    enabled: Boolean(props.matterhornServerClient && (!backendWorkspaceId || workspaceBackendControlPlaneQuery.isError)),
     queryFn: async () => {
       const client = props.matterhornServerClient;
       if (!client) throw new Error("Matterhorn Work engine is offline.");
@@ -604,7 +616,7 @@ export function SettingsOverviewView(props: {
 
   const workspaceReadinessQuery = useQuery({
     queryKey: ["settings-workspace-readiness", props.runtimeWorkspaceId],
-    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId && workspaceBackendControlPlaneQuery.isError),
     queryFn: async () => {
       const client = props.matterhornServerClient;
       const workspaceId = props.runtimeWorkspaceId?.trim();
@@ -616,7 +628,7 @@ export function SettingsOverviewView(props: {
 
   const workspaceDataMapQuery = useQuery({
     queryKey: ["settings-workspace-data-map", props.runtimeWorkspaceId],
-    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId && workspaceBackendControlPlaneQuery.isError),
     queryFn: async () => {
       const client = props.matterhornServerClient;
       const workspaceId = props.runtimeWorkspaceId?.trim();
@@ -628,7 +640,7 @@ export function SettingsOverviewView(props: {
 
   const workspaceDataControlsQuery = useQuery({
     queryKey: ["settings-workspace-data-controls", props.runtimeWorkspaceId],
-    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId && workspaceBackendControlPlaneQuery.isError),
     queryFn: async () => {
       const client = props.matterhornServerClient;
       const workspaceId = props.runtimeWorkspaceId?.trim();
@@ -637,6 +649,20 @@ export function SettingsOverviewView(props: {
     },
     staleTime: 30_000,
   });
+
+  const backendCapabilities = workspaceBackendControlPlaneQuery.data?.capabilities ?? backendCapabilitiesQuery.data;
+  const workspaceReadiness = workspaceBackendControlPlaneQuery.data?.readiness ?? workspaceReadinessQuery.data;
+  const workspaceDataMap = workspaceBackendControlPlaneQuery.data?.dataMap ?? workspaceDataMapQuery.data;
+  const workspaceDataControls = workspaceBackendControlPlaneQuery.data?.dataControls ?? workspaceDataControlsQuery.data;
+  const backendCapabilitiesLoading = backendWorkspaceId
+    ? workspaceBackendControlPlaneQuery.isLoading || (workspaceBackendControlPlaneQuery.isError && backendCapabilitiesQuery.isLoading)
+    : backendCapabilitiesQuery.isLoading;
+  const workspaceReadinessLoading = backendWorkspaceId
+    ? workspaceBackendControlPlaneQuery.isLoading || (workspaceBackendControlPlaneQuery.isError && workspaceReadinessQuery.isLoading)
+    : workspaceReadinessQuery.isLoading;
+  const workspaceDataMapLoading = backendWorkspaceId
+    ? workspaceBackendControlPlaneQuery.isLoading || (workspaceBackendControlPlaneQuery.isError && workspaceDataMapQuery.isLoading)
+    : workspaceDataMapQuery.isLoading;
 
   const projectDataLedgerQuery = useQuery({
     queryKey: ["settings-project-data-ledger", props.runtimeWorkspaceId],
@@ -742,39 +768,39 @@ export function SettingsOverviewView(props: {
           title="Backend status"
           description="What the local Matterhorn Work engine reports for this workspace."
           status={
-            backendCapabilitiesQuery.data ? (
-              <CapabilityBadge status={backendCapabilitiesQuery.data.security.memoryWriteGuards.status} />
-            ) : backendCapabilitiesQuery.isLoading ? (
+            backendCapabilities ? (
+              <CapabilityBadge status={backendCapabilities.security.memoryWriteGuards.status} />
+            ) : backendCapabilitiesLoading ? (
               <StatusBadge>Loading</StatusBadge>
             ) : (
               <StatusBadge tone="error">Unavailable</StatusBadge>
             )
           }
         >
-          {backendCapabilitiesQuery.data ? (
+          {backendCapabilities ? (
             <>
               <Row
                 label="Model routing"
-                hint={`Default: ${summarizeModelSource(backendCapabilitiesQuery.data)}. ${summarizeModelRoutingPolicy(backendCapabilitiesQuery.data)}`}
-                value={<CapabilityBadge status={backendCapabilitiesQuery.data.models.status} />}
+                hint={`Default: ${summarizeModelSource(backendCapabilities)}. ${summarizeModelRoutingPolicy(backendCapabilities)}`}
+                value={<CapabilityBadge status={backendCapabilities.models.status} />}
               />
               <Row
                 label="Workspace readiness"
                 hint={
-                  workspaceReadinessQuery.data
-                    ? `${workspaceReadinessQuery.data.summary.readyFeatures}/${workspaceReadinessQuery.data.summary.totalFeatures} actions ready. ${
-                        workspaceReadinessQuery.data.summary.blockingChecks.length
-                          ? `Blocked by ${workspaceReadinessQuery.data.summary.blockingChecks.join(", ")}.`
+                  workspaceReadiness
+                    ? `${workspaceReadiness.summary.readyFeatures}/${workspaceReadiness.summary.totalFeatures} actions ready. ${
+                        workspaceReadiness.summary.blockingChecks.length
+                          ? `Blocked by ${workspaceReadiness.summary.blockingChecks.join(", ")}.`
                           : "No blockers reported."
                       }`
-                    : workspaceReadinessQuery.isLoading
+                    : workspaceReadinessLoading
                       ? "Checking workspace readiness."
                       : "Readiness is unavailable until the workspace engine responds."
                 }
                 value={
-                  workspaceReadinessQuery.data ? (
-                    <CapabilityBadge status={workspaceReadinessQuery.data.summary.status} />
-                  ) : workspaceReadinessQuery.isLoading ? (
+                  workspaceReadiness ? (
+                    <CapabilityBadge status={workspaceReadiness.summary.status} />
+                  ) : workspaceReadinessLoading ? (
                     <StatusBadge>Loading</StatusBadge>
                   ) : (
                     <StatusBadge tone="error">Unavailable</StatusBadge>
@@ -783,18 +809,18 @@ export function SettingsOverviewView(props: {
               />
               <Row
                 label="Notes and memory"
-                hint={`Notes: ${summarizeCapability(backendCapabilitiesQuery.data.notes)} Memory: ${summarizeCapability(backendCapabilitiesQuery.data.memory)}`}
+                hint={`Notes: ${summarizeCapability(backendCapabilities.notes)} Memory: ${summarizeCapability(backendCapabilities.memory)}`}
                 value={
                   <div className="flex flex-wrap justify-end gap-1.5">
-                    <CapabilityBadge status={backendCapabilitiesQuery.data.notes.status} />
-                    <CapabilityBadge status={backendCapabilitiesQuery.data.memory.status} />
+                    <CapabilityBadge status={backendCapabilities.notes.status} />
+                    <CapabilityBadge status={backendCapabilities.memory.status} />
                   </div>
                 }
               />
               <Row
                 label="Evidence ledger"
-                hint={`Sources: ${backendCapabilitiesQuery.data.evidence.sources.join(", ")}.`}
-                value={<CapabilityBadge status={backendCapabilitiesQuery.data.evidence.status} />}
+                hint={`Sources: ${backendCapabilities.evidence.sources.join(", ")}.`}
+                value={<CapabilityBadge status={backendCapabilities.evidence.status} />}
               />
               <Row
                 label="Project ledger"
@@ -835,10 +861,10 @@ export function SettingsOverviewView(props: {
               ) : null}
               <Row
                 label="Wallet families"
-                hint={walletFamilySummary(backendCapabilitiesQuery.data)
+                hint={walletFamilySummary(backendCapabilities)
                   .map((wallet) => `${wallet.family}: ${backendCapabilityLabel(wallet.status)}`)
                   .join(" · ")}
-                value={<CapabilityBadge status={backendCapabilitiesQuery.data.wallets.status} />}
+                value={<CapabilityBadge status={backendCapabilities.wallets.status} />}
               />
               <Row
                 label="Teams"
@@ -846,18 +872,18 @@ export function SettingsOverviewView(props: {
                   ? `${teamAccessQuery.data.localAccess.tokenCount} local access tokens. Owners ${teamAccessQuery.data.localAccess.byScope.owner}; collaborators ${teamAccessQuery.data.localAccess.byScope.collaborator}; viewers ${teamAccessQuery.data.localAccess.byScope.viewer}. Cloud teams: ${backendCapabilityLabel(teamAccessQuery.data.cloudTeams.status)}.`
                   : teamAccessQuery.isLoading
                     ? "Loading local access status."
-                    : summarizeCapability(backendCapabilitiesQuery.data.teams)}
-                value={<CapabilityBadge status={backendCapabilitiesQuery.data.teams.status} />}
+                    : summarizeCapability(backendCapabilities.teams)}
+                value={<CapabilityBadge status={backendCapabilities.teams.status} />}
               />
               <Row
                 label="Write guards"
-                hint={summarizeCapability(backendCapabilitiesQuery.data.security.memoryWriteGuards)}
-                value={<CapabilityBadge status={backendCapabilitiesQuery.data.security.memoryWriteGuards.status} />}
+                hint={summarizeCapability(backendCapabilities.security.memoryWriteGuards)}
+                value={<CapabilityBadge status={backendCapabilities.security.memoryWriteGuards.status} />}
               />
             </>
           ) : (
             <div className="px-1 py-3 text-sm leading-6 text-dls-secondary">
-              {backendCapabilitiesQuery.isLoading
+              {backendCapabilitiesLoading
                 ? "Loading backend status..."
                 : "The Matterhorn Work engine is offline or did not return a capability report."}
             </div>
@@ -870,20 +896,20 @@ export function SettingsOverviewView(props: {
           title="Data policy"
           description="Where workspace data lives, what can be exported, and what can be deleted."
           status={
-            workspaceDataMapQuery.data ? (
-              <CapabilityBadge status={workspaceDataMapQuery.data.policy.redaction.status} />
-            ) : workspaceDataMapQuery.isLoading ? (
+            workspaceDataMap ? (
+              <CapabilityBadge status={workspaceDataMap.policy.redaction.status} />
+            ) : workspaceDataMapLoading ? (
               <StatusBadge>Loading</StatusBadge>
             ) : (
               <StatusBadge tone="error">Unavailable</StatusBadge>
             )
           }
         >
-          {workspaceDataMapQuery.data ? (
-            <DataPolicySection dataMap={workspaceDataMapQuery.data} controls={workspaceDataControlsQuery.data} />
+          {workspaceDataMap ? (
+            <DataPolicySection dataMap={workspaceDataMap} controls={workspaceDataControls} />
           ) : (
             <div className="px-1 py-3 text-sm leading-6 text-dls-secondary">
-              {workspaceDataMapQuery.isLoading
+              {workspaceDataMapLoading
                 ? "Loading workspace data policy..."
                 : "Open a connected workspace to review storage, export, and deletion policy."}
             </div>
@@ -1191,34 +1217,34 @@ export function SettingsOverviewView(props: {
           icon={<Lock size={18} />}
           title="Privacy &amp; Data"
           description="Where your data lives, and what is never stored."
-          status={workspaceDataMapQuery.data ? <StatusBadge tone="ready">Workspace mapped</StatusBadge> : <StatusBadge>Local first</StatusBadge>}
+          status={workspaceDataMap ? <StatusBadge tone="ready">Workspace mapped</StatusBadge> : <StatusBadge>Local first</StatusBadge>}
         >
-          {workspaceDataMapQuery.data ? (
+          {workspaceDataMap ? (
             <>
               <Row
                 label="Chat history"
-                hint={storageLocationLabel(workspaceDataMapQuery.data.stores.chat)}
-                value={<CapabilityBadge status={workspaceDataMapQuery.data.stores.chat.status} />}
+                hint={storageLocationLabel(workspaceDataMap.stores.chat)}
+                value={<CapabilityBadge status={workspaceDataMap.stores.chat.status} />}
               />
               <Row
                 label="Notes"
-                hint={storageLocationLabel(workspaceDataMapQuery.data.stores.notes)}
-                value={<CapabilityBadge status={workspaceDataMapQuery.data.stores.notes.status} />}
+                hint={storageLocationLabel(workspaceDataMap.stores.notes)}
+                value={<CapabilityBadge status={workspaceDataMap.stores.notes.status} />}
               />
               <Row
                 label="Memory"
-                hint={storageLocationLabel(workspaceDataMapQuery.data.stores.memory)}
-                value={<CapabilityBadge status={workspaceDataMapQuery.data.stores.memory.status} />}
+                hint={storageLocationLabel(workspaceDataMap.stores.memory)}
+                value={<CapabilityBadge status={workspaceDataMap.stores.memory.status} />}
               />
               <Row
                 label="Outputs"
-                hint={storageLocationLabel(workspaceDataMapQuery.data.stores.outputs)}
-                value={<CapabilityBadge status={workspaceDataMapQuery.data.stores.outputs.status} />}
+                hint={storageLocationLabel(workspaceDataMap.stores.outputs)}
+                value={<CapabilityBadge status={workspaceDataMap.stores.outputs.status} />}
               />
               <Row
                 label="Training use"
-                hint={workspaceDataPolicySummary(workspaceDataMapQuery.data)}
-                value={<CapabilityBadge status={workspaceDataMapQuery.data.policy.export.status} />}
+                hint={workspaceDataPolicySummary(workspaceDataMap)}
+                value={<CapabilityBadge status={workspaceDataMap.policy.export.status} />}
               />
               <p className="px-1 py-3 text-xs leading-5 text-dls-secondary">
                 Matterhorn Work never asks for or stores seed phrases, private keys, API secrets, raw signatures, or wallet exports.

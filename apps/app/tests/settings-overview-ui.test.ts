@@ -21,6 +21,9 @@ describe("Settings overview backend capability integration", () => {
   test("queries backend capabilities and workspace data map", () => {
     const source = readAppSource("domains/settings/pages/overview-view.tsx");
 
+    expect(source).toContain("settings-workspace-backend-control-plane");
+    expect(source).toContain("client.workspaceBackendControlPlane(backendWorkspaceId)");
+    expect(source).toContain("workspaceBackendControlPlaneQuery.data?.capabilities");
     expect(source).toContain("settings-backend-capabilities");
     expect(source).toContain("client.backendCapabilities()");
     expect(source).toContain("settings-workspace-data-map");

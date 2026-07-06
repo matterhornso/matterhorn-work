@@ -128,6 +128,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/models`');
     expect(source).toContain("workspaceReadiness");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/readiness`');
+    expect(source).toContain("workspaceBackendControlPlane");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/control-plane`');
     expect(source).toContain("workspaceDataMap");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`');
     expect(source).toContain("workspaceDataControls");
@@ -162,6 +164,10 @@ describe("backend capability UI contract", () => {
 
   test("Settings overview reads backend capabilities and workspace data map", () => {
     const source = readAppSource("react-app/domains/settings/pages/overview-view.tsx");
+    expect(source).toContain("settings-workspace-backend-control-plane");
+    expect(source).toContain("client.workspaceBackendControlPlane(backendWorkspaceId)");
+    expect(source).toContain("workspaceBackendControlPlaneQuery.data?.capabilities");
+    expect(source).toContain("workspaceBackendControlPlaneQuery.data?.dataControls");
     expect(source).toContain("settings-backend-capabilities");
     expect(source).toContain("client.backendCapabilities()");
     expect(source).toContain("settings-workspace-readiness");
@@ -180,7 +186,7 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("Workspace readiness");
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
-    expect(source).toContain("controls={workspaceDataControlsQuery.data}");
+    expect(source).toContain("controls={workspaceDataControls}");
   });
 
   test("AI settings shows backend model routing alongside live provider counts", () => {
