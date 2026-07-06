@@ -179,7 +179,8 @@ for (const phrase of [
   "Bittensor task:",
   "Hyperliquid task:",
   "Polymarket task:",
-  "hand the task to",
+  "run",
+  "in a new chat",
   "agentId:",
   "agentName:",
   "deriveMatterhornDeskMode",
@@ -463,9 +464,10 @@ assert.ok(sessionPage.includes("visual?.displayName ?? panel"), "right rail shou
 assert.ok(sessionPage.includes('getCustomerProtocolDeskVisual("wellness")?.displayName'), "Wellness rail label should come from the shared visual manifest");
 assert.ok(sessionPage.includes("primeProtocolRailPrompt"), "protocol rail prompt helper should remain available for explicit demo handoffs");
 assert.ok(sessionPage.includes("pendingProtocolRailPanelRef"), "protocol rail clicks should restore the selected desk after creating a prompted session");
-assert.ok(sessionPage.includes("props.selectedSessionId && props.surface"), "protocol rail prompt events should only target a rendered composer surface");
-assert.ok(sessionPage.includes('options?.source ?? "protocol-rail"'), "protocol rail prompt handoffs should default to the protocol-rail source");
-assert.ok(sessionPage.includes('new CustomEvent("matterhorn:crypto-chat-handoff"'), "protocol rail prompts should insert into the active composer without auto-sending");
+assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, prompt"), "protocol rail prompts should create a real Matterhorn task");
+assert.ok(sessionPage.includes("agent: agentIdForDesk(panel)"), "protocol rail prompts should route to the desk-specific agent");
+assert.ok(sessionPage.includes("sendImmediately: true"), "protocol rail prompts should start the desk task immediately");
+assert.equal(sessionPage.includes('new CustomEvent("matterhorn:crypto-chat-handoff"'), false, "protocol rail prompts should not silently stage hidden composer drafts");
 assert.ok(sessionPage.includes("onClick={() => openVenueRailPane(item.panel)}"), "protocol rail buttons should open a focused desk without priming a mixed chat composer");
 assert.ok(sessionPage.includes('card.id === "wellness_creator_workflow"'), "right rail should expose the Wellness workflow launcher");
 assert.equal(sessionPage.includes('card.id === "decentralized_services_operator"'), false, "right rail should not expose future Services as a customer-facing launcher");
@@ -495,8 +497,8 @@ assert.ok(
   "focused desk prompts should render as compact workflow cards",
 );
 assert.ok(
-  sessionSurface.includes("Start task") && sessionSurface.includes("Nothing sends until you press Ask"),
-  "focused desk prompt rows should clarify that agent tasks are staged, not auto-sent",
+  sessionSurface.includes("Start task") && sessionSurface.includes("Choose a starter below to run"),
+  "focused desk prompt rows should launch clear desk tasks without exposing hidden prompts",
 );
 assert.equal(sessionPage.includes("rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.09)] px-4 py-3 text-sm leading-6 text-dls-text"), false, "focused desk safety boundary should not use the old boxed callout");
 assert.ok(sessionSurface.includes("matterhorn-desk-session-hero overflow-hidden rounded-xl"), "desk-specific empty sessions should use the same compact logo-led hero treatment");
