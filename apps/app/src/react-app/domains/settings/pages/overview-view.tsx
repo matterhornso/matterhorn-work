@@ -7,6 +7,7 @@ import {
   Ban,
   Boxes,
   BrainCircuit,
+  ChevronDown,
   CheckCircle2,
   Circle,
   CircleUser,
@@ -56,6 +57,7 @@ import {
 import { t } from "../../../../i18n";
 import { formatRelativeTime } from "../../../../app/utils";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
@@ -418,6 +420,7 @@ function DataPolicySection(props: {
   feedbackPolicyError?: string | null;
   onFeedbackPolicyChange?: (enabled: boolean) => void;
 }) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const stores = DATA_POLICY_STORE_ORDER
     .map((key) => props.dataMap.stores[key])
     .filter(Boolean);
@@ -426,15 +429,20 @@ function DataPolicySection(props: {
     .filter((control): control is MatterhornDataControlStore => Boolean(control))
     .slice(0, 4);
   const retentionPolicy = props.controls?.policy.retention ?? props.dataMap.policy.retention;
+  const feedbackEnabled = (props.dataPolicy?.policy.feedbackUse ?? props.dataMap.policy.feedbackUse) !== "disabled";
+  const userControlledCount = stores.filter((store) => store.retention === "user_controlled").length;
+  const appendOnlyCount = stores.filter((store) => store.retention === "append_only").length;
+  const exportableCount = stores.filter((store) => store.exportable).length;
+  const deletableCount = stores.filter((store) => store.deletable).length;
 
   return (
     <div className="px-1 py-3">
       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm font-medium text-dls-text">Storage and retention</p>
+        <p className="text-sm font-medium text-dls-text">Workspace data policy</p>
         <StatusBadge tone="ready">{workspaceDataPolicySummary(props.dataMap)}</StatusBadge>
       </div>
       <div className="mb-4 grid gap-2 lg:grid-cols-3">
-        <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
+        <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2.5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium text-dls-text">Model training</p>
             <StatusBadge>Off</StatusBadge>
@@ -448,12 +456,14 @@ function DataPolicySection(props: {
             <div>
               <p className="text-xs font-medium text-dls-text">Feedback collection</p>
               <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
-                Explicit feedback only. Product quality and routing, not training.
+                {feedbackEnabled
+                  ? "Explicit feedback only. Product quality and routing, not training."
+                  : "New feedback writes are blocked. Existing feedback can still be exported or deleted."}
               </p>
             </div>
             <Switch
               size="sm"
-              checked={(props.dataPolicy?.policy.feedbackUse ?? props.dataMap.policy.feedbackUse) !== "disabled"}
+              checked={feedbackEnabled}
               disabled={!props.onFeedbackPolicyChange || props.feedbackPolicySaving}
               onCheckedChange={(checked) => props.onFeedbackPolicyChange?.(checked)}
               aria-label="Toggle workspace feedback collection"
@@ -467,63 +477,91 @@ function DataPolicySection(props: {
         </div>
         <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-medium text-dls-text">Append-only history</p>
-            <StatusBadge>{retentionPolicy.label}</StatusBadge>
+            <p className="text-xs font-medium text-dls-text">Export and delete</p>
+            <StatusBadge>{exportableCount}/{stores.length} exportable</StatusBadge>
           </div>
           <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
-            {retentionPolicy.windowLabel} Export through the project ledger.
+            {deletableCount} user-controlled stores can be deleted from their owning surfaces. {appendOnlyCount} history stores are append-only.
           </p>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[680px] border-separate border-spacing-0 text-left text-xs">
-          <thead className="text-dls-secondary">
-            <tr>
-              <th className="pb-2 pr-4 font-medium">Store</th>
-              <th className="pb-2 pr-4 font-medium">Location</th>
-              <th className="pb-2 pr-4 font-medium">Retention</th>
-              <th className="pb-2 pr-4 font-medium">Export</th>
-              <th className="pb-2 pr-4 font-medium">Delete</th>
-              <th className="pb-2 font-medium">Secrets</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stores.map((store) => (
-              <tr key={store.id} className="align-top">
-                <td className="border-t border-dls-border/45 py-2 pr-4">
-                  <p className="font-medium text-dls-text">{store.label}</p>
-                  <p className="mt-0.5 text-[11px] text-dls-secondary">{scopeLabel(store.scope)}</p>
-                </td>
-                <td className="max-w-[260px] border-t border-dls-border/45 py-2 pr-4">
-                  <span className="block truncate font-mono text-[11px] text-dls-secondary" title={storageLocationLabel(store)}>
-                    {storageLocationLabel(store)}
-                  </span>
-                </td>
-                <td className="border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">{retentionLabel(store.retention)}</td>
-                <td className="max-w-[220px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
-                  {controlSummary(props.controls, store, "export")}
-                </td>
-                <td className="max-w-[220px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
-                  {controlSummary(props.controls, store, "deletion")}
-                </td>
-                <td className="border-t border-dls-border/45 py-2 text-dls-secondary">{secretsLabel(store.containsSecrets)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {props.controls ? (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {highlightedControls.map((control) => (
-            <div key={control.storeId} className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
-              <p className="text-xs font-medium text-dls-text">{control.store.label}</p>
-              <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
-                {control.export.label} · {control.deletion.label}
-              </p>
-            </div>
-          ))}
+
+      <div className="mb-3 rounded-lg bg-dls-surface-muted/20 px-3 py-2.5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-medium text-dls-text">Retention</p>
+            <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
+              {userControlledCount} user-controlled stores. {retentionPolicy.windowLabel}
+            </p>
+          </div>
+          <StatusBadge>{retentionPolicy.label}</StatusBadge>
         </div>
-      ) : null}
+      </div>
+
+      <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <CollapsibleTrigger
+          render={(
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-xs font-medium text-dls-secondary transition-colors hover:text-dls-text"
+            >
+              <ChevronDown className={cn("size-3.5 transition-transform", detailsOpen && "rotate-180")} />
+              Storage locations and controls
+            </button>
+          )}
+        />
+        <CollapsibleContent>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[680px] border-separate border-spacing-0 text-left text-xs">
+              <thead className="text-dls-secondary">
+                <tr>
+                  <th className="pb-2 pr-4 font-medium">Store</th>
+                  <th className="pb-2 pr-4 font-medium">Location</th>
+                  <th className="pb-2 pr-4 font-medium">Retention</th>
+                  <th className="pb-2 pr-4 font-medium">Export</th>
+                  <th className="pb-2 pr-4 font-medium">Delete</th>
+                  <th className="pb-2 font-medium">Secrets</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stores.map((store) => (
+                  <tr key={store.id} className="align-top">
+                    <td className="border-t border-dls-border/45 py-2 pr-4">
+                      <p className="font-medium text-dls-text">{store.label}</p>
+                      <p className="mt-0.5 text-[11px] text-dls-secondary">{scopeLabel(store.scope)}</p>
+                    </td>
+                    <td className="max-w-[260px] border-t border-dls-border/45 py-2 pr-4">
+                      <span className="block truncate font-mono text-[11px] text-dls-secondary" title={storageLocationLabel(store)}>
+                        {storageLocationLabel(store)}
+                      </span>
+                    </td>
+                    <td className="border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">{retentionLabel(store.retention)}</td>
+                    <td className="max-w-[220px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
+                      {controlSummary(props.controls, store, "export")}
+                    </td>
+                    <td className="max-w-[220px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
+                      {controlSummary(props.controls, store, "deletion")}
+                    </td>
+                    <td className="border-t border-dls-border/45 py-2 text-dls-secondary">{secretsLabel(store.containsSecrets)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {props.controls ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {highlightedControls.map((control) => (
+                <div key={control.storeId} className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
+                  <p className="text-xs font-medium text-dls-text">{control.store.label}</p>
+                  <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
+                    {control.export.label} · {control.deletion.label}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </CollapsibleContent>
+      </Collapsible>
       <p className="mt-3 text-xs leading-5 text-dls-secondary">
         User-controlled stores can be managed from their own surfaces. {retentionPolicy.summary}
       </p>
