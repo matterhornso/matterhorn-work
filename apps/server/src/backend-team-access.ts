@@ -2,6 +2,8 @@ import type { MatterhornCapability } from "@matterhorn-work/types/backend-capabi
 import type {
   MatterhornBackendTeamAccessResponse,
   MatterhornBackendTeamAccessSummaryResponse,
+  MatterhornTeamAccessScopeCapabilities,
+  MatterhornTeamAccessSharingMode,
   MatterhornTeamAccessTokenDescriptor,
   MatterhornTeamTokenScope,
 } from "@matterhorn-work/types/backend-team-access";
@@ -19,6 +21,55 @@ function countByScope(tokens: MatterhornTeamAccessTokenDescriptor[]) {
     owner: tokens.filter((token) => token.scope === "owner").length,
     collaborator: tokens.filter((token) => token.scope === "collaborator").length,
     viewer: tokens.filter((token) => token.scope === "viewer").length,
+  };
+}
+
+function buildScopeCapabilities(): MatterhornTeamAccessScopeCapabilities {
+  return {
+    owner: {
+      scope: "owner",
+      label: "Owner",
+      description: "Can read and write workspace data. Host-protected token management remains available only to the local host process.",
+      canReadWorkspace: true,
+      canWriteWorkspace: true,
+      canManageLocalTokens: true,
+      hostProtected: true,
+    },
+    collaborator: {
+      scope: "collaborator",
+      label: "Collaborator",
+      description: "Can read and write project notes, memory actions, outputs, feedback, and task evidence through this local server.",
+      canReadWorkspace: true,
+      canWriteWorkspace: true,
+      canManageLocalTokens: false,
+      hostProtected: false,
+    },
+    viewer: {
+      scope: "viewer",
+      label: "Viewer",
+      description: "Can inspect workspace state and evidence but cannot write notes, memory, feedback, outputs, or team tokens.",
+      canReadWorkspace: true,
+      canWriteWorkspace: false,
+      canManageLocalTokens: false,
+      hostProtected: false,
+    },
+  };
+}
+
+function buildSharingMode(cloudTeams: MatterhornCapability): MatterhornTeamAccessSharingMode {
+  return {
+    current: "local_tokens",
+    label: "Local token sharing",
+    description: "Teammates can use the same Matterhorn interface against this reachable local server when you create and share a viewer or collaborator token.",
+    sameInterface: true,
+    durableCloudTeams: false,
+    requiresReachableLocalServer: true,
+    cloudTeamsStatus: cloudTeams.status,
+    limitations: [
+      "Tokens are scoped to this local server and are not durable cloud org membership.",
+      "Token details are host-protected and one-time secrets are returned only when created.",
+      "Durable teammate invites, roles, and shared cloud workspaces require Matterhorn Cloud setup.",
+    ],
   };
 }
 
@@ -43,6 +94,11 @@ export async function buildBackendTeamAccess(
   };
   const allTokens = [builtInToken, ...storedTokens];
   const byScope = countByScope(allTokens);
+  const cloudTeams = capability(
+    "needs_setup",
+    "Cloud teams",
+    "Durable teammate invites, shared cloud workspaces, and org permissions require Matterhorn Cloud setup.",
+  );
 
   return {
     success: true,
@@ -53,6 +109,8 @@ export async function buildBackendTeamAccess(
       name: workspace.name,
       type: workspace.workspaceType,
     },
+    sharingMode: buildSharingMode(cloudTeams),
+    scopeCapabilities: buildScopeCapabilities(),
     localAccess: {
       ...capability(
         "working",
@@ -64,11 +122,7 @@ export async function buildBackendTeamAccess(
       byScope,
       tokens: allTokens,
     },
-    cloudTeams: capability(
-      "needs_setup",
-      "Cloud teams",
-      "Durable teammate invites, shared cloud workspaces, and org permissions require Matterhorn Cloud setup.",
-    ),
+    cloudTeams,
     policy: {
       secretsReturned: false,
       hostProtected: true,
@@ -88,6 +142,8 @@ export async function buildBackendTeamAccessSummary(
     version: full.version,
     generatedAt: full.generatedAt,
     workspace: full.workspace,
+    sharingMode: full.sharingMode,
+    scopeCapabilities: full.scopeCapabilities,
     localAccess: {
       status: full.localAccess.status,
       label: full.localAccess.label,

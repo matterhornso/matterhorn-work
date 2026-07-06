@@ -751,7 +751,9 @@ function TeamAccessControls(props: {
   if (!props.isOpen) {
     return (
       <div className="flex flex-col gap-2 px-1 py-3 text-sm text-dls-secondary sm:flex-row sm:items-center sm:justify-between">
-        <span>{tokenCount} local access token{tokenCount === 1 ? "" : "s"}. Token details stay host-protected.</span>
+        <span>
+          {props.summary?.sharingMode.label ?? "Local token sharing"}: {tokenCount} local access token{tokenCount === 1 ? "" : "s"}. Token details stay host-protected.
+        </span>
         <Button variant="ghost" size="sm" className="w-fit px-2 text-xs" onClick={props.onOpen}>
           Manage tokens
         </Button>
@@ -784,13 +786,28 @@ function TeamAccessControls(props: {
         <div className="min-w-0">
           <p className="text-sm font-medium text-dls-text">Local access tokens</p>
           <p className="mt-0.5 text-xs leading-5 text-dls-secondary">
-            Create a viewer or collaborator token for this local workspace server.
+            {props.summary?.sharingMode.description ?? "Create a viewer or collaborator token for this local workspace server."}
           </p>
         </div>
         <span className="ml-auto text-xs text-dls-secondary">
           {sharedTokens.length || sharedCount} shared
         </span>
       </div>
+
+      {props.summary?.scopeCapabilities ? (
+        <div className="mt-3 grid gap-2 text-xs leading-5 text-dls-secondary sm:grid-cols-2">
+          {(["viewer", "collaborator"] as const).map((item) => {
+            const capability = props.summary?.scopeCapabilities[item];
+            if (!capability) return null;
+            return (
+              <div key={item} className="rounded-md bg-dls-surface/55 px-2.5 py-2">
+                <p className="font-medium text-dls-text">{capability.label}</p>
+                <p className="mt-0.5">{capability.canWriteWorkspace ? "Can read and write workspace data." : "Read-only workspace access."}</p>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="flex rounded-lg bg-dls-surface/70 p-0.5">
@@ -1297,7 +1314,7 @@ export function SettingsOverviewView(props: {
               <Row
                 label="Teams"
                 hint={teamAccessSummaryQuery.data
-                  ? `${teamAccessSummaryQuery.data.localAccess.tokenCount} local access tokens. Owners ${teamAccessSummaryQuery.data.localAccess.byScope.owner}; collaborators ${teamAccessSummaryQuery.data.localAccess.byScope.collaborator}; viewers ${teamAccessSummaryQuery.data.localAccess.byScope.viewer}. Cloud teams: ${backendCapabilityLabel(teamAccessSummaryQuery.data.cloudTeams.status)}.`
+                  ? `${teamAccessSummaryQuery.data.sharingMode.label}. ${teamAccessSummaryQuery.data.localAccess.tokenCount} local access tokens. Owners ${teamAccessSummaryQuery.data.localAccess.byScope.owner}; collaborators ${teamAccessSummaryQuery.data.localAccess.byScope.collaborator}; viewers ${teamAccessSummaryQuery.data.localAccess.byScope.viewer}. Cloud teams: ${backendCapabilityLabel(teamAccessSummaryQuery.data.cloudTeams.status)}.`
                   : teamAccessSummaryQuery.isLoading
                     ? "Loading local access status."
                     : summarizeCapability(backendCapabilities.teams)}

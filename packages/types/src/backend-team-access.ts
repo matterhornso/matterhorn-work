@@ -13,6 +13,32 @@ export interface MatterhornTeamAccessTokenDescriptor {
   source: "built_in_client_token" | "token_store";
 }
 
+export interface MatterhornTeamAccessSharingMode {
+  current: "local_tokens";
+  label: string;
+  description: string;
+  sameInterface: true;
+  durableCloudTeams: false;
+  requiresReachableLocalServer: true;
+  cloudTeamsStatus: MatterhornCapability["status"];
+  limitations: string[];
+}
+
+export interface MatterhornTeamAccessScopeCapability {
+  scope: MatterhornTeamTokenScope;
+  label: string;
+  description: string;
+  canReadWorkspace: boolean;
+  canWriteWorkspace: boolean;
+  canManageLocalTokens: boolean;
+  hostProtected: boolean;
+}
+
+export type MatterhornTeamAccessScopeCapabilities = Record<
+  MatterhornTeamTokenScope,
+  MatterhornTeamAccessScopeCapability
+>;
+
 export interface MatterhornBackendTeamAccessResponse {
   success: true;
   version: typeof MATTERHORN_BACKEND_TEAM_ACCESS_VERSION;
@@ -22,6 +48,8 @@ export interface MatterhornBackendTeamAccessResponse {
     name: string;
     type: "local" | "remote";
   };
+  sharingMode: MatterhornTeamAccessSharingMode;
+  scopeCapabilities: MatterhornTeamAccessScopeCapabilities;
   localAccess: MatterhornCapability & {
     scopes: MatterhornTeamTokenScope[];
     tokenCount: number;
@@ -41,6 +69,8 @@ export interface MatterhornBackendTeamAccessSummaryResponse {
   version: typeof MATTERHORN_BACKEND_TEAM_ACCESS_VERSION;
   generatedAt: string;
   workspace: MatterhornBackendTeamAccessResponse["workspace"];
+  sharingMode: MatterhornTeamAccessSharingMode;
+  scopeCapabilities: MatterhornTeamAccessScopeCapabilities;
   localAccess: MatterhornCapability & {
     scopes: MatterhornTeamTokenScope[];
     tokenCount: number;
