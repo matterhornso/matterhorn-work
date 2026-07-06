@@ -93,6 +93,7 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("LatestActivitySummary");
       expect(source).toContain("setHistoryOpen(true)");
       expect(source).toContain("onOpenHistory");
+      expect(source).toContain("!onOpenHistory ? (");
     });
 
     test("ActivityDetailSheet does not expose raw prompt fields", () => {
@@ -195,6 +196,9 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("Notes, tasks, outputs, and memory across this workspace");
       expect(source).toContain("<RecentActivitySection");
       expect(source).toContain("limit={10}");
+      expect(source).toContain("defaultExpanded={false}");
+      expect(source).toContain("onOpenHistory={openRunHistory}");
+      expect(source).toContain("workspaceRunHistoryRoute");
     });
 
     test("overview-view guards RecentActivitySection with client + workspaceId", () => {
