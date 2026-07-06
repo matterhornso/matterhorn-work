@@ -224,9 +224,18 @@ describe("project data ledger routes", () => {
     expect(result.payload.manifest.filters.source).toBe("feedback");
     expect(result.payload.manifest.filters.limit).toBe(50);
     expect(result.payload.manifest.includes).toEqual(["feedback"]);
+    expect(result.payload.manifest.backendContext.included).toBe(true);
+    expect(result.payload.manifest.backendContext.version).toBe("matterhorn.backend.control-plane.v1");
     expect(result.payload.manifest.trainingUse).toBe("none_by_default");
     expect(result.payload.manifest.feedbackUse).toBe("eval_routing_product_quality_only");
+    expect(result.payload.backend.controlPlane.version).toBe("matterhorn.backend.control-plane.v1");
+    expect(result.payload.backend.controlPlane.summary.totalFeatures).toBeGreaterThan(0);
+    expect(result.payload.backend.controlPlane.privacy.secretsReturned).toBe(false);
+    expect(result.payload.backend.controlPlane.capabilities).toBeUndefined();
+    expect(result.payload.backend.controlPlane.models).toBeUndefined();
+    expect(result.payload.backend.controlPlane.dataMap).toBeUndefined();
     expect(result.payload.warnings.join(" ")).toContain("redacted");
+    expect(result.payload.warnings.join(" ")).toContain("sanitized control-plane summary");
     expect(result.payload.ledger.items.every((item: { source: string }) => item.source === "feedback")).toBe(true);
 
     const serialized = JSON.stringify(result.payload);

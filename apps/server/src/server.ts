@@ -4231,8 +4231,17 @@ function createRoutes(
 
   addRoute(routes, "GET", "/workspace/:id/data-ledger/export", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
+    const controlPlane = await buildWorkspaceBackendControlPlane(config, workspace, memoryVault);
     return jsonResponse(await buildProjectDataLedgerExport({
       workspace,
+      backendControlPlane: {
+        version: controlPlane.version,
+        generatedAt: controlPlane.generatedAt,
+        workspace: controlPlane.workspace,
+        summary: controlPlane.summary,
+        versions: controlPlane.versions,
+        privacy: controlPlane.privacy,
+      },
       ...projectDataLedgerOptionsFromUrl(ctx.url),
     }));
   });

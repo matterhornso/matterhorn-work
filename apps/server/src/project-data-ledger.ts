@@ -1,5 +1,6 @@
 import type {
   MatterhornProjectDataLedgerEntry,
+  MatterhornProjectDataLedgerExportControlPlaneSnapshot,
   MatterhornProjectDataLedgerExportResponse,
   MatterhornProjectDataLedgerListOptions,
   MatterhornProjectDataLedgerPolicy,
@@ -15,6 +16,7 @@ import { readProjectFeedbackEntries } from "./project-feedback.js";
 
 type BuildProjectDataLedgerOptions = MatterhornProjectDataLedgerListOptions & {
   workspace: WorkspaceInfo;
+  backendControlPlane?: MatterhornProjectDataLedgerExportControlPlaneSnapshot;
 };
 
 const SECRET_PATTERNS: RegExp[] = [
@@ -247,6 +249,7 @@ export async function buildProjectDataLedgerExport(
   const ledger = await buildProjectDataLedger({ ...options, limit });
   const generatedAt = new Date().toISOString();
   const includes = Array.from(new Set(ledger.items.map((item) => item.source))).sort() as Array<"project_evidence" | "audit" | "feedback">;
+  const backendControlPlane = options.backendControlPlane;
 
   return {
     success: true,
@@ -269,14 +272,21 @@ export async function buildProjectDataLedgerExport(
         to: options.to,
         limit,
       },
+      backendContext: {
+        included: Boolean(backendControlPlane),
+        version: backendControlPlane?.version,
+        generatedAt: backendControlPlane?.generatedAt,
+      },
       includes,
       trainingUse: ledger.policy.trainingUse,
       feedbackUse: ledger.policy.feedbackUse,
       limitations: ledger.policy.limitations,
     },
+    backend: backendControlPlane ? { controlPlane: backendControlPlane } : undefined,
     warnings: [
       "Export payloads are redacted for known secret-shaped text fields.",
       "Chat/session history remains in the OpenCode runtime store and is not fully included in this v1 ledger export.",
+      ...(backendControlPlane ? ["Backend context includes only a sanitized control-plane summary, not tokens, secrets, or full provider payloads."] : []),
     ],
   };
 }
