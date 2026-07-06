@@ -1508,10 +1508,10 @@ function parseProjectEvidenceSource(value: string | null): MatterhornProjectEvid
 
 function parseProjectDataLedgerSource(value: string | null): MatterhornProjectDataLedgerSource | undefined {
   if (!value) return undefined;
-  if (value === "project_evidence" || value === "audit" || value === "feedback") {
+  if (value === "project_evidence" || value === "audit" || value === "opencode_runtime" || value === "feedback") {
     return value;
   }
-  throw new ApiError(400, "invalid_project_data_ledger_source", "source must be project_evidence, audit, or feedback");
+  throw new ApiError(400, "invalid_project_data_ledger_source", "source must be project_evidence, audit, opencode_runtime, or feedback");
 }
 
 function parseProjectDataLedgerKind(value: string | null): MatterhornProjectDataLedgerKind | undefined {

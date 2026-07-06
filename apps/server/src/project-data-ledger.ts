@@ -14,6 +14,7 @@ import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { readAuditEntries } from "./audit.js";
 import { buildAppendOnlyRetentionPolicy, readWorkspaceDataPolicySync } from "./backend-data-policy.js";
 import { readProjectFeedbackEntries } from "./project-feedback.js";
+import { readOpencodeSessionLedgerEntries, type OpencodeSessionLedgerEntry } from "./opencode-db.js";
 
 type BuildProjectDataLedgerOptions = MatterhornProjectDataLedgerListOptions & {
   workspace: WorkspaceInfo;
@@ -205,6 +206,40 @@ function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry
   };
 }
 
+function opencodeSessionToLedgerEntry(
+  entry: OpencodeSessionLedgerEntry,
+  workspace: WorkspaceInfo,
+): MatterhornProjectDataLedgerEntry {
+  const title = scrubString(entry.title);
+  return {
+    id: `opencode:${entry.sessionId}`,
+    workspaceId: workspace.id,
+    source: "opencode_runtime",
+    kind: "chat",
+    timestamp: entry.updatedAt,
+    title: title.value ?? "Chat session",
+    summary: `${entry.messageCount} message${entry.messageCount === 1 ? "" : "s"} (${entry.userMessageCount} user, ${entry.assistantMessageCount} assistant)`,
+    sessionId: entry.sessionId,
+    sessionSlug: entry.slug,
+    href: `/workspace/${encodeURIComponent(workspace.id)}/session/${encodeURIComponent(entry.sessionId)}`,
+    dataClass: "system_event",
+    containsUserContent: false,
+    containsSecrets: "never",
+    retention: "runtime_controlled",
+    exportable: false,
+    deletable: false,
+    redactionApplied: title.redacted,
+    trainingUse: "none",
+    eventType: "opencode.session",
+    metadata: {
+      messageCount: entry.messageCount,
+      userMessageCount: entry.userMessageCount,
+      assistantMessageCount: entry.assistantMessageCount,
+      createdAt: entry.createdAt ?? null,
+    },
+  };
+}
+
 function feedbackToLedgerEntry(entry: MatterhornProjectFeedbackEntry): MatterhornProjectDataLedgerEntry {
   const title = scrubString(`Feedback: ${entry.kind}`);
   const summary = scrubString(entry.comment);
@@ -290,7 +325,7 @@ function ledgerPolicy(workspace: WorkspaceInfo): MatterhornProjectDataLedgerPoli
 
 export async function buildProjectDataLedger(options: BuildProjectDataLedgerOptions): Promise<MatterhornProjectDataLedgerResponse> {
   const limit = Math.max(1, Math.min(options.limit ?? 100, 300));
-  const [evidence, auditEntries, feedbackEntries] = await Promise.all([
+  const [evidence, auditEntries, feedbackEntries, opencodeSessions] = await Promise.all([
     buildProjectEvidenceTimeline({
       workspaceId: options.workspace.id,
       workspaceRoot: options.workspace.path,
@@ -298,11 +333,13 @@ export async function buildProjectDataLedger(options: BuildProjectDataLedgerOpti
     }),
     readAuditEntries(options.workspace.path, options.workspace.id, 300),
     readProjectFeedbackEntries(options.workspace.id, 300),
+    Promise.resolve(readOpencodeSessionLedgerEntries({ workspaceRoot: options.workspace.path, limit: 300 })),
   ]);
 
   const allItems = [
     ...evidence.items.map(evidenceToLedgerEntry),
     ...auditEntries.map(auditToLedgerEntry),
+    ...opencodeSessions.map((entry) => opencodeSessionToLedgerEntry(entry, options.workspace)),
     ...feedbackEntries.map(feedbackToLedgerEntry),
   ]
     .filter((entry) => matchesFilters(entry, options))
@@ -337,7 +374,7 @@ export async function buildProjectDataLedgerExport(
   const limit = Math.max(1, Math.min(options.limit ?? 300, 300));
   const ledger = await buildProjectDataLedger({ ...options, limit });
   const generatedAt = new Date().toISOString();
-  const includes = Array.from(new Set(ledger.items.map((item) => item.source))).sort() as Array<"project_evidence" | "audit" | "feedback">;
+  const includes = Array.from(new Set(ledger.items.map((item) => item.source))).sort() as Array<"project_evidence" | "audit" | "opencode_runtime" | "feedback">;
   const backendControlPlane = options.backendControlPlane;
 
   return {
