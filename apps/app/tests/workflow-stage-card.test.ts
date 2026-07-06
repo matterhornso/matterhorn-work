@@ -146,6 +146,26 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("const evidenceHint =");
     expect(src).toContain("reads:");
   });
+
+  test("focused desk task cards launch the agent instead of hiding a draft", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(src).toContain("sendImmediately: true");
+    expect(src).toContain("setCurrentSidePanel(null)");
+    expect(src).not.toContain("draftedPromptTitle");
+    expect(src).not.toContain("Nothing has");
+    expect(src).not.toContain("Draft ready");
+  });
+
+  test("task launcher route can send the prompt immediately", () => {
+    const src = readAppSource("shell/session-route.tsx");
+
+    expect(src).toContain("sendImmediately");
+    expect(src).toContain("workspaceClient.session.promptAsync");
+    expect(src).toContain("sessionID: session.id");
+    expect(src).toContain("agent: agent || undefined");
+    expect(src).toContain("buildSessionSystemContext(prompt, session.id)");
+  });
 });
 
 describe("LongevityWorkflowStagePreview — uses WorkflowStageCard", () => {

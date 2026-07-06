@@ -2057,6 +2057,43 @@ export function SessionRoute() {
     navigate(target, { state: { workspaceId, sessionId } });
   }, [navigate, selectedSessionId, sidebarActiveWorkspaceId]);
 
+  const buildSessionSystemContext = useCallback(async (text: string, sessionId: string) => {
+    const envRuntimeKey = buildMatterhornEnvRuntimeKey({
+      baseUrl: client?.baseUrl ?? null,
+      pid: matterhornServerHostInfoState?.pid ?? null,
+      port: matterhornServerHostInfoState?.port ?? null,
+    });
+    const envSystemContext = await buildOpenworkEnvSystemContext(client, {
+      cacheKey: sessionId,
+      runtimeKey: envRuntimeKey,
+    });
+
+    // Build wallet session context (Feature 2)
+    const walletContext = wallet.snapshot.isConnected
+      ? `\n\n## Wallet Context\nConnected wallet: ${wallet.snapshot.address}\nChain ID: ${wallet.snapshot.chainId}\nETH: ${wallet.snapshot.ethBalance ?? "unknown"}\nUSDC: ${wallet.snapshot.usdcBalance ?? "unknown"}\nYou can use the wallet MCP tools to check balances, sign messages, and prepare transactions on behalf of the user.`
+      : "";
+
+    // Crypto system prompt injected conditionally when the message is crypto-related.
+    // Bittensor and market read/preview flows are public/external-signer-first
+    // and should not require an EVM wallet connection before the agent can
+    // see the Matterhorn crypto tools and safety rules.
+    const matterhornOrientationPrompt = shouldInjectMatterhornOrientationPrompt(text)
+      ? buildMatterhornOrientationSystemPrompt()
+      : "";
+
+    const cryptoPrompt =
+      shouldInjectCryptoPrompt(text)
+        ? buildCryptoSystemPrompt(
+            wallet.snapshot.isConnected ? wallet.snapshot.address : null,
+            wallet.snapshot.isConnected ? wallet.snapshot.chainId : null,
+            wallet.snapshot.isConnected ? wallet.snapshot.ethBalance : null,
+            wallet.snapshot.isConnected ? wallet.snapshot.usdcBalance : null,
+          )
+        : "";
+
+    return [envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt].filter(Boolean).join("\n") || undefined;
+  }, [client, matterhornServerHostInfoState?.pid, matterhornServerHostInfoState?.port, wallet.snapshot]);
+
   const surfaceProps = useMemo(() => {
     if (!client || !selectedWorkspaceId || !selectedSessionId || !opencodeBaseUrl || !token || !opencodeClient) {
       return null;
@@ -2135,40 +2172,7 @@ export function SessionRoute() {
         }
 
         const parts = await draftToParts(draft, selectedWorkspaceRoot);
-        const envRuntimeKey = buildMatterhornEnvRuntimeKey({
-          baseUrl: client?.baseUrl ?? null,
-          pid: matterhornServerHostInfoState?.pid ?? null,
-          port: matterhornServerHostInfoState?.port ?? null,
-        });
-        const envSystemContext = await buildOpenworkEnvSystemContext(client, {
-          cacheKey: selectedSessionId,
-          runtimeKey: envRuntimeKey,
-        });
-
-        // Build wallet session context (Feature 2)
-        const walletContext = wallet.snapshot.isConnected
-          ? `\n\n## Wallet Context\nConnected wallet: ${wallet.snapshot.address}\nChain ID: ${wallet.snapshot.chainId}\nETH: ${wallet.snapshot.ethBalance ?? "unknown"}\nUSDC: ${wallet.snapshot.usdcBalance ?? "unknown"}\nYou can use the wallet MCP tools to check balances, sign messages, and prepare transactions on behalf of the user.`
-          : "";
-
-        // Crypto system prompt injected conditionally when the message is crypto-related.
-        // Bittensor and market read/preview flows are public/external-signer-first
-        // and should not require an EVM wallet connection before the agent can
-        // see the Matterhorn crypto tools and safety rules.
-        const matterhornOrientationPrompt = shouldInjectMatterhornOrientationPrompt(text)
-          ? buildMatterhornOrientationSystemPrompt()
-          : "";
-
-        const cryptoPrompt =
-          shouldInjectCryptoPrompt(text)
-            ? buildCryptoSystemPrompt(
-                wallet.snapshot.isConnected ? wallet.snapshot.address : null,
-                wallet.snapshot.isConnected ? wallet.snapshot.chainId : null,
-                wallet.snapshot.isConnected ? wallet.snapshot.ethBalance : null,
-                wallet.snapshot.isConnected ? wallet.snapshot.usdcBalance : null,
-              )
-            : "";
-
-        const systemContext = [envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt].filter(Boolean).join("\n") || undefined;
+        const systemContext = await buildSessionSystemContext(text, selectedSessionId);
 
         const result = await opencodeClient.session.promptAsync({
           sessionID: selectedSessionId,
@@ -2259,6 +2263,7 @@ export function SessionRoute() {
       },
     };
   }, [
+    buildSessionSystemContext,
     client,
     compactModelPickerOpen,
     handleOpenSettings,
@@ -2949,6 +2954,7 @@ export function SessionRoute() {
             const workspacePath = workspace.path?.trim() || undefined;
             const title = options?.title?.trim();
             const agent = options?.agent?.trim();
+            const sendImmediately = Boolean(options?.sendImmediately && !selectedModelUnavailable);
             const workspaceClient = createClient(
               endpoint.opencodeBaseUrl,
               workspacePath,
@@ -2966,7 +2972,9 @@ export function SessionRoute() {
                   directory: workspacePath,
                 }).catch(() => undefined);
               }
-              saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
+              if (!sendImmediately) {
+                saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
+              }
               setSelectedAgent(agent || null);
               writeActiveWorkspaceId(workspaceId || null);
               writeLastSessionFor(workspaceId, session.id);
@@ -2976,7 +2984,43 @@ export function SessionRoute() {
                 [workspaceId]: [displaySession as any, ...(current[workspaceId] ?? [])],
               }));
               navigateToWorkspaceSession(workspaceId, session.id);
-              focusPromptSoon();
+              if (!sendImmediately) {
+                focusPromptSoon();
+                if (options?.sendImmediately && selectedModelUnavailable) {
+                  showToast({
+                    title: "Choose a model to start the task",
+                    description: "The task is ready in the composer.",
+                    tone: "warning",
+                    durationMs: 3200,
+                  });
+                }
+                return;
+              }
+
+              try {
+                const systemContext = await buildSessionSystemContext(prompt, session.id);
+                const result = await workspaceClient.session.promptAsync({
+                  sessionID: session.id,
+                  parts: [{ type: "text", text: prompt }],
+                  model: local.prefs.defaultModel ?? undefined,
+                  agent: agent || undefined,
+                  ...(modelVariantValue ? { variant: modelVariantValue } : {}),
+                  ...(systemContext ? { system: systemContext } : {}),
+                });
+                if (result.error) {
+                  throw new Error(serializeSDKError(result.error));
+                }
+                saveSessionDraft(workspaceId, session.id, { text: "", mode: "prompt" });
+              } catch {
+                saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
+                focusPromptSoon();
+                showToast({
+                  title: "Task is ready to send",
+                  description: "The agent did not start automatically. Review the draft and press Ask.",
+                  tone: "warning",
+                  durationMs: 3600,
+                });
+              }
             } catch {
               // Fall back to normal task creation without prompt
               void handleCreateTaskInWorkspace(workspaceId);

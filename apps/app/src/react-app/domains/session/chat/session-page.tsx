@@ -516,7 +516,6 @@ function ProtocolDeskEmptyState({
   const visual = getCustomerProtocolDeskVisual(panel);
   const prompts = PROTOCOL_DESK_SUGGESTED_PROMPTS[panel];
   const draftConfig = getChatDraftConfig(panel);
-  const [draftedPromptTitle, setDraftedPromptTitle] = useState<string | null>(null);
   const safeBoundary = panel === "bittensor"
     ? "Public SS58 reads and unsigned previews only. External Bittensor-compatible signer required."
     : panel === "polymarket"
@@ -581,36 +580,12 @@ function ProtocolDeskEmptyState({
               evidenceHints={[evidenceHint]}
               actionLabel={draftConfig?.confirmCtaLabel ?? "Start task"}
               onAction={() => {
-                setDraftedPromptTitle(item.title);
                 onUsePrompt(item.prompt, item.title);
               }}
             />
           );
         })}
       </div>
-      {draftedPromptTitle ? (
-        <div
-          aria-live="polite"
-          className="flex flex-col gap-2 rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-4 py-3 text-xs leading-5 text-dls-secondary shadow-[inset_0_0_0_1px_rgba(var(--matterhorn-desk-rgb),0.16)] sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div className="min-w-0">
-            <span className="font-semibold uppercase tracking-[0.14em] text-[var(--matterhorn-desk-color)]">
-              {draftConfig?.draftStateLabel ?? "Draft ready"}
-            </span>
-            <p className="mt-1">
-              <span className="font-medium text-dls-text">{draftedPromptTitle}</span> is in the composer. Nothing has
-              been sent. Review or edit it, then press Ask.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="w-fit rounded-full bg-dls-surface/70 px-3 py-1.5 font-semibold text-dls-secondary transition-colors hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
-            onClick={() => setDraftedPromptTitle(null)}
-          >
-            Hide
-          </button>
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -656,7 +631,7 @@ export type SessionPageSidebarProps = {
   onOpenSession: (workspaceId: string, sessionId: string) => void;
   onPrefetchSession?: (workspaceId: string, sessionId: string) => void;
   onCreateTaskInWorkspace: (workspaceId: string) => void;
-  onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string; agent?: string }) => void;
+  onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string; agent?: string; sendImmediately?: boolean }) => void;
   onOpenRenameWorkspace: (workspaceId: string) => void;
   onShareWorkspace: (workspaceId: string) => void;
   onRevealWorkspace: (workspaceId: string) => void;
@@ -1887,9 +1862,22 @@ export function SessionPage(props: SessionPageProps) {
                         panel={focusedProtocolPanel}
                         onBackHome={returnToProjectHome}
                         onUsePrompt={(prompt, title) => {
+                          if (typeof window !== "undefined") {
+                            const state = window.history.state && typeof window.history.state === "object"
+                              ? window.history.state as Record<string, unknown>
+                              : {};
+                            if (state.matterhornFocusedDesk) {
+                              const nextState = { ...state };
+                              delete nextState.matterhornFocusedDesk;
+                              window.history.replaceState(nextState, "", window.location.href);
+                            }
+                          }
+                          focusedDeskHistoryRef.current = null;
+                          setCurrentSidePanel(null);
                           props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, {
                             title,
                             agent: agentIdForDesk(focusedProtocolPanel),
+                            sendImmediately: true,
                           });
                         }}
                       />
