@@ -83,6 +83,7 @@ import {
   workflowOutputReceiptsFromEvidence,
 } from "../artifacts/output-receipts";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
+import { ProjectHistoryPage } from "../../recent-activity/project-history-page";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
@@ -90,7 +91,7 @@ import { useWallet } from "../../wallet/WalletProvider";
 import { useJobCron } from "../../wallet/hooks/useJobCron";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
-import { workspaceNotesRoute } from "../../../shell/workspace-routes";
+import { workspaceNotesRoute, workspaceRunHistoryRoute } from "../../../shell/workspace-routes";
 import { getExtensionId, isMatterhornExtensionEnabled, MATTERHORN_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
 import { dispatchNotesUpdated, useQuickJot } from "../../notes";
 import { cn } from "@/lib/utils";
@@ -646,6 +647,7 @@ export type SessionPageSidebarProps = {
   startupPhase: BootPhase;
   onSelectWorkspace: (workspaceId: string) => Promise<boolean> | boolean | void;
   onOpenWorkspaceHome?: (workspaceId: string) => void;
+  onOpenWorkspaceHistory?: (workspaceId: string) => void;
   onOpenSession: (workspaceId: string, sessionId: string) => void;
   onPrefetchSession?: (workspaceId: string, sessionId: string) => void;
   onCreateTaskInWorkspace: (workspaceId: string) => void;
@@ -668,6 +670,7 @@ export type SessionPageSurfaceProps = Omit<
 
 export type SessionPageProps = {
   selectedSessionId: string | null;
+  workspaceHomeView?: "home" | "history";
   selectedWorkspaceId: string;
   selectedWorkspaceDisplay: {
     id?: string;
@@ -1023,6 +1026,14 @@ export function SessionPage(props: SessionPageProps) {
   const goHome = useCallback(() => {
     props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
   }, [props.selectedWorkspaceId, props.sidebar]);
+
+  const openRunHistory = useCallback(() => {
+    if (props.sidebar.onOpenWorkspaceHistory) {
+      props.sidebar.onOpenWorkspaceHistory(props.selectedWorkspaceId);
+      return;
+    }
+    navigate(workspaceRunHistoryRoute(props.selectedWorkspaceId));
+  }, [navigate, props.selectedWorkspaceId, props.sidebar]);
 
   const copyHomePath = useCallback(async (value: string, label: string) => {
     if (!value.trim()) return;
@@ -1655,7 +1666,9 @@ export function SessionPage(props: SessionPageProps) {
               <h1 className="min-w-0 truncate text-[15px] font-semibold text-dls-text">
                 {showWorkspaceSetupEmptyState
                   ? t("session.create_or_connect_workspace")
-                  : selectedSessionTitle || t("session.default_title")}
+                  : props.workspaceHomeView === "history" && !props.selectedSessionId
+                    ? "Run history"
+                    : selectedSessionTitle || t("session.default_title")}
               </h1>
               {props.selectedSessionId && props.onRenameSession && !showWorkspaceSetupEmptyState ? (
                 <Button
@@ -1854,6 +1867,11 @@ export function SessionPage(props: SessionPageProps) {
                         </div>
                       </div>
                     </div>
+                  ) : props.workspaceHomeView === "history" && !props.selectedSessionId ? (
+                    <ProjectHistoryPage
+                      matterhornServerClient={props.matterhornServerClient}
+                      runtimeWorkspaceId={props.runtimeWorkspaceId}
+                    />
                   ) : activeWorkflowDeskId ? (
                     <WorkflowDeskHomeSurface
                       deskId={activeWorkflowDeskId}
@@ -2031,6 +2049,7 @@ export function SessionPage(props: SessionPageProps) {
                             description="Recent notes, outputs, memory reviews, and desk runs."
                             defaultExpanded={false}
                             onOpenOutputPath={openOutputPathFromActivity}
+                            onOpenHistory={openRunHistory}
                           />
                         ) : null}
                         <HomeCapabilityOverview

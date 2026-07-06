@@ -150,7 +150,7 @@ import { getReactQueryClient } from "../infra/query-client";
 import { useStatusToasts } from "../domains/shell-feedback/status-toasts";
 import { useSessionControlActions } from "../domains/session/control/session-control-actions";
 import { ProjectFeedbackDialog } from "../domains/feedback/project-feedback-dialog";
-import { legacySessionRoute, workspaceNotesRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
+import { legacySessionRoute, workspaceNotesRoute, workspaceRunHistoryRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
 import { WorkspaceProvider } from "./workspace-provider";
 import type { OpenTarget } from "../domains/session/artifacts/open-target";
 import type { SettingsSurfaceProps } from "./settings-route";
@@ -545,6 +545,7 @@ export function SessionRoute() {
   const params = useParams<{ workspaceId?: string; sessionId?: string }>();
   const routeWorkspaceId = params.workspaceId?.trim() || "";
   const selectedSessionId = params.sessionId?.trim() || null;
+  const isWorkspaceHistoryRoute = Boolean(routeWorkspaceId && /\/history\/?$/.test(location.pathname));
   const navigateToWorkspaceSession = useCallback((workspaceId: string, sessionId?: string | null, options?: { replace?: boolean; state?: unknown }) => {
     const id = workspaceId.trim();
     if (!id) {
@@ -2824,6 +2825,7 @@ export function SessionRoute() {
     ) : null}
     <SessionPage
       selectedSessionId={selectedSessionId}
+      workspaceHomeView={isWorkspaceHistoryRoute ? "history" : "home"}
       selectedWorkspaceId={selectedWorkspaceId}
       selectedWorkspaceDisplay={selectedWorkspace ? {
         id: selectedWorkspace.id,
@@ -2932,6 +2934,11 @@ export function SessionRoute() {
           setSelectedAgent(null);
           writeActiveWorkspaceId(workspaceId || null);
           navigateToWorkspaceSession(workspaceId, null);
+        },
+        onOpenWorkspaceHistory: (workspaceId) => {
+          setSelectedAgent(null);
+          writeActiveWorkspaceId(workspaceId || null);
+          navigate(workspaceRunHistoryRoute(workspaceId));
         },
         onOpenSession: (workspaceId, sessionId) => {
           setSelectedAgent(null);

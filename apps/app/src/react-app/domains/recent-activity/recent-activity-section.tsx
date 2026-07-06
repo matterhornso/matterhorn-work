@@ -338,6 +338,8 @@ interface RecentActivitySectionProps {
   defaultExpanded?: boolean;
   /** Optional bridge into the Outputs panel when an activity has output receipts. */
   onOpenOutputPath?: (path: string) => void;
+  /** Optional navigation into the full project history surface. */
+  onOpenHistory?: () => void;
 }
 
 export function RecentActivitySection({
@@ -348,6 +350,7 @@ export function RecentActivitySection({
   description,
   defaultExpanded = true,
   onOpenOutputPath,
+  onOpenHistory,
 }: RecentActivitySectionProps) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(defaultExpanded);
@@ -398,12 +401,18 @@ export function RecentActivitySection({
                 type="button"
                 className="inline-flex items-center gap-1.5 text-xs font-medium text-dls-text transition-colors hover:text-dls-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
                 aria-expanded={historyOpen}
-                onClick={() => setHistoryOpen((open) => !open)}
+                onClick={() => {
+                  if (onOpenHistory) {
+                    onOpenHistory();
+                    return;
+                  }
+                  setHistoryOpen((open) => !open);
+                }}
               >
                 <History className="size-3.5" aria-hidden="true" />
-                {historyOpen ? "Hide runs" : "Run history"}
+                {onOpenHistory ? "Run history" : historyOpen ? "Hide runs" : "Run history"}
                 <ChevronDown
-                  className={cn("size-3 transition-transform", historyOpen && "rotate-180")}
+                  className={cn("size-3 transition-transform", !onOpenHistory && historyOpen && "rotate-180")}
                   aria-hidden="true"
                 />
               </button>
@@ -434,7 +443,13 @@ export function RecentActivitySection({
           type="button"
           className="flex w-full min-w-0 items-center gap-3 rounded-lg bg-dls-surface-muted/10 px-3 py-2.5 text-left transition-colors hover:bg-dls-hover/35 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
           aria-expanded={historyOpen}
-          onClick={() => setHistoryOpen(true)}
+          onClick={() => {
+            if (onOpenHistory) {
+              onOpenHistory();
+              return;
+            }
+            setHistoryOpen(true);
+          }}
         >
           <History className="size-3.5 shrink-0 text-dls-secondary" aria-hidden="true" />
           <LatestActivitySummary item={latestItem} count={items.length} />

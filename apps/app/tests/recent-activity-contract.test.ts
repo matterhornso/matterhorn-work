@@ -92,6 +92,7 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("Run history");
       expect(source).toContain("LatestActivitySummary");
       expect(source).toContain("setHistoryOpen(true)");
+      expect(source).toContain("onOpenHistory");
     });
 
     test("ActivityDetailSheet does not expose raw prompt fields", () => {
@@ -124,6 +125,7 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain('title="Project Activity"');
       expect(source).toContain("defaultExpanded={false}");
       expect(source).toContain("onOpenOutputPath={openOutputPathFromActivity}");
+      expect(source).toContain("onOpenHistory={openRunHistory}");
     });
 
     test("session-page guards RecentActivitySection with client + workspaceId", () => {
@@ -131,6 +133,44 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain(
         "props.matterhornServerClient && props.runtimeWorkspaceId ? (",
       );
+    });
+
+    test("Home links compact activity into the full run history route", () => {
+      const source = readAppSource("domains/session/chat/session-page.tsx");
+      const routeSource = readAppSource("shell/workspace-routes.ts");
+      const appRootSource = readAppSource("shell/app-root.tsx");
+      const sessionRouteSource = readAppSource("shell/session-route.tsx");
+
+      expect(routeSource).toContain("workspaceRunHistoryRoute");
+      expect(routeSource).toContain('`/workspace/${encodeURIComponent(workspaceId.trim())}/history`');
+      expect(appRootSource).toContain('path="/workspace/:workspaceId/history"');
+      expect(sessionRouteSource).toContain("isWorkspaceHistoryRoute");
+      expect(sessionRouteSource).toContain('workspaceHomeView={isWorkspaceHistoryRoute ? "history" : "home"}');
+      expect(sessionRouteSource).toContain("onOpenWorkspaceHistory");
+      expect(source).toContain("ProjectHistoryPage");
+      expect(source).toContain("openRunHistory");
+    });
+  });
+
+  describe("Run history page", () => {
+    test("ProjectHistoryPage reads the project data ledger with filtered tabs", () => {
+      const source = readAppSource("domains/recent-activity/project-history-page.tsx");
+      expect(source).toContain("export const PROJECT_HISTORY_FILTERS");
+      expect(source).toContain('label: "Runs", kind: "task"');
+      expect(source).toContain("listProjectDataLedger");
+      expect(source).toContain('queryKey: ["project-history-ledger"');
+      expect(source).toContain("No training by default");
+      expect(source).toContain("Exported");
+    });
+
+    test("ProjectHistoryPage does not expose raw prompts or secret material", () => {
+      const source = readAppSource("domains/recent-activity/project-history-page.tsx");
+      expect(source).not.toContain("rawPrompt");
+      expect(source).not.toContain("entry.prompt");
+      expect(source).not.toContain("seed phrase");
+      expect(source).not.toContain("private key");
+      expect(source).toContain("secret-safe");
+      expect(source).toContain("redactionApplied");
     });
   });
 
