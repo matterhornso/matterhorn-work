@@ -443,6 +443,11 @@ describe("backend control plane routes", () => {
     expect(result.payload.controlPlane.capabilities).toBeUndefined();
     expect(result.payload.controlPlane.models).toBeUndefined();
     expect(result.payload.controlPlane.dataMap).toBeUndefined();
+    expect(result.payload.wallets.families.sui.signing).toBe("client_wallet");
+    expect(result.payload.wallets.families.bittensor.signing).toBe("external_signer");
+    expect(result.payload.teams.localTokenSharing.status).toBe("working");
+    expect(result.payload.teams.cloudTeams.status).toBe("needs_setup");
+    expect(result.payload.security.memoryWriteGuards.status).toBe("working");
     expect(result.payload.models.defaultModel).toMatchObject({
       providerId: "opencode",
       modelId: "big-pickle",

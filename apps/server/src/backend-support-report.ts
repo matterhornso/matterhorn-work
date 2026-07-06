@@ -40,6 +40,9 @@ export async function buildBackendSupportReport(options: {
     filename: `matterhorn-backend-support-${safeExportFilePart(options.workspace.id)}-${generatedAt.slice(0, 10)}.json`,
     workspace: controlPlaneSnapshot.workspace,
     controlPlane: controlPlaneSnapshot,
+    wallets: options.controlPlane.capabilities.wallets,
+    teams: options.controlPlane.capabilities.teams,
+    security: options.controlPlane.capabilities.security,
     models: {
       defaultModel: options.controlPlane.models.defaultModel,
       routing: options.controlPlane.models.routing,
