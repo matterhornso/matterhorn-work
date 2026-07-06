@@ -3267,7 +3267,7 @@ export function SessionRoute() {
       query={modelPickerQuery}
       setQuery={setModelPickerQuery}
       target="default"
-      current={local.prefs.defaultModel ?? ({ providerID: "", modelID: "" } satisfies ModelRef)}
+      current={selectedPromptModel ?? ({ providerID: "", modelID: "" } satisfies ModelRef)}
       onSelect={(next: ModelRef) => {
         local.setPrefs((previous) => ({
           ...previous,
