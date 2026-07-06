@@ -560,6 +560,7 @@ export function SettingsOverviewView(props: {
   const [density, setDensity] = useState<Density>(readDensity());
   const [memoryExportStatus, setMemoryExportStatus] = useState<string | null>(null);
   const [ledgerExportStatus, setLedgerExportStatus] = useState<string | null>(null);
+  const [supportReportStatus, setSupportReportStatus] = useState<string | null>(null);
   const notesWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
   const backendWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
 
@@ -708,6 +709,26 @@ export function SettingsOverviewView(props: {
     }
   }, [props.matterhornServerClient, props.runtimeWorkspaceId]);
 
+  const exportSupportReport = useCallback(async () => {
+    const client = props.matterhornServerClient;
+    const workspaceId = props.runtimeWorkspaceId?.trim();
+    if (!client || !workspaceId) {
+      setSupportReportStatus("Open a connected workspace to download a support report.");
+      return;
+    }
+    setSupportReportStatus("Preparing report...");
+    try {
+      const report = await client.workspaceBackendSupportReport(workspaceId);
+      downloadJsonFile(
+        report.filename || `matterhorn-backend-support-${safeDownloadFilePart(workspaceId)}-${new Date().toISOString().slice(0, 10)}.json`,
+        JSON.stringify(report, null, 2),
+      );
+      setSupportReportStatus("Downloaded backend support report.");
+    } catch (error) {
+      setSupportReportStatus(error instanceof Error ? error.message : "Could not download the support report.");
+    }
+  }, [props.matterhornServerClient, props.runtimeWorkspaceId]);
+
   const openMemoryReview = useCallback(() => {
     if (!notesWorkspaceId) return;
     setSidePanelState(GLOBAL_HOME_SIDE_PANEL_KEY, "memory");
@@ -843,21 +864,35 @@ export function SettingsOverviewView(props: {
               />
               <div className="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Download a redacted workspace ledger snapshot for review or support.
+                  Download redacted project evidence or a compact backend support report.
                 </p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
-                  onClick={() => void exportProjectLedger()}
-                  disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId || projectDataLedgerQuery.isLoading}
-                >
-                  <Download className="size-3.5" />
-                  Export ledger JSON
-                </Button>
+                <div className="flex flex-wrap items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
+                    onClick={() => void exportSupportReport()}
+                    disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId || workspaceBackendControlPlaneQuery.isLoading}
+                  >
+                    <Download className="size-3.5" />
+                    Support report
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
+                    onClick={() => void exportProjectLedger()}
+                    disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId || projectDataLedgerQuery.isLoading}
+                  >
+                    <Download className="size-3.5" />
+                    Ledger JSON
+                  </Button>
+                </div>
               </div>
-              {ledgerExportStatus ? (
-                <p className="px-1 py-2 text-xs leading-5 text-dls-secondary">{ledgerExportStatus}</p>
+              {supportReportStatus || ledgerExportStatus ? (
+                <p className="px-1 py-2 text-xs leading-5 text-dls-secondary">
+                  {[supportReportStatus, ledgerExportStatus].filter(Boolean).join(" ")}
+                </p>
               ) : null}
               <Row
                 label="Wallet families"

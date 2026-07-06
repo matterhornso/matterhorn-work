@@ -183,8 +183,10 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("settings-project-data-ledger");
     expect(source).toContain("client.listProjectDataLedger(workspaceId");
     expect(source).toContain("client.exportProjectDataLedger(workspaceId");
+    expect(source).toContain("client.workspaceBackendSupportReport(workspaceId)");
     expect(source).toContain("summarizeModelRoutingPolicy");
     expect(source).toContain("Backend status");
+    expect(source).toContain("Support report");
     expect(source).toContain("Workspace readiness");
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
