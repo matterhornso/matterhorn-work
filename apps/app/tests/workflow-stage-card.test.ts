@@ -147,6 +147,16 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("reads:");
   });
 
+  test("keeps desk safety copy behind an info popover", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(src).toContain("deskSafetyInfo");
+    expect(src).toContain("desk safety info");
+    expect(src).toContain("<PopoverTrigger");
+    expect(src).toContain("<PopoverContent");
+    expect(src).not.toContain("Boundary:");
+  });
+
   test("focused desk task cards launch the agent instead of hiding a draft", () => {
     const src = readAppSource("domains/session/chat/session-page.tsx");
 

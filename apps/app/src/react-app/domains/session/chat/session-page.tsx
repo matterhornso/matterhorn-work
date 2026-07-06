@@ -516,7 +516,7 @@ function ProtocolDeskEmptyState({
   const visual = getCustomerProtocolDeskVisual(panel);
   const prompts = PROTOCOL_DESK_SUGGESTED_PROMPTS[panel];
   const draftConfig = getChatDraftConfig(panel);
-  const safeBoundary = panel === "bittensor"
+  const deskSafetyInfo = panel === "bittensor"
     ? "Public SS58 reads and unsigned previews only. External Bittensor-compatible signer required."
     : panel === "polymarket"
       ? "Compliance-gated handoff only. Can submit: No. Live submission: Off. External wallet/client required."
@@ -546,9 +546,31 @@ function ProtocolDeskEmptyState({
               <ProtocolLogo venue={panel} size={52} />
             </span>
             <div className="min-w-0">
-              <h2 className="text-xl font-semibold tracking-[-0.02em] text-dls-text sm:text-2xl">
-                {visual?.displayName ?? panel} desk
-              </h2>
+              <div className="flex min-w-0 items-center gap-2">
+                <h2 className="text-xl font-semibold tracking-[-0.02em] text-dls-text sm:text-2xl">
+                  {visual?.displayName ?? panel} desk
+                </h2>
+                <Popover>
+                  <PopoverTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label={`${visual?.displayName ?? panel} desk safety info`}
+                        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-dls-border text-[11px] font-semibold leading-none text-dls-secondary transition-colors hover:border-[var(--matterhorn-desk-color)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                      >
+                        i
+                      </button>
+                    }
+                  />
+                  <PopoverContent
+                    side="right"
+                    align="start"
+                    className="w-72 rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-left text-xs leading-5 text-dls-secondary shadow-none"
+                  >
+                    <p>{deskSafetyInfo}</p>
+                  </PopoverContent>
+                </Popover>
+              </div>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
                 {visual?.shortDescription ?? "Focused protocol workspace."} Choose a task to start this desk agent.
                 Matterhorn keeps signing and live submission outside the app.
@@ -557,10 +579,6 @@ function ProtocolDeskEmptyState({
           </div>
         </div>
       </div>
-
-      <p className="text-sm leading-6 text-dls-secondary">
-        <span className="font-semibold text-[var(--matterhorn-desk-color)]">Boundary:</span> {safeBoundary}
-      </p>
 
       <div className="matterhorn-focused-desk-prompt-list space-y-2" aria-label="Agent tasks">
         {prompts.map((item) => {
