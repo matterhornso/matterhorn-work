@@ -39,7 +39,7 @@ function taskEventsDir(): string {
   return join(resolveOpenworkDataDir(), "task-events");
 }
 
-function taskEventsPath(workspaceId: string): string {
+export function taskEventsPath(workspaceId: string): string {
   return join(taskEventsDir(), `${workspaceId}.jsonl`);
 }
 

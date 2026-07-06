@@ -17,6 +17,10 @@ import type {
   MatterhornProjectEvidenceResponse,
 } from "@matterhorn-work/types/project-evidence";
 import type {
+  MatterhornBackendCapabilitiesResponse,
+  MatterhornWorkspaceDataMapResponse,
+} from "@matterhorn-work/types/backend-capabilities";
+import type {
   MatterhornWorkflowRun,
   MatterhornWorkflowRunListItem,
   MatterhornWorkflowRunStageInput,
@@ -1130,6 +1134,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       requestJson<MatterhornRuntimeSnapshot>(baseUrl, "/runtime/versions", { token, hostToken, timeoutMs: timeouts.status }),
     status: () => requestJson<MatterhornServerDiagnostics>(baseUrl, "/status", { token, hostToken, timeoutMs: timeouts.status }),
     capabilities: () => requestJson<MatterhornServerCapabilities>(baseUrl, "/capabilities", { token, hostToken, timeoutMs: timeouts.capabilities }),
+    backendCapabilities: () =>
+      requestJson<MatterhornBackendCapabilitiesResponse>(baseUrl, "/api/backend/capabilities", {
+        token,
+        hostToken,
+        timeoutMs: timeouts.capabilities,
+      }),
     googleWorkspaceStatus: () => requestJson<GoogleWorkspaceAuthStatus>(baseUrl, "/experimental/google-workspace/status", { token, hostToken, timeoutMs: timeouts.status }),
     googleWorkspaceConnectStart: () => requestJson<GoogleWorkspaceConnectStart>(baseUrl, "/experimental/google-workspace/connect/start", { token, hostToken, method: "POST", timeoutMs: timeouts.status }),
     googleWorkspaceConnectStatus: (flowId: string) => requestJson<GoogleWorkspaceConnectStatus>(baseUrl, `/experimental/google-workspace/connect/status/${encodeURIComponent(flowId)}`, { token, hostToken, timeoutMs: timeouts.status }),
@@ -1457,6 +1467,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         { token, hostToken },
       );
     },
+    workspaceDataMap: (workspaceId: string) =>
+      requestJson<MatterhornWorkspaceDataMapResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
     listNotes: (workspaceId: string, options?: MatterhornNoteListOptions) => {
       const query = new URLSearchParams();
       if (options?.query?.trim()) query.set("query", options.query.trim());

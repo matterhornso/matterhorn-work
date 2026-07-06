@@ -35,6 +35,16 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useQuickJot } from "../../notes";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
+import {
+  backendCapabilityLabel,
+  backendCapabilityTone,
+  storageLocationLabel,
+  summarizeCapability,
+  summarizeModelSource,
+  walletFamilySummary,
+  workspaceDataPolicySummary,
+  type BackendCapabilityTone,
+} from "../backend-capability-status";
 import { GLOBAL_HOME_SIDE_PANEL_KEY, useUiStateStore } from "../../../shell/ui-state-store";
 import { workspaceNotesRoute, workspaceSessionRoute } from "../../../shell/workspace-routes";
 import type { SettingsTab } from "../../../../app/types";
@@ -110,7 +120,7 @@ function Row(props: { label: string; value: ReactNode; hint?: string }) {
   );
 }
 
-function StatusBadge(props: { children: ReactNode; tone?: "ready" | "setup" | "preview" | "desktop" | "cloud" }) {
+function StatusBadge(props: { children: ReactNode; tone?: BackendCapabilityTone | "desktop" | "cloud" }) {
   const tone =
     props.tone === "ready"
       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
@@ -118,14 +128,28 @@ function StatusBadge(props: { children: ReactNode; tone?: "ready" | "setup" | "p
         ? "border-sky-500/30 bg-sky-500/10 text-sky-300"
         : props.tone === "preview"
           ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-          : props.tone === "cloud"
-            ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
-            : "border-dls-border bg-background text-dls-secondary";
+          : props.tone === "error"
+            ? "border-red-500/30 bg-red-500/10 text-red-300"
+            : props.tone === "cloud"
+              ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
+              : "border-dls-border bg-background text-dls-secondary";
   return (
     <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${tone}`}>
       {props.children}
     </span>
   );
+}
+
+function CapabilityBadge(props: { status?: string | null }) {
+  const status =
+    props.status === "working" ||
+    props.status === "needs_setup" ||
+    props.status === "preview" ||
+    props.status === "unsupported" ||
+    props.status === "error"
+      ? props.status
+      : "error";
+  return <StatusBadge tone={backendCapabilityTone(status)}>{backendCapabilityLabel(status)}</StatusBadge>;
 }
 
 function CopyButton(props: { text: string; label: string }) {
@@ -300,6 +324,29 @@ export function SettingsOverviewView(props: {
     },
   });
 
+  const backendCapabilitiesQuery = useQuery({
+    queryKey: ["settings-backend-capabilities"],
+    enabled: Boolean(props.matterhornServerClient),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client) throw new Error("Matterhorn Work engine is offline.");
+      return client.backendCapabilities();
+    },
+    staleTime: 30_000,
+  });
+
+  const workspaceDataMapQuery = useQuery({
+    queryKey: ["settings-workspace-data-map", props.runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to see where project data is stored.");
+      return client.workspaceDataMap(workspaceId);
+    },
+    staleTime: 30_000,
+  });
+
   const openMemoryReview = useCallback(() => {
     if (!notesWorkspaceId) return;
     setSidePanelState(GLOBAL_HOME_SIDE_PANEL_KEY, "memory");
@@ -352,6 +399,70 @@ export function SettingsOverviewView(props: {
               Open account settings
             </Button>
           </div>
+        </SettingsCard>
+
+        {/* Backend control plane */}
+        <SettingsCard
+          icon={<ShieldCheck size={18} />}
+          title="Backend status"
+          description="What the local Matterhorn Work engine reports for this workspace."
+          status={
+            backendCapabilitiesQuery.data ? (
+              <CapabilityBadge status={backendCapabilitiesQuery.data.security.memoryWriteGuards.status} />
+            ) : backendCapabilitiesQuery.isLoading ? (
+              <StatusBadge>Loading</StatusBadge>
+            ) : (
+              <StatusBadge tone="error">Unavailable</StatusBadge>
+            )
+          }
+        >
+          {backendCapabilitiesQuery.data ? (
+            <>
+              <Row
+                label="Model routing"
+                hint={`Default: ${summarizeModelSource(backendCapabilitiesQuery.data)}. Model list source: ${backendCapabilitiesQuery.data.models.providerListSource}.`}
+                value={<CapabilityBadge status={backendCapabilitiesQuery.data.models.status} />}
+              />
+              <Row
+                label="Notes and memory"
+                hint={`Notes: ${summarizeCapability(backendCapabilitiesQuery.data.notes)} Memory: ${summarizeCapability(backendCapabilitiesQuery.data.memory)}`}
+                value={
+                  <div className="flex flex-wrap justify-end gap-1.5">
+                    <CapabilityBadge status={backendCapabilitiesQuery.data.notes.status} />
+                    <CapabilityBadge status={backendCapabilitiesQuery.data.memory.status} />
+                  </div>
+                }
+              />
+              <Row
+                label="Evidence ledger"
+                hint={`Sources: ${backendCapabilitiesQuery.data.evidence.sources.join(", ")}.`}
+                value={<CapabilityBadge status={backendCapabilitiesQuery.data.evidence.status} />}
+              />
+              <Row
+                label="Wallet families"
+                hint={walletFamilySummary(backendCapabilitiesQuery.data)
+                  .map((wallet) => `${wallet.family}: ${backendCapabilityLabel(wallet.status)}`)
+                  .join(" · ")}
+                value={<CapabilityBadge status={backendCapabilitiesQuery.data.wallets.status} />}
+              />
+              <Row
+                label="Teams"
+                hint={summarizeCapability(backendCapabilitiesQuery.data.teams)}
+                value={<CapabilityBadge status={backendCapabilitiesQuery.data.teams.status} />}
+              />
+              <Row
+                label="Write guards"
+                hint={summarizeCapability(backendCapabilitiesQuery.data.security.memoryWriteGuards)}
+                value={<CapabilityBadge status={backendCapabilitiesQuery.data.security.memoryWriteGuards.status} />}
+              />
+            </>
+          ) : (
+            <div className="px-1 py-3 text-sm leading-6 text-dls-secondary">
+              {backendCapabilitiesQuery.isLoading
+                ? "Loading backend status..."
+                : "The Matterhorn Work engine is offline or did not return a capability report."}
+            </div>
+          )}
         </SettingsCard>
 
         {/* 1b. Task History */}
@@ -631,19 +742,54 @@ export function SettingsOverviewView(props: {
           icon={<Lock size={18} />}
           title="Privacy &amp; Data"
           description="Where your data lives, and what is never stored."
-          status={<StatusBadge tone="ready">Ready</StatusBadge>}
+          status={workspaceDataMapQuery.data ? <StatusBadge tone="ready">Workspace mapped</StatusBadge> : <StatusBadge>Local first</StatusBadge>}
         >
-          <p className="text-sm leading-6 text-dls-secondary">
-            Your chats, generated artifacts, and on-chain receipts are stored <span className="font-medium text-dls-text">locally on your machine</span> by default.
-          </p>
-          <ul className="flex list-none flex-col divide-y divide-dls-border/45 text-sm leading-6 text-dls-secondary">
-            <li className="px-1 py-3">
-              <span className="font-medium text-dls-text">Stored locally:</span> chat history, artifacts, and public on-chain receipts/links.
-            </li>
-            <li className="px-1 py-3">
-              <span className="font-medium text-dls-text">Never stored:</span> seed phrases, private keys, API secrets, raw signatures, or wallet exports.
-            </li>
-          </ul>
+          {workspaceDataMapQuery.data ? (
+            <>
+              <Row
+                label="Chat history"
+                hint={storageLocationLabel(workspaceDataMapQuery.data.stores.chat)}
+                value={<CapabilityBadge status={workspaceDataMapQuery.data.stores.chat.status} />}
+              />
+              <Row
+                label="Notes"
+                hint={storageLocationLabel(workspaceDataMapQuery.data.stores.notes)}
+                value={<CapabilityBadge status={workspaceDataMapQuery.data.stores.notes.status} />}
+              />
+              <Row
+                label="Memory"
+                hint={storageLocationLabel(workspaceDataMapQuery.data.stores.memory)}
+                value={<CapabilityBadge status={workspaceDataMapQuery.data.stores.memory.status} />}
+              />
+              <Row
+                label="Outputs"
+                hint={storageLocationLabel(workspaceDataMapQuery.data.stores.outputs)}
+                value={<CapabilityBadge status={workspaceDataMapQuery.data.stores.outputs.status} />}
+              />
+              <Row
+                label="Training use"
+                hint={workspaceDataPolicySummary(workspaceDataMapQuery.data)}
+                value={<CapabilityBadge status={workspaceDataMapQuery.data.policy.export.status} />}
+              />
+              <p className="px-1 py-3 text-xs leading-5 text-dls-secondary">
+                Matterhorn Work never asks for or stores seed phrases, private keys, API secrets, raw signatures, or wallet exports.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm leading-6 text-dls-secondary">
+                Your chats, generated artifacts, and on-chain receipts are stored <span className="font-medium text-dls-text">locally on your machine</span> by default.
+              </p>
+              <ul className="flex list-none flex-col divide-y divide-dls-border/45 text-sm leading-6 text-dls-secondary">
+                <li className="px-1 py-3">
+                  <span className="font-medium text-dls-text">Stored locally:</span> chat history, artifacts, and public on-chain receipts/links.
+                </li>
+                <li className="px-1 py-3">
+                  <span className="font-medium text-dls-text">Never stored:</span> seed phrases, private keys, API secrets, raw signatures, or wallet exports.
+                </li>
+              </ul>
+            </>
+          )}
         </SettingsCard>
 
         {/* 9. About */}

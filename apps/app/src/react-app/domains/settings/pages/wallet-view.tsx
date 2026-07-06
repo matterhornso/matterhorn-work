@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import { useState, useCallback, useMemo } from "react";
 import { useAccount, useBalance, useConnect, useDisconnect, useChainId, useSwitchChain } from "wagmi";
+import { useQuery } from "@tanstack/react-query";
 import { formatUnits } from "viem";
 import {
   Wallet,
@@ -26,6 +27,11 @@ import type { WalletStore } from "../../wallet/state/wallet-store";
 import { useWalletStore } from "../../wallet/state/wallet-store";
 import { CHAIN_NAMES, CHAIN_LIST } from "../../../infra/chains";
 import { SettingsSection, SettingsSectionHeader, SettingsSectionHeaderTitle, SettingsSectionHeaderDescription, SettingsStack } from "../settings-section";
+import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
+import {
+  backendCapabilityLabel,
+  walletFamilySummary,
+} from "../backend-capability-status";
 import {
   getWalletRuntimeCapability,
   type WalletRuntimeCapability,
@@ -50,10 +56,13 @@ function txStatusIcon(status: string) {
 
 export type WalletSettingsViewProps = {
   store: WalletStore;
+  matterhornServerClient?: MatterhornServerClient | null;
   onTxApprove?: (tx: { to: string; value: string; data?: string; chainId: number }) => void;
   onTxReject?: () => void;
   compact?: boolean;
 };
+
+type BackendWalletFamilyRow = ReturnType<typeof walletFamilySummary>[number];
 
 function WalletBoundaryList({ safetyCopy }: {
   safetyCopy: WalletRuntimeCapability["safetyCopy"];
@@ -124,8 +133,10 @@ function evmConnectorStatusLabel(state: string, connected: boolean): { label: st
 function WalletProtocolSupportMap(props: {
   capability: WalletRuntimeCapability;
   connected: boolean;
+  backendWallets?: BackendWalletFamilyRow[];
 }) {
   const evm = evmConnectorStatusLabel(props.capability.evmConnectorState, props.connected);
+  const backendSui = props.backendWallets?.find((wallet) => wallet.family === "Sui");
   const evmDetail = props.capability.supportsInjectedEvm
     ? "Browser extension wallets such as MetaMask or Rabby can appear when installed and allowed."
     : "Desktop does not use injected browser wallets. Use public addresses and external signer handoffs; WalletConnect or deep-link bridge is planned.";
@@ -136,6 +147,18 @@ function WalletProtocolSupportMap(props: {
       detail: evmDetail,
       tone: evm.tone,
     },
+    ...(backendSui ? [{
+      label: "Sui wallet",
+      status: backendCapabilityLabel(backendSui.status),
+      detail: backendSui.label,
+      tone: backendSui.status === "unsupported"
+        ? "text-gray-400 bg-gray-500/10"
+        : backendSui.status === "preview"
+          ? "text-amber-300 bg-amber-500/10"
+          : backendSui.status === "working"
+            ? "text-emerald-300 bg-emerald-500/10"
+            : "text-sky-300 bg-sky-500/10",
+    }] : []),
     ...(Object.entries(props.capability.protocols) as [WalletProtocol, WalletProtocolCapability][]).map(
       ([protocol, cap]) => {
         const { label, detail, tone } = protocolLabelAndDetail(protocol, cap);
@@ -264,7 +287,7 @@ function WalletRailMetric(props: { label: string; value: string }) {
   );
 }
 
-export function WalletSettingsView({ compact = false, store, onTxApprove, onTxReject }: WalletSettingsViewProps) {
+export function WalletSettingsView({ compact = false, matterhornServerClient, store, onTxApprove, onTxReject }: WalletSettingsViewProps) {
   const state = useWalletStore(store);
   const { address: wagmiAddress } = useAccount();
   const { connect, connectors } = useConnect();
@@ -354,6 +377,18 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
       : "web";
   const capability = useMemo(() => getWalletRuntimeCapability(runtime), [runtime]);
   const noConnectorCopy = useMemo(() => noEvmConnectorCopy(capability), [capability]);
+  const backendCapabilitiesQuery = useQuery({
+    queryKey: ["wallet-backend-capabilities"],
+    enabled: Boolean(matterhornServerClient),
+    queryFn: async () => {
+      if (!matterhornServerClient) throw new Error("Matterhorn Work engine is offline.");
+      return matterhornServerClient.backendCapabilities();
+    },
+    staleTime: 30_000,
+  });
+  const backendWallets = backendCapabilitiesQuery.data
+    ? walletFamilySummary(backendCapabilitiesQuery.data)
+    : undefined;
 
   const runtimeBadgeLabel: Record<WalletRuntime, string> = {
     web: "Web",
@@ -453,7 +488,7 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
           </section>
         )}
 
-        <WalletProtocolSupportMap capability={capability} connected={state.isConnected} />
+        <WalletProtocolSupportMap capability={capability} connected={state.isConnected} backendWallets={backendWallets} />
         <WalletRuntimeExplainer capability={capability} compact />
 
         <WalletBoundaryList safetyCopy={capability.safetyCopy} />
@@ -524,7 +559,7 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
               Current read, preview, and signing limits.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeader>
-          <WalletProtocolSupportMap capability={capability} connected={state.isConnected} />
+          <WalletProtocolSupportMap capability={capability} connected={state.isConnected} backendWallets={backendWallets} />
           <WalletRuntimeExplainer capability={capability} />
           <WalletBoundaryList safetyCopy={capability.safetyCopy} />
         </SettingsSection>

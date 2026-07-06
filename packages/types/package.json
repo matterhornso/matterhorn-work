@@ -62,6 +62,11 @@
       "types": "./src/project-evidence.ts",
       "development": "./src/project-evidence.ts",
       "default": "./src/project-evidence.ts"
+    },
+    "./backend-capabilities": {
+      "types": "./src/backend-capabilities.ts",
+      "development": "./src/backend-capabilities.ts",
+      "default": "./src/backend-capabilities.ts"
     }
   },
   "files": [
