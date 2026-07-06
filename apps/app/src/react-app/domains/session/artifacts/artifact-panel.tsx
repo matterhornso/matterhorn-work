@@ -1,13 +1,14 @@
 /** @jsxImportSource react */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, ExternalLink, FolderOpen, NotebookPen, X } from "lucide-react";
+import { Copy, Download, ExternalLink, FolderOpen, NotebookPen, Trash2, X } from "lucide-react";
 
 import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
 import { openDesktopPath } from "@/app/lib/desktop";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, formatFileSize } from "@/lib/utils";
+import { ConfirmModal } from "../../../design-system/modals/confirm-modal";
 import { getArtifactNoteContext } from "./artifact-note-context";
 import { ArtifactIcon } from "./artifact-icon";
 import type { BinaryData, Data, OpenTarget, TextData } from "./open-target";
@@ -35,6 +36,7 @@ type ArtifactPanelProps = {
   onSelectTarget?: (target: OpenTarget) => void;
   onAddNote?: (artifactPath: string, desk?: string, sessionSlug?: string) => void;
   onRevealPath?: (path: string, label: string) => Promise<void> | void;
+  onDeletedTarget?: (target: OpenTarget) => void;
   onClose: () => void;
 };
 
@@ -67,12 +69,14 @@ export function ArtifactPanel({
   onSelectTarget,
   onAddNote,
   onRevealPath,
+  onDeletedTarget,
   onClose,
 }: ArtifactPanelProps) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [copiedPath, setCopiedPath] = useState(false);
+  const [pendingDeleteTarget, setPendingDeleteTarget] = useState<OpenTarget | null>(null);
   const isDirectTextEdit = isTextContent(target) && target.preview === "markdown";
   const externalPathForTarget = useCallback(
     (nextTarget: OpenTarget) => (nextTarget.kind === "file" ? absoluteWorkspacePath(workspaceRoot, nextTarget.value) : nextTarget.value),
@@ -98,6 +102,7 @@ export function ArtifactPanel({
     () => outputs.find((output) => output.id === target.id) ?? outputs[0] ?? null,
     [outputs, target.id],
   );
+  const canDeleteTarget = target.kind === "file" && target.exists !== false && normalizeOutputReceiptPath(target.value).startsWith("outputs/");
 
   const { data, error, isError, isLoading } = useQuery<ArtifactQueryState>({
     queryKey: ["artifact-panel", workspaceId, target.id] as const,
@@ -174,6 +179,22 @@ export function ArtifactPanel({
       if (input.kind === "text") {
         setDraft(input.data);
       }
+    },
+  });
+  const deleteOutputMutation = useMutation({
+    mutationFn: async (nextTarget: OpenTarget) => {
+      if (nextTarget.kind !== "file") {
+        throw new Error("Cannot delete non-file output.");
+      }
+      return client.deleteWorkspaceOutput(workspaceId, nextTarget.value);
+    },
+    onSuccess: (_result, deletedTarget) => {
+      queryClient.removeQueries({ queryKey: ["artifact-panel", workspaceId, deletedTarget.id] as const });
+      void queryClient.invalidateQueries({ queryKey: ["workflow-output-receipts", workspaceId] as const });
+      void queryClient.invalidateQueries({ queryKey: ["project-evidence", workspaceId] });
+      window.dispatchEvent(new CustomEvent("matterhorn:project-evidence-updated"));
+      onDeletedTarget?.(deletedTarget);
+      setPendingDeleteTarget(null);
     },
   });
 
@@ -269,6 +290,10 @@ export function ArtifactPanel({
     if (!match) return;
     onSelectTarget?.(match);
     void openExternal(match);
+  };
+  const handleDeleteOutput = (output: OutputDescriptor) => {
+    const match = targets.find((item) => item.id === output.id || item.value === output.path);
+    if (match?.kind === "file") setPendingDeleteTarget(match);
   };
 
   return (
@@ -402,6 +427,24 @@ export function ArtifactPanel({
                   <TooltipContent>Reveal in folder</TooltipContent>
                 </Tooltip>
               ) : null}
+              {canDeleteTarget ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={(
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setPendingDeleteTarget(target)}
+                        aria-label="Delete output"
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 />
+                      </Button>
+                    )}
+                  />
+                  <TooltipContent>Delete output</TooltipContent>
+                </Tooltip>
+              ) : null}
               <Tooltip>
                 <TooltipTrigger
                   render={(
@@ -477,6 +520,7 @@ export function ArtifactPanel({
                   const match = targets.find((item) => item.id === output.id);
                   if (match) void reveal(match);
                 } : undefined}
+                onDelete={handleDeleteOutput}
               />
             ) : null}
           </div>
@@ -510,6 +554,25 @@ export function ArtifactPanel({
           </div>
         </>
       )}
+      <ConfirmModal
+        open={Boolean(pendingDeleteTarget)}
+        title="Delete output?"
+        message={pendingDeleteTarget ? (
+          <span>
+            Delete <span className="font-mono text-xs">{pendingDeleteTarget.value}</span> from this workspace. The action is recorded in Project Activity.
+          </span>
+        ) : "Delete this output from the workspace."}
+        confirmLabel={deleteOutputMutation.isPending ? "Deleting" : "Delete"}
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={() => {
+          if (!pendingDeleteTarget || deleteOutputMutation.isPending) return;
+          deleteOutputMutation.mutate(pendingDeleteTarget);
+        }}
+        onCancel={() => {
+          if (!deleteOutputMutation.isPending) setPendingDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }

@@ -2357,6 +2357,7 @@ export function SessionPage(props: SessionPageProps) {
                         onSelectTarget={openTarget}
                         onAddNote={(artifactPath, desk, sessionSlug) => void addArtifactNote(artifactPath, desk, sessionSlug)}
                         onRevealPath={props.onRevealPath}
+                        onDeletedTarget={removeAccessibleTarget}
                         onClose={closeRightPane}
                       />
                     ) : isVenueSidePanel(visibleSidePanel) ? (

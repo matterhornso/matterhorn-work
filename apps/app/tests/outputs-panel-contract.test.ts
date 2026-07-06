@@ -52,7 +52,7 @@ describe("Outputs panel contract", () => {
     expect(receiptSource).toContain("openTargetFromWorkflowOutputReceipt");
   });
 
-  test("output actions include copy path, add note, reveal, and open", () => {
+  test("output actions include copy path, add note, reveal, open, and delete", () => {
     const sessionSource = readAppSource("domains/session/chat/session-page.tsx");
     const artifactSource = readAppSource("domains/session/artifacts/artifact-panel.tsx");
     const listSource = readAppSource("domains/session/artifacts/output-list.tsx");
@@ -60,13 +60,18 @@ describe("Outputs panel contract", () => {
     expect(artifactSource).toContain('aria-label="Copy path"');
     expect(artifactSource).toContain('aria-label="Add note about this output"');
     expect(artifactSource).toContain('aria-label="Reveal in folder"');
+    expect(artifactSource).toContain('aria-label="Delete output"');
+    expect(artifactSource).toContain("client.deleteWorkspaceOutput");
+    expect(artifactSource).toContain("matterhorn:project-evidence-updated");
     expect(artifactSource).toContain('aria-label={isRemoteWorkspace ? "Download output" : "Open externally"}');
     expect(sessionSource).toContain("onRevealPath={props.onRevealPath}");
+    expect(sessionSource).toContain("onDeletedTarget={removeAccessibleTarget}");
 
     expect(listSource).toContain("onCopyPath");
     expect(listSource).toContain("onAddNote");
     expect(listSource).toContain("onReveal");
     expect(listSource).toContain("onOpen");
+    expect(listSource).toContain("onDelete");
   });
 
   test("legacy paths are flagged instead of presented as primary", () => {
