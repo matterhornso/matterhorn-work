@@ -163,6 +163,11 @@ import {
   verifyPolymarketReceipt,
 } from "./tools/polymarket.js";
 import {
+  buildSuiAccountCard,
+  SuiInputError,
+  suiProvider,
+} from "./tools/sui.js";
+import {
   executeUnifiedCryptoChatWorkflow,
   findForbiddenUnifiedCryptoCredentialInput,
   type UnifiedCryptoChatInput,
@@ -1394,6 +1399,14 @@ function memoryApiError(error: unknown): ApiError {
   return new ApiError(400, "memory_request_failed", message);
 }
 
+function suiApiError(error: unknown): ApiError {
+  if (error instanceof SuiInputError) {
+    return new ApiError(400, error.code, error.message);
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return new ApiError(502, "sui_provider_unavailable", message || "Sui public read provider is unavailable");
+}
+
 function memorySurface(value: URL): "client" | "mcp" {
   return value.searchParams.get("surface") === "mcp" ? "mcp" : "client";
 }
@@ -1788,7 +1801,7 @@ function backendSettingsSections(input: {
     base("profile", capability("preview", "Profile", "Profile preferences are local/cloud mixed and should use backend capability statuses.")),
     base("models", capability("working", "Models", "Models are selected through OpenCode provider discovery.")),
     base("providers", capability("working", "Providers", "Provider setup is managed by OpenCode and optional Matterhorn Cloud imports.")),
-    base("wallet", capability(input.walletStatus, "Wallet", "EVM direct connect works in web; Bittensor uses public reads and external signing; Sui is not implemented yet.")),
+    base("wallet", capability(input.walletStatus, "Wallet", "EVM and Sui can connect in web; Bittensor uses public reads and external signing.")),
     base("memory", capability(input.memoryStatus, "Memory", "User-controlled Memory review is available through the local memory vault.")),
     base("notes", capability(input.notesStatus, "Notes", "Workspace notes are stored as local markdown plus an index.")),
     base("outputs", capability("working", "Outputs", "Workspace outputs live under the workspace outputs folder.")),
@@ -1884,6 +1897,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       {
         recommendedPackages: ["@mysten/dapp-kit-react", "@mysten/dapp-kit-core", "@mysten/sui"],
         configuredNetworks: ["sui-testnet", "sui-mainnet"],
+        publicReadRoutes: ["/api/sui/account/:address", "/api/sui/balance/:address"],
         signingBoundary: "client_wallet",
         docs: ["https://sdk.mystenlabs.com/dapp-kit/getting-started/react"],
       },
@@ -1892,7 +1906,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     custody: false,
     directConnect: true,
     publicRead: true,
-    preview: false,
+    preview: true,
     signing: "client_wallet",
     supportedChains: ["sui-testnet", "sui-mainnet"],
   });
@@ -6666,6 +6680,31 @@ function createRoutes(
     }
     const verification = verifyPolymarketReceipt(handoff, coercePolymarketReceiptInput(body.receipt));
     return jsonResponse({ success: verification.ok, ...verification });
+  });
+
+  addRoute(routes, "GET", "/api/sui/account/:address", "client", async (ctx) => {
+    try {
+      const account = await suiProvider.getAccountSnapshot(ctx.params.address, {
+        network: ctx.url.searchParams.get("network"),
+        signal: ctx.request.signal,
+      });
+      return jsonResponse({ success: true, account, cards: [buildSuiAccountCard(account)] });
+    } catch (err) {
+      throw suiApiError(err);
+    }
+  });
+
+  addRoute(routes, "GET", "/api/sui/balance/:address", "client", async (ctx) => {
+    try {
+      const balance = await suiProvider.getBalance(ctx.params.address, {
+        network: ctx.url.searchParams.get("network"),
+        coinType: ctx.url.searchParams.get("coinType") ?? ctx.url.searchParams.get("coin_type"),
+        signal: ctx.request.signal,
+      });
+      return jsonResponse({ success: true, balance });
+    } catch (err) {
+      throw suiApiError(err);
+    }
   });
 
   addRoute(routes, "GET", "/api/bittensor/subnets", "client", async () => {
