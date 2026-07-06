@@ -216,12 +216,15 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("Server snapshot");
     expect(source).toContain("Model routing");
     expect(source).toContain("Current model, provider list source, and selection policy.");
+    expect(source).toContain("onOpenModelPicker");
+    expect(source).toContain("Change model");
     expect(source).toContain("OpenCode session prompts");
     expect(source).toContain("OpenCode provider list");
     expect(source).toContain("No model training by default");
     expect(routeSource).toContain("connectedModelCount");
     expect(routeSource).toContain("defaultModelLabel={defaultModelLabel}");
     expect(routeSource).toContain("defaultModelRef={defaultModelRef}");
+    expect(routeSource).toContain("onOpenModelPicker={() =>");
     expect(routeSource).toContain("matterhornServerClient={matterhornClient}");
     expect(routeSource).toContain("runtimeWorkspaceId={runtimeWorkspaceId}");
   });

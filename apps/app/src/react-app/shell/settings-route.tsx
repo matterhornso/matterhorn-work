@@ -2051,6 +2051,10 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             providerConnectError={providerAuthSnapshot.providerAuthError}
             providerDisconnectStatus={configActionStatus}
             providerDisconnectError={null}
+            onOpenModelPicker={() => {
+              setModelPickerQuery("");
+              setModelPickerOpen(true);
+            }}
             onOpenProviderAuth={handleOpenProviderAuth}
             onDisconnectProvider={async (providerId) => {
               await providerAuthStore.disconnectProvider(providerId);

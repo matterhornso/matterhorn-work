@@ -44,6 +44,7 @@ export type AiSettingsViewProps = {
   providerConnectError: string | null;
   providerDisconnectStatus: string | null;
   providerDisconnectError: string | null;
+  onOpenModelPicker: () => void | Promise<void>;
   onOpenProviderAuth: () => void | Promise<void>;
   onDisconnectProvider: (providerId: string) => void | Promise<void>;
   canDisconnectProvider: (source?: ConnectedProvider["source"]) => boolean;
@@ -138,6 +139,11 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 label={catalogLabel}
               />
             </LayoutSectionItemTitle>
+            <LayoutSectionItemHeaderActions>
+              <Button variant="outline" onClick={() => void props.onOpenModelPicker()} disabled={props.busy}>
+                Change model
+              </Button>
+            </LayoutSectionItemHeaderActions>
           </LayoutSectionItemHeader>
           <div className="mt-3 grid gap-2 text-sm text-dls-secondary sm:grid-cols-2">
             <div>
