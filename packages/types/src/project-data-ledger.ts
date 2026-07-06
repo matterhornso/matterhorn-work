@@ -207,3 +207,8 @@ export interface MatterhornProjectFeedbackResponse {
   success: true;
   feedback: MatterhornProjectFeedbackEntry;
 }
+
+export interface MatterhornProjectFeedbackDeleteResponse {
+  success: true;
+  deleted: MatterhornProjectFeedbackEntry;
+}

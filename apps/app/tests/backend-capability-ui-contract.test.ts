@@ -153,6 +153,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('query.set("to", options.to.trim())');
     expect(source).toContain("submitProjectFeedback");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/feedback`');
+    expect(source).toContain("deleteProjectFeedback");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/feedback/${encodeURIComponent(feedbackId)}`');
     expect(source).toContain("suiAccount");
     expect(source).toContain('`/api/sui/account/${encodeURIComponent(address)}${suffix}`');
     expect(source).toContain("suiBalance");

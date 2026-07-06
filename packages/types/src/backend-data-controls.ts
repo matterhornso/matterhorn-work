@@ -22,7 +22,8 @@ export type MatterhornDataControlRequirement =
   | "owner_or_host"
   | "writable_server"
   | "filesystem_access"
-  | "specific_record_id";
+  | "specific_record_id"
+  | "specific_feedback_id";
 
 export interface MatterhornDataControlAction {
   id: string;

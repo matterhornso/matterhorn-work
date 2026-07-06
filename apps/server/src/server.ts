@@ -305,7 +305,7 @@ import { buildProjectDataLedger, buildProjectDataLedgerExport, scrubProjectLedge
 import { buildBackendModels } from "./backend-models.js";
 import { backendControlPlaneExportSnapshot, buildBackendSupportReport } from "./backend-support-report.js";
 import { buildBackendTeamAccess } from "./backend-team-access.js";
-import { projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
+import { deleteProjectFeedbackEntry, projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
 import { TOY_UI_CSS, TOY_UI_FAVICON_SVG, TOY_UI_HTML, TOY_UI_JS, cssResponse, htmlResponse, jsResponse, svgResponse } from "./toy-ui.js";
 import { FileSessionStore } from "./file-sessions.js";
 import {
@@ -2536,10 +2536,22 @@ function buildDataControlStore(
       ],
     });
     deletionCapability = dataControlCapability({
-      status: "unsupported",
-      label: "Append-only feedback",
-      summary: "Feedback deletion is not exposed in v1; entries remain in the local append-only ledger.",
-      actions: [],
+      status: "working",
+      label: "Delete feedback",
+      summary: "Individual feedback entries can be deleted by id. The delete action is collaborator/writable guarded and audited.",
+      actions: [
+        dataControlAction({
+          id: "feedback.delete",
+          label: "Delete feedback entry",
+          description: "Deletes one feedback entry by id from the local feedback store.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: "/workspace/:workspaceId/feedback/:feedbackId",
+          destructive: true,
+          requirements: ["collaborator", "writable_server", "specific_feedback_id"],
+        }),
+      ],
     });
   } else if (storeId === "audit" || storeId === "taskEvents" || storeId === "workflowRuns" || storeId === "evidence") {
     exportCapability = dataControlCapability({
@@ -4382,6 +4394,33 @@ function createRoutes(
     });
 
     return jsonResponse({ success: true, feedback: entry }, 201);
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/feedback/:feedbackId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const feedbackId = ctx.params.feedbackId.trim();
+    if (!feedbackId) {
+      throw new ApiError(400, "invalid_feedback_id", "Feedback id is required");
+    }
+    const deleted = await deleteProjectFeedbackEntry(workspace.id, feedbackId);
+    if (!deleted) {
+      throw new ApiError(404, "feedback_not_found", "Feedback not found");
+    }
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.feedback.delete",
+      target: feedbackId,
+      summary: `Deleted ${deleted.kind} feedback from project data ledger`,
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({ success: true, deleted });
   });
 
   addRoute(routes, "GET", "/workspace/:id/backend/data-map", "client", async (ctx) => {

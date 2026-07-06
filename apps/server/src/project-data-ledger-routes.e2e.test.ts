@@ -198,7 +198,8 @@ describe("project data ledger routes", () => {
     expect(dataControls.response.status).toBe(200);
     expect(dataControls.payload.version).toBe("matterhorn.backend.data-controls.v1");
     expect(dataControls.payload.stores.feedback.export.actions[0].href).toBe("/workspace/ws_ledger/data-ledger?source=feedback");
-    expect(dataControls.payload.stores.feedback.deletion.status).toBe("unsupported");
+    expect(dataControls.payload.stores.feedback.deletion.status).toBe("working");
+    expect(dataControls.payload.stores.feedback.deletion.actions[0].href).toBe("/workspace/:workspaceId/feedback/:feedbackId");
     expect(dataControls.payload.stores.taskEvents.retention.mode).toBe("append_only");
   });
 
@@ -262,6 +263,45 @@ describe("project data ledger routes", () => {
     expect(byKind.response.status).toBe(200);
     expect(byKind.payload.items.length).toBe(1);
     expect(byKind.payload.items.every((item: { kind: string }) => item.kind === "feedback")).toBe(true);
+  });
+
+  test("feedback entries can be deleted with collaborator scope and remain audited", async () => {
+    const { base } = await boot();
+
+    const created = await jsonFetch(base, "/workspace/ws_ledger/feedback", {
+      method: "POST",
+      body: JSON.stringify({
+        kind: "comment",
+        target: { sourceType: "settings", sourceId: "feedback-delete" },
+        comment: "Remove this feedback after export review.",
+      }),
+    });
+    expect(created.response.status).toBe(201);
+
+    const beforeDelete = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?source=feedback&limit=20");
+    expect(beforeDelete.payload.summary.feedback).toBe(1);
+    expect(beforeDelete.payload.items[0].deletable).toBe(true);
+    expect(beforeDelete.payload.items[0].retention).toBe("user_controlled");
+
+    const deleted = await jsonFetch(base, `/workspace/ws_ledger/feedback/${created.payload.feedback.id}`, {
+      method: "DELETE",
+    });
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload.success).toBe(true);
+    expect(deleted.payload.deleted.id).toBe(created.payload.feedback.id);
+
+    const afterDelete = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?source=feedback&limit=20");
+    expect(afterDelete.payload.summary.feedback).toBe(0);
+    expect(afterDelete.payload.items).toEqual([]);
+
+    const audit = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?source=audit&limit=20");
+    expect(audit.payload.items.map((item: { eventType: string }) => item.eventType)).toContain("workspace.feedback.delete");
+
+    const secondDelete = await jsonFetch(base, `/workspace/ws_ledger/feedback/${created.payload.feedback.id}`, {
+      method: "DELETE",
+    });
+    expect(secondDelete.response.status).toBe(404);
+    expect(secondDelete.payload.code).toBe("feedback_not_found");
   });
 
   test("data-ledger can filter run history by desk, session, task, and time window", async () => {
@@ -341,12 +381,24 @@ describe("project data ledger routes", () => {
     });
     expect(viewer.response.status).toBe(201);
 
+    const created = await jsonFetch(base, "/workspace/ws_ledger/feedback", {
+      method: "POST",
+      body: JSON.stringify({ kind: "comment", comment: "Owner feedback for delete guard." }),
+    });
+    expect(created.response.status).toBe(201);
+
     const denied = await jsonFetch(base, "/workspace/ws_ledger/feedback", {
       method: "POST",
       body: JSON.stringify({ kind: "thumbs_up" }),
     }, viewer.payload.token);
     expect(denied.response.status).toBe(403);
     expect(denied.payload.code).toBe("forbidden");
+
+    const deleteDenied = await jsonFetch(base, `/workspace/ws_ledger/feedback/${created.payload.feedback.id}`, {
+      method: "DELETE",
+    }, viewer.payload.token);
+    expect(deleteDenied.response.status).toBe(403);
+    expect(deleteDenied.payload.code).toBe("forbidden");
   });
 
   test("feedback writes are blocked when server is read-only", async () => {
@@ -358,5 +410,11 @@ describe("project data ledger routes", () => {
     });
     expect(denied.response.status).toBe(403);
     expect(denied.payload.code).toBe("read_only");
+
+    const deleteDenied = await jsonFetch(base, "/workspace/ws_ledger/feedback/fb_missing", {
+      method: "DELETE",
+    });
+    expect(deleteDenied.response.status).toBe(403);
+    expect(deleteDenied.payload.code).toBe("read_only");
   });
 });
