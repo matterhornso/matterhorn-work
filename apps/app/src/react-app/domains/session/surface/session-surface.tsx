@@ -13,6 +13,7 @@ import {
   Database,
   Dumbbell,
   FileText,
+  Info,
   Minimize2,
   ShieldCheck,
 } from "lucide-react";
@@ -48,6 +49,11 @@ import { DevProfiler } from "../../../shell/dev-profiler";
 import { OwDotTicker } from "../../../shell/dot-ticker";
 import { useShellConfig } from "../../../shell/shell-config";
 import { useReactRenderWatchdog } from "../../../shell/react-render-watchdog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { ReactComposerNotice } from "./composer/notice";
 import { SessionDebugPanel } from "./debug-panel";
 import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from "./session-render-state";
@@ -271,15 +277,38 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-[12px] font-semibold text-dls-text">{copy.sessionTitle}</span>
-            <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.32)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
-              {agent?.displayName ?? copy.agentName}
-            </span>
+            <span className="text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">{agent?.displayName ?? copy.agentName}</span>
+            <DeskSafetyInfoButton label={`${copy.displayName} desk safety info`} detail={copy.sessionBoundary} />
           </div>
           <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{copy.shortDescription}</p>
-          <p className="mt-0.5 text-[10px] leading-4 text-dls-secondary/85">{copy.sessionBoundary}</p>
         </div>
       </div>
     </div>
+  );
+}
+
+function DeskSafetyInfoButton({ label, detail }: { label: string; detail: string }) {
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label={label}
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-dls-hover/60 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+          >
+            <Info className="size-3.5" />
+          </button>
+        }
+      />
+      <PopoverContent
+        side="right"
+        align="start"
+        className="w-72 rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-left text-xs leading-5 text-dls-secondary shadow-none"
+      >
+        <p>{detail}</p>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -325,21 +354,13 @@ function MatterhornDeskFocusedEmptyState({
                   </span>
                 </div>
                 <p className="mt-1.5 max-w-2xl text-[12px] leading-5 text-dls-secondary">
-                  {visual?.shortDescription ?? "Focused Matterhorn desk."} Choose a starter below to hand the task to
-                  {` ${agent?.displayName ?? visual?.agentName ?? "this desk agent"}`}. In an open chat, starters fill the composer so you can add context before sending.
+                  {visual?.shortDescription ?? "Focused Matterhorn desk."} Choose a starter below to run
+                  {` ${agent?.displayName ?? visual?.agentName ?? "this desk agent"}`} in a new chat.
                 </p>
-                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">{boundary}</p>
               </div>
             </div>
-            <div className="flex shrink-0 flex-wrap gap-1.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)] sm:max-w-48 sm:justify-end">
-              {[agent?.displayName ?? "Desk agent", "Editable", "Composer handoff"].map((label) => (
-                <span
-                  key={label}
-                  className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-2 py-1"
-                >
-                  {label}
-                </span>
-              ))}
+            <div className="shrink-0">
+              <DeskSafetyInfoButton label={`${visual?.displayName ?? mode} desk safety info`} detail={boundary} />
             </div>
           </div>
         </div>
@@ -373,7 +394,6 @@ function LongevityDeskEmptyState({
   onUsePrompt: (prompt: string) => void | Promise<void>;
 }) {
   const visual = getCustomerProtocolDeskVisual("wellness");
-  const agent = getMatterhornDeskAgent("wellness");
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS.wellness;
   const stagePrompts = MATTERHORN_DESK_EMPTY_PROMPTS.wellness;
 
@@ -433,20 +453,13 @@ function LongevityDeskEmptyState({
                   weekly check-in, habit/recovery tracker, client packet, or offer page. The Longevity Agent keeps the
                   workflow separate from markets and wallets.
                 </p>
-                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
-                  Standalone workflow. Educational only, non-medical, and no live payments/email/hosting.
-                </p>
               </div>
             </div>
-            <div className="flex shrink-0 flex-wrap gap-1.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)] sm:max-w-48 sm:justify-end">
-              {[agent?.displayName ?? "Longevity Agent", "Editable", "Composer handoff"].map((label) => (
-                <span
-                  key={label}
-                  className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-2 py-1"
-                >
-                  {label}
-                </span>
-              ))}
+            <div className="shrink-0">
+              <DeskSafetyInfoButton
+                label="Longevity workflow info"
+                detail="Standalone workflow. Educational only, non-medical, and no live payments, email, or hosting."
+              />
             </div>
           </div>
         </div>
@@ -521,37 +534,6 @@ function LongevityDeskEmptyState({
   );
 }
 
-function MatterhornDeskDraftReadyState({ mode }: { mode: MatterhornDeskMode }) {
-  const visual = getCustomerProtocolDeskVisual(mode);
-  const agent = getMatterhornDeskAgent(mode);
-  const iconHint = (visual?.id ?? mode) as CustomerWorkflowIconHint;
-  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint] ?? FileText;
-
-  return (
-    <div className="w-full space-y-3 px-2 py-3 sm:px-3 sm:py-4" style={deskToneStyle(iconHint)}>
-      <div className="flex min-w-0 items-start gap-3 rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
-          {visual ? <ProtocolLogo iconHint={iconHint} size={30} /> : <Icon className="size-5" />}
-        </span>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[14px] font-semibold text-dls-text">
-              {agent?.displayName ?? visual?.agentName ?? "Matterhorn Agent"} ready
-            </span>
-            <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-2 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
-              Ready in composer
-            </span>
-          </div>
-          <p className="mt-1 text-[12px] leading-5 text-dls-secondary">
-            The task is in the composer for this desk agent. Add public context, then press Ask.
-          </p>
-        </div>
-      </div>
-      {mode === "wellness" ? <LongevityWorkflowStagePreview /> : null}
-    </div>
-  );
-}
-
 function LongevityWorkflowStagePreview() {
   const manifest = WELLNESS_CREATOR_SERVICES_WORKFLOW;
   return (
@@ -579,7 +561,6 @@ function LongevityWorkflowStagePreview() {
 }
 
 function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): string[] {
-  // Legacy smoke contract for staged composer launches: Nothing sends until you press Ask.
   if (item.protocolDesk?.capabilityBullets.length) {
     return item.protocolDesk.capabilityBullets;
   }
