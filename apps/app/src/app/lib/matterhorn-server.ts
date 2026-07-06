@@ -633,6 +633,7 @@ export type MatterhornSuiTransactionPreviewResponse = {
   success: true;
   preview: MatterhornSuiTransactionPreview;
   cards: unknown[];
+  evidence?: MatterhornSuiWorkspaceEvidence;
 };
 
 export type MatterhornSuiTransactionReceiptInput = {
@@ -676,6 +677,15 @@ export type MatterhornSuiTransactionReceiptResponse = {
   success: true;
   receipt: MatterhornSuiTransactionReceipt;
   cards: unknown[];
+  evidence?: MatterhornSuiWorkspaceEvidence;
+};
+
+export type MatterhornSuiWorkspaceEvidence = {
+  workspaceId: string;
+  outputPath: string;
+  taskId: string;
+  sessionSlug: string;
+  source: "task_events";
 };
 
 export type MatterhornInboxItem = {
@@ -1677,6 +1687,38 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         baseUrl,
         "/api/sui/transactions/receipt",
         { token, hostToken, method: "POST", body: payload, timeoutMs: timeouts.status },
+      ),
+    workspaceSuiTransactionPreview: (
+      workspaceId: string,
+      payload: MatterhornSuiTransferPreviewInput,
+      options?: { sessionId?: string | null },
+    ) =>
+      requestJson<MatterhornSuiTransactionPreviewResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/sui/transactions/preview`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: { payload, sessionId: options?.sessionId ?? null },
+          timeoutMs: timeouts.status,
+        },
+      ),
+    workspaceSuiTransactionReceipt: (
+      workspaceId: string,
+      payload: MatterhornSuiTransactionReceiptInput,
+      options?: { sessionId?: string | null },
+    ) =>
+      requestJson<MatterhornSuiTransactionReceiptResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/sui/transactions/receipt`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: { payload, sessionId: options?.sessionId ?? null },
+          timeoutMs: timeouts.status,
+        },
       ),
     listNotes: (workspaceId: string, options?: MatterhornNoteListOptions) => {
       const query = new URLSearchParams();

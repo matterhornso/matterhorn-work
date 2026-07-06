@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -69,7 +69,7 @@ async function boot() {
   process.env.MATTERHORN_WORK_MEMORY_ROOT = join(dir, "memory");
   const server = await startServer(baseConfig(await getFreePort(), dir)) as Served;
   stops.push(() => server.stop(true));
-  return { base: `http://127.0.0.1:${server.port}` };
+  return { base: `http://127.0.0.1:${server.port}`, dir };
 }
 
 async function jsonFetch(base: string, path: string, init?: RequestInit): Promise<{ response: Response; payload: any }> {
@@ -163,6 +163,89 @@ describe("project evidence routes", () => {
     const filtered = await jsonFetch(base, "/workspace/ws_evidence/evidence?source=memory&limit=10");
     expect(filtered.response.status).toBe(200);
     expect(filtered.payload.items.every((item: { source: string }) => item.source === "memory")).toBe(true);
+  });
+
+  test("workspace Sui preview and receipt routes save output evidence", async () => {
+    const { base, dir } = await boot();
+
+    const preview = await jsonFetch(base, "/workspace/ws_evidence/sui/transactions/preview", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_sui_evidence",
+        payload: {
+          network: "testnet",
+          sender: "0x2",
+          recipient: "0x3",
+          amountMist: "1000000000",
+          memo: "Grant wallet test preview",
+        },
+      }),
+    });
+
+    expect(preview.response.status).toBe(201);
+    expect(preview.payload.success).toBe(true);
+    expect(preview.payload.evidence).toMatchObject({
+      workspaceId: "ws_evidence",
+      sessionSlug: "sess_sui_evidence",
+      source: "task_events",
+    });
+    expect(preview.payload.evidence.outputPath).toContain("outputs/sui/sess_sui_evidence/transfer-preview-");
+    expect(existsSync(join(dir, preview.payload.evidence.outputPath))).toBe(true);
+
+    const previewFile = JSON.parse(readFileSync(join(dir, preview.payload.evidence.outputPath), "utf8"));
+    expect(previewFile).toMatchObject({
+      version: "matterhorn.sui.workspace-evidence.v1",
+      kind: "transaction_preview",
+      workspaceId: "ws_evidence",
+      safety: {
+        custody: false,
+        canSubmit: false,
+        liveSubmissionEnabled: false,
+        signingInMatterhorn: false,
+      },
+    });
+
+    const receipt = await jsonFetch(base, "/workspace/ws_evidence/sui/transactions/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_sui_evidence",
+        payload: {
+          network: "testnet",
+          previewSha256: preview.payload.preview.previewSha256,
+          transactionDigest: "5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+          status: "success",
+          sender: "0x2",
+          recipient: "0x3",
+          amountMist: "1000000000",
+          explorerUrl: "https://suivision.xyz/txblock/5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+        },
+      }),
+    });
+
+    expect(receipt.response.status).toBe(201);
+    expect(receipt.payload.success).toBe(true);
+    expect(receipt.payload.evidence.outputPath).toContain("outputs/sui/sess_sui_evidence/transaction-receipt-");
+    expect(existsSync(join(dir, receipt.payload.evidence.outputPath))).toBe(true);
+
+    const evidence = await jsonFetch(base, "/workspace/ws_evidence/evidence?desk=sui&limit=20");
+    expect(evidence.response.status).toBe(200);
+    expect(evidence.payload.summary.outputs).toBeGreaterThanOrEqual(2);
+    const outputPaths = evidence.payload.items
+      .filter((item: { type: string }) => item.type === "task.output_saved")
+      .map((item: { outputPath?: string }) => item.outputPath);
+    expect(outputPaths).toContain(preview.payload.evidence.outputPath);
+    expect(outputPaths).toContain(receipt.payload.evidence.outputPath);
+
+    const ledger = await jsonFetch(base, "/workspace/ws_evidence/data-ledger?kind=output&limit=20");
+    expect(ledger.response.status).toBe(200);
+    expect(ledger.payload.policy.trainingUse).toBe("none_by_default");
+    expect(ledger.payload.items.map((item: { outputPath?: string }) => item.outputPath)).toEqual(
+      expect.arrayContaining([
+        preview.payload.evidence.outputPath,
+        receipt.payload.evidence.outputPath,
+      ]),
+    );
+    expect(JSON.stringify(ledger.payload.items)).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
   });
 
   test("GET /workspace/:id/evidence rejects unknown source filters", async () => {

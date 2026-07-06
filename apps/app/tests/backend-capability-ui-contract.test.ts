@@ -136,6 +136,11 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('"/api/sui/transactions/preview"');
     expect(source).toContain("suiTransactionReceipt");
     expect(source).toContain('"/api/sui/transactions/receipt"');
+    expect(source).toContain("workspaceSuiTransactionPreview");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/sui/transactions/preview`');
+    expect(source).toContain("workspaceSuiTransactionReceipt");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/sui/transactions/receipt`');
+    expect(source).toContain("MatterhornSuiWorkspaceEvidence");
   });
 
   test("Settings overview reads backend capabilities and workspace data map", () => {
@@ -164,10 +169,30 @@ describe("backend capability UI contract", () => {
     expect(walletSource).toContain("useWallets");
     expect(walletSource).toContain("connectSuiWallet");
     expect(walletSource).toContain("matterhornServerClient.suiAccount(account.address");
+    expect(walletSource).toContain("SuiWorkflowPanel");
+    expect(walletSource).toContain("runtimeWorkspaceId?: string | null");
     expect(walletSource).toContain('sourceLabel: "Matterhorn engine"');
+    expect(routeSource).toContain("runtimeWorkspaceId={runtimeWorkspaceId}");
     expect(providerSource).toContain("DAppKitProvider");
     expect(providerSource).toContain("suiDAppKit");
     expect(routeSource).toContain("matterhornServerClient={matterhornClient}");
+  });
+
+  test("Sui workflow panel saves wallet preview and receipt evidence through workspace routes", () => {
+    const source = readAppSource("react-app/domains/wallet/sui-workflow-panel.tsx");
+    const sessionSource = readAppSource("react-app/domains/session/chat/session-page.tsx");
+    const activitySource = readAppSource("react-app/domains/recent-activity/recent-activity-section.tsx");
+
+    expect(source).toContain("workspaceSuiTransactionPreview");
+    expect(source).toContain("workspaceSuiTransactionReceipt");
+    expect(source).toContain("matterhorn:task-log-updated");
+    expect(source).toContain("matterhorn:project-evidence-updated");
+    expect(source).toContain("No custody");
+    expect(source).toContain("Sign and submit in your Sui wallet");
+    expect(source).toContain("Do not paste signatures or signed payloads");
+    expect(sessionSource).toContain("Sui workflow");
+    expect(sessionSource).toContain('setCurrentSidePanel("wallet")');
+    expect(activitySource).toContain("matterhorn:project-evidence-updated");
   });
 
   test("Profile readiness copy does not claim memory sync before data policy supports it", () => {
