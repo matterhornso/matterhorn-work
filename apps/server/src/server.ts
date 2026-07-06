@@ -266,6 +266,7 @@ import type {
   MatterhornBackendModelSelectionRequest,
 } from "@matterhorn-work/types/backend-models";
 import type {
+  MatterhornBackendReadinessAction,
   MatterhornBackendReadinessCheck,
   MatterhornBackendReadinessCheckId,
   MatterhornBackendReadinessFeature,
@@ -3157,6 +3158,88 @@ function readinessFeature(
   };
 }
 
+function readinessActionForCheck(
+  checkId: MatterhornBackendReadinessCheckId,
+  check: MatterhornBackendReadinessCheck,
+): MatterhornBackendReadinessAction {
+  const base = {
+    severity: "blocking" as const,
+    checkIds: [checkId],
+    featureIds: check.requiredFor,
+  };
+  if (checkId === "workspace_authorized") {
+    return {
+      ...base,
+      actionId: "open-authorized-workspace",
+      kind: "open_authorized_workspace",
+      label: "Open an authorized workspace",
+      description: "Choose a workspace folder inside an authorized Matterhorn Work root, then retry the action.",
+      surface: "workspace",
+    };
+  }
+  if (checkId === "workspace_writable") {
+    return {
+      ...base,
+      actionId: "restart-writable-engine",
+      kind: "restart_writable_engine",
+      label: "Restart with writes enabled",
+      description: "The local engine is running read-only. Restart Matterhorn Work without read-only mode before saving notes, memory, or task runs.",
+      surface: "terminal",
+      command: "matterhorn-work serve",
+    };
+  }
+  if (checkId === "opencode_connection") {
+    return {
+      ...base,
+      actionId: "connect-local-engine",
+      kind: "connect_local_engine",
+      label: "Connect the local agent engine",
+      description: "Open AI settings or restart Matterhorn Work so OpenCode is reachable before starting chats or desk tasks.",
+      surface: "settings",
+      href: "settings:ai",
+    };
+  }
+  if (checkId === "notes_store") {
+    return {
+      ...base,
+      actionId: "repair-notes-store",
+      kind: "repair_notes_store",
+      label: "Repair the notes store",
+      description: "Make sure the workspace folder is available and writable so project notes can be indexed.",
+      surface: "workspace",
+    };
+  }
+  if (checkId === "memory_vault") {
+    return {
+      ...base,
+      actionId: "repair-memory-vault",
+      kind: "repair_memory_vault",
+      label: "Repair the memory vault",
+      description: "Check the configured memory vault path and retry Memory review once the local vault is writable.",
+      surface: "settings",
+      href: "settings:privacy",
+    };
+  }
+  if (checkId === "outputs_folder") {
+    return {
+      ...base,
+      actionId: "create-outputs-folder",
+      kind: "create_outputs_folder",
+      label: "Create the outputs folder",
+      description: "Create or reconnect the workspace outputs folder before saving generated artifacts.",
+      surface: "workspace",
+    };
+  }
+  return {
+    ...base,
+    actionId: "repair-project-ledger",
+    kind: "repair_project_ledger",
+    label: "Repair project history",
+    description: "Check the workspace event ledger so exports and activity history can be built.",
+    surface: "support",
+  };
+}
+
 function buildWorkspaceReadiness(
   config: ServerConfig,
   workspace: WorkspaceInfo,
@@ -3237,6 +3320,9 @@ function buildWorkspaceReadiness(
   const blockingChecks = Array.from(new Set(
     Object.values(features).flatMap((feature) => feature.blockingCheckIds),
   )).sort((a, b) => a.localeCompare(b)) as MatterhornBackendReadinessCheckId[];
+  const recommendedActions = blockingChecks
+    .map((checkId) => readinessActionForCheck(checkId, checks[checkId]))
+    .filter((action) => action.featureIds.length > 0);
   const readyFeatures = Object.values(features).filter((feature) => feature.ready).length;
 
   return {
@@ -3254,6 +3340,7 @@ function buildWorkspaceReadiness(
       readyFeatures,
       totalFeatures: Object.keys(features).length,
       blockingChecks,
+      recommendedActions,
     },
     checks,
     features,

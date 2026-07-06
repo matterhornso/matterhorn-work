@@ -19,6 +19,30 @@ export type MatterhornBackendReadinessCheckId =
   | "outputs_folder"
   | "project_ledger";
 
+export type MatterhornBackendReadinessActionKind =
+  | "open_authorized_workspace"
+  | "restart_writable_engine"
+  | "connect_local_engine"
+  | "repair_notes_store"
+  | "repair_memory_vault"
+  | "create_outputs_folder"
+  | "repair_project_ledger";
+
+export type MatterhornBackendReadinessActionSurface = "workspace" | "settings" | "terminal" | "support";
+
+export interface MatterhornBackendReadinessAction {
+  actionId: string;
+  kind: MatterhornBackendReadinessActionKind;
+  label: string;
+  description: string;
+  severity: "blocking" | "recommended";
+  surface: MatterhornBackendReadinessActionSurface;
+  checkIds: MatterhornBackendReadinessCheckId[];
+  featureIds: MatterhornBackendReadinessFeatureId[];
+  command?: string;
+  href?: string;
+}
+
 export interface MatterhornBackendReadinessCheck extends MatterhornCapability {
   checkId: MatterhornBackendReadinessCheckId;
   requiredFor: MatterhornBackendReadinessFeatureId[];
@@ -45,6 +69,7 @@ export interface MatterhornBackendReadinessResponse {
     readyFeatures: number;
     totalFeatures: number;
     blockingChecks: MatterhornBackendReadinessCheckId[];
+    recommendedActions: MatterhornBackendReadinessAction[];
   };
   checks: Record<MatterhornBackendReadinessCheckId, MatterhornBackendReadinessCheck>;
   features: Record<MatterhornBackendReadinessFeatureId, MatterhornBackendReadinessFeature>;

@@ -1201,6 +1201,26 @@ export function SettingsOverviewView(props: {
                   )
                 }
               />
+              {workspaceReadiness?.summary.recommendedActions.length ? (
+                <div className="px-1 py-3">
+                  <p className="text-sm font-medium text-dls-text">Next step</p>
+                  <div className="mt-2 flex flex-col gap-2">
+                    {workspaceReadiness.summary.recommendedActions.slice(0, 3).map((action) => (
+                      <div key={action.actionId} className="flex flex-col gap-1 text-sm leading-5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                        <div className="min-w-0">
+                          <p className="font-medium text-dls-text">{action.label}</p>
+                          <p className="text-xs leading-5 text-dls-secondary">{action.description}</p>
+                        </div>
+                        {action.command ? (
+                          <code className="shrink-0 rounded-md bg-dls-surface px-2 py-1 font-mono text-[11px] text-dls-secondary">
+                            {action.command}
+                          </code>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <Row
                 label="Notes and memory"
                 hint={`Notes: ${summarizeCapability(backendCapabilities.notes)} Memory: ${summarizeCapability(backendCapabilities.memory)}`}

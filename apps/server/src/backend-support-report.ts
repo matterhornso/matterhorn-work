@@ -46,6 +46,12 @@ export async function buildBackendSupportReport(options: {
     teams: options.controlPlane.capabilities.teams,
     teamAccess: options.teamAccess,
     security: options.controlPlane.capabilities.security,
+    readiness: {
+      version: options.controlPlane.readiness.version,
+      generatedAt: options.controlPlane.readiness.generatedAt,
+      summary: options.controlPlane.readiness.summary,
+      features: options.controlPlane.readiness.features,
+    },
     models: {
       defaultModel: options.controlPlane.models.defaultModel,
       routing: options.controlPlane.models.routing,
