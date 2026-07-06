@@ -6,16 +6,7 @@ import type {
   WorkspaceBlueprintStarter,
   WorkspaceOpenworkConfig,
 } from "../types";
-import { parseTemplateFrontmatter } from "../utils";
 import { t } from "../../i18n";
-
-import browserSetupTemplate from "../data/commands/browser-setup.md?raw";
-
-const BROWSER_AUTOMATION_QUICKSTART_PROMPT = (() => {
-  const parsed = parseTemplateFrontmatter(browserSetupTemplate);
-  return (parsed?.body ?? browserSetupTemplate).trim();
-})();
-
 
 const defaultWelcomeBlueprintMessages = (): WorkspaceBlueprintSessionMessage[] => [
   {
@@ -33,7 +24,7 @@ export function defaultBlueprintSessionsForPreset(_preset: string): WorkspaceBlu
       openOnFirstLoad: true,
     },
     {
-      id: "csv-playbook",
+      id: "matterhorn-desk-ideas",
       title: t("blueprint.csv_session_title"),
       messages: [
         {
@@ -155,25 +146,25 @@ export function defaultBlueprintStartersForPreset(preset: string): WorkspaceBlue
     default:
       return [
         {
-          id: "csv-help",
+          id: "bittensor-desk",
           kind: "prompt",
           title: t("blueprint.starter_csv_title"),
           description: t("blueprint.starter_csv_desc"),
           prompt: t("blueprint.starter_csv_prompt"),
         },
         {
-          id: "starter-connect-openai",
-          kind: "action",
-          title: t("blueprint.starter_connect_openai_title"),
-          description: t("blueprint.starter_connect_openai_desc"),
-          action: "connect-openai",
+          id: "hyperliquid-desk",
+          kind: "prompt",
+          title: t("blueprint.starter_hyperliquid_title"),
+          description: t("blueprint.starter_hyperliquid_desc"),
+          prompt: t("blueprint.starter_hyperliquid_prompt"),
         },
         {
-          id: "browser-automation",
-          kind: "session",
-          title: t("blueprint.starter_chrome_title"),
-          description: t("blueprint.starter_chrome_desc"),
-          prompt: t("blueprint.starter_chrome_prompt"),
+          id: "polymarket-desk",
+          kind: "prompt",
+          title: t("blueprint.starter_polymarket_title"),
+          description: t("blueprint.starter_polymarket_desc"),
+          prompt: t("blueprint.starter_polymarket_prompt"),
         },
       ];
   }
