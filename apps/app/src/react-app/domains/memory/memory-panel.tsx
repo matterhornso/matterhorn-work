@@ -550,7 +550,9 @@ export function MemoryPanel(props: MemoryPanelProps) {
     if (!props.client) return;
     setExportStatus("Exporting public-safe memory bundle...");
     try {
-      const response = await props.client.exportMemory();
+      const response = workspaceId
+        ? await props.client.exportWorkspaceMemory(workspaceId)
+        : await props.client.exportMemory();
       setExportStatus(`Exported ${response.export.recordCount} records. sha256 ${response.export.sha256.slice(0, 12)}...`);
     } catch (nextError) {
       setExportStatus(nextError instanceof Error ? nextError.message : "Could not export memory bundle.");

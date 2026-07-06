@@ -415,6 +415,24 @@ describe("Matterhorn memory API routes", () => {
     const otherSaved = await jsonFetch(base, "/workspace/ws_other/memory/entities?tags=bittensor&limit=10");
     expect(otherSaved.response.status).toBe(200);
     expect(otherSaved.payload.records.map((item: { id: string }) => item.id)).not.toContain(resolved.payload.record.id);
+
+    const exported = await jsonFetch(base, "/workspace/ws_memory/memory/export", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    expect(exported.response.status).toBe(200);
+    expect(exported.payload.export.workspaceId).toBe("ws_memory");
+    expect(exported.payload.export.workspaceNamespaceTag).toBe("workspace:ws_memory");
+    expect(exported.payload.export.recordCount).toBe(1);
+    expect(exported.payload.export.sha256).toMatch(/^[a-f0-9]{64}$/);
+
+    const otherExported = await jsonFetch(base, "/workspace/ws_other/memory/export", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    expect(otherExported.response.status).toBe(200);
+    expect(otherExported.payload.export.workspaceId).toBe("ws_other");
+    expect(otherExported.payload.export.recordCount).toBe(0);
   });
 
   test("stores and resolves pending memory suggestions through the inbox", async () => {

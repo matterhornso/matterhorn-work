@@ -181,6 +181,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/memory/suggestions/${encodeURIComponent(id)}/resolve`');
     expect(source).toContain("forgetWorkspaceMemory");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/memory/entities/${encodeURIComponent(id)}`');
+    expect(source).toContain("exportWorkspaceMemory");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/memory/export`');
     expect(source).toContain("MatterhornSuiWorkspaceEvidence");
   });
 

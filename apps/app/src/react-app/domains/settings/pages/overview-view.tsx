@@ -802,14 +802,14 @@ export function SettingsOverviewView(props: {
   }, []);
 
   const memoryOverviewQuery = useQuery({
-    queryKey: ["settings-memory-overview", props.runtimeWorkspaceId],
-    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    queryKey: ["settings-memory-overview", backendWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && backendWorkspaceId),
     queryFn: async () => {
       const client = props.matterhornServerClient;
-      if (!client) return { pending: 0, confirmed: 0 };
+      if (!client || !backendWorkspaceId) return { pending: 0, confirmed: 0 };
       const [pendingSuggestions, savedRecords] = await Promise.all([
-        client.listMemorySuggestions({ status: "pending", limit: 100 }),
-        client.listMemory({ limit: 100 }),
+        client.listWorkspaceMemorySuggestions(backendWorkspaceId, { status: "pending", limit: 100 }),
+        client.listWorkspaceMemory(backendWorkspaceId, { limit: 100 }),
       ]);
       return {
         pending: (pendingSuggestions.entries ?? []).filter((entry) => entry.status === "pending").length,
@@ -965,12 +965,14 @@ export function SettingsOverviewView(props: {
     if (!client) return;
     setMemoryExportStatus("Exporting...");
     try {
-      const response = await client.exportMemory();
+      const response = backendWorkspaceId
+        ? await client.exportWorkspaceMemory(backendWorkspaceId)
+        : await client.exportMemory();
       setMemoryExportStatus(`Exported ${response.export.recordCount} records.`);
     } catch (error) {
       setMemoryExportStatus(error instanceof Error ? error.message : "Could not export memory.");
     }
-  }, [props.matterhornServerClient]);
+  }, [backendWorkspaceId, props.matterhornServerClient]);
 
   const themeOptions: Array<{ id: ThemeMode; label: string }> = [
     { id: "light", label: "Light" },
@@ -1298,7 +1300,7 @@ export function SettingsOverviewView(props: {
               onClick={() => void exportMemory()}
               disabled={!props.matterhornServerClient}
             >
-              Export memory
+              Export memory bundle
             </Button>
           </div>
           {memoryExportStatus ? (

@@ -853,6 +853,11 @@ describe("backend control plane routes", () => {
       method: "GET",
       href: "/workspace/ws_backend/memory/entities",
     }));
+    expect(result.payload.stores.memory.export.actions).toContainEqual(expect.objectContaining({
+      id: "memory.workspace-export",
+      method: "POST",
+      href: "/workspace/ws_backend/memory/export",
+    }));
     expect(result.payload.stores.memory.deletion.actions).toContainEqual(expect.objectContaining({
       id: "memory.workspace-delete",
       method: "DELETE",

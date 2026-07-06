@@ -2369,6 +2369,19 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         },
       ),
 
+    exportWorkspaceMemory: (workspaceId: string, outputDir?: string) =>
+      requestJson<MatterhornMemoryExportResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/export`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: outputDir ? { outputDir } : {},
+          timeoutMs: timeouts.workspaceExport,
+        },
+      ),
+
     exportMemory: (outputDir?: string) =>
       requestJson<MatterhornMemoryExportResponse>(baseUrl, "/api/memory/export", {
         token,

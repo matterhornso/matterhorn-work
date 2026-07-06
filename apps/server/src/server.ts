@@ -278,6 +278,7 @@ import type {
 import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
@@ -1337,6 +1338,62 @@ function namespaceWorkspaceMemoryPatch(
   workspace: WorkspaceInfo,
 ): Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">> {
   return workspaceMemoryPatchFromRecord(namespaceWorkspaceMemoryRecord(workspaceMemoryRecordWithPatch(record, patch), workspace));
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function workspaceMemoryExportRelativePath(workspace: WorkspaceInfo, value: unknown): string {
+  if (typeof value === "string" && value.trim()) {
+    return normalizeWorkspaceRelativePath(value, { allowSubdirs: true });
+  }
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `outputs/memory/memory-export-${workspace.id}-${stamp}`;
+}
+
+async function exportWorkspaceMemoryRecords(
+  memoryVault: MatterhornMemoryVault,
+  workspace: WorkspaceInfo,
+  outputDirInput: unknown,
+) {
+  const outputRelativePath = workspaceMemoryExportRelativePath(workspace, outputDirInput);
+  const outputDir = resolveSafeChildPath(workspace.path, outputRelativePath);
+  await mkdir(outputDir, { recursive: true });
+  const records = (await memoryVault.listRecords({
+    scope: "workspace",
+    tags: [workspaceMemoryTag(workspace.id)],
+    limit: 500,
+  })).filter((record) => record.canExport && record.sensitivity !== "forbidden_secret");
+
+  const recordsPath = join(outputDir, "matterhorn-memory-records.json");
+  const manifestPath = join(outputDir, "matterhorn-memory-export-manifest.json");
+  const sha256Path = join(outputDir, "matterhorn-memory-export.sha256");
+  const recordsJson = `${JSON.stringify(records, null, 2)}\n`;
+  const sha256 = sha256Hex(recordsJson);
+  const exportedAt = new Date().toISOString();
+  const manifest = {
+    version: "matterhorn.memory.export-manifest.v1",
+    exportedAt,
+    workspaceId: workspace.id,
+    workspaceNamespaceTag: workspaceMemoryTag(workspace.id),
+    recordCount: records.length,
+    recordsPath,
+    sha256,
+    includesSecrets: false,
+    includesRawSignatures: false,
+    includesSignedPayloads: false,
+    includesWalletExports: false,
+  };
+  await writeFile(recordsPath, recordsJson, "utf8");
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  await writeFile(sha256Path, `${sha256}  matterhorn-memory-records.json\n`, "utf8");
+  return {
+    ...manifest,
+    outputDir,
+    manifestPath,
+    sha256Path,
+  };
 }
 
 function normalizeNoteLimit(value: string | null): number | undefined {
@@ -2599,6 +2656,16 @@ function buildDataControlStore(
           status: "working",
           method: "GET",
           href: `${workspaceMemoryRoute}/entities`,
+        }),
+        dataControlAction({
+          id: "memory.workspace-export",
+          label: "Export workspace memory",
+          description: "Writes a redacted memory export containing only records tagged for this workspace namespace.",
+          kind: "api_route",
+          status: "working",
+          method: "POST",
+          href: `${workspaceMemoryRoute}/export`,
+          requirements: ["collaborator", "writable_server"],
         }),
       ],
     });
@@ -7061,6 +7128,25 @@ function createRoutes(
         summary: `Forgot workspace memory ${ctx.params.memoryId}`,
       });
       return jsonResponse({ success: true, ...result });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/memory/export", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const result = await exportWorkspaceMemoryRecords(memoryVault, workspace, body.outputDir);
+      await recordMemoryMutationAudit(workspace, ctx, {
+        action: "memory.export",
+        target: result.outputDir,
+        summary: `Exported ${result.recordCount} workspace memory record${result.recordCount === 1 ? "" : "s"}`,
+      });
+      return jsonResponse({ success: true, export: result });
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw memoryApiError(error);

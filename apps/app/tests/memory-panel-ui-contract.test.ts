@@ -75,6 +75,7 @@ describe("Memory panel UI contract", () => {
     expect(source).toContain("listWorkspaceMemorySuggestions");
     expect(source).toContain("resolveStoredWorkspaceMemorySuggestion");
     expect(source).toContain("resolveWorkspaceMemorySuggestion");
+    expect(source).toContain("exportWorkspaceMemory");
   });
 });
 
@@ -84,11 +85,12 @@ describe("Settings overview memory contract", () => {
 
     expect(source).toContain("GLOBAL_HOME_SIDE_PANEL_KEY");
     expect(source).toContain("workspaceSessionRoute");
-    expect(source).toContain("listMemorySuggestions");
-    expect(source).toContain("listMemory");
+    expect(source).toContain("listWorkspaceMemorySuggestions");
+    expect(source).toContain("listWorkspaceMemory");
+    expect(source).toContain("exportWorkspaceMemory");
     expect(source).toContain("Pending suggestions");
     expect(source).toContain("Saved memories");
     expect(source).toContain("Open Memory review");
-    expect(source).toContain("Export memory");
+    expect(source).toContain("Export memory bundle");
   });
 });
