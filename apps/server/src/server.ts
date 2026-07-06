@@ -164,7 +164,10 @@ import {
 } from "./tools/polymarket.js";
 import {
   buildSuiAccountCard,
+  buildSuiTransferPreview,
+  buildSuiTransactionPreviewCard,
   SuiInputError,
+  type SuiTransferPreviewInput,
   suiProvider,
 } from "./tools/sui.js";
 import {
@@ -1898,6 +1901,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
         recommendedPackages: ["@mysten/dapp-kit-react", "@mysten/dapp-kit-core", "@mysten/sui"],
         configuredNetworks: ["sui-testnet", "sui-mainnet"],
         publicReadRoutes: ["/api/sui/account/:address", "/api/sui/balance/:address"],
+        transactionPreviewRoutes: ["/api/sui/transactions/preview"],
         signingBoundary: "client_wallet",
         docs: ["https://sdk.mystenlabs.com/dapp-kit/getting-started/react"],
       },
@@ -6702,6 +6706,16 @@ function createRoutes(
         signal: ctx.request.signal,
       });
       return jsonResponse({ success: true, balance });
+    } catch (err) {
+      throw suiApiError(err);
+    }
+  });
+
+  addRoute(routes, "POST", "/api/sui/transactions/preview", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    try {
+      const preview = buildSuiTransferPreview(body as SuiTransferPreviewInput);
+      return jsonResponse({ success: true, preview, cards: [buildSuiTransactionPreviewCard(preview)] });
     } catch (err) {
       throw suiApiError(err);
     }

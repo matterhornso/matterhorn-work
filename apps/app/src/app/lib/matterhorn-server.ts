@@ -585,6 +585,56 @@ export type MatterhornSuiBalanceResponse = {
   balance: MatterhornSuiBalanceSnapshot;
 };
 
+export type MatterhornSuiTransferPreviewInput = {
+  network?: MatterhornSuiNetwork;
+  kind?: "transfer_sui";
+  sender: string;
+  recipient: string;
+  amountMist?: string | number;
+  amountSui?: string | number;
+  memo?: string;
+};
+
+export type MatterhornSuiTransactionPreview = {
+  version: "matterhorn.sui.transaction-preview.v1";
+  id: string;
+  family: "sui";
+  network: MatterhornSuiNetwork;
+  kind: "transfer_sui";
+  sender: string;
+  recipient: string;
+  amountMist: string;
+  amountSui: string;
+  memo?: string;
+  custody: false;
+  canSubmit: false;
+  liveSubmissionEnabled: false;
+  signerPolicy: "client_wallet_required";
+  requiresWalletStandard: true;
+  previewSha256: string;
+  createdAt: string;
+  expiresAt: string;
+  handoff: {
+    kind: "sui_wallet_standard";
+    action: "sign_and_execute_in_wallet";
+    network: MatterhornSuiNetwork;
+    chain: `sui:${MatterhornSuiNetwork}`;
+    unsignedIntent: {
+      kind: "transfer_sui";
+      sender: string;
+      recipient: string;
+      amountMist: string;
+    };
+  };
+  warnings: string[];
+};
+
+export type MatterhornSuiTransactionPreviewResponse = {
+  success: true;
+  preview: MatterhornSuiTransactionPreview;
+  cards: unknown[];
+};
+
 export type MatterhornInboxItem = {
   id: string;
   name?: string;
@@ -1573,6 +1623,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         { token, hostToken, timeoutMs: timeouts.status },
       );
     },
+    suiTransactionPreview: (payload: MatterhornSuiTransferPreviewInput) =>
+      requestJson<MatterhornSuiTransactionPreviewResponse>(
+        baseUrl,
+        "/api/sui/transactions/preview",
+        { token, hostToken, method: "POST", body: payload, timeoutMs: timeouts.status },
+      ),
     listNotes: (workspaceId: string, options?: MatterhornNoteListOptions) => {
       const query = new URLSearchParams();
       if (options?.query?.trim()) query.set("query", options.query.trim());

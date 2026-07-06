@@ -178,6 +178,7 @@ describe("backend control plane routes", () => {
     expect(result.payload.wallets.families.sui.details.recommendedPackages).toContain("@mysten/dapp-kit-react");
     expect(result.payload.wallets.families.sui.details.publicReadRoutes).toContain("/api/sui/account/:address");
     expect(result.payload.wallets.families.sui.details.publicReadRoutes).toContain("/api/sui/balance/:address");
+    expect(result.payload.wallets.families.sui.details.transactionPreviewRoutes).toContain("/api/sui/transactions/preview");
     expect(result.payload.wallets.families.sui.actions[0].href).toBe("https://sdk.mystenlabs.com/dapp-kit/getting-started/react");
     expect(result.payload.security.cors.status).toBe("needs_setup");
     expect(result.payload.security.memoryWriteGuards.status).toBe("working");
@@ -204,6 +205,36 @@ describe("backend control plane routes", () => {
     const rejectedSecret = await jsonFetch(base, `/api/sui/account/${secretAddress}`);
     expect(rejectedSecret.response.status).toBe(400);
     expect(rejectedSecret.payload.code).toBe("sui_secret_rejected");
+  });
+
+  test("Sui transaction preview route returns a non-submittable wallet handoff", async () => {
+    const { base } = await boot();
+
+    const preview = await jsonFetch(base, "/api/sui/transactions/preview", {
+      method: "POST",
+      body: JSON.stringify({
+        network: "testnet",
+        sender: "0x2",
+        recipient: "0x3",
+        amountMist: "1000000000",
+      }),
+    });
+
+    expect(preview.response.status).toBe(200);
+    expect(preview.payload.success).toBe(true);
+    expect(preview.payload.preview).toMatchObject({
+      version: "matterhorn.sui.transaction-preview.v1",
+      family: "sui",
+      kind: "transfer_sui",
+      amountMist: "1000000000",
+      canSubmit: false,
+      custody: false,
+      liveSubmissionEnabled: false,
+      signerPolicy: "client_wallet_required",
+    });
+    expect(preview.payload.preview.previewSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(preview.payload.cards[0].kind).toBe("sui_transaction_preview");
+    expect(JSON.stringify(preview.payload)).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
   });
 
   test("GET /workspace/:id/backend/data-map returns sanitized storage locations", async () => {
