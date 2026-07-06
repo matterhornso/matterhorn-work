@@ -536,6 +536,55 @@ export type MatterhornWorkspaceFileStat = {
   updatedAt?: number;
 };
 
+export type MatterhornSuiNetwork = "testnet" | "mainnet";
+
+export type MatterhornSuiBalanceSnapshot = {
+  version: "matterhorn.sui.balance.v1";
+  address: string;
+  network: MatterhornSuiNetwork;
+  coinType: string;
+  balanceMist: string;
+  balanceSui: string;
+  coinBalanceMist?: string;
+  addressBalanceMist?: string;
+  custody: false;
+  canSubmit: false;
+  source: {
+    source: "sui.grpc";
+    network: MatterhornSuiNetwork;
+    endpoint: string;
+    fetchedAt: string;
+  };
+  warnings: string[];
+};
+
+export type MatterhornSuiAccountSnapshot = {
+  version: "matterhorn.sui.account.v1";
+  address: string;
+  network: MatterhornSuiNetwork;
+  balance: MatterhornSuiBalanceSnapshot;
+  custody: false;
+  canSubmit: false;
+  signerPolicy: "client_wallet_required";
+  safety: {
+    publicReadOnly: true;
+    signingInMatterhorn: false;
+    secretsAccepted: false;
+  };
+  warnings: string[];
+};
+
+export type MatterhornSuiAccountResponse = {
+  success: true;
+  account: MatterhornSuiAccountSnapshot;
+  cards: unknown[];
+};
+
+export type MatterhornSuiBalanceResponse = {
+  success: true;
+  balance: MatterhornSuiBalanceSnapshot;
+};
+
 export type MatterhornInboxItem = {
   id: string;
   name?: string;
@@ -1503,6 +1552,27 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         `/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`,
         { token, hostToken, timeoutMs: timeouts.capabilities },
       ),
+    suiAccount: (address: string, options?: { network?: MatterhornSuiNetwork }) => {
+      const query = new URLSearchParams();
+      if (options?.network) query.set("network", options.network);
+      const suffix = query.size ? `?${query.toString()}` : "";
+      return requestJson<MatterhornSuiAccountResponse>(
+        baseUrl,
+        `/api/sui/account/${encodeURIComponent(address)}${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
+    },
+    suiBalance: (address: string, options?: { network?: MatterhornSuiNetwork; coinType?: string }) => {
+      const query = new URLSearchParams();
+      if (options?.network) query.set("network", options.network);
+      if (options?.coinType?.trim()) query.set("coinType", options.coinType.trim());
+      const suffix = query.size ? `?${query.toString()}` : "";
+      return requestJson<MatterhornSuiBalanceResponse>(
+        baseUrl,
+        `/api/sui/balance/${encodeURIComponent(address)}${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
+    },
     listNotes: (workspaceId: string, options?: MatterhornNoteListOptions) => {
       const query = new URLSearchParams();
       if (options?.query?.trim()) query.set("query", options.query.trim());

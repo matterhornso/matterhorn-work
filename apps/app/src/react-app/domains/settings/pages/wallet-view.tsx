@@ -230,6 +230,7 @@ function WalletProtocolSupportMap(props: {
 function SuiWalletPreviewSection(props: {
   compact?: boolean;
   backendSui?: BackendWalletFamilyRow;
+  matterhornServerClient?: MatterhornServerClient | null;
 }) {
   const connection = useWalletConnection();
   const wallets = useWallets();
@@ -241,11 +242,27 @@ function SuiWalletPreviewSection(props: {
   const [error, setError] = useState<string | null>(null);
 
   const balanceQuery = useQuery({
-    queryKey: ["sui-wallet-balance", network, account?.address],
+    queryKey: ["sui-wallet-balance", network, account?.address, props.matterhornServerClient ? "matterhorn" : "wallet"],
     enabled: Boolean(account?.address),
     queryFn: async () => {
       if (!account?.address) throw new Error("No Sui account connected.");
-      return client.getBalance({ owner: account.address });
+      if (props.matterhornServerClient) {
+        try {
+          const response = await props.matterhornServerClient.suiAccount(account.address, { network });
+          return {
+            balanceMist: response.account.balance.balanceMist,
+            sourceLabel: "Matterhorn engine",
+          };
+        } catch {
+          // If the local engine is restarting, keep the wallet preview useful by
+          // falling back to the client-side Sui read.
+        }
+      }
+      const response = await client.getBalance({ owner: account.address });
+      return {
+        balanceMist: response.balance.balance,
+        sourceLabel: "Wallet client",
+      };
     },
     staleTime: 30_000,
   });
@@ -299,12 +316,15 @@ function SuiWalletPreviewSection(props: {
           <div className="grid gap-3 rounded-lg bg-background/45 px-3 py-3 sm:grid-cols-3">
             <WalletRailMetric label="Wallet" value={wallet?.name ?? "Sui"} />
             <WalletRailMetric label="Network" value={String(network)} />
-            <WalletRailMetric label="Balance" value={balanceQuery.isError ? "Unavailable" : formatSuiBalance(balanceQuery.data?.balance.balance)} />
+            <WalletRailMetric label="Balance" value={balanceQuery.isError ? "Unavailable" : formatSuiBalance(balanceQuery.data?.balanceMist)} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <code className="min-w-0 max-w-full truncate rounded-md bg-background/60 px-2 py-1 font-mono text-xs text-dls-secondary">
               {truncateAddress(account.address)}
             </code>
+            <span className="text-xs text-dls-secondary">
+              {balanceQuery.data?.sourceLabel ?? "Read-only"}
+            </span>
             <Button
               variant="ghost"
               size="icon-sm"
@@ -320,6 +340,11 @@ function SuiWalletPreviewSection(props: {
               Disconnect
             </Button>
           </div>
+          {balanceQuery.isError ? (
+            <p className="text-xs leading-5 text-amber-300">
+              Sui balance could not be read. The wallet connection remains local and non-custodial.
+            </p>
+          ) : null}
         </div>
       ) : wallets.length > 0 ? (
         <div className="grid gap-2">
@@ -655,7 +680,11 @@ export function WalletSettingsView({ compact = false, matterhornServerClient, st
           </section>
         )}
 
-        <SuiWalletPreviewSection compact backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")} />
+        <SuiWalletPreviewSection
+          compact
+          backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")}
+          matterhornServerClient={matterhornServerClient}
+        />
         <WalletProtocolSupportMap capability={capability} connected={state.isConnected} backendWallets={backendWallets} />
         <WalletRuntimeExplainer capability={capability} compact />
 
@@ -727,7 +756,10 @@ export function WalletSettingsView({ compact = false, matterhornServerClient, st
               Connect a Sui wallet-standard wallet for account reads. Signing remains in your wallet.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeader>
-          <SuiWalletPreviewSection backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")} />
+          <SuiWalletPreviewSection
+            backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")}
+            matterhornServerClient={matterhornServerClient}
+          />
         </SettingsSection>
         <SettingsSection>
           <SettingsSectionHeader>
@@ -832,7 +864,10 @@ export function WalletSettingsView({ compact = false, matterhornServerClient, st
             Connect a Sui wallet-standard wallet for account reads. Signing remains in your wallet.
           </SettingsSectionHeaderDescription>
         </SettingsSectionHeader>
-        <SuiWalletPreviewSection backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")} />
+        <SuiWalletPreviewSection
+          backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")}
+          matterhornServerClient={matterhornServerClient}
+        />
       </SettingsSection>
 
       {/* Network switcher */}

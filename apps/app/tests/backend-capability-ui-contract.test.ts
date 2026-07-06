@@ -128,6 +128,10 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/data-ledger${suffix}`');
     expect(source).toContain("submitProjectFeedback");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/feedback`');
+    expect(source).toContain("suiAccount");
+    expect(source).toContain('`/api/sui/account/${encodeURIComponent(address)}${suffix}`');
+    expect(source).toContain("suiBalance");
+    expect(source).toContain('`/api/sui/balance/${encodeURIComponent(address)}${suffix}`');
   });
 
   test("Settings overview reads backend capabilities and workspace data map", () => {
@@ -155,6 +159,8 @@ describe("backend capability UI contract", () => {
     expect(walletSource).toContain("Sui wallet");
     expect(walletSource).toContain("useWallets");
     expect(walletSource).toContain("connectSuiWallet");
+    expect(walletSource).toContain("matterhornServerClient.suiAccount(account.address");
+    expect(walletSource).toContain('sourceLabel: "Matterhorn engine"');
     expect(providerSource).toContain("DAppKitProvider");
     expect(providerSource).toContain("suiDAppKit");
     expect(routeSource).toContain("matterhornServerClient={matterhornClient}");
