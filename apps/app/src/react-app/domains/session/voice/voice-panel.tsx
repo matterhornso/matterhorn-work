@@ -239,7 +239,7 @@ function VoiceTimelineRow(props: {
 
   if (entry.role === "user") {
     return (
-      <article className="ml-8 rounded-2xl border border-primary/20 bg-primary/10 px-3 py-2 text-sm leading-relaxed text-foreground">
+      <article className="ml-8 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-sm leading-relaxed text-foreground">
         {entry.text}
       </article>
     );
@@ -247,7 +247,7 @@ function VoiceTimelineRow(props: {
 
   if (entry.role === "assistant") {
     return (
-      <article className="mr-8 rounded-2xl border border-border bg-card px-3 py-2 text-sm leading-relaxed text-card-foreground shadow-sm">
+      <article className="mr-8 rounded-lg border border-border bg-card px-3 py-2 text-sm leading-relaxed text-card-foreground shadow-sm">
         {entry.error ? <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-destructive">Error</div> : null}
         <div className="whitespace-pre-wrap break-words">{entry.text}</div>
       </article>
@@ -832,7 +832,7 @@ export function VoicePanel(props: VoicePanelProps) {
                 onToggle={() => toggleEntryExpanded(entry.id)}
               />
             )) : (
-              <div className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
+              <div className="rounded-lg border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
                 Start voice or inject a transcript from UI MCP to see the voice timeline.
               </div>
             )}

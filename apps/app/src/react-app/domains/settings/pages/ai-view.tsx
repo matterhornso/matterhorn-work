@@ -93,7 +93,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         </LayoutSectionItem>
 
         {props.showOpenWorkModelsSubscribe ? (
-          <LayoutSectionItem className="flex-row flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-6 bg-blue-2/30 px-4 py-3">
+          <LayoutSectionItem className="flex-row flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-6 bg-blue-2/30 px-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
               <ProviderIcon providerId="matterhorn" size={20} className="text-blue-11" />
               <div className="min-w-0">
@@ -117,7 +117,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             {props.connectedProviders.map((provider) => (
               <LayoutSectionItem
                 key={provider.id}
-                className="flex-row flex-wrap items-center justify-between gap-3 rounded-2xl border border-dls-border px-4 py-3"
+                className="flex-row flex-wrap items-center justify-between gap-3 rounded-lg border border-dls-border px-4 py-3"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <ProviderIcon providerId={provider.id} size={20} className="text-dls-text" />

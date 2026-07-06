@@ -41,7 +41,7 @@ export function RefreshButton({
           <Button
             variant="ghost"
             size="icon-sm"
-            className={cn("text-muted-foreground", className)}
+            className={cn("border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-dls-text", className)}
             onClick={() => void onRefresh()}
             {...props}
           >
@@ -84,7 +84,7 @@ interface SettingsInsetProps {
 
 export function SettingsInset({ children, className }: SettingsInsetProps) {
   return (
-    <div className={cn("border border-dls-border rounded-2xl p-4", className)}>
+    <div className={cn("rounded-lg border border-dls-border/55 p-4", className)}>
       {children}
     </div>
   );
@@ -99,7 +99,7 @@ export function SettingsPill({ children, className }: SettingsPillProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border border-dls-border bg-dls-hover px-2.5 py-1 text-xs font-medium text-muted-foreground",
+        "inline-flex items-center gap-1.5 rounded-md border border-dls-border/55 bg-dls-hover/55 px-2.5 py-1 text-xs font-medium text-muted-foreground",
         className,
       )}
     >
@@ -129,7 +129,7 @@ export function SettingsStatusBadge({ label, tone, className }: SettingsStatusBa
   return (
     <div
       className={cn(
-        "flex min-h-8 items-center justify-start gap-2 text-center font-medium rounded-xl px-3 py-0 text-xs text-muted-foreground shrink-0",
+        "flex min-h-8 shrink-0 items-center justify-start gap-2 rounded-md px-3 py-0 text-center text-xs font-medium text-muted-foreground",
         className,
       )}
     >
@@ -151,7 +151,7 @@ export function SettingsNotice({
   return (
     <div
       className={cn(
-        "rounded-xl border border-dls-border bg-dls-hover px-3 py-2 text-xs text-muted-foreground",
+        "rounded-lg border border-dls-border/55 bg-dls-hover/45 px-3 py-2 text-xs text-muted-foreground",
         tone === "error" && "border-red-7/30 bg-red-1/40 text-red-11",
         className,
       )}

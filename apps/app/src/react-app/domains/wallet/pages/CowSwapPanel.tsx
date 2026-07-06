@@ -169,9 +169,9 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
   return (
     <div className="flex flex-col gap-4 p-4 animate-fade-in">
       {/* Header */}
-      <div className="ow-glass-card ow-glow-border p-4 space-y-3">
+      <div className="ow-soft-card p-4 space-y-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-500/20">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-dls-surface-muted/35 text-primary">
             <ArrowRightLeft className="size-5" />
           </div>
           <div>
@@ -218,7 +218,7 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
         </button>
       </div>
 
-      <div className="ow-glass-card p-4 space-y-4">
+      <div className="ow-soft-card p-4 space-y-4">
         <div className="space-y-2">
           <div className="ow-section-heading">Sell</div>
           <div className="flex gap-2">
@@ -290,7 +290,7 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
         )}
 
         {quote && (
-          <div className="ow-glass-card p-4 space-y-3">
+          <div className="ow-soft-card p-4 space-y-3">
             <div className="flex items-center gap-2">
               <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10">
                 {mode === "limit" ? <Timer className="size-4 text-emerald-400" /> : <Zap className="size-4 text-emerald-400" />}

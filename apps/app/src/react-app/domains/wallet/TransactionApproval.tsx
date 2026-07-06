@@ -151,7 +151,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-        <div className="mx-4 w-full max-w-md rounded-2xl border border-dls-border bg-dls-sidebar p-6 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-200">
+        <div className="mx-4 w-full max-w-md rounded-lg border border-dls-border bg-dls-sidebar p-6 shadow-sm animate-in zoom-in-95 duration-200">
           {/* Header */}
           <div className="mb-5 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -308,7 +308,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="mx-4 w-full max-w-md rounded-2xl border border-dls-border bg-dls-sidebar p-6 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-200">
+      <div className="mx-4 w-full max-w-md rounded-lg border border-dls-border bg-dls-sidebar p-6 shadow-sm animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">

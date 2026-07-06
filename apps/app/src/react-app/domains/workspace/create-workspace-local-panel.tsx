@@ -124,7 +124,7 @@ export function CreateWorkspaceLocalPanel(
               {t("welcome.folder_drop_hint")}
             </div>
 
-            <div className="mt-4 rounded-2xl bg-dls-hover/75 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <div className="mt-4 rounded-lg bg-dls-hover/75 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
               {props.hasSelectedFolder ? (
                 <span className="block truncate font-mono text-[12px] text-dls-text">
                   {props.selectedFolder}
@@ -144,7 +144,7 @@ export function CreateWorkspaceLocalPanel(
                 onChange={(event) => props.onManualFolderChange?.(event.currentTarget.value)}
                 disabled={props.submitting}
                 placeholder="/Users/you/Projects/matterhorn-workspace"
-                className="h-11 w-full rounded-2xl border border-transparent bg-dls-hover/75 px-3 font-mono text-[13px] text-dls-text outline-none placeholder:text-dls-secondary focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.12)]"
+                className="h-11 w-full rounded-lg border border-transparent bg-dls-hover/75 px-3 font-mono text-[13px] text-dls-text outline-none placeholder:text-dls-secondary focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.12)]"
               />
               <span className="mt-1.5 block text-[11px] leading-4 text-dls-secondary">
                 Use this if the native folder picker does not open in browser mode.
@@ -299,7 +299,7 @@ export function CreateWorkspaceLocalPanel(
         ) : null}
 
         {props.localError ? (
-          <div className="mb-3 whitespace-pre-line rounded-[20px] border border-red-7/20 bg-red-1/40 px-4 py-3 text-[13px] text-red-11">
+          <div className="mb-3 whitespace-pre-line rounded-lg border border-red-7/20 bg-red-1/40 px-4 py-3 text-[13px] text-red-11">
             {props.localError}
           </div>
         ) : null}

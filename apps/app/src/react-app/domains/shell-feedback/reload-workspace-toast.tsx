@@ -80,7 +80,7 @@ export function ReloadWorkspaceToast(props: ReloadWorkspaceToastProps) {
 
   return (
     <div className="fixed bottom-6 left-1/2 z-[9999] -translate-x-1/2 animate-in slide-in-from-bottom-4 fade-in duration-300">
-      <div className="flex max-w-[calc(100vw-1.5rem)] items-center gap-4 rounded-2xl border border-dls-border bg-dls-surface px-5 py-3.5 shadow-lg">
+      <div className="flex max-w-[calc(100vw-1.5rem)] items-center gap-4 rounded-lg border border-dls-border bg-dls-surface px-5 py-3.5 shadow-lg">
         <div className={props.hasActiveRuns ? "text-amber-11" : "text-dls-text"}>
           <RefreshCcw
             size={16}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { NotebookPen, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
 
 import { t } from "@/i18n";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useStatusToasts } from "../shell-feedback/status-toasts";
+import { ErrorState } from "../shell/error-state";
 import { ACTIVE_WORKSPACE_CHANGED_EVENT, readActiveWorkspaceId } from "../../shell/session-memory";
 import type { MatterhornServerClient } from "../../../app/lib/matterhorn-server";
 import { useNotesServerClient } from "./notes-server-client";
@@ -22,6 +23,7 @@ import { cn } from "@/lib/utils";
 
 export type NotesPageProps = {
   client?: MatterhornServerClient | null;
+  workspaceId?: string | null;
 };
 
 function formatNoteTimestamp(timestamp: number): string {
@@ -51,14 +53,14 @@ function NoteListAttachment({ note }: { note: MatterhornNote }) {
   return <NoteAttachmentChip attachment={attachment} />;
 }
 
-export function NotesPage({ client }: NotesPageProps) {
+export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPageProps) {
   const { showToast } = useStatusToasts();
   const notesClient = useNotesServerClient(client);
   const params = useParams<{ workspaceId?: string }>();
   const routeWorkspaceId = params.workspaceId?.trim() ?? "";
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(() => readActiveWorkspaceId() ?? "");
-  const workspaceId = routeWorkspaceId || activeWorkspaceId;
-  const { notes, loading, error, create, update, remove, suggestMemory } = useNotesStore(workspaceId, notesClient);
+  const workspaceId = explicitWorkspaceId?.trim() || routeWorkspaceId || activeWorkspaceId;
+  const { notes, loading, error, create, update, remove, suggestMemory, refresh } = useNotesStore(workspaceId, notesClient);
   const [query, setQuery] = useState("");
   const [filterId, setFilterId] = useState<NoteFilterId>("all");
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
@@ -150,8 +152,7 @@ export function NotesPage({ client }: NotesPageProps) {
       <header className="flex shrink-0 flex-col gap-3 border-b border-dls-border/45 px-4 py-4 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="flex items-center gap-2 text-lg font-semibold text-dls-text">
-              <NotebookPen className="size-5 text-primary" />
+            <h1 className="text-lg font-semibold text-dls-text">
               {t("notes.page_title")}
             </h1>
             <p className="mt-0.5 text-xs text-dls-secondary">
@@ -162,9 +163,7 @@ export function NotesPage({ client }: NotesPageProps) {
             type="button"
             size="sm"
             onClick={handleCreateNote}
-            className="gap-1.5"
           >
-            <Plus className="size-4" />
             {t("notes.create_note")}
           </Button>
         </div>
@@ -194,17 +193,17 @@ export function NotesPage({ client }: NotesPageProps) {
             ))}
           </div>
         </div>
-        {loading || error ? (
-          <div
-            className={cn(
-              "rounded-md border px-3 py-2 text-xs",
-              error
-                ? "border-destructive/35 bg-destructive/10 text-destructive"
-                : "border-dls-border bg-dls-surface text-dls-secondary",
-            )}
-          >
-            {error ?? t("notes.loading")}
+        {loading ? (
+          <div className="rounded-md bg-dls-surface-muted/25 px-3 py-2 text-xs text-dls-secondary">
+            {t("notes.loading")}
           </div>
+        ) : error ? (
+          <ErrorState
+            error={error}
+            title="Could not load notes"
+            onRetry={() => void refresh()}
+            className="rounded-md bg-destructive/10 px-3 py-2"
+          />
         ) : null}
       </header>
 
@@ -228,10 +227,10 @@ export function NotesPage({ client }: NotesPageProps) {
                     type="button"
                     onClick={() => setSelectedNoteId(note.id)}
                     className={cn(
-                      "flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                      "flex flex-col gap-1 rounded-md px-3 py-2.5 text-left transition-colors",
                       selectedNoteId === note.id
-                        ? "border-primary/40 bg-primary/10"
-                        : "border-transparent bg-dls-surface/40 hover:bg-dls-hover",
+                        ? "bg-primary/10 ring-1 ring-primary/25"
+                        : "bg-transparent hover:bg-dls-hover/45",
                     )}
                   >
                     <span className="truncate text-sm font-medium text-dls-text">
@@ -245,8 +244,7 @@ export function NotesPage({ client }: NotesPageProps) {
                     <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                       <NoteListAttachment note={note} />
                       {noteSuggestedToMemory(note) ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-dls-border bg-dls-surface px-1.5 py-0.5 text-[10px] text-dls-secondary">
-                          <Sparkles className="size-3" />
+                        <span className="inline-flex items-center rounded-md bg-dls-hover/35 px-1.5 py-0.5 text-[10px] text-dls-secondary">
                           {t("notes.memory_suggested_badge")}
                         </span>
                       ) : null}
@@ -280,12 +278,11 @@ export function NotesPage({ client }: NotesPageProps) {
                   {!noteSuggestedToMemory(selectedNote) ? (
                     <Button
                       type="button"
-                      variant="secondary"
+                      variant="ghost"
                       size="sm"
-                      className="gap-1.5"
+                      className="bg-transparent hover:bg-dls-hover/45"
                       onClick={() => void handleSuggestMemory()}
                     >
-                      <Sparkles className="size-3.5" />
                       {t("notes.suggest_memory")}
                     </Button>
                   ) : null}
@@ -332,7 +329,7 @@ export function NotesPage({ client }: NotesPageProps) {
                         {selectedNote.tags.map((tag) => (
                           <span
                             key={tag}
-                            className="inline-flex items-center rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[11px] text-dls-secondary"
+                            className="inline-flex items-center rounded-md bg-dls-hover/35 px-2 py-0.5 text-[11px] text-dls-secondary"
                           >
                             {tag}
                           </span>

@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useMemo, useState, type ReactNode } from "react";
-import { Cpu } from "lucide-react";
+import { Cpu, RefreshCw } from "lucide-react";
 
 import { t } from "../../../../i18n";
 import { Button } from "@/components/ui/button";
@@ -78,11 +78,14 @@ export function ExtensionsView(props: ExtensionsViewProps) {
           ) : null}
         </div>
         <Button
-          variant="outline"
-          className={props.compact ? "h-8 px-2 text-xs" : undefined}
+          aria-label={t("common.refresh")}
+          title={t("common.refresh")}
+          variant="ghost"
+          size="icon-sm"
+          className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
           onClick={props.onRefresh}
         >
-          {t("common.refresh")}
+          <RefreshCw className={cn("size-4", props.busy && "animate-spin")} aria-hidden="true" />
         </Button>
       </div>
 

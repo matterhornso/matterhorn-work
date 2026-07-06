@@ -16,7 +16,7 @@ export function workspaceSettingsRoute(
 }
 
 export function workspaceNotesRoute(workspaceId: string) {
-  return `/workspace/${encodeURIComponent(workspaceId.trim())}/notes`;
+  return `${workspaceSessionRoute(workspaceId)}?panel=notes`;
 }
 
 export function globalSettingsRoute(tab: SettingsTab) {

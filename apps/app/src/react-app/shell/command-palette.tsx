@@ -221,7 +221,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         detail: props.outputsPath,
         meta: "Project",
         icon: <FolderOpen className="size-4 text-primary" />,
-        searchText: `open outputs artifacts files ${props.outputsPath}`,
+        searchText: `open outputs files ${props.outputsPath}`,
         action: () => {
           props.onClose();
           props.onOpenOutputs?.();
@@ -235,7 +235,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         detail: props.outputsPath,
         meta: "Copy",
         icon: <Copy className="size-4 text-primary" />,
-        searchText: `copy outputs artifacts path ${props.outputsPath}`,
+        searchText: `copy outputs path ${props.outputsPath}`,
         action: () => {
           props.onClose();
           props.onCopyOutputsPath?.();
@@ -245,10 +245,10 @@ export function CommandPalette(props: CommandPaletteProps) {
     items.push(
       {
         id: "accessible-items",
-        title: "Accessible items",
+        title: "Outputs & servers",
         detail: accessibleTargetCount > 0
-          ? `Open ${accessibleTargetCount.toLocaleString()} servers and artifacts detected in this session`
-          : "No servers or artifacts detected in this session yet",
+          ? `Open ${accessibleTargetCount.toLocaleString()} outputs and servers detected in this session`
+          : "No outputs or servers detected in this session yet",
         meta: "Session",
         action: () => {
           setMode("accessible-items");
@@ -377,7 +377,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         id: `accessible:${target.id}`,
         title: target.name || target.value,
         detail: target.value,
-        meta: target.kind === "url" ? "Server" : "Artifact",
+        meta: target.kind === "url" ? "Server" : "Output",
         icon: targetIcon(target),
         searchText: `${target.name} ${target.value} ${target.preview}`.toLowerCase(),
         action: () => {
@@ -438,7 +438,7 @@ export function CommandPalette(props: CommandPaletteProps) {
           {mode === "sessions"
             ? t("session.palette_title_sessions")
             : mode === "accessible-items"
-              ? "Accessible items"
+              ? "Outputs & servers"
               : t("session.palette_title_actions")
           }
         </CommandDialogTitle>
@@ -456,7 +456,7 @@ export function CommandPalette(props: CommandPaletteProps) {
                 mode === "sessions"
                   ? t("session.palette_placeholder_sessions")
                   : mode === "accessible-items"
-                    ? "Search servers and artifacts..."
+                    ? "Search outputs and servers..."
                     : t("session.palette_placeholder_actions")
               }
               onKeyDown={handleBackspace}

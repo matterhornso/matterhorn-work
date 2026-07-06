@@ -99,9 +99,9 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
   return (
     <div className="flex flex-col gap-4 p-4 h-full overflow-auto animate-fade-in">
       {/* Header */}
-      <div className="ow-glass-card ow-glow-border p-4 space-y-3">
+      <div className="ow-soft-card p-4 space-y-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/20">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-dls-surface-muted/35 text-primary">
             <ExternalLink className="size-5" />
           </div>
           <div>
@@ -111,7 +111,7 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
         </div>
       </div>
 
-      <div className="ow-glass-card p-4 space-y-4">
+      <div className="ow-soft-card p-4 space-y-4">
         {/* Chain selector */}
         <div className="space-y-2">
           <div className="ow-section-heading">Route</div>
@@ -222,7 +222,7 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
         </div>
 
         {quoteData && (
-          <div className="ow-glass-card p-4 space-y-3">
+          <div className="ow-soft-card p-4 space-y-3">
             <div className="flex items-center gap-2">
               <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10">
                 <Clock className="size-4 text-emerald-400" />

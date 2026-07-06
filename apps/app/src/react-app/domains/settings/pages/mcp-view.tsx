@@ -1491,7 +1491,7 @@ function MatterhornMcpReadinessFacts(props: { card: MatterhornMcpProductCard; co
   const facts = [
     "Command ready",
     props.card.backendBacked === false ? "Preview" : "Server tools",
-    "Setup required",
+    "Install in agent",
   ];
 
   return (
@@ -1512,77 +1512,55 @@ function MatterhornMcpReadinessFacts(props: { card: MatterhornMcpProductCard; co
 }
 
 function MatterhornMcpFullDocs(props: { card: MatterhornMcpProductCard; compact?: boolean }) {
+  const docsHref = props.card.docs.githubUrl;
+  const toolsHref = `${docsHref}#tools`;
+
   return (
-    <details className={props.compact ? "mt-3 text-[11px] leading-4 text-dls-secondary" : "mt-4 text-xs leading-5 text-dls-secondary"}>
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium text-dls-text">
+    <div className={props.compact ? "mt-3 space-y-2 text-[11px] leading-4 text-dls-secondary" : "mt-4 space-y-3 text-xs leading-5 text-dls-secondary"}>
+      <a
+        href={docsHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex w-fit items-center gap-1.5 font-medium text-dls-text transition-colors hover:text-[rgb(var(--dls-accent-rgb))] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+      >
         <BookOpen size={props.compact ? 12 : 14} />
         Full docs
-      </summary>
-      <div className={props.compact ? "mt-3 space-y-3 border-l border-dls-border/30 pl-3" : "mt-3 space-y-4 border-l border-dls-border/30 pl-4"}>
-        <p>{props.card.docs.summary}</p>
+        <ExternalLink size={12} />
+      </a>
 
-        <div>
-          <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">Tools</p>
-          {props.card.tools.length > 0 ? (
-            <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
-              {props.card.tools.map((tool) => (
-                <code
-                  key={tool}
-                  className={props.compact
-                    ? "max-w-full break-words rounded-md bg-dls-hover/45 px-1.5 py-0.5 font-mono text-[10px] text-dls-text"
-                    : "max-w-full break-words rounded-md bg-dls-hover/45 px-2 py-1 font-mono text-[10px] text-dls-text"
-                  }
-                >
-                  {tool}
-                </code>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-1.5">Tool names publish after the desktop bridge registers this MCP.</p>
-          )}
+      {props.card.tools.length > 0 ? (
+        <div className="flex min-w-0 flex-wrap gap-1.5">
+          {props.card.tools.map((tool) => (
+            <a
+              key={tool}
+              href={toolsHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Open GitHub docs for ${tool}`}
+              className={props.compact
+                ? "max-w-full break-words rounded-md bg-dls-hover/45 px-1.5 py-0.5 font-mono text-[10px] text-dls-text transition-colors hover:bg-dls-hover hover:text-[rgb(var(--dls-accent-rgb))] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                : "max-w-full break-words rounded-md bg-dls-hover/45 px-2 py-1 font-mono text-[10px] text-dls-text transition-colors hover:bg-dls-hover hover:text-[rgb(var(--dls-accent-rgb))] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+              }
+            >
+              {tool}
+            </a>
+          ))}
         </div>
+      ) : (
+        <p className="max-w-prose">Tool names publish in GitHub docs after this MCP registers.</p>
+      )}
 
-        {props.card.docs.sections.map((section) => (
-          <div key={section.title}>
-            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">{section.title}</p>
-            <ul className="mt-1.5 space-y-1.5">
-              {section.items.map((item) => (
-                <li key={item} className="grid grid-cols-[0.75rem_minmax(0,1fr)] gap-1.5">
-                  <span aria-hidden="true" className="pt-[0.45em]">
-                    <span className="block size-1 rounded-full bg-dls-secondary/55" />
-                  </span>
-                  <span className="min-w-0">{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-
-        <div>
-          <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">Example prompts</p>
-          <ul className="mt-1.5 space-y-1.5">
-            {props.card.docs.examples.map((example) => (
-              <li key={example} className="min-w-0 rounded-md bg-dls-surface/35 px-2 py-1 text-dls-text">
-                {example}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="min-w-0 break-words font-mono text-[10px] text-dls-secondary">{props.card.docs.repoPath}</span>
-          <a
-            href={props.card.docs.githubUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex w-fit items-center gap-1 text-[11px] font-medium text-dls-text transition-colors hover:text-[rgb(var(--dls-accent-rgb))] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
-          >
-            Open GitHub docs
-            <ExternalLink size={12} />
-          </a>
-        </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <a
+          href={docsHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="min-w-0 break-words font-mono text-[10px] text-dls-secondary transition-colors hover:text-dls-text focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+        >
+          {props.card.docs.repoPath}
+        </a>
       </div>
-    </details>
+    </div>
   );
 }
 
@@ -1816,8 +1794,8 @@ function McpCustomAppCard(props: { compact?: boolean; onOpen: () => void }) {
   return (
     <div
       className={props.compact
-        ? "rounded-[20px] bg-dls-surface-muted/22 p-3"
-        : "rounded-[24px] bg-dls-surface-muted/24 p-5 sm:px-6"
+        ? "rounded-lg bg-dls-surface-muted/22 p-3"
+        : "rounded-lg bg-dls-surface-muted/24 p-5 sm:px-6"
       }
     >
       <div className={props.compact ? "flex flex-col gap-3" : "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"}>

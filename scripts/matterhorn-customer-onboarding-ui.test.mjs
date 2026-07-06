@@ -130,8 +130,8 @@ assert.equal(
 );
 
 for (const phrase of [
-  "Start a Matterhorn project.",
-  "New Project",
+  "Start a desk task, continue a chat, or collect notes and outputs for this workspace.",
+  "New project",
   "New chat",
   "Open Bittensor desk",
   "Open a desk",
@@ -143,7 +143,6 @@ for (const phrase of [
   "Can submit: No. Live submission: Off. External trade handoff only.",
   "Blocked regions get no executable bet fields.",
   "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.",
-  "focused desk",
   "No auto-send",
   "matterhorn-capability-overview",
   "matterhorn-capability-card",
@@ -180,7 +179,6 @@ for (const phrase of [
   "Bittensor task:",
   "Hyperliquid task:",
   "Polymarket task:",
-  "Dedicated agent",
   "hand the task to",
   "agentId:",
   "agentName:",
@@ -220,7 +218,7 @@ for (const phrase of [
   "CustomerProtocolDeskVisual",
   "enrichCustomerWorkflowTemplate",
   "buildCustomerBetaDemoStarterCards",
-  "Choose a task, then review it with the agent",
+  "Choose a task to start this desk agent.",
   "Allowed workspace intents",
   "Beta-ready",
   "Preview only",
@@ -303,11 +301,16 @@ assert.ok(
 assert.ok(
   sessionPage.includes("const homeOutputsPath = homeProjectPath ? joinWorkspaceChildPath(homeProjectPath, \"outputs\") : \"outputs/\"") &&
     sessionPage.includes("{homeProjectName}") &&
-    sessionPage.includes("Copy path") &&
-    sessionPage.includes("Open folder") &&
-    sessionPage.includes("Copy outputs") &&
+    sessionPage.includes("compactPathSegment(homeProjectPath)") &&
+    sessionPage.includes("{homeFolderLabel}") &&
+    sessionPage.includes('label={homePathCopyLabel === "Project path" ? "Project path copied" : "Copy project path"}') &&
+    sessionPage.includes('label="Open project folder"') &&
+    sessionPage.includes('label={homePathCopyLabel === "Outputs path" ? "Outputs path copied" : "Copy outputs path"}') &&
+    sessionPage.includes('label="Open outputs folder"') &&
+    sessionPage.includes('label="Jot a note about outputs"') &&
+    sessionPage.includes("WorkspaceHomeIconAction") &&
     sessionPage.includes("props.sidebar.onRevealWorkspace(props.selectedWorkspaceId)"),
-  "project Home should show the active project folder and outputs location with copy/open actions",
+  "project Home should show compact folder/outputs locations with accessible icon copy/open actions",
 );
 
 for (const phrase of [
@@ -480,11 +483,19 @@ assert.equal(sessionPage.includes("relative flex min-h-0 flex-1 items-start just
 assert.ok(sessionSurface.includes("MatterhornDeskFocusedEmptyState"), "empty desk sessions should render a focused desk prompt state");
 assert.ok(sessionSurface.includes("MATTERHORN_DESK_EMPTY_PROMPTS"), "focused desk prompt state should use desk-specific suggestions");
 assert.ok(sessionSurface.includes("Show TAO balance"), "Bittensor focused empty state should suggest TAO balance reads");
-assert.ok(sessionPage.includes("matterhorn-focused-desk-hero overflow-hidden rounded-xl"), "focused desk start should render a compact protocol-logo hero instead of a plain block");
-assert.ok(sessionPage.includes("matterhorn-focused-desk-boundary flex max-w-full flex-wrap"), "focused desk safety copy should use compact metadata labels without overflowing");
-assert.ok(sessionPage.includes("matterhorn-focused-desk-prompt-list overflow-hidden rounded-xl"), "focused desk prompts should render as a compact command list");
 assert.ok(
-  sessionSurface.includes("Open with agent") && sessionSurface.includes("Nothing sends until you press Ask"),
+  sessionPage.includes("matterhorn-focused-desk-hero px-1 py-2") &&
+    sessionPage.includes("<ProtocolLogo venue={panel} size={52} />"),
+  "focused desk start should render a compact protocol-logo header instead of a plain block",
+);
+assert.equal(sessionPage.includes("matterhorn-focused-desk-boundary"), false, "focused desk header should not render decorative metadata labels");
+assert.ok(
+  sessionPage.includes("matterhorn-focused-desk-prompt-list space-y-2") &&
+    sessionPage.includes("<WorkflowStageCard"),
+  "focused desk prompts should render as compact workflow cards",
+);
+assert.ok(
+  sessionSurface.includes("Start task") && sessionSurface.includes("Nothing sends until you press Ask"),
   "focused desk prompt rows should clarify that agent tasks are staged, not auto-sent",
 );
 assert.equal(sessionPage.includes("rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.09)] px-4 py-3 text-sm leading-6 text-dls-text"), false, "focused desk safety boundary should not use the old boxed callout");
@@ -788,10 +799,14 @@ for (const phrase of [
   "Open GitHub docs",
   "MATTERHORN_MCP_DOCS_GITHUB_BASE",
   "mcpDocs(",
+  "const docsHref = props.card.docs.githubUrl",
+  "const toolsHref = `${docsHref}#tools`",
+  "href={docsHref}",
+  "href={toolsHref}",
+  "aria-label={`Open GitHub docs for ${tool}`}",
   "Use this MCP for",
   "How it works",
   "Safety boundary",
-  "Example prompts",
   "plus {hiddenToolCount} more.",
   "Bittensor MCP",
   'protocolDeskId: "bittensor"',
@@ -818,6 +833,11 @@ for (const phrase of [
 ]) {
   assert.ok(settingsRoute.includes(phrase), `MCP desk product cards should expose safe Matterhorn MCP setup copy: ${phrase}`);
 }
+assert.equal(
+  settingsRoute.includes("props.card.docs.examples.map"),
+  false,
+  "MCP product cards should keep long example prompts in GitHub docs instead of rendering them inline.",
+);
 assert.equal(
   settingsRoute.includes("aria-pressed={selected}"),
   false,
@@ -904,7 +924,7 @@ assert.ok(
   "MCP custom app card should inherit the compact right-rail rendering mode.",
 );
 assert.ok(
-  settingsRoute.includes('props.compact\n        ? "rounded-[20px] bg-dls-surface-muted/22 p-3"'),
+  settingsRoute.includes('props.compact\n        ? "rounded-lg bg-dls-surface-muted/22 p-3"'),
   "MCP custom app card should use a compact, soft rail treatment.",
 );
 assert.ok(

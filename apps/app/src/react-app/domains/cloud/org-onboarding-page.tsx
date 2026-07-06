@@ -146,7 +146,7 @@ export function OrgOnboardingPage() {
         <PageTitlebarRegion />
         <PageContainer>
           <PageHeader>
-            <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-dls-border bg-dls-hover">
+            <div className="mx-auto flex size-14 items-center justify-center rounded-lg border border-dls-border bg-dls-hover">
               <BuildingOffice2Icon className="size-7 text-foreground" />
             </div>
             <PageTitle>Your organization</PageTitle>
@@ -169,7 +169,7 @@ export function OrgOnboardingPage() {
         <PageTitlebarRegion />
         <PageContainer>
           <PageHeader>
-            <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-dls-border bg-dls-hover">
+            <div className="mx-auto flex size-14 items-center justify-center rounded-lg border border-dls-border bg-dls-hover">
               <BuildingOffice2Icon className="size-7 text-foreground" />
             </div>
             <PageTitle>Choose your organization</PageTitle>
@@ -285,7 +285,7 @@ export function ResourceSelectionPage() {
       <PageContainer>
         {/* Header */}
         <PageHeader>
-          <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-dls-border bg-dls-hover">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-lg border border-dls-border bg-dls-hover">
             <BuildingOffice2Icon className="size-7 text-foreground" />
           </div>
           <PageTitle>
@@ -337,7 +337,7 @@ export function ResourceSelectionPage() {
             <ScrollArea className="px-2.5">
             <Accordion
               multiple
-              className="rounded-2xl border border-border bg-transparent shadow-none before:hidden"
+              className="rounded-lg border border-border bg-transparent shadow-none before:hidden"
             >
               {/* AI Providers */}
               {providers.length > 0 ? (
@@ -626,7 +626,7 @@ function OrganizationSelectionPage({
       <PageTitlebarRegion />
       <PageContainer>
         <PageHeader>
-          <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-dls-border bg-dls-hover">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-lg border border-dls-border bg-dls-hover">
             <BuildingOffice2Icon className="size-7 text-foreground" />
           </div>
           <PageTitle>Choose your organization</PageTitle>

@@ -299,7 +299,7 @@ export function ShellCustomizationView() {
           </AlertDescription>
         </Alert>
 
-        <LayoutSectionItem className="rounded-2xl border border-dls-border p-4">
+        <LayoutSectionItem className="rounded-lg border border-dls-border p-4">
           <ShellWireframe config={config} />
         </LayoutSectionItem>
 
@@ -319,7 +319,7 @@ export function ShellCustomizationView() {
         />
 
         {config.statusBar ? (
-          <div className="ml-6 flex flex-col gap-3 border border-dls-border px-4 py-4 rounded-2xl -mr-4">
+          <div className="ml-6 flex flex-col gap-3 border border-dls-border px-4 py-4 rounded-lg -mr-4">
             <ToggleRow
               label="Display documentation link"
               description="Show a link to your documentation."

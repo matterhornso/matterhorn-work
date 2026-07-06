@@ -209,17 +209,17 @@ function GoogleWorkspaceConfig({ matterhornServerClient, onExtensionConnectionCh
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-border bg-card p-3">
+          <div className="rounded-lg border border-border bg-card p-3">
             <CalendarDays className="mb-2 size-4 text-blue-11" />
             <div className="text-sm font-medium text-card-foreground">Calendar read</div>
             <div className="mt-1 text-xs leading-relaxed text-muted-foreground">List upcoming events and provide meeting context.</div>
           </div>
-          <div className="rounded-2xl border border-border bg-card p-3">
+          <div className="rounded-lg border border-border bg-card p-3">
             <MailPlus className="mb-2 size-4 text-red-11" />
             <div className="text-sm font-medium text-card-foreground">Gmail drafts</div>
             <div className="mt-1 text-xs leading-relaxed text-muted-foreground">Create draft emails only. No send tool in Phase 1.</div>
           </div>
-          <div className="rounded-2xl border border-border bg-card p-3">
+          <div className="rounded-lg border border-border bg-card p-3">
             <FileText className="mb-2 size-4 text-green-11" />
             <div className="text-sm font-medium text-card-foreground">Selected Drive files</div>
             <div className="mt-1 text-xs leading-relaxed text-muted-foreground">Read files explicitly selected or created through Matterhorn Work.</div>

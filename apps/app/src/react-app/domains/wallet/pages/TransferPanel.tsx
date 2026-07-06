@@ -85,7 +85,7 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
   return (
     <div className="flex flex-col gap-4 p-4 h-full overflow-auto animate-fade-in">
       {/* Header */}
-      <div className="ow-glass-card ow-glow-border p-4 space-y-3">
+      <div className="ow-soft-card p-4 space-y-3">
         <div className="flex items-center gap-2.5">
           <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/20">
             <Send className="size-5" />
@@ -98,7 +98,7 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
       </div>
 
       {/* Token selector */}
-      <div className="ow-glass-card p-4 space-y-3">
+      <div className="ow-soft-card p-4 space-y-3">
         <div className="ow-section-heading">Select Token</div>
         <div className="flex gap-2 flex-wrap">
           {tokenList.map((t) => {
@@ -124,7 +124,7 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
       </div>
 
       {/* Recipient */}
-      <div className="ow-glass-card p-4 space-y-3">
+      <div className="ow-soft-card p-4 space-y-3">
         <div className="ow-section-heading">Recipient</div>
         <div className="relative">
           <Input
@@ -191,7 +191,7 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
       </div>
 
       {/* Amount */}
-      <div className="ow-glass-card p-4 space-y-3">
+      <div className="ow-soft-card p-4 space-y-3">
         <div className="flex justify-between items-center">
           <div className="ow-section-heading">Amount</div>
           <button

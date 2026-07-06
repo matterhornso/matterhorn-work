@@ -9,6 +9,46 @@ describe("artifact note context", () => {
       fileName: "plan.md",
       desk: "longevity",
       sessionSlug: "session-alpha",
+      isLegacy: false,
+      legacyKind: null,
+    });
+  });
+
+  test("extracts desk and session slug without leading ./", () => {
+    expect(getArtifactNoteContext("outputs/bittensor/session-beta/report.md")).toEqual({
+      path: "outputs/bittensor/session-beta/report.md",
+      fileName: "report.md",
+      desk: "bittensor",
+      sessionSlug: "session-beta",
+      isLegacy: false,
+      legacyKind: null,
+    });
+  });
+
+  test("flags legacy .opencode/openwork/outbox/ paths as developer-readable", () => {
+    expect(getArtifactNoteContext(".opencode/openwork/outbox/plan.md")).toEqual({
+      path: ".opencode/openwork/outbox/plan.md",
+      fileName: "plan.md",
+      desk: undefined,
+      sessionSlug: undefined,
+      isLegacy: true,
+      legacyKind: "opencode",
+    });
+    expect(getArtifactNoteContext("openwork/outbox/report.md")).toEqual({
+      path: "openwork/outbox/report.md",
+      fileName: "report.md",
+      desk: undefined,
+      sessionSlug: undefined,
+      isLegacy: true,
+      legacyKind: "openwork",
+    });
+    expect(getArtifactNoteContext("outbox/artifact.md")).toEqual({
+      path: "outbox/artifact.md",
+      fileName: "artifact.md",
+      desk: undefined,
+      sessionSlug: undefined,
+      isLegacy: true,
+      legacyKind: "outbox",
     });
   });
 
@@ -18,6 +58,8 @@ describe("artifact note context", () => {
       fileName: "customer.md",
       desk: undefined,
       sessionSlug: undefined,
+      isLegacy: false,
+      legacyKind: null,
     });
   });
 });

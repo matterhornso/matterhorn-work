@@ -1,15 +1,13 @@
 /** @jsxImportSource react */
 import type { CSSProperties } from "react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { usePanelRef } from "react-resizable-panels";
 import {
   BarChart3,
-  Bell,
   BrainCircuit,
   Copy,
-  Database,
   Dumbbell,
   FileText,
   FolderOpen,
@@ -18,7 +16,6 @@ import {
   Mic2,
   PanelRightClose,
   PencilLine,
-  Plus,
   Settings2,
   ShieldCheck,
   CircleUserRound,
@@ -47,6 +44,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ConfirmModal } from "../../../design-system/modals/confirm-modal";
 import type { ProviderAuthModalProps } from "../../connections/provider-auth/provider-auth-modal";
 import { RenameSessionModal } from "../modals/rename-session-modal";
@@ -66,11 +68,22 @@ import { StatusBar, type StatusBarProps } from "./status-bar";
 import { OwDotTicker } from "../../../shell/dot-ticker";
 import { useReactRenderWatchdog } from "../../../shell/react-render-watchdog";
 import { useShellConfig } from "../../../shell/shell-config";
-import { type SidePanelItem, useUiStateStore } from "../../../shell/ui-state-store";
+import {
+  GLOBAL_HOME_SIDE_PANEL_KEY,
+  SIDE_PANEL_ITEMS,
+  type SidePanelItem,
+  useUiStateStore,
+} from "../../../shell/ui-state-store";
 
 import { isElectronRuntime } from "../../../../app/utils";
 import { isCollectibleArtifactTarget, isLocalhostBrowserTarget, type OpenTarget } from "../artifacts/open-target";
+import {
+  mergeOpenTargetsWithWorkflowOutputReceipts,
+  normalizeOutputReceiptPath,
+  workflowOutputReceiptsFromEvidence,
+} from "../artifacts/output-receipts";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
+import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
@@ -95,6 +108,7 @@ import {
 } from "../workflows/protocol-desk-ui";
 import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
+import { WorkflowStageCard } from "../workflows/workflow-stage-card";
 import {
   stageWorkflowRun,
   startWorkflowRun,
@@ -123,6 +137,9 @@ const WalletPanel = lazy(() => import("../../wallet/WalletPanel").then((module) 
 const MemoryPanel = lazy(() => import("../../memory/memory-panel").then((module) => ({
   default: module.MemoryPanel,
 })));
+const NotesPanel = lazy(() => import("../../notes/notes-page").then((module) => ({
+  default: module.NotesPage,
+})));
 const CommandPalette = lazy(() => import("../../wallet/components/CommandPalette").then((module) => ({
   default: module.CommandPalette,
 })));
@@ -133,7 +150,6 @@ const STARTUP_SKELETON_ROWS = [
   { id: "final", titleWidth: "36%", bodyWidth: "74%" },
 ];
 const GLOBAL_VOICE_SIDE_PANEL_KEY = "__matterhorn_voice__";
-const GLOBAL_HOME_SIDE_PANEL_KEY = "__matterhorn_home__";
 const VENUE_SIDE_PANELS = ["bittensor", "hyperliquid", "polymarket"] as const;
 type VenueSidePanel = (typeof VENUE_SIDE_PANELS)[number];
 const RAIL_BUTTON_CLASS =
@@ -211,6 +227,40 @@ function joinWorkspaceChildPath(root: string, child: string) {
   return trimmed.includes("\\") ? `${trimmed}\\${child}` : `${trimmed}/${child}`;
 }
 
+function compactPathSegment(path: string) {
+  const trimmed = path.trim().replace(/[\\/]+$/, "");
+  if (!trimmed) return "";
+  return trimmed.split(/[\\/]+/).filter(Boolean).at(-1) ?? trimmed;
+}
+
+function WorkspaceHomeIconAction(props: {
+  label: string;
+  tooltip: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="inline-flex" />}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label={props.label}
+          title={props.tooltip}
+          disabled={props.disabled}
+          onClick={props.onClick}
+          className="size-7 rounded-md text-dls-secondary transition-colors hover:bg-dls-hover hover:text-dls-text focus-visible:ring-1 focus-visible:ring-dls-border disabled:text-dls-secondary/45"
+        >
+          {props.children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{props.tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 type HomeCapabilityStatusItem = {
   id: CustomerWorkflowIconHint;
   title: string;
@@ -219,50 +269,60 @@ type HomeCapabilityStatusItem = {
   proof: string;
 };
 
-const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: string; prompt: string }>> = {
+const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: string; detail: string; prompt: string }>> = {
   bittensor: [
     {
       title: "Show my TAO balance",
+      detail: "Read a public SS58 coldkey balance and explain what is safe to share.",
       prompt: "Show my TAO balance for this SS58 public address: <paste public SS58 address>. Use public wallet context only and do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
     },
     {
       title: "Find useful subnets",
+      detail: "Explain useful subnets in plain language, including image-generation options.",
       prompt: "Find useful Bittensor subnets for image generation. Explain what each subnet does, why it is useful, and what data source/freshness you used.",
     },
     {
       title: "Compare validators",
+      detail: "Compare validators before staking, with risk notes and missing public context.",
       prompt: "Compare Bittensor validators on subnet 14 with a balanced strategy. Show source, freshness, risks, and what extra public context is needed before staking.",
     },
     {
       title: "Prepare staking preview",
+      detail: "Build a non-custodial preview that must be reviewed and signed elsewhere.",
       prompt: "Prepare a Bittensor staking preview for 1 TAO on subnet 14. Ask for the public validator hotkey and coldkey if missing. This must be unsigned and require an external Bittensor-compatible signer.",
     },
   ],
   hyperliquid: [
     {
       title: "Show market context",
+      detail: "Summarize spread, depth, and stale-data warnings without submission.",
       prompt: "Show BTC orderbook context on Hyperliquid, spread, depth summary, and stale-data warnings. Explain that Matterhorn can prepare an external trade handoff, but Can submit: No and Live submission: Off.",
     },
     {
       title: "Show account exposure",
+      detail: "Use public or read-only account context only; never ask for exchange secrets.",
       prompt: "Summarize my public/read-only Hyperliquid account exposure if an address or public account context is available. Do not ask for API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
     },
     {
       title: "Prepare trade handoff",
+      detail: "Create an external-client handoff with live submission disabled.",
       prompt: "Prepare a Hyperliquid external trade handoff for BTC with Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
     },
   ],
   polymarket: [
     {
       title: "Research a market",
+      detail: "Explain outcomes, liquidity, orderbook context, and compliance state.",
       prompt: "Summarize this Polymarket market: <paste market URL or slug>. Include outcomes, liquidity/orderbook context, compliance state, source, freshness, and no bet placement.",
     },
     {
       title: "Check compliance",
+      detail: "If blocked, do not expose executable price, size, share, or order fields.",
       prompt: "Check whether this Polymarket market is eligible for a handoff. If compliance blocks the flow, do not show executable price, size, share, or order fields.",
     },
     {
       title: "Prepare trade handoff",
+      detail: "Build a non-custodial wallet handoff while live submission stays off.",
       prompt: "Prepare a Polymarket compliance-gated external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
     },
   ],
@@ -469,21 +529,18 @@ function ProtocolDeskEmptyState({
       style={deskToneStyle(panel)}
       aria-label={`${visual?.displayName ?? panel} desk start`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          className="inline-flex w-fit items-center gap-2 rounded-full bg-dls-surface/70 px-3 py-2 text-xs font-semibold text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+          className="inline-flex w-fit items-center gap-2 rounded-md px-2 py-1.5 text-xs font-semibold text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.10)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
           onClick={onBackHome}
           aria-label="Back to Home"
         >
           <span aria-hidden="true">←</span>
           Back to Home
         </button>
-        <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-3 py-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
-          Choose a task, then review it with the agent
-        </span>
       </div>
-      <div className="matterhorn-focused-desk-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-4 py-5 shadow-[inset_0_0_0_1px_rgba(var(--matterhorn-desk-rgb),0.09)] sm:px-5 sm:py-6">
+      <div className="matterhorn-focused-desk-hero px-1 py-2">
         <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <span className="flex size-14 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
@@ -494,16 +551,10 @@ function ProtocolDeskEmptyState({
                 {visual?.displayName ?? panel} desk
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
-                {visual?.shortDescription ?? "Focused protocol workspace."} Pick a task below to open this desk's agent.
-                You can review the task before anything is sent.
+                {visual?.shortDescription ?? "Focused protocol workspace."} Choose a task to start this desk agent.
+                Matterhorn keeps signing and live submission outside the app.
               </p>
             </div>
-          </div>
-          <div className="matterhorn-focused-desk-boundary flex max-w-full flex-wrap gap-1.5 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] lg:max-w-56 lg:justify-end lg:text-right">
-            <span>Dedicated agent</span>
-            <span>External signer</span>
-            <span>Editable tasks</span>
-            <span>No auto-send</span>
           </div>
         </div>
       </div>
@@ -512,26 +563,30 @@ function ProtocolDeskEmptyState({
         <span className="font-semibold text-[var(--matterhorn-desk-color)]">Boundary:</span> {safeBoundary}
       </p>
 
-      <div className="matterhorn-focused-desk-prompt-list overflow-hidden rounded-xl bg-dls-surface/48 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]" aria-label="Agent tasks">
-        {prompts.map((item) => (
-          <button
-            key={item.title}
-            type="button"
-            className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-4 py-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-            onClick={() => {
-              setDraftedPromptTitle(item.title);
-              onUsePrompt(item.prompt, item.title);
-            }}
-          >
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold text-dls-text">{item.title}</span>
-              <span className="mt-1 block max-w-2xl text-xs leading-5 text-dls-secondary">{item.prompt}</span>
-            </span>
-            <span className="text-xs font-semibold text-[var(--matterhorn-desk-color)]" aria-label="Open with desk agent" title="Open with desk agent">
-              {draftConfig?.confirmCtaLabel ?? "Create editable draft"}
-            </span>
-          </button>
-        ))}
+      <div className="matterhorn-focused-desk-prompt-list space-y-2" aria-label="Agent tasks">
+        {prompts.map((item) => {
+          const evidenceHint = panel === "bittensor"
+            ? "reads: public SS58 and subnet context"
+            : panel === "hyperliquid"
+              ? "reads: public market and account context"
+              : panel === "polymarket"
+                ? "reads: public market and compliance context"
+                : "reads: public context";
+          return (
+            <WorkflowStageCard
+              key={item.title}
+              title={item.title}
+              objective={item.detail}
+              status="idle"
+              evidenceHints={[evidenceHint]}
+              actionLabel={draftConfig?.confirmCtaLabel ?? "Start task"}
+              onAction={() => {
+                setDraftedPromptTitle(item.title);
+                onUsePrompt(item.prompt, item.title);
+              }}
+            />
+          );
+        })}
       </div>
       {draftedPromptTitle ? (
         <div
@@ -735,6 +790,7 @@ function writeHiddenAccessibleTargetIds(workspaceId: string | null | undefined, 
 
 export function SessionPage(props: SessionPageProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { config: shellConfig } = useShellConfig();
   const wallet = useWallet();
   const sessionWallet = useSessionWallet(wallet.store);
@@ -805,11 +861,44 @@ export function SessionPage(props: SessionPageProps) {
   const [hiddenAccessibleTargetIds, setHiddenAccessibleTargetIds] = useState<Set<string>>(() => new Set());
   const [, setExtensionStateVersion] = useState(0);
   const loadedHiddenTargetsKeyRef = useRef<string | null>(null);
-  const accessibleTargets = useMemo(
+  const outputReceiptWorkspaceId = (props.runtimeWorkspaceId ?? props.selectedWorkspaceId).trim();
+  const outputReceiptsQuery = useQuery({
+    queryKey: ["workflow-output-receipts", outputReceiptWorkspaceId] as const,
+    queryFn: () => props.matterhornServerClient!.listProjectEvidence(outputReceiptWorkspaceId, { limit: 200 }),
+    enabled: Boolean(props.matterhornServerClient && outputReceiptWorkspaceId),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+  const workflowOutputReceipts = useMemo(
+    () => workflowOutputReceiptsFromEvidence(outputReceiptsQuery.data?.items ?? []),
+    [outputReceiptsQuery.data?.items],
+  );
+  const messageAccessibleTargets = useMemo(
     () => openTargets.filter((target) => isTrackableAccessibleTarget(target) && !hiddenAccessibleTargetIds.has(target.id)),
     [hiddenAccessibleTargetIds, openTargets],
   );
-  const artifactFileTargets = useMemo(() => accessibleTargets.filter(isCollectibleArtifactTarget), [accessibleTargets]);
+  const artifactFileTargets = useMemo(
+    () => mergeOpenTargetsWithWorkflowOutputReceipts(
+      messageAccessibleTargets.filter(isCollectibleArtifactTarget),
+      workflowOutputReceipts,
+    ).filter((target) => isCollectibleArtifactTarget(target) && !hiddenAccessibleTargetIds.has(target.id)),
+    [hiddenAccessibleTargetIds, messageAccessibleTargets, workflowOutputReceipts],
+  );
+  const accessibleTargets = useMemo(
+    () => {
+      const targetsById = new Map<string, OpenTarget>();
+      for (const target of messageAccessibleTargets) {
+        if (!isCollectibleArtifactTarget(target)) {
+          targetsById.set(target.id, target);
+        }
+      }
+      for (const target of artifactFileTargets) {
+        targetsById.set(target.id, target);
+      }
+      return Array.from(targetsById.values());
+    },
+    [artifactFileTargets, messageAccessibleTargets],
+  );
   const visibleArtifactTarget = artifactTarget ?? artifactFileTargets[0] ?? null;
   const artifactTargetCount = artifactFileTargets.length;
   const hasArtifactTargets = artifactTargetCount > 0;
@@ -821,6 +910,7 @@ export function SessionPage(props: SessionPageProps) {
   const voiceRailActive = activeSidePanel === "voice";
   const profileRailActive = activeSidePanel === "profile";
   const memoryRailActive = activeSidePanel === "memory";
+  const notesRailActive = activeSidePanel === "notes";
   const walletRailActive = activeSidePanel === "wallet";
   const bittensorRailActive = activeSidePanel === "bittensor";
   const hyperliquidRailActive = activeSidePanel === "hyperliquid";
@@ -895,8 +985,8 @@ export function SessionPage(props: SessionPageProps) {
     };
   }, [refreshMemorySuggestionUnreadCount]);
   const memoryInboxLabel = memorySuggestionUnreadCount > 0
-    ? `Memory inbox: ${memorySuggestionUnreadCount > 99 ? "99+" : memorySuggestionUnreadCount} pending suggestions`
-    : "Memory inbox: no pending suggestions";
+    ? `Memory review: ${memorySuggestionUnreadCount > 99 ? "99+" : memorySuggestionUnreadCount} pending suggestions`
+    : "Memory review: no pending suggestions";
 
   const businessWorkflowLaunchers = useMemo(
     () => customerWorkflowStarterCards.filter((card) => card.id === "wellness_creator_workflow"),
@@ -936,6 +1026,7 @@ export function SessionPage(props: SessionPageProps) {
   const homeProjectPath = props.selectedWorkspaceRoot.trim();
   const homeOutputsPath = homeProjectPath ? joinWorkspaceChildPath(homeProjectPath, "outputs") : "outputs/";
   const homeProjectName = props.selectedWorkspaceDisplay.displayName || props.selectedWorkspaceDisplay.name || "Current project";
+  const homeFolderLabel = compactPathSegment(homeProjectPath) || "No local folder";
   const goHome = useCallback(() => {
     props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
   }, [props.selectedWorkspaceId, props.sidebar]);
@@ -958,6 +1049,13 @@ export function SessionPage(props: SessionPageProps) {
     if (panel === "voice") return;
     setSidePanelState(props.selectedSessionId ?? GLOBAL_HOME_SIDE_PANEL_KEY, panel);
   }, [props.selectedSessionId, setSidePanelState]);
+
+  useEffect(() => {
+    const requestedPanel = new URLSearchParams(location.search).get("panel");
+    if (SIDE_PANEL_ITEMS.includes(requestedPanel as SidePanelItem)) {
+      setCurrentSidePanel(requestedPanel as SidePanelItem);
+    }
+  }, [location.search, setCurrentSidePanel]);
 
   useEffect(() => {
     setActiveWorkflowDeskId(null);
@@ -1182,6 +1280,16 @@ export function SessionPage(props: SessionPageProps) {
     preserveSidePanelOnPanelOpenRef.current = true;
     setCurrentSidePanel("artifacts");
   }, [artifactTarget?.id, browserUrlForTarget, setCurrentSidePanel]);
+  const openOutputPathFromActivity = useCallback((outputPath: string) => {
+    const normalizedPath = normalizeOutputReceiptPath(outputPath).toLowerCase();
+    const target = artifactFileTargets.find((candidate) => (
+      normalizeOutputReceiptPath(candidate.value).toLowerCase() === normalizedPath
+    ));
+
+    if (target) {
+      openTarget(target);
+    }
+  }, [artifactFileTargets, openTarget]);
   const handleOpenTargetsChange = useCallback((targets: OpenTarget[]) => {
     setOpenTargets(targets);
     setArtifactTarget((current) => {
@@ -1251,6 +1359,9 @@ export function SessionPage(props: SessionPageProps) {
   }, [toggleCurrentSidePanel]);
   const openMemoryRailPane = useCallback(() => {
     toggleCurrentSidePanel("memory");
+  }, [toggleCurrentSidePanel]);
+  const openNotesRailPane = useCallback(() => {
+    toggleCurrentSidePanel("notes");
   }, [toggleCurrentSidePanel]);
   const primeProtocolRailPrompt = useCallback((
     panel: VenueSidePanel,
@@ -1624,7 +1735,7 @@ export function SessionPage(props: SessionPageProps) {
                     </div>
                     <div className="space-y-3">
                       {STARTUP_SKELETON_ROWS.map((row) => (
-                        <div key={row.id} className="rounded-2xl border border-dls-border bg-dls-hover/40 p-4">
+                        <div key={row.id} className="rounded-lg bg-dls-hover/35 p-4">
                           <div
                             className="mb-3 h-3 animate-pulse rounded-full bg-dls-hover/80"
                             style={{ width: row.titleWidth }}
@@ -1689,7 +1800,7 @@ export function SessionPage(props: SessionPageProps) {
                 <div className={`mx-auto max-w-[800px] px-6 ${showWorkspaceSetupEmptyState ? "pt-20" : "pt-10"}`}>
                   {props.notFoundMessage ? (
                     <div className="px-6 py-16 text-center">
-                      <div className="mx-auto max-w-md rounded-2xl border border-dls-border bg-dls-card px-5 py-6 shadow-[var(--dls-card-shadow)]">
+                      <div className="mx-auto max-w-md rounded-lg bg-dls-card px-5 py-6">
                         <h3 className="text-base font-medium text-dls-text">Workspace or session not found</h3>
                         <p className="mt-2 text-sm leading-6 text-dls-secondary">{props.notFoundMessage}</p>
                       </div>
@@ -1711,7 +1822,7 @@ export function SessionPage(props: SessionPageProps) {
                     </div>
                   ) : showSelectedWorkspaceError ? (
                     <div className="px-6 py-16">
-                      <div className="mx-auto max-w-lg rounded-2xl border border-red-7/35 bg-red-1/40 p-5 text-left shadow-[var(--dls-card-shadow)]">
+                      <div className="mx-auto max-w-lg rounded-lg bg-red-1/40 p-5 text-left ring-1 ring-red-7/25">
                         <div className="text-sm font-medium text-red-11">{selectedWorkspaceErrorTitle}</div>
                         <p className="mt-2 whitespace-pre-wrap wrap-anywhere text-sm leading-6 text-red-11/90">
                           {selectedWorkspaceErrorMessage}
@@ -1788,114 +1899,126 @@ export function SessionPage(props: SessionPageProps) {
                       className="absolute inset-0 flex items-start justify-center overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 pb-24 pt-6 sm:px-6 sm:pb-28 sm:pt-8"
                       style={{ scrollbarGutter: "stable" } as CSSProperties}
                     >
-                      <div className="relative w-full max-w-4xl space-y-5">
-                        <div className="mx-auto max-w-2xl space-y-2 text-center">
-                          <h2 className="text-2xl font-semibold leading-tight text-dls-text">
-                            Start a Matterhorn project.
-                          </h2>
-                          <p className="mx-auto max-w-xl text-sm leading-6 text-dls-secondary">
-                            Create a project folder, open a focused desk, or start a blank chat. Matterhorn keeps desk
-                            context, wallet state, previews, and safety boundaries visible before anything runs.
-                          </p>
-                        </div>
-                        <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-2 rounded-md bg-[var(--matterhorn-blue)] px-4 py-2 text-sm font-semibold text-[var(--matterhorn-ink)] shadow-[0_8px_18px_rgba(var(--matterhorn-blue-rgb),0.12)] transition-colors hover:bg-[#e7f8ff]"
-                            onClick={props.sidebar.onOpenCreateWorkspace}
-                          >
-                            <Plus className="size-4" />
-                            New Project
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-2 rounded-md bg-dls-surface-muted px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
-                            disabled={props.sidebar.newTaskDisabled}
-                            onClick={() => {
-                              if (blankWorkflowLauncher && props.sidebar.onCreateTaskWithPrompt) {
-                                props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, { title: blankWorkflowLauncher.title });
-                                return;
-                              }
-                              props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
-                            }}
-                          >
-                            <FileText className="size-4" />
-                            New chat
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-2 rounded-md border border-dls-border/70 bg-dls-surface/50 px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
-                            onClick={() => openQuickJot()}
-                          >
-                            <PencilLine className="size-4" />
-                            {t("notes.quick_jot_button_title")}
-                          </button>
-                        </div>
-                        <div className="mx-auto grid w-full max-w-3xl gap-2 rounded-lg border border-dls-border/70 bg-dls-surface-muted/20 px-3 py-2 text-left text-xs sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                          <div className="min-w-0 space-y-1">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <span className="shrink-0 font-semibold text-dls-text">{homeProjectName}</span>
-                              <span className="shrink-0 text-dls-secondary">outputs/</span>
+                      <div className="relative w-full max-w-5xl space-y-6">
+                        <section className="space-y-3" aria-label="Workspace home">
+                          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <div className="min-w-0">
+                              <h2 className="truncate text-lg font-semibold leading-7 text-dls-text">
+                                {homeProjectName}
+                              </h2>
+                              <p className="max-w-2xl text-sm leading-6 text-dls-secondary">
+                                Start a desk task, continue a chat, or collect notes and outputs for this workspace.
+                              </p>
                             </div>
-                            <div className="truncate font-mono text-[11px] leading-4 text-dls-secondary" title={homeProjectPath || "No local project folder selected"}>
-                              {homeProjectPath || "No local project folder selected"}
+                            <div className="flex flex-wrap gap-2 md:justify-end">
+                              <button
+                                type="button"
+                                className="inline-flex items-center rounded-md bg-[var(--matterhorn-blue)] px-3 py-1.5 text-sm font-semibold text-[var(--matterhorn-ink)] transition-colors hover:bg-[#e7f8ff] disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={props.sidebar.newTaskDisabled}
+                                onClick={() => {
+                                  if (blankWorkflowLauncher && props.sidebar.onCreateTaskWithPrompt) {
+                                    props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, { title: blankWorkflowLauncher.title });
+                                    return;
+                                  }
+                                  props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
+                                }}
+                              >
+                                New chat
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex items-center rounded-md bg-dls-surface-muted/45 px-3 py-1.5 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                                onClick={props.sidebar.onOpenCreateWorkspace}
+                              >
+                                New project
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex items-center rounded-md bg-transparent px-3 py-1.5 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                                onClick={() => openQuickJot()}
+                              >
+                                Jot note
+                              </button>
                             </div>
                           </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover disabled:cursor-not-allowed disabled:text-dls-secondary"
-                              disabled={!homeProjectPath}
-                              onClick={() => void copyHomePath(homeProjectPath, "Project path")}
-                            >
-                              <Copy className="size-3.5" />
-                              {homePathCopyLabel === "Project path" ? "Copied" : "Copy path"}
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover disabled:cursor-not-allowed disabled:text-dls-secondary"
-                              disabled={!homeProjectPath}
-                              onClick={() => props.sidebar.onRevealWorkspace(props.selectedWorkspaceId)}
-                            >
-                              <FolderOpen className="size-3.5" />
-                              Open folder
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
-                              onClick={() => void copyHomePath(homeOutputsPath, "Outputs path")}
-                            >
-                              <Copy className="size-3.5" />
-                              {homePathCopyLabel === "Outputs path" ? "Copied" : "Copy outputs"}
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover disabled:cursor-not-allowed disabled:text-dls-secondary"
-                              disabled={!homeProjectPath || !props.onRevealPath}
-                              onClick={() => {
-                                if (!props.onRevealPath) return;
-                                void props.onRevealPath(homeOutputsPath, "Outputs folder");
-                              }}
-                            >
-                              <FolderOpen className="size-3.5" />
-                              Open outputs
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
-                              onClick={() =>
-                                openQuickJot({
-                                  type: "output",
-                                  id: homeOutputsPath,
-                                  label: "Outputs",
-                                })
-                              }
-                            >
-                              <PencilLine className="size-3.5" />
-                              {t("notes.jot_action")}
-                            </button>
+                          <div className="flex min-w-0 flex-col gap-2 text-xs text-dls-secondary sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                              <span className="inline-flex min-w-0 items-baseline gap-2">
+                                <span className="font-medium text-dls-text">Folder</span>
+                                <span
+                                  className="min-w-0 max-w-[18rem] truncate font-mono text-[11px] leading-4 text-dls-secondary"
+                                  title={homeProjectPath || "No local project folder selected"}
+                                >
+                                  {homeFolderLabel}
+                                </span>
+                              </span>
+                              <span className="hidden h-3 w-px bg-dls-border/30 sm:block" aria-hidden="true" />
+                              <span className="inline-flex min-w-0 items-baseline gap-2">
+                                <span className="font-medium text-dls-text">Outputs</span>
+                                <span className="font-mono text-[11px] leading-4 text-dls-secondary" title={homeOutputsPath}>outputs/</span>
+                              </span>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <WorkspaceHomeIconAction
+                                label={homePathCopyLabel === "Project path" ? "Project path copied" : "Copy project path"}
+                                tooltip={homePathCopyLabel === "Project path" ? "Copied" : "Copy project path"}
+                                disabled={!homeProjectPath}
+                                onClick={() => void copyHomePath(homeProjectPath, "Project path")}
+                              >
+                                <Copy className="size-3.5" />
+                              </WorkspaceHomeIconAction>
+                              <WorkspaceHomeIconAction
+                                label="Open project folder"
+                                tooltip="Open project folder"
+                                disabled={!homeProjectPath}
+                                onClick={() => props.sidebar.onRevealWorkspace(props.selectedWorkspaceId)}
+                              >
+                                <FolderOpen className="size-3.5" />
+                              </WorkspaceHomeIconAction>
+                              <WorkspaceHomeIconAction
+                                label={homePathCopyLabel === "Outputs path" ? "Outputs path copied" : "Copy outputs path"}
+                                tooltip={homePathCopyLabel === "Outputs path" ? "Copied" : "Copy outputs path"}
+                                onClick={() => void copyHomePath(homeOutputsPath, "Outputs path")}
+                              >
+                                <Copy className="size-3.5" />
+                              </WorkspaceHomeIconAction>
+                              <WorkspaceHomeIconAction
+                                label="Open outputs folder"
+                                tooltip="Open outputs folder"
+                                disabled={!homeProjectPath || !props.onRevealPath}
+                                onClick={() => {
+                                  if (!props.onRevealPath) return;
+                                  void props.onRevealPath(homeOutputsPath, "Outputs folder");
+                                }}
+                              >
+                                <FolderOpen className="size-3.5" />
+                              </WorkspaceHomeIconAction>
+                              <WorkspaceHomeIconAction
+                                label="Jot a note about outputs"
+                                tooltip="Jot a note about outputs"
+                                onClick={() =>
+                                  openQuickJot({
+                                    type: "output",
+                                    id: homeOutputsPath,
+                                    label: "Outputs",
+                                  })
+                                }
+                              >
+                                <PencilLine className="size-3.5" />
+                              </WorkspaceHomeIconAction>
+                            </div>
                           </div>
-                        </div>
+                        </section>
+                        {props.matterhornServerClient && props.runtimeWorkspaceId ? (
+                          <RecentActivitySection
+                            matterhornServerClient={props.matterhornServerClient}
+                            runtimeWorkspaceId={props.runtimeWorkspaceId}
+                            limit={8}
+                            title="Project Activity"
+                            description="Recent notes, outputs, memory reviews, and desk runs."
+                            onOpenOutputPath={openOutputPathFromActivity}
+                          />
+                        ) : null}
                         <HomeCapabilityOverview
                           onOpenCapability={(id) => {
                             if (id === "bittensor" || id === "hyperliquid" || id === "polymarket") {
@@ -2117,9 +2240,9 @@ export function SessionPage(props: SessionPageProps) {
                 <ResizableHandle withHandle className="hidden lg:flex" />
                 <ResizablePanel
                   panelRef={browserPanelRef}
-                  defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "memory" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
-                  minSize={visibleSidePanel === "extensions" || visibleSidePanel === "memory" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
-                  maxSize={protocolSidePanelOpen || visibleSidePanel === "memory" || visibleSidePanel === "extensions" ? "500px" : "70%"}
+                  defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
+                  minSize={visibleSidePanel === "extensions" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
+                  maxSize={protocolSidePanelOpen || visibleSidePanel === "memory" || visibleSidePanel === "notes" || visibleSidePanel === "extensions" ? "500px" : "70%"}
                   className="hidden h-full min-h-0 overflow-hidden lg:flex lg:flex-col"
                 >
                   <Suspense fallback={<LazyPanelFallback />}>
@@ -2142,6 +2265,11 @@ export function SessionPage(props: SessionPageProps) {
                         workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
                         onClose={closeRightPane}
                       />
+                    ) : visibleSidePanel === "notes" ? (
+                      <NotesPanel
+                        client={props.matterhornServerClient}
+                        workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
+                      />
                     ) : visibleSidePanel === "artifacts" && visibleArtifactTarget && props.matterhornServerClient && props.runtimeWorkspaceId ? (
                       <ArtifactPanel
                         client={props.matterhornServerClient}
@@ -2151,8 +2279,10 @@ export function SessionPage(props: SessionPageProps) {
                         isRemoteWorkspace={props.surface?.isRemoteWorkspace ?? false}
                         target={visibleArtifactTarget}
                         targets={artifactFileTargets}
+                        outputReceipts={workflowOutputReceipts}
                         onSelectTarget={openTarget}
                         onAddNote={(artifactPath, desk, sessionSlug) => void addArtifactNote(artifactPath, desk, sessionSlug)}
+                        onRevealPath={props.onRevealPath}
                         onClose={closeRightPane}
                       />
                     ) : isVenueSidePanel(visibleSidePanel) ? (
@@ -2264,13 +2394,13 @@ export function SessionPage(props: SessionPageProps) {
                   artifactRailActive && RAIL_ACTIVE_CLASS,
                 )}
                 onClick={openArtifactRailPane}
-                title={hasArtifactTargets ? `Artifacts and files (${artifactTargetCount})` : "Artifacts and files"}
-                aria-label={hasArtifactTargets ? `Artifacts and files (${artifactTargetCount})` : "Artifacts and files"}
+                title={hasArtifactTargets ? `Outputs (${artifactTargetCount})` : "Outputs"}
+                aria-label={hasArtifactTargets ? `Outputs (${artifactTargetCount})` : "Outputs"}
                 aria-pressed={artifactRailActive}
                 disabled={!hasArtifactTargets}
               >
                 <FileText size={17} />
-                <span className={RAIL_LABEL_CLASS}>Artifacts</span>
+                <span className={RAIL_LABEL_CLASS}>Outputs</span>
                 {artifactTargetCount > 0 ? (
                   <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
                     {artifactTargetCount > 9 ? "9+" : artifactTargetCount}
@@ -2305,10 +2435,10 @@ export function SessionPage(props: SessionPageProps) {
               aria-label={`${memoryInboxLabel}. Review remembered context, use selected memories in chat, forget records, and export evidence.`}
               aria-pressed={memoryRailActive}
             >
-              {memorySuggestionUnreadCount > 0 ? <Bell size={17} /> : <Database size={17} />}
+              <BrainCircuit size={17} />
               <span className={RAIL_LABEL_CLASS}>Memory</span>
               {memorySuggestionUnreadCount > 0 ? (
-                <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
+                <span className="absolute right-1 top-1 flex min-w-3 items-center justify-center rounded-md bg-dls-hover px-1 text-[9px] font-semibold leading-3 text-dls-secondary ring-1 ring-dls-border/40">
                   {memorySuggestionUnreadCount > 99 ? "99+" : memorySuggestionUnreadCount}
                 </span>
               ) : null}
@@ -2316,10 +2446,14 @@ export function SessionPage(props: SessionPageProps) {
             <Button
               variant="ghost"
               size="icon-sm"
-              className={cn(`relative ${RAIL_BUTTON_CLASS}`)}
-              onClick={() => navigate(workspaceNotesRoute(props.selectedWorkspaceId))}
+              className={cn(
+                `relative ${RAIL_BUTTON_CLASS}`,
+                notesRailActive && RAIL_ACTIVE_CLASS,
+              )}
+              onClick={openNotesRailPane}
               title={t("notes.rail_title")}
               aria-label={t("notes.rail_title")}
+              aria-pressed={notesRailActive}
             >
               <PencilLine size={17} />
               <span className={RAIL_LABEL_CLASS}>{t("notes.rail_label")}</span>

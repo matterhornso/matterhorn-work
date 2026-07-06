@@ -48,7 +48,7 @@ export function CommandPalette({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[20vh] bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-md mx-4 rounded-2xl border border-dls-border bg-dls-sidebar shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-150">
+      <div className="w-full max-w-md mx-4 rounded-lg border border-dls-border bg-dls-sidebar shadow-sm overflow-hidden animate-in zoom-in-95 duration-150">
         <input
           autoFocus
           value={query}

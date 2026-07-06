@@ -101,9 +101,9 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
   return (
     <div className="flex flex-col gap-4 p-4 h-full overflow-auto animate-fade-in">
       {/* Header */}
-      <div className="ow-glass-card ow-glow-border p-4 space-y-3">
+      <div className="ow-soft-card p-4 space-y-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/20">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-dls-surface-muted/35 text-primary">
             <Sparkles className="size-5" />
           </div>
           <div>
@@ -133,7 +133,7 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
       </div>
 
       {/* Intent input */}
-      <div className="ow-glass-card p-4 space-y-3">
+      <div className="ow-soft-card p-4 space-y-3">
         <div className="ow-section-heading">What should I do?</div>
         <div className="flex gap-2">
           <Input
@@ -170,7 +170,7 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
 
       {/* Preview card */}
       {preview && (
-        <div className="ow-glass-card border-violet-500/30 p-4 space-y-3 animate-slide-up">
+        <div className="ow-soft-card border-violet-500/30 p-4 space-y-3 animate-slide-up">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="flex size-7 items-center justify-center rounded-lg bg-violet-500/10">
@@ -309,7 +309,7 @@ function JobCard({
   const nextRunText = isActive ? `Next: ${new Date(job.schedule.nextRun).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Paused";
 
   return (
-    <div className="ow-glass-card p-3 space-y-2">
+    <div className="ow-soft-card p-3 space-y-2">
       <div className="flex items-center justify-between">
         <div className="min-w-0 flex items-center gap-2">
           <div className={cn(
@@ -377,5 +377,4 @@ function JobCard({
     </div>
   );
 }
-
 

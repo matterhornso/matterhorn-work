@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -18,6 +18,11 @@ const opencodeBaseUrl =
   process.env.MATTERHORN_LOCAL_OPENCODE_URL?.trim() ||
   process.env.OPENWORK_OPENCODE_BASE_URL?.trim() ||
   "";
+const detectedOpencodeBin = findInstalledOpencodeBin();
+const opencodeBin = process.env.OPENWORK_OPENCODE_BIN?.trim() || detectedOpencodeBin;
+const manageOpencode =
+  !opencodeBaseUrl &&
+  (process.env.OPENWORK_MANAGE_OPENCODE === "1" || Boolean(opencodeBin));
 
 const children = new Set();
 let shuttingDown = false;
@@ -87,6 +92,39 @@ function spawnChild(label, command, args, options = {}) {
   });
 
   return child;
+}
+
+function opencodePlatformSubdir() {
+  if (process.platform === "darwin" && process.arch === "arm64") return "darwin-arm64";
+  if (process.platform === "darwin" && process.arch === "x64") return "darwin-x64";
+  if (process.platform === "linux" && process.arch === "x64") return "linux-x64";
+  if (process.platform === "linux" && process.arch === "arm64") return "linux-arm64";
+  if (process.platform === "win32" && process.arch === "x64") return "windows-x64";
+  return "";
+}
+
+function findInstalledOpencodeBin() {
+  const platformSubdir = opencodePlatformSubdir();
+  if (!platformSubdir) return "";
+
+  const sidecarsDir = path.join(os.homedir(), ".openwork", "openwork-orchestrator", "sidecars", "opencode");
+  if (!existsSync(sidecarsDir)) return "";
+
+  try {
+    const versions = readdirSync(sidecarsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+
+    for (const version of versions) {
+      const candidate = path.join(sidecarsDir, version, platformSubdir, process.platform === "win32" ? "opencode.exe" : "opencode");
+      if (existsSync(candidate)) return candidate;
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
 }
 
 async function waitForJson(url, options = {}) {
@@ -194,7 +232,11 @@ async function main() {
 
   console.log("Starting Matterhorn Work local stack...");
   console.log(`Workspace: ${workspaceRoot}`);
-  if (!opencodeBaseUrl) {
+  if (opencodeBaseUrl) {
+    console.log(`OpenCode engine: ${opencodeBaseUrl}`);
+  } else if (manageOpencode) {
+    console.log(opencodeBin ? `OpenCode engine: managed local sidecar (${opencodeBin})` : "OpenCode engine: managed from PATH");
+  } else {
     console.log("OpenCode engine: not provided. Chat creation may stay disabled until an engine is connected.");
   }
 
@@ -202,6 +244,8 @@ async function main() {
     env: {
       ...process.env,
       OPENWORK_DEV_MODE: "1",
+      ...(manageOpencode ? { OPENWORK_MANAGE_OPENCODE: "1" } : {}),
+      ...(opencodeBin ? { OPENWORK_OPENCODE_BIN: opencodeBin } : {}),
     },
   });
 

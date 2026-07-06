@@ -597,7 +597,7 @@ function FileCard(props: {
   return (
     <div
       className={cn(
-        "group relative flex items-center gap-3 rounded-2xl border px-4 py-3 transition-colors",
+        "group relative flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors",
         props.tone === "user"
           ? "border-gray-6/60 bg-gray-2/40 hover:bg-gray-2/60"
           : "border-gray-6/40 bg-gray-1/40 hover:bg-gray-2/30",
@@ -639,7 +639,7 @@ function FileCard(props: {
           {menuOpen ? (
             <>
               <button type="button" className="fixed inset-0 z-30 cursor-default border-0 bg-transparent p-0" aria-label="Close file actions" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-full z-40 mt-1 w-48 rounded-2xl border border-dls-border bg-dls-surface p-1.5 shadow-lg">
+              <div className="absolute right-0 top-full z-40 mt-1 w-48 rounded-lg border border-dls-border bg-dls-surface p-1.5 shadow-lg">
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-gray-3/60"
@@ -1447,9 +1447,9 @@ function MessageBlockRow(props: {
   const hasSearchMatch = blockMessageIds.some((id) => props.searchMatchMessageIds?.has(id));
   const hasActiveSearchMatch = blockMessageIds.some((id) => id === props.activeSearchMessageId);
   const searchOutlineClass = hasActiveSearchMatch
-    ? "outline outline-2 outline-amber-8/70 outline-offset-2 rounded-2xl"
+    ? "outline outline-2 outline-amber-8/70 outline-offset-2 rounded-lg"
     : hasSearchMatch
-      ? "outline outline-1 outline-amber-7/50 outline-offset-1 rounded-2xl"
+      ? "outline outline-1 outline-amber-7/50 outline-offset-1 rounded-lg"
       : "";
   const perfStyle = props.shouldUseContentVisibility && props.blockIndex < props.totalBlocks - 12
     ? { contentVisibility: "auto", containIntrinsicSize: "180px" } satisfies CSSProperties
@@ -1467,8 +1467,8 @@ function MessageBlockRow(props: {
           className={cn(
             block.isUser
               ? props.isNestedVariant
-                ? "relative max-w-[92%] rounded-[20px] border border-dls-border bg-dls-sidebar px-4 py-3 text-sm leading-relaxed text-foreground"
-                : "relative max-w-[85%] rounded-[24px] border border-dls-border bg-dls-sidebar px-6 py-4 text-sm leading-relaxed text-foreground"
+                ? "relative max-w-[92%] rounded-lg border border-dls-border bg-dls-sidebar px-4 py-3 text-sm leading-relaxed text-foreground"
+                : "relative max-w-[85%] rounded-lg border border-dls-border bg-dls-sidebar px-6 py-4 text-sm leading-relaxed text-foreground"
               : props.isNestedVariant
                 ? "w-full relative text-sm leading-[1.65] text-foreground group"
                 : "w-full relative max-w-[760px] text-sm leading-[1.7] text-foreground group",
@@ -1534,8 +1534,8 @@ function MessageBlockRow(props: {
         className={cn(
           "text-sm text-foreground leading-relaxed",
           block.isUser && "border border-dls-border bg-dls-sidebar",
-          block.isUser && props.isNestedVariant && "max-w-[92%] rounded-[20px] px-4 py-3",
-          block.isUser && !props.isNestedVariant && "max-w-[85%] rounded-[24px] px-6 py-4",
+          block.isUser && props.isNestedVariant && "max-w-[92%] rounded-lg px-4 py-3",
+          block.isUser && !props.isNestedVariant && "max-w-[85%] rounded-lg px-6 py-4",
           !block.isUser && "w-full antialiased group",
           !block.isUser && !props.isNestedVariant && "max-w-[760px]",
           searchOutlineClass,
