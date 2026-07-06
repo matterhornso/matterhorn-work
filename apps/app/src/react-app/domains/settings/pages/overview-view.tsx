@@ -602,6 +602,18 @@ export function SettingsOverviewView(props: {
     staleTime: 30_000,
   });
 
+  const workspaceReadinessQuery = useQuery({
+    queryKey: ["settings-workspace-readiness", props.runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to check readiness.");
+      return client.workspaceReadiness(workspaceId);
+    },
+    staleTime: 30_000,
+  });
+
   const workspaceDataMapQuery = useQuery({
     queryKey: ["settings-workspace-data-map", props.runtimeWorkspaceId],
     enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
@@ -745,6 +757,29 @@ export function SettingsOverviewView(props: {
                 label="Model routing"
                 hint={`Default: ${summarizeModelSource(backendCapabilitiesQuery.data)}. ${summarizeModelRoutingPolicy(backendCapabilitiesQuery.data)}`}
                 value={<CapabilityBadge status={backendCapabilitiesQuery.data.models.status} />}
+              />
+              <Row
+                label="Workspace readiness"
+                hint={
+                  workspaceReadinessQuery.data
+                    ? `${workspaceReadinessQuery.data.summary.readyFeatures}/${workspaceReadinessQuery.data.summary.totalFeatures} actions ready. ${
+                        workspaceReadinessQuery.data.summary.blockingChecks.length
+                          ? `Blocked by ${workspaceReadinessQuery.data.summary.blockingChecks.join(", ")}.`
+                          : "No blockers reported."
+                      }`
+                    : workspaceReadinessQuery.isLoading
+                      ? "Checking workspace readiness."
+                      : "Readiness is unavailable until the workspace engine responds."
+                }
+                value={
+                  workspaceReadinessQuery.data ? (
+                    <CapabilityBadge status={workspaceReadinessQuery.data.summary.status} />
+                  ) : workspaceReadinessQuery.isLoading ? (
+                    <StatusBadge>Loading</StatusBadge>
+                  ) : (
+                    <StatusBadge tone="error">Unavailable</StatusBadge>
+                  )
+                }
               />
               <Row
                 label="Notes and memory"

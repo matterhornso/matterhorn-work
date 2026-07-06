@@ -259,6 +259,13 @@ import type {
   MatterhornBackendModelCatalogSnapshot,
   MatterhornBackendModelProviderSummary,
 } from "@matterhorn-work/types/backend-models";
+import type {
+  MatterhornBackendReadinessCheck,
+  MatterhornBackendReadinessCheckId,
+  MatterhornBackendReadinessFeature,
+  MatterhornBackendReadinessFeatureId,
+  MatterhornBackendReadinessResponse,
+} from "@matterhorn-work/types/backend-readiness";
 import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
@@ -2608,6 +2615,141 @@ function buildWorkspaceDataControls(
   };
 }
 
+function readinessCheck(input: MatterhornBackendReadinessCheck): MatterhornBackendReadinessCheck {
+  return input;
+}
+
+function featureLabel(featureId: MatterhornBackendReadinessFeatureId): string {
+  if (featureId === "start_chat") return "Start chat";
+  if (featureId === "start_desk_task") return "Start desk task";
+  if (featureId === "save_notes") return "Save notes";
+  if (featureId === "review_memory") return "Review memory";
+  if (featureId === "save_memory") return "Save memory";
+  return "Export evidence";
+}
+
+function readinessFeature(
+  featureId: MatterhornBackendReadinessFeatureId,
+  checks: Record<MatterhornBackendReadinessCheckId, MatterhornBackendReadinessCheck>,
+  requiredChecks: MatterhornBackendReadinessCheckId[],
+): MatterhornBackendReadinessFeature {
+  const blockingCheckIds = requiredChecks.filter((checkId) => checks[checkId].status !== "working");
+  const ready = blockingCheckIds.length === 0;
+  return {
+    featureId,
+    ready,
+    status: ready ? "working" : "needs_setup",
+    label: featureLabel(featureId),
+    description: ready
+      ? "Ready for this workspace."
+      : `Blocked by ${blockingCheckIds.map((checkId) => checks[checkId].label).join(", ")}.`,
+    blockingCheckIds,
+  };
+}
+
+function buildWorkspaceReadiness(
+  config: ServerConfig,
+  workspace: WorkspaceInfo,
+  memoryVault: MatterhornMemoryVault,
+): MatterhornBackendReadinessResponse {
+  const dataMap = buildWorkspaceDataMap(workspace, memoryVault);
+  const connection = resolveWorkspaceOpencodeConnection(config, workspace);
+  const opencodeConfigured = Boolean(connection.baseUrl?.trim());
+  const notesStore = dataMap.stores.notes;
+  const memoryStore = dataMap.stores.memory;
+  const outputsStore = dataMap.stores.outputs;
+  const ledgerStore = dataMap.stores.evidence;
+
+  const checks: Record<MatterhornBackendReadinessCheckId, MatterhornBackendReadinessCheck> = {
+    workspace_authorized: readinessCheck({
+      checkId: "workspace_authorized",
+      status: "working",
+      label: "Workspace authorized",
+      description: "The workspace path is inside an authorized Matterhorn Work root.",
+      requiredFor: ["start_chat", "start_desk_task", "save_notes", "review_memory", "save_memory", "export_evidence"],
+    }),
+    workspace_writable: readinessCheck({
+      checkId: "workspace_writable",
+      status: config.readOnly ? "needs_setup" : "working",
+      label: config.readOnly ? "Read-only server" : "Writable server",
+      description: config.readOnly
+        ? "The local engine is running read-only, so write actions are blocked."
+        : "The local engine can write workspace state.",
+      requiredFor: ["start_desk_task", "save_notes", "save_memory"],
+    }),
+    opencode_connection: readinessCheck({
+      checkId: "opencode_connection",
+      status: opencodeConfigured ? "working" : "needs_setup",
+      label: opencodeConfigured ? "OpenCode connection configured" : "OpenCode connection missing",
+      description: opencodeConfigured
+        ? "This workspace has an OpenCode base URL configured. Credentials are not exposed in this response."
+        : "Set up the local Matterhorn/OpenCode engine connection before starting chats or desk tasks.",
+      requiredFor: ["start_chat", "start_desk_task"],
+    }),
+    notes_store: readinessCheck({
+      checkId: "notes_store",
+      status: notesStore.status,
+      label: notesStore.label,
+      description: notesStore.description,
+      requiredFor: ["save_notes"],
+    }),
+    memory_vault: readinessCheck({
+      checkId: "memory_vault",
+      status: memoryStore.status,
+      label: memoryStore.label,
+      description: memoryStore.description,
+      requiredFor: ["review_memory", "save_memory"],
+    }),
+    outputs_folder: readinessCheck({
+      checkId: "outputs_folder",
+      status: outputsStore.status,
+      label: outputsStore.label,
+      description: outputsStore.description,
+      requiredFor: [],
+    }),
+    project_ledger: readinessCheck({
+      checkId: "project_ledger",
+      status: ledgerStore.status,
+      label: ledgerStore.label,
+      description: ledgerStore.description,
+      requiredFor: ["export_evidence"],
+    }),
+  };
+
+  const features: Record<MatterhornBackendReadinessFeatureId, MatterhornBackendReadinessFeature> = {
+    start_chat: readinessFeature("start_chat", checks, ["workspace_authorized", "opencode_connection"]),
+    start_desk_task: readinessFeature("start_desk_task", checks, ["workspace_authorized", "workspace_writable", "opencode_connection"]),
+    save_notes: readinessFeature("save_notes", checks, ["workspace_authorized", "workspace_writable", "notes_store"]),
+    review_memory: readinessFeature("review_memory", checks, ["workspace_authorized", "memory_vault"]),
+    save_memory: readinessFeature("save_memory", checks, ["workspace_authorized", "workspace_writable", "memory_vault"]),
+    export_evidence: readinessFeature("export_evidence", checks, ["workspace_authorized", "project_ledger"]),
+  };
+  const blockingChecks = Array.from(new Set(
+    Object.values(features).flatMap((feature) => feature.blockingCheckIds),
+  )).sort((a, b) => a.localeCompare(b)) as MatterhornBackendReadinessCheckId[];
+  const readyFeatures = Object.values(features).filter((feature) => feature.ready).length;
+
+  return {
+    success: true,
+    version: "matterhorn.backend.readiness.v1",
+    generatedAt: new Date().toISOString(),
+    workspace: {
+      id: workspace.id,
+      name: workspace.name,
+      type: workspace.workspaceType,
+      preset: workspace.preset,
+    },
+    summary: {
+      status: blockingChecks.length === 0 ? "working" : "needs_setup",
+      readyFeatures,
+      totalFeatures: Object.keys(features).length,
+      blockingChecks,
+    },
+    checks,
+    features,
+  };
+}
+
 function objectField(value: unknown, key: string): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const child = (value as Record<string, unknown>)[key];
@@ -3565,6 +3707,11 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/backend/models", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     return jsonResponse(await buildWorkspaceBackendModels(config, workspace));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/readiness", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(buildWorkspaceReadiness(config, workspace, memoryVault));
   });
 
   addRoute(routes, "GET", "/workspace/:id/backend/team-access", "host", async (ctx) => {

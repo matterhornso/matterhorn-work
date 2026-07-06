@@ -126,6 +126,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('"/api/backend/models"');
     expect(source).toContain("workspaceBackendModels");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/models`');
+    expect(source).toContain("workspaceReadiness");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/readiness`');
     expect(source).toContain("workspaceDataMap");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`');
     expect(source).toContain("workspaceDataControls");
@@ -162,6 +164,8 @@ describe("backend capability UI contract", () => {
     const source = readAppSource("react-app/domains/settings/pages/overview-view.tsx");
     expect(source).toContain("settings-backend-capabilities");
     expect(source).toContain("client.backendCapabilities()");
+    expect(source).toContain("settings-workspace-readiness");
+    expect(source).toContain("client.workspaceReadiness(workspaceId)");
     expect(source).toContain("settings-workspace-data-map");
     expect(source).toContain("client.workspaceDataMap(workspaceId)");
     expect(source).toContain("settings-workspace-data-controls");
@@ -173,6 +177,7 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("client.exportProjectDataLedger(workspaceId");
     expect(source).toContain("summarizeModelRoutingPolicy");
     expect(source).toContain("Backend status");
+    expect(source).toContain("Workspace readiness");
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
     expect(source).toContain("controls={workspaceDataControlsQuery.data}");

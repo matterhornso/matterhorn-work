@@ -254,6 +254,35 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain(HOST_TOKEN);
   });
 
+  test("GET /workspace/:id/backend/readiness reports workspace action blockers", async () => {
+    const { base } = await boot();
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/readiness");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.version).toBe("matterhorn.backend.readiness.v1");
+    expect(result.payload.workspace).toMatchObject({
+      id: "ws_backend",
+      name: "Backend control plane test workspace",
+      type: "local",
+      preset: "default",
+    });
+    expect(result.payload.checks.opencode_connection.status).toBe("needs_setup");
+    expect(result.payload.checks.workspace_writable.status).toBe("working");
+    expect(result.payload.features.start_chat.ready).toBe(false);
+    expect(result.payload.features.start_desk_task.blockingCheckIds).toContain("opencode_connection");
+    expect(result.payload.features.save_notes.ready).toBe(true);
+    expect(result.payload.features.review_memory.ready).toBe(true);
+    expect(result.payload.features.save_memory.ready).toBe(true);
+    expect(result.payload.features.export_evidence.ready).toBe(true);
+    expect(result.payload.summary.blockingChecks).toContain("opencode_connection");
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+    expect(serialized).not.toContain("Basic ");
+  });
+
   test("GET /workspace/:id/backend/team-access reports sanitized local access status", async () => {
     const { base } = await boot();
 
