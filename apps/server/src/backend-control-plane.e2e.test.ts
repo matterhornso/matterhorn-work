@@ -172,7 +172,9 @@ describe("backend control plane routes", () => {
     expect(result.payload.memory.scope).toBe("machine_global");
     expect(result.payload.wallets.families.evm.status).toBe("working");
     expect(result.payload.wallets.families.bittensor.signing).toBe("external_signer");
-    expect(result.payload.wallets.families.sui.status).toBe("unsupported");
+    expect(result.payload.wallets.families.sui.status).toBe("preview");
+    expect(result.payload.wallets.families.sui.directConnect).toBe(true);
+    expect(result.payload.wallets.families.sui.signing).toBe("client_wallet");
     expect(result.payload.wallets.families.sui.details.recommendedPackages).toContain("@mysten/dapp-kit-react");
     expect(result.payload.wallets.families.sui.actions[0].href).toBe("https://sdk.mystenlabs.com/dapp-kit/getting-started/react");
     expect(result.payload.security.cors.status).toBe("needs_setup");

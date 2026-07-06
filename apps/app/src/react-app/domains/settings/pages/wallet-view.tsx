@@ -1,5 +1,13 @@
 /** @jsxImportSource react */
 import { useState, useCallback, useMemo } from "react";
+import {
+  useCurrentAccount,
+  useCurrentNetwork,
+  useCurrentWallet,
+  useWalletConnection,
+  useWallets,
+  type UiWallet,
+} from "@mysten/dapp-kit-react";
 import { useAccount, useBalance, useConnect, useDisconnect, useChainId, useSwitchChain } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { formatUnits } from "viem";
@@ -17,6 +25,7 @@ import {
   ShieldCheck,
   MonitorSmartphone,
   Globe,
+  Waves,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -26,6 +35,7 @@ import { Separator } from "@/components/ui/separator";
 import type { WalletStore } from "../../wallet/state/wallet-store";
 import { useWalletStore } from "../../wallet/state/wallet-store";
 import { CHAIN_NAMES, CHAIN_LIST } from "../../../infra/chains";
+import { SUI_NETWORKS, suiDAppKit, type SuiMatterhornNetwork } from "../../../infra/sui-dapp-kit";
 import { SettingsSection, SettingsSectionHeader, SettingsSectionHeaderTitle, SettingsSectionHeaderDescription, SettingsStack } from "../settings-section";
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import {
@@ -43,6 +53,23 @@ import { isDesktopRuntime, isElectronRuntime } from "../../../../app/utils";
 
 function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
+function formatSuiBalance(totalBalance: string | number | bigint | null | undefined): string {
+  if (totalBalance === null || totalBalance === undefined) return "—";
+  try {
+    const mist = BigInt(totalBalance);
+    const whole = mist / 1_000_000_000n;
+    const fraction = mist % 1_000_000_000n;
+    const fractionText = fraction.toString().padStart(9, "0").slice(0, 4).replace(/0+$/g, "");
+    return `${whole.toString()}${fractionText ? `.${fractionText}` : ""} SUI`;
+  } catch {
+    return "—";
+  }
+}
+
+function isSuiMatterhornNetwork(value: unknown): value is SuiMatterhornNetwork {
+  return typeof value === "string" && SUI_NETWORKS.includes(value as SuiMatterhornNetwork);
 }
 
 function txStatusIcon(status: string) {
@@ -150,7 +177,9 @@ function WalletProtocolSupportMap(props: {
     ...(backendSui ? [{
       label: "Sui wallet",
       status: backendCapabilityLabel(backendSui.status),
-      detail: backendSui.label,
+      detail: backendSui.status === "preview"
+        ? "Wallet-standard Sui connect is in preview. Signing stays in your Sui wallet."
+        : backendSui.label,
       tone: backendSui.status === "unsupported"
         ? "text-gray-400 bg-gray-500/10"
         : backendSui.status === "preview"
@@ -178,14 +207,14 @@ function WalletProtocolSupportMap(props: {
   return (
     <section className="flex flex-col gap-3 rounded-xl bg-dls-surface-muted/30 px-3 py-3">
       <div>
-        <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-dls-secondary">Protocol support</h4>
+        <h4 className="text-sm font-semibold text-dls-text">Protocol support</h4>
         <p className="mt-1 text-xs leading-5 text-dls-secondary">
           One wallet surface; each desk keeps its own safety boundary.
         </p>
       </div>
-      <div className="divide-y divide-dls-border/35">
+      <div className="grid gap-2">
         {rows.map((row) => (
-          <div key={row.label} className="grid gap-1 py-2 text-xs leading-5">
+          <div key={row.label} className="grid gap-1 rounded-md py-1.5 text-xs leading-5">
             <div className="flex items-center justify-between gap-3">
               <span className="font-medium text-dls-text">{row.label}</span>
               <span className={`shrink-0 rounded-md px-2 py-0.5 font-medium ${row.tone}`}>{row.status}</span>
@@ -194,6 +223,144 @@ function WalletProtocolSupportMap(props: {
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+function SuiWalletPreviewSection(props: {
+  compact?: boolean;
+  backendSui?: BackendWalletFamilyRow;
+}) {
+  const connection = useWalletConnection();
+  const wallets = useWallets();
+  const account = useCurrentAccount();
+  const wallet = useCurrentWallet();
+  const reportedNetwork = useCurrentNetwork();
+  const network = isSuiMatterhornNetwork(reportedNetwork) ? reportedNetwork : "testnet";
+  const client = suiDAppKit.getClient(network);
+  const [error, setError] = useState<string | null>(null);
+
+  const balanceQuery = useQuery({
+    queryKey: ["sui-wallet-balance", network, account?.address],
+    enabled: Boolean(account?.address),
+    queryFn: async () => {
+      if (!account?.address) throw new Error("No Sui account connected.");
+      return client.getBalance({ owner: account.address });
+    },
+    staleTime: 30_000,
+  });
+
+  const connectSuiWallet = useCallback(async (nextWallet: UiWallet) => {
+    setError(null);
+    try {
+      await suiDAppKit.connectWallet({ wallet: nextWallet });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not connect Sui wallet.");
+    }
+  }, []);
+
+  const disconnectSuiWallet = useCallback(async () => {
+    setError(null);
+    try {
+      await suiDAppKit.disconnectWallet();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not disconnect Sui wallet.");
+    }
+  }, []);
+
+  const busy = connection.isConnecting || connection.isReconnecting;
+  const statusLabel = connection.isConnected ? "Connected" : props.backendSui ? backendCapabilityLabel(props.backendSui.status) : "Preview";
+  const statusTone = connection.isConnected
+    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+    : "border-amber-500/30 bg-amber-500/10 text-amber-300";
+
+  return (
+    <section className={cn(
+      "flex flex-col gap-3 rounded-lg bg-dls-surface-muted/30",
+      props.compact ? "px-3 py-3" : "px-4 py-4",
+    )}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2">
+          <Waves className="mt-0.5 size-4 shrink-0 text-dls-secondary" />
+          <div className="min-w-0">
+            <h4 className="text-sm font-semibold text-dls-text">Sui wallet</h4>
+            <p className="mt-1 text-xs leading-5 text-dls-secondary">
+              Connect with a Sui wallet-standard wallet. Matterhorn never asks for seed phrases or private keys.
+            </p>
+          </div>
+        </div>
+        <span className={cn("shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium", statusTone)}>
+          {statusLabel}
+        </span>
+      </div>
+
+      {connection.isConnected && account ? (
+        <div className="grid gap-3">
+          <div className="grid gap-3 rounded-lg bg-background/45 px-3 py-3 sm:grid-cols-3">
+            <WalletRailMetric label="Wallet" value={wallet?.name ?? "Sui"} />
+            <WalletRailMetric label="Network" value={String(network)} />
+            <WalletRailMetric label="Balance" value={balanceQuery.isError ? "Unavailable" : formatSuiBalance(balanceQuery.data?.balance.balance)} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="min-w-0 max-w-full truncate rounded-md bg-background/60 px-2 py-1 font-mono text-xs text-dls-secondary">
+              {truncateAddress(account.address)}
+            </code>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
+              onClick={() => void balanceQuery.refetch()}
+              aria-label="Refresh Sui balance"
+              title="Refresh Sui balance"
+            >
+              <RefreshCw className={cn("size-3", balanceQuery.isFetching && "animate-spin")} />
+            </Button>
+            <Button variant="ghost" size="sm" className="text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300" onClick={disconnectSuiWallet}>
+              <Unplug className="size-3" />
+              Disconnect
+            </Button>
+          </div>
+        </div>
+      ) : wallets.length > 0 ? (
+        <div className="grid gap-2">
+          {wallets.map((availableWallet) => (
+            <Button
+              key={`${availableWallet.name}-${availableWallet.version}`}
+              variant="outline"
+              className="h-auto justify-start gap-3 rounded-lg px-3 py-3"
+              disabled={busy}
+              onClick={() => connectSuiWallet(availableWallet)}
+            >
+              {availableWallet.icon ? (
+                <img src={availableWallet.icon} alt="" className="size-5 shrink-0 rounded-md" />
+              ) : (
+                <Waves className="size-4 shrink-0" />
+              )}
+              <span className="min-w-0 text-left">
+                <span className="block truncate text-sm font-medium">{availableWallet.name}</span>
+                <span className="block truncate text-xs text-dls-secondary">
+                  {availableWallet.chains.length} supported {availableWallet.chains.length === 1 ? "chain" : "chains"}
+                </span>
+              </span>
+              {busy ? <RefreshCw className="ml-auto size-3.5 animate-spin" /> : null}
+            </Button>
+          ))}
+        </div>
+      ) : (
+        <div className="border-t border-dls-border/35 pt-3 text-xs leading-5 text-dls-secondary">
+          <p className="font-medium text-dls-text">No Sui wallet detected</p>
+          <p className="mt-1">
+            Install or enable a Sui wallet that supports Wallet Standard, then return here to connect. Public previews can still be prepared without custody.
+          </p>
+        </div>
+      )}
+
+      {error ? (
+        <div className="flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-300">
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -488,6 +655,7 @@ export function WalletSettingsView({ compact = false, matterhornServerClient, st
           </section>
         )}
 
+        <SuiWalletPreviewSection compact backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")} />
         <WalletProtocolSupportMap capability={capability} connected={state.isConnected} backendWallets={backendWallets} />
         <WalletRuntimeExplainer capability={capability} compact />
 
@@ -551,6 +719,15 @@ export function WalletSettingsView({ compact = false, matterhornServerClient, st
               </div>
             )}
           </div>
+        </SettingsSection>
+        <SettingsSection>
+          <SettingsSectionHeader>
+            <SettingsSectionHeaderTitle>Sui wallet preview</SettingsSectionHeaderTitle>
+            <SettingsSectionHeaderDescription>
+              Connect a Sui wallet-standard wallet for account reads. Signing remains in your wallet.
+            </SettingsSectionHeaderDescription>
+          </SettingsSectionHeader>
+          <SuiWalletPreviewSection backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")} />
         </SettingsSection>
         <SettingsSection>
           <SettingsSectionHeader>
@@ -647,6 +824,16 @@ export function WalletSettingsView({ compact = false, matterhornServerClient, st
           </Button>
         </CardContent>
       </Card>
+
+      <SettingsSection>
+        <SettingsSectionHeader>
+          <SettingsSectionHeaderTitle>Sui wallet preview</SettingsSectionHeaderTitle>
+          <SettingsSectionHeaderDescription>
+            Connect a Sui wallet-standard wallet for account reads. Signing remains in your wallet.
+          </SettingsSectionHeaderDescription>
+        </SettingsSectionHeader>
+        <SuiWalletPreviewSection backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")} />
+      </SettingsSection>
 
       {/* Network switcher */}
       <SettingsSection>

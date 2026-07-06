@@ -135,13 +135,14 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
       },
       sui: {
         family: "sui",
-        ...cap("unsupported", "Sui wallet"),
+        ...cap("preview", "Sui wallet preview"),
         custody: false,
-        directConnect: false,
-        publicRead: false,
+        directConnect: true,
+        publicRead: true,
         preview: false,
-        signing: "unsupported",
-        description: "Sui wallet is not supported yet.",
+        signing: "client_wallet",
+        supportedChains: ["sui-testnet", "sui-mainnet"],
+        description: "Sui wallet-standard connect is in preview. Matterhorn Work never holds keys.",
       },
       bittensor: {
         family: "bittensor",
@@ -225,7 +226,7 @@ export const backendCapabilitiesPreviewFixture: MatterhornBackendCapabilitiesRes
       sui: {
         ...backendCapabilitiesWorkingFixture.wallets.families.sui,
         ...cap("preview", "Sui wallet"),
-        description: "Sui wallet support is in early preview and not ready for use.",
+        description: "Sui wallet support is in early preview for account reads.",
       },
     },
   },

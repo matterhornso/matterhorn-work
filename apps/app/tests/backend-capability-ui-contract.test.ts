@@ -72,14 +72,15 @@ function capabilities(overrides: Partial<MatterhornBackendCapabilitiesResponse> 
           supportedChains: ["Base Sepolia", "Base"],
         },
         sui: {
-          status: "unsupported",
-          label: "Sui not implemented",
+          status: "preview",
+          label: "Sui wallet preview",
           family: "sui",
           custody: false,
-          directConnect: false,
-          publicRead: false,
+          directConnect: true,
+          publicRead: true,
           preview: false,
-          signing: "unsupported",
+          signing: "client_wallet",
+          supportedChains: ["sui-testnet", "sui-mainnet"],
         },
         bittensor: {
           status: "preview",
@@ -146,11 +147,16 @@ describe("backend capability UI contract", () => {
   test("Wallet settings uses backend wallet family status including Sui", () => {
     const walletSource = readAppSource("react-app/domains/settings/pages/wallet-view.tsx");
     const routeSource = readAppSource("react-app/shell/settings-route.tsx");
+    const providerSource = readAppSource("react-app/shell/providers.tsx");
     expect(walletSource).toContain("matterhornServerClient?: MatterhornServerClient | null");
     expect(walletSource).toContain("wallet-backend-capabilities");
     expect(walletSource).toContain("matterhornServerClient.backendCapabilities()");
     expect(walletSource).toContain('wallet.family === "Sui"');
     expect(walletSource).toContain("Sui wallet");
+    expect(walletSource).toContain("useWallets");
+    expect(walletSource).toContain("connectSuiWallet");
+    expect(providerSource).toContain("DAppKitProvider");
+    expect(providerSource).toContain("suiDAppKit");
     expect(routeSource).toContain("matterhornServerClient={matterhornClient}");
   });
 
@@ -169,7 +175,7 @@ describe("backend capability UI contract", () => {
     expect(backendCapabilityTone("unsupported")).toBe("neutral");
   });
 
-  test("model and wallet helpers expose Sui as unsupported instead of hidden", () => {
+  test("model and wallet helpers expose Sui as preview instead of hidden", () => {
     const result = capabilities();
     expect(summarizeModelSource(result)).toBe("opencode/big-pickle");
     expect(summarizeModelRoutingPolicy(result)).toContain("OpenCode session prompts");
@@ -177,7 +183,7 @@ describe("backend capability UI contract", () => {
     expect(summarizeModelRoutingPolicy(result)).toContain("model picker");
     expect(walletFamilySummary(result)).toEqual([
       { family: "EVM", label: "EVM direct connect", status: "working" },
-      { family: "Sui", label: "Sui not implemented", status: "unsupported" },
+      { family: "Sui", label: "Sui wallet preview", status: "preview" },
       { family: "Bittensor", label: "Bittensor external signer", status: "preview" },
     ]);
   });

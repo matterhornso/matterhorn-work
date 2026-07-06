@@ -52,6 +52,8 @@
     "@lexical/react": "^0.35.0",
     "@matterhorn-work/types": "workspace:*",
     "@matterhorn-work/ui": "workspace:*",
+    "@mysten/dapp-kit-react": "^2.1.5",
+    "@mysten/sui": "^2.20.1",
     "@opencode-ai/sdk": "^1.14.38",
     "@paper-design/shaders-react": "0.0.72",
     "@radix-ui/colors": "^3.0.0",

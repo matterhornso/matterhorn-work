@@ -707,7 +707,8 @@ describe("Security capability classification", () => {
     expect(caps.success).toBe(true);
     expect(caps.version).toBe("matterhorn.backend.capabilities.v1");
     expect(caps.security.memoryWriteGuards.status).toBe("working");
-    expect(caps.wallets.families.sui.status).toBe("unsupported");
+    expect(caps.wallets.families.sui.status).toBe("preview");
+    expect(caps.wallets.families.sui.signing).toBe("client_wallet");
   });
 
   test("CORS wildcard is detected from backend capabilities", async () => {

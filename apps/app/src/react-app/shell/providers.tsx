@@ -1,8 +1,10 @@
 /** @jsxImportSource react */
 import { useEffect, type ReactNode } from "react";
+import { DAppKitProvider } from "@mysten/dapp-kit-react";
 import { WagmiProvider } from "wagmi";
 
 import { wagmiConfig } from "../infra/wagmi-config";
+import { suiDAppKit } from "../infra/sui-dapp-kit";
 import { isWebDeployment } from "../../app/lib/matterhorn-deployment";
 import { hydrateMatterhornServerSettingsFromEnv } from "../../app/lib/matterhorn-server";
 import { isDesktopRuntime } from "../../app/utils";
@@ -68,28 +70,30 @@ export function AppProviders({ children }: AppProvidersProps) {
   const defaultUrl = resolveDefaultServerUrl();
   return (
     <WagmiProvider config={wagmiConfig}>
-      <LazyWalletProvider>
-      <BootStateProvider>
-        <ServerProvider defaultUrl={defaultUrl}>
-          <ArchitectureMismatchGate>
-            <DesktopRuntimeBoot />
-            <DenAuthProvider>
-              <BetaAuthProvider>
-                <DesktopConfigProvider>
-                  <RestrictionNoticeProvider>
-                    <LocalProvider>
-                      <StatusToastsProvider>
-                        <ReloadCoordinatorProvider>{children}</ReloadCoordinatorProvider>
-                      </StatusToastsProvider>
-                    </LocalProvider>
-                  </RestrictionNoticeProvider>
-                </DesktopConfigProvider>
-              </BetaAuthProvider>
-            </DenAuthProvider>
-          </ArchitectureMismatchGate>
-        </ServerProvider>
-      </BootStateProvider>
-      </LazyWalletProvider>
+      <DAppKitProvider dAppKit={suiDAppKit}>
+        <LazyWalletProvider>
+          <BootStateProvider>
+            <ServerProvider defaultUrl={defaultUrl}>
+              <ArchitectureMismatchGate>
+                <DesktopRuntimeBoot />
+                <DenAuthProvider>
+                  <BetaAuthProvider>
+                    <DesktopConfigProvider>
+                      <RestrictionNoticeProvider>
+                        <LocalProvider>
+                          <StatusToastsProvider>
+                            <ReloadCoordinatorProvider>{children}</ReloadCoordinatorProvider>
+                          </StatusToastsProvider>
+                        </LocalProvider>
+                      </RestrictionNoticeProvider>
+                    </DesktopConfigProvider>
+                  </BetaAuthProvider>
+                </DenAuthProvider>
+              </ArchitectureMismatchGate>
+            </ServerProvider>
+          </BootStateProvider>
+        </LazyWalletProvider>
+      </DAppKitProvider>
     </WagmiProvider>
   );
 }
