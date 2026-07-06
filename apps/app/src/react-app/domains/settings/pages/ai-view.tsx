@@ -1,10 +1,13 @@
 /** @jsxImportSource react */
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
+import { useState, type ReactNode } from "react";
 
 import { t } from "@/i18n";
 import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
+import { cn } from "@/lib/utils";
 import { ProviderIcon } from "../../../design-system/provider-icon";
 import { SettingsNotice, SettingsStatusBadge } from "../settings-section";
 import {
@@ -20,6 +23,7 @@ import {
   LayoutSectionTitle,
   LayoutStack,
 } from "../settings-layout";
+import { buildModelReadinessSummary } from "../state/model-readiness-summary";
 
 type ConnectedProvider = {
   id: string;
@@ -71,26 +75,9 @@ function providerStatusTone(label: string): "ready" | "warning" | "neutral" {
   return "neutral";
 }
 
-function yesNo(value: boolean | undefined) {
-  return value ? "Yes" : "No";
-}
-
-function catalogStatusTone(status: string | undefined): "ready" | "warning" | "neutral" {
-  if (status === "working") return "ready";
-  if (status === "needs_setup") return "warning";
-  return "neutral";
-}
-
-function catalogStatusLabel(status: string | undefined) {
-  if (status === "working") return "Working";
-  if (status === "needs_setup") return "Needs setup";
-  if (status === "preview") return "Preview";
-  if (status === "unsupported") return "Not supported here";
-  return "Unknown";
-}
-
 export function AiSettingsView(props: AiSettingsViewProps) {
   const runtimeWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
+  const [modelDetailsOpen, setModelDetailsOpen] = useState(false);
   const queryClient = useQueryClient();
   const workspaceBackendModelsQuery = useQuery({
     queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId],
@@ -148,16 +135,22 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     },
   });
   const backendModels = workspaceBackendModelsQuery.data ?? backendModelsQuery.data;
-  const modelRouting = backendModels?.routing;
   const catalog = backendModels?.catalog;
   const workspaceSelection = workspaceModelSelectionQuery.data?.selection ?? backendModels?.workspaceSelection ?? null;
   const effectiveWorkspaceModel = workspaceModelSelectionQuery.data?.effectiveModel ?? backendModels?.defaultModel ?? null;
   const catalogQueryFailed = workspaceBackendModelsQuery.isError || backendModelsQuery.isError;
-  const catalogTone = catalogQueryFailed ? "warning" : catalogStatusTone(catalog?.status);
-  const catalogLabel = catalogQueryFailed ? "Needs engine" : catalogStatusLabel(catalog?.status);
   const connectedProviderCount = catalog?.serverFetched ? catalog.connectedProviderCount : props.connectedProviders.length;
   const connectedModelCount = catalog?.serverFetched ? catalog.modelCount : props.connectedModelCount;
-  const catalogSourceLabel = catalog?.serverFetched ? "Server snapshot" : "Delegated";
+  const modelReadiness = buildModelReadinessSummary({
+    currentModelLabel: props.defaultModelLabel,
+    currentModelRef: props.defaultModelRef,
+    backendModels,
+    workspaceSelection,
+    effectiveWorkspaceModel,
+    catalogQueryFailed,
+    connectedProviderCount,
+    connectedModelCount,
+  });
   const canSaveWorkspaceDefault = Boolean(props.defaultModelProviderId && props.defaultModelId && props.matterhornServerClient && runtimeWorkspaceId);
   const modelSelectionStatus =
     saveWorkspaceDefaultMutation.error instanceof Error
@@ -177,19 +170,20 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         <LayoutSectionHeader>
           <LayoutSectionTitle>Model routing</LayoutSectionTitle>
           <LayoutSectionDescription>
-            Current model, provider list source, and selection policy.
+            Choose which model answers workspace prompts, and whether that choice is saved for this project.
           </LayoutSectionDescription>
         </LayoutSectionHeader>
 
-        <LayoutSectionItem className="rounded-lg border border-dls-border/70 px-4 py-3">
+        <LayoutSectionItem className="rounded-lg border border-dls-border/40 bg-dls-card/35 px-4 py-4 shadow-sm shadow-black/5">
           <LayoutSectionItemHeader>
             <LayoutSectionItemTitle>
-              {props.defaultModelLabel}
+              {modelReadiness.currentChoice.value}
               <SettingsStatusBadge
-                tone={catalogTone}
-                label={catalogLabel}
+                tone={modelReadiness.statusTone}
+                label={modelReadiness.statusLabel}
               />
             </LayoutSectionItemTitle>
+            <LayoutSectionItemDescription>{modelReadiness.currentChoice.detail}</LayoutSectionItemDescription>
             <LayoutSectionItemHeaderActions>
               <Button variant="outline" onClick={() => void props.onOpenModelPicker()} disabled={props.busy}>
                 Change model
@@ -212,60 +206,50 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               ) : null}
             </LayoutSectionItemHeaderActions>
           </LayoutSectionItemHeader>
-          <div className="mt-3 grid gap-2 text-sm text-dls-secondary sm:grid-cols-2">
-            <div>
-              <span className="text-dls-text">Model</span>
-              <span className="ml-2 font-mono text-xs">{props.defaultModelRef}</span>
-            </div>
-            <div>
-              <span className="text-dls-text">Workspace default</span>
-              <span className="ml-2 font-mono text-xs">
-                {workspaceSelection
-                  ? `${workspaceSelection.providerId}/${workspaceSelection.modelId}`
-                  : effectiveWorkspaceModel
-                    ? `${effectiveWorkspaceModel.providerId}/${effectiveWorkspaceModel.modelId}`
-                    : "Not saved"}
-              </span>
-            </div>
-            <div>
-              <span className="text-dls-text">Connected</span>
-              <span className="ml-2">{connectedProviderCount} providers · {connectedModelCount} models</span>
-            </div>
-            <div>
-              <span className="text-dls-text">Answers</span>
-              <span className="ml-2">{modelRouting?.answerPath.label ?? "OpenCode session prompts"}</span>
-            </div>
-            <div>
-              <span className="text-dls-text">Model list</span>
-              <span className="ml-2">{modelRouting?.registry.label ?? "OpenCode provider list"}</span>
-            </div>
-            <div>
-              <span className="text-dls-text">User selectable</span>
-              <span className="ml-2">{yesNo(modelRouting?.selection.userSelectable ?? true)}</span>
-            </div>
-            <div>
-              <span className="text-dls-text">Server registry</span>
-              <span className="ml-2">{modelRouting?.registry.serverOwned ? "Server-owned" : "Delegated"}</span>
-            </div>
-            <div>
-              <span className="text-dls-text">Catalog</span>
-              <span className="ml-2">{catalogSourceLabel}</span>
-            </div>
-            <div>
-              <span className="text-dls-text">Preference store</span>
-              <span className="ml-2">{modelRouting?.selection.preferenceStore === "server" ? "Workspace" : "Local app"}</span>
-            </div>
-            {catalog?.connectedProviderIds.length ? (
-              <div>
-                <span className="text-dls-text">Providers</span>
-                <span className="ml-2">{catalog.connectedProviderIds.slice(0, 4).join(", ")}</span>
+
+          <div className="grid gap-3 text-sm @md/settings:grid-cols-2">
+            {[modelReadiness.workspaceDefault, modelReadiness.effectiveModel, modelReadiness.answerPath, modelReadiness.providerList].map((item) => (
+              <div key={item.label} className="min-w-0 rounded-md bg-dls-hover/35 px-3 py-2">
+                <div className="text-[11px] font-medium uppercase tracking-wide text-dls-secondary">{item.label}</div>
+                <div className="mt-1 truncate text-dls-text">{item.value}</div>
+                {item.detail ? <div className="mt-1 text-xs leading-5 text-dls-secondary">{item.detail}</div> : null}
               </div>
-            ) : null}
+            ))}
           </div>
+
+          <Collapsible open={modelDetailsOpen} onOpenChange={setModelDetailsOpen}>
+            <CollapsibleTrigger
+              render={(
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-xs font-medium text-dls-secondary transition-colors hover:text-dls-text"
+                >
+                  <ChevronDown className={cn("size-3.5 transition-transform", modelDetailsOpen && "rotate-180")} />
+                  Model details
+                </button>
+              )}
+            />
+            <CollapsibleContent>
+              <div className="mt-2 grid gap-2 text-xs text-dls-secondary @md/settings:grid-cols-2">
+                {[modelReadiness.providerCatalog, modelReadiness.selectionPolicy, ...modelReadiness.details].map((item) => (
+                  <div key={item.label} className="min-w-0">
+                    <span className="text-dls-text">{item.label}</span>
+                    <span className="ml-2">{item.value}</span>
+                    {item.detail ? <div className="mt-1 leading-5">{item.detail}</div> : null}
+                  </div>
+                ))}
+                {catalog?.connectedProviderIds.length ? (
+                  <div className="min-w-0">
+                    <span className="text-dls-text">Connected providers</span>
+                    <span className="ml-2">{catalog.connectedProviderIds.slice(0, 4).join(", ")}</span>
+                  </div>
+                ) : null}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
           <p className="mt-3 text-xs leading-5 text-dls-secondary">
-            {backendModels?.privacy.trainingUse === "none_by_default"
-              ? "No model training by default. Feedback is stored for eval, routing, and product quality only."
-              : "Training policy is unavailable."}
+            {modelReadiness.trainingPolicy}
           </p>
           {modelSelectionStatus ? (
             <p className="mt-2 text-xs leading-5 text-dls-secondary">{modelSelectionStatus}</p>
