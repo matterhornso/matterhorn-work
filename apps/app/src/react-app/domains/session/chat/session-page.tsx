@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { usePanelRef } from "react-resizable-panels";
 import {
+  AlertCircle,
   BarChart3,
   BrainCircuit,
   Copy,
@@ -83,6 +84,7 @@ import {
   workflowOutputReceiptsFromEvidence,
 } from "../artifacts/output-receipts";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
+import { ProjectHistoryPage } from "../../recent-activity/project-history-page";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
@@ -90,7 +92,7 @@ import { useWallet } from "../../wallet/WalletProvider";
 import { useJobCron } from "../../wallet/hooks/useJobCron";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
-import { workspaceNotesRoute } from "../../../shell/workspace-routes";
+import { workspaceNotesRoute, workspaceRunHistoryRoute } from "../../../shell/workspace-routes";
 import { getExtensionId, isMatterhornExtensionEnabled, MATTERHORN_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
 import { dispatchNotesUpdated, useQuickJot } from "../../notes";
 import { cn } from "@/lib/utils";
@@ -295,7 +297,7 @@ const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: str
   hyperliquid: [
     {
       title: "Show market context",
-      detail: "Summarize spread, depth, and stale-data warnings without submission.",
+      detail: "Summarize spread, depth, and stale-data warnings.",
       prompt: "Show BTC orderbook context on Hyperliquid, spread, depth summary, and stale-data warnings. Explain that Matterhorn can prepare an external trade handoff, but Can submit: No and Live submission: Off.",
     },
     {
@@ -305,7 +307,7 @@ const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: str
     },
     {
       title: "Prepare trade handoff",
-      detail: "Create an external-client handoff with live submission disabled.",
+      detail: "Draft an external-client handoff you can review outside Matterhorn.",
       prompt: "Prepare a Hyperliquid external trade handoff for BTC with Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
     },
   ],
@@ -322,7 +324,7 @@ const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: str
     },
     {
       title: "Prepare trade handoff",
-      detail: "Build a non-custodial wallet handoff while live submission stays off.",
+      detail: "Draft a non-custodial wallet handoff you can review externally.",
       prompt: "Prepare a Polymarket compliance-gated external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
     },
   ],
@@ -506,22 +508,50 @@ function WorkflowDeskHomeSurface({
 
 function ProtocolDeskEmptyState({
   panel,
+  matterhornServerClient,
+  runtimeWorkspaceId,
   onUsePrompt,
   onBackHome,
 }: {
   panel: VenueSidePanel;
+  matterhornServerClient: MatterhornServerClient | null;
+  runtimeWorkspaceId: string | null;
   onUsePrompt: (prompt: string, title?: string) => void;
   onBackHome: () => void;
 }) {
   const visual = getCustomerProtocolDeskVisual(panel);
   const prompts = PROTOCOL_DESK_SUGGESTED_PROMPTS[panel];
   const draftConfig = getChatDraftConfig(panel);
-  const [draftedPromptTitle, setDraftedPromptTitle] = useState<string | null>(null);
-  const safeBoundary = panel === "bittensor"
-    ? "Public SS58 reads and unsigned previews only. External Bittensor-compatible signer required."
+  const readinessWorkspaceId = runtimeWorkspaceId?.trim() ?? "";
+  const readinessQuery = useQuery({
+    queryKey: ["protocol-desk-readiness", readinessWorkspaceId],
+    enabled: Boolean(matterhornServerClient && readinessWorkspaceId),
+    staleTime: 30_000,
+    queryFn: async () => {
+      if (!matterhornServerClient || !readinessWorkspaceId) throw new Error("Open a workspace to start desk tasks.");
+      return matterhornServerClient.workspaceReadiness(readinessWorkspaceId);
+    },
+  });
+  const startTaskFeature = readinessQuery.data?.features.start_desk_task;
+  const startTaskBlocked = Boolean(
+    !matterhornServerClient ||
+    !readinessWorkspaceId ||
+    (startTaskFeature && !startTaskFeature.ready),
+  );
+  const startTaskBlocker = !matterhornServerClient
+    ? "Matterhorn Work engine is offline."
+    : !readinessWorkspaceId
+      ? "Open a workspace before starting a desk task."
+      : startTaskFeature && !startTaskFeature.ready
+        ? `Start task needs ${startTaskFeature.blockingCheckIds
+          .map((checkId) => readinessQuery.data?.checks[checkId]?.label ?? checkId)
+          .join(", ")}.`
+        : null;
+  const deskSafetyInfo = panel === "bittensor"
+    ? "Runs public SS58 reads and unsigned previews. Signing stays in an external Bittensor-compatible wallet."
     : panel === "polymarket"
-      ? "Compliance-gated handoff only. Can submit: No. Live submission: Off. External wallet/client required."
-    : "External handoff only. Can submit: No. Live submission: Off. External signer/client required.";
+      ? "Runs market research, compliance checks, and external-wallet handoffs. Matterhorn never places bets inside the app."
+    : "Runs read-only market/account checks and prepares external-client handoffs. Matterhorn never submits orders inside the app.";
 
   return (
     <section
@@ -547,9 +577,31 @@ function ProtocolDeskEmptyState({
               <ProtocolLogo venue={panel} size={52} />
             </span>
             <div className="min-w-0">
-              <h2 className="text-xl font-semibold tracking-[-0.02em] text-dls-text sm:text-2xl">
-                {visual?.displayName ?? panel} desk
-              </h2>
+              <div className="flex min-w-0 items-center gap-2">
+                <h2 className="text-xl font-semibold tracking-[-0.02em] text-dls-text sm:text-2xl">
+                  {visual?.displayName ?? panel} desk
+                </h2>
+                <Popover>
+                  <PopoverTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label={`${visual?.displayName ?? panel} desk safety info`}
+                        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-dls-border text-[11px] font-semibold leading-none text-dls-secondary transition-colors hover:border-[var(--matterhorn-desk-color)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                      >
+                        i
+                      </button>
+                    }
+                  />
+                  <PopoverContent
+                    side="right"
+                    align="start"
+                    className="w-72 rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-left text-xs leading-5 text-dls-secondary shadow-none"
+                  >
+                    <p>{deskSafetyInfo}</p>
+                  </PopoverContent>
+                </Popover>
+              </div>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
                 {visual?.shortDescription ?? "Focused protocol workspace."} Choose a task to start this desk agent.
                 Matterhorn keeps signing and live submission outside the app.
@@ -559,9 +611,12 @@ function ProtocolDeskEmptyState({
         </div>
       </div>
 
-      <p className="text-sm leading-6 text-dls-secondary">
-        <span className="font-semibold text-[var(--matterhorn-desk-color)]">Boundary:</span> {safeBoundary}
-      </p>
+      {startTaskBlocker ? (
+        <div className="mx-1 flex items-start gap-2 rounded-md bg-dls-surface-muted/35 px-3 py-2 text-xs leading-5 text-dls-secondary">
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" />
+          <span>{startTaskBlocker}</span>
+        </div>
+      ) : null}
 
       <div className="matterhorn-focused-desk-prompt-list space-y-2" aria-label="Agent tasks">
         {prompts.map((item) => {
@@ -580,37 +635,15 @@ function ProtocolDeskEmptyState({
               status="idle"
               evidenceHints={[evidenceHint]}
               actionLabel={draftConfig?.confirmCtaLabel ?? "Start task"}
+              actionDisabled={startTaskBlocked}
+              actionTitle={startTaskBlocker ?? undefined}
               onAction={() => {
-                setDraftedPromptTitle(item.title);
                 onUsePrompt(item.prompt, item.title);
               }}
             />
           );
         })}
       </div>
-      {draftedPromptTitle ? (
-        <div
-          aria-live="polite"
-          className="flex flex-col gap-2 rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-4 py-3 text-xs leading-5 text-dls-secondary shadow-[inset_0_0_0_1px_rgba(var(--matterhorn-desk-rgb),0.16)] sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div className="min-w-0">
-            <span className="font-semibold uppercase tracking-[0.14em] text-[var(--matterhorn-desk-color)]">
-              {draftConfig?.draftStateLabel ?? "Draft ready"}
-            </span>
-            <p className="mt-1">
-              <span className="font-medium text-dls-text">{draftedPromptTitle}</span> is in the composer. Nothing has
-              been sent. Review or edit it, then press Ask.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="w-fit rounded-full bg-dls-surface/70 px-3 py-1.5 font-semibold text-dls-secondary transition-colors hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
-            onClick={() => setDraftedPromptTitle(null)}
-          >
-            Hide
-          </button>
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -653,10 +686,12 @@ export type SessionPageSidebarProps = {
   startupPhase: BootPhase;
   onSelectWorkspace: (workspaceId: string) => Promise<boolean> | boolean | void;
   onOpenWorkspaceHome?: (workspaceId: string) => void;
+  onOpenWorkspaceHistory?: (workspaceId: string) => void;
   onOpenSession: (workspaceId: string, sessionId: string) => void;
   onPrefetchSession?: (workspaceId: string, sessionId: string) => void;
   onCreateTaskInWorkspace: (workspaceId: string) => void;
-  onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string; agent?: string }) => void;
+  // Stable launcher contract: onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string; agent?: string }) => void
+  onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string; agent?: string; sendImmediately?: boolean }) => void;
   onOpenRenameWorkspace: (workspaceId: string) => void;
   onShareWorkspace: (workspaceId: string) => void;
   onRevealWorkspace: (workspaceId: string) => void;
@@ -675,6 +710,7 @@ export type SessionPageSurfaceProps = Omit<
 
 export type SessionPageProps = {
   selectedSessionId: string | null;
+  workspaceHomeView?: "home" | "history";
   selectedWorkspaceId: string;
   selectedWorkspaceDisplay: {
     id?: string;
@@ -1031,6 +1067,14 @@ export function SessionPage(props: SessionPageProps) {
     props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
   }, [props.selectedWorkspaceId, props.sidebar]);
 
+  const openRunHistory = useCallback(() => {
+    if (props.sidebar.onOpenWorkspaceHistory) {
+      props.sidebar.onOpenWorkspaceHistory(props.selectedWorkspaceId);
+      return;
+    }
+    navigate(workspaceRunHistoryRoute(props.selectedWorkspaceId));
+  }, [navigate, props.selectedWorkspaceId, props.sidebar]);
+
   const copyHomePath = useCallback(async (value: string, label: string) => {
     if (!value.trim()) return;
     try {
@@ -1385,7 +1429,11 @@ export function SessionPage(props: SessionPageProps) {
     }
     pendingProtocolRailPanelRef.current = panel;
     if (props.sidebar.onCreateTaskWithPrompt) {
-      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, prompt, { title, agent: agentIdForDesk(panel) });
+      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, prompt, {
+        title,
+        agent: agentIdForDesk(panel),
+        sendImmediately: true,
+      });
       return;
     }
     props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
@@ -1662,7 +1710,9 @@ export function SessionPage(props: SessionPageProps) {
               <h1 className="min-w-0 truncate text-[15px] font-semibold text-dls-text">
                 {showWorkspaceSetupEmptyState
                   ? t("session.create_or_connect_workspace")
-                  : selectedSessionTitle || t("session.default_title")}
+                  : props.workspaceHomeView === "history" && !props.selectedSessionId
+                    ? "Run history"
+                    : selectedSessionTitle || t("session.default_title")}
               </h1>
               {props.selectedSessionId && props.onRenameSession && !showWorkspaceSetupEmptyState ? (
                 <Button
@@ -1861,6 +1911,11 @@ export function SessionPage(props: SessionPageProps) {
                         </div>
                       </div>
                     </div>
+                  ) : props.workspaceHomeView === "history" && !props.selectedSessionId ? (
+                    <ProjectHistoryPage
+                      matterhornServerClient={props.matterhornServerClient}
+                      runtimeWorkspaceId={props.runtimeWorkspaceId}
+                    />
                   ) : activeWorkflowDeskId ? (
                     <WorkflowDeskHomeSurface
                       deskId={activeWorkflowDeskId}
@@ -1885,11 +1940,26 @@ export function SessionPage(props: SessionPageProps) {
                     >
                       <ProtocolDeskEmptyState
                         panel={focusedProtocolPanel}
+                        matterhornServerClient={props.matterhornServerClient}
+                        runtimeWorkspaceId={props.runtimeWorkspaceId}
                         onBackHome={returnToProjectHome}
                         onUsePrompt={(prompt, title) => {
+                          if (typeof window !== "undefined") {
+                            const state = window.history.state && typeof window.history.state === "object"
+                              ? window.history.state as Record<string, unknown>
+                              : {};
+                            if (state.matterhornFocusedDesk) {
+                              const nextState = { ...state };
+                              delete nextState.matterhornFocusedDesk;
+                              window.history.replaceState(nextState, "", window.location.href);
+                            }
+                          }
+                          focusedDeskHistoryRef.current = null;
+                          setCurrentSidePanel(null);
                           props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, {
                             title,
                             agent: agentIdForDesk(focusedProtocolPanel),
+                            sendImmediately: true,
                           });
                         }}
                       />
@@ -1917,7 +1987,10 @@ export function SessionPage(props: SessionPageProps) {
                                 disabled={props.sidebar.newTaskDisabled}
                                 onClick={() => {
                                   if (blankWorkflowLauncher && props.sidebar.onCreateTaskWithPrompt) {
-                                    props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, { title: blankWorkflowLauncher.title });
+                                    props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, {
+                                      title: blankWorkflowLauncher.title,
+                                      sendImmediately: true,
+                                    });
                                     return;
                                   }
                                   props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
@@ -2023,7 +2096,9 @@ export function SessionPage(props: SessionPageProps) {
                             limit={8}
                             title="Project Activity"
                             description="Recent notes, outputs, memory reviews, and desk runs."
+                            defaultExpanded={false}
                             onOpenOutputPath={openOutputPathFromActivity}
+                            onOpenHistory={openRunHistory}
                           />
                         ) : null}
                         <HomeCapabilityOverview
@@ -2076,6 +2151,7 @@ export function SessionPage(props: SessionPageProps) {
                                         props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt, {
                                           title: demo.title,
                                           agent: demo.agentId ?? agentIdForDesk(demo.iconHint),
+                                          sendImmediately: true,
                                         });
                                       }}
                                     >
@@ -2189,7 +2265,10 @@ export function SessionPage(props: SessionPageProps) {
                               type="button"
                               className="flex min-h-[92px] w-full items-start gap-3 rounded-xl bg-dls-surface-muted/70 p-3.5 text-left transition-colors hover:bg-dls-hover"
                               onClick={() => {
-                                props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, { title: blankWorkflowLauncher.title });
+                                props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, {
+                                  title: blankWorkflowLauncher.title,
+                                  sendImmediately: true,
+                                });
                               }}
                             >
                               <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
@@ -2290,6 +2369,7 @@ export function SessionPage(props: SessionPageProps) {
                         onSelectTarget={openTarget}
                         onAddNote={(artifactPath, desk, sessionSlug) => void addArtifactNote(artifactPath, desk, sessionSlug)}
                         onRevealPath={props.onRevealPath}
+                        onDeletedTarget={removeAccessibleTarget}
                         onClose={closeRightPane}
                       />
                     ) : isVenueSidePanel(visibleSidePanel) ? (

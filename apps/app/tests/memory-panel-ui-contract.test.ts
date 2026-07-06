@@ -63,6 +63,20 @@ describe("Memory panel UI contract", () => {
     expect(source).toContain("Add memory manually");
     expect(source).toContain("Save memory");
   });
+
+  test("uses workspace-scoped memory APIs when a workspace id is available", () => {
+    const source = readAppSource("domains/memory/memory-panel.tsx");
+
+    expect(source).toContain("searchWorkspaceMemory");
+    expect(source).toContain("listWorkspaceMemory");
+    expect(source).toContain("captureWorkspaceMemory");
+    expect(source).toContain("forgetWorkspaceMemory");
+    expect(source).toContain("createWorkspaceMemorySuggestions");
+    expect(source).toContain("listWorkspaceMemorySuggestions");
+    expect(source).toContain("resolveStoredWorkspaceMemorySuggestion");
+    expect(source).toContain("resolveWorkspaceMemorySuggestion");
+    expect(source).toContain("exportWorkspaceMemory");
+  });
 });
 
 describe("Settings overview memory contract", () => {
@@ -71,11 +85,12 @@ describe("Settings overview memory contract", () => {
 
     expect(source).toContain("GLOBAL_HOME_SIDE_PANEL_KEY");
     expect(source).toContain("workspaceSessionRoute");
-    expect(source).toContain("listMemorySuggestions");
-    expect(source).toContain("listMemory");
+    expect(source).toContain("listWorkspaceMemorySuggestions");
+    expect(source).toContain("listWorkspaceMemory");
+    expect(source).toContain("exportWorkspaceMemory");
     expect(source).toContain("Pending suggestions");
     expect(source).toContain("Saved memories");
     expect(source).toContain("Open Memory review");
-    expect(source).toContain("Export memory");
+    expect(source).toContain("Export memory bundle");
   });
 });

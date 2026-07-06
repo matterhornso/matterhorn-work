@@ -17,6 +17,7 @@ import type {
   ProviderListResponse,
   TextPartInput,
 } from "@opencode-ai/sdk/v2/client";
+import type { MatterhornBackendModelSelectionResponse } from "@matterhorn-work/types/backend-models";
 
 import { createClient, unwrap } from "../../app/lib/opencode";
 import { forkSession, listCommands, revertSession, shellInSession } from "../../app/lib/opencode-session";
@@ -150,7 +151,7 @@ import { getReactQueryClient } from "../infra/query-client";
 import { useStatusToasts } from "../domains/shell-feedback/status-toasts";
 import { useSessionControlActions } from "../domains/session/control/session-control-actions";
 import { ProjectFeedbackDialog } from "../domains/feedback/project-feedback-dialog";
-import { legacySessionRoute, workspaceNotesRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
+import { legacySessionRoute, workspaceNotesRoute, workspaceRunHistoryRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
 import { WorkspaceProvider } from "./workspace-provider";
 import type { OpenTarget } from "../domains/session/artifacts/open-target";
 import type { SettingsSurfaceProps } from "./settings-route";
@@ -545,6 +546,7 @@ export function SessionRoute() {
   const params = useParams<{ workspaceId?: string; sessionId?: string }>();
   const routeWorkspaceId = params.workspaceId?.trim() || "";
   const selectedSessionId = params.sessionId?.trim() || null;
+  const isWorkspaceHistoryRoute = Boolean(routeWorkspaceId && /\/history\/?$/.test(location.pathname));
   const navigateToWorkspaceSession = useCallback((workspaceId: string, sessionId?: string | null, options?: { replace?: boolean; state?: unknown }) => {
     const id = workspaceId.trim();
     if (!id) {
@@ -626,6 +628,7 @@ export function SessionRoute() {
   const [providerDefaults, setProviderDefaults] = useState<Record<string, string>>({});
   const [providerConnectedIds, setProviderConnectedIds] = useState<string[]>([]);
   const [disabledProviderIds, setDisabledProviderIds] = useState<string[]>([]);
+  const [workspaceModelSelection, setWorkspaceModelSelection] = useState<MatterhornBackendModelSelectionResponse | null>(null);
   // Bump to re-filter provider list when den session changes (sign-in/out)
   const [denSessionVersion, setDenSessionVersion] = useState(0);
   useEffect(() => {
@@ -1580,22 +1583,50 @@ export function SessionRoute() {
     baseUrl: opencodeBaseUrl,
     directory: selectedWorkspaceRoot || undefined,
   });
+  useEffect(() => {
+    let cancelled = false;
+    if (!client || !selectedWorkspaceId) {
+      setWorkspaceModelSelection(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    void client.workspaceModelSelection(selectedWorkspaceId)
+      .then((selection) => {
+        if (!cancelled) setWorkspaceModelSelection(selection);
+      })
+      .catch(() => {
+        if (!cancelled) setWorkspaceModelSelection(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, selectedWorkspaceId]);
+  const workspaceDefaultModel = useMemo<ModelRef | null>(() => {
+    const effective = workspaceModelSelection?.effectiveModel;
+    if (!effective?.providerId || !effective.modelId) return null;
+    return {
+      providerID: effective.providerId,
+      modelID: effective.modelId,
+    };
+  }, [workspaceModelSelection]);
+  const selectedPromptModel = local.prefs.defaultModel ?? workspaceDefaultModel;
   const selectedModelUnavailable = Boolean(
-    local.prefs.defaultModel &&
+    selectedPromptModel &&
       (
         isDesktopProviderBlocked({
-          providerId: local.prefs.defaultModel.providerID,
+          providerId: selectedPromptModel.providerID,
           checkRestriction: checkDesktopRestriction,
         }) ||
         (
           checkDesktopRestriction({ restriction: "allowCustomProviders" }) &&
           !providerConnectedIds.some(
-            (providerId) => providerId.trim() === local.prefs.defaultModel?.providerID.trim(),
+            (providerId) => providerId.trim() === selectedPromptModel.providerID.trim(),
           )
         ) ||
         (
           providerListQuery.data &&
-          !isModelAvailableInConnectedProviders(providerListQuery.data, local.prefs.defaultModel)
+          !isModelAvailableInConnectedProviders(providerListQuery.data, selectedPromptModel)
         )
       ),
   );
@@ -1913,8 +1944,8 @@ export function SessionRoute() {
     };
   }, [opencodeBaseUrl, opencodeClient, selectedWorkspaceRoot, denSessionVersion]);
 
-  const modelLabel = local.prefs.defaultModel
-    ? resolveModelDisplayName(local.prefs.defaultModel.modelID)
+  const modelLabel = selectedPromptModel
+    ? resolveModelDisplayName(selectedPromptModel.modelID)
     : t("session.default_model");
 
   // Prefetch the full provider catalog once so `getModelBehaviorSummary` has
@@ -1934,7 +1965,7 @@ export function SessionRoute() {
   // Compute behavior (reasoning/thinking variant) options for the current
   // default model. This is what the composer renders as its variant pill.
   const { modelVariantLabel, modelBehaviorOptions, modelVariantValue } = useMemo(() => {
-    const ref = local.prefs.defaultModel;
+    const ref = selectedPromptModel;
     const variant = local.prefs.modelVariant ?? null;
     if (!ref) {
       return {
@@ -1957,7 +1988,7 @@ export function SessionRoute() {
       modelBehaviorOptions: summary.options,
       modelVariantValue: summary.value,
     };
-  }, [local.prefs.defaultModel, local.prefs.modelVariant, providerCatalog]);
+  }, [local.prefs.modelVariant, providerCatalog, selectedPromptModel]);
 
   // Load the picker list lazily the first time the modal opens. Uses the
   // cached catalog when available, otherwise re-fetches.
@@ -2057,6 +2088,43 @@ export function SessionRoute() {
     navigate(target, { state: { workspaceId, sessionId } });
   }, [navigate, selectedSessionId, sidebarActiveWorkspaceId]);
 
+  const buildSessionSystemContext = useCallback(async (text: string, sessionId: string) => {
+    const envRuntimeKey = buildMatterhornEnvRuntimeKey({
+      baseUrl: client?.baseUrl ?? null,
+      pid: matterhornServerHostInfoState?.pid ?? null,
+      port: matterhornServerHostInfoState?.port ?? null,
+    });
+    const envSystemContext = await buildOpenworkEnvSystemContext(client, {
+      cacheKey: sessionId,
+      runtimeKey: envRuntimeKey,
+    });
+
+    // Build wallet session context (Feature 2)
+    const walletContext = wallet.snapshot.isConnected
+      ? `\n\n## Wallet Context\nConnected wallet: ${wallet.snapshot.address}\nChain ID: ${wallet.snapshot.chainId}\nETH: ${wallet.snapshot.ethBalance ?? "unknown"}\nUSDC: ${wallet.snapshot.usdcBalance ?? "unknown"}\nYou can use the wallet MCP tools to check balances, sign messages, and prepare transactions on behalf of the user.`
+      : "";
+
+    // Crypto system prompt injected conditionally when the message is crypto-related.
+    // Bittensor and market read/preview flows are public/external-signer-first
+    // and should not require an EVM wallet connection before the agent can
+    // see the Matterhorn crypto tools and safety rules.
+    const matterhornOrientationPrompt = shouldInjectMatterhornOrientationPrompt(text)
+      ? buildMatterhornOrientationSystemPrompt()
+      : "";
+
+    const cryptoPrompt =
+      shouldInjectCryptoPrompt(text)
+        ? buildCryptoSystemPrompt(
+            wallet.snapshot.isConnected ? wallet.snapshot.address : null,
+            wallet.snapshot.isConnected ? wallet.snapshot.chainId : null,
+            wallet.snapshot.isConnected ? wallet.snapshot.ethBalance : null,
+            wallet.snapshot.isConnected ? wallet.snapshot.usdcBalance : null,
+          )
+        : "";
+
+    return [envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt].filter(Boolean).join("\n") || undefined;
+  }, [client, matterhornServerHostInfoState?.pid, matterhornServerHostInfoState?.port, wallet.snapshot]);
+
   const surfaceProps = useMemo(() => {
     if (!client || !selectedWorkspaceId || !selectedSessionId || !opencodeBaseUrl || !token || !opencodeClient) {
       return null;
@@ -2097,7 +2165,7 @@ export function SessionRoute() {
       },
       modelPickerOpen: compactModelPickerOpen,
       modelUnavailable: selectedModelUnavailable,
-      selectedModel: local.prefs.defaultModel ?? { providerID: "", modelID: "" },
+      selectedModel: selectedPromptModel ?? { providerID: "", modelID: "" },
       onModelPickerOpenChange: setCompactModelPickerOpen,
       onModelChange: (model: ModelRef) => {
         local.setPrefs((previous) => ({
@@ -2135,45 +2203,12 @@ export function SessionRoute() {
         }
 
         const parts = await draftToParts(draft, selectedWorkspaceRoot);
-        const envRuntimeKey = buildMatterhornEnvRuntimeKey({
-          baseUrl: client?.baseUrl ?? null,
-          pid: matterhornServerHostInfoState?.pid ?? null,
-          port: matterhornServerHostInfoState?.port ?? null,
-        });
-        const envSystemContext = await buildOpenworkEnvSystemContext(client, {
-          cacheKey: selectedSessionId,
-          runtimeKey: envRuntimeKey,
-        });
-
-        // Build wallet session context (Feature 2)
-        const walletContext = wallet.snapshot.isConnected
-          ? `\n\n## Wallet Context\nConnected wallet: ${wallet.snapshot.address}\nChain ID: ${wallet.snapshot.chainId}\nETH: ${wallet.snapshot.ethBalance ?? "unknown"}\nUSDC: ${wallet.snapshot.usdcBalance ?? "unknown"}\nYou can use the wallet MCP tools to check balances, sign messages, and prepare transactions on behalf of the user.`
-          : "";
-
-        // Crypto system prompt injected conditionally when the message is crypto-related.
-        // Bittensor and market read/preview flows are public/external-signer-first
-        // and should not require an EVM wallet connection before the agent can
-        // see the Matterhorn crypto tools and safety rules.
-        const matterhornOrientationPrompt = shouldInjectMatterhornOrientationPrompt(text)
-          ? buildMatterhornOrientationSystemPrompt()
-          : "";
-
-        const cryptoPrompt =
-          shouldInjectCryptoPrompt(text)
-            ? buildCryptoSystemPrompt(
-                wallet.snapshot.isConnected ? wallet.snapshot.address : null,
-                wallet.snapshot.isConnected ? wallet.snapshot.chainId : null,
-                wallet.snapshot.isConnected ? wallet.snapshot.ethBalance : null,
-                wallet.snapshot.isConnected ? wallet.snapshot.usdcBalance : null,
-              )
-            : "";
-
-        const systemContext = [envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt].filter(Boolean).join("\n") || undefined;
+        const systemContext = await buildSessionSystemContext(text, selectedSessionId);
 
         const result = await opencodeClient.session.promptAsync({
           sessionID: selectedSessionId,
           parts,
-          model: local.prefs.defaultModel ?? undefined,
+          model: selectedPromptModel ?? undefined,
           agent: selectedAgent ?? undefined,
           ...(modelVariantValue ? { variant: modelVariantValue } : {}),
           ...(systemContext ? { system: systemContext } : {}),
@@ -2259,6 +2294,7 @@ export function SessionRoute() {
       },
     };
   }, [
+    buildSessionSystemContext,
     client,
     compactModelPickerOpen,
     handleOpenSettings,
@@ -2274,6 +2310,7 @@ export function SessionRoute() {
     selectedAgent,
     selectedSessionId,
     selectedModelUnavailable,
+    selectedPromptModel,
     selectedWorkspace,
     selectedWorkspaceId,
     selectedWorkspaceRoot,
@@ -2819,6 +2856,7 @@ export function SessionRoute() {
     ) : null}
     <SessionPage
       selectedSessionId={selectedSessionId}
+      workspaceHomeView={isWorkspaceHistoryRoute ? "history" : "home"}
       selectedWorkspaceId={selectedWorkspaceId}
       selectedWorkspaceDisplay={selectedWorkspace ? {
         id: selectedWorkspace.id,
@@ -2928,6 +2966,11 @@ export function SessionRoute() {
           writeActiveWorkspaceId(workspaceId || null);
           navigateToWorkspaceSession(workspaceId, null);
         },
+        onOpenWorkspaceHistory: (workspaceId) => {
+          setSelectedAgent(null);
+          writeActiveWorkspaceId(workspaceId || null);
+          navigate(workspaceRunHistoryRoute(workspaceId));
+        },
         onOpenSession: (workspaceId, sessionId) => {
           setSelectedAgent(null);
           setLegacySelectedWorkspaceId(workspaceId);
@@ -2949,6 +2992,7 @@ export function SessionRoute() {
             const workspacePath = workspace.path?.trim() || undefined;
             const title = options?.title?.trim();
             const agent = options?.agent?.trim();
+            const sendImmediately = Boolean(options?.sendImmediately && !selectedModelUnavailable);
             const workspaceClient = createClient(
               endpoint.opencodeBaseUrl,
               workspacePath,
@@ -2966,7 +3010,9 @@ export function SessionRoute() {
                   directory: workspacePath,
                 }).catch(() => undefined);
               }
-              saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
+              if (!sendImmediately) {
+                saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
+              }
               setSelectedAgent(agent || null);
               writeActiveWorkspaceId(workspaceId || null);
               writeLastSessionFor(workspaceId, session.id);
@@ -2976,7 +3022,43 @@ export function SessionRoute() {
                 [workspaceId]: [displaySession as any, ...(current[workspaceId] ?? [])],
               }));
               navigateToWorkspaceSession(workspaceId, session.id);
-              focusPromptSoon();
+              if (!sendImmediately) {
+                focusPromptSoon();
+                if (options?.sendImmediately && selectedModelUnavailable) {
+                  showToast({
+                    title: "Choose a model to start the task",
+                    description: "The task is ready in the composer.",
+                    tone: "warning",
+                    durationMs: 3200,
+                  });
+                }
+                return;
+              }
+
+              try {
+                const systemContext = await buildSessionSystemContext(prompt, session.id);
+                const result = await workspaceClient.session.promptAsync({
+                  sessionID: session.id,
+                  parts: [{ type: "text", text: prompt }],
+                  model: selectedPromptModel ?? undefined,
+                  agent: agent || undefined,
+                  ...(modelVariantValue ? { variant: modelVariantValue } : {}),
+                  ...(systemContext ? { system: systemContext } : {}),
+                });
+                if (result.error) {
+                  throw new Error(serializeSDKError(result.error));
+                }
+                saveSessionDraft(workspaceId, session.id, { text: "", mode: "prompt" });
+              } catch {
+                saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
+                focusPromptSoon();
+                showToast({
+                  title: "Task is ready to send",
+                  description: "The agent did not start automatically. Review the draft and press Ask.",
+                  tone: "warning",
+                  durationMs: 3600,
+                });
+              }
             } catch {
               // Fall back to normal task creation without prompt
               void handleCreateTaskInWorkspace(workspaceId);
@@ -3131,6 +3213,7 @@ export function SessionRoute() {
       }}
       onOpenSession={(workspaceId, sessionId) => navigateToWorkspaceSession(workspaceId, sessionId)}
       onOpenSettings={(route) => handleOpenSettings(route ?? "/settings/general")}
+      onSendFeedback={() => setFeedbackDialogOpen(true)}
       onOpenNotes={() => {
         navigate(selectedWorkspaceId ? workspaceNotesRoute(selectedWorkspaceId) : "/notes");
       }}

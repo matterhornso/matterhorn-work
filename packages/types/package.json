@@ -72,6 +72,41 @@
       "types": "./src/backend-capabilities.ts",
       "development": "./src/backend-capabilities.ts",
       "default": "./src/backend-capabilities.ts"
+    },
+    "./backend-models": {
+      "types": "./src/backend-models.ts",
+      "development": "./src/backend-models.ts",
+      "default": "./src/backend-models.ts"
+    },
+    "./backend-team-access": {
+      "types": "./src/backend-team-access.ts",
+      "development": "./src/backend-team-access.ts",
+      "default": "./src/backend-team-access.ts"
+    },
+    "./backend-data-controls": {
+      "types": "./src/backend-data-controls.ts",
+      "development": "./src/backend-data-controls.ts",
+      "default": "./src/backend-data-controls.ts"
+    },
+    "./backend-data-policy": {
+      "types": "./src/backend-data-policy.ts",
+      "development": "./src/backend-data-policy.ts",
+      "default": "./src/backend-data-policy.ts"
+    },
+    "./backend-readiness": {
+      "types": "./src/backend-readiness.ts",
+      "development": "./src/backend-readiness.ts",
+      "default": "./src/backend-readiness.ts"
+    },
+    "./backend-control-plane": {
+      "types": "./src/backend-control-plane.ts",
+      "development": "./src/backend-control-plane.ts",
+      "default": "./src/backend-control-plane.ts"
+    },
+    "./backend-support-report": {
+      "types": "./src/backend-support-report.ts",
+      "development": "./src/backend-support-report.ts",
+      "default": "./src/backend-support-report.ts"
     }
   },
   "files": [

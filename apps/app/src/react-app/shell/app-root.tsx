@@ -246,6 +246,16 @@ export function AppRoot() {
                 }
               />
               <Route
+                path="/workspace/:workspaceId/history"
+                element={
+                  <DevProfiler id="SessionRoute">
+                    <Suspense fallback={<RouteFallback />}>
+                      <SessionRoute />
+                    </Suspense>
+                  </DevProfiler>
+                }
+              />
+              <Route
                 path="/workspace/:workspaceId/settings/*"
                 element={
                   <DevProfiler id="SettingsRoute">

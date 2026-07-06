@@ -1,6 +1,9 @@
 import type { MatterhornCapability } from "./backend-capabilities.js";
+import type { MatterhornBackendControlPlaneResponse } from "./backend-control-plane.js";
+import type { MatterhornWorkspaceFeedbackUse } from "./backend-data-policy.js";
 
 export const MATTERHORN_PROJECT_DATA_LEDGER_VERSION = "matterhorn.project-data-ledger.v1" as const;
+export const MATTERHORN_PROJECT_DATA_LEDGER_EXPORT_VERSION = "matterhorn.project-data-ledger-export.v1" as const;
 
 export const MATTERHORN_PROJECT_DATA_LEDGER_SOURCES = [
   "project_evidence",
@@ -14,6 +17,9 @@ export type MatterhornProjectDataLedgerSource =
 export type MatterhornProjectDataLedgerKind =
   | "note"
   | "memory_suggestion"
+  | "team_access"
+  | "wallet"
+  | "chat"
   | "task"
   | "output"
   | "audit"
@@ -77,6 +83,9 @@ export interface MatterhornProjectDataLedgerSummary {
   total: number;
   notes: number;
   memorySuggestions: number;
+  teamAccess: number;
+  wallets: number;
+  chats: number;
   tasks: number;
   outputs: number;
   audits: number;
@@ -86,7 +95,7 @@ export interface MatterhornProjectDataLedgerSummary {
 
 export interface MatterhornProjectDataLedgerPolicy {
   trainingUse: "none_by_default";
-  feedbackUse: "eval_routing_product_quality_only";
+  feedbackUse: MatterhornWorkspaceFeedbackUse;
   redaction: MatterhornCapability;
   retention: MatterhornCapability;
   export: MatterhornCapability;
@@ -98,6 +107,11 @@ export interface MatterhornProjectDataLedgerListOptions {
   limit?: number;
   source?: MatterhornProjectDataLedgerSource;
   kind?: MatterhornProjectDataLedgerKind;
+  desk?: string;
+  sessionId?: string;
+  taskId?: string;
+  from?: string;
+  to?: string;
 }
 
 export interface MatterhornProjectDataLedgerResponse {
@@ -115,6 +129,48 @@ export interface MatterhornProjectDataLedgerResponse {
   count: number;
   summary: MatterhornProjectDataLedgerSummary;
   policy: MatterhornProjectDataLedgerPolicy;
+}
+
+export type MatterhornProjectDataLedgerExportControlPlaneSnapshot = Pick<
+  MatterhornBackendControlPlaneResponse,
+  "version" | "generatedAt" | "workspace" | "summary" | "versions" | "privacy"
+>;
+
+export interface MatterhornProjectDataLedgerExportResponse {
+  success: true;
+  version: typeof MATTERHORN_PROJECT_DATA_LEDGER_EXPORT_VERSION;
+  generatedAt: string;
+  filename: string;
+  ledger: MatterhornProjectDataLedgerResponse;
+  manifest: {
+    exportedAt: string;
+    workspaceId: string;
+    itemCount: number;
+    redactedCount: number;
+    filters: {
+      source?: MatterhornProjectDataLedgerSource;
+      kind?: MatterhornProjectDataLedgerKind;
+      desk?: string;
+      sessionId?: string;
+      taskId?: string;
+      from?: string;
+      to?: string;
+      limit: number;
+    };
+    backendContext: {
+      included: boolean;
+      version?: MatterhornProjectDataLedgerExportControlPlaneSnapshot["version"];
+      generatedAt?: string;
+    };
+    includes: Array<"project_evidence" | "audit" | "feedback">;
+    trainingUse: "none_by_default";
+    feedbackUse: MatterhornWorkspaceFeedbackUse;
+    limitations: string[];
+  };
+  backend?: {
+    controlPlane: MatterhornProjectDataLedgerExportControlPlaneSnapshot;
+  };
+  warnings: string[];
 }
 
 export const MATTERHORN_PROJECT_FEEDBACK_KINDS = [
@@ -157,4 +213,14 @@ export interface MatterhornProjectFeedbackEntry extends MatterhornProjectFeedbac
 export interface MatterhornProjectFeedbackResponse {
   success: true;
   feedback: MatterhornProjectFeedbackEntry;
+}
+
+export interface MatterhornProjectFeedbackDeleteResponse {
+  success: true;
+  deleted: MatterhornProjectFeedbackEntry;
+}
+
+export interface MatterhornProjectFeedbackDeleteAllResponse {
+  success: true;
+  deletedCount: number;
 }

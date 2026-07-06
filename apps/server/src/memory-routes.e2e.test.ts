@@ -22,7 +22,7 @@ const priorEnv = {
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
 
-function baseConfig(port: number): ServerConfig {
+function baseConfig(port: number, root: string): ServerConfig {
   return {
     host: "127.0.0.1",
     port,
@@ -30,8 +30,23 @@ function baseConfig(port: number): ServerConfig {
     hostToken: HOST_TOKEN,
     approval: { mode: "auto", timeoutMs: 1000 },
     corsOrigins: ["*"],
-    workspaces: [],
-    authorizedRoots: [],
+    workspaces: [
+      {
+        id: "ws_memory",
+        name: "Memory route workspace",
+        path: root,
+        preset: "default",
+        workspaceType: "local",
+      },
+      {
+        id: "ws_other",
+        name: "Other memory route workspace",
+        path: join(root, "other"),
+        preset: "default",
+        workspaceType: "local",
+      },
+    ],
+    authorizedRoots: [root],
     readOnly: false,
     startedAt: Date.now(),
     tokenSource: "cli",
@@ -59,7 +74,7 @@ async function boot() {
   process.env.OPENWORK_ENV_STORE = join(dir, "env.json");
   process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
   process.env.MATTERHORN_WORK_MEMORY_ROOT = join(dir, "memory");
-  const server = await startServer(baseConfig(await getFreePort())) as Served;
+  const server = await startServer(baseConfig(await getFreePort(), dir)) as Served;
   stops.push(() => server.stop(true));
   return { base: `http://127.0.0.1:${server.port}`, dir };
 }
@@ -291,6 +306,133 @@ describe("Matterhorn memory API routes", () => {
     });
     expect(rejected.response.status).toBe(400);
     expect(rejected.payload.code).toBe("memory_suggestion_secret_rejected");
+  });
+
+  test("workspace memory routes namespace records by workspace", async () => {
+    const { base } = await boot();
+
+    const captured = await jsonFetch(base, "/workspace/ws_memory/memory/capture", {
+      method: "POST",
+      body: JSON.stringify({
+        record: record({
+          id: "mem_workspace_namespace",
+          scope: "user",
+          title: "Workspace TAO wallet",
+          tags: ["bittensor"],
+        }),
+      }),
+    });
+    expect(captured.response.status).toBe(201);
+    expect(captured.payload.record.scope).toBe("workspace");
+    expect(captured.payload.record.tags).toContain("workspace:ws_memory");
+    expect(captured.payload.record.links).toContainEqual({
+      rel: "workspace",
+      href: "/workspace/ws_memory",
+      title: "Memory route workspace",
+    });
+
+    const listed = await jsonFetch(base, "/workspace/ws_memory/memory/search?tags=bittensor&limit=10");
+    expect(listed.response.status).toBe(200);
+    expect(listed.payload.count).toBe(1);
+    expect(listed.payload.records[0].id).toBe("mem_workspace_namespace");
+
+    const otherWorkspace = await jsonFetch(base, "/workspace/ws_other/memory/search?tags=bittensor&limit=10");
+    expect(otherWorkspace.response.status).toBe(200);
+    expect(otherWorkspace.payload.count).toBe(0);
+
+    const fetched = await jsonFetch(base, "/workspace/ws_memory/memory/entities/mem_workspace_namespace");
+    expect(fetched.response.status).toBe(200);
+    expect(fetched.payload.record.id).toBe("mem_workspace_namespace");
+
+    const otherFetch = await jsonFetch(base, "/workspace/ws_other/memory/entities/mem_workspace_namespace");
+    expect(otherFetch.response.status).toBe(404);
+    expect(otherFetch.payload.code).toBe("memory_not_found");
+
+    const deleted = await jsonFetch(base, "/workspace/ws_memory/memory/entities/mem_workspace_namespace", {
+      method: "DELETE",
+    });
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload.id).toBe("mem_workspace_namespace");
+
+    const afterDelete = await jsonFetch(base, "/workspace/ws_memory/memory/search?tags=bittensor&limit=10");
+    expect(afterDelete.response.status).toBe(200);
+    expect(afterDelete.payload.count).toBe(0);
+
+    const audit = await jsonFetch(base, "/workspace/ws_memory/audit?limit=10");
+    expect(audit.response.status).toBe(200);
+    const actions = audit.payload.items.map((entry: { action: string }) => entry.action);
+    expect(actions).toContain("memory.capture");
+    expect(actions).toContain("memory.record.forget");
+  });
+
+  test("workspace memory suggestions resolve into workspace-scoped records", async () => {
+    const { base } = await boot();
+
+    const created = await jsonFetch(base, "/workspace/ws_memory/memory/suggestions", {
+      method: "POST",
+      body: JSON.stringify({
+        input: {
+          desk: "bittensor",
+          prompt: "Remember 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1routeFixture for TAO reads and subnet 14.",
+          sourceId: "workspace-memory-suggestion-test",
+        },
+      }),
+    });
+    expect(created.response.status).toBe(200);
+    expect(created.payload.inbox.count).toBeGreaterThanOrEqual(1);
+    const entry = created.payload.inbox.entries[0];
+    expect(entry.suggestion.proposedRecord.scope).toBe("workspace");
+    expect(entry.suggestion.proposedRecord.tags).toContain("workspace:ws_memory");
+
+    const listed = await jsonFetch(base, "/workspace/ws_memory/memory/suggestions?includeResolved=true&limit=10");
+    expect(listed.response.status).toBe(200);
+    expect(listed.payload.entries.map((item: { id: string }) => item.id)).toContain(entry.id);
+
+    const otherListed = await jsonFetch(base, "/workspace/ws_other/memory/suggestions?includeResolved=true&limit=10");
+    expect(otherListed.response.status).toBe(200);
+    expect(otherListed.payload.entries.map((item: { id: string }) => item.id)).not.toContain(entry.id);
+
+    const otherFetch = await jsonFetch(base, `/workspace/ws_other/memory/suggestions/${encodeURIComponent(entry.id)}`);
+    expect(otherFetch.response.status).toBe(404);
+    expect(otherFetch.payload.code).toBe("memory_suggestion_not_found");
+
+    const resolved = await jsonFetch(base, `/workspace/ws_memory/memory/suggestions/${encodeURIComponent(entry.id)}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "confirm",
+        reason: "User confirmed this workspace-scoped memory suggestion.",
+      }),
+    });
+    expect(resolved.response.status).toBe(200);
+    expect(resolved.payload.saved).toBe(true);
+    expect(resolved.payload.record.scope).toBe("workspace");
+    expect(resolved.payload.record.tags).toContain("workspace:ws_memory");
+
+    const saved = await jsonFetch(base, "/workspace/ws_memory/memory/entities?tags=bittensor&limit=10");
+    expect(saved.response.status).toBe(200);
+    expect(saved.payload.records.map((item: { id: string }) => item.id)).toContain(resolved.payload.record.id);
+
+    const otherSaved = await jsonFetch(base, "/workspace/ws_other/memory/entities?tags=bittensor&limit=10");
+    expect(otherSaved.response.status).toBe(200);
+    expect(otherSaved.payload.records.map((item: { id: string }) => item.id)).not.toContain(resolved.payload.record.id);
+
+    const exported = await jsonFetch(base, "/workspace/ws_memory/memory/export", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    expect(exported.response.status).toBe(200);
+    expect(exported.payload.export.workspaceId).toBe("ws_memory");
+    expect(exported.payload.export.workspaceNamespaceTag).toBe("workspace:ws_memory");
+    expect(exported.payload.export.recordCount).toBe(1);
+    expect(exported.payload.export.sha256).toMatch(/^[a-f0-9]{64}$/);
+
+    const otherExported = await jsonFetch(base, "/workspace/ws_other/memory/export", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    expect(otherExported.response.status).toBe(200);
+    expect(otherExported.payload.export.workspaceId).toBe("ws_other");
+    expect(otherExported.payload.export.recordCount).toBe(0);
   });
 
   test("stores and resolves pending memory suggestions through the inbox", async () => {

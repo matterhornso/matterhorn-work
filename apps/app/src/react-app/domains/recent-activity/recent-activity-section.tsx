@@ -6,10 +6,12 @@ import {
   BrainCircuit,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   Files,
   FileText,
   Hash,
+  History,
   ListTodo,
   Play,
   Save,
@@ -192,6 +194,19 @@ function ActivityRow(props: { item: RecentActivityItem; onSelect: () => void }) 
   );
 }
 
+function LatestActivitySummary({ item, count }: { item: RecentActivityItem; count: number }) {
+  const title = activityDisplayTitle(item);
+  const context = item.desk ? deskLabel(item.desk) : item.source.replace(/_/g, " ");
+
+  return (
+    <span className="min-w-0 truncate text-xs leading-5 text-dls-secondary">
+      {count} recent {count === 1 ? "event" : "events"}
+      <span className="mx-2 text-dls-secondary/50">/</span>
+      Latest: {title} · {context} · {formatActivityTimestamp(item.timestamp)}
+    </span>
+  );
+}
+
 function DetailLine(props: { label: string; value?: string }) {
   if (!props.value) return null;
 
@@ -319,8 +334,12 @@ interface RecentActivitySectionProps {
   title?: string;
   /** Optional supporting line for standalone placements. */
   description?: string;
+  /** Whether the run history list is visible on first render. */
+  defaultExpanded?: boolean;
   /** Optional bridge into the Outputs panel when an activity has output receipts. */
   onOpenOutputPath?: (path: string) => void;
+  /** Optional navigation into the full project history surface. */
+  onOpenHistory?: () => void;
 }
 
 export function RecentActivitySection({
@@ -329,9 +348,12 @@ export function RecentActivitySection({
   limit = 10,
   title,
   description,
+  defaultExpanded = true,
   onOpenOutputPath,
+  onOpenHistory,
 }: RecentActivitySectionProps) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(defaultExpanded);
   const queryKey = ["project-evidence", runtimeWorkspaceId, limit] as const;
 
   const { data, error, isError, isLoading, refetch } = useQuery({
@@ -356,6 +378,11 @@ export function RecentActivitySection({
 
   const items: RecentActivityItem[] = data?.items ? normalizeEvidenceEvents(data.items) : [];
   const selectedItem = items.find((item) => item.id === selectedItemId) ?? null;
+  const latestItem = items[0] ?? null;
+
+  useEffect(() => {
+    setHistoryOpen(defaultExpanded);
+  }, [defaultExpanded, runtimeWorkspaceId]);
 
   return (
     <section className="space-y-3" aria-label={title ?? "Project activity"}>
@@ -367,8 +394,29 @@ export function RecentActivitySection({
               <p className="mt-0.5 text-xs leading-5 text-dls-secondary">{description}</p>
             ) : null}
           </div>
-          {!isLoading && !isError && items.length > 0 ? (
-            <span className="shrink-0 text-xs text-dls-secondary">{items.length} recent</span>
+          {!isLoading && !isError && latestItem ? (
+            <div className="flex shrink-0 items-center gap-3">
+              <span className="hidden text-xs text-dls-secondary sm:inline">{items.length} recent</span>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-dls-text transition-colors hover:text-dls-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+                aria-expanded={historyOpen}
+                onClick={() => {
+                  if (onOpenHistory) {
+                    onOpenHistory();
+                    return;
+                  }
+                  setHistoryOpen((open) => !open);
+                }}
+              >
+                <History className="size-3.5" aria-hidden="true" />
+                {onOpenHistory ? "Run history" : historyOpen ? "Hide runs" : "Run history"}
+                <ChevronDown
+                  className={cn("size-3 transition-transform", !onOpenHistory && historyOpen && "rotate-180")}
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -390,6 +438,22 @@ export function RecentActivitySection({
           <ListTodo className="size-3.5 shrink-0" />
           Notes, tasks, and outputs will appear here as you work.
         </div>
+      ) : !historyOpen && latestItem ? (
+        <button
+          type="button"
+          className="flex w-full min-w-0 items-center gap-3 rounded-lg bg-dls-surface-muted/10 px-3 py-2.5 text-left transition-colors hover:bg-dls-hover/35 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+          aria-expanded={historyOpen}
+          onClick={() => {
+            if (onOpenHistory) {
+              onOpenHistory();
+              return;
+            }
+            setHistoryOpen(true);
+          }}
+        >
+          <History className="size-3.5 shrink-0 text-dls-secondary" aria-hidden="true" />
+          <LatestActivitySummary item={latestItem} count={items.length} />
+        </button>
       ) : (
         <div className="overflow-hidden rounded-lg bg-dls-surface-muted/10">
           {items.map((item) => (

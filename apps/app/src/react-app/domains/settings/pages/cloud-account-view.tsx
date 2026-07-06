@@ -2,6 +2,7 @@
 import * as React from "react";
 import { ArrowUpRight, ExternalLink, ListChecks } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +35,7 @@ import {
   type ProfileAuthState,
   type ProfileReadiness,
 } from "@matterhorn-work/types";
+import { ProfileCapabilityStatus } from "../../profile/profile-capability-status";
 import { getSessionActivityStatusLabel, type SessionActivityStatus } from "../../session/status/session-activity-store";
 import { useWorkflowTaskLog } from "./use-workflow-task-log";
 
@@ -338,6 +340,21 @@ export function CloudAccountView({
     () => getProfileReadiness(cloudAuthState(isSignedIn, session.authError)),
     [isSignedIn, session.authError],
   );
+  const workspaceIdForBackend = workspaceId?.trim() ?? "";
+  const backendProfileQuery = useQuery({
+    queryKey: ["profile-backend-control-plane", workspaceIdForBackend],
+    enabled: Boolean(matterhornServerClient),
+    staleTime: 30_000,
+    queryFn: async () => {
+      if (!matterhornServerClient) throw new Error("Matterhorn Work engine is offline.");
+      if (workspaceIdForBackend) {
+        const snapshot = await matterhornServerClient.workspaceBackendControlPlane(workspaceIdForBackend);
+        return snapshot.capabilities;
+      }
+      return matterhornServerClient.backendCapabilities();
+    },
+  });
+  const backendProfileError = backendProfileQuery.error instanceof Error ? backendProfileQuery.error : null;
 
   React.useEffect(() => {
     if (!isSignedIn || !session.needsOrgSelection) return;
@@ -361,6 +378,12 @@ export function CloudAccountView({
             <p className="text-xs leading-5 text-dls-secondary">{t("den.cloud_sleep_hint")}</p>
           ) : null}
         </section>
+
+        <ProfileCapabilityStatus
+          capabilities={backendProfileQuery.data ?? null}
+          error={backendProfileError}
+          isLoading={backendProfileQuery.isLoading}
+        />
 
         <section className="flex flex-col gap-3 rounded-xl bg-dls-surface-muted/35 px-3 py-3">
           <div>
@@ -443,6 +466,14 @@ export function CloudAccountView({
   return (
     <SettingsStack>
       <Separator />
+
+      <SettingsSection>
+        <ProfileCapabilityStatus
+          capabilities={backendProfileQuery.data ?? null}
+          error={backendProfileError}
+          isLoading={backendProfileQuery.isLoading}
+        />
+      </SettingsSection>
 
       <SettingsSection>
         <SettingsSectionHeader>

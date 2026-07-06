@@ -284,11 +284,12 @@ function buildMemoryRecord(draft: CaptureDraft, workspaceId: string | null, sess
     summary,
     body: {
       note: bodyText,
-      workspaceId: workspaceId ?? undefined,
-      sessionId: sessionId ?? undefined,
     },
     tags,
-    links: [],
+    links: [
+      ...(workspaceId ? [{ rel: "workspace", href: `/workspace/${workspaceId}`, title: "Workspace" }] : []),
+      ...(workspaceId && sessionId ? [{ rel: "session", href: `/workspace/${workspaceId}/session/${sessionId}`, title: "Session" }] : []),
+    ],
     provenance: {
       source: "user_confirmed",
       capturedAt: now,
@@ -306,11 +307,12 @@ function buildMemoryRecord(draft: CaptureDraft, workspaceId: string | null, sess
   return applyMatterhornMemoryDeskPolicyDefaults(record);
 }
 
-function useMemoryRecords(client: MatterhornServerClient | null) {
+function useMemoryRecords(client: MatterhornServerClient | null, workspaceId: string | null) {
   const [query, setQuery] = useState("");
   const [records, setRecords] = useState<MatterhornMemoryRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const resolvedWorkspaceId = workspaceId?.trim() || null;
 
   const refresh = useCallback(async () => {
     if (!client) {
@@ -322,15 +324,19 @@ function useMemoryRecords(client: MatterhornServerClient | null) {
     setError(null);
     try {
       const response = query.trim()
-        ? await client.searchMemory({ query, limit: 80 })
-        : await client.listMemory({ limit: 80 });
+        ? resolvedWorkspaceId
+          ? await client.searchWorkspaceMemory(resolvedWorkspaceId, { query, limit: 80 })
+          : await client.searchMemory({ query, limit: 80 })
+        : resolvedWorkspaceId
+          ? await client.listWorkspaceMemory(resolvedWorkspaceId, { limit: 80 })
+          : await client.listMemory({ limit: 80 });
       setRecords(response.records ?? []);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not load memory.");
     } finally {
       setLoading(false);
     }
-  }, [client, query]);
+  }, [client, query, resolvedWorkspaceId]);
 
   useEffect(() => {
     void refresh();
@@ -363,10 +369,11 @@ function localSuggestionEntry(suggestion: MatterhornMemorySuggestion): Matterhor
   };
 }
 
-function useMemorySuggestionInbox(client: MatterhornServerClient | null) {
+function useMemorySuggestionInbox(client: MatterhornServerClient | null, workspaceId: string | null) {
   const [entries, setEntries] = useState<MatterhornMemorySuggestionInboxEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const resolvedWorkspaceId = workspaceId?.trim() || null;
 
   const refresh = useCallback(async () => {
     if (!client) {
@@ -377,14 +384,16 @@ function useMemorySuggestionInbox(client: MatterhornServerClient | null) {
     setLoading(true);
     setError(null);
     try {
-      const response = await client.listMemorySuggestions({ includeResolved: true, limit: 40 });
+      const response = resolvedWorkspaceId
+        ? await client.listWorkspaceMemorySuggestions(resolvedWorkspaceId, { includeResolved: true, limit: 40 })
+        : await client.listMemorySuggestions({ includeResolved: true, limit: 40 });
       setEntries(response.entries ?? []);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not load memory review.");
     } finally {
       setLoading(false);
     }
-  }, [client]);
+  }, [client, resolvedWorkspaceId]);
 
   useEffect(() => {
     void refresh();
@@ -409,7 +418,8 @@ function useMemorySuggestionInbox(client: MatterhornServerClient | null) {
 }
 
 export function MemoryPanel(props: MemoryPanelProps) {
-  const { query, setQuery, records, setRecords, loading, error, refresh } = useMemoryRecords(props.client);
+  const workspaceId = props.workspaceId?.trim() || null;
+  const { query, setQuery, records, setRecords, loading, error, refresh } = useMemoryRecords(props.client, workspaceId);
   const {
     entries: suggestionEntries,
     loading: suggestionsLoading,
@@ -417,7 +427,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
     refresh: refreshSuggestions,
     upsertEntries: upsertSuggestionEntries,
     removeEntry: removeSuggestionEntry,
-  } = useMemorySuggestionInbox(props.client);
+  } = useMemorySuggestionInbox(props.client, workspaceId);
   const [selectedRecords, setSelectedRecords] = useState<MatterhornMemoryRecord[]>([]);
   const [draft, setDraft] = useState<CaptureDraft>(INITIAL_DRAFT);
   const [captureError, setCaptureError] = useState<string | null>(null);
@@ -439,7 +449,11 @@ export function MemoryPanel(props: MemoryPanelProps) {
       const localEntries = incoming.map(localSuggestionEntry);
       upsertSuggestionEntries(localEntries);
       if (detail.input && props.client) {
-        void props.client.createMemorySuggestions(detail.input)
+        const input = workspaceId ? { ...detail.input, workspaceId } : detail.input;
+        const request = workspaceId
+          ? props.client.createWorkspaceMemorySuggestions(workspaceId, input)
+          : props.client.createMemorySuggestions(input);
+        void request
           .then((response) => upsertSuggestionEntries(response.inbox.entries ?? []))
           .catch(() => {
             // Keep local visible suggestions if the durable inbox is unavailable.
@@ -452,7 +466,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
       window.removeEventListener("matterhorn:memory-suggestions-updated", handleSuggestions);
       window.removeEventListener("matterhorn:memory-suggestion", handleSuggestions);
     };
-  }, [props.client, upsertSuggestionEntries]);
+  }, [props.client, upsertSuggestionEntries, workspaceId]);
 
   const visibleSelectedRecords = useMemo(
     () => selectedRecords.filter((record) => records.some((candidate) => candidate.id === record.id)),
@@ -520,7 +534,11 @@ export function MemoryPanel(props: MemoryPanelProps) {
   const handleForget = async (record: MatterhornMemoryRecord) => {
     if (!props.client || !record.canDelete) return;
     try {
-      await props.client.forgetMemory(record.id, "User forgot this memory from the Matterhorn Memory panel.");
+      if (workspaceId) {
+        await props.client.forgetWorkspaceMemory(workspaceId, record.id);
+      } else {
+        await props.client.forgetMemory(record.id, "User forgot this memory from the Matterhorn Memory panel.");
+      }
       setRecords((current) => current.filter((item) => item.id !== record.id));
       setSelectedRecords((current) => current.filter((item) => item.id !== record.id));
     } catch (nextError) {
@@ -532,7 +550,9 @@ export function MemoryPanel(props: MemoryPanelProps) {
     if (!props.client) return;
     setExportStatus("Exporting public-safe memory bundle...");
     try {
-      const response = await props.client.exportMemory();
+      const response = workspaceId
+        ? await props.client.exportWorkspaceMemory(workspaceId)
+        : await props.client.exportMemory();
       setExportStatus(`Exported ${response.export.recordCount} records. sha256 ${response.export.sha256.slice(0, 12)}...`);
     } catch (nextError) {
       setExportStatus(nextError instanceof Error ? nextError.message : "Could not export memory bundle.");
@@ -551,10 +571,15 @@ export function MemoryPanel(props: MemoryPanelProps) {
             ? "User regenerated this visible Memory suggestion from the Matterhorn Memory panel."
             : "User confirmed this visible Memory suggestion from the Matterhorn Memory panel.";
       if (entry.status === "pending") {
-        const response = await props.client.resolveStoredMemorySuggestion(entry.id, {
-          action,
-          reason,
-        });
+        const response = workspaceId
+          ? await props.client.resolveStoredWorkspaceMemorySuggestion(workspaceId, entry.id, {
+            action,
+            reason,
+          })
+          : await props.client.resolveStoredMemorySuggestion(entry.id, {
+            action,
+            reason,
+          });
         if (response.record) {
           setRecords((current) => [response.record!, ...current.filter((item) => item.id !== response.record!.id)]);
         }
@@ -566,7 +591,9 @@ export function MemoryPanel(props: MemoryPanelProps) {
       }
 
       if (action === "restore" || action === "regenerate") {
-        const response = await props.client.resolveStoredMemorySuggestion(entry.id, { action, reason });
+        const response = workspaceId
+          ? await props.client.resolveStoredWorkspaceMemorySuggestion(workspaceId, entry.id, { action, reason })
+          : await props.client.resolveStoredMemorySuggestion(entry.id, { action, reason });
         upsertSuggestionEntries([response.entry]);
         window.dispatchEvent(new CustomEvent("matterhorn:memory-suggestions-changed", {
           detail: { id: entry.id, action, status: response.entry.status },
@@ -574,11 +601,17 @@ export function MemoryPanel(props: MemoryPanelProps) {
         return;
       }
 
-      const response = await props.client.resolveMemorySuggestion({
-        suggestion: entry.suggestion,
-        action,
-        reason,
-      });
+      const response = workspaceId
+        ? await props.client.resolveWorkspaceMemorySuggestion(workspaceId, {
+          suggestion: entry.suggestion,
+          action,
+          reason,
+        })
+        : await props.client.resolveMemorySuggestion({
+          suggestion: entry.suggestion,
+          action,
+          reason,
+        });
       if (response.record) {
         setRecords((current) => [response.record!, ...current.filter((item) => item.id !== response.record!.id)]);
       }
@@ -614,11 +647,17 @@ export function MemoryPanel(props: MemoryPanelProps) {
     const patch = buildEditedSuggestionPatch(entry, suggestionEditDraft);
     try {
       if (entry.status === "pending") {
-        const response = await props.client.resolveStoredMemorySuggestion(entry.id, {
-          action: "edit",
-          patch,
-          reason: "User edited this visible Memory suggestion, reviewed why it was suggested, and saved it from the Matterhorn Memory panel.",
-        });
+        const response = workspaceId
+          ? await props.client.resolveStoredWorkspaceMemorySuggestion(workspaceId, entry.id, {
+            action: "edit",
+            patch,
+            reason: "User edited this visible Memory suggestion, reviewed why it was suggested, and saved it from the Matterhorn Memory panel.",
+          })
+          : await props.client.resolveStoredMemorySuggestion(entry.id, {
+            action: "edit",
+            patch,
+            reason: "User edited this visible Memory suggestion, reviewed why it was suggested, and saved it from the Matterhorn Memory panel.",
+          });
         if (response.record) {
           setRecords((current) => [response.record!, ...current.filter((item) => item.id !== response.record!.id)]);
         }
@@ -627,12 +666,19 @@ export function MemoryPanel(props: MemoryPanelProps) {
           detail: { id: entry.id, action: "edit", status: response.entry.status },
         }));
       } else {
-        const response = await props.client.resolveMemorySuggestion({
-          suggestion: entry.suggestion,
-          action: "edit",
-          patch,
-          reason: "User edited this visible Memory suggestion, reviewed why it was suggested, and saved it from the Matterhorn Memory panel.",
-        });
+        const response = workspaceId
+          ? await props.client.resolveWorkspaceMemorySuggestion(workspaceId, {
+            suggestion: entry.suggestion,
+            action: "edit",
+            patch,
+            reason: "User edited this visible Memory suggestion, reviewed why it was suggested, and saved it from the Matterhorn Memory panel.",
+          })
+          : await props.client.resolveMemorySuggestion({
+            suggestion: entry.suggestion,
+            action: "edit",
+            patch,
+            reason: "User edited this visible Memory suggestion, reviewed why it was suggested, and saved it from the Matterhorn Memory panel.",
+          });
         if (response.record) {
           setRecords((current) => [response.record!, ...current.filter((item) => item.id !== response.record!.id)]);
         }
@@ -679,7 +725,9 @@ export function MemoryPanel(props: MemoryPanelProps) {
         setCaptureError(`Desk policy blocked this memory: ${policyDecision.blockedReasons.join("; ")}`);
         return;
       }
-      const response = await props.client.captureMemory(nextRecord);
+      const response = workspaceId
+        ? await props.client.captureWorkspaceMemory(workspaceId, nextRecord)
+        : await props.client.captureMemory(nextRecord);
       setRecords((current) => [response.record, ...current.filter((item) => item.id !== response.record.id)]);
       setDraft(INITIAL_DRAFT);
     } catch (nextError) {

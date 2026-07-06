@@ -171,6 +171,33 @@ describe("workflow run routes", () => {
     expect(events.map((event) => event.type)).toContain("workflow.started");
   });
 
+  test("workflow start events use human desk labels in project evidence", async () => {
+    const { base } = await boot();
+    const { payload: stagedPayload } = await jsonFetch(base, "/api/workflows/runs/stage", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: "ws_longevity",
+        sessionId: "sess_hyperliquid_label",
+        deskId: "hyperliquid",
+        visibleUserIntent: "Show BTC orderbook context",
+      }),
+    });
+    const runId = ((stagedPayload as Record<string, unknown>)?.run as Record<string, unknown>)?.workflowRunId as string;
+
+    await jsonFetch(base, `/api/workflows/runs/${runId}/start`, { method: "POST" });
+
+    const { response, payload } = await jsonFetch(
+      base,
+      `/workspace/ws_longevity/evidence?source=task_events&taskId=${encodeURIComponent(runId)}&limit=10`,
+    );
+    expect(response.status).toBe(200);
+    const items = ((payload as Record<string, unknown>)?.items ?? []) as Array<{
+      title: string;
+      type: string;
+    }>;
+    expect(items.find((item) => item.type === "task.started")?.title).toBe("Hyperliquid task started");
+  });
+
   test("GET /api/workflows/runs lists runs with filters", async () => {
     const { base } = await boot();
     await jsonFetch(base, "/api/workflows/runs/stage", {

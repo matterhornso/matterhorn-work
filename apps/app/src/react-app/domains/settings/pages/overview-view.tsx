@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Ban,
@@ -35,6 +35,19 @@ import type {
   MatterhornDataStoreDescriptor,
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
+import type {
+  MatterhornDataControlStore,
+  MatterhornWorkspaceDataControlsResponse,
+} from "@matterhorn-work/types/backend-data-controls";
+import type {
+  MatterhornWorkspaceDataPolicyResponse,
+  MatterhornWorkspaceFeedbackUse,
+} from "@matterhorn-work/types/backend-data-policy";
+import type {
+  MatterhornBackendTeamAccessResponse,
+  MatterhornBackendTeamAccessSummaryResponse,
+  MatterhornTeamShareableTokenScope,
+} from "@matterhorn-work/types/backend-team-access";
 import {
   MATTERHORN_PROJECT_FEEDBACK_KINDS,
   type MatterhornProjectDataLedgerEntry,
@@ -43,6 +56,8 @@ import {
 import { t } from "../../../../i18n";
 import { formatRelativeTime } from "../../../../app/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useQuickJot } from "../../notes";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
@@ -240,6 +255,16 @@ function yesNo(value: boolean) {
   return value ? "Yes" : "No";
 }
 
+function controlSummary(
+  controls: MatterhornWorkspaceDataControlsResponse | undefined,
+  store: MatterhornDataStoreDescriptor,
+  kind: "export" | "deletion",
+) {
+  const control = controls?.stores[store.id as keyof MatterhornWorkspaceDataControlsResponse["stores"]];
+  if (!control) return kind === "export" ? yesNo(store.exportable) : yesNo(store.deletable);
+  return kind === "export" ? control.export.summary : control.deletion.summary;
+}
+
 function feedbackKindLabel(value: string | null | undefined) {
   if (value === "thumbs_up") return "Worked well";
   if (value === "thumbs_down") return "Felt rough";
@@ -269,6 +294,12 @@ function feedbackTargetLabel(entry: MatterhornProjectDataLedgerEntry) {
 function feedbackRatingLabel(entry: MatterhornProjectDataLedgerEntry) {
   const rating = entry.metadata?.rating;
   return typeof rating === "number" ? `${rating}/5` : null;
+}
+
+function feedbackIdFromEntry(entry: MatterhornProjectDataLedgerEntry) {
+  const feedbackId = entry.metadata?.feedbackId;
+  if (typeof feedbackId === "string" && feedbackId.trim()) return feedbackId.trim();
+  return entry.id.startsWith("feedback:") ? entry.id.slice("feedback:".length) : entry.id;
 }
 
 // ---------------------------------------------------------------------------
@@ -379,16 +410,60 @@ function TaskHistorySection(props: {
   );
 }
 
-function DataPolicySection(props: { dataMap: MatterhornWorkspaceDataMapResponse }) {
+function DataPolicySection(props: {
+  dataMap: MatterhornWorkspaceDataMapResponse;
+  controls?: MatterhornWorkspaceDataControlsResponse;
+  dataPolicy?: MatterhornWorkspaceDataPolicyResponse;
+  feedbackPolicySaving?: boolean;
+  feedbackPolicyError?: string | null;
+  onFeedbackPolicyChange?: (enabled: boolean) => void;
+}) {
   const stores = DATA_POLICY_STORE_ORDER
     .map((key) => props.dataMap.stores[key])
     .filter(Boolean);
+  const highlightedControls = stores
+    .map((store) => props.controls?.stores[store.id as keyof MatterhornWorkspaceDataControlsResponse["stores"]])
+    .filter((control): control is MatterhornDataControlStore => Boolean(control))
+    .slice(0, 4);
 
   return (
     <div className="px-1 py-3">
       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm font-medium text-dls-text">Storage and retention</p>
         <StatusBadge tone="ready">{workspaceDataPolicySummary(props.dataMap)}</StatusBadge>
+      </div>
+      <div className="mb-4 grid gap-2 sm:grid-cols-2">
+        <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-medium text-dls-text">Model training</p>
+            <StatusBadge>Off</StatusBadge>
+          </div>
+          <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
+            Workspace data is not used for RL or model training.
+          </p>
+        </div>
+        <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-dls-text">Feedback collection</p>
+              <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
+                Explicit feedback only. Product quality and routing, not training.
+              </p>
+            </div>
+            <Switch
+              size="sm"
+              checked={(props.dataPolicy?.policy.feedbackUse ?? props.dataMap.policy.feedbackUse) !== "disabled"}
+              disabled={!props.onFeedbackPolicyChange || props.feedbackPolicySaving}
+              onCheckedChange={(checked) => props.onFeedbackPolicyChange?.(checked)}
+              aria-label="Toggle workspace feedback collection"
+            />
+          </div>
+          {props.feedbackPolicyError ? (
+            <p className="mt-2 text-[11px] leading-4 text-destructive">{props.feedbackPolicyError}</p>
+          ) : props.feedbackPolicySaving ? (
+            <p className="mt-2 text-[11px] leading-4 text-dls-secondary">Saving...</p>
+          ) : null}
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[680px] border-separate border-spacing-0 text-left text-xs">
@@ -415,14 +490,30 @@ function DataPolicySection(props: { dataMap: MatterhornWorkspaceDataMapResponse 
                   </span>
                 </td>
                 <td className="border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">{retentionLabel(store.retention)}</td>
-                <td className="border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">{yesNo(store.exportable)}</td>
-                <td className="border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">{yesNo(store.deletable)}</td>
+                <td className="max-w-[220px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
+                  {controlSummary(props.controls, store, "export")}
+                </td>
+                <td className="max-w-[220px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
+                  {controlSummary(props.controls, store, "deletion")}
+                </td>
                 <td className="border-t border-dls-border/45 py-2 text-dls-secondary">{secretsLabel(store.containsSecrets)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {props.controls ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {highlightedControls.map((control) => (
+            <div key={control.storeId} className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
+              <p className="text-xs font-medium text-dls-text">{control.store.label}</p>
+              <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
+                {control.export.label} · {control.deletion.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <p className="mt-3 text-xs leading-5 text-dls-secondary">
         User-controlled stores can be managed from their own surfaces. Append-only rows are retained for accountability and are included in ledger export where available.
       </p>
@@ -435,6 +526,9 @@ function FeedbackReviewSection(props: {
   runtimeWorkspaceId: string;
 }) {
   const [filter, setFilter] = useState<"all" | MatterhornProjectFeedbackKind>("all");
+  const [deletingFeedbackId, setDeletingFeedbackId] = useState<string | null>(null);
+  const [deleteAllBusy, setDeleteAllBusy] = useState(false);
+  const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ["settings-feedback-review", props.runtimeWorkspaceId],
     queryFn: () => props.matterhornServerClient.listProjectDataLedger(props.runtimeWorkspaceId, {
@@ -449,29 +543,73 @@ function FeedbackReviewSection(props: {
     const kind = feedbackKindFromEntry(entry);
     return filter === "all" || kind === filter;
   });
+  const feedbackCount = data?.summary.feedback ?? 0;
+
+  const deleteFeedback = useCallback(async (entry: MatterhornProjectDataLedgerEntry) => {
+    const feedbackId = feedbackIdFromEntry(entry);
+    if (!feedbackId) return;
+    setDeletingFeedbackId(feedbackId);
+    setDeleteStatus(null);
+    try {
+      await props.matterhornServerClient.deleteProjectFeedback(props.runtimeWorkspaceId, feedbackId);
+      setDeleteStatus("Feedback deleted.");
+      await refetch();
+    } catch (deleteError) {
+      setDeleteStatus(deleteError instanceof Error ? deleteError.message : "Feedback could not be deleted.");
+    } finally {
+      setDeletingFeedbackId(null);
+    }
+  }, [props.matterhornServerClient, props.runtimeWorkspaceId, refetch]);
+
+  const deleteAllFeedback = useCallback(async () => {
+    if (feedbackCount <= 0) return;
+    if (typeof window !== "undefined" && !window.confirm("Delete all local feedback for this workspace?")) return;
+    setDeleteAllBusy(true);
+    setDeleteStatus(null);
+    try {
+      const response = await props.matterhornServerClient.deleteAllProjectFeedback(props.runtimeWorkspaceId);
+      setDeleteStatus(`Deleted ${response.deletedCount} feedback entr${response.deletedCount === 1 ? "y" : "ies"}.`);
+      await refetch();
+    } catch (deleteError) {
+      setDeleteStatus(deleteError instanceof Error ? deleteError.message : "Feedback could not be cleared.");
+    } finally {
+      setDeleteAllBusy(false);
+    }
+  }, [feedbackCount, props.matterhornServerClient, props.runtimeWorkspaceId, refetch]);
 
   return (
     <div className="px-1 py-3">
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        <Button
-          variant={filter === "all" ? "default" : "ghost"}
-          size="sm"
-          className="h-7 px-2 text-xs"
-          onClick={() => setFilter("all")}
-        >
-          All {data?.summary.feedback ?? 0}
-        </Button>
-        {MATTERHORN_PROJECT_FEEDBACK_KINDS.map((kind) => (
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-1.5">
           <Button
-            key={kind}
-            variant={filter === kind ? "default" : "ghost"}
+            variant={filter === "all" ? "default" : "ghost"}
             size="sm"
             className="h-7 px-2 text-xs"
-            onClick={() => setFilter(kind)}
+            onClick={() => setFilter("all")}
           >
-            {feedbackKindLabel(kind)}
+            All {feedbackCount}
           </Button>
-        ))}
+          {MATTERHORN_PROJECT_FEEDBACK_KINDS.map((kind) => (
+            <Button
+              key={kind}
+              variant={filter === kind ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setFilter(kind)}
+            >
+              {feedbackKindLabel(kind)}
+            </Button>
+          ))}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-fit px-2 text-xs text-dls-secondary hover:text-dls-text"
+          disabled={feedbackCount <= 0 || deleteAllBusy}
+          onClick={() => void deleteAllFeedback()}
+        >
+          {deleteAllBusy ? "Deleting" : "Delete all"}
+        </Button>
       </div>
 
       {isLoading ? (
@@ -490,6 +628,7 @@ function FeedbackReviewSection(props: {
           {items.map((entry) => {
             const kind = feedbackKindFromEntry(entry);
             const rating = feedbackRatingLabel(entry);
+            const feedbackId = feedbackIdFromEntry(entry);
             return (
               <div key={entry.id} className="rounded-lg px-2 py-2 transition-colors hover:bg-dls-hover/60">
                 <div className="flex flex-wrap items-center gap-2">
@@ -497,6 +636,17 @@ function FeedbackReviewSection(props: {
                   {rating ? <span className="text-xs text-dls-secondary">{rating}</span> : null}
                   <span className="text-xs text-dls-secondary">{feedbackTargetLabel(entry)}</span>
                   <span className="ml-auto text-xs text-dls-secondary">{formatRelativeTime(Date.parse(entry.timestamp))}</span>
+                  {entry.deletable ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1.5 text-xs text-dls-secondary hover:text-dls-text"
+                      disabled={deletingFeedbackId === feedbackId}
+                      onClick={() => void deleteFeedback(entry)}
+                    >
+                      {deletingFeedbackId === feedbackId ? "Deleting" : "Delete"}
+                    </Button>
+                  ) : null}
                 </div>
                 <p className="mt-1 line-clamp-2 text-xs leading-5 text-dls-secondary">
                   {entry.summary?.trim() || "No comment."}
@@ -506,6 +656,210 @@ function FeedbackReviewSection(props: {
           })}
         </div>
       )}
+      {deleteStatus ? <p className="mt-3 text-xs leading-5 text-dls-secondary">{deleteStatus}</p> : null}
+    </div>
+  );
+}
+
+function TeamAccessControls(props: {
+  client?: MatterhornServerClient | null;
+  workspaceId: string;
+  summary?: MatterhornBackendTeamAccessSummaryResponse;
+  data?: MatterhornBackendTeamAccessResponse;
+  error: unknown;
+  isError: boolean;
+  isLoading: boolean;
+  isOpen: boolean;
+  onOpen: () => void;
+  refetch: () => Promise<unknown>;
+}) {
+  const { client, workspaceId, refetch } = props;
+  const [scope, setScope] = useState<MatterhornTeamShareableTokenScope>("viewer");
+  const [label, setLabel] = useState("");
+  const [createdToken, setCreatedToken] = useState<{
+    id: string;
+    token: string;
+    scope: MatterhornTeamShareableTokenScope;
+    label?: string;
+    createdAt: number;
+  } | null>(null);
+  const [busyTokenId, setBusyTokenId] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const sharedTokens = props.data?.localAccess.tokens.filter((token) => token.source === "token_store") ?? [];
+  const tokenCount = props.summary?.localAccess.tokenCount ?? props.data?.localAccess.tokenCount ?? 0;
+  const sharedCount = Math.max(0, tokenCount - (props.summary?.localAccess.byScope.collaborator ? 1 : 0));
+  const canUseTokenControls = Boolean(client && workspaceId && !props.isLoading && props.data);
+
+  const createToken = useCallback(async () => {
+    if (!client || !workspaceId) {
+      setStatus("Open a connected workspace to create a local access token.");
+      return;
+    }
+    setBusyTokenId("create");
+    setStatus(null);
+    try {
+      const response = await client.createWorkspaceTeamAccessToken(workspaceId, {
+        scope,
+        label: label.trim() || undefined,
+      });
+      setCreatedToken({
+        id: response.token.id,
+        token: response.token.token,
+        scope,
+        label: response.token.label,
+        createdAt: response.token.createdAt,
+      });
+      setLabel("");
+      setStatus("Local access token created. Copy it now; it will not be shown again.");
+      await refetch();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not create a local access token.");
+    } finally {
+      setBusyTokenId(null);
+    }
+  }, [client, label, refetch, scope, workspaceId]);
+
+  const revokeToken = useCallback(async (tokenId: string, tokenLabel?: string) => {
+    if (!client || !workspaceId) {
+      setStatus("Open a connected workspace to revoke a local access token.");
+      return;
+    }
+    setBusyTokenId(tokenId);
+    setStatus(null);
+    try {
+      await client.revokeWorkspaceTeamAccessToken(workspaceId, tokenId);
+      if (createdToken?.id === tokenId) setCreatedToken(null);
+      setStatus(`Revoked ${tokenLabel || "local access token"}.`);
+      await refetch();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not revoke the local access token.");
+    } finally {
+      setBusyTokenId(null);
+    }
+  }, [client, createdToken?.id, refetch, workspaceId]);
+
+  if (!props.isOpen) {
+    return (
+      <div className="flex flex-col gap-2 px-1 py-3 text-sm text-dls-secondary sm:flex-row sm:items-center sm:justify-between">
+        <span>{tokenCount} local access token{tokenCount === 1 ? "" : "s"}. Token details stay host-protected.</span>
+        <Button variant="ghost" size="sm" className="w-fit px-2 text-xs" onClick={props.onOpen}>
+          Manage tokens
+        </Button>
+      </div>
+    );
+  }
+
+  if (props.isLoading) {
+    return <p className="px-1 py-3 text-sm leading-6 text-dls-secondary">Loading local access tokens...</p>;
+  }
+
+  if (props.isError) {
+    return (
+      <div className="flex flex-col gap-2 px-1 py-3 text-sm text-dls-secondary sm:flex-row sm:items-center sm:justify-between">
+        <span>
+          {props.error instanceof Error
+            ? props.error.message
+            : "Token management requires host access on this local server."}
+        </span>
+        <Button variant="ghost" size="sm" className="w-fit px-2 text-xs" onClick={() => void props.refetch()}>
+          Refresh
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-1 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-dls-text">Local access tokens</p>
+          <p className="mt-0.5 text-xs leading-5 text-dls-secondary">
+            Create a viewer or collaborator token for this local workspace server.
+          </p>
+        </div>
+        <span className="ml-auto text-xs text-dls-secondary">
+          {sharedTokens.length || sharedCount} shared
+        </span>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex rounded-lg bg-dls-surface/70 p-0.5">
+          {(["viewer", "collaborator"] as const).map((item) => (
+            <Button
+              key={item}
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-7 flex-1 rounded-md px-2 text-xs capitalize text-dls-secondary hover:text-dls-text sm:flex-none",
+                scope === item && "bg-dls-hover text-dls-text",
+              )}
+              onClick={() => setScope(item)}
+            >
+              {item}
+            </Button>
+          ))}
+        </div>
+        <Input
+          value={label}
+          onChange={(event) => setLabel(event.target.value)}
+          placeholder="Label optional"
+          className="h-8 min-w-0 flex-1 text-xs"
+          maxLength={80}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 text-xs"
+          disabled={!canUseTokenControls || busyTokenId === "create"}
+          onClick={() => void createToken()}
+        >
+          {busyTokenId === "create" ? "Creating" : "Create token"}
+        </Button>
+      </div>
+
+      {createdToken ? (
+        <div className="mt-3 rounded-lg bg-dls-surface/70 px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium capitalize text-dls-text">{createdToken.scope}</span>
+            <span className="text-xs text-dls-secondary">
+              {createdToken.label || createdToken.id}
+            </span>
+            <span className="text-xs text-dls-secondary">{formatRelativeTime(createdToken.createdAt)}</span>
+            <div className="ml-auto">
+              <CopyButton text={createdToken.token} label="Copy token" />
+            </div>
+          </div>
+          <p className="mt-2 break-all font-mono text-[11px] leading-5 text-dls-secondary">{createdToken.token}</p>
+        </div>
+      ) : null}
+
+      <div className="mt-3 space-y-1">
+        {sharedTokens.length ? sharedTokens.map((token) => (
+          <div key={token.id} className="flex flex-wrap items-center gap-2 rounded-lg px-2 py-2 hover:bg-dls-hover/60">
+            <span className="text-xs font-medium capitalize text-dls-text">{token.scope}</span>
+            <span className="min-w-0 max-w-[18rem] truncate text-xs text-dls-secondary">
+              {token.label || token.id}
+            </span>
+            <span className="text-xs text-dls-secondary">{formatRelativeTime(token.createdAt)}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-6 px-1.5 text-xs text-dls-secondary hover:text-dls-text"
+              disabled={busyTokenId === token.id}
+              onClick={() => void revokeToken(token.id, token.label || token.id)}
+            >
+              {busyTokenId === token.id ? "Revoking" : "Revoke"}
+            </Button>
+          </div>
+        )) : (
+          <p className="rounded-lg px-2 py-2 text-xs leading-5 text-dls-secondary">
+            No shared local tokens created yet.
+          </p>
+        )}
+      </div>
+
+      {status ? <p className="mt-3 text-xs leading-5 text-dls-secondary">{status}</p> : null}
     </div>
   );
 }
@@ -517,13 +871,16 @@ export function SettingsOverviewView(props: {
 }) {
   const { onSelectTab } = props;
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { openQuickJot } = useQuickJot();
   const setSidePanelState = useUiStateStore((state) => state.setSidePanelState);
   const [theme, setTheme] = useState<ThemeMode>(getInitialThemeMode());
   const [density, setDensity] = useState<Density>(readDensity());
   const [memoryExportStatus, setMemoryExportStatus] = useState<string | null>(null);
   const [ledgerExportStatus, setLedgerExportStatus] = useState<string | null>(null);
+  const [supportReportStatus, setSupportReportStatus] = useState<string | null>(null);
   const notesWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
+  const backendWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
 
   useEffect(() => subscribeToTheme(() => setTheme(getInitialThemeMode())), []);
 
@@ -538,14 +895,14 @@ export function SettingsOverviewView(props: {
   }, []);
 
   const memoryOverviewQuery = useQuery({
-    queryKey: ["settings-memory-overview", props.runtimeWorkspaceId],
-    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    queryKey: ["settings-memory-overview", backendWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && backendWorkspaceId),
     queryFn: async () => {
       const client = props.matterhornServerClient;
-      if (!client) return { pending: 0, confirmed: 0 };
+      if (!client || !backendWorkspaceId) return { pending: 0, confirmed: 0 };
       const [pendingSuggestions, savedRecords] = await Promise.all([
-        client.listMemorySuggestions({ status: "pending", limit: 100 }),
-        client.listMemory({ limit: 100 }),
+        client.listWorkspaceMemorySuggestions(backendWorkspaceId, { status: "pending", limit: 100 }),
+        client.listWorkspaceMemory(backendWorkspaceId, { limit: 100 }),
       ]);
       return {
         pending: (pendingSuggestions.entries ?? []).filter((entry) => entry.status === "pending").length,
@@ -554,9 +911,20 @@ export function SettingsOverviewView(props: {
     },
   });
 
+  const workspaceBackendControlPlaneQuery = useQuery({
+    queryKey: ["settings-workspace-backend-control-plane", backendWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && backendWorkspaceId),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client || !backendWorkspaceId) throw new Error("Open a workspace to check backend status.");
+      return client.workspaceBackendControlPlane(backendWorkspaceId);
+    },
+    staleTime: 30_000,
+  });
+
   const backendCapabilitiesQuery = useQuery({
     queryKey: ["settings-backend-capabilities"],
-    enabled: Boolean(props.matterhornServerClient),
+    enabled: Boolean(props.matterhornServerClient && (!backendWorkspaceId || workspaceBackendControlPlaneQuery.isError)),
     queryFn: async () => {
       const client = props.matterhornServerClient;
       if (!client) throw new Error("Matterhorn Work engine is offline.");
@@ -565,9 +933,21 @@ export function SettingsOverviewView(props: {
     staleTime: 30_000,
   });
 
+  const workspaceReadinessQuery = useQuery({
+    queryKey: ["settings-workspace-readiness", props.runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId && workspaceBackendControlPlaneQuery.isError),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to check readiness.");
+      return client.workspaceReadiness(workspaceId);
+    },
+    staleTime: 30_000,
+  });
+
   const workspaceDataMapQuery = useQuery({
     queryKey: ["settings-workspace-data-map", props.runtimeWorkspaceId],
-    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId && workspaceBackendControlPlaneQuery.isError),
     queryFn: async () => {
       const client = props.matterhornServerClient;
       const workspaceId = props.runtimeWorkspaceId?.trim();
@@ -576,6 +956,63 @@ export function SettingsOverviewView(props: {
     },
     staleTime: 30_000,
   });
+
+  const workspaceDataControlsQuery = useQuery({
+    queryKey: ["settings-workspace-data-controls", props.runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId && workspaceBackendControlPlaneQuery.isError),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to see project data controls.");
+      return client.workspaceDataControls(workspaceId);
+    },
+    staleTime: 30_000,
+  });
+
+  const workspaceDataPolicyQuery = useQuery({
+    queryKey: ["settings-workspace-data-policy", props.runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId && workspaceBackendControlPlaneQuery.isError),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to see data policy.");
+      return client.workspaceDataPolicy(workspaceId);
+    },
+    staleTime: 30_000,
+  });
+
+  const backendCapabilities = workspaceBackendControlPlaneQuery.data?.capabilities ?? backendCapabilitiesQuery.data;
+  const workspaceReadiness = workspaceBackendControlPlaneQuery.data?.readiness ?? workspaceReadinessQuery.data;
+  const workspaceDataMap = workspaceBackendControlPlaneQuery.data?.dataMap ?? workspaceDataMapQuery.data;
+  const workspaceDataControls = workspaceBackendControlPlaneQuery.data?.dataControls ?? workspaceDataControlsQuery.data;
+  const workspaceDataPolicy = workspaceBackendControlPlaneQuery.data?.dataPolicy ?? workspaceDataPolicyQuery.data;
+  const updateWorkspaceDataPolicyMutation = useMutation({
+    mutationFn: async (feedbackUse: MatterhornWorkspaceFeedbackUse) => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to update data policy.");
+      return client.updateWorkspaceDataPolicy(workspaceId, { feedbackUse });
+    },
+    onSuccess: (policy) => {
+      queryClient.setQueryData(["settings-workspace-data-policy", props.runtimeWorkspaceId], policy);
+      void queryClient.invalidateQueries({ queryKey: ["settings-workspace-backend-control-plane", backendWorkspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["settings-workspace-data-map", props.runtimeWorkspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["settings-workspace-data-controls", props.runtimeWorkspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["settings-project-data-ledger", props.runtimeWorkspaceId] });
+    },
+  });
+  const handleFeedbackPolicyChange = useCallback((enabled: boolean) => {
+    updateWorkspaceDataPolicyMutation.mutate(enabled ? "eval_routing_product_quality_only" : "disabled");
+  }, [updateWorkspaceDataPolicyMutation]);
+  const backendCapabilitiesLoading = backendWorkspaceId
+    ? workspaceBackendControlPlaneQuery.isLoading || (workspaceBackendControlPlaneQuery.isError && backendCapabilitiesQuery.isLoading)
+    : backendCapabilitiesQuery.isLoading;
+  const workspaceReadinessLoading = backendWorkspaceId
+    ? workspaceBackendControlPlaneQuery.isLoading || (workspaceBackendControlPlaneQuery.isError && workspaceReadinessQuery.isLoading)
+    : workspaceReadinessQuery.isLoading;
+  const workspaceDataMapLoading = backendWorkspaceId
+    ? workspaceBackendControlPlaneQuery.isLoading || (workspaceBackendControlPlaneQuery.isError && workspaceDataMapQuery.isLoading)
+    : workspaceDataMapQuery.isLoading;
 
   const projectDataLedgerQuery = useQuery({
     queryKey: ["settings-project-data-ledger", props.runtimeWorkspaceId],
@@ -589,6 +1026,30 @@ export function SettingsOverviewView(props: {
     staleTime: 30_000,
   });
 
+  const teamAccessSummaryQuery = useQuery({
+    queryKey: ["settings-team-access-summary", props.runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to see team access.");
+      return client.workspaceTeamAccessSummary(workspaceId);
+    },
+    staleTime: 30_000,
+  });
+  const [teamTokenManagementOpen, setTeamTokenManagementOpen] = useState(false);
+  const teamAccessQuery = useQuery({
+    queryKey: ["settings-team-access", props.runtimeWorkspaceId],
+    enabled: Boolean(teamTokenManagementOpen && props.matterhornServerClient && props.runtimeWorkspaceId),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to manage local access tokens.");
+      return client.workspaceTeamAccess(workspaceId);
+    },
+    staleTime: 30_000,
+  });
+
   const exportProjectLedger = useCallback(async () => {
     const client = props.matterhornServerClient;
     const workspaceId = props.runtimeWorkspaceId?.trim();
@@ -598,15 +1059,34 @@ export function SettingsOverviewView(props: {
     }
     setLedgerExportStatus("Exporting...");
     try {
-      const ledger = await client.listProjectDataLedger(workspaceId, { limit: 300 });
-      const datePart = new Date().toISOString().slice(0, 10);
+      const exportPayload = await client.exportProjectDataLedger(workspaceId, { limit: 300 });
       downloadJsonFile(
-        `matterhorn-project-ledger-${safeDownloadFilePart(workspaceId)}-${datePart}.json`,
-        JSON.stringify(ledger, null, 2),
+        exportPayload.filename || `matterhorn-project-ledger-${safeDownloadFilePart(workspaceId)}-${new Date().toISOString().slice(0, 10)}.json`,
+        JSON.stringify(exportPayload, null, 2),
       );
-      setLedgerExportStatus(`Exported ${ledger.count} ledger events.`);
+      setLedgerExportStatus(`Exported ${exportPayload.manifest.itemCount} ledger events.`);
     } catch (error) {
       setLedgerExportStatus(error instanceof Error ? error.message : "Could not export the project ledger.");
+    }
+  }, [props.matterhornServerClient, props.runtimeWorkspaceId]);
+
+  const exportSupportReport = useCallback(async () => {
+    const client = props.matterhornServerClient;
+    const workspaceId = props.runtimeWorkspaceId?.trim();
+    if (!client || !workspaceId) {
+      setSupportReportStatus("Open a connected workspace to download a support report.");
+      return;
+    }
+    setSupportReportStatus("Preparing report...");
+    try {
+      const report = await client.workspaceBackendSupportReport(workspaceId);
+      downloadJsonFile(
+        report.filename || `matterhorn-backend-support-${safeDownloadFilePart(workspaceId)}-${new Date().toISOString().slice(0, 10)}.json`,
+        JSON.stringify(report, null, 2),
+      );
+      setSupportReportStatus("Downloaded backend support report.");
+    } catch (error) {
+      setSupportReportStatus(error instanceof Error ? error.message : "Could not download the support report.");
     }
   }, [props.matterhornServerClient, props.runtimeWorkspaceId]);
 
@@ -621,12 +1101,14 @@ export function SettingsOverviewView(props: {
     if (!client) return;
     setMemoryExportStatus("Exporting...");
     try {
-      const response = await client.exportMemory();
+      const response = backendWorkspaceId
+        ? await client.exportWorkspaceMemory(backendWorkspaceId)
+        : await client.exportMemory();
       setMemoryExportStatus(`Exported ${response.export.recordCount} records.`);
     } catch (error) {
       setMemoryExportStatus(error instanceof Error ? error.message : "Could not export memory.");
     }
-  }, [props.matterhornServerClient]);
+  }, [backendWorkspaceId, props.matterhornServerClient]);
 
   const themeOptions: Array<{ id: ThemeMode; label: string }> = [
     { id: "light", label: "Light" },
@@ -670,36 +1152,59 @@ export function SettingsOverviewView(props: {
           title="Backend status"
           description="What the local Matterhorn Work engine reports for this workspace."
           status={
-            backendCapabilitiesQuery.data ? (
-              <CapabilityBadge status={backendCapabilitiesQuery.data.security.memoryWriteGuards.status} />
-            ) : backendCapabilitiesQuery.isLoading ? (
+            backendCapabilities ? (
+              <CapabilityBadge status={backendCapabilities.security.memoryWriteGuards.status} />
+            ) : backendCapabilitiesLoading ? (
               <StatusBadge>Loading</StatusBadge>
             ) : (
               <StatusBadge tone="error">Unavailable</StatusBadge>
             )
           }
         >
-          {backendCapabilitiesQuery.data ? (
+          {backendCapabilities ? (
             <>
               <Row
                 label="Model routing"
-                hint={`Default: ${summarizeModelSource(backendCapabilitiesQuery.data)}. ${summarizeModelRoutingPolicy(backendCapabilitiesQuery.data)}`}
-                value={<CapabilityBadge status={backendCapabilitiesQuery.data.models.status} />}
+                hint={`Default: ${summarizeModelSource(backendCapabilities)}. ${summarizeModelRoutingPolicy(backendCapabilities)}`}
+                value={<CapabilityBadge status={backendCapabilities.models.status} />}
+              />
+              <Row
+                label="Workspace readiness"
+                hint={
+                  workspaceReadiness
+                    ? `${workspaceReadiness.summary.readyFeatures}/${workspaceReadiness.summary.totalFeatures} actions ready. ${
+                        workspaceReadiness.summary.blockingChecks.length
+                          ? `Blocked by ${workspaceReadiness.summary.blockingChecks.join(", ")}.`
+                          : "No blockers reported."
+                      }`
+                    : workspaceReadinessLoading
+                      ? "Checking workspace readiness."
+                      : "Readiness is unavailable until the workspace engine responds."
+                }
+                value={
+                  workspaceReadiness ? (
+                    <CapabilityBadge status={workspaceReadiness.summary.status} />
+                  ) : workspaceReadinessLoading ? (
+                    <StatusBadge>Loading</StatusBadge>
+                  ) : (
+                    <StatusBadge tone="error">Unavailable</StatusBadge>
+                  )
+                }
               />
               <Row
                 label="Notes and memory"
-                hint={`Notes: ${summarizeCapability(backendCapabilitiesQuery.data.notes)} Memory: ${summarizeCapability(backendCapabilitiesQuery.data.memory)}`}
+                hint={`Notes: ${summarizeCapability(backendCapabilities.notes)} Memory: ${summarizeCapability(backendCapabilities.memory)}`}
                 value={
                   <div className="flex flex-wrap justify-end gap-1.5">
-                    <CapabilityBadge status={backendCapabilitiesQuery.data.notes.status} />
-                    <CapabilityBadge status={backendCapabilitiesQuery.data.memory.status} />
+                    <CapabilityBadge status={backendCapabilities.notes.status} />
+                    <CapabilityBadge status={backendCapabilities.memory.status} />
                   </div>
                 }
               />
               <Row
                 label="Evidence ledger"
-                hint={`Sources: ${backendCapabilitiesQuery.data.evidence.sources.join(", ")}.`}
-                value={<CapabilityBadge status={backendCapabilitiesQuery.data.evidence.status} />}
+                hint={`Sources: ${backendCapabilities.evidence.sources.join(", ")}.`}
+                value={<CapabilityBadge status={backendCapabilities.evidence.status} />}
               />
               <Row
                 label="Project ledger"
@@ -722,43 +1227,73 @@ export function SettingsOverviewView(props: {
               />
               <div className="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Download a redacted workspace ledger snapshot for review or support.
+                  Download redacted project evidence or a compact backend support report.
                 </p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
-                  onClick={() => void exportProjectLedger()}
-                  disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId || projectDataLedgerQuery.isLoading}
-                >
-                  <Download className="size-3.5" />
-                  Export ledger JSON
-                </Button>
+                <div className="flex flex-wrap items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
+                    onClick={() => void exportSupportReport()}
+                    disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId || workspaceBackendControlPlaneQuery.isLoading}
+                  >
+                    <Download className="size-3.5" />
+                    Support report
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
+                    onClick={() => void exportProjectLedger()}
+                    disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId || projectDataLedgerQuery.isLoading}
+                  >
+                    <Download className="size-3.5" />
+                    Ledger JSON
+                  </Button>
+                </div>
               </div>
-              {ledgerExportStatus ? (
-                <p className="px-1 py-2 text-xs leading-5 text-dls-secondary">{ledgerExportStatus}</p>
+              {supportReportStatus || ledgerExportStatus ? (
+                <p className="px-1 py-2 text-xs leading-5 text-dls-secondary">
+                  {[supportReportStatus, ledgerExportStatus].filter(Boolean).join(" ")}
+                </p>
               ) : null}
               <Row
                 label="Wallet families"
-                hint={walletFamilySummary(backendCapabilitiesQuery.data)
+                hint={walletFamilySummary(backendCapabilities)
                   .map((wallet) => `${wallet.family}: ${backendCapabilityLabel(wallet.status)}`)
                   .join(" · ")}
-                value={<CapabilityBadge status={backendCapabilitiesQuery.data.wallets.status} />}
+                value={<CapabilityBadge status={backendCapabilities.wallets.status} />}
               />
               <Row
                 label="Teams"
-                hint={summarizeCapability(backendCapabilitiesQuery.data.teams)}
-                value={<CapabilityBadge status={backendCapabilitiesQuery.data.teams.status} />}
+                hint={teamAccessSummaryQuery.data
+                  ? `${teamAccessSummaryQuery.data.localAccess.tokenCount} local access tokens. Owners ${teamAccessSummaryQuery.data.localAccess.byScope.owner}; collaborators ${teamAccessSummaryQuery.data.localAccess.byScope.collaborator}; viewers ${teamAccessSummaryQuery.data.localAccess.byScope.viewer}. Cloud teams: ${backendCapabilityLabel(teamAccessSummaryQuery.data.cloudTeams.status)}.`
+                  : teamAccessSummaryQuery.isLoading
+                    ? "Loading local access status."
+                    : summarizeCapability(backendCapabilities.teams)}
+                value={<CapabilityBadge status={backendCapabilities.teams.status} />}
+              />
+              <TeamAccessControls
+                client={props.matterhornServerClient}
+                workspaceId={backendWorkspaceId}
+                summary={teamAccessSummaryQuery.data}
+                data={teamAccessQuery.data}
+                error={teamAccessQuery.error}
+                isError={teamAccessQuery.isError}
+                isLoading={teamAccessQuery.isLoading}
+                isOpen={teamTokenManagementOpen}
+                onOpen={() => setTeamTokenManagementOpen(true)}
+                refetch={teamAccessQuery.refetch}
               />
               <Row
                 label="Write guards"
-                hint={summarizeCapability(backendCapabilitiesQuery.data.security.memoryWriteGuards)}
-                value={<CapabilityBadge status={backendCapabilitiesQuery.data.security.memoryWriteGuards.status} />}
+                hint={summarizeCapability(backendCapabilities.security.memoryWriteGuards)}
+                value={<CapabilityBadge status={backendCapabilities.security.memoryWriteGuards.status} />}
               />
             </>
           ) : (
             <div className="px-1 py-3 text-sm leading-6 text-dls-secondary">
-              {backendCapabilitiesQuery.isLoading
+              {backendCapabilitiesLoading
                 ? "Loading backend status..."
                 : "The Matterhorn Work engine is offline or did not return a capability report."}
             </div>
@@ -771,20 +1306,27 @@ export function SettingsOverviewView(props: {
           title="Data policy"
           description="Where workspace data lives, what can be exported, and what can be deleted."
           status={
-            workspaceDataMapQuery.data ? (
-              <CapabilityBadge status={workspaceDataMapQuery.data.policy.redaction.status} />
-            ) : workspaceDataMapQuery.isLoading ? (
+            workspaceDataMap ? (
+              <CapabilityBadge status={workspaceDataMap.policy.redaction.status} />
+            ) : workspaceDataMapLoading ? (
               <StatusBadge>Loading</StatusBadge>
             ) : (
               <StatusBadge tone="error">Unavailable</StatusBadge>
             )
           }
         >
-          {workspaceDataMapQuery.data ? (
-            <DataPolicySection dataMap={workspaceDataMapQuery.data} />
+          {workspaceDataMap ? (
+            <DataPolicySection
+              dataMap={workspaceDataMap}
+              controls={workspaceDataControls}
+              dataPolicy={workspaceDataPolicy}
+              feedbackPolicySaving={updateWorkspaceDataPolicyMutation.isPending}
+              feedbackPolicyError={updateWorkspaceDataPolicyMutation.error instanceof Error ? updateWorkspaceDataPolicyMutation.error.message : null}
+              onFeedbackPolicyChange={props.matterhornServerClient && props.runtimeWorkspaceId ? handleFeedbackPolicyChange : undefined}
+            />
           ) : (
             <div className="px-1 py-3 text-sm leading-6 text-dls-secondary">
-              {workspaceDataMapQuery.isLoading
+              {workspaceDataMapLoading
                 ? "Loading workspace data policy..."
                 : "Open a connected workspace to review storage, export, and deletion policy."}
             </div>
@@ -904,7 +1446,7 @@ export function SettingsOverviewView(props: {
               onClick={() => void exportMemory()}
               disabled={!props.matterhornServerClient}
             >
-              Export memory
+              Export memory bundle
             </Button>
           </div>
           {memoryExportStatus ? (
@@ -1092,34 +1634,34 @@ export function SettingsOverviewView(props: {
           icon={<Lock size={18} />}
           title="Privacy &amp; Data"
           description="Where your data lives, and what is never stored."
-          status={workspaceDataMapQuery.data ? <StatusBadge tone="ready">Workspace mapped</StatusBadge> : <StatusBadge>Local first</StatusBadge>}
+          status={workspaceDataMap ? <StatusBadge tone="ready">Workspace mapped</StatusBadge> : <StatusBadge>Local first</StatusBadge>}
         >
-          {workspaceDataMapQuery.data ? (
+          {workspaceDataMap ? (
             <>
               <Row
                 label="Chat history"
-                hint={storageLocationLabel(workspaceDataMapQuery.data.stores.chat)}
-                value={<CapabilityBadge status={workspaceDataMapQuery.data.stores.chat.status} />}
+                hint={storageLocationLabel(workspaceDataMap.stores.chat)}
+                value={<CapabilityBadge status={workspaceDataMap.stores.chat.status} />}
               />
               <Row
                 label="Notes"
-                hint={storageLocationLabel(workspaceDataMapQuery.data.stores.notes)}
-                value={<CapabilityBadge status={workspaceDataMapQuery.data.stores.notes.status} />}
+                hint={storageLocationLabel(workspaceDataMap.stores.notes)}
+                value={<CapabilityBadge status={workspaceDataMap.stores.notes.status} />}
               />
               <Row
                 label="Memory"
-                hint={storageLocationLabel(workspaceDataMapQuery.data.stores.memory)}
-                value={<CapabilityBadge status={workspaceDataMapQuery.data.stores.memory.status} />}
+                hint={storageLocationLabel(workspaceDataMap.stores.memory)}
+                value={<CapabilityBadge status={workspaceDataMap.stores.memory.status} />}
               />
               <Row
                 label="Outputs"
-                hint={storageLocationLabel(workspaceDataMapQuery.data.stores.outputs)}
-                value={<CapabilityBadge status={workspaceDataMapQuery.data.stores.outputs.status} />}
+                hint={storageLocationLabel(workspaceDataMap.stores.outputs)}
+                value={<CapabilityBadge status={workspaceDataMap.stores.outputs.status} />}
               />
               <Row
                 label="Training use"
-                hint={workspaceDataPolicySummary(workspaceDataMapQuery.data)}
-                value={<CapabilityBadge status={workspaceDataMapQuery.data.policy.export.status} />}
+                hint={workspaceDataPolicySummary(workspaceDataMap)}
+                value={<CapabilityBadge status={workspaceDataMap.policy.export.status} />}
               />
               <p className="px-1 py-3 text-xs leading-5 text-dls-secondary">
                 Matterhorn Work never asks for or stores seed phrases, private keys, API secrets, raw signatures, or wallet exports.

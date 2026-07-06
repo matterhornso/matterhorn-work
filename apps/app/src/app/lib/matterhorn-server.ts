@@ -18,7 +18,10 @@ import type {
 } from "@matterhorn-work/types/project-evidence";
 import type {
   MatterhornProjectDataLedgerListOptions,
+  MatterhornProjectDataLedgerExportResponse,
   MatterhornProjectDataLedgerResponse,
+  MatterhornProjectFeedbackDeleteAllResponse,
+  MatterhornProjectFeedbackDeleteResponse,
   MatterhornProjectFeedbackRequest,
   MatterhornProjectFeedbackResponse,
 } from "@matterhorn-work/types/project-data-ledger";
@@ -26,6 +29,26 @@ import type {
   MatterhornBackendCapabilitiesResponse,
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
+import type {
+  MatterhornBackendModelSelectionRequest,
+  MatterhornBackendModelSelectionResponse,
+  MatterhornBackendModelsResponse,
+} from "@matterhorn-work/types/backend-models";
+import type {
+  MatterhornBackendTeamAccessResponse,
+  MatterhornBackendTeamAccessSummaryResponse,
+  MatterhornTeamAccessTokenCreateRequest,
+  MatterhornTeamAccessTokenCreateResponse,
+  MatterhornTeamAccessTokenRevokeResponse,
+} from "@matterhorn-work/types/backend-team-access";
+import type { MatterhornWorkspaceDataControlsResponse } from "@matterhorn-work/types/backend-data-controls";
+import type {
+  MatterhornWorkspaceDataPolicyResponse,
+  MatterhornWorkspaceDataPolicyUpdateRequest,
+} from "@matterhorn-work/types/backend-data-policy";
+import type { MatterhornBackendReadinessResponse } from "@matterhorn-work/types/backend-readiness";
+import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
+import type { MatterhornBackendSupportReportResponse } from "@matterhorn-work/types/backend-support-report";
 import type {
   MatterhornWorkflowRun,
   MatterhornWorkflowRunListItem,
@@ -688,6 +711,15 @@ export type MatterhornSuiWorkspaceEvidence = {
   source: "task_events";
 };
 
+export type MatterhornWorkspaceOutputDeleteResponse = {
+  success: true;
+  deleted: {
+    path: string;
+    size: number;
+    updatedAt: number;
+  };
+};
+
 export type MatterhornInboxItem = {
   id: string;
   name?: string;
@@ -1298,6 +1330,54 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         hostToken,
         timeoutMs: timeouts.capabilities,
       }),
+    backendModels: () =>
+      requestJson<MatterhornBackendModelsResponse>(baseUrl, "/api/backend/models", {
+        token,
+        hostToken,
+        timeoutMs: timeouts.capabilities,
+      }),
+    workspaceBackendModels: (workspaceId: string) =>
+      requestJson<MatterhornBackendModelsResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/models`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    workspaceModelSelection: (workspaceId: string) =>
+      requestJson<MatterhornBackendModelSelectionResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/model-selection`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    saveWorkspaceModelSelection: (workspaceId: string, body: MatterhornBackendModelSelectionRequest) =>
+      requestJson<MatterhornBackendModelSelectionResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/model-selection`,
+        { token, hostToken, method: "PATCH", body, timeoutMs: timeouts.capabilities },
+      ),
+    clearWorkspaceModelSelection: (workspaceId: string) =>
+      requestJson<MatterhornBackendModelSelectionResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/model-selection`,
+        { token, hostToken, method: "DELETE", timeoutMs: timeouts.capabilities },
+      ),
+    workspaceReadiness: (workspaceId: string) =>
+      requestJson<MatterhornBackendReadinessResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/readiness`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    workspaceBackendControlPlane: (workspaceId: string) =>
+      requestJson<MatterhornBackendControlPlaneResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/control-plane`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    workspaceBackendSupportReport: (workspaceId: string) =>
+      requestJson<MatterhornBackendSupportReportResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/support-report`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      ),
     googleWorkspaceStatus: () => requestJson<GoogleWorkspaceAuthStatus>(baseUrl, "/experimental/google-workspace/status", { token, hostToken, timeoutMs: timeouts.status }),
     googleWorkspaceConnectStart: () => requestJson<GoogleWorkspaceConnectStart>(baseUrl, "/experimental/google-workspace/connect/start", { token, hostToken, method: "POST", timeoutMs: timeouts.status }),
     googleWorkspaceConnectStatus: (flowId: string) => requestJson<GoogleWorkspaceConnectStatus>(baseUrl, `/experimental/google-workspace/connect/status/${encodeURIComponent(flowId)}`, { token, hostToken, timeoutMs: timeouts.status }),
@@ -1630,10 +1710,32 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       if (typeof options?.limit === "number") query.set("limit", String(options.limit));
       if (options?.source) query.set("source", options.source);
       if (options?.kind) query.set("kind", options.kind);
+      if (options?.desk?.trim()) query.set("desk", options.desk.trim());
+      if (options?.sessionId?.trim()) query.set("sessionId", options.sessionId.trim());
+      if (options?.taskId?.trim()) query.set("taskId", options.taskId.trim());
+      if (options?.from?.trim()) query.set("from", options.from.trim());
+      if (options?.to?.trim()) query.set("to", options.to.trim());
       const suffix = query.size ? `?${query.toString()}` : "";
       return requestJson<MatterhornProjectDataLedgerResponse>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/data-ledger${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
+    },
+    exportProjectDataLedger: (workspaceId: string, options?: MatterhornProjectDataLedgerListOptions) => {
+      const query = new URLSearchParams();
+      if (typeof options?.limit === "number") query.set("limit", String(options.limit));
+      if (options?.source) query.set("source", options.source);
+      if (options?.kind) query.set("kind", options.kind);
+      if (options?.desk?.trim()) query.set("desk", options.desk.trim());
+      if (options?.sessionId?.trim()) query.set("sessionId", options.sessionId.trim());
+      if (options?.taskId?.trim()) query.set("taskId", options.taskId.trim());
+      if (options?.from?.trim()) query.set("from", options.from.trim());
+      if (options?.to?.trim()) query.set("to", options.to.trim());
+      const suffix = query.size ? `?${query.toString()}` : "";
+      return requestJson<MatterhornProjectDataLedgerExportResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/data-ledger/export${suffix}`,
         { token, hostToken, timeoutMs: timeouts.status },
       );
     },
@@ -1649,11 +1751,65 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           timeoutMs: timeouts.config,
         },
       ),
+    deleteProjectFeedback: (workspaceId: string, feedbackId: string) =>
+      requestJson<MatterhornProjectFeedbackDeleteResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/feedback/${encodeURIComponent(feedbackId)}`,
+        { token, hostToken, method: "DELETE", timeoutMs: timeouts.config },
+      ),
+    deleteAllProjectFeedback: (workspaceId: string) =>
+      requestJson<MatterhornProjectFeedbackDeleteAllResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/feedback`,
+        { token, hostToken, method: "DELETE", timeoutMs: timeouts.config },
+      ),
     workspaceDataMap: (workspaceId: string) =>
       requestJson<MatterhornWorkspaceDataMapResponse>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`,
         { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    workspaceDataControls: (workspaceId: string) =>
+      requestJson<MatterhornWorkspaceDataControlsResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/data-controls`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    workspaceDataPolicy: (workspaceId: string) =>
+      requestJson<MatterhornWorkspaceDataPolicyResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/data-policy`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    updateWorkspaceDataPolicy: (workspaceId: string, policy: MatterhornWorkspaceDataPolicyUpdateRequest) =>
+      requestJson<MatterhornWorkspaceDataPolicyResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/data-policy`,
+        { token, hostToken, method: "PATCH", body: policy, timeoutMs: timeouts.config },
+      ),
+    workspaceTeamAccess: (workspaceId: string) =>
+      requestJson<MatterhornBackendTeamAccessResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/team-access`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    workspaceTeamAccessSummary: (workspaceId: string) =>
+      requestJson<MatterhornBackendTeamAccessSummaryResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/team-access/summary`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    createWorkspaceTeamAccessToken: (workspaceId: string, request: MatterhornTeamAccessTokenCreateRequest) =>
+      requestJson<MatterhornTeamAccessTokenCreateResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/team-access/tokens`,
+        { token, hostToken, method: "POST", body: request, timeoutMs: timeouts.config },
+      ),
+    revokeWorkspaceTeamAccessToken: (workspaceId: string, tokenId: string) =>
+      requestJson<MatterhornTeamAccessTokenRevokeResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/team-access/tokens/${encodeURIComponent(tokenId)}`,
+        { token, hostToken, method: "DELETE", timeoutMs: timeouts.config },
       ),
     suiAccount: (address: string, options?: { network?: MatterhornSuiNetwork }) => {
       const query = new URLSearchParams();
@@ -1720,6 +1876,14 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           timeoutMs: timeouts.status,
         },
       ),
+    deleteWorkspaceOutput: (workspaceId: string, outputPath: string) => {
+      const query = new URLSearchParams({ path: outputPath });
+      return requestJson<MatterhornWorkspaceOutputDeleteResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/outputs?${query.toString()}`,
+        { token, hostToken, method: "DELETE", timeoutMs: timeouts.deleteWorkspace },
+      );
+    },
     listNotes: (workspaceId: string, options?: MatterhornNoteListOptions) => {
       const query = new URLSearchParams();
       if (options?.query?.trim()) query.set("query", options.query.trim());
@@ -2075,6 +2239,46 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         timeoutMs: timeouts.config,
       }),
 
+    searchWorkspaceMemory: (workspaceId: string, options?: MatterhornMemorySearchOptions) => {
+      const params = new URLSearchParams();
+      if (options?.query?.trim()) params.set("q", options.query.trim());
+      if (options?.kind) params.set("kind", options.kind);
+      if (options?.tags?.length) params.set("tags", options.tags.filter(Boolean).join(","));
+      if (typeof options?.limit === "number") params.set("limit", String(options.limit));
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return requestJson<MatterhornMemoryListResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/search${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
+    },
+
+    listWorkspaceMemory: (workspaceId: string, options?: Omit<MatterhornMemorySearchOptions, "query" | "scope">) => {
+      const params = new URLSearchParams();
+      if (options?.kind) params.set("kind", options.kind);
+      if (options?.tags?.length) params.set("tags", options.tags.filter(Boolean).join(","));
+      if (typeof options?.limit === "number") params.set("limit", String(options.limit));
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return requestJson<MatterhornMemoryListResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/entities${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
+    },
+
+    captureWorkspaceMemory: (workspaceId: string, record: MatterhornMemoryRecord) =>
+      requestJson<MatterhornMemoryCaptureResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/capture`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: { record },
+          timeoutMs: timeouts.config,
+        },
+      ),
+
     planMemorySuggestions: (input: MatterhornMemorySuggestionPlanInput) =>
       requestJson<MatterhornMemorySuggestionPlanResponse>(baseUrl, "/api/memory/suggestions/plan", {
         token,
@@ -2093,6 +2297,19 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         timeoutMs: timeouts.config,
       }),
 
+    createWorkspaceMemorySuggestions: (workspaceId: string, input: MatterhornMemorySuggestionPlanInput) =>
+      requestJson<MatterhornMemorySuggestionInboxResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/suggestions`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: { input },
+          timeoutMs: timeouts.config,
+        },
+      ),
+
     listMemorySuggestions: (options?: {
       status?: MatterhornMemorySuggestionInboxStatus;
       desk?: string;
@@ -2110,6 +2327,25 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         hostToken,
         timeoutMs: timeouts.status,
       });
+    },
+
+    listWorkspaceMemorySuggestions: (workspaceId: string, options?: {
+      status?: MatterhornMemorySuggestionInboxStatus;
+      desk?: string;
+      includeResolved?: boolean;
+      limit?: number;
+    }) => {
+      const params = new URLSearchParams();
+      if (options?.status) params.set("status", options.status);
+      if (options?.desk?.trim()) params.set("desk", options.desk.trim());
+      if (options?.includeResolved) params.set("includeResolved", "true");
+      if (typeof options?.limit === "number") params.set("limit", String(options.limit));
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return requestJson<MatterhornMemorySuggestionListResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/suggestions${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
     },
 
     getMemorySuggestion: (id: string) =>
@@ -2132,6 +2368,23 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         timeoutMs: timeouts.config,
       }),
 
+    resolveStoredWorkspaceMemorySuggestion: (workspaceId: string, id: string, payload: {
+      action?: MatterhornMemorySuggestionAction;
+      patch?: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>;
+      reason?: string;
+    }) =>
+      requestJson<MatterhornMemoryStoredSuggestionResolveResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/suggestions/${encodeURIComponent(id)}/resolve`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: payload,
+          timeoutMs: timeouts.config,
+        },
+      ),
+
     resolveMemorySuggestion: (payload: {
       suggestion: MatterhornMemorySuggestion;
       action?: MatterhornMemorySuggestion["userAction"];
@@ -2146,6 +2399,24 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         timeoutMs: timeouts.config,
       }),
 
+    resolveWorkspaceMemorySuggestion: (workspaceId: string, payload: {
+      suggestion: MatterhornMemorySuggestion;
+      action?: MatterhornMemorySuggestion["userAction"];
+      patch?: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>;
+      reason?: string;
+    }) =>
+      requestJson<MatterhornMemorySuggestionResolveResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/suggestions/resolve`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: payload,
+          timeoutMs: timeouts.config,
+        },
+      ),
+
     forgetMemory: (id: string, reason?: string) =>
       requestJson<MatterhornMemoryForgetResponse>(baseUrl, "/api/memory/forget", {
         token,
@@ -2154,6 +2425,31 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         body: { id, reason: reason ?? "User forgot this memory from the Matterhorn Memory panel." },
         timeoutMs: timeouts.config,
       }),
+
+    forgetWorkspaceMemory: (workspaceId: string, id: string) =>
+      requestJson<MatterhornMemoryForgetResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/entities/${encodeURIComponent(id)}`,
+        {
+          token,
+          hostToken,
+          method: "DELETE",
+          timeoutMs: timeouts.config,
+        },
+      ),
+
+    exportWorkspaceMemory: (workspaceId: string, outputDir?: string) =>
+      requestJson<MatterhornMemoryExportResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/memory/export`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: outputDir ? { outputDir } : {},
+          timeoutMs: timeouts.workspaceExport,
+        },
+      ),
 
     exportMemory: (outputDir?: string) =>
       requestJson<MatterhornMemoryExportResponse>(baseUrl, "/api/memory/export", {

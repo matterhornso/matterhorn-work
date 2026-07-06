@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { Copy, ExternalLink, FileText, FolderOpen, NotebookPen } from "lucide-react";
+import { Copy, ExternalLink, FileText, FolderOpen, NotebookPen, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn, formatFileSize } from "@/lib/utils";
@@ -23,6 +23,7 @@ type OutputListProps = {
   onAddNote?: (output: OutputDescriptor) => void;
   onCopyPath?: (output: OutputDescriptor) => void;
   onReveal?: (output: OutputDescriptor) => void;
+  onDelete?: (output: OutputDescriptor) => void;
 };
 
 export function OutputList({
@@ -33,6 +34,7 @@ export function OutputList({
   onAddNote,
   onCopyPath,
   onReveal,
+  onDelete,
 }: OutputListProps) {
   if (outputs.length === 0) return null;
 
@@ -153,6 +155,21 @@ export function OutputList({
                     title="Reveal in folder"
                   >
                     <FolderOpen className="size-3.5" />
+                  </Button>
+                ) : null}
+                {onDelete && output.path.startsWith("outputs/") && output.exists !== false ? (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDelete(output);
+                    }}
+                    aria-label="Delete output"
+                    title="Delete output"
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="size-3.5" />
                   </Button>
                 ) : null}
                 <Button

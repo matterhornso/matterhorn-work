@@ -1681,9 +1681,12 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       ? [{
           id: provider.id,
           name: provider.name ?? provider.id,
+          source: provider.source,
+          modelCount: Object.keys(provider.models ?? {}).length,
         }]
       : [],
   );
+  const connectedModelCount = connectedProviders.reduce((total, provider) => total + (provider.modelCount ?? 0), 0);
   const mcpConnectedAppsCount = connectionsSnapshot.mcpServers.length;
 
   // Build enablement context from all available runtime state.
@@ -2035,6 +2038,13 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           <AiSettingsView
             busy={busy}
             providerAuthBusy={providerAuthSnapshot.providerAuthBusy}
+            matterhornServerClient={matterhornClient}
+            runtimeWorkspaceId={runtimeWorkspaceId}
+            defaultModelLabel={defaultModelLabel}
+            defaultModelRef={defaultModelRef}
+            defaultModelProviderId={local.prefs.defaultModel?.providerID ?? null}
+            defaultModelId={local.prefs.defaultModel?.modelID ?? null}
+            connectedModelCount={connectedModelCount}
             providerStatusLabel={providerStatusLabel}
             providerStatusStyle={providerStatusStyle}
             providerSummary={providerSummary}
@@ -2043,6 +2053,10 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             providerConnectError={providerAuthSnapshot.providerAuthError}
             providerDisconnectStatus={configActionStatus}
             providerDisconnectError={null}
+            onOpenModelPicker={() => {
+              setModelPickerQuery("");
+              setModelPickerOpen(true);
+            }}
             onOpenProviderAuth={handleOpenProviderAuth}
             onDisconnectProvider={async (providerId) => {
               await providerAuthStore.disconnectProvider(providerId);

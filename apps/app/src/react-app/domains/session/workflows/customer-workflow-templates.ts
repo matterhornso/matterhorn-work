@@ -112,7 +112,7 @@ type CustomerWorkflowTemplateResponse = {
 };
 
 const MARKET_HANDOFF_SUFFIX =
-  "Prepare an external trade handoff when asked. Make clear: Can submit: No, Live submission: Off, the user executes in their own external client, and Matterhorn never signs or holds keys.";
+  "Prepare an external trade handoff when asked. Make clear: Can submit: No. Live submission: Off. External trade handoff only. The user executes in their own external client, and Matterhorn never signs or holds keys.";
 
 const BITTENSOR_SUFFIX =
   "Use public wallet context only. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";
@@ -199,10 +199,10 @@ function safetySummary(template: CustomerWorkflowTemplate): string {
       : "Public reads only. No secrets.";
   }
   if (template.routing.chatMode === "hyperliquid") {
-    return "Can submit: No. Live submission: Off. External trade handoff only.";
+    return "Read and preview tasks with external-client handoff.";
   }
   if (template.routing.chatMode === "polymarket") {
-    return "Can submit: No. Live submission: Off. Compliance-gated handoff only.";
+    return "Market research and compliance checks with external-wallet handoff.";
   }
   if (template.routing.chatMode === "wellness") {
     return "Standalone business workflow. Not Web3, not markets, no medical advice, and no live payments/email/hosting.";

@@ -1,5 +1,7 @@
 import type {
   MatterhornProjectDataLedgerEntry,
+  MatterhornProjectDataLedgerExportControlPlaneSnapshot,
+  MatterhornProjectDataLedgerExportResponse,
   MatterhornProjectDataLedgerListOptions,
   MatterhornProjectDataLedgerPolicy,
   MatterhornProjectDataLedgerResponse,
@@ -10,10 +12,12 @@ import type { AuditEntry, WorkspaceInfo } from "./types.js";
 import type { MatterhornCapability } from "@matterhorn-work/types/backend-capabilities";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { readAuditEntries } from "./audit.js";
+import { readWorkspaceDataPolicySync } from "./backend-data-policy.js";
 import { readProjectFeedbackEntries } from "./project-feedback.js";
 
 type BuildProjectDataLedgerOptions = MatterhornProjectDataLedgerListOptions & {
   workspace: WorkspaceInfo;
+  backendControlPlane?: MatterhornProjectDataLedgerExportControlPlaneSnapshot;
 };
 
 const SECRET_PATTERNS: RegExp[] = [
@@ -96,27 +100,108 @@ function evidenceToLedgerEntry(event: MatterhornProjectEvidenceEvent): Matterhor
   };
 }
 
+function memoryAuditTitle(action: string): string | null {
+  if (action === "memory.suggestions.create") return "Memory review created";
+  if (action === "memory.suggestion.resolve") return "Memory review updated";
+  if (action === "memory.capture") return "Memory saved";
+  if (action === "memory.record.update") return "Memory updated";
+  if (action === "memory.record.forget") return "Memory forgotten";
+  if (action === "memory.export") return "Memory exported";
+  return null;
+}
+
+function teamAccessAuditTitle(action: string): string | null {
+  if (action === "workspace.team_token.create") return "Team access token created";
+  if (action === "workspace.team_token.revoke") return "Team access token revoked";
+  return null;
+}
+
+function walletAuditTitle(action: string): string | null {
+  if (action === "workspace.sui.preview.create") return "Sui preview saved";
+  if (action === "workspace.sui.receipt.import") return "Sui receipt saved";
+  return null;
+}
+
+function outputAuditTitle(action: string): string | null {
+  if (action === "workspace.output.delete") return "Output deleted";
+  return null;
+}
+
+function chatAuditTitle(action: string): string | null {
+  if (action === "session.create") return "Chat session created";
+  if (action === "session.prompt") return "Chat prompt submitted";
+  return null;
+}
+
+function modelSelectionAuditTitle(action: string): string | null {
+  if (action === "workspace.model_selection.update") return "Workspace model updated";
+  if (action === "workspace.model_selection.clear") return "Workspace model reset";
+  return null;
+}
+
 function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry {
-  const title = scrubString(entry.action);
+  const memoryTitle = memoryAuditTitle(entry.action);
+  const teamAccessTitle = teamAccessAuditTitle(entry.action);
+  const walletTitle = walletAuditTitle(entry.action);
+  const outputTitle = outputAuditTitle(entry.action);
+  const chatTitle = chatAuditTitle(entry.action);
+  const modelSelectionTitle = modelSelectionAuditTitle(entry.action);
+  const title = scrubString(memoryTitle ?? teamAccessTitle ?? walletTitle ?? outputTitle ?? chatTitle ?? modelSelectionTitle ?? entry.action);
   const summary = scrubString(entry.summary);
+  const target = scrubString(entry.target);
+  const isMemoryAudit = Boolean(memoryTitle);
+  const isTeamAccessAudit = Boolean(teamAccessTitle);
+  const isWalletAudit = Boolean(walletTitle);
+  const isOutputAudit = Boolean(outputTitle);
+  const isChatAudit = Boolean(chatTitle);
+  const isModelSelectionAudit = Boolean(modelSelectionTitle);
   return {
     id: `audit:${entry.id}`,
     workspaceId: entry.workspaceId,
     source: "audit",
-    kind: "audit",
+    kind: isMemoryAudit
+      ? "memory_suggestion"
+      : isTeamAccessAudit
+        ? "team_access"
+        : isWalletAudit
+          ? "wallet"
+          : isOutputAudit
+            ? "output"
+            : isChatAudit
+              ? "chat"
+              : "audit",
     timestamp: new Date(entry.timestamp).toISOString(),
     title: title.value ?? "Audit event",
     summary: summary.value,
+    href: isMemoryAudit
+      ? `/workspace/${encodeURIComponent(entry.workspaceId)}/session?panel=memory`
+      : isTeamAccessAudit
+        ? `/workspace/${encodeURIComponent(entry.workspaceId)}/settings/overview`
+        : isWalletAudit
+          ? `/workspace/${encodeURIComponent(entry.workspaceId)}/settings/wallet`
+          : isOutputAudit
+            ? `/workspace/${encodeURIComponent(entry.workspaceId)}/session?panel=outputs`
+          : isChatAudit && target.value
+            ? `/workspace/${encodeURIComponent(entry.workspaceId)}/session/${encodeURIComponent(target.value)}`
+          : undefined,
+    outputPath: isOutputAudit ? target.value : undefined,
+    sessionId: isChatAudit ? target.value : undefined,
     actor: actorFromAudit(entry),
     dataClass: "audit_metadata",
-    containsUserContent: false,
-    containsSecrets: "never",
+    containsUserContent: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isOutputAudit || isChatAudit || isModelSelectionAudit,
+    containsSecrets: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isOutputAudit || isChatAudit || isModelSelectionAudit ? "redacted" : "never",
     retention: "append_only",
     exportable: true,
     deletable: false,
-    redactionApplied: title.redacted || summary.redacted,
+    redactionApplied: title.redacted || summary.redacted || target.redacted,
     trainingUse: "none",
     eventType: entry.action,
+    metadata: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isOutputAudit || isChatAudit || isModelSelectionAudit
+      ? {
+        auditAction: entry.action,
+        target: target.value ?? null,
+      }
+      : undefined,
   };
 }
 
@@ -124,6 +209,8 @@ function feedbackToLedgerEntry(entry: MatterhornProjectFeedbackEntry): Matterhor
   const title = scrubString(`Feedback: ${entry.kind}`);
   const summary = scrubString(entry.comment);
   const sourceId = scrubString(entry.target?.sourceId);
+  const targetSourceType = entry.target?.sourceType;
+  const targetSourceId = sourceId.value?.trim();
   return {
     id: `feedback:${entry.id}`,
     workspaceId: entry.workspaceId,
@@ -133,21 +220,24 @@ function feedbackToLedgerEntry(entry: MatterhornProjectFeedbackEntry): Matterhor
     title: title.value ?? "Feedback",
     summary: summary.value,
     href: entry.target?.href,
+    taskId: targetSourceType === "task" ? targetSourceId : undefined,
+    noteId: targetSourceType === "note" ? targetSourceId : undefined,
     actor: actorFromFeedback(entry),
     dataClass: "feedback",
     containsUserContent: true,
     containsSecrets: "redacted",
-    retention: "append_only",
+    retention: "user_controlled",
     exportable: true,
-    deletable: false,
+    deletable: true,
     redactionApplied: entry.redactionApplied || title.redacted || summary.redacted || sourceId.redacted,
     trainingUse: "eval_routing_product_quality_only",
     eventType: entry.kind,
     metadata: {
+      feedbackId: entry.id,
       feedbackKind: entry.kind,
       rating: entry.rating ?? null,
-      targetSourceType: entry.target?.sourceType ?? null,
-      targetSourceId: sourceId.value ?? null,
+      targetSourceType: targetSourceType ?? null,
+      targetSourceId: targetSourceId ?? null,
     },
   };
 }
@@ -155,6 +245,11 @@ function feedbackToLedgerEntry(entry: MatterhornProjectFeedbackEntry): Matterhor
 function matchesFilters(entry: MatterhornProjectDataLedgerEntry, options: MatterhornProjectDataLedgerListOptions): boolean {
   if (options.source && entry.source !== options.source) return false;
   if (options.kind && entry.kind !== options.kind) return false;
+  if (options.desk && entry.desk !== options.desk) return false;
+  if (options.sessionId && entry.sessionId !== options.sessionId && entry.sessionSlug !== options.sessionId) return false;
+  if (options.taskId && entry.taskId !== options.taskId) return false;
+  if (options.from && Date.parse(entry.timestamp) < Date.parse(options.from)) return false;
+  if (options.to && Date.parse(entry.timestamp) > Date.parse(options.to)) return false;
   return true;
 }
 
@@ -163,6 +258,9 @@ function summarize(items: MatterhornProjectDataLedgerEntry[]): MatterhornProject
     total: items.length,
     notes: items.filter((item) => item.kind === "note").length,
     memorySuggestions: items.filter((item) => item.kind === "memory_suggestion").length,
+    teamAccess: items.filter((item) => item.kind === "team_access").length,
+    wallets: items.filter((item) => item.kind === "wallet").length,
+    chats: items.filter((item) => item.kind === "chat").length,
     tasks: items.filter((item) => item.kind === "task").length,
     outputs: items.filter((item) => item.kind === "output").length,
     audits: items.filter((item) => item.kind === "audit").length,
@@ -171,16 +269,17 @@ function summarize(items: MatterhornProjectDataLedgerEntry[]): MatterhornProject
   };
 }
 
-function ledgerPolicy(): MatterhornProjectDataLedgerPolicy {
+function ledgerPolicy(workspace: WorkspaceInfo): MatterhornProjectDataLedgerPolicy {
+  const dataPolicy = readWorkspaceDataPolicySync(workspace);
   return {
     trainingUse: "none_by_default",
-    feedbackUse: "eval_routing_product_quality_only",
+    feedbackUse: dataPolicy.feedbackUse,
     redaction: capability("working", "Redaction", "Known secret-shaped tokens, wallet material, raw signatures, and private-key phrases are redacted from ledger text fields."),
-    retention: capability("preview", "Retention", "Notes and outputs are user-controlled; audit, task, and feedback events are append-only in this v1 ledger."),
+    retention: capability("preview", "Retention", "Notes, outputs, memory records, and feedback are user-controlled; chat metadata, audit, and task events remain retained for accountability."),
     export: capability("preview", "Export", "The ledger response is exportable as JSON. Full project export packaging remains planned."),
-    deletion: capability("preview", "Deletion", "User notes and memory records can be deleted elsewhere; append-only audit, task, and feedback events are retained for accountability."),
+    deletion: capability("preview", "Deletion", "User notes, memory records, and feedback can be deleted through their owning surfaces; append-only audit and task events are retained for accountability."),
     limitations: [
-      "Chat/session history remains in the OpenCode runtime store and is not fully materialized into this v1 ledger.",
+      "Full chat message bodies remain in the OpenCode runtime store; this v1 ledger includes chat session and prompt metadata only.",
       "Feedback is stored for eval, routing, and product quality review only; it is not used for RL or model training by default.",
       "Team collaboration is not durable here yet; this ledger is scoped to the local workspace server.",
     ],
@@ -222,7 +321,60 @@ export async function buildProjectDataLedger(options: BuildProjectDataLedgerOpti
     items,
     count: items.length,
     summary: summarize(allItems),
-    policy: ledgerPolicy(),
+    policy: ledgerPolicy(options.workspace),
+  };
+}
+
+function safeExportFilePart(value: string): string {
+  return value.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "workspace";
+}
+
+export async function buildProjectDataLedgerExport(
+  options: BuildProjectDataLedgerOptions,
+): Promise<MatterhornProjectDataLedgerExportResponse> {
+  const limit = Math.max(1, Math.min(options.limit ?? 300, 300));
+  const ledger = await buildProjectDataLedger({ ...options, limit });
+  const generatedAt = new Date().toISOString();
+  const includes = Array.from(new Set(ledger.items.map((item) => item.source))).sort() as Array<"project_evidence" | "audit" | "feedback">;
+  const backendControlPlane = options.backendControlPlane;
+
+  return {
+    success: true,
+    version: "matterhorn.project-data-ledger-export.v1",
+    generatedAt,
+    filename: `matterhorn-project-ledger-${safeExportFilePart(options.workspace.id)}-${generatedAt.slice(0, 10)}.json`,
+    ledger,
+    manifest: {
+      exportedAt: generatedAt,
+      workspaceId: options.workspace.id,
+      itemCount: ledger.count,
+      redactedCount: ledger.summary.redacted,
+      filters: {
+        source: options.source,
+        kind: options.kind,
+        desk: options.desk,
+        sessionId: options.sessionId,
+        taskId: options.taskId,
+        from: options.from,
+        to: options.to,
+        limit,
+      },
+      backendContext: {
+        included: Boolean(backendControlPlane),
+        version: backendControlPlane?.version,
+        generatedAt: backendControlPlane?.generatedAt,
+      },
+      includes,
+      trainingUse: ledger.policy.trainingUse,
+      feedbackUse: ledger.policy.feedbackUse,
+      limitations: ledger.policy.limitations,
+    },
+    backend: backendControlPlane ? { controlPlane: backendControlPlane } : undefined,
+    warnings: [
+      "Export payloads are redacted for known secret-shaped text fields.",
+      "Full chat message bodies remain in the OpenCode runtime store and are not included in this v1 ledger export.",
+      ...(backendControlPlane ? ["Backend context includes only a sanitized control-plane summary, not tokens, secrets, or full provider payloads."] : []),
+    ],
   };
 }
 

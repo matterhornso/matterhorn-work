@@ -21,11 +21,15 @@ describe("project feedback UI contract", () => {
 
   test("session feedback opens the local dialog instead of an external URL", () => {
     const source = readReactSource("shell/session-route.tsx");
+    const paletteSource = readReactSource("shell/command-palette.tsx");
 
     expect(source).toContain("ProjectFeedbackDialog");
     expect(source).toContain("setFeedbackDialogOpen(true)");
     expect(source).toContain('entrypoint="status-bar"');
     expect(source).toContain('sourceType: selectedSessionId ? "chat" : "other"');
+    expect(source).toContain("onSendFeedback={() => setFeedbackDialogOpen(true)}");
+    expect(paletteSource).toContain("onSendFeedback?: () => void");
+    expect(paletteSource).toContain("props.onSendFeedback()");
     expect(source).not.toContain("buildFeedbackUrl");
   });
 
@@ -43,9 +47,13 @@ describe("project feedback UI contract", () => {
     const source = readReactSource("domains/settings/pages/overview-view.tsx");
 
     expect(source).toContain("exportProjectLedger");
-    expect(source).toContain("client.listProjectDataLedger(workspaceId, { limit: 300 })");
-    expect(source).toContain("Export ledger JSON");
-    expect(source).toContain("Download a redacted workspace ledger snapshot");
+    expect(source).toContain("client.exportProjectDataLedger(workspaceId, { limit: 300 })");
+    expect(source).toContain("exportPayload.manifest.itemCount");
+    expect(source).toContain("exportSupportReport");
+    expect(source).toContain("client.workspaceBackendSupportReport(workspaceId)");
+    expect(source).toContain("Ledger JSON");
+    expect(source).toContain("Support report");
+    expect(source).toContain("Download redacted project evidence");
   });
 
   test("settings overview exposes a local feedback review surface", () => {
@@ -55,6 +63,11 @@ describe("project feedback UI contract", () => {
     expect(source).toContain('source: "feedback"');
     expect(source).toContain("MATTERHORN_PROJECT_FEEDBACK_KINDS.map");
     expect(source).toContain("feedbackKindFromEntry");
+    expect(source).toContain("feedbackIdFromEntry");
+    expect(source).toContain("deleteProjectFeedback");
+    expect(source).toContain("deleteAllProjectFeedback");
+    expect(source).toContain("Feedback deleted.");
+    expect(source).toContain("Delete all local feedback for this workspace?");
     expect(source).toContain("Local feedback stored for product quality and routing. No training by default.");
   });
 });

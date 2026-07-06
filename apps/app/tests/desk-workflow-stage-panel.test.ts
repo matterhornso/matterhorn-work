@@ -71,6 +71,8 @@ describe("desk workflow stage panel metadata", () => {
       "hidden instruction",
       "never reveal",
       "internal use only",
+      "Can submit: No",
+      "Live submission: Off",
     ];
 
     for (const deskId of CUSTOMER_LAUNCHER_DESK_IDS) {

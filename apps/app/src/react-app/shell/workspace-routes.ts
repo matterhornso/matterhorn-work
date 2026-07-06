@@ -19,6 +19,10 @@ export function workspaceNotesRoute(workspaceId: string) {
   return `${workspaceSessionRoute(workspaceId)}?panel=notes`;
 }
 
+export function workspaceRunHistoryRoute(workspaceId: string) {
+  return `/workspace/${encodeURIComponent(workspaceId.trim())}/history`;
+}
+
 export function globalSettingsRoute(tab: SettingsTab) {
   return `/settings/${tab}`;
 }

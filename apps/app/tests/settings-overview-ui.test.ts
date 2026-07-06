@@ -21,10 +21,18 @@ describe("Settings overview backend capability integration", () => {
   test("queries backend capabilities and workspace data map", () => {
     const source = readAppSource("domains/settings/pages/overview-view.tsx");
 
+    expect(source).toContain("settings-workspace-backend-control-plane");
+    expect(source).toContain("client.workspaceBackendControlPlane(backendWorkspaceId)");
+    expect(source).toContain("workspaceBackendControlPlaneQuery.data?.capabilities");
     expect(source).toContain("settings-backend-capabilities");
     expect(source).toContain("client.backendCapabilities()");
     expect(source).toContain("settings-workspace-data-map");
     expect(source).toContain("client.workspaceDataMap(workspaceId)");
+    expect(source).toContain("settings-workspace-data-controls");
+    expect(source).toContain("client.workspaceDataControls(workspaceId)");
+    expect(source).toContain("settings-workspace-data-policy");
+    expect(source).toContain("client.workspaceDataPolicy(workspaceId)");
+    expect(source).toContain("client.updateWorkspaceDataPolicy(workspaceId, { feedbackUse })");
     expect(source).toContain("Backend status");
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
@@ -36,10 +44,14 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("DataPolicySection");
     expect(source).toContain("DATA_POLICY_STORE_ORDER");
     expect(source).toContain("storageLocationLabel(store)");
+    expect(source).toContain("controlSummary(props.controls, store, \"export\")");
+    expect(source).toContain("controlSummary(props.controls, store, \"deletion\")");
     expect(source).toContain("retentionLabel(store.retention)");
-    expect(source).toContain("yesNo(store.exportable)");
-    expect(source).toContain("yesNo(store.deletable)");
     expect(source).toContain("secretsLabel(store.containsSecrets)");
+    expect(source).toContain("Model training");
+    expect(source).toContain("Workspace data is not used for RL or model training.");
+    expect(source).toContain("Feedback collection");
+    expect(source).toContain("Toggle workspace feedback collection");
     expect(source).toContain("Where workspace data lives, what can be exported, and what can be deleted.");
   });
 

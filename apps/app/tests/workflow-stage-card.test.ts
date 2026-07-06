@@ -50,6 +50,13 @@ describe("WorkflowStageCard — render contract", () => {
     expect(source).toContain("ArrowRight");
   });
 
+  test("supports disabling task actions when workspace readiness is blocked", () => {
+    const source = readAppSource("domains/session/workflows/workflow-stage-card.tsx");
+    expect(source).toContain("actionDisabled?:");
+    expect(source).toContain("disabled={actionDisabled}");
+    expect(source).toContain("actionTitle?:");
+  });
+
   test("shows external signer lock indicator when required", () => {
     const source = readAppSource("domains/session/workflows/workflow-stage-card.tsx");
     expect(source).toContain("requiresExternalSigner?:");
@@ -145,6 +152,68 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     // The hint is stored in a local `const evidenceHint` variable.
     expect(src).toContain("const evidenceHint =");
     expect(src).toContain("reads:");
+  });
+
+  test("keeps desk safety copy behind an info popover", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(src).toContain("deskSafetyInfo");
+    expect(src).toContain("desk safety info");
+    expect(src).toContain("Matterhorn never submits orders inside the app");
+    expect(src).toContain("Matterhorn never places bets inside the app");
+    expect(src).toContain("<PopoverTrigger");
+    expect(src).toContain("<PopoverContent");
+    expect(src).not.toContain("Boundary:");
+  });
+
+  test("uses positive task copy for preview-only desks", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(src).toContain("Summarize spread, depth, and stale-data warnings.");
+    expect(src).toContain("Draft an external-client handoff you can review outside Matterhorn.");
+    expect(src).toContain("Draft a non-custodial wallet handoff you can review externally.");
+  });
+
+  test("focused desk task cards launch the agent instead of hiding a draft", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(src).toContain("sendImmediately: true");
+    expect(src).toContain("setCurrentSidePanel(null)");
+    expect(src).not.toContain("draftedPromptTitle");
+    expect(src).not.toContain("Nothing has");
+    expect(src).not.toContain("Draft ready");
+  });
+
+  test("rail and home workflow launchers create running tasks", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(src).toContain("primeProtocolRailPrompt");
+    expect(src).toContain("agent: agentIdForDesk(panel)");
+    expect(src).toContain("sendImmediately: true");
+    expect(src).toContain("blankWorkflowLauncher.prompt");
+  });
+
+  test("focused desk task cards show readiness blockers before launch", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(src).toContain("protocol-desk-readiness");
+    expect(src).toContain("matterhornServerClient.workspaceReadiness(readinessWorkspaceId)");
+    expect(src).toContain("features.start_desk_task");
+    expect(src).toContain("actionDisabled={startTaskBlocked}");
+    expect(src).toContain("actionTitle={startTaskBlocker ?? undefined}");
+  });
+
+  test("task launcher route can send the prompt immediately", () => {
+    const src = readAppSource("shell/session-route.tsx");
+
+    expect(src).toContain("sendImmediately");
+    expect(src).toContain("workspaceClient.session.promptAsync");
+    expect(src).toContain("sessionID: session.id");
+    expect(src).toContain("selectedPromptModel");
+    expect(src).toContain("client.workspaceModelSelection(selectedWorkspaceId)");
+    expect(src).toContain("model: selectedPromptModel ?? undefined");
+    expect(src).toContain("agent: agent || undefined");
+    expect(src).toContain("buildSessionSystemContext(prompt, session.id)");
   });
 });
 

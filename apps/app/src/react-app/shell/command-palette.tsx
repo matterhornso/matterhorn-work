@@ -89,6 +89,7 @@ export type CommandPaletteProps = {
   onOpenSettings: (route?: string) => void;
   onOpenNotes?: () => void;
   onQuickJot?: () => void;
+  onSendFeedback?: () => void;
   /** Optional — open a URL in the user's browser. Falls back to window.open. */
   onOpenUrl?: (url: string) => void;
   /** Optional: current session servers/artifacts exposed through Cmd/Ctrl+K. */
@@ -305,7 +306,11 @@ export function CommandPalette(props: CommandPaletteProps) {
         meta: t("session.cmd_settings_meta"),
         action: () => {
           props.onClose();
-          openUrl("https://matterhorn.work/feedback");
+          if (props.onSendFeedback) {
+            props.onSendFeedback();
+          } else {
+            openUrl("https://matterhorn.work/feedback");
+          }
         },
       },
       {

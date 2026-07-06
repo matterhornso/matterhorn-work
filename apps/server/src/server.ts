@@ -213,7 +213,11 @@ import {
   buildMarketExecutionReadinessResponse,
   buildMarketSdkValidationResponse,
 } from "./tools/market-execution-readiness.js";
-import { createMatterhornMemoryVault, type MatterhornMemoryVault } from "@matterhorn-work/memory-vault";
+import {
+  createMatterhornMemoryVault,
+  type MatterhornMemorySuggestionInboxEntry,
+  type MatterhornMemoryVault,
+} from "@matterhorn-work/memory-vault";
 import {
   MATTERHORN_MEMORY_SUGGESTION_VERSION,
   MATTERHORN_MEMORY_DESK_POLICY_MATRIX,
@@ -247,9 +251,36 @@ import type {
   MatterhornWorkspaceDataMapResponse,
   MatterhornWalletFamilyCapability,
 } from "@matterhorn-work/types/backend-capabilities";
+import type {
+  MatterhornDataControlAction,
+  MatterhornDataControlCapability,
+  MatterhornDataControlStore,
+  MatterhornDataControlStoreId,
+  MatterhornWorkspaceDataControlsResponse,
+} from "@matterhorn-work/types/backend-data-controls";
+import type { MatterhornWorkspaceDataPolicyUpdateRequest } from "@matterhorn-work/types/backend-data-policy";
+import type {
+  MatterhornBackendModelCatalogErrorCode,
+  MatterhornBackendModelCatalogSnapshot,
+  MatterhornBackendModelProviderSummary,
+  MatterhornBackendModelSelectionRequest,
+} from "@matterhorn-work/types/backend-models";
+import type {
+  MatterhornBackendReadinessCheck,
+  MatterhornBackendReadinessCheckId,
+  MatterhornBackendReadinessFeature,
+  MatterhornBackendReadinessFeatureId,
+  MatterhornBackendReadinessResponse,
+} from "@matterhorn-work/types/backend-readiness";
+import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
+import type {
+  MatterhornTeamAccessTokenDescriptor,
+  MatterhornTeamShareableTokenScope,
+} from "@matterhorn-work/types/backend-team-access";
 import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
@@ -277,8 +308,24 @@ import { TokenService } from "./tokens.js";
 import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from "./env-file.js";
 import { MatterhornNotesStore } from "./notes.js";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
-import { buildProjectDataLedger, scrubProjectLedgerText } from "./project-data-ledger.js";
-import { projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
+import { buildProjectDataLedger, buildProjectDataLedgerExport, scrubProjectLedgerText } from "./project-data-ledger.js";
+import {
+  buildBackendModels,
+  buildWorkspaceModelSelectionResponse,
+  clearWorkspaceModelSelection,
+  readWorkspaceModelSelection,
+  workspaceModelSelectionPath,
+  writeWorkspaceModelSelection,
+} from "./backend-models.js";
+import {
+  buildWorkspaceDataPolicyResponse,
+  readWorkspaceDataPolicySync,
+  workspaceDataPolicyPath,
+  writeWorkspaceDataPolicy,
+} from "./backend-data-policy.js";
+import { backendControlPlaneExportSnapshot, buildBackendSupportReport } from "./backend-support-report.js";
+import { buildBackendTeamAccess, buildBackendTeamAccessSummary } from "./backend-team-access.js";
+import { deleteAllProjectFeedbackEntries, deleteProjectFeedbackEntry, projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
 import { TOY_UI_CSS, TOY_UI_FAVICON_SVG, TOY_UI_HTML, TOY_UI_JS, cssResponse, htmlResponse, jsResponse, svgResponse } from "./toy-ui.js";
 import { FileSessionStore } from "./file-sessions.js";
 import {
@@ -928,6 +975,122 @@ function unwrapOpencodeResult<T, E>(result: OpencodeClientResult<T, E>, path: st
   });
 }
 
+function recordLike(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => stringValue(entry)).filter((entry): entry is string => Boolean(entry));
+}
+
+function recordStringMap(value: unknown): Record<string, string> {
+  const source = recordLike(value);
+  if (!source) return {};
+  const result: Record<string, string> = {};
+  for (const [key, entryValue] of Object.entries(source)) {
+    const safeKey = stringValue(key);
+    const safeValue = stringValue(entryValue);
+    if (safeKey && safeValue) result[safeKey] = safeValue;
+  }
+  return result;
+}
+
+function providerModelIds(provider: Record<string, unknown>): string[] {
+  const models = recordLike(provider.models);
+  if (!models) return [];
+  return Object.keys(models)
+    .map((modelId) => modelId.trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function providerListToBackendModelCatalog(value: unknown): MatterhornBackendModelCatalogSnapshot {
+  const payload = recordLike(value) ?? {};
+  const providers = Array.isArray(payload.all) ? payload.all : [];
+  const connectedProviderIds = Array.from(new Set(stringArray(payload.connected))).sort((a, b) => a.localeCompare(b));
+  const connected = new Set(connectedProviderIds);
+  const providerSummaries: MatterhornBackendModelProviderSummary[] = providers
+    .map((entry): MatterhornBackendModelProviderSummary | null => {
+      const provider = recordLike(entry);
+      if (!provider) return null;
+      const id = stringValue(provider.id);
+      if (!id) return null;
+      const models = providerModelIds(provider);
+      return {
+        id,
+        name: stringValue(provider.name) ?? id,
+        source: stringValue(provider.source) ?? "unknown",
+        connected: connected.has(id),
+        modelCount: models.length,
+        sampleModels: models.slice(0, 5),
+      };
+    })
+    .filter((entry): entry is MatterhornBackendModelProviderSummary => Boolean(entry))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const modelCount = providerSummaries.reduce((sum, provider) => sum + provider.modelCount, 0);
+
+  return {
+    status: "working",
+    label: "OpenCode provider catalog",
+    description: "Matterhorn asked OpenCode for the provider and model catalog for this workspace, then normalized it into safe counts and IDs.",
+    source: "opencode_provider_list",
+    serverFetched: true,
+    providerCount: providerSummaries.length,
+    connectedProviderCount: providerSummaries.filter((provider) => provider.connected).length,
+    modelCount,
+    connectedProviderIds,
+    defaultModels: recordStringMap(payload.default),
+    providers: providerSummaries,
+  };
+}
+
+function unavailableBackendModelCatalog(
+  errorCode: MatterhornBackendModelCatalogErrorCode,
+): MatterhornBackendModelCatalogSnapshot {
+  return {
+    status: "needs_setup",
+    label: "OpenCode provider catalog unavailable",
+    description: "Matterhorn could not ask OpenCode for this workspace's live provider list. Model routing can still use the selected local preference once the engine is connected.",
+    source: "opencode_provider_list",
+    serverFetched: false,
+    providerCount: 0,
+    connectedProviderCount: 0,
+    modelCount: 0,
+    connectedProviderIds: [],
+    defaultModels: {},
+    providers: [],
+    errorCode,
+  };
+}
+
+async function buildWorkspaceBackendModels(config: ServerConfig, workspace: WorkspaceInfo) {
+  const selection = await readWorkspaceModelSelection(workspace).catch(() => null);
+  try {
+    const opencode = createWorkspaceOpencodeClient(config, workspace);
+    const directory = resolveOpencodeDirectory(workspace) ?? undefined;
+    const providerList = unwrapOpencodeResult(
+      await opencode.provider.list({
+        ...(directory ? { directory } : {}),
+      }),
+      "/provider",
+    );
+    return buildBackendModels({ catalog: providerListToBackendModelCatalog(providerList), selection });
+  } catch (error) {
+    const errorCode: MatterhornBackendModelCatalogErrorCode =
+      error instanceof ApiError && error.code === "opencode_unconfigured"
+        ? "opencode_unconfigured"
+        : error instanceof ApiError && error.code === "opencode_request_failed"
+          ? "opencode_request_failed"
+          : "unknown";
+    return buildBackendModels({ catalog: unavailableBackendModelCatalog(errorCode), selection });
+  }
+}
+
 async function proxyOpencodeRequest(input: {
   config: ServerConfig;
   request: Request;
@@ -1082,6 +1245,173 @@ function normalizeMemoryLimit(value: string | null): number | undefined {
   return Math.min(Math.floor(limit), 200);
 }
 
+function workspaceMemoryTag(workspaceId: string): string {
+  return `workspace:${workspaceId}`;
+}
+
+function uniqueMemoryStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+function workspaceMemoryQueryTags(workspace: WorkspaceInfo, tags?: string[]): string[] {
+  return uniqueMemoryStrings([...(tags ?? []), workspaceMemoryTag(workspace.id)]);
+}
+
+function memoryRecordBelongsToWorkspace(record: MatterhornMemoryRecord, workspace: WorkspaceInfo): boolean {
+  const tag = workspaceMemoryTag(workspace.id).toLowerCase();
+  return record.scope === "workspace" && record.tags.some((item) => item.toLowerCase() === tag);
+}
+
+function assertWorkspaceMemoryRecord(record: MatterhornMemoryRecord | null, workspace: WorkspaceInfo): MatterhornMemoryRecord {
+  if (!record || !memoryRecordBelongsToWorkspace(record, workspace)) {
+    throw new ApiError(404, "memory_not_found", "Memory record not found for this workspace");
+  }
+  return record;
+}
+
+function memorySuggestionBelongsToWorkspace(
+  suggestion: MatterhornMemorySuggestion,
+  workspace: WorkspaceInfo,
+): boolean {
+  return memoryRecordBelongsToWorkspace(suggestion.proposedRecord, workspace);
+}
+
+function assertWorkspaceMemorySuggestion(
+  entry: MatterhornMemorySuggestionInboxEntry | null,
+  workspace: WorkspaceInfo,
+): MatterhornMemorySuggestionInboxEntry {
+  if (!entry || !memorySuggestionBelongsToWorkspace(entry.suggestion, workspace)) {
+    throw new ApiError(404, "memory_suggestion_not_found", "Memory suggestion not found for this workspace");
+  }
+  return entry;
+}
+
+function namespaceWorkspaceMemoryRecord(record: MatterhornMemoryRecord, workspace: WorkspaceInfo): MatterhornMemoryRecord {
+  const workspaceHref = `/workspace/${encodeURIComponent(workspace.id)}`;
+  const links = [...(record.links ?? [])];
+  if (!links.some((link) => link.rel === "workspace" && link.href === workspaceHref)) {
+    links.push({ rel: "workspace", href: workspaceHref, title: workspace.name });
+  }
+  return {
+    ...record,
+    scope: "workspace",
+    tags: workspaceMemoryQueryTags(workspace, record.tags),
+    links,
+  };
+}
+
+function namespaceWorkspaceMemorySuggestion(
+  suggestion: MatterhornMemorySuggestion,
+  workspace: WorkspaceInfo,
+): MatterhornMemorySuggestion {
+  return {
+    ...suggestion,
+    proposedRecord: namespaceWorkspaceMemoryRecord(suggestion.proposedRecord, workspace),
+  };
+}
+
+function workspaceMemoryRecordWithPatch(
+  record: MatterhornMemoryRecord,
+  patch: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">> | undefined,
+): MatterhornMemoryRecord {
+  return {
+    ...record,
+    ...(patch ?? {}),
+    id: record.id,
+    createdAt: record.createdAt,
+    updatedAt: patch?.updatedAt ?? new Date().toISOString(),
+    body: patch?.body ?? record.body,
+    tags: patch?.tags ?? record.tags,
+    links: patch?.links ?? record.links,
+    provenance: patch?.provenance ?? record.provenance,
+  };
+}
+
+function workspaceMemoryPatchFromRecord(
+  record: MatterhornMemoryRecord,
+): Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">> {
+  const {
+    id: _id,
+    createdAt: _createdAt,
+    ...patch
+  } = record;
+  return patch;
+}
+
+function namespaceWorkspaceMemoryPatch(
+  record: MatterhornMemoryRecord,
+  patch: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">> | undefined,
+  workspace: WorkspaceInfo,
+): Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">> {
+  return workspaceMemoryPatchFromRecord(namespaceWorkspaceMemoryRecord(workspaceMemoryRecordWithPatch(record, patch), workspace));
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function workspaceMemoryExportRelativePath(workspace: WorkspaceInfo, value: unknown): string {
+  if (typeof value === "string" && value.trim()) {
+    return normalizeWorkspaceRelativePath(value, { allowSubdirs: true });
+  }
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `outputs/memory/memory-export-${workspace.id}-${stamp}`;
+}
+
+async function exportWorkspaceMemoryRecords(
+  memoryVault: MatterhornMemoryVault,
+  workspace: WorkspaceInfo,
+  outputDirInput: unknown,
+) {
+  const outputRelativePath = workspaceMemoryExportRelativePath(workspace, outputDirInput);
+  const outputDir = resolveSafeChildPath(workspace.path, outputRelativePath);
+  await mkdir(outputDir, { recursive: true });
+  const records = (await memoryVault.listRecords({
+    scope: "workspace",
+    tags: [workspaceMemoryTag(workspace.id)],
+    limit: 500,
+  })).filter((record) => record.canExport && record.sensitivity !== "forbidden_secret");
+
+  const recordsPath = join(outputDir, "matterhorn-memory-records.json");
+  const manifestPath = join(outputDir, "matterhorn-memory-export-manifest.json");
+  const sha256Path = join(outputDir, "matterhorn-memory-export.sha256");
+  const recordsJson = `${JSON.stringify(records, null, 2)}\n`;
+  const sha256 = sha256Hex(recordsJson);
+  const exportedAt = new Date().toISOString();
+  const manifest = {
+    version: "matterhorn.memory.export-manifest.v1",
+    exportedAt,
+    workspaceId: workspace.id,
+    workspaceNamespaceTag: workspaceMemoryTag(workspace.id),
+    recordCount: records.length,
+    recordsPath,
+    sha256,
+    includesSecrets: false,
+    includesRawSignatures: false,
+    includesSignedPayloads: false,
+    includesWalletExports: false,
+  };
+  await writeFile(recordsPath, recordsJson, "utf8");
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  await writeFile(sha256Path, `${sha256}  matterhorn-memory-records.json\n`, "utf8");
+  return {
+    ...manifest,
+    outputDir,
+    manifestPath,
+    sha256Path,
+  };
+}
+
 function normalizeNoteLimit(value: string | null): number | undefined {
   if (!value) return undefined;
   const limit = Number(value);
@@ -1126,6 +1456,14 @@ function notesListOptionsFromUrl(url: URL) {
   };
 }
 
+function normalizeWorkspaceOutputPath(input: string | null): string {
+  const relativePath = normalizeWorkspaceRelativePath(input ?? "", { allowSubdirs: true });
+  if (relativePath === "outputs" || !relativePath.startsWith("outputs/")) {
+    throw new ApiError(400, "invalid_output_path", "Output path must point to a file under outputs/.");
+  }
+  return relativePath;
+}
+
 function parseProjectEvidenceSource(value: string | null): MatterhornProjectEvidenceSource | undefined {
   if (!value) return undefined;
   if (value === "notes" || value === "memory" || value === "task_events" || value === "task_runs") {
@@ -1144,10 +1482,37 @@ function parseProjectDataLedgerSource(value: string | null): MatterhornProjectDa
 
 function parseProjectDataLedgerKind(value: string | null): MatterhornProjectDataLedgerKind | undefined {
   if (!value) return undefined;
-  if (value === "note" || value === "memory_suggestion" || value === "task" || value === "output" || value === "audit" || value === "feedback") {
+  if (value === "note" || value === "memory_suggestion" || value === "team_access" || value === "wallet" || value === "chat" || value === "task" || value === "output" || value === "audit" || value === "feedback") {
     return value;
   }
-  throw new ApiError(400, "invalid_project_data_ledger_kind", "kind must be note, memory_suggestion, task, output, audit, or feedback");
+  throw new ApiError(400, "invalid_project_data_ledger_kind", "kind must be note, memory_suggestion, team_access, wallet, chat, task, output, audit, or feedback");
+}
+
+function parseProjectDataLedgerTimestamp(value: string | null, name: "from" | "to"): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const timestamp = Date.parse(trimmed);
+  if (!Number.isFinite(timestamp)) {
+    throw new ApiError(400, "invalid_project_data_ledger_time", `${name} must be a valid ISO timestamp`);
+  }
+  return new Date(timestamp).toISOString();
+}
+
+function projectDataLedgerOptionsFromUrl(url: URL) {
+  const limitParam = url.searchParams.get("limit");
+  const parsed = limitParam ? Number(limitParam) : NaN;
+  const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 300) : 100;
+  return {
+    limit,
+    source: parseProjectDataLedgerSource(url.searchParams.get("source")?.trim() || null),
+    kind: parseProjectDataLedgerKind(url.searchParams.get("kind")?.trim() || null),
+    desk: url.searchParams.get("desk")?.trim() || undefined,
+    sessionId: url.searchParams.get("sessionId")?.trim() || url.searchParams.get("session_id")?.trim() || undefined,
+    taskId: url.searchParams.get("taskId")?.trim() || url.searchParams.get("task_id")?.trim() || undefined,
+    from: parseProjectDataLedgerTimestamp(url.searchParams.get("from"), "from"),
+    to: parseProjectDataLedgerTimestamp(url.searchParams.get("to"), "to"),
+  };
 }
 
 function parseProjectFeedbackKind(value: unknown): MatterhornProjectFeedbackKind {
@@ -1228,6 +1593,20 @@ function coerceProjectFeedbackRequest(value: unknown): MatterhornProjectFeedback
     throw new ApiError(400, "invalid_project_feedback_comment", `${request.kind} feedback requires a comment`);
   }
   return request;
+}
+
+function coerceWorkspaceDataPolicyUpdate(value: unknown): MatterhornWorkspaceDataPolicyUpdateRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiError(400, "invalid_data_policy", "data policy body must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const feedbackUse = input.feedbackUse;
+  if (feedbackUse !== undefined && feedbackUse !== "eval_routing_product_quality_only" && feedbackUse !== "disabled") {
+    throw new ApiError(400, "invalid_data_policy_feedback_use", "feedbackUse must be eval_routing_product_quality_only or disabled");
+  }
+  return {
+    ...(feedbackUse ? { feedbackUse } : {}),
+  };
 }
 
 function coerceNoteCreateRequest(value: unknown): MatterhornNoteCreateRequest {
@@ -1968,7 +2347,15 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       stores: {
         memory: dataStore({
           id: "memory",
-          ...capability(memoryStatus, "Memory vault", "Default memory is machine-global unless MATTERHORN_WORK_MEMORY_ROOT points elsewhere."),
+          ...capability(
+            memoryStatus,
+            "Memory vault",
+            "Memory is stored in a machine-level vault; workspace memory routes namespace project records with a workspace tag.",
+            {
+              workspaceRoutePrefix: "/workspace/:id/memory",
+              namespace: "workspace_tag",
+            },
+          ),
           scope: "machine_global",
           path: memoryVault.rootDir,
           format: "mixed",
@@ -2024,15 +2411,23 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   const opencodeDbPath = resolveOpencodeDbPath();
   const workflowRunsPath = join(workspace.path, ".matterhorn-work", "task-logs", workspace.id);
   const outputsPath = join(workspace.path, "outputs");
+  const walletEvidencePath = join(outputsPath, "sui");
+  const modelPreferencePath = workspaceModelSelectionPath(workspace);
+  const dataPolicyPath = workspaceDataPolicyPath(workspace);
+  const dataPolicy = readWorkspaceDataPolicySync(workspace);
   const notesIndexPath = notes.indexPath;
   const notesDir = notes.notesDir;
   const memoryRoot = memoryVault.rootDir;
+  const memoryNamespaceTag = workspaceMemoryTag(workspace.id);
   const feedbackPath = projectFeedbackLogPath(workspace.id);
   const evidencePaths = [
     notesIndexPath,
     join(memoryRoot, "memory-suggestions.json"),
     taskEventsPath(workspace.id),
     workflowRunsPath,
+    walletEvidencePath,
+    modelPreferencePath,
+    dataPolicyPath,
     outputsPath,
     feedbackPath,
   ];
@@ -2061,6 +2456,46 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         exportable: false,
         deletable: false,
       }),
+      modelPreferences: dataStore({
+        id: "modelPreferences",
+        ...capability(
+          existsSync(modelPreferencePath) ? "working" : "preview",
+          "Model preference",
+          "The workspace default model stores only provider/model identifiers. Provider credentials stay in the provider connection layer.",
+          {
+            route: `/workspace/${workspace.id}/backend/model-selection`,
+          },
+        ),
+        scope: "workspace",
+        path: modelPreferencePath,
+        format: "json",
+        containsUserContent: false,
+        containsSecrets: "never",
+        retention: "user_controlled",
+        exportable: true,
+        deletable: true,
+      }),
+      dataPolicy: dataStore({
+        id: "dataPolicy",
+        ...capability(
+          existsSync(dataPolicyPath) ? "working" : "preview",
+          "Data policy",
+          "Workspace privacy choices are stored locally and never include secrets.",
+          {
+            route: `/workspace/${workspace.id}/backend/data-policy`,
+            feedbackUse: dataPolicy.feedbackUse,
+            modelTraining: "disabled",
+          },
+        ),
+        scope: "workspace",
+        path: dataPolicyPath,
+        format: "json",
+        containsUserContent: false,
+        containsSecrets: "never",
+        retention: "user_controlled",
+        exportable: true,
+        deletable: true,
+      }),
       notes: dataStore({
         id: "notes",
         ...capability("working", "Notes", "Notes are stored inside the workspace as markdown plus an index."),
@@ -2075,7 +2510,20 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
       }),
       memory: dataStore({
         id: "memory",
-        ...capability("working", "Memory vault", "Default memory is a machine-level vault, not a durable team workspace store yet."),
+        ...capability(
+          "working",
+          "Memory vault",
+          "Memory is stored in a machine-level vault. Workspace memory routes force workspace scope and namespace project records with this workspace tag.",
+          {
+            workspaceNamespaceTag: memoryNamespaceTag,
+            workspaceRoutes: [
+              `/workspace/${workspace.id}/memory/search`,
+              `/workspace/${workspace.id}/memory/entities`,
+              `/workspace/${workspace.id}/memory/capture`,
+            ],
+            isolation: "tagged_records_in_machine_vault",
+          },
+        ),
         scope: "machine_global",
         paths: [memoryRoot, join(memoryRoot, "memory-index.json"), join(memoryRoot, "memory-suggestions.json"), join(memoryRoot, "memory-log.jsonl")],
         format: "mixed",
@@ -2133,6 +2581,27 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         exportable: true,
         deletable: false,
       }),
+      walletEvidence: dataStore({
+        id: "walletEvidence",
+        ...capability(
+          existsSync(walletEvidencePath) ? "working" : "preview",
+          "Wallet evidence",
+          "Wallet previews and receipts are stored as user-visible output artifacts plus redacted audit-backed ledger rows.",
+          {
+            families: ["sui"],
+            outputPath: walletEvidencePath,
+            ledgerRoute: `/workspace/${workspace.id}/data-ledger?kind=wallet`,
+          },
+        ),
+        scope: "workspace",
+        paths: [walletEvidencePath, auditLogPath(workspace.id)],
+        format: "mixed",
+        containsUserContent: true,
+        containsSecrets: "redacted",
+        retention: "runtime_controlled",
+        exportable: true,
+        deletable: false,
+      }),
       evidence: dataStore({
         id: "evidence",
         ...capability("working", "Project evidence", "Project Activity is a normalized read layer across notes, memory suggestions, task events, task runs, outputs, and workflow runs."),
@@ -2153,16 +2622,671 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         format: "jsonl",
         containsUserContent: true,
         containsSecrets: "redacted",
-        retention: "append_only",
+        retention: "user_controlled",
         exportable: true,
-        deletable: false,
+        deletable: true,
       }),
     },
     policy: {
       trainingUse: "none_by_default",
+      feedbackUse: dataPolicy.feedbackUse,
       redaction: capability("working", "Redaction", "Memory, workflow, and market paths reject or redact known secret-shaped wallet/API/signature inputs."),
       export: capability("preview", "Export", "Memory can export bundles and workspace files are user-controlled; the project data ledger can be read as a unified JSON contract."),
       deletion: capability("preview", "Deletion", "Notes and memory records are user-deletable; append-only audit/task logs are retained for accountability."),
+    },
+  };
+}
+
+function dataControlAction(input: MatterhornDataControlAction): MatterhornDataControlAction {
+  return input;
+}
+
+function dataControlCapability(input: MatterhornDataControlCapability): MatterhornDataControlCapability {
+  return input;
+}
+
+function retentionControl(store: MatterhornDataStoreDescriptor): MatterhornDataControlStore["retention"] {
+  if (store.retention === "user_controlled") {
+    return {
+      mode: store.retention,
+      label: "User controlled",
+      summary: "The user can manage this store from its owning UI or the filesystem.",
+      configurable: false,
+    };
+  }
+  if (store.retention === "append_only") {
+    return {
+      mode: store.retention,
+      label: "Append-only",
+      summary: "Events are retained for accountability and exported through the project ledger.",
+      configurable: false,
+    };
+  }
+  if (store.retention === "runtime_controlled") {
+    return {
+      mode: store.retention,
+      label: "Runtime controlled",
+      summary: "Retention is controlled by the underlying runtime or derived read layer.",
+      configurable: false,
+    };
+  }
+  return {
+    mode: store.retention,
+    label: "Unknown",
+    summary: "Matterhorn cannot yet report retention controls for this store.",
+    configurable: false,
+  };
+}
+
+function buildDataControlStore(
+  workspace: WorkspaceInfo,
+  store: MatterhornDataStoreDescriptor,
+): MatterhornDataControlStore {
+  const storeId = store.id as MatterhornDataControlStoreId;
+  const dataPolicy = readWorkspaceDataPolicySync(workspace);
+  const ledgerRoute = `/workspace/${encodeURIComponent(workspace.id)}/data-ledger`;
+  const dataPolicyRoute = `/workspace/${encodeURIComponent(workspace.id)}/backend/data-policy`;
+  const modelSelectionRoute = `/workspace/${encodeURIComponent(workspace.id)}/backend/model-selection`;
+  const notesRoute = `/workspace/${encodeURIComponent(workspace.id)}/notes`;
+  const workspaceMemoryRoute = `/workspace/${encodeURIComponent(workspace.id)}/memory`;
+
+  let exportCapability: MatterhornDataControlCapability = dataControlCapability({
+    status: store.exportable ? "preview" : "unsupported",
+    label: store.exportable ? "Export available" : "No export route",
+    summary: store.exportable
+      ? "This store is included in a Matterhorn export or can be copied from the filesystem."
+      : "Matterhorn does not expose an export route for this store yet.",
+    actions: [],
+  });
+  let deletionCapability: MatterhornDataControlCapability = dataControlCapability({
+    status: store.deletable ? "preview" : "unsupported",
+    label: store.deletable ? "Delete available" : "Append-only or runtime controlled",
+    summary: store.deletable
+      ? "This store has deletion controls in its owning surface."
+      : "Matterhorn does not expose deletion for this store in v1.",
+    actions: [],
+  });
+
+  if (storeId === "dataPolicy") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Data policy API",
+      summary: "The workspace data policy reports training and feedback collection status without returning secrets.",
+      actions: [
+        dataControlAction({
+          id: "data-policy.read",
+          label: "Read data policy",
+          description: "Returns the workspace privacy and feedback policy.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: dataPolicyRoute,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Reset data policy",
+      summary: "Collaborators can reset the workspace feedback policy to the safe default.",
+      actions: [
+        dataControlAction({
+          id: "data-policy.reset-feedback",
+          label: "Reset feedback policy",
+          description: "Restores feedback collection to the local product-quality default and records an audit entry.",
+          kind: "api_route",
+          status: "working",
+          method: "PATCH",
+          href: dataPolicyRoute,
+          requirements: ["collaborator", "writable_server"],
+        }),
+      ],
+    });
+  } else if (storeId === "modelPreferences") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Model selection API",
+      summary: "The workspace default model can be read without returning provider credentials.",
+      actions: [
+        dataControlAction({
+          id: "model-preference.read",
+          label: "Read model preference",
+          description: "Returns the saved provider/model identifiers and the effective fallback model.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: modelSelectionRoute,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Reset workspace default",
+      summary: "Collaborators can clear the workspace default model and fall back to the server default.",
+      actions: [
+        dataControlAction({
+          id: "model-preference.clear",
+          label: "Reset model preference",
+          description: "Clears the saved workspace model preference and records an audit entry.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: modelSelectionRoute,
+          destructive: true,
+          requirements: ["collaborator", "writable_server"],
+        }),
+      ],
+    });
+  } else if (storeId === "notes") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Notes API",
+      summary: "Notes can be listed and exported from the workspace notes API.",
+      actions: [
+        dataControlAction({
+          id: "notes.list",
+          label: "List notes",
+          description: "Returns workspace note metadata and bodies according to the notes API contract.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: notesRoute,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Individual note delete",
+      summary: "Individual notes can be deleted by collaborators from Notes.",
+      actions: [
+        dataControlAction({
+          id: "notes.delete",
+          label: "Delete note",
+          description: "Deletes one note by id and records an audit entry.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: `${notesRoute}/:noteId`,
+          destructive: true,
+          requirements: ["collaborator", "writable_server", "specific_record_id"],
+        }),
+      ],
+    });
+  } else if (storeId === "memory") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Memory export",
+      summary: "Memory can export a bundle from the local memory vault.",
+      actions: [
+        dataControlAction({
+          id: "memory.export",
+          label: "Export memory",
+          description: "Creates a user-triggered memory export bundle.",
+          kind: "api_route",
+          status: "working",
+          method: "POST",
+          href: "/api/memory/export",
+          requirements: ["collaborator", "writable_server"],
+        }),
+        dataControlAction({
+          id: "memory.workspace-list",
+          label: "List workspace memory",
+          description: "Lists memory records tagged for this workspace namespace.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `${workspaceMemoryRoute}/entities`,
+        }),
+        dataControlAction({
+          id: "memory.workspace-export",
+          label: "Export workspace memory",
+          description: "Writes a redacted memory export containing only records tagged for this workspace namespace.",
+          kind: "api_route",
+          status: "working",
+          method: "POST",
+          href: `${workspaceMemoryRoute}/export`,
+          requirements: ["collaborator", "writable_server"],
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Forget memory",
+      summary: "Individual saved memories can be forgotten by collaborators.",
+      actions: [
+        dataControlAction({
+          id: "memory.forget",
+          label: "Forget memory",
+          description: "Forgets one memory record by id and records an audit entry when a workspace is resolved.",
+          kind: "api_route",
+          status: "working",
+          method: "POST",
+          href: "/api/memory/forget",
+          destructive: true,
+          requirements: ["collaborator", "writable_server", "specific_record_id"],
+        }),
+        dataControlAction({
+          id: "memory.delete-entity",
+          label: "Delete memory entity",
+          description: "Alias route for deleting one memory record by id.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: "/api/memory/entities/:id",
+          destructive: true,
+          requirements: ["collaborator", "writable_server", "specific_record_id"],
+        }),
+        dataControlAction({
+          id: "memory.workspace-delete",
+          label: "Delete workspace memory",
+          description: "Deletes one memory record from this workspace namespace and records an audit entry.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: `${workspaceMemoryRoute}/entities/:memoryId`,
+          destructive: true,
+          requirements: ["collaborator", "writable_server", "specific_record_id"],
+        }),
+      ],
+    });
+  } else if (storeId === "outputs") {
+    exportCapability = dataControlCapability({
+      status: store.status === "working" ? "working" : "needs_setup",
+      label: "Outputs folder",
+      summary: "Outputs are regular files under the workspace outputs folder.",
+      actions: [
+        dataControlAction({
+          id: "outputs.open-folder",
+          label: "Open outputs folder",
+          description: "Use the app shell or filesystem to open the outputs directory.",
+          kind: "filesystem",
+          status: store.status === "working" ? "working" : "needs_setup",
+          href: store.path,
+          requirements: ["filesystem_access"],
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Single output delete",
+      summary: "Individual output files can be deleted through the workspace outputs API. Bulk folder deletion is not exposed.",
+      actions: [
+        dataControlAction({
+          id: "outputs.delete-file",
+          label: "Delete output file",
+          description: "Deletes one file under outputs/ and records an audit entry.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/outputs?path=:outputPath`,
+          destructive: true,
+          requirements: ["collaborator", "writable_server", "specific_record_id"],
+        }),
+      ],
+    });
+  } else if (storeId === "feedback") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Ledger export",
+      summary: "Feedback is exportable through the project data ledger and is not used for model training by default.",
+      actions: [
+        dataControlAction({
+          id: "feedback.ledger",
+          label: "Export feedback ledger",
+          description: "Returns redacted feedback entries as part of the project data ledger.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `${ledgerRoute}?source=feedback`,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Delete feedback",
+      summary: "Individual feedback entries can be deleted by id. The delete action is collaborator/writable guarded and audited.",
+      actions: [
+        dataControlAction({
+          id: "feedback.delete",
+          label: "Delete feedback entry",
+          description: "Deletes one feedback entry by id from the local feedback store.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: "/workspace/:workspaceId/feedback/:feedbackId",
+          destructive: true,
+          requirements: ["collaborator", "writable_server", "specific_feedback_id"],
+        }),
+        dataControlAction({
+          id: "feedback.delete-all",
+          label: "Delete all feedback",
+          description: "Deletes all parseable feedback entries for this workspace and records an audit entry.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/feedback`,
+          destructive: true,
+          requirements: ["collaborator", "writable_server"],
+        }),
+      ],
+    });
+  } else if (storeId === "walletEvidence") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Wallet ledger export",
+      summary: "Wallet previews and receipts are exportable through the redacted project ledger.",
+      actions: [
+        dataControlAction({
+          id: "wallet-evidence.ledger",
+          label: "Export wallet evidence",
+          description: "Returns redacted wallet preview and receipt ledger entries.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `${ledgerRoute}?kind=wallet`,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "unsupported",
+      label: "Audit-backed evidence",
+      summary: "Wallet audit events are retained for accountability. Output files can be removed from the outputs folder.",
+      actions: [],
+    });
+  } else if (storeId === "audit" || storeId === "taskEvents" || storeId === "workflowRuns" || storeId === "evidence") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Ledger export",
+      summary: "Events are exportable through the redacted project data ledger.",
+      actions: [
+        dataControlAction({
+          id: `${storeId}.ledger`,
+          label: "Export ledger",
+          description: "Returns redacted project ledger entries.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: ledgerRoute,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "unsupported",
+      label: "Append-only events",
+      summary: "Audit, task, workflow, and evidence events are retained for accountability in v1.",
+      actions: [],
+    });
+  }
+
+  return {
+    storeId,
+    store,
+    export: exportCapability,
+    deletion: deletionCapability,
+    retention: retentionControl(store),
+    privacy: {
+      containsUserContent: store.containsUserContent,
+      containsSecrets: store.containsSecrets,
+      trainingUse: storeId === "feedback" ? dataPolicy.feedbackUse : "none",
+    },
+  };
+}
+
+function summarizeDataControls(stores: MatterhornDataControlStore[]): MatterhornWorkspaceDataControlsResponse["summary"] {
+  return {
+    totalStores: stores.length,
+    exportableStores: stores.filter((store) => store.export.status === "working" || store.export.status === "preview").length,
+    deletableStores: stores.filter((store) => store.deletion.status === "working" || store.deletion.status === "preview").length,
+    appendOnlyStores: stores.filter((store) => store.retention.mode === "append_only").length,
+    userControlledStores: stores.filter((store) => store.retention.mode === "user_controlled").length,
+  };
+}
+
+function buildWorkspaceDataControls(
+  workspace: WorkspaceInfo,
+  memoryVault: MatterhornMemoryVault,
+): MatterhornWorkspaceDataControlsResponse {
+  const dataMap = buildWorkspaceDataMap(workspace, memoryVault);
+  const stores = Object.fromEntries(
+    Object.entries(dataMap.stores).map(([key, store]) => [key, buildDataControlStore(workspace, store)]),
+  ) as MatterhornWorkspaceDataControlsResponse["stores"];
+  const storeList = Object.values(stores);
+
+  return {
+    success: true,
+    version: "matterhorn.backend.data-controls.v1",
+    generatedAt: new Date().toISOString(),
+    workspace: dataMap.workspace,
+    stores,
+    summary: summarizeDataControls(storeList),
+    policy: {
+      trainingUse: dataMap.policy.trainingUse,
+      feedbackUse: dataMap.policy.feedbackUse,
+      redaction: dataMap.policy.redaction,
+      export: capability("working", "Export controls", "Notes, memory, outputs, feedback, and event ledgers report their available export paths."),
+      deletion: capability("preview", "Deletion controls", "Notes and memory support individual deletes; append-only logs remain retained for accountability."),
+      limitations: [
+        "Bulk deletion is currently limited to feedback; append-only logs remain retained for accountability.",
+        "Chat/session history remains controlled by the OpenCode runtime store.",
+        "Feedback is stored for eval, routing, and product quality only; it is not used for model training by default.",
+      ],
+    },
+  };
+}
+
+function readinessCheck(input: MatterhornBackendReadinessCheck): MatterhornBackendReadinessCheck {
+  return input;
+}
+
+function featureLabel(featureId: MatterhornBackendReadinessFeatureId): string {
+  if (featureId === "start_chat") return "Start chat";
+  if (featureId === "start_desk_task") return "Start desk task";
+  if (featureId === "save_notes") return "Save notes";
+  if (featureId === "review_memory") return "Review memory";
+  if (featureId === "save_memory") return "Save memory";
+  return "Export evidence";
+}
+
+function readinessFeature(
+  featureId: MatterhornBackendReadinessFeatureId,
+  checks: Record<MatterhornBackendReadinessCheckId, MatterhornBackendReadinessCheck>,
+  requiredChecks: MatterhornBackendReadinessCheckId[],
+): MatterhornBackendReadinessFeature {
+  const blockingCheckIds = requiredChecks.filter((checkId) => checks[checkId].status !== "working");
+  const ready = blockingCheckIds.length === 0;
+  return {
+    featureId,
+    ready,
+    status: ready ? "working" : "needs_setup",
+    label: featureLabel(featureId),
+    description: ready
+      ? "Ready for this workspace."
+      : `Blocked by ${blockingCheckIds.map((checkId) => checks[checkId].label).join(", ")}.`,
+    blockingCheckIds,
+  };
+}
+
+function buildWorkspaceReadiness(
+  config: ServerConfig,
+  workspace: WorkspaceInfo,
+  memoryVault: MatterhornMemoryVault,
+): MatterhornBackendReadinessResponse {
+  const dataMap = buildWorkspaceDataMap(workspace, memoryVault);
+  const connection = resolveWorkspaceOpencodeConnection(config, workspace);
+  const opencodeConfigured = Boolean(connection.baseUrl?.trim());
+  const notesStore = dataMap.stores.notes;
+  const memoryStore = dataMap.stores.memory;
+  const outputsStore = dataMap.stores.outputs;
+  const ledgerStore = dataMap.stores.evidence;
+
+  const checks: Record<MatterhornBackendReadinessCheckId, MatterhornBackendReadinessCheck> = {
+    workspace_authorized: readinessCheck({
+      checkId: "workspace_authorized",
+      status: "working",
+      label: "Workspace authorized",
+      description: "The workspace path is inside an authorized Matterhorn Work root.",
+      requiredFor: ["start_chat", "start_desk_task", "save_notes", "review_memory", "save_memory", "export_evidence"],
+    }),
+    workspace_writable: readinessCheck({
+      checkId: "workspace_writable",
+      status: config.readOnly ? "needs_setup" : "working",
+      label: config.readOnly ? "Read-only server" : "Writable server",
+      description: config.readOnly
+        ? "The local engine is running read-only, so write actions are blocked."
+        : "The local engine can write workspace state.",
+      requiredFor: ["start_desk_task", "save_notes", "save_memory"],
+    }),
+    opencode_connection: readinessCheck({
+      checkId: "opencode_connection",
+      status: opencodeConfigured ? "working" : "needs_setup",
+      label: opencodeConfigured ? "OpenCode connection configured" : "OpenCode connection missing",
+      description: opencodeConfigured
+        ? "This workspace has an OpenCode base URL configured. Credentials are not exposed in this response."
+        : "Set up the local Matterhorn/OpenCode engine connection before starting chats or desk tasks.",
+      requiredFor: ["start_chat", "start_desk_task"],
+    }),
+    notes_store: readinessCheck({
+      checkId: "notes_store",
+      status: notesStore.status,
+      label: notesStore.label,
+      description: notesStore.description,
+      requiredFor: ["save_notes"],
+    }),
+    memory_vault: readinessCheck({
+      checkId: "memory_vault",
+      status: memoryStore.status,
+      label: memoryStore.label,
+      description: memoryStore.description,
+      requiredFor: ["review_memory", "save_memory"],
+    }),
+    outputs_folder: readinessCheck({
+      checkId: "outputs_folder",
+      status: outputsStore.status,
+      label: outputsStore.label,
+      description: outputsStore.description,
+      requiredFor: [],
+    }),
+    project_ledger: readinessCheck({
+      checkId: "project_ledger",
+      status: ledgerStore.status,
+      label: ledgerStore.label,
+      description: ledgerStore.description,
+      requiredFor: ["export_evidence"],
+    }),
+  };
+
+  const features: Record<MatterhornBackendReadinessFeatureId, MatterhornBackendReadinessFeature> = {
+    start_chat: readinessFeature("start_chat", checks, ["workspace_authorized", "opencode_connection"]),
+    start_desk_task: readinessFeature("start_desk_task", checks, ["workspace_authorized", "workspace_writable", "opencode_connection"]),
+    save_notes: readinessFeature("save_notes", checks, ["workspace_authorized", "workspace_writable", "notes_store"]),
+    review_memory: readinessFeature("review_memory", checks, ["workspace_authorized", "memory_vault"]),
+    save_memory: readinessFeature("save_memory", checks, ["workspace_authorized", "workspace_writable", "memory_vault"]),
+    export_evidence: readinessFeature("export_evidence", checks, ["workspace_authorized", "project_ledger"]),
+  };
+  const blockingChecks = Array.from(new Set(
+    Object.values(features).flatMap((feature) => feature.blockingCheckIds),
+  )).sort((a, b) => a.localeCompare(b)) as MatterhornBackendReadinessCheckId[];
+  const readyFeatures = Object.values(features).filter((feature) => feature.ready).length;
+
+  return {
+    success: true,
+    version: "matterhorn.backend.readiness.v1",
+    generatedAt: new Date().toISOString(),
+    workspace: {
+      id: workspace.id,
+      name: workspace.name,
+      type: workspace.workspaceType,
+      preset: workspace.preset,
+    },
+    summary: {
+      status: blockingChecks.length === 0 ? "working" : "needs_setup",
+      readyFeatures,
+      totalFeatures: Object.keys(features).length,
+      blockingChecks,
+    },
+    checks,
+    features,
+  };
+}
+
+function mergeCapabilityStatuses(statuses: MatterhornCapabilityStatus[]): MatterhornCapabilityStatus {
+  if (statuses.includes("error")) return "error";
+  if (statuses.includes("needs_setup")) return "needs_setup";
+  if (statuses.includes("preview")) return "preview";
+  if (statuses.includes("unsupported")) return "unsupported";
+  return "working";
+}
+
+async function buildWorkspaceBackendControlPlane(
+  config: ServerConfig,
+  workspace: WorkspaceInfo,
+  memoryVault: MatterhornMemoryVault,
+): Promise<MatterhornBackendControlPlaneResponse> {
+  const [capabilities, models] = await Promise.all([
+    buildBackendCapabilities(config, memoryVault),
+    buildWorkspaceBackendModels(config, workspace),
+  ]);
+  const readiness = buildWorkspaceReadiness(config, workspace, memoryVault);
+  const dataMap = buildWorkspaceDataMap(workspace, memoryVault);
+  const dataControls = buildWorkspaceDataControls(workspace, memoryVault);
+  const dataPolicy = buildWorkspaceDataPolicyResponse(workspace);
+  const capabilitiesStatus = mergeCapabilityStatuses([
+    capabilities.memory.status,
+    capabilities.notes.status,
+    capabilities.evidence.status,
+    capabilities.wallets.status,
+    capabilities.teams.status,
+    capabilities.security.status,
+  ]);
+  const dataControlsStatus = mergeCapabilityStatuses([
+    dataControls.policy.redaction.status,
+    dataControls.policy.export.status,
+    dataControls.policy.deletion.status,
+  ]);
+
+  return {
+    success: true,
+    version: "matterhorn.backend.control-plane.v1",
+    generatedAt: new Date().toISOString(),
+    workspace: dataMap.workspace,
+    summary: {
+      status: mergeCapabilityStatuses([
+        capabilitiesStatus,
+        models.catalog.status,
+        readiness.summary.status,
+        dataControlsStatus,
+      ]),
+      capabilitiesStatus,
+      modelCatalogStatus: models.catalog.status,
+      readinessStatus: readiness.summary.status,
+      dataControlsStatus,
+      readyFeatures: readiness.summary.readyFeatures,
+      totalFeatures: readiness.summary.totalFeatures,
+      blockingChecks: readiness.summary.blockingChecks,
+      connectedProviders: models.catalog.connectedProviderCount,
+      totalProviders: models.catalog.providerCount,
+      totalModels: models.catalog.modelCount,
+      exportableStores: dataControls.summary.exportableStores,
+      deletableStores: dataControls.summary.deletableStores,
+    },
+    versions: {
+      capabilities: capabilities.version,
+      models: models.version,
+      readiness: readiness.version,
+      dataMap: dataMap.version,
+      dataControls: dataControls.version,
+      dataPolicy: dataPolicy.version,
+    },
+    capabilities,
+    models,
+    readiness,
+    dataMap,
+    dataControls,
+    dataPolicy,
+    privacy: {
+      trainingUse: "none_by_default",
+      feedbackUse: dataPolicy.policy.feedbackUse,
+      feedbackCollectionEnabled: dataPolicy.controls.feedback.enabled,
+      secretsReturned: false,
     },
   };
 }
@@ -3117,6 +4241,215 @@ function createRoutes(
     return jsonResponse(await buildBackendCapabilities(config, memoryVault));
   });
 
+  addRoute(routes, "GET", "/api/backend/models", "client", async () => {
+    return jsonResponse(buildBackendModels());
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/models", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(await buildWorkspaceBackendModels(config, workspace));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/model-selection", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const models = await buildWorkspaceBackendModels(config, workspace);
+    const fallbackModels = buildBackendModels({ catalog: models.catalog });
+    return jsonResponse(buildWorkspaceModelSelectionResponse({
+      workspace,
+      fallbackModel: fallbackModels.defaultModel,
+      selection: models.workspaceSelection ?? null,
+    }));
+  });
+
+  addRoute(routes, "PATCH", "/workspace/:id/backend/model-selection", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request) as Partial<MatterhornBackendModelSelectionRequest>;
+    let selection;
+    try {
+      selection = await writeWorkspaceModelSelection(workspace, {
+        providerId: body.providerId,
+        modelId: body.modelId,
+      } as MatterhornBackendModelSelectionRequest, ctx.actor ?? { type: "remote" });
+    } catch (error) {
+      throw new ApiError(400, "invalid_model_selection", error instanceof Error ? error.message : "Invalid model selection");
+    }
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.model_selection.update",
+      target: `${selection.providerId}/${selection.modelId}`,
+      summary: "Updated workspace default model",
+      timestamp: Date.now(),
+    });
+
+    const models = await buildWorkspaceBackendModels(config, workspace);
+    const fallbackModels = buildBackendModels({ catalog: models.catalog });
+    return jsonResponse(buildWorkspaceModelSelectionResponse({
+      workspace,
+      fallbackModel: fallbackModels.defaultModel,
+      selection,
+      auditLogged: true,
+    }));
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/backend/model-selection", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const existing = await readWorkspaceModelSelection(workspace);
+    const cleared = await clearWorkspaceModelSelection(workspace);
+    if (cleared) {
+      await recordAudit(workspace.path, {
+        id: shortId(),
+        workspaceId: workspace.id,
+        actor: ctx.actor ?? { type: "remote" },
+        action: "workspace.model_selection.clear",
+        target: existing ? `${existing.providerId}/${existing.modelId}` : "workspace_default_model",
+        summary: "Cleared workspace default model",
+        timestamp: Date.now(),
+      });
+    }
+
+    const models = await buildWorkspaceBackendModels(config, workspace);
+    const fallbackModels = buildBackendModels({ catalog: models.catalog });
+    return jsonResponse(buildWorkspaceModelSelectionResponse({
+      workspace,
+      fallbackModel: fallbackModels.defaultModel,
+      selection: null,
+      auditLogged: cleared,
+    }));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/readiness", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(buildWorkspaceReadiness(config, workspace, memoryVault));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/control-plane", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(await buildWorkspaceBackendControlPlane(config, workspace, memoryVault));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/support-report", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const controlPlane = await buildWorkspaceBackendControlPlane(config, workspace, memoryVault);
+    const teamAccess = await buildBackendTeamAccessSummary(config, workspace, tokens);
+    return jsonResponse(await buildBackendSupportReport({ workspace, controlPlane, teamAccess }));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/team-access", "host", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(await buildBackendTeamAccess(config, workspace, tokens));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/team-access/summary", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(await buildBackendTeamAccessSummary(config, workspace, tokens));
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/backend/team-access/tokens", "host", async (ctx) => {
+    ensureWritable(config);
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const scopeRaw = typeof body.scope === "string" ? body.scope.trim() : "";
+    const scope = scopeRaw === "collaborator" || scopeRaw === "viewer" ? scopeRaw as MatterhornTeamShareableTokenScope : null;
+    if (!scope) {
+      throw new ApiError(400, "invalid_scope", "Team access tokens can be collaborator or viewer tokens.");
+    }
+    const label = typeof body.label === "string" ? body.label.trim().slice(0, 80) : undefined;
+    const issued = await tokens.create(scope, { label });
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "host" },
+      action: "workspace.team_token.create",
+      target: issued.id,
+      summary: `Created ${scope} local access token${issued.label ? ` "${issued.label}"` : ""}`,
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({
+      success: true,
+      version: "matterhorn.backend.team-access.v1",
+      generatedAt: new Date().toISOString(),
+      workspace: {
+        id: workspace.id,
+        name: workspace.name,
+        type: workspace.workspaceType,
+      },
+      token: {
+        id: issued.id,
+        token: issued.token,
+        scope: issued.scope,
+        createdAt: issued.createdAt,
+        ...(issued.label ? { label: issued.label } : {}),
+        source: "token_store",
+      },
+      policy: {
+        secretsReturned: "one_time_token",
+        hostProtected: true,
+        auditLogged: true,
+        allowedScopes: ["collaborator", "viewer"],
+      },
+    }, 201);
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/backend/team-access/tokens/:tokenId", "host", async (ctx) => {
+    ensureWritable(config);
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const tokenId = ctx.params.tokenId.trim();
+    const existing = (await tokens.list()).find((token) => token.id === tokenId);
+    if (!existing) {
+      throw new ApiError(404, "token_not_found", "Token not found");
+    }
+    if (existing.scope === "owner") {
+      throw new ApiError(400, "owner_token_not_supported", "Revoke owner tokens from host token settings.");
+    }
+    const ok = await tokens.revoke(tokenId);
+    if (!ok) {
+      throw new ApiError(404, "token_not_found", "Token not found");
+    }
+    const revoked: MatterhornTeamAccessTokenDescriptor = {
+      id: existing.id,
+      scope: existing.scope,
+      createdAt: existing.createdAt,
+      ...(existing.label ? { label: existing.label } : {}),
+      source: "token_store",
+    };
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "host" },
+      action: "workspace.team_token.revoke",
+      target: revoked.id,
+      summary: `Revoked ${revoked.scope} local access token${revoked.label ? ` "${revoked.label}"` : ""}`,
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({
+      success: true,
+      version: "matterhorn.backend.team-access.v1",
+      generatedAt: new Date().toISOString(),
+      workspace: {
+        id: workspace.id,
+        name: workspace.name,
+        type: workspace.workspaceType,
+      },
+      revoked,
+      policy: {
+        secretsReturned: false,
+        hostProtected: true,
+        auditLogged: true,
+      },
+    });
+  });
+
   addRoute(routes, "GET", "/experimental/extensions/actions", "client", async (ctx) => {
     const extensionId = ctx.url.searchParams.get("extensionId") ?? "";
     return jsonResponse({
@@ -3536,15 +4869,44 @@ function createRoutes(
 
   addRoute(routes, "GET", "/workspace/:id/data-ledger", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    const limitParam = ctx.url.searchParams.get("limit");
-    const parsed = limitParam ? Number(limitParam) : NaN;
-    const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 300) : 100;
     return jsonResponse(await buildProjectDataLedger({
       workspace,
-      limit,
-      source: parseProjectDataLedgerSource(ctx.url.searchParams.get("source")?.trim() || null),
-      kind: parseProjectDataLedgerKind(ctx.url.searchParams.get("kind")?.trim() || null),
+      ...projectDataLedgerOptionsFromUrl(ctx.url),
     }));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/data-ledger/export", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const controlPlane = await buildWorkspaceBackendControlPlane(config, workspace, memoryVault);
+    return jsonResponse(await buildProjectDataLedgerExport({
+      workspace,
+      backendControlPlane: backendControlPlaneExportSnapshot(controlPlane),
+      ...projectDataLedgerOptionsFromUrl(ctx.url),
+    }));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/data-policy", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(buildWorkspaceDataPolicyResponse(workspace));
+  });
+
+  addRoute(routes, "PATCH", "/workspace/:id/backend/data-policy", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const update = coerceWorkspaceDataPolicyUpdate(await readJsonBody(ctx.request));
+    const actorLabel = ctx.actor ? `${ctx.actor.type}:${"scope" in ctx.actor ? ctx.actor.scope : "unknown"}` : "remote";
+    const response = await writeWorkspaceDataPolicy(workspace, update, actorLabel);
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.data_policy.update",
+      target: workspaceDataPolicyPath(workspace),
+      summary: `Updated workspace data policy feedback use to ${response.policy.feedbackUse}`,
+      timestamp: Date.now(),
+    });
+    return jsonResponse(response);
   });
 
   addRoute(routes, "POST", "/workspace/:id/feedback", "client", async (ctx) => {
@@ -3552,6 +4914,10 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
 
     const workspace = await resolveWorkspace(config, ctx.params.id);
+    const dataPolicy = readWorkspaceDataPolicySync(workspace);
+    if (dataPolicy.feedbackUse === "disabled") {
+      throw new ApiError(403, "feedback_disabled", "Feedback collection is disabled for this workspace.");
+    }
     const body = await readJsonBody(ctx.request);
     const requestBody = body.feedback && typeof body.feedback === "object" && !Array.isArray(body.feedback)
       ? body.feedback
@@ -3582,9 +4948,98 @@ function createRoutes(
     return jsonResponse({ success: true, feedback: entry }, 201);
   });
 
+  addRoute(routes, "DELETE", "/workspace/:id/feedback/:feedbackId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const feedbackId = ctx.params.feedbackId.trim();
+    if (!feedbackId) {
+      throw new ApiError(400, "invalid_feedback_id", "Feedback id is required");
+    }
+    const deleted = await deleteProjectFeedbackEntry(workspace.id, feedbackId);
+    if (!deleted) {
+      throw new ApiError(404, "feedback_not_found", "Feedback not found");
+    }
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.feedback.delete",
+      target: feedbackId,
+      summary: `Deleted ${deleted.kind} feedback from project data ledger`,
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({ success: true, deleted });
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/feedback", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const deletedCount = await deleteAllProjectFeedbackEntries(workspace.id);
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.feedback.delete_all",
+      target: projectFeedbackLogPath(workspace.id),
+      summary: `Deleted ${deletedCount} feedback entr${deletedCount === 1 ? "y" : "ies"} from project data ledger`,
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({ success: true, deletedCount });
+  });
+
   addRoute(routes, "GET", "/workspace/:id/backend/data-map", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     return jsonResponse(buildWorkspaceDataMap(workspace, memoryVault));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/data-controls", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(buildWorkspaceDataControls(workspace, memoryVault));
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/outputs", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const relativePath = normalizeWorkspaceOutputPath(
+      ctx.url.searchParams.get("path") ?? ctx.url.searchParams.get("outputPath") ?? ctx.url.searchParams.get("output_path"),
+    );
+    const absPath = resolveSafeChildPath(workspace.path, relativePath);
+    if (!(await exists(absPath))) {
+      throw new ApiError(404, "output_not_found", "Output file not found");
+    }
+    const info = await stat(absPath);
+    if (!info.isFile()) {
+      throw new ApiError(400, "invalid_output_path", "Output deletion only supports files.");
+    }
+
+    await rm(absPath);
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.output.delete",
+      target: relativePath,
+      summary: "Deleted workspace output file",
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({
+      success: true,
+      deleted: {
+        path: relativePath,
+        size: info.size,
+        updatedAt: info.mtimeMs,
+      },
+    });
   });
 
   addRoute(routes, "GET", "/workspace/:id/notes", "client", async (ctx) => {
@@ -3694,7 +5149,7 @@ function createRoutes(
       if (!note || note.deletedAt) {
         throw new ApiError(404, "note_not_found", "Note not found");
       }
-      const suggestion = buildNoteMemorySuggestion(note, input);
+      const suggestion = namespaceWorkspaceMemorySuggestion(buildNoteMemorySuggestion(note, input), workspace);
       const inbox = await memoryVault.storeSuggestions([suggestion]);
       const entry = inbox.entries[0];
       if (!entry) {
@@ -5974,6 +7429,274 @@ function createRoutes(
     return jsonResponse({ success: true, record });
   });
 
+  addRoute(routes, "GET", "/workspace/:id/memory/search", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const records = await memoryVault.searchRecords({
+        query: ctx.url.searchParams.get("q") ?? ctx.url.searchParams.get("query") ?? undefined,
+        kind: ctx.url.searchParams.get("kind") as MatterhornMemoryRecord["kind"] | null ?? undefined,
+        scope: "workspace",
+        tags: workspaceMemoryQueryTags(workspace, normalizeMemoryTags(ctx.url.searchParams.get("tags"))),
+        limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
+        includeDeleted: ctx.url.searchParams.get("includeDeleted") === "true" || ctx.url.searchParams.get("include_deleted") === "true",
+      });
+      const filteredRecords = filterMemoryRecordsForSurface(records, memorySurface(ctx.url));
+      return jsonResponse({ success: true, records: filteredRecords, count: filteredRecords.length });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/memory/entities", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const records = await memoryVault.listRecords({
+        kind: ctx.url.searchParams.get("kind") as MatterhornMemoryRecord["kind"] | null ?? undefined,
+        scope: "workspace",
+        tags: workspaceMemoryQueryTags(workspace, normalizeMemoryTags(ctx.url.searchParams.get("tags"))),
+        limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
+        includeDeleted: ctx.url.searchParams.get("includeDeleted") === "true" || ctx.url.searchParams.get("include_deleted") === "true",
+      });
+      const filteredRecords = filterMemoryRecordsForSurface(records, memorySurface(ctx.url));
+      return jsonResponse({ success: true, records: filteredRecords, count: filteredRecords.length });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/memory/entities/:memoryId", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const record = assertWorkspaceMemoryRecord(await memoryVault.getRecord(ctx.params.memoryId), workspace);
+      assertMemoryRecordAllowedForSurface(record, memorySurface(ctx.url));
+      return jsonResponse({ success: true, record });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/memory/capture", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const record = namespaceWorkspaceMemoryRecord(coerceMemoryRecord(body.record ?? body), workspace);
+      assertMemoryRecordAllowedForSurface(record, memorySurface(ctx.url));
+      const result = await memoryVault.captureRecord(record);
+      await recordMemoryMutationAudit(workspace, ctx, {
+        action: "memory.capture",
+        target: result.record.id,
+        summary: `Captured workspace memory ${result.record.title}`,
+      });
+      return jsonResponse({ success: true, ...result }, 201);
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/memory/entities/:memoryId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      assertWorkspaceMemoryRecord(await memoryVault.getRecord(ctx.params.memoryId), workspace);
+      const result = await memoryVault.forgetRecord(ctx.params.memoryId, "Deleted through Matterhorn Work workspace memory API.");
+      await recordMemoryMutationAudit(workspace, ctx, {
+        action: "memory.record.forget",
+        target: ctx.params.memoryId,
+        summary: `Forgot workspace memory ${ctx.params.memoryId}`,
+      });
+      return jsonResponse({ success: true, ...result });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/memory/export", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const result = await exportWorkspaceMemoryRecords(memoryVault, workspace, body.outputDir);
+      await recordMemoryMutationAudit(workspace, ctx, {
+        action: "memory.export",
+        target: result.outputDir,
+        summary: `Exported ${result.recordCount} workspace memory record${result.recordCount === 1 ? "" : "s"}`,
+      });
+      return jsonResponse({ success: true, export: result });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/memory/suggestions/plan", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const input = (body.input && typeof body.input === "object" && !Array.isArray(body.input)
+        ? body.input
+        : body) as MatterhornMemorySuggestionPlanInput;
+      const inputWithWorkspace = { ...input, workspaceId: workspace.id };
+      if (hasForbiddenMatterhornMemorySuggestionInput(inputWithWorkspace)) {
+        throw new ApiError(
+          400,
+          "memory_suggestion_secret_rejected",
+          "Memory suggestions cannot be planned from seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, or secret-shaped fields.",
+        );
+      }
+      const plan = planMatterhornMemorySuggestions(inputWithWorkspace);
+      const suggestions = plan.suggestions.map((suggestion) => namespaceWorkspaceMemorySuggestion(suggestion, workspace));
+      return jsonResponse({ success: true, ...plan, suggestions, count: suggestions.length });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/memory/suggestions", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const input = (body.input && typeof body.input === "object" && !Array.isArray(body.input)
+        ? body.input
+        : body) as MatterhornMemorySuggestionPlanInput;
+      const inputWithWorkspace = { ...input, workspaceId: workspace.id };
+      if (hasForbiddenMatterhornMemorySuggestionInput(inputWithWorkspace)) {
+        throw new ApiError(
+          400,
+          "memory_suggestion_secret_rejected",
+          "Memory suggestions cannot be created from seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, or secret-shaped fields.",
+        );
+      }
+      const plan = planMatterhornMemorySuggestions(inputWithWorkspace);
+      const suggestions = plan.suggestions.map((suggestion) => namespaceWorkspaceMemorySuggestion(suggestion, workspace));
+      const inbox = await memoryVault.storeSuggestions(suggestions);
+      await recordMemoryMutationAudit(workspace, ctx, {
+        action: "memory.suggestions.create",
+        target: "memory-suggestions",
+        summary: `Created ${inbox.entries.length} workspace memory suggestion${inbox.entries.length === 1 ? "" : "s"}`,
+      });
+      return jsonResponse({ success: true, ...plan, suggestions, count: suggestions.length, inbox });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/memory/suggestions", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const entries = await memoryVault.listSuggestions({
+        status: coerceMemorySuggestionStatus(ctx.url.searchParams.get("status")),
+        desk: ctx.url.searchParams.get("desk") as MatterhornMemorySuggestion["desk"] | null ?? undefined,
+        includeResolved: ctx.url.searchParams.get("includeResolved") === "true" || ctx.url.searchParams.get("include_resolved") === "true",
+        limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
+      });
+      const filteredEntries = entries.filter((entry) => memorySuggestionBelongsToWorkspace(entry.suggestion, workspace));
+      return jsonResponse({ success: true, entries: filteredEntries, count: filteredEntries.length });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/memory/suggestions/:suggestionId", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const entry = assertWorkspaceMemorySuggestion(await memoryVault.getSuggestion(ctx.params.suggestionId), workspace);
+      return jsonResponse({ success: true, entry });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/memory/suggestions/:suggestionId/resolve", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const action = coerceMemorySuggestionAction(body.action);
+      const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
+        ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
+        : undefined;
+      const entry = assertWorkspaceMemorySuggestion(await memoryVault.getSuggestion(ctx.params.suggestionId), workspace);
+      const effectiveAction = action ?? entry.suggestion.userAction;
+      const namespacedPatch = effectiveAction === "confirm" || effectiveAction === "edit"
+        ? namespaceWorkspaceMemoryPatch(entry.suggestion.proposedRecord, patch, workspace)
+        : patch;
+      if (effectiveAction === "confirm" || effectiveAction === "edit") {
+        assertMemoryRecordAllowedForSurface(
+          workspaceMemoryRecordWithPatch(entry.suggestion.proposedRecord, namespacedPatch),
+          memorySurface(ctx.url),
+        );
+      }
+      const result = await memoryVault.resolveStoredSuggestion(ctx.params.suggestionId, {
+        action,
+        patch: namespacedPatch,
+        reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
+      });
+      await recordMemoryMutationAudit(workspace, ctx, {
+        action: "memory.suggestion.resolve",
+        target: ctx.params.suggestionId,
+        summary: `Resolved workspace memory suggestion ${ctx.params.suggestionId} as ${effectiveAction}`,
+      });
+      return jsonResponse({ success: true, ...result });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/memory/suggestions/resolve", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const suggestion = namespaceWorkspaceMemorySuggestion(coerceMemorySuggestion(body.suggestion ?? body), workspace);
+      const action = coerceMemorySuggestionAction(body.action);
+      const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
+        ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
+        : undefined;
+      const effectiveAction = action ?? suggestion.userAction;
+      const namespacedPatch = effectiveAction === "confirm" || effectiveAction === "edit"
+        ? namespaceWorkspaceMemoryPatch(suggestion.proposedRecord, patch, workspace)
+        : patch;
+      if (effectiveAction === "confirm" || effectiveAction === "edit") {
+        assertMemoryRecordAllowedForSurface(
+          workspaceMemoryRecordWithPatch(suggestion.proposedRecord, namespacedPatch),
+          memorySurface(ctx.url),
+        );
+      }
+      const result = await memoryVault.resolveSuggestion(suggestion, {
+        action,
+        patch: namespacedPatch,
+        reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
+      });
+      await recordMemoryMutationAudit(workspace, ctx, {
+        action: "memory.suggestion.resolve",
+        target: suggestion.id,
+        summary: `Resolved workspace memory suggestion ${suggestion.id} as ${effectiveAction}`,
+      });
+      return jsonResponse({ success: true, ...result });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
   addRoute(routes, "POST", "/api/memory/capture", "client", async (ctx) => {
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
@@ -6021,6 +7744,7 @@ function createRoutes(
     try {
       const body = await readJsonBody(ctx.request);
       const auditWorkspace = await resolveMemoryMutationWorkspace(config, body);
+      const namespaceWorkspace = memoryMutationWorkspaceId(body) ? auditWorkspace : null;
       const input = (body.input && typeof body.input === "object" && !Array.isArray(body.input)
         ? body.input
         : body) as MatterhornMemorySuggestionPlanInput;
@@ -6032,13 +7756,16 @@ function createRoutes(
         );
       }
       const plan = planMatterhornMemorySuggestions(input);
-      const inbox = await memoryVault.storeSuggestions(plan.suggestions);
+      const suggestions = namespaceWorkspace
+        ? plan.suggestions.map((suggestion) => namespaceWorkspaceMemorySuggestion(suggestion, namespaceWorkspace))
+        : plan.suggestions;
+      const inbox = await memoryVault.storeSuggestions(suggestions);
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
         action: "memory.suggestions.create",
         target: "memory-suggestions",
         summary: `Created ${inbox.entries.length} memory suggestion${inbox.entries.length === 1 ? "" : "s"}`,
       });
-      return jsonResponse({ success: true, ...plan, inbox });
+      return jsonResponse({ success: true, ...plan, suggestions, count: suggestions.length, inbox });
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw memoryApiError(error);
@@ -6074,6 +7801,7 @@ function createRoutes(
     try {
       const body = await readJsonBody(ctx.request);
       const auditWorkspace = await resolveMemoryMutationWorkspace(config, body);
+      const namespaceWorkspace = memoryMutationWorkspaceId(body) ? auditWorkspace : null;
       const action = coerceMemorySuggestionAction(body.action);
       const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
         ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
@@ -6083,12 +7811,18 @@ function createRoutes(
         throw new ApiError(404, "memory_suggestion_not_found", "Memory suggestion not found");
       }
       const effectiveAction = action ?? entry.suggestion.userAction;
+      const namespacedPatch = namespaceWorkspace && (effectiveAction === "confirm" || effectiveAction === "edit")
+        ? namespaceWorkspaceMemoryPatch(entry.suggestion.proposedRecord, patch, namespaceWorkspace)
+        : patch;
       if (effectiveAction === "confirm" || effectiveAction === "edit") {
-        assertMemoryRecordAllowedForSurface({ ...entry.suggestion.proposedRecord, ...(patch ?? {}) } as MatterhornMemoryRecord, memorySurface(ctx.url));
+        assertMemoryRecordAllowedForSurface(
+          workspaceMemoryRecordWithPatch(entry.suggestion.proposedRecord, namespacedPatch),
+          memorySurface(ctx.url),
+        );
       }
       const result = await memoryVault.resolveStoredSuggestion(ctx.params.id, {
         action,
-        patch,
+        patch: namespacedPatch,
         reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
       });
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
@@ -6109,18 +7843,28 @@ function createRoutes(
     try {
       const body = await readJsonBody(ctx.request);
       const auditWorkspace = await resolveMemoryMutationWorkspace(config, body);
-      const suggestion = coerceMemorySuggestion(body.suggestion ?? body);
+      const namespaceWorkspace = memoryMutationWorkspaceId(body) ? auditWorkspace : null;
+      const rawSuggestion = coerceMemorySuggestion(body.suggestion ?? body);
       const action = coerceMemorySuggestionAction(body.action);
       const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
         ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
         : undefined;
+      const suggestion = namespaceWorkspace
+        ? namespaceWorkspaceMemorySuggestion(rawSuggestion, namespaceWorkspace)
+        : rawSuggestion;
       const effectiveAction = action ?? suggestion.userAction;
+      const namespacedPatch = namespaceWorkspace && (effectiveAction === "confirm" || effectiveAction === "edit")
+        ? namespaceWorkspaceMemoryPatch(suggestion.proposedRecord, patch, namespaceWorkspace)
+        : patch;
       if (effectiveAction === "confirm" || effectiveAction === "edit") {
-        assertMemoryRecordAllowedForSurface({ ...suggestion.proposedRecord, ...(patch ?? {}) } as MatterhornMemoryRecord, memorySurface(ctx.url));
+        assertMemoryRecordAllowedForSurface(
+          workspaceMemoryRecordWithPatch(suggestion.proposedRecord, namespacedPatch),
+          memorySurface(ctx.url),
+        );
       }
       const result = await memoryVault.resolveSuggestion(suggestion, {
         action,
-        patch,
+        patch: namespacedPatch,
         reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
       });
       await recordMemoryMutationAudit(auditWorkspace, ctx, {

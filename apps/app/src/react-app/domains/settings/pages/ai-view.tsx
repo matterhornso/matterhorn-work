@@ -1,8 +1,10 @@
 /** @jsxImportSource react */
 import { Button } from "@/components/ui/button";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { t } from "@/i18n";
+import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
 import { ProviderIcon } from "../../../design-system/provider-icon";
 import { SettingsNotice, SettingsStatusBadge } from "../settings-section";
 import {
@@ -23,11 +25,19 @@ type ConnectedProvider = {
   id: string;
   name: string;
   source?: "env" | "api" | "config" | "custom";
+  modelCount?: number;
 };
 
 export type AiSettingsViewProps = {
   busy: boolean;
   providerAuthBusy: boolean;
+  matterhornServerClient?: MatterhornServerClient | null;
+  runtimeWorkspaceId?: string | null;
+  defaultModelLabel: string;
+  defaultModelRef: string;
+  defaultModelProviderId?: string | null;
+  defaultModelId?: string | null;
+  connectedModelCount: number;
   providerStatusLabel: string;
   providerStatusStyle: string;
   providerSummary: string;
@@ -36,6 +46,7 @@ export type AiSettingsViewProps = {
   providerConnectError: string | null;
   providerDisconnectStatus: string | null;
   providerDisconnectError: string | null;
+  onOpenModelPicker: () => void | Promise<void>;
   onOpenProviderAuth: () => void | Promise<void>;
   onDisconnectProvider: (providerId: string) => void | Promise<void>;
   canDisconnectProvider: (source?: ConnectedProvider["source"]) => boolean;
@@ -60,9 +71,208 @@ function providerStatusTone(label: string): "ready" | "warning" | "neutral" {
   return "neutral";
 }
 
+function yesNo(value: boolean | undefined) {
+  return value ? "Yes" : "No";
+}
+
+function catalogStatusTone(status: string | undefined): "ready" | "warning" | "neutral" {
+  if (status === "working") return "ready";
+  if (status === "needs_setup") return "warning";
+  return "neutral";
+}
+
+function catalogStatusLabel(status: string | undefined) {
+  if (status === "working") return "Working";
+  if (status === "needs_setup") return "Needs setup";
+  if (status === "preview") return "Preview";
+  if (status === "unsupported") return "Not supported here";
+  return "Unknown";
+}
+
 export function AiSettingsView(props: AiSettingsViewProps) {
+  const runtimeWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
+  const queryClient = useQueryClient();
+  const workspaceBackendModelsQuery = useQuery({
+    queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && runtimeWorkspaceId),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
+      return client.workspaceBackendModels(runtimeWorkspaceId);
+    },
+  });
+  const backendModelsQuery = useQuery({
+    queryKey: ["settings-backend-models"],
+    enabled: Boolean(props.matterhornServerClient && !runtimeWorkspaceId),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client) throw new Error("Matterhorn Work engine is offline.");
+      return client.backendModels();
+    },
+  });
+  const workspaceModelSelectionQuery = useQuery({
+    queryKey: ["settings-workspace-model-selection", runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && runtimeWorkspaceId),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
+      return client.workspaceModelSelection(runtimeWorkspaceId);
+    },
+  });
+  const saveWorkspaceDefaultMutation = useMutation({
+    mutationFn: async () => {
+      const client = props.matterhornServerClient;
+      const providerId = props.defaultModelProviderId?.trim();
+      const modelId = props.defaultModelId?.trim();
+      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
+      if (!providerId || !modelId) throw new Error("Choose a model before saving a workspace default.");
+      return client.saveWorkspaceModelSelection(runtimeWorkspaceId, { providerId, modelId });
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["settings-workspace-model-selection", runtimeWorkspaceId], data);
+      void queryClient.invalidateQueries({ queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId] });
+    },
+  });
+  const clearWorkspaceDefaultMutation = useMutation({
+    mutationFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
+      return client.clearWorkspaceModelSelection(runtimeWorkspaceId);
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["settings-workspace-model-selection", runtimeWorkspaceId], data);
+      void queryClient.invalidateQueries({ queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId] });
+    },
+  });
+  const backendModels = workspaceBackendModelsQuery.data ?? backendModelsQuery.data;
+  const modelRouting = backendModels?.routing;
+  const catalog = backendModels?.catalog;
+  const workspaceSelection = workspaceModelSelectionQuery.data?.selection ?? backendModels?.workspaceSelection ?? null;
+  const effectiveWorkspaceModel = workspaceModelSelectionQuery.data?.effectiveModel ?? backendModels?.defaultModel ?? null;
+  const catalogQueryFailed = workspaceBackendModelsQuery.isError || backendModelsQuery.isError;
+  const catalogTone = catalogQueryFailed ? "warning" : catalogStatusTone(catalog?.status);
+  const catalogLabel = catalogQueryFailed ? "Needs engine" : catalogStatusLabel(catalog?.status);
+  const connectedProviderCount = catalog?.serverFetched ? catalog.connectedProviderCount : props.connectedProviders.length;
+  const connectedModelCount = catalog?.serverFetched ? catalog.modelCount : props.connectedModelCount;
+  const catalogSourceLabel = catalog?.serverFetched ? "Server snapshot" : "Delegated";
+  const canSaveWorkspaceDefault = Boolean(props.defaultModelProviderId && props.defaultModelId && props.matterhornServerClient && runtimeWorkspaceId);
+  const modelSelectionStatus =
+    saveWorkspaceDefaultMutation.error instanceof Error
+      ? saveWorkspaceDefaultMutation.error.message
+      : clearWorkspaceDefaultMutation.error instanceof Error
+        ? clearWorkspaceDefaultMutation.error.message
+        : saveWorkspaceDefaultMutation.isSuccess
+          ? "Workspace default saved."
+          : clearWorkspaceDefaultMutation.isSuccess
+            ? "Workspace default reset."
+            : null;
+
   return (
     <LayoutStack>
+      {/* ---- Model routing ---- */}
+      <LayoutSection>
+        <LayoutSectionHeader>
+          <LayoutSectionTitle>Model routing</LayoutSectionTitle>
+          <LayoutSectionDescription>
+            Current model, provider list source, and selection policy.
+          </LayoutSectionDescription>
+        </LayoutSectionHeader>
+
+        <LayoutSectionItem className="rounded-lg border border-dls-border/70 px-4 py-3">
+          <LayoutSectionItemHeader>
+            <LayoutSectionItemTitle>
+              {props.defaultModelLabel}
+              <SettingsStatusBadge
+                tone={catalogTone}
+                label={catalogLabel}
+              />
+            </LayoutSectionItemTitle>
+            <LayoutSectionItemHeaderActions>
+              <Button variant="outline" onClick={() => void props.onOpenModelPicker()} disabled={props.busy}>
+                Change model
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => saveWorkspaceDefaultMutation.mutate()}
+                disabled={props.busy || !canSaveWorkspaceDefault || saveWorkspaceDefaultMutation.isPending}
+              >
+                Save workspace default
+              </Button>
+              {workspaceSelection ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => clearWorkspaceDefaultMutation.mutate()}
+                  disabled={props.busy || clearWorkspaceDefaultMutation.isPending}
+                >
+                  Reset
+                </Button>
+              ) : null}
+            </LayoutSectionItemHeaderActions>
+          </LayoutSectionItemHeader>
+          <div className="mt-3 grid gap-2 text-sm text-dls-secondary sm:grid-cols-2">
+            <div>
+              <span className="text-dls-text">Model</span>
+              <span className="ml-2 font-mono text-xs">{props.defaultModelRef}</span>
+            </div>
+            <div>
+              <span className="text-dls-text">Workspace default</span>
+              <span className="ml-2 font-mono text-xs">
+                {workspaceSelection
+                  ? `${workspaceSelection.providerId}/${workspaceSelection.modelId}`
+                  : effectiveWorkspaceModel
+                    ? `${effectiveWorkspaceModel.providerId}/${effectiveWorkspaceModel.modelId}`
+                    : "Not saved"}
+              </span>
+            </div>
+            <div>
+              <span className="text-dls-text">Connected</span>
+              <span className="ml-2">{connectedProviderCount} providers · {connectedModelCount} models</span>
+            </div>
+            <div>
+              <span className="text-dls-text">Answers</span>
+              <span className="ml-2">{modelRouting?.answerPath.label ?? "OpenCode session prompts"}</span>
+            </div>
+            <div>
+              <span className="text-dls-text">Model list</span>
+              <span className="ml-2">{modelRouting?.registry.label ?? "OpenCode provider list"}</span>
+            </div>
+            <div>
+              <span className="text-dls-text">User selectable</span>
+              <span className="ml-2">{yesNo(modelRouting?.selection.userSelectable ?? true)}</span>
+            </div>
+            <div>
+              <span className="text-dls-text">Server registry</span>
+              <span className="ml-2">{modelRouting?.registry.serverOwned ? "Server-owned" : "Delegated"}</span>
+            </div>
+            <div>
+              <span className="text-dls-text">Catalog</span>
+              <span className="ml-2">{catalogSourceLabel}</span>
+            </div>
+            <div>
+              <span className="text-dls-text">Preference store</span>
+              <span className="ml-2">{modelRouting?.selection.preferenceStore === "server" ? "Workspace" : "Local app"}</span>
+            </div>
+            {catalog?.connectedProviderIds.length ? (
+              <div>
+                <span className="text-dls-text">Providers</span>
+                <span className="ml-2">{catalog.connectedProviderIds.slice(0, 4).join(", ")}</span>
+              </div>
+            ) : null}
+          </div>
+          <p className="mt-3 text-xs leading-5 text-dls-secondary">
+            {backendModels?.privacy.trainingUse === "none_by_default"
+              ? "No model training by default. Feedback is stored for eval, routing, and product quality only."
+              : "Training policy is unavailable."}
+          </p>
+          {modelSelectionStatus ? (
+            <p className="mt-2 text-xs leading-5 text-dls-secondary">{modelSelectionStatus}</p>
+          ) : null}
+        </LayoutSectionItem>
+      </LayoutSection>
+
       {/* ---- Providers ---- */}
       <LayoutSection>
         <LayoutSectionHeader>
