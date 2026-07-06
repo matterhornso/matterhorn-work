@@ -177,6 +177,7 @@ describe("project data ledger routes", () => {
     expect(kinds).toContain("feedback");
     const feedbackEntry = ledger.payload.items.find((item: { kind: string }) => item.kind === "feedback");
     expect(feedbackEntry).toBeTruthy();
+    expect(feedbackEntry.metadata.feedbackId).toBe(feedback.payload.feedback.id);
     expect(feedbackEntry.metadata.feedbackKind).toBe("comment");
     expect(feedbackEntry.metadata.targetSourceType).toBe("task");
     expect(feedbackEntry.metadata.targetSourceId).toBe("task_ledger");
@@ -280,6 +281,7 @@ describe("project data ledger routes", () => {
 
     const beforeDelete = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?source=feedback&limit=20");
     expect(beforeDelete.payload.summary.feedback).toBe(1);
+    expect(beforeDelete.payload.items[0].metadata.feedbackId).toBe(created.payload.feedback.id);
     expect(beforeDelete.payload.items[0].deletable).toBe(true);
     expect(beforeDelete.payload.items[0].retention).toBe("user_controlled");
 

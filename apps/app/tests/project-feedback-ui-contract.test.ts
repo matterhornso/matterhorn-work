@@ -63,6 +63,9 @@ describe("project feedback UI contract", () => {
     expect(source).toContain('source: "feedback"');
     expect(source).toContain("MATTERHORN_PROJECT_FEEDBACK_KINDS.map");
     expect(source).toContain("feedbackKindFromEntry");
+    expect(source).toContain("feedbackIdFromEntry");
+    expect(source).toContain("deleteProjectFeedback");
+    expect(source).toContain("Feedback deleted.");
     expect(source).toContain("Local feedback stored for product quality and routing. No training by default.");
   });
 });

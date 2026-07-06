@@ -285,6 +285,12 @@ function feedbackRatingLabel(entry: MatterhornProjectDataLedgerEntry) {
   return typeof rating === "number" ? `${rating}/5` : null;
 }
 
+function feedbackIdFromEntry(entry: MatterhornProjectDataLedgerEntry) {
+  const feedbackId = entry.metadata?.feedbackId;
+  if (typeof feedbackId === "string" && feedbackId.trim()) return feedbackId.trim();
+  return entry.id.startsWith("feedback:") ? entry.id.slice("feedback:".length) : entry.id;
+}
+
 // ---------------------------------------------------------------------------
 // Task History helpers
 // ---------------------------------------------------------------------------
@@ -472,6 +478,8 @@ function FeedbackReviewSection(props: {
   runtimeWorkspaceId: string;
 }) {
   const [filter, setFilter] = useState<"all" | MatterhornProjectFeedbackKind>("all");
+  const [deletingFeedbackId, setDeletingFeedbackId] = useState<string | null>(null);
+  const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ["settings-feedback-review", props.runtimeWorkspaceId],
     queryFn: () => props.matterhornServerClient.listProjectDataLedger(props.runtimeWorkspaceId, {
@@ -486,6 +494,22 @@ function FeedbackReviewSection(props: {
     const kind = feedbackKindFromEntry(entry);
     return filter === "all" || kind === filter;
   });
+
+  const deleteFeedback = useCallback(async (entry: MatterhornProjectDataLedgerEntry) => {
+    const feedbackId = feedbackIdFromEntry(entry);
+    if (!feedbackId) return;
+    setDeletingFeedbackId(feedbackId);
+    setDeleteStatus(null);
+    try {
+      await props.matterhornServerClient.deleteProjectFeedback(props.runtimeWorkspaceId, feedbackId);
+      setDeleteStatus("Feedback deleted.");
+      await refetch();
+    } catch (deleteError) {
+      setDeleteStatus(deleteError instanceof Error ? deleteError.message : "Feedback could not be deleted.");
+    } finally {
+      setDeletingFeedbackId(null);
+    }
+  }, [props.matterhornServerClient, props.runtimeWorkspaceId, refetch]);
 
   return (
     <div className="px-1 py-3">
@@ -527,6 +551,7 @@ function FeedbackReviewSection(props: {
           {items.map((entry) => {
             const kind = feedbackKindFromEntry(entry);
             const rating = feedbackRatingLabel(entry);
+            const feedbackId = feedbackIdFromEntry(entry);
             return (
               <div key={entry.id} className="rounded-lg px-2 py-2 transition-colors hover:bg-dls-hover/60">
                 <div className="flex flex-wrap items-center gap-2">
@@ -534,6 +559,17 @@ function FeedbackReviewSection(props: {
                   {rating ? <span className="text-xs text-dls-secondary">{rating}</span> : null}
                   <span className="text-xs text-dls-secondary">{feedbackTargetLabel(entry)}</span>
                   <span className="ml-auto text-xs text-dls-secondary">{formatRelativeTime(Date.parse(entry.timestamp))}</span>
+                  {entry.deletable ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1.5 text-xs text-dls-secondary hover:text-dls-text"
+                      disabled={deletingFeedbackId === feedbackId}
+                      onClick={() => void deleteFeedback(entry)}
+                    >
+                      {deletingFeedbackId === feedbackId ? "Deleting" : "Delete"}
+                    </Button>
+                  ) : null}
                 </div>
                 <p className="mt-1 line-clamp-2 text-xs leading-5 text-dls-secondary">
                   {entry.summary?.trim() || "No comment."}
@@ -543,6 +579,7 @@ function FeedbackReviewSection(props: {
           })}
         </div>
       )}
+      {deleteStatus ? <p className="mt-3 text-xs leading-5 text-dls-secondary">{deleteStatus}</p> : null}
     </div>
   );
 }

@@ -151,6 +151,7 @@ function feedbackToLedgerEntry(entry: MatterhornProjectFeedbackEntry): Matterhor
     trainingUse: "eval_routing_product_quality_only",
     eventType: entry.kind,
     metadata: {
+      feedbackId: entry.id,
       feedbackKind: entry.kind,
       rating: entry.rating ?? null,
       targetSourceType: targetSourceType ?? null,
