@@ -209,6 +209,7 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("client.backendCapabilities()");
     expect(source).toContain("settings-workspace-readiness");
     expect(source).toContain("client.workspaceReadiness(workspaceId)");
+    expect(source).toContain("workspaceReadiness.summary.recommendedActions");
     expect(source).toContain("settings-workspace-data-map");
     expect(source).toContain("client.workspaceDataMap(workspaceId)");
     expect(source).toContain("settings-workspace-data-controls");

@@ -22,6 +22,12 @@ export interface MatterhornBackendSupportReportResponse {
   teams: MatterhornBackendCapabilitiesResponse["teams"];
   teamAccess: MatterhornBackendTeamAccessSummaryResponse;
   security: MatterhornBackendCapabilitiesResponse["security"];
+  readiness: {
+    version: MatterhornBackendControlPlaneResponse["readiness"]["version"];
+    generatedAt: string;
+    summary: MatterhornBackendControlPlaneResponse["readiness"]["summary"];
+    features: MatterhornBackendControlPlaneResponse["readiness"]["features"];
+  };
   models: {
     defaultModel: MatterhornBackendModelsResponse["defaultModel"];
     routing: MatterhornBackendModelsResponse["routing"];

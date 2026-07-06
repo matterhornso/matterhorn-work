@@ -466,6 +466,16 @@ describe("backend control plane routes", () => {
     expect(result.payload.features.save_memory.ready).toBe(true);
     expect(result.payload.features.export_evidence.ready).toBe(true);
     expect(result.payload.summary.blockingChecks).toContain("opencode_connection");
+    expect(result.payload.summary.recommendedActions).toContainEqual(expect.objectContaining({
+      actionId: "connect-local-engine",
+      kind: "connect_local_engine",
+      label: "Connect the local agent engine",
+      severity: "blocking",
+      surface: "settings",
+      checkIds: ["opencode_connection"],
+      featureIds: ["start_chat", "start_desk_task"],
+      href: "settings:ai",
+    }));
 
     const serialized = JSON.stringify(result.payload);
     expect(serialized).not.toContain(TOKEN);
@@ -506,6 +516,10 @@ describe("backend control plane routes", () => {
       totalModels: 0,
     });
     expect(result.payload.summary.blockingChecks).toContain("opencode_connection");
+    expect(result.payload.readiness.summary.recommendedActions[0]).toMatchObject({
+      actionId: "connect-local-engine",
+      label: "Connect the local agent engine",
+    });
     expect(result.payload.summary.exportableStores).toBeGreaterThan(0);
     expect(result.payload.summary.deletableStores).toBeGreaterThan(0);
     expect(result.payload.capabilities.security.memoryWriteGuards.status).toBe("working");
@@ -571,6 +585,13 @@ describe("backend control plane routes", () => {
     expect(result.payload.teamAccess.localAccess.tokenCount).toBeGreaterThanOrEqual(1);
     expect(result.payload.teamAccess.localAccess.tokens).toBeUndefined();
     expect(result.payload.security.memoryWriteGuards.status).toBe("working");
+    expect(result.payload.readiness.version).toBe("matterhorn.backend.readiness.v1");
+    expect(result.payload.readiness.summary.recommendedActions).toContainEqual(expect.objectContaining({
+      actionId: "connect-local-engine",
+      kind: "connect_local_engine",
+      label: "Connect the local agent engine",
+    }));
+    expect(result.payload.readiness.features.start_desk_task.ready).toBe(false);
     expect(result.payload.models.defaultModel).toMatchObject({
       providerId: "opencode",
       modelId: "big-pickle",
@@ -648,6 +669,7 @@ describe("backend control plane routes", () => {
       totalFeatures: 6,
     });
     expect(result.payload.summary.blockingChecks).toEqual([]);
+    expect(result.payload.readiness.summary.recommendedActions).toEqual([]);
     expect(result.payload.models.catalog.providers).toContainEqual({
       id: "openai",
       name: "OpenAI",
