@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SUI_NETWORKS, suiDAppKit, type SuiMatterhornNetwork } from "../../infra/sui-dapp-kit";
+import { getSuiWorkflowAvailability } from "./sui-workflow-state";
 
 function truncateAddress(address: string): string {
   return `${address.slice(0, 8)}...${address.slice(-6)}`;
@@ -329,15 +330,20 @@ export function SuiWorkflowPanel(props: {
 
   const preview = previewResponse?.preview ?? null;
   const receipt = receiptResponse?.receipt ?? null;
-  const canPreview = Boolean(client && workspaceId && effectiveSender && recipient.trim() && amountSui.trim());
-  const canSignPreview = Boolean(
-    client &&
-    workspaceId &&
-    preview &&
-    account?.address &&
-    account.address.toLowerCase() === preview.sender.toLowerCase(),
-  );
-  const canImportReceipt = Boolean(client && workspaceId && digest.trim());
+  const availability = getSuiWorkflowAvailability({
+    clientReady: Boolean(client),
+    workspaceReady: Boolean(workspaceId),
+    sender: effectiveSender,
+    recipient: recipient.trim(),
+    amountSui: amountSui.trim(),
+    previewReady: Boolean(preview),
+    previewSender: preview?.sender,
+    connectedAddress: account?.address,
+    digest: digest.trim(),
+  });
+  const canPreview = availability.canPreparePreview;
+  const canSignPreview = availability.canSignPreview;
+  const canImportReceipt = availability.canImportReceipt;
   const accountBalance = accountQuery.data?.account.balance.balanceMist;
   const connectedWalletLabel = account?.address
     ? `${wallet?.name ?? "Sui wallet"} · ${truncateAddress(account.address)}`
@@ -486,6 +492,7 @@ export function SuiWorkflowPanel(props: {
           className="w-fit"
           disabled={!canPreview || busyAction === "preview"}
           onClick={preparePreview}
+          title={availability.preparePreviewReason ?? "Prepare a non-custodial Sui preview"}
         >
           {busyAction === "preview" ? <RefreshCw className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
           Prepare preview
@@ -514,7 +521,7 @@ export function SuiWorkflowPanel(props: {
               size="sm"
               disabled={!canSignPreview || busyAction === "sign"}
               onClick={signPreviewInWallet}
-              title={canSignPreview ? "Sign and submit with the connected Sui wallet" : "Connect the sender wallet to sign"}
+              title={availability.signPreviewReason ?? "Sign and submit with the connected Sui wallet"}
             >
               {busyAction === "sign" ? <RefreshCw className="size-3 animate-spin" /> : <Send className="size-3" />}
               Sign in wallet
@@ -574,6 +581,7 @@ export function SuiWorkflowPanel(props: {
           className="w-fit"
           disabled={!canImportReceipt || busyAction === "receipt"}
           onClick={importReceipt}
+          title={availability.importReceiptReason ?? "Import the public Sui transaction receipt"}
         >
           {busyAction === "receipt" ? <RefreshCw className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
           Import receipt

@@ -1,0 +1,99 @@
+import { describe, expect, test } from "bun:test";
+
+import {
+  getSuiWorkflowAvailability,
+  type SuiWorkflowAvailabilityInput,
+} from "../src/react-app/domains/wallet/sui-workflow-state";
+
+const READY_INPUT: SuiWorkflowAvailabilityInput = {
+  clientReady: true,
+  workspaceReady: true,
+  sender: "0x2",
+  recipient: "0x3",
+  amountSui: "1",
+  previewReady: false,
+  previewSender: null,
+  connectedAddress: null,
+  digest: "",
+};
+
+describe("Sui workflow state", () => {
+  test("blocks preview and receipt writes when the Matterhorn engine is offline", () => {
+    const result = getSuiWorkflowAvailability({ ...READY_INPUT, clientReady: false });
+
+    expect(result).toMatchObject({
+      canPreparePreview: false,
+      preparePreviewReason: "Matterhorn Work engine is offline.",
+      canSignPreview: false,
+      signPreviewReason: "Matterhorn Work engine is offline.",
+      canImportReceipt: false,
+      importReceiptReason: "Matterhorn Work engine is offline.",
+      nextAction: "connect_engine",
+    });
+  });
+
+  test("requires a workspace before saving Sui evidence", () => {
+    const result = getSuiWorkflowAvailability({ ...READY_INPUT, workspaceReady: false });
+
+    expect(result.canPreparePreview).toBe(false);
+    expect(result.preparePreviewReason).toBe("Open a workspace before saving Sui evidence.");
+    expect(result.nextAction).toBe("open_workspace");
+  });
+
+  test("reports the next missing preview field in order", () => {
+    expect(getSuiWorkflowAvailability({ ...READY_INPUT, sender: "" }).nextAction).toBe("enter_sender");
+    expect(getSuiWorkflowAvailability({ ...READY_INPUT, recipient: "" }).nextAction).toBe("enter_recipient");
+    expect(getSuiWorkflowAvailability({ ...READY_INPUT, amountSui: "" }).nextAction).toBe("enter_amount");
+  });
+
+  test("enables preview preparation before wallet signing", () => {
+    const result = getSuiWorkflowAvailability(READY_INPUT);
+
+    expect(result.canPreparePreview).toBe(true);
+    expect(result.preparePreviewReason).toBeNull();
+    expect(result.canSignPreview).toBe(false);
+    expect(result.signPreviewReason).toBe("Prepare a Sui preview before signing.");
+    expect(result.nextAction).toBe("prepare_preview");
+  });
+
+  test("requires the connected Sui wallet to match the preview sender", () => {
+    const result = getSuiWorkflowAvailability({
+      ...READY_INPUT,
+      previewReady: true,
+      previewSender: "0x2",
+      connectedAddress: "0x9",
+    });
+
+    expect(result.canSignPreview).toBe(false);
+    expect(result.signPreviewReason).toBe("The connected Sui wallet does not match the preview sender.");
+    expect(result.nextAction).toBe("connect_sender_wallet");
+  });
+
+  test("enables wallet signing when the preview sender matches", () => {
+    const result = getSuiWorkflowAvailability({
+      ...READY_INPUT,
+      previewReady: true,
+      previewSender: "0x2",
+      connectedAddress: "0X2",
+    });
+
+    expect(result.canSignPreview).toBe(true);
+    expect(result.signPreviewReason).toBeNull();
+    expect(result.nextAction).toBe("sign_in_wallet");
+  });
+
+  test("allows receipt import with a public digest even without a prepared preview", () => {
+    const result = getSuiWorkflowAvailability({
+      ...READY_INPUT,
+      sender: "",
+      recipient: "",
+      amountSui: "",
+      digest: "5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+    });
+
+    expect(result.canPreparePreview).toBe(false);
+    expect(result.canImportReceipt).toBe(true);
+    expect(result.importReceiptReason).toBeNull();
+    expect(result.nextAction).toBe("import_receipt");
+  });
+});
