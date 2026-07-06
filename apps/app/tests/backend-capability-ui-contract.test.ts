@@ -97,24 +97,24 @@ function capabilities(overrides: Partial<MatterhornBackendCapabilitiesResponse> 
             desktop: {
               runtime: "desktop",
               status: "preview",
-              label: "Desktop wallet handoff",
-              description: "Desktop prepares Sui previews; signing happens outside Matterhorn.",
+              label: "Desktop external handoff",
+              description: "Desktop prepares Sui previews; signing happens in an external Sui wallet or protocol client.",
               custody: false,
               directConnect: false,
               publicRead: true,
               preview: true,
-              signing: "client_wallet",
+              signing: "external_signer",
             },
             electron: {
               runtime: "electron",
               status: "preview",
-              label: "Electron wallet handoff",
-              description: "Electron prepares Sui previews; signing happens outside Matterhorn.",
+              label: "Electron external handoff",
+              description: "Electron prepares Sui previews; signing happens in an external Sui wallet or protocol client.",
               custody: false,
               directConnect: false,
               publicRead: true,
               preview: true,
-              signing: "client_wallet",
+              signing: "external_signer",
             },
           },
         },
@@ -391,9 +391,13 @@ describe("backend capability UI contract", () => {
     ]);
     expect(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.web.directConnect).toBe(true);
     expect(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.desktop.directConnect).toBe(false);
+    expect(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.desktop.signing).toBe("external_signer");
     const webCopy = walletRuntimeSupportSummary(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.web);
     expect(webCopy.label).toBe("Direct connect · Preview");
     expect(webCopy.detail).toContain("Mysten dApp Kit");
+    const desktopCopy = walletRuntimeSupportSummary(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.desktop);
+    expect(desktopCopy.label).toBe("External handoff · Preview");
+    expect(desktopCopy.detail).toContain("external Sui wallet");
   });
 
   test("data-map helpers summarize local storage and policy", () => {
