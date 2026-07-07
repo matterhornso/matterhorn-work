@@ -162,9 +162,12 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain('label: "Wallet", kind: "wallet"');
       expect(source).toContain('label: "Chats", kind: "chat"');
       expect(source).toContain("listProjectDataLedger");
+      expect(source).toContain("exportProjectDataLedger");
       expect(source).toContain('queryKey: ["project-history-ledger"');
       expect(source).toContain("activeDesk");
       expect(source).toContain("desk: activeDesk");
+      expect(source).toContain("manifest.itemCount");
+      expect(source).toContain("exportPayload.filename");
       expect(source).toContain('if (entry.kind === "memory_suggestion") return entry.title || "Memory review";');
       expect(source).toContain('team_access: { icon: Users');
       expect(source).toContain('wallet: { icon: WalletCards');
