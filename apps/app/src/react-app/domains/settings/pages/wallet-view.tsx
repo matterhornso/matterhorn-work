@@ -676,7 +676,7 @@ export function WalletSettingsView({
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-dls-text">Matterhorn Wallet</h3>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                EVM handoffs live here. Bittensor uses public SS58 reads and external signing.
+                EVM and Sui handoffs live here. Bittensor uses public SS58 reads and external signing.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -787,7 +787,7 @@ export function WalletSettingsView({
           <SettingsSectionHeader>
             <SettingsSectionHeaderTitle>Matterhorn Wallet</SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Connect an EVM wallet for handoffs. Bittensor actions stay external-signer only.
+              Connect EVM and Sui wallets where this runtime supports direct wallet connect. Bittensor actions stay external-signer only.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeader>
 
@@ -830,7 +830,7 @@ export function WalletSettingsView({
                   {noConnectorCopy.body}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                  Public Bittensor reads and market previews still work.
+                  Public Bittensor reads and market previews still work. Sui previews and receipt import still work.
                 </p>
               </div>
             )}
