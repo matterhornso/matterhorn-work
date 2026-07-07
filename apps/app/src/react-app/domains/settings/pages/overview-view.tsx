@@ -52,6 +52,7 @@ import type {
 import {
   MATTERHORN_PROJECT_FEEDBACK_KINDS,
   type MatterhornProjectDataLedgerEntry,
+  type MatterhornProjectDataLedgerResponse,
   type MatterhornProjectFeedbackKind,
 } from "@matterhorn-work/types/project-data-ledger";
 import { t } from "../../../../i18n";
@@ -196,6 +197,29 @@ function CapabilityBadge(props: { status?: string | null }) {
       ? props.status
       : "error";
   return <StatusBadge tone={backendCapabilityTone(status)}>{backendCapabilityLabel(status)}</StatusBadge>;
+}
+
+function ProjectLedgerControlSummary(props: {
+  ledger?: MatterhornProjectDataLedgerResponse | null;
+  loading?: boolean;
+}) {
+  const ledger = props.ledger;
+  if (!ledger) {
+    return props.loading ? <StatusBadge>Loading</StatusBadge> : <StatusBadge tone="error">Unavailable</StatusBadge>;
+  }
+  const exportable = ledger.items.filter((item) => item.exportable).length;
+  const deletable = ledger.items.filter((item) => item.deletable).length;
+  const appendOnly = ledger.items.filter((item) => item.retention === "append_only").length;
+  const shownLabel = ledger.items.length < ledger.summary.total ? `shown ${ledger.items.length}` : `${ledger.summary.total}`;
+  return (
+    <div className="flex max-w-full flex-wrap justify-end gap-1.5">
+      <StatusBadge>{ledger.summary.total} events</StatusBadge>
+      <StatusBadge>{exportable}/{shownLabel} exportable</StatusBadge>
+      <StatusBadge>{deletable} deletable</StatusBadge>
+      <StatusBadge>{appendOnly} append-only</StatusBadge>
+      {ledger.summary.feedback > 0 ? <StatusBadge>{ledger.summary.feedback} feedback</StatusBadge> : null}
+    </div>
+  );
 }
 
 function CopyButton(props: { text: string; label: string }) {
@@ -1086,7 +1110,7 @@ export function SettingsOverviewView(props: {
       const client = props.matterhornServerClient;
       const workspaceId = props.runtimeWorkspaceId?.trim();
       if (!client || !workspaceId) throw new Error("Open a workspace to see the project data ledger.");
-      return client.listProjectDataLedger(workspaceId, { limit: 1 });
+      return client.listProjectDataLedger(workspaceId, { limit: 50 });
     },
     staleTime: 30_000,
   });
@@ -1300,19 +1324,16 @@ export function SettingsOverviewView(props: {
                 label="Project ledger"
                 hint={
                   projectDataLedgerQuery.data
-                    ? `${projectDataLedgerQuery.data.summary.total} events. ${projectDataLedgerQuery.data.summary.feedback} feedback. ${projectDataLedgerQuery.data.summary.redacted} redacted. No training by default.`
+                    ? `${projectDataLedgerQuery.data.summary.redacted} redacted. Feedback is eval/routing/product-quality only. Append-only history remains exportable for accountability.`
                     : projectDataLedgerQuery.isLoading
                       ? "Loading ledger policy and counts."
                       : "Ledger counts are unavailable until the workspace engine responds."
                 }
                 value={
-                  projectDataLedgerQuery.data ? (
-                    <CapabilityBadge status={projectDataLedgerQuery.data.policy.redaction.status} />
-                  ) : projectDataLedgerQuery.isLoading ? (
-                    <StatusBadge>Loading</StatusBadge>
-                  ) : (
-                    <StatusBadge tone="error">Unavailable</StatusBadge>
-                  )
+                  <ProjectLedgerControlSummary
+                    ledger={projectDataLedgerQuery.data}
+                    loading={projectDataLedgerQuery.isLoading}
+                  />
                 }
               />
               <div className="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">

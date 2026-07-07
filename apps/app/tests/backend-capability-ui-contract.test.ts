@@ -265,6 +265,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("Local access token created. Copy it now; it will not be shown again.");
     expect(source).toContain("settings-project-data-ledger");
     expect(source).toContain("client.listProjectDataLedger(workspaceId");
+    expect(source).toContain("ProjectLedgerControlSummary");
+    expect(source).toContain("Append-only history remains exportable for accountability.");
     expect(source).toContain("client.exportProjectDataLedger(workspaceId");
     expect(source).toContain("client.workspaceBackendSupportReport(workspaceId)");
     expect(source).toContain("summarizeModelRoutingPolicy");
