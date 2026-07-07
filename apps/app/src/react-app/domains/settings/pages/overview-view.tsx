@@ -764,6 +764,26 @@ function FeedbackReviewSection(props: {
   );
 }
 
+function teamAccessInviteText(input: {
+  connection: MatterhornBackendTeamAccessResponse["connection"];
+  token: {
+    token: string;
+    scope: MatterhornTeamShareableTokenScope;
+    label?: string;
+  };
+}) {
+  return [
+    "Matterhorn Work local access",
+    `Server: ${input.connection.serverUrl}`,
+    `Access token: ${input.token.token}`,
+    `Scope: ${input.token.scope}`,
+    input.token.label ? `Label: ${input.token.label}` : null,
+    "",
+    "Open Matterhorn Work, choose Connect custom remote, then paste the server URL and access token.",
+    "This is local server access, not durable Matterhorn Cloud team membership.",
+  ].filter((line): line is string => line !== null).join("\n");
+}
+
 function TeamAccessControls(props: {
   client?: MatterhornServerClient | null;
   workspaceId: string;
@@ -848,8 +868,8 @@ function TeamAccessControls(props: {
         <span className="leading-6">
           {props.summary?.sharingMode.label ?? "Local token sharing"}: {sharedCount} shared token{sharedCount === 1 ? "" : "s"}.{" "}
           {connection?.reachableFromOtherDevices === false
-            ? "This server is bound to this device."
-            : "Token details stay host-protected."}
+            ? "Teammates can connect only after this server is reachable from their device."
+            : "Teammates use Connect custom remote in the same Matterhorn interface."}
         </span>
         <Button variant="ghost" size="sm" className="w-fit px-2 text-xs" onClick={props.onOpen}>
           Manage tokens
@@ -907,6 +927,9 @@ function TeamAccessControls(props: {
           </code>
           <p>
             Teammates should open Matterhorn Work, choose Connect custom remote, then paste this URL and the one-time token.
+          </p>
+          <p>
+            This is local server access. Durable org invites and shared cloud workspaces still require Matterhorn Cloud.
           </p>
           {!connection.reachableFromOtherDevices ? (
             <p className="text-amber-300">
@@ -975,7 +998,13 @@ function TeamAccessControls(props: {
               {createdToken.label || createdToken.id}
             </span>
             <span className="text-xs text-dls-secondary">{formatRelativeTime(createdToken.createdAt)}</span>
-            <div className="ml-auto">
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {connection ? (
+                <CopyButton
+                  text={teamAccessInviteText({ connection, token: createdToken })}
+                  label="Copy invite"
+                />
+              ) : null}
               <CopyButton text={createdToken.token} label="Copy token" />
             </div>
           </div>
