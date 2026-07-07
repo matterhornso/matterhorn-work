@@ -236,13 +236,17 @@ export function ProjectHistoryPage({
     }
     setExportStatus("Exporting...");
     try {
-      const ledger = await matterhornServerClient.listProjectDataLedger(runtimeWorkspaceId, { limit: 300 });
+      const exportPayload = await matterhornServerClient.exportProjectDataLedger(runtimeWorkspaceId, {
+        limit: 300,
+        ...(activeKind ? { kind: activeKind } : {}),
+        ...(activeDesk !== ALL_DESKS ? { desk: activeDesk } : {}),
+      });
       const datePart = new Date().toISOString().slice(0, 10);
       downloadJsonFile(
-        `matterhorn-project-history-${safeDownloadFilePart(runtimeWorkspaceId)}-${datePart}.json`,
-        JSON.stringify(ledger, null, 2),
+        exportPayload.filename || `matterhorn-project-history-${safeDownloadFilePart(runtimeWorkspaceId)}-${datePart}.json`,
+        JSON.stringify(exportPayload, null, 2),
       );
-      setExportStatus(`Exported ${ledger.count} events.`);
+      setExportStatus(`Exported ${exportPayload.manifest.itemCount} events.`);
     } catch (error) {
       setExportStatus(error instanceof Error ? error.message : "Could not export project history.");
     }
