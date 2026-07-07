@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -256,8 +256,46 @@ describe("Generated media routes", () => {
     expect(draftResult.payload.draft.title).toBe("Test NFT");
     expect(draftResult.payload.draft.status).toBe("draft");
     expect(draftResult.payload.draft.storage.status).toBe("local_only");
+    });
   });
-});
+
+  test("GET image list and history redact stale secret-shaped prompt metadata", async () => {
+    const { base, dir } = await boot();
+    const imageDir = join(dir, ".matterhorn-work", "outputs", "images");
+    mkdirSync(imageDir, { recursive: true });
+    writeFileSync(join(imageDir, "img_legacy_secret.metadata.json"), JSON.stringify({
+      id: "img_legacy_secret",
+      workspaceId: WORKSPACE_ID,
+      outputId: "out_legacy_secret",
+      provider: "mock",
+      model: "mock-image-1",
+      prompt: "make a poster with sk-proj-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+      size: "1024x1024",
+      quality: "auto",
+      format: "png",
+      fileName: "img_legacy_secret.png",
+      relativePath: ".matterhorn-work/outputs/images/img_legacy_secret.png",
+      contentType: "image/png",
+      byteLength: 100,
+      sha256: "a".repeat(64),
+      createdAt: "2026-07-07T00:00:00.000Z",
+      status: "generated",
+      safety: { secretsRejected: false },
+    }, null, 2));
+
+    const list = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images`);
+    expect(list.response.status).toBe(200);
+    expect(JSON.stringify(list.payload)).not.toContain("sk-proj-");
+    expect(list.payload.images[0].prompt).toBe("[redacted: secret-shaped input detected]");
+    expect(list.payload.images[0].promptRedacted).toBe(true);
+    expect(list.payload.images[0].safety.secretsRejected).toBe(true);
+
+    const history = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/generated-media/history`);
+    expect(history.response.status).toBe(200);
+    expect(JSON.stringify(history.payload)).not.toContain("sk-proj-");
+    expect(history.payload.items[0].image.prompt).toBe("[redacted: secret-shaped input detected]");
+    expect(history.payload.items[0].image.promptRedacted).toBe(true);
+  });
 
 describe("Generated media Sui NFT setup previews", () => {
   async function createDraft(base: string) {
@@ -811,6 +849,16 @@ describe("Generated media security", () => {
     const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
       method: "POST",
       body: JSON.stringify({ prompt: "use sk-abcdefghijklmnopqrstuvwxyz1234567890" }),
+    });
+    expect(result.response.status).toBe(400);
+    expect(result.payload.code).toBe("image_prompt_secret_rejected");
+  });
+
+  test("rejects modern OpenAI project key shaped prompts", async () => {
+    const { base } = await boot();
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "use sk-proj-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" }),
     });
     expect(result.response.status).toBe(400);
     expect(result.payload.code).toBe("image_prompt_secret_rejected");

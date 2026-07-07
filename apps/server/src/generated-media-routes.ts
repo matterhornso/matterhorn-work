@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
+  MatterhornGeneratedImage,
   MatterhornImageGenerationInput,
   MatterhornGeneratedMediaHistoryItem,
   MatterhornGeneratedMediaHistoryResponse,
@@ -65,7 +66,7 @@ export function addGeneratedMediaRoutes(
   addRoute("GET", "/workspace/:id/images", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const store = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
-    const images = await store.list();
+    const images = (await store.list()).map(redactGeneratedImageForResponse);
     const response: MatterhornImageListResponse = { success: true, images };
     return jsonResponse(response);
   });
@@ -74,7 +75,8 @@ export function addGeneratedMediaRoutes(
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const imageStore = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draftStore = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
-    const [images, drafts] = await Promise.all([imageStore.list(), draftStore.list()]);
+    const [storedImages, drafts] = await Promise.all([imageStore.list(), draftStore.list()]);
+    const images = storedImages.map(redactGeneratedImageForResponse);
     const draftsByImage = new Map<string, MatterhornImageNftDraft[]>();
 
     for (const draft of drafts) {
@@ -1116,7 +1118,7 @@ const SENSITIVE_TEXT_PATTERNS = [
   /\bmnemonic\b/i,
   /\bprivate key\b/i,
   /\bseed phrase\b/i,
-  /\bsk-[a-zA-Z0-9]{20,}\b/,
+  /\bsk-[a-zA-Z0-9_-]{20,}\b/,
 ];
 
 const IMAGE_GENERATION_SECRET_SCAN_SKIP_KEYS = new Set(["prompt"]);
@@ -1156,6 +1158,22 @@ function findSensitiveGeneratedMediaInput(
     if (findSensitiveGeneratedMediaInput(nested, options)) return true;
   }
   return false;
+}
+
+function redactGeneratedImageForResponse(image: MatterhornGeneratedImage): MatterhornGeneratedImage {
+  const promptSecret = detectSecretShapedInput(image.prompt);
+  const revisedPromptSecret = typeof image.promptRevised === "string" && detectSecretShapedInput(image.promptRevised);
+  if (!promptSecret && !revisedPromptSecret) return image;
+  return {
+    ...image,
+    prompt: promptSecret ? "[redacted: secret-shaped input detected]" : image.prompt,
+    promptRevised: revisedPromptSecret ? "[redacted: secret-shaped input detected]" : image.promptRevised,
+    promptRedacted: true,
+    safety: {
+      ...image.safety,
+      secretsRejected: true,
+    },
+  };
 }
 
 function validateImageGenerationInput(body: unknown): MatterhornImageGenerationInput {
