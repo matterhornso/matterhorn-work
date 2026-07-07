@@ -41,6 +41,17 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("Training use");
   });
 
+  test("renders profile overview status from backend capability instead of hardcoded sign-out copy", () => {
+    const source = readAppSource("domains/settings/pages/overview-view.tsx");
+
+    expect(source).toContain('settingsCapability(backendCapabilities, "profile")');
+    expect(source).toContain("profileCapability?.description");
+    expect(source).toContain("<CapabilityBadge status={profileCapability.status}");
+    expect(source).toContain("Account and local/cloud profile readiness.");
+    expect(source).not.toContain("You are not signed in to a Matterhorn Work account.");
+    expect(source).not.toContain("<StatusBadge tone=\"setup\">Signed out</StatusBadge>");
+  });
+
   test("renders data policy from workspace data-map instead of static copy", () => {
     const source = readAppSource("domains/settings/pages/overview-view.tsx");
 
