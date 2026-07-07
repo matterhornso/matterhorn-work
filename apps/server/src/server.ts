@@ -4407,6 +4407,13 @@ function createRoutes(
     onEvent: recordWorkflowTaskEvent,
   });
 
+  function outputDeletionDetail(relativePath: string): string {
+    const parts = relativePath.split("/").filter(Boolean);
+    const desk = parts[1] ?? "outputs";
+    const sessionSlug = parts[2] ?? "deleted";
+    return `${desk};${sessionSlug}`;
+  }
+
   const serializeFileSession = (session: {
     id: string;
     workspaceId: string;
@@ -5427,6 +5434,16 @@ function createRoutes(
       target: relativePath,
       summary: "Deleted workspace output file",
       timestamp: Date.now(),
+    });
+    await recordTaskEvent({
+      id: `task_evt_${shortId()}`,
+      workspaceId: workspace.id,
+      taskId: `output_delete_${shortId()}`,
+      type: "artifact_deleted",
+      timestamp: Date.now(),
+      summary: "Output deleted",
+      detail: outputDeletionDetail(relativePath),
+      artifactPath: relativePath,
     });
 
     return jsonResponse({

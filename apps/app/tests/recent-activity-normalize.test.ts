@@ -61,6 +61,11 @@ describe("normalizeEvidenceEvents", () => {
     expect(items[0].kind).toBe("task_output_saved");
   });
 
+  test("maps task.output_deleted to task_output_deleted", () => {
+    const items = normalizeEvidenceEvents([makeEvent({ type: "task.output_deleted", title: "Output deleted" })]);
+    expect(items[0].kind).toBe("task_output_deleted");
+  });
+
   test("maps task.completed to task_completed", () => {
     const items = normalizeEvidenceEvents([makeEvent({ type: "task.completed", title: "Run complete" })]);
     expect(items[0].kind).toBe("task_completed");

@@ -17,6 +17,7 @@ const TASK_EVENT_TYPE_MAP: Partial<Record<MatterhornTaskEvent["type"], Matterhor
   workflow_started: "task.started",
   stage_started: "task.stage_started",
   artifact_saved: "task.output_saved",
+  artifact_deleted: "task.output_deleted",
   completed: "task.completed",
   failed: "task.failed",
   cancelled: "task.cancelled",
@@ -122,18 +123,46 @@ function matchesFilters(event: MatterhornProjectEvidenceEvent, options: Matterho
   return true;
 }
 
+function eventOutputPaths(event: MatterhornProjectEvidenceEvent): string[] {
+  return [
+    ...(event.artifactPaths ?? []),
+    ...(event.outputPath ? [event.outputPath] : []),
+  ].map((path) => path.trim()).filter(Boolean);
+}
+
+function activeOutputCount(items: MatterhornProjectEvidenceEvent[]): number {
+  const deletedAtByPath = new Map<string, number>();
+  for (const item of items) {
+    if (item.type !== "task.output_deleted") continue;
+    const timestamp = Date.parse(item.timestamp);
+    for (const path of eventOutputPaths(item)) {
+      const key = path.toLowerCase();
+      const current = deletedAtByPath.get(key) ?? 0;
+      deletedAtByPath.set(key, Math.max(current, Number.isFinite(timestamp) ? timestamp : 0));
+    }
+  }
+
+  const active = new Set<string>();
+  for (const item of items) {
+    if (item.type === "task.output_deleted") continue;
+    const timestamp = Date.parse(item.timestamp);
+    for (const path of eventOutputPaths(item)) {
+      const key = path.toLowerCase();
+      const deletedAt = deletedAtByPath.get(key);
+      if (deletedAt !== undefined && (!Number.isFinite(timestamp) || timestamp <= deletedAt)) continue;
+      active.add(path);
+    }
+  }
+  return active.size;
+}
+
 function summarize(items: MatterhornProjectEvidenceEvent[]): MatterhornProjectEvidenceSummary {
   return {
     notes: items.filter((item) => item.source === "notes").length,
     memorySuggestions: items.filter((item) => item.source === "memory").length,
     taskEvents: items.filter((item) => item.source === "task_events").length,
     taskRuns: items.filter((item) => item.source === "task_runs").length,
-    outputs: new Set(
-      items
-        .flatMap((item) => item.artifactPaths ?? (item.outputPath ? [item.outputPath] : []))
-        .map((path) => path.trim())
-        .filter(Boolean),
-    ).size,
+    outputs: activeOutputCount(items),
   };
 }
 

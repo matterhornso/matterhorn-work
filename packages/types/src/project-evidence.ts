@@ -6,6 +6,7 @@ export const MATTERHORN_PROJECT_EVIDENCE_EVENT_TYPES = [
   "task.started",
   "task.stage_started",
   "task.output_saved",
+  "task.output_deleted",
   "task.completed",
   "task.failed",
   "task.cancelled",

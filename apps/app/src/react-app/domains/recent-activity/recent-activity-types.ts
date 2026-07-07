@@ -16,6 +16,7 @@ export type RecentActivityKind =
   | "task_started"
   | "task_stage_started"
   | "task_output_saved"
+  | "task_output_deleted"
   | "task_completed"
   | "task_failed"
   | "task_cancelled";
@@ -50,6 +51,7 @@ const EVENT_TYPE_MAP: Record<MatterhornProjectEvidenceEvent["type"], RecentActiv
   "task.started": "task_started",
   "task.stage_started": "task_stage_started",
   "task.output_saved": "task_output_saved",
+  "task.output_deleted": "task_output_deleted",
   "task.completed": "task_completed",
   "task.failed": "task_failed",
   "task.cancelled": "task_cancelled",
