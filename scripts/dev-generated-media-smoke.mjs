@@ -275,6 +275,22 @@ function startFakeOpencode() {
     return session;
   };
 
+  const ensureSession = (sessionId, request) => {
+    const existing = sessions.get(sessionId);
+    if (existing) return existing;
+    const now = Math.floor(Date.now() / 1000);
+    const session = {
+      id: sessionId,
+      title: "Generated media smoke",
+      slug: "generated-media-smoke",
+      directory: request.headers["x-opencode-directory"] || workspaceRoot,
+      time: { created: now, updated: now },
+    };
+    sessions.set(sessionId, session);
+    messages.set(sessionId, []);
+    return session;
+  };
+
   const providerList = {
     all: [
       {
@@ -302,13 +318,47 @@ function startFakeOpencode() {
       return;
     }
 
-    if (url.pathname === "/health" && request.method === "GET") {
+    if ((url.pathname === "/health" || url.pathname === "/global/health") && request.method === "GET") {
       json(response, 200, { healthy: true });
+      return;
+    }
+
+    if (url.pathname === "/config" && request.method === "GET") {
+      json(response, 200, {
+        disabled_providers: [],
+        provider: providerList.default,
+      });
+      return;
+    }
+
+    if (url.pathname === "/config/providers" && request.method === "GET") {
+      json(response, 200, providerList);
       return;
     }
 
     if (url.pathname === "/provider" && request.method === "GET") {
       json(response, 200, providerList);
+      return;
+    }
+
+    if (url.pathname === "/event" && request.method === "GET") {
+      response.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+      response.write(": fake OpenCode event stream\n\n");
+      response.end();
+      return;
+    }
+
+    if ((url.pathname === "/permission" || url.pathname === "/question") && request.method === "GET") {
+      json(response, 200, []);
+      return;
+    }
+
+    if ((url.pathname === "/permission" || url.pathname === "/question") && request.method === "POST") {
+      json(response, 200, { ok: true });
       return;
     }
 
@@ -336,9 +386,17 @@ function startFakeOpencode() {
     if (sessionMatch) {
       const sessionId = decodeURIComponent(sessionMatch[1] || "");
       const action = sessionMatch[2] ? decodeURIComponent(sessionMatch[2]) : "";
-      const session = sessions.get(sessionId);
+      const session = request.method === "GET" || request.method === "HEAD"
+        ? ensureSession(sessionId, request)
+        : sessions.get(sessionId);
       if (!session) {
         json(response, 404, { code: "not_found", message: "Fake OpenCode session not found." });
+        return;
+      }
+
+      if (request.method === "HEAD") {
+        response.writeHead(200);
+        response.end();
         return;
       }
 

@@ -11,6 +11,7 @@ assert.ok(
 );
 assert.ok(
   script.includes("startFakeOpencode") &&
+    script.includes("ensureSession") &&
     script.includes('url.pathname === "/session"') &&
     script.includes('url.pathname === "/session/status"') &&
     script.includes('action === "prompt_async"') &&
@@ -25,6 +26,14 @@ assert.ok(
   script.includes('url.pathname === "/provider"') &&
     script.includes('"big-pickle"'),
   "generated-media smoke launcher should expose a minimal provider catalog",
+);
+assert.ok(
+  script.includes('url.pathname === "/global/health"') &&
+    script.includes('url.pathname === "/config"') &&
+    script.includes('url.pathname === "/event"') &&
+    script.includes('url.pathname === "/permission"') &&
+    script.includes('url.pathname === "/question"'),
+  "generated-media smoke launcher should quiet normal OpenCode health, config, event, permission, and question side channels",
 );
 assert.ok(
   script.includes('MATTERHORN_IMAGE_PROVIDER: "mock"'),
