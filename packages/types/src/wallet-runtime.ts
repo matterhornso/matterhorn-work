@@ -24,7 +24,17 @@ export type DesktopWalletStrategy = (typeof DESKTOP_WALLET_STRATEGIES)[number];
 export const WALLET_PROTOCOLS = ["bittensor", "hyperliquid", "polymarket", "sui"] as const;
 export type WalletProtocol = (typeof WALLET_PROTOCOLS)[number];
 
+export const WALLET_PROTOCOL_CONNECTION_MODES = [
+  "wallet_standard",
+  "injected_evm",
+  "external_handoff",
+  "public_read",
+  "unsupported",
+] as const;
+export type WalletProtocolConnectionMode = (typeof WALLET_PROTOCOL_CONNECTION_MODES)[number];
+
 export interface WalletProtocolCapability {
+  connectionMode: WalletProtocolConnectionMode;
   canRead: boolean;
   canPreview: boolean;
   canSubmit: boolean;
@@ -56,6 +66,7 @@ export const WEB_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
   supportsInjectedEvm: true,
   protocols: {
     bittensor: {
+      connectionMode: "external_handoff",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -65,6 +76,7 @@ export const WEB_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       secretInputsAllowed: false,
     },
     hyperliquid: {
+      connectionMode: "injected_evm",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -74,6 +86,7 @@ export const WEB_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       secretInputsAllowed: false,
     },
     polymarket: {
+      connectionMode: "injected_evm",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -83,6 +96,7 @@ export const WEB_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       secretInputsAllowed: false,
     },
     sui: {
+      connectionMode: "wallet_standard",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -110,6 +124,7 @@ export const DESKTOP_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
   supportsInjectedEvm: false,
   protocols: {
     bittensor: {
+      connectionMode: "external_handoff",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -119,6 +134,7 @@ export const DESKTOP_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       secretInputsAllowed: false,
     },
     hyperliquid: {
+      connectionMode: "external_handoff",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -128,6 +144,7 @@ export const DESKTOP_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       secretInputsAllowed: false,
     },
     polymarket: {
+      connectionMode: "external_handoff",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -137,6 +154,7 @@ export const DESKTOP_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       secretInputsAllowed: false,
     },
     sui: {
+      connectionMode: "external_handoff",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -148,7 +166,7 @@ export const DESKTOP_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
   },
   safetyCopy: {
     publicAddressLine:
-      "Desktop uses external-signer handoffs. Provide a public address or connect via the planned wallet strategy.",
+      "Desktop uses external-signer handoffs. Provide public addresses for reads and complete signing in your own wallet or protocol client.",
     externalSignerLine:
       "All on-chain writes are signed outside Matterhorn. Desktop Sui and Bittensor actions use external signer or wallet handoffs.",
     forbiddenSecretsLine:
@@ -164,6 +182,7 @@ export const ELECTRON_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
   supportsInjectedEvm: false,
   protocols: {
     bittensor: {
+      connectionMode: "external_handoff",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -173,6 +192,7 @@ export const ELECTRON_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       secretInputsAllowed: false,
     },
     hyperliquid: {
+      connectionMode: "external_handoff",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -182,6 +202,7 @@ export const ELECTRON_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       secretInputsAllowed: false,
     },
     polymarket: {
+      connectionMode: "external_handoff",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -191,6 +212,7 @@ export const ELECTRON_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       secretInputsAllowed: false,
     },
     sui: {
+      connectionMode: "external_handoff",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -218,6 +240,7 @@ export const UNKNOWN_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
   supportsInjectedEvm: false,
   protocols: {
     bittensor: {
+      connectionMode: "unsupported",
       canRead: false,
       canPreview: false,
       canSubmit: false,
@@ -227,6 +250,7 @@ export const UNKNOWN_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       secretInputsAllowed: false,
     },
     hyperliquid: {
+      connectionMode: "unsupported",
       canRead: false,
       canPreview: false,
       canSubmit: false,
@@ -236,6 +260,7 @@ export const UNKNOWN_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       secretInputsAllowed: false,
     },
     polymarket: {
+      connectionMode: "unsupported",
       canRead: false,
       canPreview: false,
       canSubmit: false,
@@ -245,6 +270,7 @@ export const UNKNOWN_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       secretInputsAllowed: false,
     },
     sui: {
+      connectionMode: "unsupported",
       canRead: false,
       canPreview: false,
       canSubmit: false,

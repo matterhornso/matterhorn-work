@@ -339,6 +339,9 @@ describe("backend capability UI contract", () => {
     expect(walletSource).toContain("SuiWorkflowPanel");
     expect(walletSource).toContain("backendSui?.runtimeSupport?.[props.capability.runtime]");
     expect(walletSource).toContain("walletRuntimeSupportSummary");
+    expect(walletSource).toContain("Wallet Standard");
+    expect(walletSource).toContain("Browser wallet extensions are available when installed and allowed.");
+    expect(walletSource).not.toContain("planned wallet strategy");
     expect(walletSource).toContain("runtimeWorkspaceId?: string | null");
     expect(walletSource).toContain('sourceLabel: "Matterhorn engine"');
     expect(routeSource).toContain("runtimeWorkspaceId={runtimeWorkspaceId}");

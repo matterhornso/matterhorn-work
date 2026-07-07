@@ -122,6 +122,15 @@ function protocolLabelAndDetail(
   const readLabel = cap.canRead ? "Read" : "—";
   const previewLabel = cap.canPreview ? "Preview" : "—";
   const submitLabel = cap.canSubmit ? "Submit" : cap.canPreview ? "Preview only" : "—";
+  const connectionLabel = (() => {
+    switch (cap.connectionMode) {
+      case "wallet_standard": return "Wallet Standard";
+      case "injected_evm": return "Browser wallet";
+      case "external_handoff": return "External handoff";
+      case "public_read": return "Public reads";
+      case "unsupported": return "Not supported";
+    }
+  })();
   const signerNote =
     cap.signerRequirement === "external_signer"
       ? " External signer required for writes."
@@ -133,25 +142,25 @@ function protocolLabelAndDetail(
     case "bittensor":
       return {
         label: "Bittensor",
-        detail: `${readLabel} public SS58/coldkey data. ${previewLabel} extrinsics and receipt evidence. ${submitLabel}.${signerNote}`,
+        detail: `${connectionLabel}. ${readLabel} public SS58/coldkey data. ${previewLabel} extrinsics and receipt evidence. ${submitLabel}.${signerNote}`,
         tone: cap.canRead ? "text-cyan-300 bg-cyan-500/10" : "text-gray-500 bg-gray-500/10",
       };
     case "hyperliquid":
       return {
         label: "Hyperliquid",
-        detail: `${readLabel} markets, orderbooks, and funding. ${previewLabel} orders. ${submitLabel}.${signerNote}`,
+        detail: `${connectionLabel}. ${readLabel} markets, orderbooks, and funding. ${previewLabel} orders. ${submitLabel}.${signerNote}`,
         tone: cap.canRead ? "text-blue-300 bg-blue-500/10" : "text-gray-500 bg-gray-500/10",
       };
     case "polymarket":
       return {
         label: "Polymarket",
-        detail: `${readLabel} markets, compliance, and liquidity. ${previewLabel} orders. ${submitLabel}.${signerNote}`,
+        detail: `${connectionLabel}. ${readLabel} markets, compliance, and liquidity. ${previewLabel} orders. ${submitLabel}.${signerNote}`,
         tone: cap.canRead ? "text-violet-300 bg-violet-500/10" : "text-gray-500 bg-gray-500/10",
       };
     case "sui":
       return {
         label: "Sui",
-        detail: `${readLabel} public account data. ${previewLabel} wallet handoffs. ${submitLabel}.${signerNote}`,
+        detail: `${connectionLabel}. ${readLabel} public account data. ${previewLabel} wallet handoffs. ${submitLabel}.${signerNote}`,
         tone: cap.canRead ? "text-cyan-300 bg-cyan-500/10" : "text-gray-500 bg-gray-500/10",
       };
   }
@@ -179,7 +188,7 @@ function WalletProtocolSupportMap(props: {
   const backendSuiRuntimeCopy = walletRuntimeSupportSummary(backendSuiRuntime);
   const evmDetail = props.capability.supportsInjectedEvm
     ? "Browser extension wallets such as MetaMask or Rabby can appear when installed and allowed."
-    : "Desktop does not use injected browser wallets. Use public addresses and external signer handoffs; WalletConnect or deep-link bridge is planned.";
+    : "Desktop does not use injected browser wallets. Use public addresses and external signer handoffs.";
   const rows: { label: string; status: string; detail: string; tone: string }[] = [
     {
       label: "EVM wallet",
@@ -222,7 +231,7 @@ function WalletProtocolSupportMap(props: {
   ];
 
   return (
-    <section className="flex flex-col gap-3 rounded-xl bg-dls-surface-muted/30 px-3 py-3">
+    <section className="flex flex-col gap-3 rounded-lg bg-dls-surface-muted/30 px-3 py-3">
       <div>
         <h4 className="text-sm font-semibold text-dls-text">Protocol support</h4>
         <p className="mt-1 text-xs leading-5 text-dls-secondary">
@@ -416,12 +425,12 @@ const RUNTIME_LABELS: Record<WalletRuntime, { label: string; icon: typeof Globe;
   desktop: {
     label: "Desktop app",
     icon: MonitorSmartphone,
-    detail: "Browser wallet extensions do not inject into Electron. Use external signing today; WalletConnect or deep-link bridge is planned.",
+    detail: "Browser wallet extensions do not inject into desktop. Use external signing for on-chain actions.",
   },
   electron: {
     label: "Desktop app",
     icon: MonitorSmartphone,
-    detail: "Electron builds do not support injected wallets. Use external signing for on-chain actions; WalletConnect or deep-link bridge is planned.",
+    detail: "Electron builds do not support injected wallets. Use external signing for on-chain actions.",
   },
   unknown: {
     label: "Unknown runtime",
@@ -433,31 +442,34 @@ const RUNTIME_LABELS: Record<WalletRuntime, { label: string; icon: typeof Globe;
 function WalletRuntimeExplainer(props: { capability: WalletRuntimeCapability; compact?: boolean }) {
   const { label, icon: RuntimeIcon, detail } = RUNTIME_LABELS[props.capability.runtime];
   const strategyNote = (() => {
+    if (props.capability.supportsInjectedEvm) {
+      return "Browser wallet extensions are available when installed and allowed.";
+    }
     switch (props.capability.desktopWalletStrategy) {
       case "external_signer": return "External signer handoffs are available here.";
       case "walletconnect_planned": return "WalletConnect support is planned for this runtime.";
       case "deep_link_planned": return "Deep-link support is planned for this runtime.";
-      default: return "Native wallet support is not available in this runtime.";
+      default: return "Direct wallet connection is not available in this runtime.";
     }
   })();
 
   return (
     <section className={cn(
-      "rounded-xl bg-sky-500/10",
+      "rounded-lg bg-dls-surface-muted/25",
       props.compact ? "px-3 py-3" : "px-4 py-4",
     )}>
       <div className="flex items-start gap-2">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-sky-300" />
+        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-dls-secondary" />
         <div className="min-w-0">
-          <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-200">Wallet runtime behavior</h4>
+          <h4 className="text-sm font-semibold text-dls-text">Wallet runtime</h4>
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
             Matterhorn shows where signing happens before any handoff.
           </p>
         </div>
       </div>
-      <div className="mt-3 space-y-2 divide-y divide-sky-400/15">
+      <div className="mt-3 space-y-2 divide-y divide-dls-border/30">
         <div className="flex items-start gap-2 py-2 text-xs leading-5">
-          <RuntimeIcon className="mt-0.5 size-3.5 shrink-0 text-sky-300" />
+          <RuntimeIcon className="mt-0.5 size-3.5 shrink-0 text-dls-secondary" />
           <div>
             <span className="font-medium text-dls-text">{label}</span>
             <span className="text-dls-secondary"> — {detail}</span>
@@ -483,7 +495,7 @@ function noEvmConnectorCopy(capability: WalletRuntimeCapability): { title: strin
   }
   return {
     title: "Desktop uses external handoffs",
-    body: "Browser extensions do not connect inside the desktop app. Use a public address here, then sign in your own wallet or protocol client. WalletConnect or deep-link bridge is planned.",
+    body: "Browser extensions do not connect inside the desktop app. Use public addresses here, then sign in your own wallet or protocol client.",
   };
 }
 
