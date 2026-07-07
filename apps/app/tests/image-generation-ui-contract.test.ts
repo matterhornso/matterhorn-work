@@ -634,6 +634,85 @@ describe("Sui NFT transaction plan helpers", () => {
     expect(receipt.objectId).toBe(suiObjectId);
   });
 
+  test("extracts minted object id from JSON-RPC created effects", () => {
+    const receipt = receiptFromSuiWalletResult({
+      $kind: "Transaction",
+      Transaction: {
+        digest: "9uJsonRpcDigest",
+        effects: {
+          status: { success: true, error: null },
+          created: [
+            {
+              reference: {
+                objectId: suiObjectId,
+                version: "1",
+                digest: "createdObjectDigest",
+              },
+              owner: { AddressOwner: suiSender },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(receipt).toMatchObject({
+      digest: "9uJsonRpcDigest",
+      status: "success",
+      objectId: suiObjectId,
+      error: null,
+    });
+  });
+
+  test("extracts minted object id from GraphQL object change nodes", () => {
+    const receipt = receiptFromSuiWalletResult({
+      $kind: "Transaction",
+      Transaction: {
+        digest: "9uGraphqlDigest",
+        effects: {
+          status: { success: true, error: null },
+          objectChanges: {
+            nodes: [
+              {
+                address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                idCreated: false,
+              },
+              {
+                address: suiObjectId,
+                idCreated: true,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(receipt.objectId).toBe(suiObjectId);
+  });
+
+  test("handles direct transaction result objects from wallet adapters", () => {
+    const receipt = receiptFromSuiWalletResult({
+      digest: "9uDirectDigest",
+      status: { success: true, error: null },
+      effects: {
+        changedObjects: [
+          {
+            objectId: suiObjectId,
+            inputState: "DoesNotExist",
+            outputState: "ObjectWrite",
+            idOperation: "Created",
+          },
+        ],
+      },
+    });
+
+    expect(receipt).toEqual({
+      digest: "9uDirectDigest",
+      status: "success",
+      objectId: suiObjectId,
+      error: null,
+    });
+  });
+
   test("does not mistake gas or mutated objects for minted object ids", () => {
     const receipt = receiptFromSuiWalletResult({
       $kind: "Transaction",
@@ -664,6 +743,26 @@ describe("Sui NFT transaction plan helpers", () => {
         status: {
           success: false,
           error: { message: "MoveAbort in NFT mint" },
+        },
+      },
+    });
+
+    expect(receipt).toEqual({
+      digest: "9uFailedDigest",
+      status: "failure",
+      objectId: null,
+      error: "MoveAbort in NFT mint",
+    });
+  });
+
+  test("extracts string wallet failure messages", () => {
+    const receipt = receiptFromSuiWalletResult({
+      $kind: "FailedTransaction",
+      FailedTransaction: {
+        digest: "9uFailedDigest",
+        status: {
+          success: false,
+          error: "MoveAbort in NFT mint",
         },
       },
     });
