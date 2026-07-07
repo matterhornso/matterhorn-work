@@ -526,7 +526,8 @@ Latest integration commit: this PR branch head
 - `apps/server/src/generated-media-routes.ts` — full route set for images, drafts, storage, mint preview/receipt, listing preview/receipt.
 - `apps/server/src/server.ts` + `project-evidence.ts` + `project-data-ledger.ts` — wired routes, capabilities, ledger events.
 - `apps/app/src/app/lib/matterhorn-server.ts` — client methods for all image/NFT endpoints.
-- `apps/app/src/react-app/domains/session/media/` — `GeneratedImageCard`, `ImageGenerationComposer`, `NftDraftPanel`.
+- `apps/app/src/react-app/domains/session/media/` — `GeneratedImageCard`, `ImageGenerationComposer`, `NftDraftPanel`, and `SessionImageGenerationPanel`.
+- `apps/app/src/react-app/domains/session/surface/session-surface.tsx` — wired image generation into the live chat composer accessory.
 - `apps/app/src/react-app/domains/recent-activity/` — image/NFT activity kinds and icons.
 - `apps/app/src/react-app/domains/settings/backend-capabilities/backend-capability-fixtures.ts` — updated fixtures.
 
@@ -544,7 +545,7 @@ All focused tests pass.
 
 ```bash
 bun test apps/app/tests/
-# 319 pass, 0 fail
+# 321 pass, 0 fail
 ```
 
 ```bash
@@ -580,11 +581,17 @@ Codex live API smoke started Matterhorn locally with `MATTERHORN_IMAGE_PROVIDER=
 - NFT draft creation returns `storage: local_only` on `sui-testnet`;
 - mint/listing receipt routes reject private keys, seed phrases, signatures, and wallet-export-shaped payloads.
 
-Browser UI smoke loaded the local app successfully, but did not find a visible image generation or NFT entry point in the session/home shell.
+Follow-up browser UI smoke loaded the local app with `MATTERHORN_IMAGE_PROVIDER=mock` and verified:
+
+- new chat sessions show a compact `Generate image` composer accessory;
+- expanding it shows the prompt input and provider-ready status;
+- submitting a prompt creates a mock image, updates the generated image card, and renders a blob-backed preview;
+- `Make NFT` opens an in-session sheet without changing routes;
+- creating a local NFT draft shows truthful setup blockers for Walrus publisher/relay, Sui NFT package, and Kiosk/TransferPolicy listing config;
+- browser console had no app-level errors during the image/NFT smoke.
 
 ### Not Completed
 
-- The React image/NFT components exist, and app client methods exist, but the components are not yet wired into the live session composer/chat surface. A user cannot currently generate an image from the visible UI.
 - Walrus upload is stubbed to a mock blob id; true upload requires configured publisher/relay.
 - NFT mint/listing transaction building is scaffolding only; no Move package or transaction construction is implemented.
 
@@ -603,9 +610,9 @@ Browser UI smoke loaded the local app successfully, but did not find a visible i
 ```md
 ## Summary
 
-- Adds image generation backend support for Matterhorn Work with workspace output storage.
+- Adds chat-visible image generation for Matterhorn Work with workspace output storage.
 - Adds generated image metadata, project evidence, and data-ledger events.
-- Adds image-to-Sui-NFT draft backend flow with explicit Walrus, mint, and marketplace setup states.
+- Adds image-to-Sui-NFT draft flow with explicit Walrus, mint, and marketplace setup states.
 - Extends backend capabilities/settings truth for image generation, Walrus storage, NFT minting, and marketplace listing.
 
 ## Safety
@@ -622,5 +629,5 @@ Browser UI smoke loaded the local app successfully, but did not find a visible i
 - [x] Server typecheck
 - [x] App typecheck
 - [x] Browser smoke for app load
-- [ ] Live chat UI image-generation entry point
+- [x] Live chat UI image-generation entry point
 ```

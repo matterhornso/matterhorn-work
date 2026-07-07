@@ -44,6 +44,15 @@ describe("Image generation backend capability contract", () => {
     expect(source).toContain("recordNftListingReceipt:");
   });
 
+  test("live session surface wires image generation into the composer", () => {
+    const source = readAppSource("react-app/domains/session/surface/session-surface.tsx");
+    expect(source).toContain("SessionImageGenerationPanel");
+    expect(source).toContain("showImageGenerationPanel");
+    expect(source).toContain("client={props.client}");
+    expect(source).toContain("workspaceId={props.workspaceId}");
+    expect(source).toContain("sessionId={props.sessionId}");
+  });
+
   test("backend capability fixtures include image/NFT capabilities", () => {
     const source = readAppSource("react-app/domains/settings/backend-capabilities/backend-capability-fixtures.ts");
     expect(source).toContain("imageGeneration:");

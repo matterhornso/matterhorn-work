@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   GeneratedImageCard,
   GeneratedImageLoadingCard,
   GeneratedImageErrorCard,
   ImageGenerationComposer,
   NftDraftPanel,
+  SessionImageGenerationPanel,
 } from "../src/react-app/domains/session/media";
 import type { MatterhornGeneratedImage, MatterhornImageNftDraft } from "@matterhorn-work/types/generated-media";
 
@@ -55,7 +57,13 @@ const mockDraft: MatterhornImageNftDraft = {
 
 describe("Generated image card", () => {
   test("renders image metadata and actions", () => {
-    const html = renderToStaticMarkup(React.createElement(GeneratedImageCard, { image: mockImage }));
+    const html = renderToStaticMarkup(React.createElement(GeneratedImageCard, {
+      image: mockImage,
+      onEditPrompt: () => {},
+      onGenerateVariant: () => {},
+      onSaveToOutputs: () => {},
+      onMakeNft: () => {},
+    }));
     expect(html).toContain("a tiny robot");
     expect(html).toContain("mock");
     expect(html).toContain("1024x1024");
@@ -90,8 +98,46 @@ describe("Image generation composer", () => {
     const html = renderToStaticMarkup(
       React.createElement(ImageGenerationComposer, { capabilityStatus: "needs_setup", onGenerate: () => {} }),
     );
-    expect(html).toContain("needs_setup");
-    expect(html).toContain("OPENAI_API_KEY");
+    expect(html).toContain("needs setup");
+    expect(html).toContain("Configure an image provider");
+  });
+});
+
+describe("Session image generation panel", () => {
+  test("renders as a compact chat composer accessory", () => {
+    const client = {
+      backendCapabilities: async () => { throw new Error("not used"); },
+      listGeneratedImages: async () => ({ success: true, images: [] }),
+      getGeneratedImageFile: async () => ({ data: new ArrayBuffer(0), contentType: "image/png", filename: null }),
+      generateImage: async () => ({ success: true, image: mockImage }),
+      listImageNftDrafts: async () => ({ success: true, drafts: [] }),
+      createImageNftDraft: async () => ({ success: true, draft: mockDraft }),
+      prepareNftStorage: async () => ({ success: true, draft: mockDraft }),
+      uploadNftStorage: async () => ({ success: true, draft: mockDraft }),
+      previewNftMint: async () => ({ success: true, draft: mockDraft }),
+      previewNftListing: async () => ({ success: true, draft: mockDraft }),
+    };
+    const queryClient = new QueryClient();
+    const html = renderToStaticMarkup(
+      React.createElement(QueryClientProvider, { client: queryClient },
+        React.createElement(SessionImageGenerationPanel, {
+          client: client as any,
+          workspaceId: "ws_test",
+          sessionId: "ses_test",
+          defaultOpen: true,
+          capabilitiesOverride: {
+            imageGeneration: { status: "working" },
+            walrusStorage: { status: "needs_setup" },
+            nftMinting: { status: "needs_setup" },
+            nftMarketplaceListing: { status: "needs_setup" },
+          },
+        }),
+      ),
+    );
+
+    expect(html).toContain("Generate image");
+    expect(html).toContain("Describe an image to generate");
+    expect(html).toContain("Ready");
   });
 });
 

@@ -91,7 +91,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
                   id="nft-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe the NFT…"
+                  placeholder="Describe the NFT..."
                   className="min-h-[80px] text-sm"
                 />
               </div>
@@ -148,7 +148,7 @@ function NftStep(props: {
   actions: { label: string; onClick: () => void; disabled?: boolean }[];
 }) {
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-dls-border/45 bg-dls-surface p-3">
+    <div className="flex flex-col gap-2 rounded-md bg-dls-surface-muted/45 p-3">
       <div className="flex items-center gap-2 text-sm font-medium text-dls-text">
         {props.status === "confirmed" || props.status === "listed" || props.status === "uploaded" ? (
           <CheckCircle2 size={14} className="text-emerald-300" />
@@ -160,7 +160,7 @@ function NftStep(props: {
       <p className="text-xs text-muted-foreground">{props.description}</p>
       <div className="flex flex-wrap gap-2">
         {props.actions.map((action, index) => (
-          <Button key={index} variant="outline" size="sm" className="h-7 text-xs" onClick={action.onClick} disabled={action.disabled}>
+          <Button key={index} variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={action.onClick} disabled={action.disabled}>
             {action.label}
           </Button>
         ))}

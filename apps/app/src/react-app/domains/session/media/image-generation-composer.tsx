@@ -23,10 +23,15 @@ export function ImageGenerationComposer(props: ImageGenerationComposerProps) {
   };
 
   if (props.capabilityStatus === "needs_setup" || props.capabilityStatus === "unsupported" || props.capabilityStatus === "error") {
+    const label = props.capabilityStatus === "needs_setup"
+      ? "needs setup"
+      : props.capabilityStatus === "unsupported"
+        ? "is not supported here"
+        : "is unavailable";
     return (
-      <div className="flex items-center gap-2 rounded-md border border-dls-border/45 bg-dls-surface p-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 rounded-md bg-dls-surface-muted/45 px-3 py-2 text-[12px] leading-5 text-dls-secondary">
         <Image size={14} />
-        Image generation {props.capabilityStatus}. Set OPENAI_API_KEY or use mock provider for tests.
+        Image generation {label}. Configure an image provider to use it in chat.
       </div>
     );
   }
@@ -37,7 +42,7 @@ export function ImageGenerationComposer(props: ImageGenerationComposerProps) {
         <Input
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Describe an image to generate…"
+          placeholder="Describe an image to generate..."
           className="h-9 pr-8 text-sm"
           disabled={props.isGenerating}
         />
