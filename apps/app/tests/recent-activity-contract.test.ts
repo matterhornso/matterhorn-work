@@ -99,7 +99,7 @@ describe("Project Activity contract tests", () => {
       const source = readAppSource("domains/recent-activity/recent-activity-section.tsx");
       expect(source).toContain("defaultExpanded = true");
       expect(source).toContain("historyOpen");
-      expect(source).toContain("Run history");
+      expect(source).toContain("Project history");
       expect(source).toContain("LatestActivitySummary");
       expect(source).toContain("setHistoryOpen(true)");
       expect(source).toContain("onOpenHistory");
@@ -181,6 +181,12 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("setHistoryDesk(event.currentTarget.value)");
       expect(source).toContain("activeDesk");
       expect(source).toContain("desk: activeDesk");
+      expect(source).toContain("Project history");
+      expect(source).toContain("Actual local events from this workspace");
+      expect(source).toContain("entryDisplaySummary");
+      expect(source).toContain("Actual local event recorded when the desk task started.");
+      expect(source).toContain("actual event");
+      expect(source).toContain("sourceLabel");
       expect(source).toContain("manifest.itemCount");
       expect(source).toContain("exportPayload.filename");
       expect(source).toContain('if (entry.kind === "memory_suggestion") return entry.title || "Memory review";');

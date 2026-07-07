@@ -1745,7 +1745,7 @@ export function SessionPage(props: SessionPageProps) {
                 {showWorkspaceSetupEmptyState
                   ? t("session.create_or_connect_workspace")
                   : props.workspaceHomeView === "history" && !props.selectedSessionId
-                    ? "Run history"
+                    ? "Project history"
                     : selectedSessionTitle || t("session.default_title")}
               </h1>
               {props.selectedSessionId && props.onRenameSession && !showWorkspaceSetupEmptyState ? (

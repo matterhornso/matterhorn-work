@@ -618,7 +618,7 @@ function DataPolicySection(props: {
         </CollapsibleContent>
       </Collapsible>
       <p className="mt-3 text-xs leading-5 text-dls-secondary">
-        Use the Manage links for user-controlled stores. Append-only history stays exportable through Run history. {retentionPolicy.summary}
+        Use the Manage links for user-controlled stores. Append-only history stays exportable through Project history. {retentionPolicy.summary}
       </p>
     </div>
   );

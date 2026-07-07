@@ -417,7 +417,7 @@ export function RecentActivitySection({
                 }}
               >
                 <History className="size-3.5" aria-hidden="true" />
-                {onOpenHistory ? "Run history" : historyOpen ? "Hide runs" : "Run history"}
+                {onOpenHistory ? "Project history" : historyOpen ? "Hide recent" : "Project history"}
                 {!onOpenHistory ? (
                   <ChevronDown
                     className={cn("size-3 transition-transform", historyOpen && "rotate-180")}
