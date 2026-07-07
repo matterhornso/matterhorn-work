@@ -196,7 +196,7 @@ export function printHelp(): void {
     "  --opencode-username <user> OpenCode server username",
     "  --opencode-password <pass> OpenCode server password",
     "  --workspace <path>       Workspace root (repeatable)",
-    "  --cors <origins>          Comma-separated origins or *",
+    "  --cors <origins>          Comma-separated origins, loopback, or *",
     "  --read-only              Disable writes",
     "  --log-format <format>     Log output format: pretty | json",
     "  --log-requests           Log incoming requests (default: true)",
@@ -293,7 +293,7 @@ export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
 
   const envCorsOrigins = readMatterhornEnv("CORS_ORIGINS");
   const parsedEnvCors = envCorsOrigins ? parseList(envCorsOrigins) : null;
-  const corsOrigins = cli.corsOrigins ?? parsedEnvCors ?? fileConfig.corsOrigins ?? ["*"];
+  const corsOrigins = cli.corsOrigins ?? parsedEnvCors ?? fileConfig.corsOrigins ?? ["loopback"];
 
   const envReadOnly = process.env.OPENWORK_READONLY;
   const parsedReadOnly = envReadOnly

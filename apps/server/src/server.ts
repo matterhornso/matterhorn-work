@@ -2074,12 +2074,30 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
   });
 }
 
+function isLoopbackCorsOrigin(origin: string | null) {
+  if (!origin) return false;
+  try {
+    const parsed = new URL(origin);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    return (
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname === "::1" ||
+      parsed.hostname === "[::1]"
+    );
+  } catch {
+    return false;
+  }
+}
+
 function withCors(response: Response, request: Request, config: ServerConfig) {
   const origin = request.headers.get("origin");
   const allowedOrigins = config.corsOrigins;
   let allowOrigin: string | null = null;
   if (allowedOrigins.includes("*")) {
     allowOrigin = "*";
+  } else if (allowedOrigins.includes("loopback") && isLoopbackCorsOrigin(origin)) {
+    allowOrigin = origin;
   } else if (origin && allowedOrigins.includes(origin)) {
     allowOrigin = origin;
   }
