@@ -362,6 +362,12 @@ describe("backend capability UI contract", () => {
     expect(walletSource).toContain("connectSuiWallet");
     expect(walletSource).toContain("matterhornServerClient.suiAccount(account.address");
     expect(walletSource).toContain("SuiWorkflowPanel");
+    expect(walletSource).toContain("useEffect(() =>");
+    expect(walletSource).toContain("syncStore();");
+    expect(walletSource).toContain("}, [syncStore]);");
+    expect(walletSource).toContain("needsConnectionSync");
+    expect(walletSource).toContain("balanceSnapshot.ethBalance !== nextEthBalance");
+    expect(walletSource).not.toContain("useState(() => { syncStore(); return null; });");
     expect(walletSource).toContain("backendSui?.runtimeSupport?.[props.capability.runtime]");
     expect(walletSource).toContain("walletRuntimeSupportSummary");
     expect(walletSource).toContain("Wallet Standard");

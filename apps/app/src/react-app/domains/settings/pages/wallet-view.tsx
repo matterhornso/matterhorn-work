@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   useCurrentAccount,
   useCurrentNetwork,
@@ -574,22 +574,40 @@ export function WalletSettingsView({
   const syncStore = useCallback(() => {
     if (wagmiAddress && chainId) {
       const connectorName = connectors.find((c) => c.id === (store.getSnapshot().connector))?.name ?? null;
-      store.setConnected(
-        wagmiAddress,
-        chainId,
-        connectorName ?? "connected",
-      );
-      if (ethBalance) {
-        store.setBalances(
-          Number(formatUnits(ethBalance.value, 18)).toFixed(4),
-          "—", // USDC balance requires separate call
+      const nextConnector = connectorName ?? "connected";
+      const current = store.getSnapshot();
+      const needsConnectionSync =
+        current.address !== wagmiAddress
+        || current.chainId !== chainId
+        || current.connector !== nextConnector
+        || !current.isConnected
+        || current.isConnecting
+        || Boolean(current.error);
+
+      if (needsConnectionSync) {
+        store.setConnected(
+          wagmiAddress,
+          chainId,
+          nextConnector,
         );
+      }
+
+      if (ethBalance) {
+        const nextEthBalance = Number(formatUnits(ethBalance.value, 18)).toFixed(4);
+        const balanceSnapshot = store.getSnapshot();
+        if (balanceSnapshot.ethBalance !== nextEthBalance || balanceSnapshot.usdcBalance !== "—") {
+          store.setBalances(
+            nextEthBalance,
+            "—", // USDC balance requires separate call
+          );
+        }
       }
     }
   }, [wagmiAddress, chainId, ethBalance, store, connectors]);
 
-  // Keep store synced
-  useState(() => { syncStore(); return null; });
+  useEffect(() => {
+    syncStore();
+  }, [syncStore]);
 
   const handleConnect = useCallback(async (connectorId: string) => {
     setError(null);
