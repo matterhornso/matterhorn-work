@@ -327,7 +327,7 @@ import {
   writeWorkspaceDataPolicy,
 } from "./backend-data-policy.js";
 import { backendControlPlaneExportSnapshot, buildBackendSupportReport } from "./backend-support-report.js";
-import { buildBackendTeamAccess, buildBackendTeamAccessSummary } from "./backend-team-access.js";
+import { buildBackendTeamAccess, buildBackendTeamAccessConnection, buildBackendTeamAccessSummary } from "./backend-team-access.js";
 import { deleteAllProjectFeedbackEntries, deleteProjectFeedbackEntry, projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
 import { TOY_UI_CSS, TOY_UI_FAVICON_SVG, TOY_UI_HTML, TOY_UI_JS, cssResponse, htmlResponse, jsResponse, svgResponse } from "./toy-ui.js";
 import { FileSessionStore } from "./file-sessions.js";
@@ -4786,6 +4786,7 @@ function createRoutes(
         name: workspace.name,
         type: workspace.workspaceType,
       },
+      connection: buildBackendTeamAccessConnection(config),
       token: {
         id: issued.id,
         token: issued.token,

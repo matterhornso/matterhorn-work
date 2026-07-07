@@ -759,7 +759,8 @@ function TeamAccessControls(props: {
   const [status, setStatus] = useState<string | null>(null);
   const sharedTokens = props.data?.localAccess.tokens.filter((token) => token.source === "token_store") ?? [];
   const tokenCount = props.summary?.localAccess.tokenCount ?? props.data?.localAccess.tokenCount ?? 0;
-  const sharedCount = Math.max(0, tokenCount - (props.summary?.localAccess.byScope.collaborator ? 1 : 0));
+  const sharedCount = props.data ? sharedTokens.length : Math.max(0, tokenCount - 1);
+  const connection = props.summary?.connection ?? props.data?.connection;
   const canUseTokenControls = Boolean(client && workspaceId && !props.isLoading && props.data);
 
   const createToken = useCallback(async () => {
@@ -813,8 +814,11 @@ function TeamAccessControls(props: {
   if (!props.isOpen) {
     return (
       <div className="flex flex-col gap-2 px-1 py-3 text-sm text-dls-secondary sm:flex-row sm:items-center sm:justify-between">
-        <span>
-          {props.summary?.sharingMode.label ?? "Local token sharing"}: {tokenCount} local access token{tokenCount === 1 ? "" : "s"}. Token details stay host-protected.
+        <span className="leading-6">
+          {props.summary?.sharingMode.label ?? "Local token sharing"}: {sharedCount} shared token{sharedCount === 1 ? "" : "s"}.{" "}
+          {connection?.reachableFromOtherDevices === false
+            ? "This server is bound to this device."
+            : "Token details stay host-protected."}
         </span>
         <Button variant="ghost" size="sm" className="w-fit px-2 text-xs" onClick={props.onOpen}>
           Manage tokens
@@ -855,6 +859,31 @@ function TeamAccessControls(props: {
           {sharedTokens.length || sharedCount} shared
         </span>
       </div>
+
+      {connection ? (
+        <div className="mt-3 grid gap-2 rounded-md bg-dls-surface/55 px-2.5 py-2 text-xs leading-5 text-dls-secondary">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-dls-text">Connect custom remote</span>
+            <span className="text-dls-secondary">
+              {connection.reachableFromOtherDevices ? "Reachable server URL" : "Local-only server URL"}
+            </span>
+            <div className="ml-auto">
+              <CopyButton text={connection.serverUrl} label="Copy server URL" />
+            </div>
+          </div>
+          <code className="block truncate font-mono text-[11px] text-dls-secondary" title={connection.serverUrl}>
+            {connection.serverUrl}
+          </code>
+          <p>
+            Teammates should open Matterhorn Work, choose Connect custom remote, then paste this URL and the one-time token.
+          </p>
+          {!connection.reachableFromOtherDevices ? (
+            <p className="text-amber-300">
+              This server is bound to {connection.host}. Share it only after you bind or tunnel the local server to a reachable address.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {props.summary?.scopeCapabilities ? (
         <div className="mt-3 grid gap-2 text-xs leading-5 text-dls-secondary sm:grid-cols-2">

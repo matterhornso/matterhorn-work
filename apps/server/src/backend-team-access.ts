@@ -2,6 +2,7 @@ import type { MatterhornCapability } from "@matterhorn-work/types/backend-capabi
 import type {
   MatterhornBackendTeamAccessResponse,
   MatterhornBackendTeamAccessSummaryResponse,
+  MatterhornTeamAccessConnection,
   MatterhornTeamAccessScopeCapabilities,
   MatterhornTeamAccessSharingMode,
   MatterhornTeamAccessTokenDescriptor,
@@ -73,6 +74,36 @@ function buildSharingMode(cloudTeams: MatterhornCapability): MatterhornTeamAcces
   };
 }
 
+function isLoopbackHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1" || normalized === "[::1]";
+}
+
+function formatServerUrl(host: string, port: number): string {
+  const trimmed = host.trim() || "127.0.0.1";
+  const hostForUrl = trimmed.includes(":") && !trimmed.startsWith("[") ? `[${trimmed}]` : trimmed;
+  return `http://${hostForUrl}:${port}`;
+}
+
+export function buildBackendTeamAccessConnection(config: ServerConfig): MatterhornTeamAccessConnection {
+  const serverUrl = formatServerUrl(config.host, config.port);
+  const reachableFromOtherDevices = !isLoopbackHost(config.host);
+  return {
+    serverUrl,
+    host: config.host,
+    port: config.port,
+    reachableFromOtherDevices,
+    connectSurface: "connect_custom_remote",
+    authScheme: "bearer_token",
+    tokenFieldLabel: "Access token",
+    instructions: [
+      "Open Matterhorn Work on the teammate device.",
+      "Choose Connect custom remote.",
+      "Paste this server URL and the one-time local access token.",
+    ],
+  };
+}
+
 export async function buildBackendTeamAccess(
   config: ServerConfig,
   workspace: WorkspaceInfo,
@@ -99,6 +130,7 @@ export async function buildBackendTeamAccess(
     "Cloud teams",
     "Durable teammate invites, shared cloud workspaces, and org permissions require Matterhorn Cloud setup.",
   );
+  const connection = buildBackendTeamAccessConnection(config);
 
   return {
     success: true,
@@ -110,6 +142,7 @@ export async function buildBackendTeamAccess(
       type: workspace.workspaceType,
     },
     sharingMode: buildSharingMode(cloudTeams),
+    connection,
     scopeCapabilities: buildScopeCapabilities(),
     localAccess: {
       ...capability(
@@ -143,6 +176,7 @@ export async function buildBackendTeamAccessSummary(
     generatedAt: full.generatedAt,
     workspace: full.workspace,
     sharingMode: full.sharingMode,
+    connection: full.connection,
     scopeCapabilities: full.scopeCapabilities,
     localAccess: {
       status: full.localAccess.status,

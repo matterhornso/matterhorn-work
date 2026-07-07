@@ -263,6 +263,11 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("createWorkspaceTeamAccessToken");
     expect(source).toContain("revokeWorkspaceTeamAccessToken");
     expect(source).toContain("Local access token created. Copy it now; it will not be shown again.");
+    expect(source).toContain("props.summary?.connection ?? props.data?.connection");
+    expect(source).toContain("Connect custom remote");
+    expect(source).toContain("Copy server URL");
+    expect(source).toContain("reachableFromOtherDevices");
+    expect(source).toContain("Math.max(0, tokenCount - 1)");
     expect(source).toContain("settings-project-data-ledger");
     expect(source).toContain("client.listProjectDataLedger(workspaceId");
     expect(source).toContain("ProjectLedgerControlSummary");

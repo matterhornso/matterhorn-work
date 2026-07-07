@@ -24,6 +24,17 @@ export interface MatterhornTeamAccessSharingMode {
   limitations: string[];
 }
 
+export interface MatterhornTeamAccessConnection {
+  serverUrl: string;
+  host: string;
+  port: number;
+  reachableFromOtherDevices: boolean;
+  connectSurface: "connect_custom_remote";
+  authScheme: "bearer_token";
+  tokenFieldLabel: "Access token";
+  instructions: string[];
+}
+
 export interface MatterhornTeamAccessScopeCapability {
   scope: MatterhornTeamTokenScope;
   label: string;
@@ -49,6 +60,7 @@ export interface MatterhornBackendTeamAccessResponse {
     type: "local" | "remote";
   };
   sharingMode: MatterhornTeamAccessSharingMode;
+  connection: MatterhornTeamAccessConnection;
   scopeCapabilities: MatterhornTeamAccessScopeCapabilities;
   localAccess: MatterhornCapability & {
     scopes: MatterhornTeamTokenScope[];
@@ -70,6 +82,7 @@ export interface MatterhornBackendTeamAccessSummaryResponse {
   generatedAt: string;
   workspace: MatterhornBackendTeamAccessResponse["workspace"];
   sharingMode: MatterhornTeamAccessSharingMode;
+  connection: MatterhornTeamAccessConnection;
   scopeCapabilities: MatterhornTeamAccessScopeCapabilities;
   localAccess: MatterhornCapability & {
     scopes: MatterhornTeamTokenScope[];
@@ -95,6 +108,7 @@ export interface MatterhornTeamAccessTokenCreateResponse {
   version: typeof MATTERHORN_BACKEND_TEAM_ACCESS_VERSION;
   generatedAt: string;
   workspace: MatterhornBackendTeamAccessResponse["workspace"];
+  connection: MatterhornTeamAccessConnection;
   token: MatterhornTeamAccessTokenDescriptor & {
     token: string;
     source: "token_store";
