@@ -357,7 +357,7 @@ export interface MatterhornNftMintPreviewResponse {
     functionName: "mint";
     storageUrl?: string | null;
     metadata: MatterhornNftDraftMetadata;
-        steps: MatterhornNftPreviewStep[];
+    steps: MatterhornNftPreviewStep[];
   };
   transactionPlan: MatterhornNftMintTransactionPlan;
   setupRequirements: MatterhornNftSetupRequirement[];
@@ -387,8 +387,8 @@ export interface MatterhornNftListingPreviewResponse {
     kioskPackageId: string;
     transferPolicyPackageId: string;
     priceMist?: string;
-        objectId?: string | null;
-        steps: MatterhornNftPreviewStep[];
+    objectId?: string | null;
+    steps: MatterhornNftPreviewStep[];
   };
   transactionPlan: MatterhornNftKioskListingTransactionPlan;
   setupRequirements: MatterhornNftSetupRequirement[];
