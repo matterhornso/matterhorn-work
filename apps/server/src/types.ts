@@ -227,6 +227,7 @@ export interface AuditEntry {
   target: string;
   summary: string;
   timestamp: number;
+  metadata?: Record<string, string | number | boolean | null>;
 }
 
 // ---------------------------------------------------------------------------

@@ -5655,6 +5655,7 @@ function createRoutes(
     const body = await readJsonBody(ctx.request);
     const parts = parseSessionPromptParts(body);
     const model = parseSessionPromptModel(body);
+    const auditMetadata = sessionPromptAuditMetadata(body, model);
     const directory = resolveOpencodeDirectory(workspace) ?? undefined;
     const opencode = createWorkspaceOpencodeClient(config, workspace);
     const sessionApi = opencode.session as typeof opencode.session & {
@@ -5694,6 +5695,7 @@ function createRoutes(
       target: sessionId,
       summary: "Submitted prompt to chat session",
       timestamp: Date.now(),
+      metadata: auditMetadata,
     });
 
     return jsonResponse({ ok: true, accepted: true, sessionId }, 202);
@@ -10173,6 +10175,42 @@ function parseSessionPromptModel(body: Record<string, unknown>): { providerID: s
     throw new ApiError(400, "invalid_payload", "providerID and modelID must be provided together");
   }
   return { providerID, modelID };
+}
+
+function boundedPromptAuditString(value: unknown, maxLength = 120): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, maxLength) : undefined;
+}
+
+function sessionPromptAuditMetadata(
+  body: Record<string, unknown>,
+  model: { providerID: string; modelID: string } | undefined,
+): Record<string, string | boolean> {
+  const metadata: Record<string, string | boolean> = {
+    modelSource: model ? "request" : "server_default",
+  };
+
+  if (model) {
+    const providerID = model.providerID.slice(0, 120);
+    const modelID = model.modelID.slice(0, 120);
+    metadata.modelProviderId = providerID;
+    metadata.modelId = modelID;
+    metadata.modelRef = `${providerID}/${modelID}`.slice(0, 240);
+  }
+
+  const agent = boundedPromptAuditString(body.agent);
+  if (agent) metadata.agent = agent;
+
+  const variant = boundedPromptAuditString(body.variant);
+  if (variant) metadata.variant = variant;
+
+  const reasoningEffort = boundedPromptAuditString(body.reasoning_effort ?? body.reasoningEffort, 80);
+  if (reasoningEffort) metadata.reasoningEffort = reasoningEffort;
+
+  if (typeof body.noReply === "boolean") metadata.noReply = body.noReply;
+
+  return metadata;
 }
 
 function remapSessionReadError(error: unknown): never {
