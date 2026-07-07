@@ -150,6 +150,7 @@ import { useReloadCoordinator } from "./reload-coordinator";
 import { getReactQueryClient } from "../infra/query-client";
 import { useStatusToasts } from "../domains/shell-feedback/status-toasts";
 import { useSessionControlActions } from "../domains/session/control/session-control-actions";
+import { resolveSelectedPromptModel } from "../domains/session/model-selection";
 import { ProjectFeedbackDialog } from "../domains/feedback/project-feedback-dialog";
 import {
   WORKSPACE_MODEL_SELECTION_CHANGED_EVENT,
@@ -1619,15 +1620,11 @@ export function SessionRoute() {
       window.removeEventListener(WORKSPACE_MODEL_SELECTION_CHANGED_EVENT, handleModelSelectionChanged);
     };
   }, [refreshWorkspaceModelSelection, selectedWorkspaceId]);
-  const workspaceDefaultModel = useMemo<ModelRef | null>(() => {
-    const effective = workspaceModelSelection?.effectiveModel;
-    if (!effective?.providerId || !effective.modelId) return null;
-    return {
-      providerID: effective.providerId,
-      modelID: effective.modelId,
-    };
-  }, [workspaceModelSelection]);
-  const selectedPromptModel = local.prefs.defaultModel ?? workspaceDefaultModel;
+  const selectedPromptModelResolution = useMemo(() => resolveSelectedPromptModel({
+    localDefaultModel: local.prefs.defaultModel,
+    workspaceModelSelection,
+  }), [local.prefs.defaultModel, workspaceModelSelection]);
+  const selectedPromptModel = selectedPromptModelResolution.model;
   const selectedModelUnavailable = Boolean(
     selectedPromptModel &&
       (
