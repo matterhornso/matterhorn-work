@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  buildImageGenerationCapability,
   buildNftMarketplaceListingCapability,
   buildNftMintingCapability,
   buildWalrusStorageCapability,
@@ -8,6 +9,49 @@ import {
 } from "./image-nft-capabilities.js";
 
 describe("image/NFT publishing capability config", () => {
+  test("OpenAI image generation setup reports the exact missing env var", () => {
+    const capability = buildImageGenerationCapability({
+      status: "needs_setup",
+      label: "OpenAI image provider",
+      provider: "openai",
+      model: "gpt-image-1",
+      size: "1024x1024",
+      quality: "auto",
+      format: "png",
+      message: "Set OPENAI_API_KEY to enable OpenAI image generation.",
+    });
+
+    expect(capability.status).toBe("needs_setup");
+    expect(capability.setupRequirements).toEqual([{
+      key: "openai_api_key",
+      label: "OpenAI API key",
+      status: "missing",
+      envVar: "OPENAI_API_KEY",
+      description: "Set OPENAI_API_KEY to enable OpenAI image generation.",
+    }]);
+  });
+
+  test("invalid image generation setup reports a structured setup requirement", () => {
+    const capability = buildImageGenerationCapability({
+      status: "error",
+      label: "Image provider configuration",
+      provider: "mock",
+      model: "mock-image-1",
+      size: "2048x2048",
+      quality: "auto",
+      format: "png",
+      message: "MATTERHORN_IMAGE_SIZE must be one of 1024x1024, 1536x1024, 1024x1536, auto.",
+    });
+
+    expect(capability.status).toBe("error");
+    expect(capability.setupRequirements?.[0]).toMatchObject({
+      key: "image_size",
+      label: "Image size",
+      status: "invalid",
+      envVar: "MATTERHORN_IMAGE_SIZE",
+    });
+  });
+
   test("invalid Walrus URLs report error instead of working", () => {
     const config = resolveNftEnvironmentConfig({
       MATTERHORN_WALRUS_PUBLISHER_URL: "notaurl",
@@ -24,6 +68,23 @@ describe("image/NFT publishing capability config", () => {
       expect.objectContaining({ field: "MATTERHORN_WALRUS_RELAY_URL" }),
       expect.objectContaining({ field: "MATTERHORN_WALRUS_STORAGE_EPOCHS" }),
     ]);
+    expect(capability.setupRequirements).toEqual([
+      expect.objectContaining({
+        key: "walrus_publisher",
+        status: "invalid",
+        envVar: "MATTERHORN_WALRUS_PUBLISHER_URL",
+      }),
+      expect.objectContaining({
+        key: "walrus_relay",
+        status: "invalid",
+        envVar: "MATTERHORN_WALRUS_RELAY_URL",
+      }),
+      expect.objectContaining({
+        key: "walrus_storage_epochs",
+        status: "invalid",
+        envVar: "MATTERHORN_WALRUS_STORAGE_EPOCHS",
+      }),
+    ]);
   });
 
   test("valid Walrus URLs normalize to working capability", () => {
@@ -38,6 +99,10 @@ describe("image/NFT publishing capability config", () => {
     expect(capability.publisherConfigured).toBe(true);
     expect(capability.relayConfigured).toBe(true);
     expect(capability.details?.storageEpochs).toBe(2);
+    expect(capability.setupRequirements).toEqual([
+      expect.objectContaining({ key: "walrus_publisher", status: "configured" }),
+      expect.objectContaining({ key: "walrus_relay", status: "configured" }),
+    ]);
   });
 
   test("invalid Sui network marks minting and listing as setup errors", () => {
@@ -57,6 +122,40 @@ describe("image/NFT publishing capability config", () => {
     ]);
     expect(listing.details?.validationIssues).toEqual([
       expect.objectContaining({ field: "MATTERHORN_SUI_NETWORK" }),
+    ]);
+    expect(minting.setupRequirements).toEqual([
+      expect.objectContaining({
+        key: "sui_network",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_NETWORK",
+      }),
+      expect.objectContaining({
+        key: "sui_nft_package",
+        status: "configured",
+        envVar: "MATTERHORN_SUI_NFT_PACKAGE_ID",
+      }),
+      expect.objectContaining({
+        key: "sui_nft_module",
+        status: "configured",
+        envVar: "MATTERHORN_SUI_NFT_MODULE_NAME",
+      }),
+    ]);
+    expect(listing.setupRequirements).toEqual([
+      expect.objectContaining({
+        key: "sui_network",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_NETWORK",
+      }),
+      expect.objectContaining({
+        key: "sui_kiosk_package",
+        status: "configured",
+        envVar: "MATTERHORN_SUI_KIOSK_PACKAGE_ID",
+      }),
+      expect.objectContaining({
+        key: "sui_transfer_policy",
+        status: "configured",
+        envVar: "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID",
+      }),
     ]);
   });
 });

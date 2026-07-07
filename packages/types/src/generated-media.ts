@@ -82,6 +82,27 @@ export type MatterhornImageGenerationResponse =
   | MatterhornImageGenerationResult
   | MatterhornImageGenerationError;
 
+export type MatterhornGeneratedMediaSetupRequirementStatus =
+  | "configured"
+  | "missing"
+  | "invalid"
+  | "not_implemented";
+
+export type MatterhornImageSetupRequirementKey =
+  | "openai_api_key"
+  | "image_provider"
+  | "image_size"
+  | "image_quality"
+  | "image_format";
+
+export interface MatterhornImageSetupRequirement {
+  key: MatterhornImageSetupRequirementKey;
+  label: string;
+  status: MatterhornGeneratedMediaSetupRequirementStatus;
+  envVar?: string;
+  description: string;
+}
+
 export interface MatterhornImageCapability extends MatterhornCapability {
   provider: MatterhornImageProvider;
   model: string;
@@ -94,6 +115,7 @@ export interface MatterhornImageGenerationCapability extends MatterhornCapabilit
   providers: MatterhornImageCapability[];
   defaultProvider: MatterhornImageProvider;
   defaultModel: string;
+  setupRequirements?: MatterhornImageSetupRequirement[];
 }
 
 export interface MatterhornImageEditingCapability extends MatterhornCapability {
@@ -217,6 +239,7 @@ export interface MatterhornNftCapability extends MatterhornCapability {
   signing: "client_wallet";
   packageConfigured: boolean;
   kioskConfigured: boolean;
+  setupRequirements?: MatterhornNftSetupRequirement[];
 }
 
 export interface MatterhornNftMintingCapability extends MatterhornNftCapability {}
@@ -225,9 +248,10 @@ export interface MatterhornNftMarketplaceListingCapability extends MatterhornNft
 export interface MatterhornWalrusStorageCapability extends MatterhornCapability {
   publisherConfigured: boolean;
   relayConfigured: boolean;
+  setupRequirements?: MatterhornNftSetupRequirement[];
 }
 
-export type MatterhornNftSetupRequirementStatus = "configured" | "missing" | "invalid" | "not_implemented";
+export type MatterhornNftSetupRequirementStatus = MatterhornGeneratedMediaSetupRequirementStatus;
 
 export type MatterhornNftSetupRequirementKey =
   | "walrus_publisher"

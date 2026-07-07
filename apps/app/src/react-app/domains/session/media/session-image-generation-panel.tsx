@@ -32,6 +32,7 @@ import {
 import {
   NftDraftWalletBridge,
 } from "./nft-draft-wallet-bridge";
+import { buildNftPublishingSetupRequirements } from "./nft-publishing-readiness";
 
 type NftCapabilityStatus = "working" | "needs_setup" | "preview";
 
@@ -112,6 +113,12 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     : canGenerate
       ? "Ready"
       : "Needs setup";
+  const publishingSetupRequirements = useMemo(() => buildNftPublishingSetupRequirements({
+    imageGeneration: capabilities?.imageGeneration,
+    walrusStorage: capabilities?.walrusStorage,
+    nftMinting: capabilities?.nftMinting,
+    nftMarketplaceListing: capabilities?.nftMarketplaceListing,
+  }), [capabilities]);
 
   useEffect(() => {
     setSelectedImage(null);
@@ -432,6 +439,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
           image={nftImage}
           imageUrl={previewUrl ?? undefined}
           capabilities={nftCapabilities}
+          readinessSetupRequirements={publishingSetupRequirements}
           draft={nftDraft}
           mintPreview={nftMintPreview}
           listingPreview={nftListingPreview}

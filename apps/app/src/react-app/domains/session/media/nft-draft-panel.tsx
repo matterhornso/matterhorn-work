@@ -33,7 +33,12 @@ import type {
   MatterhornNftReceiptRequest,
   MatterhornNftSetupRequirement,
 } from "@matterhorn-work/types/generated-media";
-import { buildNftPublishingReadinessItems, NftPublishingReadinessRows } from "./nft-publishing-readiness";
+import {
+  buildNftPublishingReadinessItems,
+  NftPublishingReadinessRows,
+  NftPublishingSetupRows,
+  type PublishingSetupRequirement,
+} from "./nft-publishing-readiness";
 import type { MatterhornSuiWalletExecutionReceipt } from "./sui-nft-transaction-plan";
 
 export type NftCapabilityStatus = "working" | "needs_setup" | "preview";
@@ -74,6 +79,7 @@ export interface NftDraftPanelProps {
   mintPreview?: MatterhornNftMintPreviewResponse | null;
   listingPreview?: MatterhornNftListingPreviewResponse | null;
   walletExecution?: NftWalletExecutionState;
+  readinessSetupRequirements?: PublishingSetupRequirement[];
   setupRequirements?: MatterhornNftSetupRequirement[];
   isLoading?: boolean;
   onCreateDraft: (input: MatterhornImageNftDraftInput) => void | Promise<void>;
@@ -265,6 +271,10 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
             title="Publishing readiness"
             description="Create the local draft anytime. Public storage, minting, and listing unlock when setup is ready."
             surface
+          />
+          <NftPublishingSetupRows
+            requirements={props.readinessSetupRequirements ?? []}
+            description="These setup gates come from the local Matterhorn backend."
           />
 
           {!draft ? (
