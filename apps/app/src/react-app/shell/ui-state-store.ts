@@ -27,6 +27,7 @@ export const SIDE_PANEL_ITEMS = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
 ] as const;
 export type SidePanelItem = (typeof SIDE_PANEL_ITEMS)[number];
 export type SidePanelState = Record<string, SidePanelItem | null>;

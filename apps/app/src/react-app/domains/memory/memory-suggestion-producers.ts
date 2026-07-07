@@ -9,7 +9,7 @@ import {
   type MatterhornMemorySuggestion,
 } from "@matterhorn-work/types";
 
-type MemoryProducerDesk = Extract<MatterhornMemoryDesk, "bittensor" | "hyperliquid" | "polymarket" | "wellness">;
+type MemoryProducerDesk = Extract<MatterhornMemoryDesk, "bittensor" | "hyperliquid" | "polymarket" | "sui" | "wellness">;
 
 export type MatterhornMemorySuggestionProducerInput = {
   desk?: MatterhornMemoryDesk | string;
@@ -25,9 +25,10 @@ export type MatterhornMemorySuggestionProducerInput = {
 };
 
 const SS58_RE = /\b5[1-9A-HJ-NP-Za-km-z]{20,63}\b/;
+const SUI_ADDRESS_RE = /\b0x[0-9a-fA-F]{40,64}\b/;
 const NETUID_RE = /\b(?:netuid|subnet)\s*#?:?\s*(\d{1,4})\b/i;
 const HYPERLIQUID_ASSET_RE = /\b(BTC|ETH|SOL|HYPE|ARB|DOGE|XRP|AVAX|BNB|LINK|SUI|TON|WIF|PUMP)\b/i;
-const SECRET_TOKEN_RE = /\bsk-[a-zA-Z0-9]{20,}\b|\b[A-Za-z0-9_]+_(API_KEY|SECRET)\s*=|\b0x[0-9a-fA-F]{64}\b/;
+const SECRET_TOKEN_RE = /\bsk-[a-zA-Z0-9]{20,}\b|\b[A-Za-z0-9_]+_(API_KEY|SECRET)\s*=/;
 const SECRET_CAPTURE_INTENT_RE = /\b(remember|store|save|capture|use|paste|enter|send|include|my|here is|here's)\b.{0,80}\b(seed phrase|private key|mnemonic|api secret|raw signature|signed payload|signed order|wallet export|bearer token|exchange secret)\b/i;
 const POLYMARKET_TOPIC_BRAND_RE = /\bpolymarket\b[:\s-]*/i;
 
@@ -70,6 +71,9 @@ function inferDesk(input: MatterhornMemorySuggestionProducerInput): MemoryProduc
   if (raw.includes("polymarket") || raw.includes("prediction market") || raw.includes("outcome") || raw.includes("odds")) {
     return "polymarket";
   }
+  if (raw.includes("sui") || raw.includes("transaction digest") || raw.includes("sui wallet")) {
+    return "sui";
+  }
   if (raw.includes("wellness") || raw.includes("trainer") || raw.includes("dietician") || raw.includes("yoga")) {
     return "wellness";
   }
@@ -80,6 +84,10 @@ function extractSs58(input: MatterhornMemorySuggestionProducerInput): string | n
   const direct = input.ss58Address?.trim();
   if (direct && SS58_RE.test(direct)) return direct.match(SS58_RE)?.[0] ?? null;
   return input.prompt?.match(SS58_RE)?.[0] ?? null;
+}
+
+function extractSuiAddress(input: MatterhornMemorySuggestionProducerInput): string | null {
+  return input.prompt?.match(SUI_ADDRESS_RE)?.[0] ?? null;
 }
 
 function extractNetuid(input: MatterhornMemorySuggestionProducerInput): number | null {
@@ -294,6 +302,64 @@ function buildPolymarketSuggestions(input: MatterhornMemorySuggestionProducerInp
   return marketSuggestion ? [marketSuggestion] : [];
 }
 
+function buildSuiSuggestions(input: MatterhornMemorySuggestionProducerInput): MatterhornMemorySuggestion[] {
+  const suggestions: MatterhornMemorySuggestion[] = [];
+  const address = extractSuiAddress(input);
+  if (address) {
+    const record = baseRecord(input, {
+      id: safeId("mem_sui_wallet", [address.slice(0, 10)]),
+      kind: "protocol_address",
+      scope: "workspace",
+      title: "Sui public wallet",
+      summary: "Public Sui address for future account, balance, preview, and receipt workflows.",
+      body: { suiAddress: address },
+      tags: ["sui", "wallet", "protocol-address", "memory-suggestion"],
+      sensitivity: "public",
+      canUseInChat: true,
+      canExport: true,
+    });
+    const walletSuggestion = suggestion(
+      input,
+      "sui",
+      record,
+      "sui_wallet_label",
+      `You mentioned public Sui address ${truncatedPublicAddress(address)} in visible chat. I can use it for future Sui account and preview workflows after you confirm.`,
+      0.8,
+    );
+    if (walletSuggestion) suggestions.push(walletSuggestion);
+  }
+
+  if (/transaction digest|receipt/i.test(input.prompt ?? "")) {
+    const record = baseRecord(input, {
+      id: safeId("mem_sui_receipt_context", [input.sessionId ?? input.sourceId ?? "receipt"]),
+      kind: "receipt",
+      scope: "workspace",
+      title: "Sui receipt context",
+      summary: "Public Sui receipt context for future project evidence review.",
+      body: {
+        venue: "sui",
+        publicReceiptOnly: true,
+        sourceId: input.sourceId ?? null,
+      },
+      tags: ["sui", "receipt", "public-metadata", "memory-suggestion"],
+      sensitivity: "public",
+      canUseInChat: true,
+      canExport: true,
+    });
+    const receiptSuggestion = suggestion(
+      input,
+      "sui",
+      record,
+      "sui_receipt_context",
+      "A Sui receipt workflow appeared in visible chat. I can reuse this public receipt context for future project evidence review after you confirm.",
+      0.64,
+    );
+    if (receiptSuggestion) suggestions.push(receiptSuggestion);
+  }
+
+  return suggestions;
+}
+
 function buildWellnessSuggestions(input: MatterhornMemorySuggestionProducerInput): MatterhornMemorySuggestion[] {
   const prompt = input.prompt?.trim() ?? "";
   const templateId = input.templateId?.trim();
@@ -336,6 +402,7 @@ export function buildMatterhornMemorySuggestions(
   if (desk === "bittensor") return buildBittensorSuggestions(input);
   if (desk === "hyperliquid") return buildHyperliquidSuggestions(input);
   if (desk === "polymarket") return buildPolymarketSuggestions(input);
+  if (desk === "sui") return buildSuiSuggestions(input);
   if (desk === "wellness") return buildWellnessSuggestions(input);
   return [];
 }

@@ -42,7 +42,7 @@ for (const token of [
   assert.ok(types.includes(token), `types missing protocol desk visual token: ${token}`);
 }
 
-const expectedDeskIds = ["bittensor", "hyperliquid", "polymarket", "wellness", "memory", "mcps"];
+const expectedDeskIds = ["bittensor", "hyperliquid", "polymarket", "sui", "wellness", "memory", "mcps"];
 
 // 3. Registry covers expected desks.
 const registryBlock = types.slice(types.indexOf("PROTOCOL_DESK_MANIFEST_REGISTRY"));
@@ -271,7 +271,11 @@ for (const [key, block] of Object.entries(assetBlocks)) {
   }
   for (const field of ["lightAssetPath", "darkAssetPath"]) {
     const assetPath = block.match(new RegExp(`${field}:\\s*"([^"]+)"`))?.[1];
-    assert.ok(assetPath, `${key} brand asset must include ${field} path`);
+    const fallback = block.match(/fallbackInitials:\s*"([^"]+)"/)?.[1];
+    if (!assetPath) {
+      assert.ok(fallback, `${key} brand asset without ${field} path must include fallbackInitials`);
+      continue;
+    }
     assert.ok(
       existsSync(`apps/app/public${assetPath}`),
       `${key} ${field} should resolve to a bundled app asset: ${assetPath}`,
@@ -304,6 +308,7 @@ assert.ok(types.includes("export function getDeskLogoFallback"), "getDeskLogoFal
 assert.ok(deskBlocks.bittensor.includes('walletRailMode: "external_signer"'), "Bittensor walletRailMode must be external_signer");
 assert.ok(deskBlocks.hyperliquid.includes('walletRailMode: "evm_preview"'), "Hyperliquid walletRailMode must be evm_preview");
 assert.ok(deskBlocks.polymarket.includes('walletRailMode: "evm_preview"'), "Polymarket walletRailMode must be evm_preview");
+assert.ok(deskBlocks.sui.includes('walletRailMode: "sui_wallet"'), "Sui walletRailMode must be sui_wallet");
 for (const id of ["wellness", "memory", "mcps"]) {
   assert.ok(deskBlocks[id].includes('walletRailMode: "none"'), `${id} walletRailMode must be none`);
 }
@@ -324,6 +329,7 @@ const expectedReadinessTones = {
   bittensor: "beta_ready",
   hyperliquid: "preview_only",
   polymarket: "preview_only",
+  sui: "preview_only",
   wellness: "workflow_ready",
   memory: "beta_ready",
   mcps: "local_only",
@@ -348,6 +354,11 @@ const expectedStatusLabels = {
     extensionStatus: "built_in_live",
   },
   polymarket: {
+    backendStatus: "preview",
+    actionStatus: "preview_only",
+    extensionStatus: "built_in_live",
+  },
+  sui: {
     backendStatus: "preview",
     actionStatus: "preview_only",
     extensionStatus: "built_in_live",

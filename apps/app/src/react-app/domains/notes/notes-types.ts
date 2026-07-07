@@ -51,6 +51,7 @@ export const NOTE_DESK_FILTER_IDS = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
   "longevity",
 ] as const;
 
@@ -76,6 +77,7 @@ export const NOTE_FILTERS: NoteFilter[] = [
   { id: "bittensor", label: "notes.filter_bittensor" },
   { id: "hyperliquid", label: "notes.filter_hyperliquid" },
   { id: "polymarket", label: "notes.filter_polymarket" },
+  { id: "sui", label: "notes.filter_sui" },
   { id: "longevity", label: "notes.filter_longevity" },
   { id: "outputs", label: "notes.filter_outputs" },
   { id: "memory-suggested", label: "notes.filter_memory_suggested" },
@@ -185,6 +187,7 @@ function deskLabel(desk: string): string {
   if (desk === "bittensor") return "Bittensor";
   if (desk === "hyperliquid") return "Hyperliquid";
   if (desk === "polymarket") return "Polymarket";
+  if (desk === "sui") return "Sui";
   if (desk === "longevity" || desk === "wellness") return "Longevity";
   if (desk === "memory") return "Memory";
   if (desk === "mcp") return "MCP";

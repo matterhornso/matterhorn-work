@@ -136,6 +136,9 @@ const VoicePanel = lazy(() => import("../voice/voice-panel").then((module) => ({
 const WalletPanel = lazy(() => import("../../wallet/WalletPanel").then((module) => ({
   default: module.WalletPanel,
 })));
+const SuiWorkflowPanel = lazy(() => import("../../wallet/sui-workflow-panel").then((module) => ({
+  default: module.SuiWorkflowPanel,
+})));
 const MemoryPanel = lazy(() => import("../../memory/memory-panel").then((module) => ({
   default: module.MemoryPanel,
 })));
@@ -152,7 +155,7 @@ const STARTUP_SKELETON_ROWS = [
   { id: "final", titleWidth: "36%", bodyWidth: "74%" },
 ];
 const GLOBAL_VOICE_SIDE_PANEL_KEY = "__matterhorn_voice__";
-const VENUE_SIDE_PANELS = ["bittensor", "hyperliquid", "polymarket"] as const;
+const VENUE_SIDE_PANELS = ["bittensor", "hyperliquid", "polymarket", "sui"] as const;
 type VenueSidePanel = (typeof VENUE_SIDE_PANELS)[number];
 const RAIL_BUTTON_CLASS =
   "h-auto min-h-12 w-full flex-col gap-1 rounded-md px-1 py-2 text-dls-text transition-colors hover:bg-white/[0.06] hover:text-dls-text";
@@ -165,6 +168,10 @@ const RAIL_SECTION_LABEL_CLASS =
   "mt-1 w-full border-t border-white/[0.06] pt-2 text-center text-[10px] font-bold uppercase tracking-normal text-dls-text";
 
 function isVenueSidePanel(panel: SidePanelItem | null): panel is VenueSidePanel {
+  return panel === "bittensor" || panel === "hyperliquid" || panel === "polymarket" || panel === "sui";
+}
+
+function isLegacyCryptoVenueSidePanel(panel: SidePanelItem | null): panel is Exclude<VenueSidePanel, "sui"> {
   return panel === "bittensor" || panel === "hyperliquid" || panel === "polymarket";
 }
 
@@ -189,6 +196,7 @@ const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof
   bittensor: BrainCircuit,
   hyperliquid: BarChart3,
   polymarket: ShieldCheck,
+  sui: WalletIcon,
   wellness: Dumbbell,
   services: FileText,
   blank: FileText,
@@ -208,6 +216,8 @@ function deskToneStyle(iconHint: CustomerWorkflowIconHint | VenueSidePanel | "me
         return ["--desk-hyperliquid", "--desk-hyperliquid-rgb", "--desk-hyperliquid-secondary"];
       case "polymarket":
         return ["--desk-polymarket", "--desk-polymarket-rgb", "--desk-polymarket-secondary"];
+      case "sui":
+        return ["--desk-sui", "--desk-sui-rgb", "--desk-sui-secondary"];
       case "wellness":
         return ["--desk-wellness", "--desk-wellness-rgb", "--desk-wellness-secondary"];
       case "memory":
@@ -326,6 +336,23 @@ const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: str
       title: "Prepare trade handoff",
       detail: "Draft a non-custodial wallet handoff you can review externally.",
       prompt: "Prepare a Polymarket compliance-gated external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
+    },
+  ],
+  sui: [
+    {
+      title: "Show my Sui wallet",
+      detail: "Read a public Sui address, network, and SUI balance without custody.",
+      prompt: "Show my Sui wallet for this public address: <paste public Sui address>. Use public account and balance context only. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
+    },
+    {
+      title: "Prepare transfer preview",
+      detail: "Create a non-custodial transfer preview and save it as project evidence.",
+      prompt: "Prepare a Sui transfer preview. Ask for the public sender address, recipient address, network, amount, and memo if missing. Signing must happen in my connected Sui wallet on web or an external Sui wallet/client on desktop.",
+    },
+    {
+      title: "Import transaction receipt",
+      detail: "Save public transaction metadata after signing in an external wallet.",
+      prompt: "Import a Sui transaction receipt from this public transaction digest: <paste transaction digest>. Use only public receipt metadata and save the receipt as project evidence.",
     },
   ],
 };
@@ -590,7 +617,9 @@ function ProtocolDeskEmptyState({
     ? "Runs public SS58 reads and unsigned previews. Signing stays in an external Bittensor-compatible wallet."
     : panel === "polymarket"
       ? "Runs market research, compliance checks, and external-wallet handoffs. Matterhorn never places bets inside the app."
-    : "Runs read-only market/account checks and prepares external-client handoffs. Matterhorn never submits orders inside the app.";
+      : panel === "sui"
+        ? "Runs public Sui account reads and transfer previews. Web signing happens in your connected Sui wallet; desktop signing stays external."
+        : "Runs read-only market/account checks and prepares external-client handoffs. Matterhorn never submits orders inside the app.";
 
   return (
     <section
@@ -671,7 +700,9 @@ function ProtocolDeskEmptyState({
               ? "reads: public market and account context"
               : panel === "polymarket"
                 ? "reads: public market and compliance context"
-                : "reads: public context";
+                : panel === "sui"
+                  ? "reads: public Sui account and receipt context"
+                  : "reads: public context";
           return (
             <WorkflowStageCard
               key={item.title}
@@ -1033,7 +1064,7 @@ export function SessionPage(props: SessionPageProps) {
     [customerWorkflowStarterCards],
   );
   const protocolWorkflowLaunchers = useMemo(
-    () => customerWorkflowStarterCards.filter((card) => card.panel === "bittensor" || card.panel === "hyperliquid" || card.panel === "polymarket"),
+    () => customerWorkflowStarterCards.filter((card) => card.panel === "bittensor" || card.panel === "hyperliquid" || card.panel === "polymarket" || card.panel === "sui"),
     [customerWorkflowStarterCards],
   );
   const [memorySuggestionUnreadCount, setMemorySuggestionUnreadCount] = useState(0);
@@ -2139,7 +2170,7 @@ export function SessionPage(props: SessionPageProps) {
                         ) : null}
                         <HomeCapabilityOverview
                           onOpenCapability={(id) => {
-                            if (id === "bittensor" || id === "hyperliquid" || id === "polymarket") {
+                            if (id === "bittensor" || id === "hyperliquid" || id === "polymarket" || id === "sui") {
                               openVenueRailPane(id);
                               return;
                             }
@@ -2408,7 +2439,20 @@ export function SessionPage(props: SessionPageProps) {
                         onDeletedTarget={removeAccessibleTarget}
                         onClose={closeRightPane}
                       />
-                    ) : isVenueSidePanel(visibleSidePanel) ? (
+                    ) : visibleSidePanel === "sui" ? (
+                      <div
+                        data-testid="protocol-side-panel-scroll-root"
+                        className="flex h-full min-h-0 max-h-full flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain"
+                      >
+                        <SuiWorkflowPanel
+                          matterhornServerClient={props.matterhornServerClient}
+                          workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
+                          sessionId={props.selectedSessionId}
+                          compact
+                          onEvidenceSaved={() => void outputReceiptsQuery.refetch()}
+                        />
+                      </div>
+                    ) : isLegacyCryptoVenueSidePanel(visibleSidePanel) ? (
                       <div
                         data-testid="protocol-side-panel-scroll-root"
                         className="flex h-full min-h-0 max-h-full flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain"

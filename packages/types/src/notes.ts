@@ -15,6 +15,7 @@ export const MATTERHORN_NOTE_DESKS = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
   "longevity",
   "wellness",
   "memory",

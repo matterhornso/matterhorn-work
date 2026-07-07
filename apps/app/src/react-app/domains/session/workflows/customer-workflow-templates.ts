@@ -18,6 +18,7 @@ export type CustomerWorkflowIconHint =
   | "bittensor"
   | "hyperliquid"
   | "polymarket"
+  | "sui"
   | "wellness"
   | "services"
   | "blank";
@@ -43,8 +44,8 @@ export type CustomerWorkflowTemplate = {
     shortDescription: string;
   };
   routing: {
-    chatMode: "bittensor" | "hyperliquid" | "polymarket" | "wellness" | "services" | "general";
-    opensPanel?: "bittensor" | "hyperliquid" | "polymarket";
+    chatMode: "bittensor" | "hyperliquid" | "polymarket" | "sui" | "wellness" | "services" | "general";
+    opensPanel?: "bittensor" | "hyperliquid" | "polymarket" | "sui";
     startsSession: true;
   };
   safetyBoundaries: {
@@ -79,7 +80,7 @@ export type CustomerWorkflowStarterCard = {
   prompt: string;
   agentId?: string;
   iconHint: CustomerWorkflowIconHint;
-  panel?: "bittensor" | "hyperliquid" | "polymarket";
+  panel?: "bittensor" | "hyperliquid" | "polymarket" | "sui";
   recommendedSurface: CustomerWorkflowTemplate["launch"]["recommendedSurface"];
   statusLabel: string;
   safetySummary: string;
@@ -96,7 +97,7 @@ export type CustomerBetaDemoStarterCard = {
   prompt: string;
   agentId?: string;
   iconHint: CustomerWorkflowIconHint;
-  panel?: "bittensor" | "hyperliquid" | "polymarket";
+  panel?: "bittensor" | "hyperliquid" | "polymarket" | "sui";
   statusLabel: string;
   safetySummary: string;
   protocolDesk?: CustomerProtocolDeskVisual;
@@ -117,6 +118,9 @@ const MARKET_HANDOFF_SUFFIX =
 const BITTENSOR_SUFFIX =
   "Use public wallet context only. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";
 
+const SUI_SUFFIX =
+  "Use public Sui account context only. Prepare non-custodial previews, and keep signing inside the user's Sui wallet or external client. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";
+
 const WELLNESS_SUFFIX =
   "Use the standalone Longevity workflow, not a Web3 or market desk. Keep this educational and client-safe. Include a non-medical disclaimer and do not diagnose, prescribe, or claim live payments, hosting, email, or token gating. Expected outputs should save under outputs/longevity/<session-slug>/.";
 
@@ -130,6 +134,7 @@ const CUSTOMER_VISIBLE_TEMPLATE_IDS = new Set([
   "bittensor_operator",
   "hyperliquid_trader",
   "polymarket_researcher",
+  "sui_wallet_workflow",
   "wellness_creator_workflow",
   "blank_chat_workflow",
 ]);
@@ -138,6 +143,7 @@ const CUSTOMER_VISIBLE_DEMO_TEMPLATE_IDS = new Set([
   "bittensor_operator",
   "hyperliquid_trader",
   "polymarket_researcher",
+  "sui_wallet_workflow",
   "wellness_creator_workflow",
 ]);
 
@@ -145,12 +151,14 @@ const PANEL_BY_PROTOCOL_WORKSPACE: Partial<Record<MatterhornProtocolWorkspaceId,
   bittensor: "bittensor",
   hyperliquid: "hyperliquid",
   polymarket: "polymarket",
+  sui: "sui",
 };
 
 const CHAT_MODE_BY_PROTOCOL_WORKSPACE: Record<MatterhornProtocolWorkspaceId, CustomerWorkflowTemplate["routing"]["chatMode"]> = {
   bittensor: "bittensor",
   hyperliquid: "hyperliquid",
   polymarket: "polymarket",
+  sui: "sui",
   wellness: "wellness",
   decentralized_services: "services",
 };
@@ -204,6 +212,9 @@ function safetySummary(template: CustomerWorkflowTemplate): string {
   if (template.routing.chatMode === "polymarket") {
     return "Market research and compliance checks with external-wallet handoff.";
   }
+  if (template.routing.chatMode === "sui") {
+    return "Wallet signing stays in your Sui wallet. Matterhorn stores previews and public receipts only.";
+  }
   if (template.routing.chatMode === "wellness") {
     return "Standalone business workflow. Not Web3, not markets, no medical advice, and no live payments/email/hosting.";
   }
@@ -224,6 +235,8 @@ function buildCustomerWorkflowPromptFromText(template: CustomerWorkflowTemplate,
       return `Hyperliquid task: ${prompt}. Scope: markets, orderbooks, account exposure, funding, open orders, external trade handoffs, watches, and receipts. ${MARKET_HANDOFF_SUFFIX} ${intentContext}`.trim();
     case "polymarket":
       return `Polymarket task: ${prompt}. Scope: market discovery, outcomes, probabilities, liquidity, compliance checks, external trade handoffs, watches, and receipts. ${MARKET_HANDOFF_SUFFIX} ${intentContext}`.trim();
+    case "sui":
+      return `Sui task: ${prompt}. Scope: Sui public addresses, wallet-standard account reads, balance reads, transfer previews, wallet signing handoffs, public transaction digests, explorer links, and receipt evidence. ${SUI_SUFFIX} ${intentContext}`.trim();
     case "wellness": {
       const task = /build the full 7-stage longevity workflow/i.test(prompt)
         ? "Start the Longevity workflow for my clients"
@@ -376,6 +389,39 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
       shortDescription: "Research markets, outcomes, liquidity, compliance, and prepare external trade handoffs. Bet placement stays off.",
     },
     routing: { chatMode: "polymarket", opensPanel: "polymarket", startsSession: true },
+    safetyBoundaries: {
+      acceptsSecrets: false,
+      acceptsPrivateKeys: false,
+      acceptsApiSecrets: false,
+      acceptsRawSignatures: false,
+      canSubmit: false,
+      liveExecutionEnabled: false,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+  },
+  {
+    id: "sui_wallet_workflow",
+    name: "Use Sui",
+    summary: "Read public Sui account context, prepare transfer previews, and save public transaction receipts.",
+    promise: "Sui signing stays in your wallet. Matterhorn never asks for seed phrases, private keys, raw signatures, signed payloads, or wallet exports.",
+    category: "web3",
+    status: "preview_only",
+    examplePrompts: ["Show my Sui wallet", "Prepare a Sui transfer preview", "Import a Sui transaction receipt"],
+    launch: {
+      primaryCta: "Open Sui desk",
+      secondaryCta: "Preview transfer",
+      defaultPrompt: "Show my Sui wallet",
+      handoffContextLabel: "Public Sui address",
+      recommendedSurface: "protocol_desk",
+    },
+    ui: {
+      iconHint: "sui",
+      accent: "matterhorn_blue",
+      shortDescription: "Read Sui accounts, prepare transfer previews, and import public receipts. Signing stays in your wallet.",
+    },
+    routing: { chatMode: "sui", opensPanel: "sui", startsSession: true },
     safetyBoundaries: {
       acceptsSecrets: false,
       acceptsPrivateKeys: false,

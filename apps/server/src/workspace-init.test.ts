@@ -23,6 +23,7 @@ describe("ensureWorkspaceFiles", () => {
       const bittensorAgent = await readFile(join(root, ".opencode", "agents", "matterhorn-bittensor.md"), "utf8");
       const hyperliquidAgent = await readFile(join(root, ".opencode", "agents", "matterhorn-hyperliquid.md"), "utf8");
       const polymarketAgent = await readFile(join(root, ".opencode", "agents", "matterhorn-polymarket.md"), "utf8");
+      const suiAgent = await readFile(join(root, ".opencode", "agents", "matterhorn-sui.md"), "utf8");
       const longevityAgent = await readFile(join(root, ".opencode", "agents", "matterhorn-longevity.md"), "utf8");
       const config = await readFile(join(root, "opencode.jsonc"), "utf8");
       const outputsDir = await stat(join(root, "outputs"));
@@ -41,6 +42,9 @@ describe("ensureWorkspaceFiles", () => {
       expect(hyperliquidAgent).toContain("Can submit: No");
       expect(polymarketAgent).toContain("Polymarket Agent");
       expect(polymarketAgent).toContain("compliance-gated handoff");
+      expect(suiAgent).toContain("Sui Agent");
+      expect(suiAgent).toContain("matterhorn_desk_id: sui");
+      expect(suiAgent).toContain("outputs/sui/<session-slug>");
       expect(longevityAgent).toContain("Longevity Agent");
       expect(longevityAgent).toContain("7-stage workflow");
       expect(outputsDir.isDirectory()).toBe(true);

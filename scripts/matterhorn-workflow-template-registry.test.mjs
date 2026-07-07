@@ -182,6 +182,7 @@ const deskIds = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
   "wellness",
   "memory",
   "mcp",

@@ -66,6 +66,7 @@ for (const [deskId, agentId] of [
   ["bittensor", "matterhorn-bittensor"],
   ["hyperliquid", "matterhorn-hyperliquid"],
   ["polymarket", "matterhorn-polymarket"],
+  ["sui", "matterhorn-sui"],
   ["wellness", "matterhorn-longevity"],
   ["memory", "matterhorn-memory"],
   ["mcps", "matterhorn-mcps"],
@@ -85,12 +86,13 @@ assertIncludes(workspaceInit, "outputs/<desk>/<session-slug>/", "workspace artif
 assertIncludes(workspaceInitTest, "matterhorn-bittensor.md", "workspace init tests");
 assertIncludes(workspaceInitTest, "matterhorn-hyperliquid.md", "workspace init tests");
 assertIncludes(workspaceInitTest, "matterhorn-polymarket.md", "workspace init tests");
+assertIncludes(workspaceInitTest, "matterhorn-sui.md", "workspace init tests");
 assertIncludes(workspaceInitTest, "matterhorn-longevity.md", "workspace init tests");
 
 assertIncludes(sessionSurface, "matterhornDeskAgentIdForDesk(activeDeskMode)", "session surface auto agent selection");
 assertIncludes(sessionSurface, "props.onSelectAgent(deskAgentId)", "session surface auto agent selection");
-assertIncludes(sessionSurface, "Open with agent", "session surface CTA");
-assertIncludes(sessionSurface, "Nothing sends until you press Ask", "session surface guardrail copy");
+assertIncludes(sessionSurface, "Start task", "session surface CTA");
+assertIncludes(sessionSurface, "Review it, then send it to the desk agent.", "session surface guardrail copy");
 assertIncludes(sessionRoute, "agent: selectedAgent ?? undefined", "session route prompt dispatch");
 assertIncludes(sessionRoute, "formatAgentDisplayName(selectedAgent)", "session route agent label");
 assertIncludes(sessionRoute, "setSelectedAgent(agent || null)", "session route launcher agent selection");
