@@ -354,6 +354,36 @@ export interface MatterhornImageListResponse {
   images: MatterhornGeneratedImage[];
 }
 
+export type MatterhornGeneratedMediaHistoryStatus =
+  | "generated"
+  | "draft"
+  | "storage_ready"
+  | "mint_preview_ready"
+  | "minted"
+  | "listed";
+
+export interface MatterhornGeneratedMediaHistoryItem {
+  id: string;
+  workspaceId: string;
+  image: MatterhornGeneratedImage;
+  drafts: MatterhornImageNftDraft[];
+  latestDraft?: MatterhornImageNftDraft | null;
+  status: MatterhornGeneratedMediaHistoryStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MatterhornGeneratedMediaHistoryResponse {
+  success: true;
+  items: MatterhornGeneratedMediaHistoryItem[];
+  counts: {
+    images: number;
+    drafts: number;
+    minted: number;
+    listed: number;
+  };
+}
+
 export interface MatterhornImageResponse {
   success: true;
   image: MatterhornGeneratedImage;

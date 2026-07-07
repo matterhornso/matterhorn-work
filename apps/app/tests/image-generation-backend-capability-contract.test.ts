@@ -37,6 +37,8 @@ describe("Image generation backend capability contract", () => {
     const source = readAppSource("app/lib/matterhorn-server.ts");
     expect(source).toContain("generateImage:");
     expect(source).toContain("listGeneratedImages:");
+    expect(source).toContain("listGeneratedMediaHistory:");
+    expect(source).toContain("/generated-media/history");
     expect(source).toContain("createImageNftDraft:");
     expect(source).toContain("previewNftMint:");
     expect(source).toContain("previewNftListing:");

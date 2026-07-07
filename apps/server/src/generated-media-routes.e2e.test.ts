@@ -201,6 +201,46 @@ describe("Generated media routes", () => {
     expect(list.payload.images.length).toBe(1);
   });
 
+  test("GET /workspace/:id/generated-media/history joins images with NFT draft state", async () => {
+    const { base } = await boot();
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "a cat in a mountain studio" }),
+    });
+    const imageId = generated.payload.image.id;
+    const draftResult = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${imageId}/nft-draft`, {
+      method: "POST",
+      body: JSON.stringify({ title: "Mountain Cat" }),
+    });
+    expect(draftResult.response.status).toBe(200);
+
+    const history = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/generated-media/history`);
+
+    expect(history.response.status).toBe(200);
+    expect(history.payload.success).toBe(true);
+    expect(history.payload.counts).toMatchObject({
+      images: 1,
+      drafts: 1,
+      minted: 0,
+      listed: 0,
+    });
+    expect(history.payload.items).toHaveLength(1);
+    expect(history.payload.items[0]).toMatchObject({
+      id: imageId,
+      workspaceId: WORKSPACE_ID,
+      status: "draft",
+      image: {
+        id: imageId,
+        prompt: "a cat in a mountain studio",
+      },
+      latestDraft: {
+        title: "Mountain Cat",
+        status: "draft",
+      },
+    });
+    expect(history.payload.items[0].drafts).toHaveLength(1);
+  });
+
   test("POST /workspace/:id/images/:imageId/nft-draft creates a draft", async () => {
     const { base } = await boot();
     const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {

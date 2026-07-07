@@ -7,6 +7,7 @@ import {
   GeneratedImageCard,
   GeneratedImageLoadingCard,
   GeneratedImageErrorCard,
+  GeneratedMediaHistory,
   ImageGenerationComposer,
   NftSetupRequirements,
   NftDraftPanel,
@@ -19,6 +20,7 @@ import {
   buildKioskListingTransactionFromPlan,
   buildMintTransactionFromPlan,
   receiptFromSuiWalletResult,
+  generatedMediaStatusLabel,
 } from "../src/react-app/domains/session/media";
 import type {
   MatterhornGeneratedImage,
@@ -224,6 +226,42 @@ describe("Generated image card", () => {
   });
 });
 
+describe("Generated media history", () => {
+  test("renders recent images with NFT status and actions", () => {
+    const html = renderToStaticMarkup(React.createElement(GeneratedMediaHistory, {
+      items: [
+        {
+          id: "img_test",
+          workspaceId: "ws_test",
+          image: mockImage,
+          drafts: [mockUploadedDraft],
+          latestDraft: mockUploadedDraft,
+          status: "mint_preview_ready",
+          createdAt: mockImage.createdAt,
+          updatedAt: mockUploadedDraft.updatedAt,
+        },
+      ],
+      selectedImageId: "img_test",
+      onSelectImage: () => {},
+      onMakeNft: () => {},
+    }));
+
+    expect(html).toContain("Recent images");
+    expect(html).toContain("a tiny robot");
+    expect(html).toContain("Mint ready");
+    expect(html).toContain("NFT");
+    expect(generatedMediaStatusLabel({
+      id: "img_test",
+      workspaceId: "ws_test",
+      image: mockImage,
+      drafts: [],
+      status: "generated",
+      createdAt: mockImage.createdAt,
+      updatedAt: mockImage.createdAt,
+    })).toBe("Image");
+  });
+});
+
 describe("Image generation composer", () => {
   test("working state renders input and button", () => {
     const html = renderToStaticMarkup(
@@ -247,6 +285,7 @@ describe("Session image generation panel", () => {
     const client = {
       backendCapabilities: async () => { throw new Error("not used"); },
       listGeneratedImages: async () => ({ success: true, images: [] }),
+      listGeneratedMediaHistory: async () => ({ success: true, items: [], counts: { images: 0, drafts: 0, minted: 0, listed: 0 } }),
       getGeneratedImageFile: async () => ({ data: new ArrayBuffer(0), contentType: "image/png", filename: null }),
       generateImage: async () => ({ success: true, image: mockImage }),
       listImageNftDrafts: async () => ({ success: true, drafts: [] }),
