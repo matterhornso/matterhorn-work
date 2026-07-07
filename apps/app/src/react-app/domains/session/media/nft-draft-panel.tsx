@@ -32,6 +32,9 @@ import type {
   MatterhornNftMintPreviewResponse,
   MatterhornNftReceiptRequest,
   MatterhornNftSetupRequirement,
+  MatterhornNftMarketplaceListingCapability,
+  MatterhornNftMintingCapability,
+  MatterhornWalrusStorageCapability,
 } from "@matterhorn-work/types/generated-media";
 import {
   buildNftPublishingReadinessItems,
@@ -42,6 +45,26 @@ import {
 import type { MatterhornSuiWalletExecutionReceipt } from "./sui-nft-transaction-plan";
 
 export type NftCapabilityStatus = "working" | "needs_setup" | "preview";
+type NftCapabilityInput<T extends object> = NftCapabilityStatus | (Partial<T> & {
+  status?: NftCapabilityStatus;
+  label?: string;
+  description?: string;
+  value?: string | null;
+  setupRequirements?: PublishingSetupRequirement[];
+});
+type NormalizedNftCapabilityInput<T extends object> = Omit<Partial<T>, "status"> & {
+  status: NftCapabilityStatus;
+  label?: string;
+  description?: string;
+  value?: string | null;
+  setupRequirements?: PublishingSetupRequirement[];
+};
+
+export interface NftDraftPublishingCapabilities {
+  walrusStorage: NftCapabilityInput<MatterhornWalrusStorageCapability>;
+  nftMinting: NftCapabilityInput<MatterhornNftMintingCapability>;
+  nftMarketplaceListing: NftCapabilityInput<MatterhornNftMarketplaceListingCapability>;
+}
 
 export interface NftWalletOption {
   id: string;
@@ -70,11 +93,7 @@ export interface NftDraftPanelProps {
   onOpenChange: (open: boolean) => void;
   image: MatterhornGeneratedImage;
   imageUrl?: string;
-  capabilities: {
-    walrusStorage: NftCapabilityStatus;
-    nftMinting: NftCapabilityStatus;
-    nftMarketplaceListing: NftCapabilityStatus;
-  };
+  capabilities: NftDraftPublishingCapabilities;
   draft?: MatterhornImageNftDraft | null;
   mintPreview?: MatterhornNftMintPreviewResponse | null;
   listingPreview?: MatterhornNftListingPreviewResponse | null;
@@ -106,9 +125,12 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
   const [transferPolicyId, setTransferPolicyId] = useState("");
   const [priceMist, setPriceMist] = useState("");
 
-  const canUpload = props.capabilities.walrusStorage === "working" || props.capabilities.walrusStorage === "preview";
-  const canMint = props.capabilities.nftMinting === "working" || props.capabilities.nftMinting === "preview";
-  const canList = props.capabilities.nftMarketplaceListing === "working" || props.capabilities.nftMarketplaceListing === "preview";
+  const walrusStorage = normalizeNftCapabilityInput(props.capabilities.walrusStorage);
+  const nftMinting = normalizeNftCapabilityInput(props.capabilities.nftMinting);
+  const nftMarketplaceListing = normalizeNftCapabilityInput(props.capabilities.nftMarketplaceListing);
+  const canUpload = walrusStorage.status === "working" || walrusStorage.status === "preview";
+  const canMint = nftMinting.status === "working" || nftMinting.status === "preview";
+  const canList = nftMarketplaceListing.status === "working" || nftMarketplaceListing.status === "preview";
   const walletExecution = props.walletExecution;
   const draft = props.draft ?? null;
   const publishingReadiness = useMemo(() => buildNftPublishingReadinessItems({
@@ -118,22 +140,13 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
       description: "This generated image is ready to use as NFT media.",
       value: `${props.image.provider}/${props.image.model}`,
     },
-    walrusStorage: {
-      status: props.capabilities.walrusStorage,
-      label: "Public storage",
-    },
-    nftMinting: {
-      status: props.capabilities.nftMinting,
-      label: "Sui minting",
-    },
-    nftMarketplaceListing: {
-      status: props.capabilities.nftMarketplaceListing,
-      label: "Marketplace listing",
-    },
+    walrusStorage: { ...walrusStorage, label: walrusStorage.label ?? "Public storage" },
+    nftMinting: { ...nftMinting, label: nftMinting.label ?? "Sui minting" },
+    nftMarketplaceListing: { ...nftMarketplaceListing, label: nftMarketplaceListing.label ?? "Marketplace listing" },
   }), [
-    props.capabilities.nftMarketplaceListing,
-    props.capabilities.nftMinting,
-    props.capabilities.walrusStorage,
+    nftMarketplaceListing,
+    nftMinting,
+    walrusStorage,
     props.image.model,
     props.image.provider,
   ]);
@@ -438,6 +451,13 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
       </SheetContent>
     </Sheet>
   );
+}
+
+function normalizeNftCapabilityInput<T extends object>(
+  capability: NftCapabilityInput<T>,
+): NormalizedNftCapabilityInput<T> {
+  if (typeof capability === "string") return { status: capability } as NormalizedNftCapabilityInput<T>;
+  return { ...capability, status: capability.status ?? "needs_setup" } as NormalizedNftCapabilityInput<T>;
 }
 
 export function NftSetupRequirements(props: { requirements: MatterhornNftSetupRequirement[] }) {
