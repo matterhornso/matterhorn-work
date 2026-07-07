@@ -136,7 +136,7 @@ import { abortSessionSafe } from "../../app/lib/opencode-session";
 import { useReloadCoordinator } from "./reload-coordinator";
 import { getDenInferenceUrl } from "../../app/lib/den";
 import { readActiveWorkspaceId, writeActiveWorkspaceId } from "./session-memory";
-import { workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
+import { workspaceRunHistoryRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
 import { getReactQueryClient } from "../infra/query-client";
 import { ensureProviderListQuery, getConnectedProviderItems, refreshProviderListQueries } from "../domains/connections/provider-list-query";
 import { openModelPickerEvent, pendingModelPickerProviderIdsKey } from "./new-providers-toast";
@@ -2040,6 +2040,20 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     navigateSettingsPath("cloud-account");
   };
 
+  const openWorkspaceSurfacePanel = (panel: "memory" | "notes") => {
+    const workspaceId = runtimeWorkspaceId?.trim() || selectedWorkspaceId?.trim();
+    navigate(workspaceId ? `${workspaceSessionRoute(workspaceId)}?panel=${panel}` : `/session?panel=${panel}`);
+  };
+
+  const openWorkspaceOutputs = () => {
+    const workspaceId = runtimeWorkspaceId?.trim() || selectedWorkspaceId?.trim();
+    if (workspaceId) {
+      navigate(workspaceRunHistoryRoute(workspaceId));
+      return;
+    }
+    navigateSettingsPath("overview");
+  };
+
   const settingsView = (() => {
     switch (route.tab) {
       case "overview":
@@ -2052,6 +2066,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             runtimeWorkspaceId={runtimeWorkspaceId ?? undefined}
             matterhornServerClient={matterhornClient}
             backendSettingsSections={settingsCapabilitySectionsQuery.data ?? null}
+            onOpenMemoryReview={() => openWorkspaceSurfacePanel("memory")}
+            onOpenNotes={() => openWorkspaceSurfacePanel("notes")}
+            onOpenOutputs={openWorkspaceOutputs}
             onSendFeedback={() => setFeedbackDialogOpen(true)}
             onJoinDiscord={() => platform.openLink("https://discord.gg/VEhNQXxYMB")}
             onReportIssue={() => platform.openLink("https://github.com/matterhornso/matterhorn-work/issues/new?template=bug.yml")}

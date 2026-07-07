@@ -2,12 +2,15 @@
 import {
   ArrowRight,
   ArrowUpRight,
+  BrainCircuit,
   Cloud,
   Cog,
+  FileText,
   FolderLock,
   LifeBuoy,
   ListChecks,
   MessageCircle,
+  NotebookPen,
   Paintbrush,
   Puzzle,
   RefreshCcw,
@@ -20,7 +23,10 @@ import {
 import { t } from "../../../../i18n";
 import type { SettingsTab } from "../../../../app/types";
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
-import type { MatterhornSettingsSectionCapability } from "@matterhorn-work/types/backend-capabilities";
+import type {
+  MatterhornCapabilityStatus,
+  MatterhornSettingsSectionCapability,
+} from "@matterhorn-work/types/backend-capabilities";
 import { Button } from "@/components/ui/button";
 import { getSessionActivityStatusLabel, type SessionActivityStatus } from "../../session/status/session-activity-store";
 import { useWorkflowTaskLog, type TaskLogSource } from "./use-workflow-task-log";
@@ -35,6 +41,9 @@ export type GeneralSettingsViewProps = {
   runtimeWorkspaceId?: string;
   matterhornServerClient?: MatterhornServerClient | null;
   backendSettingsSections?: MatterhornSettingsSectionCapability[] | null;
+  onOpenMemoryReview: () => void;
+  onOpenNotes: () => void;
+  onOpenOutputs: () => void;
   onSendFeedback: () => void;
   onJoinDiscord: () => void;
   onReportIssue: () => void;
@@ -47,6 +56,17 @@ type SettingsHubCard = {
   desc: string;
   status: SettingsReadinessStatus;
   developerOnly?: boolean;
+};
+
+type ProjectSurfaceSection = "memory" | "notes" | "outputs" | "feedback";
+type ProjectSurfaceStatus = SettingsReadinessStatus | "Unavailable";
+
+type ProjectSurfaceCard = {
+  section: ProjectSurfaceSection;
+  icon: typeof Sparkles;
+  title: string;
+  desc: string;
+  actionLabel: string;
 };
 
 const workspaceCards: SettingsHubCard[] = [
@@ -65,6 +85,53 @@ const globalCards: SettingsHubCard[] = [
   { tab: "environment", icon: Terminal, title: "Environment", desc: "Local runtime variables.", status: "Developer", developerOnly: true },
   { tab: "recovery", icon: ShieldCheck, title: "Recovery", desc: "Reset and repair diagnostics.", status: "Preview", developerOnly: true },
 ];
+
+const projectSurfaceCards: ProjectSurfaceCard[] = [
+  {
+    section: "memory",
+    icon: BrainCircuit,
+    title: "Memory review",
+    desc: "Review suggestions before saving.",
+    actionLabel: "Open",
+  },
+  {
+    section: "notes",
+    icon: NotebookPen,
+    title: "Notes",
+    desc: "Workspace notes and quick jots.",
+    actionLabel: "Open",
+  },
+  {
+    section: "outputs",
+    icon: FileText,
+    title: "Outputs",
+    desc: "Receipts, files, and run evidence.",
+    actionLabel: "Review",
+  },
+  {
+    section: "feedback",
+    icon: MessageCircle,
+    title: "Feedback",
+    desc: "Local feedback for product quality only.",
+    actionLabel: "Send",
+  },
+];
+
+function capabilityStatusToSettingsStatus(status: MatterhornCapabilityStatus): SettingsReadinessStatus {
+  if (status === "working") return "Working";
+  if (status === "needs_setup") return "Needs setup";
+  if (status === "preview") return "Preview";
+  return "Not supported here";
+}
+
+function getSectionStatus(
+  sectionId: ProjectSurfaceSection,
+  sections?: MatterhornSettingsSectionCapability[] | null,
+) {
+  if (!sections?.length) return "Unavailable";
+  const section = sections?.find((item) => item.section === sectionId);
+  return section ? capabilityStatusToSettingsStatus(section.status) : "Not supported here";
+}
 
 function SettingsCard(props: {
   icon: typeof Sparkles;
@@ -103,6 +170,49 @@ function SettingsCard(props: {
         <div className="mt-0.5 text-[12px] leading-5 text-dls-text">{props.desc}</div>
       </div>
       <ArrowRight size={14} className="shrink-0 text-dls-secondary" />
+    </button>
+  );
+}
+
+function ProjectSurfaceRow(props: {
+  icon: typeof Sparkles;
+  title: string;
+  desc: string;
+  status: ProjectSurfaceStatus;
+  actionLabel: string;
+  onClick: () => void;
+}) {
+  const statusClass =
+    props.status === "Working"
+      ? "text-emerald-300"
+      : props.status === "Needs setup"
+        ? "text-sky-300"
+        : props.status === "Preview"
+          ? "text-amber-300"
+          : props.status === "Unavailable"
+            ? "text-red-300"
+          : "text-dls-secondary";
+
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      className="group flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-dls-hover/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.34)]"
+    >
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-dls-hover/55 text-dls-text transition-colors group-hover:bg-dls-hover">
+        <props.icon size={16} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="min-w-0 truncate text-[13px] font-medium text-dls-text">{props.title}</div>
+          <span className={`shrink-0 text-[11px] font-medium ${statusClass}`}>{props.status}</span>
+        </div>
+        <div className="mt-0.5 text-[12px] leading-5 text-dls-secondary">{props.desc}</div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1 text-[12px] font-medium text-dls-accent">
+        <span>{props.actionLabel}</span>
+        <ArrowRight size={13} />
+      </div>
     </button>
   );
 }
@@ -200,6 +310,13 @@ function TaskLogsSection(props: {
 }
 
 export function GeneralSettingsView(props: GeneralSettingsViewProps) {
+  const projectSurfaceActions: Record<ProjectSurfaceSection, () => void> = {
+    memory: props.onOpenMemoryReview,
+    notes: props.onOpenNotes,
+    outputs: props.onOpenOutputs,
+    feedback: props.onSendFeedback,
+  };
+
   return (
     <div className="w-full max-w-4xl space-y-6">
       {/* Workspace settings */}
@@ -243,6 +360,27 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
                 />
               );
             })}
+        </div>
+      </section>
+
+      {/* Project surfaces */}
+      <section className="rounded-xl bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+        <div className="px-2 pb-1 text-sm font-semibold text-dls-text">Project surfaces</div>
+        <p className="px-2 pb-2 text-[12px] leading-5 text-dls-secondary">
+          Open the workspace evidence surfaces with live backend status.
+        </p>
+        <div className="grid gap-1 md:grid-cols-2">
+          {projectSurfaceCards.map((card) => (
+            <ProjectSurfaceRow
+              key={card.section}
+              icon={card.icon}
+              title={card.title}
+              desc={card.desc}
+              status={getSectionStatus(card.section, props.backendSettingsSections)}
+              actionLabel={card.actionLabel}
+              onClick={projectSurfaceActions[card.section]}
+            />
+          ))}
         </div>
       </section>
 
