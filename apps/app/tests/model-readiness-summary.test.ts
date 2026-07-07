@@ -118,11 +118,15 @@ describe("model readiness summary", () => {
     expect(summary.workspaceDefault.value).toBe("openai/gpt-4.1");
     expect(summary.workspaceDefault.detail).toContain("Saved in this workspace");
     expect(summary.effectiveModel.value).toBe("openai/gpt-4.1");
+    expect(summary.effectiveModel.label).toBe("Fallback model");
     expect(summary.answerPath.value).toBe("OpenCode session prompts");
+    expect(summary.answerPath.detail).toContain("session.promptAsync");
     expect(summary.providerList.value).toBe("OpenCode provider list");
+    expect(summary.providerList.detail).toContain("OpenCode provider.list");
     expect(summary.providerCatalog.value).toBe("1 providers · 2 models");
     expect(summary.selectionPolicy.value).toBe("Workspace");
     expect(summary.trainingPolicy).toContain("No model training by default");
+    expect(summary.trainingPolicy).toContain("product quality review");
   });
 
   test("shows workspace default as the current choice after local override is cleared", () => {

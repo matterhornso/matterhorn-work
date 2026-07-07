@@ -23,7 +23,7 @@ import {
   LayoutSectionTitle,
   LayoutStack,
 } from "../settings-layout";
-import { buildModelReadinessSummary } from "../state/model-readiness-summary";
+import { buildModelReadinessSummary, type ModelReadinessDetail } from "../state/model-readiness-summary";
 
 type ConnectedProvider = {
   id: string;
@@ -75,6 +75,18 @@ function providerStatusTone(label: string): "ready" | "warning" | "neutral" {
   if (label.toLowerCase().includes("connected")) return "ready";
   if (label.toLowerCase().includes("error") || label.toLowerCase().includes("fail")) return "warning";
   return "neutral";
+}
+
+function ModelRoutingRow({ item }: { item: ModelReadinessDetail }) {
+  return (
+    <div className="grid gap-1 py-2.5 text-sm @md/settings:grid-cols-[9.5rem_1fr] @md/settings:gap-4">
+      <div className="text-xs font-medium text-muted-foreground">{item.label}</div>
+      <div className="min-w-0">
+        <div className="truncate text-dls-text">{item.value}</div>
+        {item.detail ? <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{item.detail}</div> : null}
+      </div>
+    </div>
+  );
 }
 
 export function AiSettingsView(props: AiSettingsViewProps) {
@@ -175,9 +187,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
       {/* ---- Model routing ---- */}
       <LayoutSection>
         <LayoutSectionHeader>
-          <LayoutSectionTitle>Model routing</LayoutSectionTitle>
+          <LayoutSectionTitle>Agent model</LayoutSectionTitle>
           <LayoutSectionDescription>
-            Choose which model answers workspace prompts, and whether that choice is saved for this project.
+            See what answers prompts, where the model list comes from, and what is saved for this workspace.
           </LayoutSectionDescription>
         </LayoutSectionHeader>
 
@@ -187,7 +199,13 @@ export function AiSettingsView(props: AiSettingsViewProps) {
           </SettingsNotice>
         ) : null}
 
-        <LayoutSectionItem className="rounded-lg border border-dls-border/40 bg-dls-card/35 px-4 py-4 shadow-sm shadow-black/5">
+        {catalogQueryFailed && !opencodeSetupMissing ? (
+          <SettingsNotice tone="error">
+            Model catalog could not load. Check the local Matterhorn Work engine, then refresh this workspace.
+          </SettingsNotice>
+        ) : null}
+
+        <LayoutSectionItem>
           <LayoutSectionItemHeader>
             <LayoutSectionItemTitle>
               {modelReadiness.currentChoice.value}
@@ -221,7 +239,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 }}
                 disabled={props.busy || !canSaveWorkspaceDefault || saveWorkspaceDefaultMutation.isPending}
               >
-                Save workspace default
+                Save as workspace default
               </Button>
               {workspaceSelection ? (
                 <Button
@@ -238,13 +256,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             </LayoutSectionItemHeaderActions>
           </LayoutSectionItemHeader>
 
-          <div className="grid gap-3 text-sm @md/settings:grid-cols-2">
+          <div className="divide-y divide-dls-border/35">
             {[modelReadiness.workspaceDefault, modelReadiness.effectiveModel, modelReadiness.answerPath, modelReadiness.providerList].map((item) => (
-              <div key={item.label} className="min-w-0 rounded-md bg-dls-hover/35 px-3 py-2">
-                <div className="text-[11px] font-medium uppercase tracking-wide text-dls-secondary">{item.label}</div>
-                <div className="mt-1 truncate text-dls-text">{item.value}</div>
-                {item.detail ? <div className="mt-1 text-xs leading-5 text-dls-secondary">{item.detail}</div> : null}
-              </div>
+              <ModelRoutingRow key={item.label} item={item} />
             ))}
           </div>
 
