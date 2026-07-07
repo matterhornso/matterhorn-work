@@ -195,6 +195,13 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain('chat: { icon: MessageSquareText');
       expect(source).toContain("No training by default");
       expect(source).toContain("Exported");
+      expect(source).toContain("ProjectHistoryDetailSheet");
+      expect(source).toContain("SheetContent");
+      expect(source).toContain("selectedEntryId");
+      expect(source).toContain("onSelect={() => setSelectedEntryId(entry.id)}");
+      expect(source).toContain("formatAbsoluteTimestamp");
+      expect(source).toContain("Data policy");
+      expect(source).toContain("Ledger id");
     });
 
     test("ProjectHistoryPage does not expose raw prompts or secret material", () => {
