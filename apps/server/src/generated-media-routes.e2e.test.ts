@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -201,6 +201,31 @@ describe("Generated media routes", () => {
     expect(list.payload.images.length).toBe(1);
   });
 
+  test("DELETE /workspace/:id/images/:imageId removes a local generated image", async () => {
+    const { base, dir } = await boot();
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "a tiny studio landscape" }),
+    });
+    const imageId = generated.payload.image.id;
+    const imagePath = join(dir, generated.payload.image.relativePath);
+    const metadataPath = join(dir, ".matterhorn-work", "outputs", "images", `${imageId}.metadata.json`);
+    expect(existsSync(imagePath)).toBe(true);
+    expect(existsSync(metadataPath)).toBe(true);
+
+    const deleted = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${imageId}`, {
+      method: "DELETE",
+    });
+
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload.success).toBe(true);
+    expect(deleted.payload.deleted.id).toBe(imageId);
+    expect(existsSync(imagePath)).toBe(false);
+    expect(existsSync(metadataPath)).toBe(false);
+    const list = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images`);
+    expect(list.payload.images).toHaveLength(0);
+  });
+
   test("GET /workspace/:id/generated-media/history joins images with NFT draft state", async () => {
     const { base } = await boot();
     const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
@@ -256,7 +281,81 @@ describe("Generated media routes", () => {
     expect(draftResult.payload.draft.title).toBe("Test NFT");
     expect(draftResult.payload.draft.status).toBe("draft");
     expect(draftResult.payload.draft.storage.status).toBe("local_only");
+  });
+
+  test("DELETE NFT draft removes a local draft and unblocks image deletion", async () => {
+    const { base } = await boot();
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "a local NFT draft image" }),
     });
+    const imageId = generated.payload.image.id;
+    const draftResult = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${imageId}/nft-draft`, {
+      method: "POST",
+      body: JSON.stringify({ title: "Local draft" }),
+    });
+    const draftId = draftResult.payload.draft.id;
+
+    const blockedImageDelete = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${imageId}`, {
+      method: "DELETE",
+    });
+    expect(blockedImageDelete.response.status).toBe(409);
+    expect(blockedImageDelete.payload.code).toBe("image_has_nft_drafts");
+
+    const deletedDraft = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draftId}`, {
+      method: "DELETE",
+    });
+    expect(deletedDraft.response.status).toBe(200);
+    expect(deletedDraft.payload.deleted.id).toBe(draftId);
+
+    const drafts = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts`);
+    expect(drafts.payload.drafts).toHaveLength(0);
+    const deletedImage = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${imageId}`, {
+      method: "DELETE",
+    });
+    expect(deletedImage.response.status).toBe(200);
+  });
+
+  test("DELETE refuses NFT drafts with public storage state", async () => {
+    const publisher = bootWalrusPublisher({
+      newlyCreated: {
+        blobObject: {
+          id: "0xpublicblobobject",
+          blobId: "blob_public_delete_guard",
+          storage: { endEpoch: 42 },
+        },
+      },
+    });
+    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = publisher.url;
+    process.env.MATTERHORN_WALRUS_RELAY_URL = "https://relay.example.test/base";
+    const { base } = await boot();
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "a public storage NFT draft image" }),
+    });
+    const imageId = generated.payload.image.id;
+    const draftResult = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${imageId}/nft-draft`, {
+      method: "POST",
+      body: JSON.stringify({ title: "Public draft" }),
+    });
+    const draftId = draftResult.payload.draft.id;
+    const uploaded = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draftId}/storage/upload`, {
+      method: "POST",
+    });
+    expect(uploaded.response.status).toBe(200);
+
+    const deletedDraft = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draftId}`, {
+      method: "DELETE",
+    });
+    expect(deletedDraft.response.status).toBe(409);
+    expect(deletedDraft.payload.code).toBe("nft_draft_public_state_retained");
+    expect(deletedDraft.payload.details.storageStatus).toBe("uploaded");
+
+    const deletedImage = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${imageId}`, {
+      method: "DELETE",
+    });
+    expect(deletedImage.response.status).toBe(409);
+    expect(deletedImage.payload.details.publicDraftCount).toBe(1);
   });
 
   test("GET image list and history redact stale secret-shaped prompt metadata", async () => {
@@ -385,6 +484,7 @@ describe("Generated media routes", () => {
     expect(history.payload.items[0].latestDraft.title).toBe("[redacted: secret-shaped input detected]");
     expect(history.payload.items[0].drafts[0].metadata.name).toBe("[redacted: secret-shaped input detected]");
   });
+});
 
 describe("Generated media Sui NFT setup previews", () => {
   async function createDraft(base: string) {

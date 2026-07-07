@@ -210,6 +210,43 @@ export function addGeneratedMediaRoutes(
     }
   });
 
+  addRoute("DELETE", "/workspace/:id/images/:imageId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const imageStore = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+    const draftStore = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+    const image = await imageStore.get(ctx.params.imageId);
+    if (!image) throw new ApiError(404, "image_not_found", "Generated image not found.");
+    const drafts = (await draftStore.list()).filter((draft) => draft.imageId === image.id);
+    if (drafts.length > 0) {
+      throw new ApiError(
+        409,
+        "image_has_nft_drafts",
+        "Generated image has NFT drafts. Delete local drafts first; public NFT state is retained.",
+        {
+          imageId: image.id,
+          draftCount: drafts.length,
+          publicDraftCount: drafts.filter(isPublicNftDraft).length,
+        },
+      );
+    }
+    const deleted = await imageStore.delete(image.id);
+    if (!deleted) throw new ApiError(404, "image_not_found", "Generated image not found.");
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.image.delete",
+      target: image.relativePath,
+      summary: `Deleted generated image ${image.id}`,
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({ success: true, deleted: redactGeneratedImageForResponse(deleted) });
+  });
+
   addRoute("POST", "/workspace/:id/images/:imageId/nft-draft", "client", async (ctx) => {
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
@@ -236,6 +273,43 @@ export function addGeneratedMediaRoutes(
 
     const response: MatterhornImageNftDraftResponse = { success: true, draft: redactNftDraftForResponse(draft) };
     return jsonResponse(response);
+  });
+
+  addRoute("DELETE", "/workspace/:id/nft-drafts/:draftId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+    const draft = await store.get(ctx.params.draftId);
+    if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
+    if (isPublicNftDraft(draft)) {
+      throw new ApiError(
+        409,
+        "nft_draft_public_state_retained",
+        "NFT draft has public storage, mint, or listing state and is retained for accountability.",
+        {
+          draftId: draft.id,
+          storageStatus: draft.storage.status,
+          mintStatus: draft.mint.status,
+          listingStatus: draft.listing.status,
+        },
+      );
+    }
+
+    const deleted = await store.delete(draft.id);
+    if (!deleted) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.nft.draft_delete",
+      target: draft.id,
+      summary: `Deleted local NFT draft ${draft.id}`,
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({ success: true, deleted: redactNftDraftForResponse(deleted) });
   });
 
   addRoute("GET", "/workspace/:id/nft-drafts", "client", async (ctx) => {
@@ -740,6 +814,14 @@ function generatedMediaHistoryStatus(
   if (draft.mint.status === "preview_ready") return "mint_preview_ready";
   if (draft.storage.status === "uploaded" || draft.storage.status === "ready_to_upload") return "storage_ready";
   return "draft";
+}
+
+function isPublicNftDraft(draft: MatterhornImageNftDraft): boolean {
+  return draft.storage.status === "uploaded"
+    || Boolean(draft.storage.blobId || draft.storage.objectId || draft.storage.transactionDigest || draft.storage.url)
+    || draft.mint.status === "confirmed"
+    || Boolean(draft.mint.transactionDigest || draft.mint.objectId)
+    || draft.listing.status === "listed";
 }
 
 function ensureWritable(config: ServerConfig): void {

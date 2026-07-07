@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   MatterhornGeneratedImage,
@@ -158,6 +158,13 @@ export class MatterhornImageNftDraftStore {
 
     draft.updatedAt = nowIso();
     await this.save(draft);
+    return draft;
+  }
+
+  async delete(draftId: string): Promise<MatterhornImageNftDraft | null> {
+    const draft = await this.get(draftId);
+    if (!draft) return null;
+    await rm(draftPath(this.workspaceRoot, draftId), { force: true });
     return draft;
   }
 

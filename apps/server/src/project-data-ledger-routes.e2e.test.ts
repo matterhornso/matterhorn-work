@@ -436,7 +436,19 @@ describe("project data ledger routes", () => {
         href: "/workspace/ws_ledger/data-ledger?kind=nft",
       }),
     );
-    expect(dataControls.payload.stores.imageOutputs.deletion.status).toBe("unsupported");
+    expect(dataControls.payload.stores.imageOutputs.deletion.status).toBe("working");
+    expect(dataControls.payload.stores.imageOutputs.deletion.actions).toContainEqual(
+      expect.objectContaining({
+        id: "generated-media.delete-image",
+        href: "/workspace/ws_ledger/images/:imageId",
+      }),
+    );
+    expect(dataControls.payload.stores.imageOutputs.deletion.actions).toContainEqual(
+      expect.objectContaining({
+        id: "generated-media.delete-nft-draft",
+        href: "/workspace/ws_ledger/nft-drafts/:draftId",
+      }),
+    );
     expect(dataControls.payload.stores.taskEvents.export.actions).toContainEqual(
       expect.objectContaining({
         id: "taskEvents.open-history",
