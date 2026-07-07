@@ -109,6 +109,17 @@ describe("DeskWorkflowStagePanel — uses WorkflowStageCard", () => {
     expect(panelSrc).not.toContain("rawPrompt={rawPrompt}");
   });
 
+  test("keeps workflow safety copy behind an info popover", () => {
+    const panelSrc = readAppSource("domains/session/workflows/desk-workflow-stage-panel.tsx");
+
+    expect(panelSrc).toContain("PopoverTrigger");
+    expect(panelSrc).toContain("PopoverContent");
+    expect(panelSrc).toContain("${visual.displayName} safety info");
+    expect(panelSrc).toContain("{visual.sessionBoundary}");
+    expect(panelSrc).not.toContain("Safety boundary:");
+    expect(panelSrc).not.toContain("safetyBoundary={isCurrent");
+  });
+
   test("cardStatus maps all runtime statuses correctly", () => {
     const panelSrc = readAppSource("domains/session/workflows/desk-workflow-stage-panel.tsx");
     expect(panelSrc).toContain('return "idle"');
