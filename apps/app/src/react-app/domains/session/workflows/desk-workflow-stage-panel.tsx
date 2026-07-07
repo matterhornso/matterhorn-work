@@ -1,7 +1,8 @@
-import { FileOutput, FileText, PencilLine, Shield } from "lucide-react";
+import { FileOutput, FileText, Info, PencilLine } from "lucide-react";
 import { t } from "@/i18n";
 import type { MatterhornWorkflowArtifact, MatterhornWorkflowManifest, MatterhornWorkflowStep } from "@matterhorn-work/types/matterhorn-workflows";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { deskToneStyle, getCustomerProtocolDeskVisual, getDeskWorkflowManifest, type CustomerProtocolDeskId } from "./protocol-desk-ui";
 import { ProtocolBrandLogo } from "./protocol-brand-logo";
 import { WorkflowStageCard, type WorkflowStageStatus } from "./workflow-stage-card";
@@ -125,6 +126,26 @@ export function DeskWorkflowStagePanel({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[14px] font-semibold text-dls-text">{visual.agentName}</span>
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={`${visual.displayName} safety info`}
+                    className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                  >
+                    <Info className="size-3.5" aria-hidden="true" />
+                  </button>
+                }
+              />
+              <PopoverContent
+                side="right"
+                align="start"
+                className="w-72 rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-left text-xs leading-5 text-dls-secondary shadow-none"
+              >
+                <p>{visual.sessionBoundary}</p>
+              </PopoverContent>
+            </Popover>
             <span className={`text-[11px] font-semibold ${STATUS_TONE[taskStatus] ?? STATUS_TONE.idle}`}>
               {STATUS_LABELS[taskStatus] ?? taskStatus}
             </span>
@@ -155,7 +176,6 @@ export function DeskWorkflowStagePanel({
                 evidenceHints={evidenceHintForStep(step)}
                 requiresExternalSigner={step.requiresExternalSigner}
                 requiresCustomerConfirmation={step.requiresCustomerConfirmation}
-                safetyBoundary={isCurrent ? visual.sessionBoundary : undefined}
                 isCurrent={isCurrent}
                 actionLabel={stageActionDisabled ? "Needs setup" : isCurrent ? "Start" : "Stage task"}
                 actionDisabled={stageActionDisabled}
@@ -216,17 +236,6 @@ export function DeskWorkflowStagePanel({
         </ul>
         <p className="mt-2 text-[11px] leading-4 text-dls-muted">
           Outputs save under <span className="font-medium text-dls-text">outputs/{visual.outputDeskId}/&lt;session-slug&gt;/</span>.
-        </p>
-      </div>
-
-      {/* Safety boundary */}
-      <div className="rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.24)] bg-[rgba(var(--matterhorn-desk-rgb),0.06)] px-3 py-2.5">
-        <p className="flex items-start gap-1.5 text-[11px] leading-4 text-dls-secondary">
-          <Shield className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" />
-          <span>
-            <span className="font-semibold text-dls-text">Safety boundary:</span>{" "}
-            {visual.sessionBoundary}
-          </span>
         </p>
       </div>
 
