@@ -67,6 +67,11 @@ import { cn } from "@/lib/utils";
 import { useQuickJot } from "../../notes";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
 import {
+  buildNftPublishingReadinessItems,
+  NftPublishingReadinessRows,
+  rollUpNftPublishingReadinessStatus,
+} from "../../session/media";
+import {
   backendCapabilityLabel,
   backendCapabilityTone,
   storageLocationLabel,
@@ -1244,6 +1249,17 @@ export function SettingsOverviewView(props: {
   const workspaceDataControls = workspaceBackendControlPlaneQuery.data?.dataControls ?? workspaceDataControlsQuery.data;
   const workspaceDataPolicy = workspaceBackendControlPlaneQuery.data?.dataPolicy ?? workspaceDataPolicyQuery.data;
   const profileCapability = settingsCapability(backendCapabilities, "profile");
+  const publishingReadiness = backendCapabilities
+    ? buildNftPublishingReadinessItems({
+      imageGeneration: backendCapabilities.imageGeneration,
+      walrusStorage: backendCapabilities.walrusStorage,
+      nftMinting: backendCapabilities.nftMinting,
+      nftMarketplaceListing: backendCapabilities.nftMarketplaceListing,
+    })
+    : [];
+  const publishingStatus = publishingReadiness.length
+    ? rollUpNftPublishingReadinessStatus(publishingReadiness)
+    : null;
   const updateWorkspaceDataPolicyMutation = useMutation({
     mutationFn: async (feedbackUse: MatterhornWorkspaceFeedbackUse) => {
       const client = props.matterhornServerClient;
@@ -1488,6 +1504,20 @@ export function SettingsOverviewView(props: {
                       </div>
                     ))}
                   </div>
+                </div>
+              ) : null}
+              {publishingReadiness.length ? (
+                <div className="px-1 py-3">
+                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-dls-text">Image and NFT publishing</p>
+                      <p className="mt-0.5 text-xs leading-5 text-dls-secondary">
+                        Generated images, public storage, Sui minting, and marketplace listing readiness.
+                      </p>
+                    </div>
+                    {publishingStatus ? <CapabilityBadge status={publishingStatus} /> : null}
+                  </div>
+                  <NftPublishingReadinessRows items={publishingReadiness} />
                 </div>
               ) : null}
               <Row

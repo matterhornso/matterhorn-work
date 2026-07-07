@@ -51,6 +51,7 @@ function getFreePort(): Promise<number> {
 
 async function boot() {
   const dir = mkdtempSync(join(tmpdir(), "matterhorn-image-"));
+  process.env.OPENWORK_DATA_DIR = join(dir, ".openwork-test");
   dirs.push(dir);
   const port = await getFreePort();
   const server = await startServer(baseConfig(port, dir));
@@ -105,6 +106,7 @@ beforeEach(() => {
     MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN: process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN,
     MATTERHORN_WALRUS_RELAY_URL: process.env.MATTERHORN_WALRUS_RELAY_URL,
     MATTERHORN_WALRUS_STORAGE_EPOCHS: process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS,
+    MATTERHORN_SUI_NETWORK: process.env.MATTERHORN_SUI_NETWORK,
     MATTERHORN_SUI_NFT_PACKAGE_ID: process.env.MATTERHORN_SUI_NFT_PACKAGE_ID,
     MATTERHORN_SUI_NFT_MODULE_NAME: process.env.MATTERHORN_SUI_NFT_MODULE_NAME,
     MATTERHORN_SUI_NFT_TYPE: process.env.MATTERHORN_SUI_NFT_TYPE,
@@ -113,6 +115,7 @@ beforeEach(() => {
     MATTERHORN_SUI_KIOSK_OWNER_CAP_ID: process.env.MATTERHORN_SUI_KIOSK_OWNER_CAP_ID,
     MATTERHORN_SUI_TRANSFER_POLICY_ID: process.env.MATTERHORN_SUI_TRANSFER_POLICY_ID,
     MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID: process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID,
+    OPENWORK_DATA_DIR: process.env.OPENWORK_DATA_DIR,
   };
   process.env.MATTERHORN_IMAGE_PROVIDER = "mock";
   delete process.env.OPENAI_API_KEY;
@@ -120,6 +123,7 @@ beforeEach(() => {
   delete process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN;
   delete process.env.MATTERHORN_WALRUS_RELAY_URL;
   delete process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS;
+  delete process.env.MATTERHORN_SUI_NETWORK;
   delete process.env.MATTERHORN_SUI_NFT_PACKAGE_ID;
   delete process.env.MATTERHORN_SUI_NFT_MODULE_NAME;
   delete process.env.MATTERHORN_SUI_NFT_TYPE;
@@ -128,6 +132,7 @@ beforeEach(() => {
   delete process.env.MATTERHORN_SUI_KIOSK_OWNER_CAP_ID;
   delete process.env.MATTERHORN_SUI_TRANSFER_POLICY_ID;
   delete process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID;
+  delete process.env.OPENWORK_DATA_DIR;
 });
 
 afterEach(async () => {
@@ -153,6 +158,18 @@ describe("Generated media routes", () => {
     expect(result.payload.image.provider).toBe("mock");
     expect(result.payload.image.prompt).toBe("a tiny robot");
     expect(result.payload.image.relativePath).toMatch(/\.matterhorn-work\/outputs\/images\/img_/);
+  });
+
+  test("POST /workspace/:id/images/generate reports invalid provider setup as setup failure", async () => {
+    process.env.MATTERHORN_IMAGE_PROVIDER = "not-a-provider";
+    const { base } = await boot();
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "a tiny robot" }),
+    });
+    expect(result.response.status).toBe(503);
+    expect(result.payload.code).toBe("image_provider_invalid_config");
+    expect(result.payload.message).toContain("MATTERHORN_IMAGE_PROVIDER");
   });
 
   test("GET /workspace/:id/images/:imageId/file returns renderable PNG bytes", async () => {
@@ -240,6 +257,35 @@ describe("Generated media Sui NFT setup previews", () => {
         key: "walrus_relay",
         status: "missing",
         envVar: "MATTERHORN_WALRUS_RELAY_URL",
+      }),
+    );
+  });
+
+  test("storage prepare reports invalid Walrus setup distinctly from missing setup", async () => {
+    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = "ftp://publisher.example.test";
+    process.env.MATTERHORN_WALRUS_RELAY_URL = "https://relay.example.test";
+    process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS = "0";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/storage/prepare`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(503);
+    expect(result.payload.code).toBe("walrus_invalid_setup");
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "walrus_publisher",
+        status: "invalid",
+        envVar: "MATTERHORN_WALRUS_PUBLISHER_URL",
+      }),
+    );
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "walrus_storage_epochs",
+        status: "invalid",
+        envVar: "MATTERHORN_WALRUS_STORAGE_EPOCHS",
       }),
     );
   });
@@ -336,6 +382,27 @@ describe("Generated media Sui NFT setup previews", () => {
     );
   });
 
+  test("mint preview reports invalid Sui network before preparing a transaction plan", async () => {
+    process.env.MATTERHORN_SUI_NETWORK = "sui-devnet";
+    process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = "0xmintpackage";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/preview`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(503);
+    expect(result.payload.code).toBe("sui_nft_invalid_setup");
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "sui_network",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_NETWORK",
+      }),
+    );
+  });
+
   test("mint preview blocks until the draft has a public image URI", async () => {
     process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = "0xmintpackage";
     const { base } = await boot();
@@ -423,6 +490,28 @@ describe("Generated media Sui NFT setup previews", () => {
     );
   });
 
+  test("listing preview reports invalid Sui network before preparing a marketplace plan", async () => {
+    process.env.MATTERHORN_SUI_NETWORK = "sui-devnet";
+    process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = "0xkiosk";
+    process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = "0xpolicy";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/preview`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(503);
+    expect(result.payload.code).toBe("sui_kiosk_invalid_setup");
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "sui_network",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_NETWORK",
+      }),
+    );
+  });
+
   test("listing preview requires minted object and user-owned Kiosk inputs", async () => {
     process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = "0xkiosk";
     process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = "0xpolicy";
@@ -497,6 +586,111 @@ describe("Generated media Sui NFT setup previews", () => {
     expect(result.payload.draft.listing.kioskOwnerCapId).toBe("0xownercap");
     expect(result.payload.draft.listing.transferPolicyId).toBe("0xtransferpolicy");
     expect(result.payload.draft.listing.itemType).toBe("0xmintpackage::matterhorn_media::MatterhornNFT");
+  });
+
+  test("mint and listing receipts appear in project evidence and data ledger", async () => {
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const mintReceipt = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "0xmintdigest",
+        objectId: "0xmintedobject",
+        network: "sui-testnet",
+        packageId: "0xmintpackage",
+      }),
+    });
+    expect(mintReceipt.response.status).toBe(200);
+
+    const listingReceipt = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "0xlistingdigest",
+        objectId: "0xmintedobject",
+        network: "sui-testnet",
+        kioskId: "0xuserkiosk",
+        transferPolicyId: "0xtransferpolicy",
+      }),
+    });
+    expect(listingReceipt.response.status).toBe(200);
+
+    const evidence = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/evidence?source=task_events&limit=20`);
+    expect(evidence.response.status).toBe(200);
+    expect(evidence.payload.summary.nfts).toBe(2);
+    expect(evidence.payload.items).toContainEqual(expect.objectContaining({
+      type: "nft.minted",
+      title: "NFT minted",
+      desk: "nft",
+      sessionSlug: draft.id,
+      taskId: `nft_mint_${draft.id}`,
+    }));
+    expect(evidence.payload.items).toContainEqual(expect.objectContaining({
+      type: "nft.listed",
+      title: "NFT listed",
+      desk: "nft",
+      sessionSlug: draft.id,
+      taskId: `nft_listing_${draft.id}`,
+    }));
+
+    const nftLedger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=nft&limit=20`);
+    expect(nftLedger.response.status).toBe(200);
+    expect(nftLedger.payload.summary.nfts).toBe(2);
+    expect(nftLedger.payload.items.map((item: { eventType?: string }) => item.eventType)).toEqual([
+      "nft.listed",
+      "nft.minted",
+    ]);
+    expect(nftLedger.payload.items.every((item: { source: string; kind: string; containsSecrets: string; trainingUse: string }) =>
+      item.source === "project_evidence" &&
+      item.kind === "nft" &&
+      item.containsSecrets === "never" &&
+      item.trainingUse === "none",
+    )).toBe(true);
+
+    const imageLedger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=image&limit=20`);
+    expect(imageLedger.response.status).toBe(200);
+    expect(imageLedger.payload.summary.images).toBe(1);
+    expect(imageLedger.payload.items).toContainEqual(expect.objectContaining({
+      kind: "image",
+      eventType: "image.generated",
+    }));
+  });
+
+  test("NFT receipts must match the draft network and recorded minted object", async () => {
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const wrongNetwork = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "0xwrongnetwork",
+        objectId: "0xmintedobject",
+        network: "sui-mainnet",
+      }),
+    });
+    expect(wrongNetwork.response.status).toBe(400);
+    expect(wrongNetwork.payload.code).toBe("nft_receipt_network_mismatch");
+
+    const mintReceipt = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "0xmintdigest",
+        objectId: "0xmintedobject",
+        network: "sui-testnet",
+      }),
+    });
+    expect(mintReceipt.response.status).toBe(200);
+
+    const wrongObject = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "0xwrongobject",
+        objectId: "0xotherobject",
+        network: "sui-testnet",
+      }),
+    });
+    expect(wrongObject.response.status).toBe(400);
+    expect(wrongObject.payload.code).toBe("nft_receipt_object_mismatch");
   });
 });
 

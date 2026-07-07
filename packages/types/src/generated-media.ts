@@ -227,12 +227,14 @@ export interface MatterhornWalrusStorageCapability extends MatterhornCapability 
   relayConfigured: boolean;
 }
 
-export type MatterhornNftSetupRequirementStatus = "configured" | "missing" | "not_implemented";
+export type MatterhornNftSetupRequirementStatus = "configured" | "missing" | "invalid" | "not_implemented";
 
 export type MatterhornNftSetupRequirementKey =
   | "walrus_publisher"
   | "walrus_relay"
+  | "walrus_storage_epochs"
   | "walrus_upload_connector"
+  | "sui_network"
   | "sui_public_image_uri"
   | "sui_nft_package"
   | "sui_nft_module"

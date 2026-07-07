@@ -11,6 +11,12 @@ import type {
   MatterhornImageQuality,
   MatterhornImageSize,
 } from "@matterhorn-work/types/generated-media";
+import {
+  MATTERHORN_IMAGE_FORMATS,
+  MATTERHORN_IMAGE_PROVIDERS,
+  MATTERHORN_IMAGE_QUALITIES,
+  MATTERHORN_IMAGE_SIZES,
+} from "@matterhorn-work/types/generated-media";
 
 export interface ImageGenerationProviderConfig {
   provider: MatterhornImageProvider;
@@ -19,6 +25,10 @@ export interface ImageGenerationProviderConfig {
   defaultSize?: MatterhornImageSize;
   defaultQuality?: MatterhornImageQuality;
   defaultFormat?: MatterhornImageFormat;
+  configError?: {
+    code: string;
+    message: string;
+  };
 }
 
 export interface ImageGenerationProviderStatus {
@@ -322,6 +332,18 @@ export function createImageGenerationProvider(config: ImageGenerationProviderCon
 
   return {
     async status(): Promise<ImageGenerationProviderStatus> {
+      if (config.configError) {
+        return {
+          status: "error",
+          label: "Image provider configuration",
+          provider: config.provider,
+          model: effectiveModel,
+          size: effectiveSize,
+          quality: effectiveQuality,
+          format: effectiveFormat,
+          message: config.configError.message,
+        };
+      }
       if (config.provider === "mock") {
         return {
           status: "working",
@@ -356,6 +378,13 @@ export function createImageGenerationProvider(config: ImageGenerationProviderCon
       };
     },
     async generate(input: ImageGenerationProviderInput): Promise<MatterhornImageGenerationResponse> {
+      if (config.configError) {
+        return {
+          success: false,
+          code: config.configError.code,
+          message: config.configError.message,
+        };
+      }
       if (config.provider === "mock") {
         return mockGenerate(input);
       }
@@ -365,23 +394,72 @@ export function createImageGenerationProvider(config: ImageGenerationProviderCon
 }
 
 export function resolveImageGenerationProviderFromEnv(env: typeof process.env): ImageGenerationProviderConfig {
-  const provider = env.MATTERHORN_IMAGE_PROVIDER?.trim() as MatterhornImageProvider | undefined;
+  const providerValue = env.MATTERHORN_IMAGE_PROVIDER?.trim();
+  const provider = providerValue as MatterhornImageProvider | undefined;
+  const defaultSize = env.MATTERHORN_IMAGE_SIZE?.trim() || "1024x1024";
+  const defaultQuality = env.MATTERHORN_IMAGE_QUALITY?.trim() || "auto";
+  const defaultFormat = env.MATTERHORN_IMAGE_FORMAT?.trim() || "png";
+  const configError = imageProviderConfigError({
+    provider: providerValue,
+    size: defaultSize,
+    quality: defaultQuality,
+    format: defaultFormat,
+  });
   if (provider === "openai" || (provider === undefined && env.OPENAI_API_KEY?.trim())) {
     return {
       provider: "openai",
       apiKey: env.OPENAI_API_KEY,
       model: env.MATTERHORN_IMAGE_MODEL?.trim() || "gpt-image-1",
-      defaultSize: (env.MATTERHORN_IMAGE_SIZE?.trim() as MatterhornImageSize) || "1024x1024",
-      defaultQuality: (env.MATTERHORN_IMAGE_QUALITY?.trim() as MatterhornImageQuality) || "auto",
-      defaultFormat: (env.MATTERHORN_IMAGE_FORMAT?.trim() as MatterhornImageFormat) || "png",
+      defaultSize: defaultSize as MatterhornImageSize,
+      defaultQuality: defaultQuality as MatterhornImageQuality,
+      defaultFormat: defaultFormat as MatterhornImageFormat,
+      configError,
     };
   }
   return {
     provider: "mock",
     apiKey: env.OPENAI_API_KEY,
     model: env.MATTERHORN_IMAGE_MODEL?.trim() || "mock-image-1",
-    defaultSize: (env.MATTERHORN_IMAGE_SIZE?.trim() as MatterhornImageSize) || "1024x1024",
-    defaultQuality: (env.MATTERHORN_IMAGE_QUALITY?.trim() as MatterhornImageQuality) || "auto",
-    defaultFormat: (env.MATTERHORN_IMAGE_FORMAT?.trim() as MatterhornImageFormat) || "png",
+    defaultSize: defaultSize as MatterhornImageSize,
+    defaultQuality: defaultQuality as MatterhornImageQuality,
+    defaultFormat: defaultFormat as MatterhornImageFormat,
+    configError,
   };
+}
+
+function imageProviderConfigError(input: {
+  provider?: string;
+  size: string;
+  quality: string;
+  format: string;
+}): ImageGenerationProviderConfig["configError"] | undefined {
+  if (input.provider && !includesString(MATTERHORN_IMAGE_PROVIDERS, input.provider)) {
+    return {
+      code: "image_provider_invalid_config",
+      message: `MATTERHORN_IMAGE_PROVIDER must be one of ${MATTERHORN_IMAGE_PROVIDERS.join(", ")}.`,
+    };
+  }
+  if (!includesString(MATTERHORN_IMAGE_SIZES, input.size)) {
+    return {
+      code: "image_provider_invalid_config",
+      message: `MATTERHORN_IMAGE_SIZE must be one of ${MATTERHORN_IMAGE_SIZES.join(", ")}.`,
+    };
+  }
+  if (!includesString(MATTERHORN_IMAGE_QUALITIES, input.quality)) {
+    return {
+      code: "image_provider_invalid_config",
+      message: `MATTERHORN_IMAGE_QUALITY must be one of ${MATTERHORN_IMAGE_QUALITIES.join(", ")}.`,
+    };
+  }
+  if (!includesString(MATTERHORN_IMAGE_FORMATS, input.format)) {
+    return {
+      code: "image_provider_invalid_config",
+      message: `MATTERHORN_IMAGE_FORMAT must be one of ${MATTERHORN_IMAGE_FORMATS.join(", ")}.`,
+    };
+  }
+  return undefined;
+}
+
+function includesString(values: readonly string[], value: string): boolean {
+  return values.includes(value);
 }

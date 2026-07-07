@@ -104,9 +104,9 @@ function actorFromFeedback(entry: MatterhornProjectFeedbackEntry): MatterhornPro
 function ledgerKindFromEvidence(event: MatterhornProjectEvidenceEvent): MatterhornProjectDataLedgerEntry["kind"] {
   if (event.type === "note.created") return "note";
   if (event.type === "note.memory_suggested") return "memory_suggestion";
-  if (event.type === "task.output_saved" || event.outputPath || event.artifactPaths?.length) return "output";
   if (event.type === "image.generated" || event.type === "image.failed") return "image";
   if (event.type.startsWith("nft.")) return "nft";
+  if (event.type === "task.output_saved" || event.outputPath || event.artifactPaths?.length) return "output";
   return "task";
 }
 

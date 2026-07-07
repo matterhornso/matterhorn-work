@@ -22,6 +22,15 @@ const priorEnv = {
   memoryRoot: process.env.MATTERHORN_WORK_MEMORY_ROOT,
   memoryScope: process.env.MATTERHORN_WORK_MEMORY_SCOPE,
   opencodeDb: process.env.OPENCODE_DB,
+  imageProvider: process.env.MATTERHORN_IMAGE_PROVIDER,
+  imageSize: process.env.MATTERHORN_IMAGE_SIZE,
+  walrusPublisherUrl: process.env.MATTERHORN_WALRUS_PUBLISHER_URL,
+  walrusRelayUrl: process.env.MATTERHORN_WALRUS_RELAY_URL,
+  walrusStorageEpochs: process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS,
+  suiNetwork: process.env.MATTERHORN_SUI_NETWORK,
+  suiNftPackageId: process.env.MATTERHORN_SUI_NFT_PACKAGE_ID,
+  suiKioskPackageId: process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID,
+  suiTransferPolicyPackageId: process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID,
 };
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
@@ -181,6 +190,15 @@ afterEach(async () => {
   restoreEnv("memoryRoot", "MATTERHORN_WORK_MEMORY_ROOT");
   restoreEnv("memoryScope", "MATTERHORN_WORK_MEMORY_SCOPE");
   restoreEnv("opencodeDb", "OPENCODE_DB");
+  restoreEnv("imageProvider", "MATTERHORN_IMAGE_PROVIDER");
+  restoreEnv("imageSize", "MATTERHORN_IMAGE_SIZE");
+  restoreEnv("walrusPublisherUrl", "MATTERHORN_WALRUS_PUBLISHER_URL");
+  restoreEnv("walrusRelayUrl", "MATTERHORN_WALRUS_RELAY_URL");
+  restoreEnv("walrusStorageEpochs", "MATTERHORN_WALRUS_STORAGE_EPOCHS");
+  restoreEnv("suiNetwork", "MATTERHORN_SUI_NETWORK");
+  restoreEnv("suiNftPackageId", "MATTERHORN_SUI_NFT_PACKAGE_ID");
+  restoreEnv("suiKioskPackageId", "MATTERHORN_SUI_KIOSK_PACKAGE_ID");
+  restoreEnv("suiTransferPolicyPackageId", "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID");
 });
 
 describe("backend control plane routes", () => {
@@ -341,6 +359,39 @@ describe("backend control plane routes", () => {
     });
     expect(result.payload.privacy.trainingUse).toBe("none_by_default");
     expect(result.payload.privacy.feedbackUse).toBe("eval_routing_product_quality_only");
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+  });
+
+  test("GET /api/backend/capabilities reports invalid image and NFT publishing setup", async () => {
+    process.env.MATTERHORN_IMAGE_PROVIDER = "banana";
+    process.env.MATTERHORN_IMAGE_SIZE = "2048x2048";
+    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = "notaurl";
+    process.env.MATTERHORN_WALRUS_RELAY_URL = "ipfs://not-http";
+    process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS = "-1";
+    process.env.MATTERHORN_SUI_NETWORK = "devnet";
+    process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = "0x1234";
+    process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = "0x4567";
+    process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = "0x8910";
+    const { base } = await boot();
+
+    const result = await jsonFetch(base, "/api/backend/capabilities");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.imageGeneration.status).toBe("error");
+    expect(result.payload.imageGeneration.description).toContain("MATTERHORN_IMAGE_PROVIDER");
+    expect(result.payload.walrusStorage.status).toBe("error");
+    expect(result.payload.walrusStorage.details.validationIssues).toEqual([
+      expect.objectContaining({ field: "MATTERHORN_WALRUS_PUBLISHER_URL" }),
+      expect.objectContaining({ field: "MATTERHORN_WALRUS_RELAY_URL" }),
+      expect.objectContaining({ field: "MATTERHORN_WALRUS_STORAGE_EPOCHS" }),
+    ]);
+    expect(result.payload.nftMinting.status).toBe("error");
+    expect(result.payload.nftMarketplaceListing.status).toBe("error");
+    expect(result.payload.nftMinting.details.validationIssues).toEqual([
+      expect.objectContaining({ field: "MATTERHORN_SUI_NETWORK" }),
+    ]);
 
     const serialized = JSON.stringify(result.payload);
     expect(serialized).not.toContain(TOKEN);

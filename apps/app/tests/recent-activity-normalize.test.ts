@@ -81,6 +81,25 @@ describe("normalizeEvidenceEvents", () => {
     expect(items[0].kind).toBe("task_cancelled");
   });
 
+  test("maps image.generated to image_generated", () => {
+    const items = normalizeEvidenceEvents([makeEvent({ type: "image.generated", title: "Image generated" })]);
+    expect(items[0].kind).toBe("image_generated");
+  });
+
+  test("maps image.failed to image_failed", () => {
+    const items = normalizeEvidenceEvents([makeEvent({ type: "image.failed", title: "Image failed" })]);
+    expect(items[0].kind).toBe("image_failed");
+  });
+
+  test("maps NFT lifecycle events", () => {
+    const items = normalizeEvidenceEvents([
+      makeEvent({ id: "draft", type: "nft.draft_created", title: "NFT draft created" }),
+      makeEvent({ id: "mint", type: "nft.minted", title: "NFT minted" }),
+      makeEvent({ id: "list", type: "nft.listed", title: "NFT listed" }),
+    ]);
+    expect(items.map((item) => item.kind)).toEqual(["nft_draft_created", "nft_minted", "nft_listed"]);
+  });
+
   test("returns Untitled when title is missing", () => {
     const items = normalizeEvidenceEvents([makeEvent({ title: "" })]);
     expect(items[0].title).toBe("Untitled");

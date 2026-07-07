@@ -27,7 +27,7 @@ import {
 } from "./image-generation-provider.js";
 import { MatterhornGeneratedImageStore, imageFilePath } from "./generated-image-store.js";
 import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
-import { resolveNftEnvironmentConfig } from "./image-nft-capabilities.js";
+import { resolveNftEnvironmentConfig, type NftEnvironmentConfig } from "./image-nft-capabilities.js";
 import { recordAudit } from "./audit.js";
 import { recordTaskEvent } from "./task-events.js";
 import { shortId } from "./utils.js";
@@ -84,8 +84,9 @@ export function addGeneratedMediaRoutes(
     });
 
     if (!result.success) {
+      const setupErrorCodes = new Set(["image_provider_needs_setup", "image_provider_invalid_config"]);
       throw new ApiError(
-        result.code === "image_provider_needs_setup" ? 503 : 500,
+        setupErrorCodes.has(result.code) ? 503 : 500,
         result.code,
         result.message,
         result.details,
@@ -219,6 +220,13 @@ export function addGeneratedMediaRoutes(
     const publisherConfigured = Boolean(nftEnv.walrusPublisherUrl?.trim());
     const relayConfigured = Boolean(nftEnv.walrusRelayUrl?.trim());
     const setupRequirements = buildWalrusSetupRequirements(nftEnv);
+    if (hasInvalidSetup(setupRequirements)) {
+      throwNftSetupError(
+        "walrus_invalid_setup",
+        "Walrus public storage setup is invalid. Fix the highlighted environment values before preparing upload.",
+        setupRequirements,
+      );
+    }
     if (!publisherConfigured || !relayConfigured) {
       throwNftSetupError(
         "walrus_needs_setup",
@@ -247,6 +255,13 @@ export function addGeneratedMediaRoutes(
     const publisherConfigured = Boolean(nftEnv.walrusPublisherUrl?.trim());
     const relayConfigured = Boolean(nftEnv.walrusRelayUrl?.trim());
     const setupRequirements = buildWalrusSetupRequirements(nftEnv);
+    if (hasInvalidSetup(setupRequirements)) {
+      throwNftSetupError(
+        "walrus_invalid_setup",
+        "Walrus public storage setup is invalid. Fix the highlighted environment values before uploading.",
+        setupRequirements,
+      );
+    }
     if (!publisherConfigured || !relayConfigured) {
       throwNftSetupError(
         "walrus_needs_setup",
@@ -328,6 +343,13 @@ export function addGeneratedMediaRoutes(
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const setupRequirements = buildMintSetupRequirements(nftEnv);
+    if (hasInvalidSetup(setupRequirements)) {
+      throwNftSetupError(
+        "sui_nft_invalid_setup",
+        "Sui NFT minting setup is invalid. Fix the highlighted environment values before preparing a mint preview.",
+        setupRequirements,
+      );
+    }
     if (hasMissingSetup(setupRequirements)) {
       throwNftSetupError(
         "sui_nft_package_needs_setup",
@@ -392,6 +414,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
+    ensureReceiptMatchesDraft(receipt, draft);
 
     const updated = await store.updateMintStatus(draft.id, "confirmed", {
       transactionDigest: receipt.transactionDigest,
@@ -407,6 +430,15 @@ export function addGeneratedMediaRoutes(
       target: draft.id,
       summary: `Minted NFT ${receipt.objectId} on ${receipt.network}`,
       timestamp: Date.now(),
+    });
+    await recordTaskEvent({
+      id: `task_evt_${shortId()}`,
+      workspaceId: workspace.id,
+      taskId: `nft_mint_${draft.id}`,
+      type: "nft_minted",
+      timestamp: Date.now(),
+      summary: "NFT minted",
+      detail: `nft;${draft.id}`,
     });
 
     const response: MatterhornNftReceiptResponse = {
@@ -431,6 +463,13 @@ export function addGeneratedMediaRoutes(
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const setupRequirements = buildListingSetupRequirements(nftEnv);
+    if (hasInvalidSetup(setupRequirements)) {
+      throwNftSetupError(
+        "sui_kiosk_invalid_setup",
+        "Sui Kiosk listing setup is invalid. Fix the highlighted environment values before preparing a listing preview.",
+        setupRequirements,
+      );
+    }
     if (hasMissingSetup(setupRequirements)) {
       throwNftSetupError(
         "sui_kiosk_package_needs_setup",
@@ -501,6 +540,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
+    ensureReceiptMatchesDraft(receipt, draft);
 
     const updated = await store.updateListingStatus(draft.id, "listed", {
       kioskId: receipt.kioskId ?? undefined,
@@ -515,6 +555,15 @@ export function addGeneratedMediaRoutes(
       target: draft.id,
       summary: `Listed NFT in kiosk ${receipt.kioskId ?? "unknown"} on ${receipt.network}`,
       timestamp: Date.now(),
+    });
+    await recordTaskEvent({
+      id: `task_evt_${shortId()}`,
+      workspaceId: workspace.id,
+      taskId: `nft_listing_${draft.id}`,
+      type: "nft_listed",
+      timestamp: Date.now(),
+      summary: "NFT listed",
+      detail: `nft;${draft.id}`,
     });
 
     const response: MatterhornNftReceiptResponse = {
@@ -550,27 +599,44 @@ function jsonResponse(data: unknown, status = 200): Response {
   });
 }
 
-function buildWalrusSetupRequirements(config: ReturnType<typeof resolveNftEnvironmentConfig>): MatterhornNftSetupRequirement[] {
-  return [
+function buildWalrusSetupRequirements(config: NftEnvironmentConfig): MatterhornNftSetupRequirement[] {
+  const publisherIssue = validationIssueFor(config, "MATTERHORN_WALRUS_PUBLISHER_URL");
+  const relayIssue = validationIssueFor(config, "MATTERHORN_WALRUS_RELAY_URL");
+  const epochsIssue = validationIssueFor(config, "MATTERHORN_WALRUS_STORAGE_EPOCHS");
+  const requirements = [
     setupRequirement({
       key: "walrus_publisher",
       label: "Walrus publisher",
       envVar: "MATTERHORN_WALRUS_PUBLISHER_URL",
       configured: Boolean(config.walrusPublisherUrl?.trim()),
-      description: "Public storage needs a Walrus publisher endpoint.",
+      status: publisherIssue ? "invalid" : undefined,
+      description: publisherIssue?.message ?? "Public storage needs a Walrus publisher endpoint.",
     }),
     setupRequirement({
       key: "walrus_relay",
       label: "Walrus relay",
       envVar: "MATTERHORN_WALRUS_RELAY_URL",
       configured: Boolean(config.walrusRelayUrl?.trim()),
-      description: "NFT metadata needs a public aggregator or relay URL for stored image media.",
+      status: relayIssue ? "invalid" : undefined,
+      description: relayIssue?.message ?? "NFT metadata needs a public aggregator or relay URL for stored image media.",
     }),
   ];
+  if (epochsIssue) {
+    requirements.push(setupRequirement({
+      key: "walrus_storage_epochs",
+      label: "Walrus storage epochs",
+      envVar: "MATTERHORN_WALRUS_STORAGE_EPOCHS",
+      configured: false,
+      status: "invalid",
+      description: epochsIssue.message,
+    }));
+  }
+  return requirements;
 }
 
-function buildMintSetupRequirements(config: ReturnType<typeof resolveNftEnvironmentConfig>): MatterhornNftSetupRequirement[] {
-  return [
+function buildMintSetupRequirements(config: NftEnvironmentConfig): MatterhornNftSetupRequirement[] {
+  const networkIssue = validationIssueFor(config, "MATTERHORN_SUI_NETWORK");
+  const requirements = [
     setupRequirement({
       key: "sui_nft_package",
       label: "Sui NFT package",
@@ -586,10 +652,22 @@ function buildMintSetupRequirements(config: ReturnType<typeof resolveNftEnvironm
       description: `Move module name for mint previews. Defaults to ${config.suiNftModuleName || "matterhorn_nft"}.`,
     }),
   ];
+  if (networkIssue) {
+    requirements.unshift(setupRequirement({
+      key: "sui_network",
+      label: "Sui network",
+      envVar: "MATTERHORN_SUI_NETWORK",
+      configured: false,
+      status: "invalid",
+      description: networkIssue.message,
+    }));
+  }
+  return requirements;
 }
 
-function buildListingSetupRequirements(config: ReturnType<typeof resolveNftEnvironmentConfig>): MatterhornNftSetupRequirement[] {
-  return [
+function buildListingSetupRequirements(config: NftEnvironmentConfig): MatterhornNftSetupRequirement[] {
+  const networkIssue = validationIssueFor(config, "MATTERHORN_SUI_NETWORK");
+  const requirements = [
     setupRequirement({
       key: "sui_kiosk_package",
       label: "Sui Kiosk package",
@@ -605,6 +683,17 @@ function buildListingSetupRequirements(config: ReturnType<typeof resolveNftEnvir
       description: "Listings need the TransferPolicy config that controls marketplace transfer rules.",
     }),
   ];
+  if (networkIssue) {
+    requirements.unshift(setupRequirement({
+      key: "sui_network",
+      label: "Sui network",
+      envVar: "MATTERHORN_SUI_NETWORK",
+      configured: false,
+      status: "invalid",
+      description: networkIssue.message,
+    }));
+  }
+  return requirements;
 }
 
 function publicImageUriForMint(draft: MatterhornImageNftDraft): string | null {
@@ -798,19 +887,31 @@ function setupRequirement(input: {
   label: string;
   envVar?: string;
   configured: boolean;
+  status?: MatterhornNftSetupRequirement["status"];
   description: string;
 }): MatterhornNftSetupRequirement {
   return {
     key: input.key,
     label: input.label,
     envVar: input.envVar,
-    status: input.configured ? "configured" : "missing",
+    status: input.status ?? (input.configured ? "configured" : "missing"),
     description: input.description,
   };
 }
 
+function validationIssueFor(
+  config: NftEnvironmentConfig,
+  field: NonNullable<NftEnvironmentConfig["validationIssues"]>[number]["field"],
+): NonNullable<NftEnvironmentConfig["validationIssues"]>[number] | undefined {
+  return config.validationIssues?.find((issue) => issue.field === field);
+}
+
 function hasMissingSetup(requirements: MatterhornNftSetupRequirement[]): boolean {
   return requirements.some((requirement) => requirement.status === "missing");
+}
+
+function hasInvalidSetup(requirements: MatterhornNftSetupRequirement[]): boolean {
+  return requirements.some((requirement) => requirement.status === "invalid");
 }
 
 function nftPreviewErrorDetails(requirements: MatterhornNftSetupRequirement[]): MatterhornNftPreviewErrorDetails {
@@ -987,4 +1088,14 @@ function validateNftReceiptRequest(body: unknown): MatterhornNftReceiptRequest {
     kioskId: typeof b.kioskId === "string" ? b.kioskId.trim() : undefined,
     transferPolicyId: typeof b.transferPolicyId === "string" ? b.transferPolicyId.trim() : undefined,
   };
+}
+
+function ensureReceiptMatchesDraft(receipt: MatterhornNftReceiptRequest, draft: MatterhornImageNftDraft): void {
+  if (receipt.network !== draft.network) {
+    throw new ApiError(400, "nft_receipt_network_mismatch", `Receipt network must match the draft network (${draft.network}).`);
+  }
+  const mintedObjectId = draft.mint.objectId?.trim();
+  if (mintedObjectId && receipt.objectId.trim() !== mintedObjectId) {
+    throw new ApiError(400, "nft_receipt_object_mismatch", "Receipt objectId must match the NFT object already recorded on this draft.");
+  }
 }

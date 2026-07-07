@@ -10,7 +10,9 @@ import {
   ImageGenerationComposer,
   NftSetupRequirements,
   NftDraftPanel,
+  NftPublishingReadinessRows,
   SessionImageGenerationPanel,
+  buildNftPublishingReadinessItems,
   buildKioskListingTransactionFromPlan,
   buildMintTransactionFromPlan,
   receiptFromSuiWalletResult,
@@ -336,6 +338,15 @@ describe("NFT draft panel", () => {
     expect(source).toContain("onRecordListingReceipt");
   });
 
+  test("component source exposes publishing readiness before NFT actions", () => {
+    const source = readFileSync("apps/app/src/react-app/domains/session/media/nft-draft-panel.tsx", "utf8");
+    expect(source).toContain("Publishing readiness");
+    expect(source).toContain("Create the local draft anytime");
+    expect(source).toContain("Public storage");
+    expect(source).toContain("Sui minting");
+    expect(source).toContain("Marketplace listing");
+  });
+
   test("component renders backend NFT setup requirements", () => {
     const html = renderToStaticMarkup(
       React.createElement(NftSetupRequirements, {
@@ -360,6 +371,32 @@ describe("NFT draft panel", () => {
     expect(html).toContain("Setup needed");
     expect(html).toContain("MATTERHORN_SUI_NFT_PACKAGE_ID");
     expect(html).not.toContain("MATTERHORN_SUI_NFT_MODULE_NAME");
+  });
+
+  test("publishing readiness rows summarize generated image and NFT setup states", () => {
+    const items = buildNftPublishingReadinessItems({
+      imageGeneration: {
+        status: "working",
+        providers: [{ status: "working", label: "Mock", provider: "mock", model: "mock-image-1", size: "1024x1024", quality: "auto", format: "png" }],
+        defaultProvider: "mock",
+        defaultModel: "mock-image-1",
+      },
+      walrusStorage: { status: "needs_setup", publisherConfigured: false, relayConfigured: false },
+      nftMinting: { status: "needs_setup", network: "sui-testnet", custody: false, signing: "client_wallet", packageConfigured: false, kioskConfigured: false },
+      nftMarketplaceListing: { status: "needs_setup", network: "sui-testnet", custody: false, signing: "client_wallet", packageConfigured: false, kioskConfigured: false },
+    });
+    const html = renderToStaticMarkup(React.createElement(NftPublishingReadinessRows, {
+      items,
+      title: "Publishing readiness",
+      description: "Public actions need setup.",
+      surface: true,
+    }));
+
+    expect(html).toContain("Publishing readiness");
+    expect(html).toContain("mock/mock-image-1");
+    expect(html).toContain("Publisher/relay needed");
+    expect(html).toContain("Package needed");
+    expect(html).toContain("Kiosk/TransferPolicy needed");
   });
 });
 

@@ -242,6 +242,8 @@ export type MatterhornTaskEventType =
   | "artifact_saved"   // an artifact file was written to disk
   | "artifact_deleted" // an artifact file was deleted by the user
   | "image_generated"  // an AI-generated image was created and saved
+  | "nft_minted"       // an NFT mint receipt was recorded
+  | "nft_listed"       // an NFT marketplace listing receipt was recorded
   | "waiting_for_user" // workflow paused, awaiting user input/approval
   | "completed"        // workflow finished successfully
   | "failed"           // workflow terminated with an error
