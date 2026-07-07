@@ -23,6 +23,7 @@ import {
   LayoutSectionTitle,
   LayoutStack,
 } from "../settings-layout";
+import { notifyWorkspaceModelSelectionChanged } from "../model-selection-events";
 import { buildModelReadinessSummary, type ModelReadinessDetail } from "../state/model-readiness-summary";
 
 type ConnectedProvider = {
@@ -136,6 +137,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     onSuccess: (data) => {
       queryClient.setQueryData(["settings-workspace-model-selection", runtimeWorkspaceId], data);
       void queryClient.invalidateQueries({ queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId] });
+      notifyWorkspaceModelSelectionChanged(runtimeWorkspaceId);
     },
   });
   const clearWorkspaceDefaultMutation = useMutation({
@@ -147,6 +149,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     onSuccess: (data) => {
       queryClient.setQueryData(["settings-workspace-model-selection", runtimeWorkspaceId], data);
       void queryClient.invalidateQueries({ queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId] });
+      notifyWorkspaceModelSelectionChanged(runtimeWorkspaceId);
     },
   });
   const backendModels = workspaceBackendModelsQuery.data ?? backendModelsQuery.data;

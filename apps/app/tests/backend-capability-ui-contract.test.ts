@@ -293,6 +293,7 @@ describe("backend capability UI contract", () => {
   test("AI settings shows backend model routing alongside live provider counts", () => {
     const source = readAppSource("react-app/domains/settings/pages/ai-view.tsx");
     const routeSource = readAppSource("react-app/shell/settings-route.tsx");
+    const sessionRouteSource = readAppSource("react-app/shell/session-route.tsx");
 
     expect(source).toContain("settings-backend-models");
     expect(source).toContain("client.backendModels()");
@@ -302,6 +303,7 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("client.workspaceModelSelection(runtimeWorkspaceId)");
     expect(source).toContain("client.saveWorkspaceModelSelection(runtimeWorkspaceId");
     expect(source).toContain("client.clearWorkspaceModelSelection(runtimeWorkspaceId)");
+    expect(source).toContain("notifyWorkspaceModelSelectionChanged(runtimeWorkspaceId)");
     expect(source).toContain("runtimeWorkspaceId?: string | null");
     expect(source).toContain("backendModels?.catalog");
     expect(source).toContain('catalog?.errorCode === "opencode_unconfigured"');
@@ -333,6 +335,15 @@ describe("backend capability UI contract", () => {
     expect(routeSource).toContain("onOpenModelPicker={() =>");
     expect(routeSource).toContain("matterhornServerClient={matterhornClient}");
     expect(routeSource).toContain("runtimeWorkspaceId={runtimeWorkspaceId}");
+    expect(sessionRouteSource).toContain("WORKSPACE_MODEL_SELECTION_CHANGED_EVENT");
+    expect(sessionRouteSource).toContain("refreshWorkspaceModelSelection");
+    expect(sessionRouteSource).toContain("WorkspaceModelSelectionChangedDetail");
+    expect(sessionRouteSource).toContain("window.addEventListener(WORKSPACE_MODEL_SELECTION_CHANGED_EVENT");
+
+    const eventSource = readAppSource("react-app/domains/settings/model-selection-events.ts");
+    expect(eventSource).toContain('WORKSPACE_MODEL_SELECTION_CHANGED_EVENT = "matterhorn:workspace-model-selection-changed"');
+    expect(eventSource).toContain("WorkspaceModelSelectionChangedDetail");
+    expect(eventSource).toContain("notifyWorkspaceModelSelectionChanged");
   });
 
   test("Wallet settings uses backend wallet family status including Sui", () => {
