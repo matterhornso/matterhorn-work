@@ -5,7 +5,6 @@ import { Info } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { revealDesktopItemInDir } from "@/app/lib/desktop";
 import { isDesktopRuntime, isMacPlatform, isWindowsPlatform } from "@/app/utils";
 import { t } from "@/i18n";
@@ -18,6 +17,14 @@ import {
   LayoutSectionItemTitle,
   LayoutStack,
 } from "../settings-layout";
+
+function RecoveryActionUnavailable({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-300">
+      {label}
+    </span>
+  );
+}
 
 export type RecoveryViewProps = {
   anyActiveRuns: boolean;
@@ -68,23 +75,7 @@ export function RecoveryView(props: RecoveryViewProps) {
                     ? t("workspace_list.reveal_finder")
                     : t("workspace_list.reveal_file_manager")}
             </Button>
-            <Tooltip>
-              <TooltipTrigger render={<span className="inline-flex" />}>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => void props.onResetAppConfigDefaults()}
-                  // TODO: Restore the conditional disabled state once this action is wired into the React settings route.
-                  // disabled={props.resetConfigBusy || props.anyActiveRuns}
-                  disabled
-                >
-                  {props.resetConfigBusy ? t("settings.resetting") : t("settings.reset_config_defaults")}
-                </Button>
-              </TooltipTrigger>
-              {props.anyActiveRuns && (
-                <TooltipContent>{t("settings.stop_runs_before_reset_config")}</TooltipContent>
-              )}
-            </Tooltip>
+            <RecoveryActionUnavailable label={t("settings.recovery_action_unavailable")} />
           </LayoutSectionItemHeaderActions>
         </LayoutSectionItemHeader>
 
@@ -112,16 +103,7 @@ export function RecoveryView(props: RecoveryViewProps) {
           <LayoutSectionItemTitle>{t("settings.opencode_cache")}</LayoutSectionItemTitle>
           <LayoutSectionItemDescription>{t("settings.opencode_cache_description")}</LayoutSectionItemDescription>
           <LayoutSectionItemHeaderActions>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => void props.onRepairOpencodeCache()}
-              // TODO: Restore the conditional disabled state once this action is wired into the React settings route.
-              // disabled={props.cacheRepairBusy || !isDesktopRuntime()}
-              disabled
-            >
-              {props.cacheRepairBusy ? t("settings.repairing_cache") : t("settings.repair_cache")}
-            </Button>
+            <RecoveryActionUnavailable label={t("settings.recovery_action_unavailable")} />
           </LayoutSectionItemHeaderActions>
         </LayoutSectionItemHeader>
 
@@ -139,25 +121,7 @@ export function RecoveryView(props: RecoveryViewProps) {
           <LayoutSectionItemTitle>{t("settings.docker_containers_title")}</LayoutSectionItemTitle>
           <LayoutSectionItemDescription>{t("settings.docker_containers_desc")}</LayoutSectionItemDescription>
           <LayoutSectionItemHeaderActions>
-            <Tooltip>
-              <TooltipTrigger render={<span className="inline-flex" />}>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => void props.onCleanupOpenworkDockerContainers()}
-                  // TODO: Restore the conditional disabled state once this action is wired into the React settings route.
-                  // disabled={props.dockerCleanupBusy || props.anyActiveRuns || !isDesktopRuntime()}
-                  disabled
-                >
-                  {props.dockerCleanupBusy
-                    ? t("settings.removing_containers")
-                    : t("settings.delete_containers")}
-                </Button>
-              </TooltipTrigger>
-              {isDesktopRuntime() && props.anyActiveRuns && (
-                <TooltipContent>{t("settings.stop_runs_before_cleanup")}</TooltipContent>
-              )}
-            </Tooltip>
+            <RecoveryActionUnavailable label={t("settings.recovery_action_unavailable")} />
           </LayoutSectionItemHeaderActions>
         </LayoutSectionItemHeader>
 

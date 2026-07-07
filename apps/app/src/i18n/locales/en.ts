@@ -1216,6 +1216,7 @@ export default {
   "settings.recovery_cache_repair_unavailable": "Cache repair is not yet available.",
   "settings.recovery_docker_cleanup_unavailable": "Container cleanup is not yet available.",
   "settings.recovery_reset_config_unavailable": "Reset config is not yet available.",
+  "settings.recovery_action_unavailable": "Unavailable in beta",
   "settings.recovery_requires_desktop": "These actions require the desktop app.",
   "settings.recovery_requires_desktop_title": "Desktop app required",
   "settings.reveal_config_requires_desktop": "Only available in the desktop app",
