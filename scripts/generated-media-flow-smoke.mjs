@@ -281,6 +281,23 @@ async function runGeneratedMediaFlow(config) {
       canSubmit: listingPreview.canSubmit,
     };
 
+    const listingReceipt = await stage("sui.listing_receipt", "Record Sui Kiosk listing receipt", () => fetchJson(config, `/workspace/${workspaceId}/nft-drafts/${draft.draft.id}/listing/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "0xsmokelistingdigest",
+        objectId: config.nftObjectId,
+        network: "sui-testnet",
+        packageId: listingPreview.handoff?.kioskPackageId || config.kioskPackageId,
+        kioskId: config.kioskId,
+        transferPolicyId: config.transferPolicyId,
+      }),
+    }));
+    report.artifacts.listingReceipt = {
+      status: listingReceipt.draft?.listing?.status,
+      marketplace: listingReceipt.draft?.listing?.marketplace,
+      kioskId: listingReceipt.draft?.listing?.kioskId,
+    };
+
     report.ready = report.stages.every((item) => item.status === "pass");
   } catch (error) {
     report.ready = false;
