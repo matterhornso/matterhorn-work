@@ -5,6 +5,10 @@ function readAppSource(path: string) {
   return readFileSync(new URL(`../src/react-app/${path}`, import.meta.url), "utf8");
 }
 
+function readShellSource(path: string) {
+  return readFileSync(new URL(`../src/react-app/shell/${path}`, import.meta.url), "utf8");
+}
+
 describe("WorkflowStageCard — render contract", () => {
   test("shows title and objective", () => {
     const source = readAppSource("domains/session/workflows/workflow-stage-card.tsx");
@@ -191,6 +195,9 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
 
     expect(src).toContain("sendImmediately: true");
     expect(src).toContain("setCurrentSidePanel(null)");
+    expect(src).toContain("launchingTaskTitle");
+    expect(src).toContain("Starting {launchingTaskTitle} in a new chat.");
+    expect(src).toContain('actionLabel={isLaunching ? "Starting..."');
     expect(src).not.toContain("draftedPromptTitle");
     expect(src).not.toContain("Nothing has");
     expect(src).not.toContain("Draft ready");
@@ -217,9 +224,23 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("protocol-desk-readiness");
     expect(src).toContain("matterhornServerClient.workspaceReadiness(readinessWorkspaceId)");
     expect(src).toContain("features.start_desk_task");
-    expect(src).toContain('actionLabel={startTaskBlocked ? "Needs setup"');
-    expect(src).toContain("actionDisabled={startTaskBlocked}");
+    expect(src).toContain(': startTaskBlocked ? "Needs setup"');
+    expect(src).toContain("actionDisabled={startTaskBlocked || Boolean(launchingTaskTitle)}");
     expect(src).toContain("actionTitle={startTaskBlocker ?? undefined}");
+  });
+
+  test("route-level task launcher reports setup failures instead of silently returning", () => {
+    const routeSrc = readShellSource("session-route.tsx");
+    const launcherBlock = routeSrc.slice(
+      routeSrc.indexOf("onCreateTaskWithPrompt:"),
+      routeSrc.indexOf("onOpenRenameWorkspace:"),
+    );
+
+    expect(launcherBlock).toContain('title: "Could not start task"');
+    expect(launcherBlock).toContain('title: "Matterhorn Work engine is offline"');
+    expect(launcherBlock).toContain('title: `Starting ${title || "desk task"}`');
+    expect(launcherBlock).not.toContain("if (!workspace) return;");
+    expect(launcherBlock).not.toContain("if (!endpoint?.token) return;");
   });
 
   test("workflow desk stage cards reuse backend readiness blockers", () => {

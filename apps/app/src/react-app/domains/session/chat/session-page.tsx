@@ -560,6 +560,7 @@ function ProtocolDeskEmptyState({
   const visual = getCustomerProtocolDeskVisual(panel);
   const prompts = PROTOCOL_DESK_SUGGESTED_PROMPTS[panel];
   const draftConfig = getChatDraftConfig(panel);
+  const [launchingTaskTitle, setLaunchingTaskTitle] = useState<string | null>(null);
   const readinessWorkspaceId = runtimeWorkspaceId?.trim() ?? "";
   const readinessQuery = useQuery({
     queryKey: ["protocol-desk-readiness", readinessWorkspaceId],
@@ -655,9 +656,15 @@ function ProtocolDeskEmptyState({
           <span>{startTaskBlocker}</span>
         </div>
       ) : null}
+      {launchingTaskTitle ? (
+        <div className="mx-1 text-xs leading-5 text-dls-secondary" role="status">
+          Starting {launchingTaskTitle} in a new chat.
+        </div>
+      ) : null}
 
       <div className="matterhorn-focused-desk-prompt-list space-y-2" aria-label="Agent tasks">
         {prompts.map((item) => {
+          const isLaunching = launchingTaskTitle === item.title;
           const evidenceHint = panel === "bittensor"
             ? "reads: public SS58 and subnet context"
             : panel === "hyperliquid"
@@ -672,10 +679,11 @@ function ProtocolDeskEmptyState({
               objective={item.detail}
               status="idle"
               evidenceHints={[evidenceHint]}
-              actionLabel={startTaskBlocked ? "Needs setup" : draftConfig?.confirmCtaLabel ?? "Start task"}
-              actionDisabled={startTaskBlocked}
+              actionLabel={isLaunching ? "Starting..." : startTaskBlocked ? "Needs setup" : draftConfig?.confirmCtaLabel ?? "Start task"}
+              actionDisabled={startTaskBlocked || Boolean(launchingTaskTitle)}
               actionTitle={startTaskBlocker ?? undefined}
               onAction={() => {
+                setLaunchingTaskTitle(item.title);
                 onUsePrompt(item.prompt, item.title);
               }}
             />
