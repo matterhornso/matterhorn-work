@@ -2731,7 +2731,11 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
     stores: {
       chat: dataStore({
         id: "chat",
-        ...capability("working", "Chat/session history", "Chat history is managed by the OpenCode runtime store."),
+        ...capability(
+          "working",
+          "Chat/session history",
+          "Chat history is managed by the OpenCode runtime store. The project ledger exports session counts, timestamps, and audit metadata only.",
+        ),
         scope: "opencode_runtime",
         path: opencodeDbPath,
         format: "sqlite",
@@ -3029,12 +3033,12 @@ function buildDataControlStore(
     exportCapability = dataControlCapability({
       status: "preview",
       label: "Runtime managed",
-      summary: "Chat history is managed by the local agent runtime. Open the session shell to review workspace chats.",
+      summary: "Chat history is managed by the local agent runtime. The project ledger exports metadata only; open the session shell to review workspace chats.",
       actions: [
         appRouteDataControlAction({
           id: "chat.open-session",
           label: "Open session",
-          description: "Opens the workspace session shell where chat history is managed by the agent runtime.",
+          description: "Opens the workspace session shell where full chat history is managed by the agent runtime.",
           href: appRoutes.session,
         }),
       ],
@@ -3252,8 +3256,8 @@ function buildDataControlStore(
       actions: [
         appRouteDataControlAction({
           id: "outputs.open-history",
-          label: "Open Run history",
-          description: "Opens Run history, where output receipts and workflow evidence are reviewed.",
+          label: "Open Project history",
+          description: "Opens Project history, where output receipts and workflow evidence are reviewed.",
           href: appRoutes.outputHistory,
         }),
         dataControlAction({
@@ -3374,8 +3378,8 @@ function buildDataControlStore(
       actions: [
         appRouteDataControlAction({
           id: `${storeId}.open-history`,
-          label: "Open Run history",
-          description: "Opens Run history for append-only project activity and evidence.",
+          label: "Open Project history",
+          description: "Opens Project history for append-only project activity and evidence.",
           href: storeId === "audit" ? appRoutes.auditHistory : storeId === "evidence" ? appRoutes.history : appRoutes.taskHistory,
         }),
         dataControlAction({
