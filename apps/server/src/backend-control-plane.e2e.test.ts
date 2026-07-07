@@ -1424,6 +1424,13 @@ describe("backend control plane routes", () => {
       outputPath: "outputs/bittensor/session-a/report.md",
       eventType: "workspace.output.delete",
     }));
+    const evidence = await jsonFetch(base, "/workspace/ws_backend/evidence?source=task_events&limit=10");
+    expect(evidence.payload.items).toContainEqual(expect.objectContaining({
+      type: "task.output_deleted",
+      title: "Output deleted",
+      outputPath: "outputs/bittensor/session-a/report.md",
+    }));
+    expect(evidence.payload.summary.outputs).toBe(0);
 
     const readOnly = await boot({ readOnly: true });
     const deniedReadOnly = await jsonFetch(readOnly.base, "/workspace/ws_backend/outputs?path=outputs/bittensor/session-a/report.md", {

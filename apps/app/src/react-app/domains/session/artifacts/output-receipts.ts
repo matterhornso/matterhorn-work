@@ -69,6 +69,16 @@ function shouldReplaceReceipt(existing: WorkflowOutputReceipt, next: WorkflowOut
 
 export function workflowOutputReceiptsFromEvidence(events: MatterhornProjectEvidenceEvent[]): WorkflowOutputReceipt[] {
   const receiptsByPath = new Map<string, WorkflowOutputReceipt>();
+  const deletedAtByPath = new Map<string, number>();
+
+  for (const event of events) {
+    if (event.type !== "task.output_deleted") continue;
+    const timestampMs = Date.parse(event.timestamp);
+    for (const outputPath of eventOutputPaths(event)) {
+      const key = outputPath.toLowerCase();
+      deletedAtByPath.set(key, Math.max(deletedAtByPath.get(key) ?? 0, Number.isFinite(timestampMs) ? timestampMs : 0));
+    }
+  }
 
   for (const event of events) {
     if (!RECEIPT_EVENT_TYPES.has(event.type)) continue;
@@ -81,6 +91,10 @@ export function workflowOutputReceiptsFromEvidence(events: MatterhornProjectEvid
     const timestampMs = Date.parse(event.timestamp);
 
     for (const outputPath of paths) {
+      const deletedAt = deletedAtByPath.get(outputPath.toLowerCase());
+      if (deletedAt !== undefined && (!Number.isFinite(timestampMs) || timestampMs <= deletedAt)) {
+        continue;
+      }
       const receipt: WorkflowOutputReceipt = {
         id: `workflow-output:${event.id}:${outputPath}`,
         outputPath,

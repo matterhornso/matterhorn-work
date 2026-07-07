@@ -100,6 +100,41 @@ describe("workflow output receipts", () => {
     expect(receipts[0].title).toBe("Saved plan");
   });
 
+  test("treats newer output-deleted evidence as a tombstone", () => {
+    const receipts = workflowOutputReceiptsFromEvidence([
+      makeEvent({
+        id: "evt_saved",
+        timestamp: "2026-07-05T10:00:00.000Z",
+      }),
+      makeEvent({
+        id: "evt_deleted",
+        type: "task.output_deleted",
+        title: "Output deleted",
+        timestamp: "2026-07-05T10:05:00.000Z",
+      }),
+    ]);
+
+    expect(receipts).toHaveLength(0);
+  });
+
+  test("keeps outputs saved after an older deletion event", () => {
+    const receipts = workflowOutputReceiptsFromEvidence([
+      makeEvent({
+        id: "evt_deleted",
+        type: "task.output_deleted",
+        title: "Output deleted",
+        timestamp: "2026-07-05T10:00:00.000Z",
+      }),
+      makeEvent({
+        id: "evt_saved",
+        timestamp: "2026-07-05T10:05:00.000Z",
+      }),
+    ]);
+
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0].status).toBe("saved");
+  });
+
   test("merges receipt targets with message-discovered outputs", () => {
     const existingTarget: OpenTarget = {
       id: "file:outputs/longevity/session-alpha/plan.md",

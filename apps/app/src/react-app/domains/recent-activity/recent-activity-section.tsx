@@ -15,6 +15,7 @@ import {
   ListTodo,
   Play,
   Save,
+  Trash2,
   XCircle,
 } from "lucide-react";
 
@@ -42,6 +43,7 @@ const KIND_META: Record<RecentActivityKind, { icon: ElementType; tone: string }>
   task_started: { icon: Play, tone: "text-sky-300" },
   task_stage_started: { icon: Play, tone: "text-violet-300" },
   task_output_saved: { icon: Save, tone: "text-emerald-300" },
+  task_output_deleted: { icon: Trash2, tone: "text-muted-foreground" },
   task_completed: { icon: CheckCircle2, tone: "text-emerald-300" },
   task_failed: { icon: XCircle, tone: "text-red-300" },
   task_cancelled: { icon: AlertCircle, tone: "text-muted-foreground" },
@@ -80,6 +82,7 @@ function activityDisplayTitle(item: RecentActivityItem) {
   if (item.kind === "task_started") return "Run started";
   if (item.kind === "task_stage_started") return "Stage started";
   if (item.kind === "task_output_saved") return "Output saved";
+  if (item.kind === "task_output_deleted") return "Output deleted";
   if (item.kind === "task_completed") return `${deskLabel(item.desk)} run completed`;
   if (item.kind === "task_failed") return `${deskLabel(item.desk)} run failed`;
   if (item.kind === "task_cancelled") return `${deskLabel(item.desk)} run cancelled`;
