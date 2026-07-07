@@ -220,7 +220,7 @@ async function main() {
     "--workspace", workspaceRoot,
     "--approval", "auto",
     "--approval-timeout", "30000",
-    "--cors", "*",
+    "--cors", "loopback",
     "--opencode-directory", workspaceRoot,
     "--log-format", "pretty",
     "--no-log-requests",
