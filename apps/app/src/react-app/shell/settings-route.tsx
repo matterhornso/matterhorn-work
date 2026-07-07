@@ -2249,6 +2249,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             session={denSession}
             workspaceId={selectedWorkspaceId}
             matterhornServerClient={matterhornClient}
+            onSendFeedback={() => setFeedbackDialogOpen(true)}
           />
         );
       case "cloud-marketplaces":

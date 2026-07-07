@@ -70,6 +70,7 @@ export type CloudAccountViewProps = {
   compact?: boolean;
   workspaceId?: string;
   matterhornServerClient?: MatterhornServerClient | null;
+  onSendFeedback?: () => void;
 };
 
 type DenSignedOutPanelProps = Pick<
@@ -192,14 +193,28 @@ function cloudAuthState(isSignedIn: boolean, authError: string | null | undefine
   return "signed_in";
 }
 
-function ProfileReadinessSupportSection({ readiness }: { readiness: ProfileReadiness }) {
+function ProfileReadinessSupportSection({
+  onSendFeedback,
+  readiness,
+}: {
+  onSendFeedback?: () => void;
+  readiness: ProfileReadiness;
+}) {
   const { docsUrl, feedbackUrl, issueUrl, accountUrl } = readiness.supportLinks;
   return (
     <section className="flex flex-col gap-2 rounded-xl bg-dls-surface-muted/20 px-3 py-3 text-xs leading-5 text-dls-secondary">
       <h4 className="font-semibold text-dls-text">{readiness.stateCopy.headline}</h4>
       <p>{readiness.stateCopy.body}</p>
       <div className="flex flex-wrap gap-2">
-        {feedbackUrl ? (
+        {onSendFeedback ? (
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover"
+            onClick={onSendFeedback}
+          >
+            Send feedback
+          </button>
+        ) : feedbackUrl ? (
           <a className="flex items-center gap-1 rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover" href={feedbackUrl} target="_blank" rel="noreferrer">
             Send feedback <ExternalLink size={10} />
           </a>
@@ -332,6 +347,7 @@ export function CloudAccountView({
   session,
   workspaceId,
   matterhornServerClient,
+  onSendFeedback,
 }: CloudAccountViewProps) {
   const { activeOrganization, isSignedIn, statusMessage } = useCloudSession();
   const navigate = useNavigate();
@@ -458,7 +474,10 @@ export function CloudAccountView({
           matterhornServerClient={matterhornServerClient}
         />
 
-        <ProfileReadinessSupportSection readiness={profileReadiness} />
+        <ProfileReadinessSupportSection
+          onSendFeedback={onSendFeedback}
+          readiness={profileReadiness}
+        />
       </SettingsStack>
     );
   }

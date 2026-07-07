@@ -35,11 +35,15 @@ describe("project feedback UI contract", () => {
 
   test("settings feedback opens the local dialog with settings context", () => {
     const source = readReactSource("shell/settings-route.tsx");
+    const profileSource = readReactSource("domains/settings/pages/cloud-account-view.tsx");
 
     expect(source).toContain("ProjectFeedbackDialog");
     expect(source).toContain("setFeedbackDialogOpen(true)");
     expect(source).toContain('entrypoint="settings"');
     expect(source).toContain('sourceType: "settings"');
+    expect(source).toContain("onSendFeedback={() => setFeedbackDialogOpen(true)}");
+    expect(profileSource).toContain("onSendFeedback?: () => void");
+    expect(profileSource).toContain("onClick={onSendFeedback}");
     expect(source).not.toContain("buildFeedbackUrl");
   });
 
