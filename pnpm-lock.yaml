@@ -93,6 +93,9 @@ importers:
       '@mysten/dapp-kit-react':
         specifier: ^2.1.5
         version: 2.1.5(@mysten/sui@2.20.1(typescript@5.9.3))(@types/react@19.2.14)(react@19.2.4)(typescript@5.9.3)
+      '@mysten/kiosk':
+        specifier: 1.3.3
+        version: 1.3.3(@mysten/sui@2.20.1(typescript@5.9.3))
       '@mysten/sui':
         specifier: ^2.20.1
         version: 2.20.1(typescript@5.9.3)
@@ -1597,6 +1600,12 @@ packages:
     peerDependencies:
       '@types/react': '>=17.0.0'
       react: '>=17.0.0'
+
+  '@mysten/kiosk@1.3.3':
+    resolution: {integrity: sha512-rbP4F0RkIPFrhR4bhr2Fi4zitjuxO7oZzarBULHBfB6/zI7YOPeWc2KMFJz0Pe/k0MjwnFZ1EmH3vrhrh9PbaA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@mysten/sui': ^2.20.1
 
   '@mysten/slush-wallet@1.1.3':
     resolution: {integrity: sha512-NZteED3JZce0aR5FVRM7HZ996K52Sk72jZjLzwZ25dOeGYaTCBTgBLlsk15tWOi/OtTXKR588d3b9cYVDiilzA==}
@@ -8395,6 +8404,12 @@ snapshots:
     transitivePeerDependencies:
       - '@mysten/sui'
       - typescript
+
+  '@mysten/kiosk@1.3.3(@mysten/sui@2.20.1(typescript@5.9.3))':
+    dependencies:
+      '@mysten/bcs': 2.1.0
+      '@mysten/sui': 2.20.1(typescript@5.9.3)
+      '@mysten/utils': 0.4.0
 
   '@mysten/slush-wallet@1.1.3(@mysten/sui@2.20.1(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:

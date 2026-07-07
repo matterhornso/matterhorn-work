@@ -1,5 +1,8 @@
 import { Transaction } from "@mysten/sui/transactions";
+import { getJsonRpcFullnodeUrl, SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { KioskClient, KioskTransaction, type KioskOwnerCap } from "@mysten/kiosk";
 import type {
+  MatterhornNftKioskListingTransactionPlan,
   MatterhornNftMintTransactionPlan,
   MatterhornNftTransactionPlan,
   MatterhornSuiTransactionArgumentPlan,
@@ -30,6 +33,40 @@ export function buildMintTransactionFromPlan(
       arguments: moveCall.arguments.map((argument) => transactionArgument(tx, argument)),
     });
   }
+  return tx;
+}
+
+export function buildKioskListingTransactionFromPlan(
+  plan: MatterhornNftKioskListingTransactionPlan,
+  sender: string,
+): Transaction {
+  const network = suiNetworkFromNftPlan(plan);
+  const tx = new Transaction();
+  tx.setSender(plan.sender || sender);
+
+  const client = new SuiJsonRpcClient({
+    url: getJsonRpcFullnodeUrl(network),
+    network,
+  });
+  const kioskClient = new KioskClient({
+    client,
+    network,
+  });
+  const cap: KioskOwnerCap = {
+    kioskId: plan.kioskId,
+    objectId: plan.kioskOwnerCapId,
+    digest: "",
+    version: "",
+  };
+
+  new KioskTransaction({ transaction: tx, kioskClient, cap })
+    .placeAndList({
+      itemType: plan.nftType,
+      item: plan.nftObjectId,
+      price: plan.priceMist,
+    })
+    .finalize();
+
   return tx;
 }
 

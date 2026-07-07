@@ -13,6 +13,7 @@ import type {
 import { suiDAppKit } from "../../../infra/sui-dapp-kit";
 import { NftDraftPanel, type NftDraftPanelProps, type NftWalletExecutionState } from "./nft-draft-panel";
 import {
+  buildKioskListingTransactionFromPlan,
   buildMintTransactionFromPlan,
   receiptFromSuiWalletResult,
   suiNetworkFromNftPlan,
@@ -30,6 +31,7 @@ export function NftDraftWalletBridge(props: NftDraftWalletBridgeProps) {
   const [connectingWalletId, setConnectingWalletId] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
   const [lastMintReceipt, setLastMintReceipt] = useState<MatterhornSuiWalletExecutionReceipt | null>(null);
+  const [lastListingReceipt, setLastListingReceipt] = useState<MatterhornSuiWalletExecutionReceipt | null>(null);
 
   const walletOptions = useMemo(() => (
     wallets.slice(0, 3).map((availableWallet) => ({
@@ -120,6 +122,54 @@ export function NftDraftWalletBridge(props: NftDraftWalletBridgeProps) {
     }
   }, [account, props]);
 
+  const signListing = useCallback(async () => {
+    const preview = props.listingPreview;
+    const transactionPlan = preview?.transactionPlan;
+    if (!transactionPlan) {
+      setWalletError("Prepare a listing preview before signing.");
+      return;
+    }
+    if (!account?.address) {
+      setWalletError("Connect the Sui wallet that owns this Kiosk.");
+      return;
+    }
+    if (transactionPlan.sender && transactionPlan.sender.toLowerCase() !== account.address.toLowerCase()) {
+      setWalletError("The connected Sui wallet does not match the listing preview sender.");
+      return;
+    }
+
+    setWalletError(null);
+    setLastListingReceipt(null);
+    setSigning(true);
+    try {
+      const transaction = buildKioskListingTransactionFromPlan(transactionPlan, account.address);
+      const result = await suiDAppKit.signAndExecuteTransaction({
+        transaction,
+        account,
+        network: suiNetworkFromNftPlan(transactionPlan),
+      });
+      const receipt = receiptFromSuiWalletResult(result);
+      setLastListingReceipt(receipt);
+      if (receipt.status === "failure") {
+        setWalletError(receipt.error || "The Sui wallet returned a failed listing transaction.");
+        return;
+      }
+
+      const request: MatterhornNftReceiptRequest = {
+        transactionDigest: receipt.digest,
+        objectId: transactionPlan.nftObjectId,
+        network: transactionPlan.network,
+        kioskId: transactionPlan.kioskId,
+        transferPolicyId: transactionPlan.transferPolicyId,
+      };
+      await props.onRecordListingReceipt(request);
+    } catch (error) {
+      setWalletError(error instanceof Error ? error.message : "Could not sign listing transaction.");
+    } finally {
+      setSigning(false);
+    }
+  }, [account, props]);
+
   const walletExecution: NftWalletExecutionState = {
     directWalletAvailable: true,
     connectedAddress: account?.address ?? null,
@@ -129,9 +179,11 @@ export function NftDraftWalletBridge(props: NftDraftWalletBridgeProps) {
     isSigning: signing,
     error: walletError,
     lastMintReceipt,
+    lastListingReceipt,
     onConnectWallet: connectWallet,
     onDisconnectWallet: disconnectWallet,
     onSignMint: signMint,
+    onSignListing: signListing,
   };
 
   return <NftDraftPanel {...props} walletExecution={walletExecution} />;

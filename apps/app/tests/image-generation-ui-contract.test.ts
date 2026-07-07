@@ -11,6 +11,7 @@ import {
   NftSetupRequirements,
   NftDraftPanel,
   SessionImageGenerationPanel,
+  buildKioskListingTransactionFromPlan,
   buildMintTransactionFromPlan,
   receiptFromSuiWalletResult,
 } from "../src/react-app/domains/session/media";
@@ -329,6 +330,7 @@ describe("NFT draft panel", () => {
     const source = readFileSync("apps/app/src/react-app/domains/session/media/nft-draft-panel.tsx", "utf8");
     expect(source).toContain("Marketplace listing");
     expect(source).toContain("Listing plan ready");
+    expect(source).toContain("Sign listing in wallet");
     expect(source).toContain("Price (MIST)");
     expect(source).toContain("Listing transaction digest");
     expect(source).toContain("onRecordListingReceipt");
@@ -364,6 +366,11 @@ describe("NFT draft panel", () => {
 describe("Sui NFT transaction plan helpers", () => {
   test("builds a wallet transaction from the backend mint plan", () => {
     const transaction = buildMintTransactionFromPlan(mockMintPreview.transactionPlan, suiSender);
+    expect(transaction).toBeTruthy();
+  });
+
+  test("builds a wallet transaction from the backend Kiosk listing plan", () => {
+    const transaction = buildKioskListingTransactionFromPlan(mockListingPreview.transactionPlan, suiSender);
     expect(transaction).toBeTruthy();
   });
 
