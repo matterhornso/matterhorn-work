@@ -313,7 +313,7 @@ function ledgerPolicy(workspace: WorkspaceInfo): MatterhornProjectDataLedgerPoli
     redaction: capability("working", "Redaction", "Known secret-shaped tokens, wallet material, raw signatures, and private-key phrases are redacted from ledger text fields."),
     retention: capability("working", appendOnlyRetention.label, appendOnlyRetention.summary),
     retentionPolicy: appendOnlyRetention,
-    export: capability("preview", "Export", "The ledger response is exportable as JSON. Full project export packaging remains planned."),
+    export: capability("working", "Export", "The project data ledger is exportable as redacted JSON. Full project export packaging remains planned."),
     deletion: capability("preview", "Deletion", "User notes, memory records, and feedback can be deleted through their owning surfaces; append-only audit and task events are retained for accountability."),
     limitations: [
       "Full chat message bodies remain in the OpenCode runtime store; this v1 ledger includes chat session and prompt metadata only.",
