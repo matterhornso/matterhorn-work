@@ -257,6 +257,7 @@ function SuiWalletPreviewSection(props: {
   compact?: boolean;
   backendSui?: BackendWalletFamilyRow;
   matterhornServerClient?: MatterhornServerClient | null;
+  runtime?: WalletRuntime;
 }) {
   const connection = useWalletConnection();
   const wallets = useWallets();
@@ -266,10 +267,15 @@ function SuiWalletPreviewSection(props: {
   const network = isSuiMatterhornNetwork(reportedNetwork) ? reportedNetwork : "testnet";
   const client = suiDAppKit.getClient(network);
   const [error, setError] = useState<string | null>(null);
+  const runtime = props.runtime ?? "web";
+  const directSuiWalletAvailable = runtime === "web";
+  const backendRuntimeSupport =
+    runtime === "unknown" ? undefined : props.backendSui?.runtimeSupport?.[runtime];
+  const runtimeSummary = walletRuntimeSupportSummary(backendRuntimeSupport);
 
   const balanceQuery = useQuery({
     queryKey: ["sui-wallet-balance", network, account?.address, props.matterhornServerClient ? "matterhorn" : "wallet"],
-    enabled: Boolean(account?.address),
+    enabled: Boolean(directSuiWalletAvailable && account?.address),
     queryFn: async () => {
       if (!account?.address) throw new Error("No Sui account connected.");
       if (props.matterhornServerClient) {
@@ -312,10 +318,46 @@ function SuiWalletPreviewSection(props: {
   }, []);
 
   const busy = connection.isConnecting || connection.isReconnecting;
-  const statusLabel = connection.isConnected ? "Connected" : props.backendSui ? backendCapabilityLabel(props.backendSui.status) : "Preview";
+  const statusLabel = connection.isConnected
+    ? "Connected"
+    : runtimeSummary.status
+      ? runtimeSummary.label
+      : props.backendSui
+        ? backendCapabilityLabel(props.backendSui.status)
+        : "Preview";
   const statusTone = connection.isConnected
     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-    : "border-amber-500/30 bg-amber-500/10 text-amber-300";
+    : directSuiWalletAvailable
+      ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+      : "border-dls-border/35 bg-dls-surface-muted/45 text-dls-secondary";
+
+  if (!directSuiWalletAvailable) {
+    return (
+      <section className={cn(
+        "flex flex-col gap-3 rounded-lg bg-dls-surface-muted/30",
+        props.compact ? "px-3 py-3" : "px-4 py-4",
+      )}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-2">
+            <Waves className="mt-0.5 size-4 shrink-0 text-dls-secondary" />
+            <div className="min-w-0">
+              <h4 className="text-sm font-semibold text-dls-text">Sui external handoff</h4>
+              <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                Desktop prepares Sui previews and receipt evidence. Signing happens in your Sui wallet or protocol client.
+              </p>
+            </div>
+          </div>
+          <span className={cn("shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium", statusTone)}>
+            {statusLabel}
+          </span>
+        </div>
+        <div className="grid gap-1 text-xs leading-5 text-dls-secondary">
+          <p><span className="font-medium text-dls-text">Available here:</span> public reads, transfer previews, handoff copy, and receipt import.</p>
+          <p><span className="font-medium text-dls-text">Not here:</span> wallet-extension connect, seed phrases, private keys, raw signatures, or live submit by Matterhorn.</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className={cn(
@@ -328,7 +370,7 @@ function SuiWalletPreviewSection(props: {
           <div className="min-w-0">
             <h4 className="text-sm font-semibold text-dls-text">Sui wallet</h4>
             <p className="mt-1 text-xs leading-5 text-dls-secondary">
-              Connect with a Sui wallet-standard wallet. Matterhorn never asks for seed phrases or private keys.
+              Connect with a Sui wallet-standard wallet. Signing stays in your wallet.
             </p>
           </div>
         </div>
@@ -721,12 +763,14 @@ export function WalletSettingsView({
           compact
           backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")}
           matterhornServerClient={matterhornServerClient}
+          runtime={runtime}
         />
         <SuiWorkflowPanel
           compact
           matterhornServerClient={matterhornServerClient}
           workspaceId={runtimeWorkspaceId}
           sessionId={sessionId}
+          runtime={runtime}
         />
         <WalletProtocolSupportMap capability={capability} connected={state.isConnected} backendWallets={backendWallets} />
         <WalletRuntimeExplainer capability={capability} compact />
@@ -802,11 +846,13 @@ export function WalletSettingsView({
           <SuiWalletPreviewSection
             backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")}
             matterhornServerClient={matterhornServerClient}
+            runtime={runtime}
           />
           <SuiWorkflowPanel
             matterhornServerClient={matterhornServerClient}
             workspaceId={runtimeWorkspaceId}
             sessionId={sessionId}
+            runtime={runtime}
           />
         </SettingsSection>
         <SettingsSection>
@@ -915,11 +961,13 @@ export function WalletSettingsView({
         <SuiWalletPreviewSection
           backendSui={backendWallets?.find((wallet) => wallet.family === "Sui")}
           matterhornServerClient={matterhornServerClient}
+          runtime={runtime}
         />
         <SuiWorkflowPanel
           matterhornServerClient={matterhornServerClient}
           workspaceId={runtimeWorkspaceId}
           sessionId={sessionId}
+          runtime={runtime}
         />
       </SettingsSection>
 
