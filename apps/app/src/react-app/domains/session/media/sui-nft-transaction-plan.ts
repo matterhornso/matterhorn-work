@@ -73,17 +73,19 @@ export function buildKioskListingTransactionFromPlan(
 export function receiptFromSuiWalletResult(result: unknown): MatterhornSuiWalletExecutionReceipt {
   const record = objectRecord(result);
   const failed = objectRecord(record?.FailedTransaction);
-  const succeeded = objectRecord(record?.Transaction);
+  const directTransaction = stringValue(record?.digest) ? record : null;
+  const succeeded = objectRecord(record?.Transaction) ?? (!failed ? directTransaction : null);
   const executed = succeeded ?? failed;
-  const digest = stringValue(executed?.digest);
+  const digest = transactionDigest(executed);
   if (!digest) {
     throw new Error("The Sui wallet did not return a transaction digest.");
   }
+  const status = failed || transactionFailed(executed) ? "failure" : "success";
   return {
     digest,
-    status: succeeded ? "success" : "failure",
+    status,
     objectId: findCreatedObjectId(executed),
-    error: stringValue(objectRecord(objectRecord(failed?.status)?.error)?.message) ?? null,
+    error: status === "failure" ? transactionErrorMessage(executed) : null,
   };
 }
 
@@ -116,15 +118,30 @@ function findCreatedObjectId(value: unknown): string | null {
 
     const record = objectRecord(current);
     if (!record) continue;
-    const objectId =
-      stringValue(record.objectId) ??
-      stringValue(record.id) ??
-      stringValue(objectRecord(record.reference)?.objectId) ??
-      stringValue(objectRecord(record.object)?.objectId);
+    const createdObjectId = createdObjectIdFromCollection(record.created, true)
+      ?? createdObjectIdFromCollection(record.objectChanges)
+      ?? createdObjectIdFromCollection(objectRecord(record.objectChanges)?.nodes);
+    if (createdObjectId) return createdObjectId;
+
+    const objectId = objectIdFromRecord(record);
     if (objectId && isCreatedObjectRecord(record)) return objectId;
     for (const nested of Object.values(record)) queue.push(nested);
   }
 
+  return null;
+}
+
+function createdObjectIdFromCollection(value: unknown, allowImplicitCreated = false): string | null {
+  if (!Array.isArray(value)) return null;
+  for (const item of value) {
+    const record = objectRecord(item);
+    if (!record) continue;
+    const objectId = objectIdFromRecord(record);
+    const implicitlyCreated = allowImplicitCreated && !("type" in record) && !("idOperation" in record);
+    if (objectId && (isCreatedObjectRecord(record) || implicitlyCreated)) {
+      return objectId;
+    }
+  }
   return null;
 }
 
@@ -136,10 +153,41 @@ function isCreatedObjectRecord(record: Record<string, unknown>) {
     stringValue(record.idOperation),
   ].filter(Boolean).join(" ");
   if (/created/i.test(kind)) return true;
+  if (record.idCreated === true) return true;
 
   const inputState = stringValue(record.inputState);
   const outputState = stringValue(record.outputState);
   return inputState === "DoesNotExist" && Boolean(outputState && outputState !== "DoesNotExist");
+}
+
+function objectIdFromRecord(record: Record<string, unknown>): string | null {
+  return stringValue(record.objectId) ??
+    stringValue(record.address) ??
+    stringValue(record.id) ??
+    stringValue(objectRecord(record.reference)?.objectId) ??
+    stringValue(objectRecord(record.object)?.objectId);
+}
+
+function transactionDigest(record: Record<string, unknown> | null): string | null {
+  if (!record) return null;
+  return stringValue(record.digest) ??
+    stringValue(record.transactionDigest) ??
+    stringValue(objectRecord(record.transaction)?.digest);
+}
+
+function transactionFailed(record: Record<string, unknown> | null): boolean {
+  const status = objectRecord(record?.status);
+  if (!status) return false;
+  return status.success === false || Boolean(status.error);
+}
+
+function transactionErrorMessage(record: Record<string, unknown> | null): string | null {
+  const status = objectRecord(record?.status);
+  const error = status?.error ?? record?.error;
+  return stringValue(error) ??
+    stringValue(objectRecord(error)?.message) ??
+    stringValue(objectRecord(error)?.name) ??
+    null;
 }
 
 function objectRecord(value: unknown): Record<string, unknown> | null {
