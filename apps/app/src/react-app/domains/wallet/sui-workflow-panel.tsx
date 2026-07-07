@@ -348,6 +348,13 @@ export function SuiWorkflowPanel(props: {
 
   const preview = previewResponse?.preview ?? null;
   const receipt = receiptResponse?.receipt ?? null;
+  const connectedAddress = directWalletAvailable ? account?.address ?? null : null;
+  const senderMatchesConnectedWallet = Boolean(
+    connectedAddress && effectiveSender && connectedAddress.toLowerCase() === effectiveSender.toLowerCase(),
+  );
+  const canUseConnectedWalletSender = Boolean(
+    directWalletAvailable && connectedAddress && !senderMatchesConnectedWallet,
+  );
   const availability = getSuiWorkflowAvailability({
     clientReady: Boolean(client),
     workspaceReady: Boolean(workspaceId),
@@ -356,7 +363,7 @@ export function SuiWorkflowPanel(props: {
     amountSui: amountSui.trim(),
     previewReady: Boolean(preview),
     previewSender: preview?.sender,
-    connectedAddress: directWalletAvailable ? account?.address : null,
+    connectedAddress,
     directWalletAvailable,
     digest: digest.trim(),
   });
@@ -376,29 +383,31 @@ export function SuiWorkflowPanel(props: {
     preview ? JSON.stringify(preview.handoff, null, 2) : ""
   ), [preview]);
 
+  const useConnectedWalletSender = useCallback(() => {
+    if (connectedAddress) setSender(connectedAddress);
+  }, [connectedAddress]);
+
   return (
     <section className={cn(
-      "grid gap-4 rounded-lg bg-dls-surface-muted/25",
+      "grid gap-4",
       props.compact ? "px-3 py-3" : "px-4 py-4",
     )}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Waves className="size-4 text-dls-secondary" aria-hidden="true" />
-            <h4 className="text-sm font-semibold text-dls-text">Sui workflow</h4>
+            <h4 className="text-sm font-semibold text-dls-text">Sui wallet workflow</h4>
           </div>
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
             {directWalletAvailable
-              ? "Connect a wallet, prepare a transfer preview, then save the wallet receipt as project evidence."
+              ? "Prepare a transfer preview, sign in your wallet, and save the public receipt."
               : "Prepare a transfer preview, sign externally, then import the public receipt as project evidence."}
           </p>
         </div>
-        <span className="shrink-0 rounded-md bg-dls-surface px-2 py-0.5 text-[11px] font-medium text-dls-secondary">
-          No custody
-        </span>
+        <span className="shrink-0 text-[11px] font-medium text-dls-secondary">No custody</span>
       </div>
 
-      <div className="grid gap-3 rounded-md bg-background/35 px-3 py-3">
+      <div className="grid gap-3 border-y border-dls-border/45 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="truncate text-xs font-medium text-dls-text">{connectedWalletLabel}</p>
@@ -438,7 +447,7 @@ export function SuiWorkflowPanel(props: {
         </div>
 
         {!directWalletAvailable ? (
-          <div className="rounded-md bg-background/35 px-3 py-2 text-xs leading-5 text-dls-secondary">
+          <div className="text-xs leading-5 text-dls-secondary">
             <span className="font-medium text-dls-text">Desktop handoff:</span>{" "}
             copy the preview handoff, sign in your Sui wallet or protocol client, then paste the public digest below.
           </div>
@@ -478,12 +487,25 @@ export function SuiWorkflowPanel(props: {
             </select>
           </WorkflowField>
           <WorkflowField label="Sender" htmlFor={fieldId("sender")} help="Public Sui address only. Never paste keys, mnemonics, signatures, or wallet exports.">
-            <Input
-              id={fieldId("sender")}
-              value={sender}
-              placeholder="0x..."
-              onChange={(event) => setSender(event.target.value)}
-            />
+            <div className="flex min-w-0 gap-2">
+              <Input
+                id={fieldId("sender")}
+                value={sender}
+                placeholder="0x..."
+                onChange={(event) => setSender(event.target.value)}
+              />
+              {canUseConnectedWalletSender ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={useConnectedWalletSender}
+                >
+                  Use wallet
+                </Button>
+              ) : null}
+            </div>
           </WorkflowField>
         </div>
 
@@ -530,7 +552,7 @@ export function SuiWorkflowPanel(props: {
       </div>
 
       {preview ? (
-        <div className="grid gap-3 rounded-md bg-background/45 px-3 py-3">
+        <div className="grid gap-3 border-t border-dls-border/45 pt-3">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-dls-text">Preview ready</p>
@@ -542,7 +564,7 @@ export function SuiWorkflowPanel(props: {
           </div>
           <div className="grid gap-1 text-xs leading-5 text-dls-secondary">
             <p><span className="font-medium text-dls-text">Preview hash:</span> <span className="font-mono">{preview.previewSha256.slice(0, 18)}...</span></p>
-            <p><span className="font-medium text-dls-text">Can submit:</span> Yes, only through your connected Sui wallet.</p>
+            <p><span className="font-medium text-dls-text">Execution:</span> wallet-only. Matterhorn does not hold keys or submit directly.</p>
           </div>
           <EvidencePath path={previewResponse?.evidence?.outputPath} />
           <div className="flex flex-wrap gap-2">
@@ -628,7 +650,7 @@ export function SuiWorkflowPanel(props: {
       </div>
 
       {receipt ? (
-        <div className="grid gap-3 rounded-md bg-background/45 px-3 py-3">
+        <div className="grid gap-3 border-t border-dls-border/45 pt-3">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-dls-text">Receipt imported</p>
