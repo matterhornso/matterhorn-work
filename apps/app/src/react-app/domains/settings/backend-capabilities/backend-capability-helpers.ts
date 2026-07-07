@@ -40,8 +40,8 @@ export function walletFamilySigningCopy(family: MatterhornWalletFamilyCapability
       };
     }
     return {
-      label: "Not supported yet",
-      hint: "Sui wallet support is not implemented yet.",
+      label: "Not supported here",
+      hint: "Sui direct wallet connect is not available in this runtime. Backend previews, handoffs, and receipt evidence remain available when the workspace engine supports them.",
     };
   }
 
