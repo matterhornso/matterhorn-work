@@ -5,6 +5,10 @@ function readAppSource(path: string) {
   return readFileSync(new URL(`../src/react-app/${path}`, import.meta.url), "utf8");
 }
 
+function readSource(path: string) {
+  return readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
+}
+
 describe("Project Activity contract tests", () => {
   describe("normalization layer", () => {
     test("normalizeEvidenceEvents is exported from recent-activity-types", () => {
@@ -16,6 +20,12 @@ describe("Project Activity contract tests", () => {
       const source = readAppSource("domains/recent-activity/recent-activity-types.ts");
       expect(source).toContain("export type RecentActivityKind");
       expect(source).toContain("export interface RecentActivityItem");
+    });
+
+    test("MatterhornServerClient task event type includes output deletion events", () => {
+      const source = readSource("app/lib/matterhorn-server.ts");
+      expect(source).toContain('| "artifact_deleted"');
+      expect(source).toContain("artifactPath?: string");
     });
 
     test("EVENT_TYPE_MAP covers all five required activity kinds", () => {
