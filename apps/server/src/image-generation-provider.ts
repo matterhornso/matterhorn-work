@@ -53,7 +53,7 @@ interface ImageGenerationProviderInput extends MatterhornImageGenerationInput {
 }
 
 const SECRET_PATTERNS = [
-  /\b(sk-[a-zA-Z0-9]{20,})\b/,
+  /\b(sk-[a-zA-Z0-9_-]{20,})\b/,
   /\b-----BEGIN (RSA |EC |OPENSSH |PGP )?(PRIVATE KEY|SECRET KEY)-----/,
   /\b0x[a-fA-F0-9]{64}\b/,
   /\bmnemonic\b[^\n]{0,200}\b(?:abandon|ability|able|about|above|absent|absorb|abstract|absurd)\b/i,
