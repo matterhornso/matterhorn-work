@@ -32,6 +32,7 @@ describe("workflow output receipts", () => {
 
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({
+      kind: "workflow",
       outputPath: "outputs/longevity/session-alpha/plan.md",
       title: "Saved output",
       desk: "longevity",
@@ -54,6 +55,61 @@ describe("workflow output receipts", () => {
       preview: "markdown",
       exists: true,
       reason: "workflow output receipt",
+    });
+  });
+
+  test("maps generated image evidence into Outputs receipts", () => {
+    const receipts = workflowOutputReceiptsFromEvidence([
+      makeEvent({
+        id: "img_evt",
+        type: "image.generated",
+        title: "Image generated",
+        summary: "mock;mock-image-1;.matterhorn-work/outputs/images/img_123.png",
+        desk: undefined,
+        sessionSlug: undefined,
+        taskId: "image_gen_img_123",
+        outputPath: ".matterhorn-work/outputs/images/img_123.png",
+        artifactPaths: [".matterhorn-work/outputs/images/img_123.png"],
+      }),
+    ]);
+
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({
+      kind: "image",
+      outputPath: ".matterhorn-work/outputs/images/img_123.png",
+      title: "Image generated: img_123.png",
+      status: "generated",
+      taskId: "image_gen_img_123",
+    });
+
+    const target = openTargetFromWorkflowOutputReceipt(receipts[0]);
+    expect(target).toMatchObject({
+      id: "file:.matterhorn-work/outputs/images/img_123.png",
+      preview: "image",
+      exists: true,
+    });
+  });
+
+  test("maps NFT evidence with output paths into Outputs receipts", () => {
+    const receipts = workflowOutputReceiptsFromEvidence([
+      makeEvent({
+        id: "nft_evt",
+        type: "nft.listed",
+        title: "NFT listed",
+        summary: "nft;nft_draft_1",
+        desk: "nft",
+        taskId: "nft_listing_nft_draft_1",
+        outputPath: "outputs/nft/nft_draft_1/listing-receipt.json",
+        artifactPaths: ["outputs/nft/nft_draft_1/listing-receipt.json"],
+      }),
+    ]);
+
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({
+      kind: "nft",
+      status: "published",
+      outputPath: "outputs/nft/nft_draft_1/listing-receipt.json",
+      taskId: "nft_listing_nft_draft_1",
     });
   });
 

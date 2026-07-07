@@ -46,9 +46,15 @@ describe("Outputs panel contract", () => {
     expect(sessionSource).toContain("mergeOpenTargetsWithWorkflowOutputReceipts");
     expect(sessionSource).toContain("listProjectEvidence(outputReceiptWorkspaceId, { limit: 200 })");
     expect(artifactSource).toContain("outputReceipts?: WorkflowOutputReceipt[]");
+    expect(artifactSource).toContain("outputReceiptKindLabel");
+    expect(artifactSource).toContain("Image receipt");
+    expect(artifactSource).toContain("NFT receipt");
     expect(artifactSource).toContain("Workflow receipt");
     expect(receiptSource).toContain('"task.output_saved"');
     expect(receiptSource).toContain('"task.completed"');
+    expect(receiptSource).toContain('"image.generated"');
+    expect(receiptSource).toContain('"nft.minted"');
+    expect(receiptSource).toContain('"nft.listed"');
     expect(receiptSource).toContain("openTargetFromWorkflowOutputReceipt");
   });
 
