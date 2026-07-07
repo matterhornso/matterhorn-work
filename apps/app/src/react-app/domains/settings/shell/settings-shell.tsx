@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/sidebar";
 import { t } from "../../../../i18n";
 import type { SettingsTab } from "../../../../app/types";
+import type { MatterhornSettingsSectionCapability } from "@matterhorn-work/types/backend-capabilities";
 import {
   SettingsPage,
   SettingsSidebar,
@@ -49,6 +50,7 @@ export type SettingsShellProps = SettingsPageFrameProps & {
   footer?: React.ReactNode;
   compact?: boolean;
   hideWorkspaceSwitcher?: boolean;
+  backendSettingsSections?: MatterhornSettingsSectionCapability[] | null;
 };
 
 export function SettingsShell(props: SettingsShellProps) {
@@ -68,6 +70,7 @@ export function SettingsShell(props: SettingsShellProps) {
               activeTab={props.activeTab}
               developerMode={props.developerMode}
               onSelectTab={props.onSelectTab}
+              backendSettingsSections={props.backendSettingsSections}
               compact
             />
             <Button
@@ -119,6 +122,7 @@ export function SettingsShell(props: SettingsShellProps) {
           workspaces={props.workspaces}
           onSelectWorkspace={props.onSelectWorkspace}
           hideWorkspaceSwitcher={props.hideWorkspaceSwitcher}
+          backendSettingsSections={props.backendSettingsSections}
         />
         <SidebarInset className="min-h-0 overflow-hidden bg-background mac:bg-background/80 mac:[&_header]:transition-[padding-left] mac:[&_header]:duration-200 mac:[&_header]:ease-linear mac:peer-data-[state=collapsed]:[&_header]:pl-16 [&_header]:pl-16 md:[&_header]:pl-6">
           <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -178,7 +182,12 @@ export function SettingsShell(props: SettingsShellProps) {
   );
 }
 
-function SettingsSectionMenu(props: Pick<SettingsPageFrameProps, "activeTab" | "developerMode" | "onSelectTab"> & { compact?: boolean }) {
+function SettingsSectionMenu(
+  props: Pick<SettingsPageFrameProps, "activeTab" | "developerMode" | "onSelectTab"> & {
+    compact?: boolean;
+    backendSettingsSections?: MatterhornSettingsSectionCapability[] | null;
+  },
+) {
   const sections: Array<{ label: string | null; tabs: SettingsTab[] }> = [
     { label: null, tabs: ["general"] },
     { label: t("settings.group_workspace"), tabs: getWorkspaceSettingsTabs(props.developerMode) },
@@ -222,9 +231,9 @@ function SettingsSectionMenu(props: Pick<SettingsPageFrameProps, "activeTab" | "
                 >
                   <Icon />
                   <span>{getSettingsTabLabel(tab)}</span>
-                  {getSettingsTabStatus(tab) ? (
+                  {getSettingsTabStatus(tab, props.backendSettingsSections) ? (
                     <span className="ml-auto rounded-md border border-dls-border px-1.5 py-0.5 text-[9px] font-medium tracking-normal text-dls-secondary">
-                      {getSettingsTabStatus(tab)}
+                      {getSettingsTabStatus(tab, props.backendSettingsSections)}
                     </span>
                   ) : null}
                 </DropdownMenuItem>

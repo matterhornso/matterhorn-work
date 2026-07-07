@@ -17,6 +17,7 @@ import {
   getBackendCapabilitiesResult,
 } from "../src/react-app/domains/settings/backend-capabilities";
 import { ProfileCapabilityStatus } from "../src/react-app/domains/profile/profile-capability-status";
+import { getSettingsTabStatus } from "../src/react-app/domains/settings/shell/settings-page";
 
 function renderCapabilitiesSection(capabilities: MatterhornBackendCapabilitiesResponse | null, error?: Error | null) {
   return renderToStaticMarkup(
@@ -99,6 +100,30 @@ describe("Backend capability fixtures", () => {
     expect(f.models.status).toBe("error");
     const security = f.settings.find((s) => s.section === "security");
     expect(security?.status).toBe("error");
+  });
+});
+
+describe("Settings tab capability status mapping", () => {
+  test("uses backend settings sections instead of static readiness labels", () => {
+    const sections = backendCapabilitiesNeedsSetupFixture.settings;
+
+    expect(getSettingsTabStatus("wallet", sections)).toBe("Needs setup");
+    expect(getSettingsTabStatus("cloud-account", sections)).toBe("Needs setup");
+    expect(getSettingsTabStatus("permissions", sections)).toBe("Working");
+    expect(getSettingsTabStatus("extensions", sections)).toBe("Working");
+    expect(getSettingsTabStatus("appearance", sections)).toBe("Working");
+  });
+
+  test("rolls multiple backend sections up to the most actionable status", () => {
+    const sections = backendCapabilitiesWorkingFixture.settings.map((section) => {
+      if (section.section === "models") return { ...section, status: "needs_setup" as const };
+      if (section.section === "providers") return { ...section, status: "working" as const };
+      if (section.section === "wallet") return { ...section, status: "preview" as const };
+      return section;
+    });
+
+    expect(getSettingsTabStatus("ai", sections)).toBe("Needs setup");
+    expect(getSettingsTabStatus("wallet", sections)).toBe("Preview");
   });
 });
 

@@ -43,6 +43,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { t } from "../../../../i18n";
 import type { SettingsTab } from "../../../../app/types";
+import type {
+  MatterhornCapabilityStatus,
+  MatterhornSettingsSectionCapability,
+} from "@matterhorn-work/types/backend-capabilities";
 import {
   SettingsContent,
   SettingsPanel,
@@ -197,20 +201,68 @@ export function getSettingsTabDescription(tab: SettingsTab) {
 }
 
 export type SettingsReadinessStatus =
-  | "Ready"
+  | "Working"
   | "Needs setup"
   | "Preview"
+  | "Not supported here"
   | "Desktop only"
   | "Cloud only"
   | "Developer";
 
-export function getSettingsTabStatus(tab: SettingsTab): SettingsReadinessStatus | null {
+const TAB_CAPABILITY_SECTIONS: Partial<Record<SettingsTab, MatterhornSettingsSectionCapability["section"][]>> = {
+  overview: ["overview"],
+  ai: ["models", "providers"],
+  permissions: ["security"],
+  "cloud-account": ["profile", "teams"],
+  "cloud-providers": ["providers"],
+  extensions: ["mcp"],
+  wallet: ["wallet"],
+};
+
+function capabilityStatusRank(status: MatterhornCapabilityStatus) {
+  if (status === "error") return 5;
+  if (status === "unsupported") return 4;
+  if (status === "needs_setup") return 3;
+  if (status === "preview") return 2;
+  return 1;
+}
+
+function capabilityStatusToSettingsStatus(status: MatterhornCapabilityStatus): SettingsReadinessStatus {
+  if (status === "working") return "Working";
+  if (status === "needs_setup") return "Needs setup";
+  if (status === "preview") return "Preview";
+  return "Not supported here";
+}
+
+function liveSettingsTabStatus(
+  tab: SettingsTab,
+  sections?: MatterhornSettingsSectionCapability[] | null,
+): SettingsReadinessStatus | null {
+  if (!sections?.length) return null;
+  const sectionIds = TAB_CAPABILITY_SECTIONS[tab];
+  if (!sectionIds?.length) return null;
+  const matched = sectionIds
+    .map((sectionId) => sections.find((section) => section.section === sectionId))
+    .filter((section): section is MatterhornSettingsSectionCapability => Boolean(section));
+  if (!matched.length) return null;
+  const highestPriority = matched.reduce((current, next) =>
+    capabilityStatusRank(next.status) > capabilityStatusRank(current.status) ? next : current,
+  );
+  return capabilityStatusToSettingsStatus(highestPriority.status);
+}
+
+export function getSettingsTabStatus(
+  tab: SettingsTab,
+  sections?: MatterhornSettingsSectionCapability[] | null,
+): SettingsReadinessStatus | null {
+  const liveStatus = liveSettingsTabStatus(tab, sections);
+  if (liveStatus) return liveStatus;
   switch (tab) {
     case "preferences":
     case "permissions":
     case "appearance":
     case "extensions":
-      return "Ready";
+      return "Working";
     case "wallet":
     case "ai":
     case "cloud-account":
@@ -253,7 +305,7 @@ function SettingsTabReadinessBadge(props: { status: SettingsReadinessStatus | nu
   if (!props.status) return null;
 
   const tone =
-    props.status === "Ready"
+    props.status === "Working"
       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
       : props.status === "Needs setup"
         ? "border-sky-500/30 bg-sky-500/10 text-sky-300"
@@ -284,6 +336,7 @@ type SettingsPageProps = {
   updateRestartBlockedMessage?: string | null;
   onUpdateToolbarAction?: () => void;
   children: React.ReactNode;
+  backendSettingsSections?: MatterhornSettingsSectionCapability[] | null;
 };
 
 type SettingsSidebarProps = Pick<SettingsPageProps, "activeTab" | "onSelectTab" | "developerMode"> & {
@@ -294,6 +347,7 @@ type SettingsSidebarProps = Pick<SettingsPageProps, "activeTab" | "onSelectTab" 
   workspaces: Array<{ id: string; name: string; color: string }>;
   onSelectWorkspace: (workspaceId: string) => void;
   hideWorkspaceSwitcher?: boolean;
+  backendSettingsSections?: MatterhornSettingsSectionCapability[] | null;
 };
 
 export function SettingsSidebar(props: SettingsSidebarProps) {
@@ -375,7 +429,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                     >
                       <Icon />
                       <span>{getSettingsTabLabel(tab)}</span>
-                      <SettingsTabReadinessBadge status={getSettingsTabStatus(tab)} />
+                      <SettingsTabReadinessBadge status={getSettingsTabStatus(tab, props.backendSettingsSections)} />
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -399,7 +453,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                     >
                       <Icon />
                       <span>{getSettingsTabLabel(tab)}</span>
-                      <SettingsTabReadinessBadge status={getSettingsTabStatus(tab)} />
+                      <SettingsTabReadinessBadge status={getSettingsTabStatus(tab, props.backendSettingsSections)} />
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -423,7 +477,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                     >
                       <Icon />
                       <span>{getSettingsTabLabel(tab)}</span>
-                      <SettingsTabReadinessBadge status={getSettingsTabStatus(tab)} />
+                      <SettingsTabReadinessBadge status={getSettingsTabStatus(tab, props.backendSettingsSections)} />
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );

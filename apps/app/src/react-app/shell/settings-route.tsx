@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
 import { SUGGESTED_PLUGINS } from "../../app/constants";
 import type { EnablementContext } from "../../app/enablement";
@@ -29,6 +30,7 @@ import type {
   WorkspacePreset,
   WorkspaceSessionGroup,
 } from "../../app/types";
+import type { MatterhornSettingsSectionCapability } from "@matterhorn-work/types/backend-capabilities";
 import { getWorkspaceTaskLoadErrorDisplay, isSandboxWorkspace } from "../../app/utils";
 import { currentLocale, t, setLocale, type Language } from "../../i18n";
 import { createConnectionsStore, useConnectionsStoreSnapshot } from "../domains/connections/store";
@@ -906,6 +908,27 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const opencodeBaseUrl = selectedWorkspaceEndpoint?.opencodeBaseUrl ?? "";
   const runtimeWorkspaceId = selectedWorkspaceEndpoint?.workspaceId ?? selectedWorkspace?.id ?? null;
   routeStateRef.current.runtimeWorkspaceId = runtimeWorkspaceId;
+  const settingsCapabilityClient = selectedWorkspaceEndpoint?.client ?? matterhornClient;
+
+  const settingsCapabilitySectionsQuery = useQuery({
+    queryKey: ["settings-shell-capability-sections", runtimeWorkspaceId ?? "global", settingsCapabilityClient ? "client" : "missing"],
+    enabled: Boolean(settingsCapabilityClient),
+    queryFn: async (): Promise<MatterhornSettingsSectionCapability[]> => {
+      if (!settingsCapabilityClient) return [];
+      const workspaceId = runtimeWorkspaceId?.trim();
+      if (workspaceId) {
+        try {
+          const controlPlane = await settingsCapabilityClient.workspaceBackendControlPlane(workspaceId);
+          return controlPlane.capabilities.settings;
+        } catch {
+          // Fall back to the server-level contract when a workspace-scoped control plane is unavailable.
+        }
+      }
+      const capabilities = await settingsCapabilityClient.backendCapabilities();
+      return capabilities.settings;
+    },
+    staleTime: 30_000,
+  });
 
   const opencodeClient = useMemo(() => {
     if (!selectedWorkspaceEndpoint || !selectedWorkspaceEndpoint.token) return null;
@@ -2010,6 +2033,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             developerMode={developerMode}
             runtimeWorkspaceId={runtimeWorkspaceId ?? undefined}
             matterhornServerClient={matterhornClient}
+            backendSettingsSections={settingsCapabilitySectionsQuery.data ?? null}
             onSendFeedback={() => setFeedbackDialogOpen(true)}
             onJoinDiscord={() => platform.openLink("https://discord.gg/VEhNQXxYMB")}
             onReportIssue={() => platform.openLink("https://github.com/matterhornso/matterhorn-work/issues/new?template=bug.yml")}
@@ -2443,6 +2467,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         onClose={props.onClose ?? (() => navigate(selectedWorkspaceId ? workspaceSessionRoute(selectedWorkspaceId) : "/session"))}
         error={routeError ?? notFoundRouteError}
         compact={props.embedded}
+        backendSettingsSections={settingsCapabilitySectionsQuery.data ?? null}
       >
         {settingsView}
       </SettingsShell>
