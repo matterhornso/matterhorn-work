@@ -2986,12 +2986,29 @@ export function SessionRoute() {
         onCreateTaskWithPrompt: (workspaceId, prompt, options) => {
           void (async () => {
             const workspace = workspaces.find((item) => item.id === workspaceId);
-            if (!workspace) return;
-            const endpoint = resolveWorkspaceEndpoint(workspace, { baseUrl, token });
-            if (!endpoint?.token) return;
-            const workspacePath = workspace.path?.trim() || undefined;
             const title = options?.title?.trim();
             const agent = options?.agent?.trim();
+            if (!workspace) {
+              showToast({
+                title: "Could not start task",
+                description: "The workspace could not be found. Return Home and try again.",
+                tone: "error",
+                durationMs: 3600,
+              });
+              return;
+            }
+            const endpoint = resolveWorkspaceEndpoint(workspace, { baseUrl, token });
+            if (!endpoint?.token) {
+              showToast({
+                title: "Matterhorn Work engine is offline",
+                description: "The task could not start because this workspace is not connected to a local engine.",
+                tone: "error",
+                durationMs: 4200,
+              });
+              void handleCreateTaskInWorkspace(workspaceId);
+              return;
+            }
+            const workspacePath = workspace.path?.trim() || undefined;
             const sendImmediately = Boolean(options?.sendImmediately && !selectedModelUnavailable);
             const workspaceClient = createClient(
               endpoint.opencodeBaseUrl,
@@ -3022,6 +3039,14 @@ export function SessionRoute() {
                 [workspaceId]: [displaySession as any, ...(current[workspaceId] ?? [])],
               }));
               navigateToWorkspaceSession(workspaceId, session.id);
+              if (sendImmediately) {
+                showToast({
+                  title: `Starting ${title || "desk task"}`,
+                  description: "Opening the agent session now.",
+                  tone: "success",
+                  durationMs: 1800,
+                });
+              }
               if (!sendImmediately) {
                 focusPromptSoon();
                 if (options?.sendImmediately && selectedModelUnavailable) {
