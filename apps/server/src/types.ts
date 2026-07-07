@@ -241,6 +241,7 @@ export type MatterhornTaskEventType =
   | "tool_called"      // a tool was invoked during a stage
   | "artifact_saved"   // an artifact file was written to disk
   | "artifact_deleted" // an artifact file was deleted by the user
+  | "image_generated"  // an AI-generated image was created and saved
   | "waiting_for_user" // workflow paused, awaiting user input/approval
   | "completed"        // workflow finished successfully
   | "failed"           // workflow terminated with an error

@@ -97,6 +97,7 @@ import {
   type MatterhornSessionMemoryContext,
 } from "./memory-context-store";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
+import { SessionImageGenerationPanel } from "../media/session-image-generation-panel";
 import { useQuickJot } from "../../notes";
 
 const SessionTranscript = lazy(() => import("./message-list").then((module) => ({
@@ -1992,7 +1993,16 @@ export function SessionSurface(props: SessionSurfaceProps) {
   useControlAction(sessionReadTranscriptControlAction);
 
   const hasTodoContent = (props.todos ?? []).some((todo) => todo.content.trim());
-  const hasComposerTopAccessory = Boolean(props.activeQuestion || hasTodoContent || props.activePermission || activeDeskMode || bittensorContext || memoryContext);
+  const showImageGenerationPanel = Boolean(props.client && props.workspaceId && props.sessionId);
+  const hasComposerTopAccessory = Boolean(
+    showImageGenerationPanel ||
+      props.activeQuestion ||
+      hasTodoContent ||
+      props.activePermission ||
+      activeDeskMode ||
+      bittensorContext ||
+      memoryContext,
+  );
 
   return (
     <DevProfiler id="SessionSurface">
@@ -2305,6 +2315,16 @@ export function SessionSurface(props: SessionSurfaceProps) {
                       }
                     }}
                   />
+                ) : null}
+                {showImageGenerationPanel ? (
+                  <div className="border-t border-dls-border/25 pt-3 first:border-t-0 first:pt-0">
+                    <SessionImageGenerationPanel
+                      client={props.client}
+                      workspaceId={props.workspaceId}
+                      sessionId={props.sessionId}
+                      onNotice={setNotice}
+                    />
+                  </div>
                 ) : null}
               </div>
             ) : null

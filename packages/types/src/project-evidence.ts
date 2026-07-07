@@ -10,6 +10,11 @@ export const MATTERHORN_PROJECT_EVIDENCE_EVENT_TYPES = [
   "task.completed",
   "task.failed",
   "task.cancelled",
+  "image.generated",
+  "image.failed",
+  "nft.draft_created",
+  "nft.minted",
+  "nft.listed",
 ] as const;
 
 export type MatterhornProjectEvidenceEventType =
@@ -55,6 +60,8 @@ export interface MatterhornProjectEvidenceSummary {
   taskEvents: number;
   taskRuns: number;
   outputs: number;
+  images: number;
+  nfts: number;
 }
 
 export interface MatterhornProjectEvidenceResponse {

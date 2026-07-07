@@ -107,6 +107,11 @@
       "types": "./src/backend-support-report.ts",
       "development": "./src/backend-support-report.ts",
       "default": "./src/backend-support-report.ts"
+    },
+    "./generated-media": {
+      "types": "./src/generated-media.ts",
+      "development": "./src/generated-media.ts",
+      "default": "./src/generated-media.ts"
     }
   },
   "files": [

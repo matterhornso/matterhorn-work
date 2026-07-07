@@ -18,6 +18,7 @@ const TASK_EVENT_TYPE_MAP: Partial<Record<MatterhornTaskEvent["type"], Matterhor
   stage_started: "task.stage_started",
   artifact_saved: "task.output_saved",
   artifact_deleted: "task.output_deleted",
+  image_generated: "image.generated",
   completed: "task.completed",
   failed: "task.failed",
   cancelled: "task.cancelled",
@@ -163,6 +164,8 @@ function summarize(items: MatterhornProjectEvidenceEvent[]): MatterhornProjectEv
     taskEvents: items.filter((item) => item.source === "task_events").length,
     taskRuns: items.filter((item) => item.source === "task_runs").length,
     outputs: activeOutputCount(items),
+    images: items.filter((item) => item.type.startsWith("image.")).length,
+    nfts: items.filter((item) => item.type.startsWith("nft.")).length,
   };
 }
 

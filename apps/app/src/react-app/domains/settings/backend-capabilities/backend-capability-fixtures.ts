@@ -31,6 +31,8 @@ function settingsCap(
     security: "/settings/permissions",
     feedback: "/settings/overview#feedback",
     mcp: "/settings/extensions/mcp",
+    "image-generation": "/settings/image-generation",
+    nft: "/settings/nft",
   };
   return {
     ...cap(status, label, description),
@@ -239,6 +241,37 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
     requestLogging: cap("working", "Request logging"),
     memoryWriteGuards: cap("working", "Memory write guards"),
   },
+  imageGeneration: {
+    ...cap("working", "Image generation", "Generate images from chat using mock provider."),
+    providers: [{ status: "working", label: "Mock image provider", provider: "mock", model: "mock-image-1", size: "1024x1024", quality: "auto", format: "png" }],
+    defaultProvider: "mock",
+    defaultModel: "mock-image-1",
+  },
+  imageEditing: {
+    ...cap("preview", "Image editing", "Image editing is in preview."),
+    providers: [{ status: "preview", label: "Mock image provider", provider: "mock", model: "mock-image-1", size: "1024x1024", quality: "auto", format: "png" }],
+  },
+  walrusStorage: {
+    ...cap("needs_setup", "Walrus storage", "Walrus publisher and relay are not configured."),
+    publisherConfigured: false,
+    relayConfigured: false,
+  },
+  nftMinting: {
+    ...cap("needs_setup", "Sui NFT minting", "Sui NFT package is not configured."),
+    network: "sui-testnet",
+    custody: false,
+    signing: "client_wallet",
+    packageConfigured: false,
+    kioskConfigured: false,
+  },
+  nftMarketplaceListing: {
+    ...cap("needs_setup", "NFT marketplace listing", "Kiosk/TransferPolicy config is not configured."),
+    network: "sui-testnet",
+    custody: false,
+    signing: "client_wallet",
+    packageConfigured: false,
+    kioskConfigured: false,
+  },
   settings: [
     settingsCap("overview", "working", "Overview"),
     settingsCap("profile", "working", "Profile"),
@@ -252,6 +285,8 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
     settingsCap("security", "working", "Security"),
     settingsCap("feedback", "working", "Feedback", "Structured feedback is stored locally for evaluation, routing, and product quality only."),
     settingsCap("mcp", "working", "MCP"),
+    settingsCap("image-generation", "working", "Image generation", "Generate images from chat and save them as workspace outputs."),
+    settingsCap("nft", "needs_setup", "NFT drafts", "NFT drafts are created locally. Set MATTERHORN_SUI_NFT_PACKAGE_ID to enable mint previews."),
   ],
 };
 

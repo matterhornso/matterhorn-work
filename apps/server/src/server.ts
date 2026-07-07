@@ -204,6 +204,29 @@ import {
   type MatterhornWorkflowRunStatus,
 } from "./workflow-run-types.js";
 import {
+  createImageGenerationProvider,
+  detectSecretShapedInput,
+  resolveImageGenerationProviderFromEnv,
+  type ImageGenerationProviderConfig,
+} from "./image-generation-provider.js";
+import {
+  MatterhornGeneratedImageStore,
+  imageFilePath,
+} from "./generated-image-store.js";
+import {
+  MatterhornImageNftDraftStore,
+  hashImageForNftId,
+} from "./image-nft-draft-store.js";
+import {
+  buildImageEditingCapability,
+  buildImageGenerationCapability,
+  buildNftMarketplaceListingCapability,
+  buildNftMintingCapability,
+  buildWalrusStorageCapability,
+  resolveNftEnvironmentConfig,
+} from "./image-nft-capabilities.js";
+import { addGeneratedMediaRoutes } from "./generated-media-routes.js";
+import {
   hasForbiddenMatterhornMemorySuggestionInput,
   planMatterhornMemorySuggestions,
   type MatterhornMemorySuggestionPlanInput,
@@ -2247,6 +2270,8 @@ function backendSettingsSections(input: {
   evidenceStatus: MatterhornCapabilityStatus;
   walletStatus: MatterhornCapabilityStatus;
   securityStatus: MatterhornCapabilityStatus;
+  imageStatus: MatterhornCapabilityStatus;
+  nftStatus: MatterhornCapabilityStatus;
 }): MatterhornSettingsSectionCapability[] {
   const metadata: Record<MatterhornSettingsSectionCapability["section"], Omit<MatterhornSettingsSectionCapability, keyof MatterhornCapability | "section">> = {
     overview: {
@@ -2331,6 +2356,20 @@ function backendSettingsSections(input: {
       backendDependencies: ["/mcp/*", "/extensions/*"],
       primaryAction: { id: "settings.mcp.open", label: "Open MCPs", kind: "route", href: "/settings/extensions/mcp" },
     },
+    "image-generation": {
+      route: "/settings/image-generation",
+      workspaceScoped: true,
+      desktopOnly: false,
+      backendDependencies: ["/workspace/:id/images", "/workspace/:id/images/generate"],
+      primaryAction: { id: "settings.image-generation.open", label: "Open image generation", kind: "route", href: "/settings/image-generation" },
+    },
+    nft: {
+      route: "/settings/nft",
+      workspaceScoped: true,
+      desktopOnly: false,
+      backendDependencies: ["/workspace/:id/nft-drafts", "/workspace/:id/backend/capabilities"],
+      primaryAction: { id: "settings.nft.open", label: "Open NFT drafts", kind: "route", href: "/settings/nft" },
+    },
   };
   const base = (section: MatterhornSettingsSectionCapability["section"], item: MatterhornCapability): MatterhornSettingsSectionCapability => ({
     section,
@@ -2350,6 +2389,8 @@ function backendSettingsSections(input: {
     base("security", capability(input.securityStatus, "Security", "Security posture is reported from server auth, CORS, roots, logging, and approval settings.")),
     base("feedback", capability("working", "Feedback", "Structured feedback is stored locally for evaluation, routing, and product quality only; it is not used for training by default.")),
     base("mcp", capability(input.readOnly ? "preview" : "working", "MCPs", input.readOnly ? "MCPs can be inspected in read-only mode." : "MCP configuration can be inspected and updated.")),
+    base("image-generation", capability(input.imageStatus, "Image generation", input.imageStatus === "working" ? "Generate images from chat and save them as workspace outputs." : "Image generation needs setup or is disabled. Set OPENAI_API_KEY or use the mock provider for tests.")),
+    base("nft", capability(input.nftStatus, "NFT drafts", input.nftStatus === "preview" ? "Create Sui NFT drafts from generated images. Minting and listing are signed by your wallet." : "NFT drafts are created locally. Set MATTERHORN_SUI_NFT_PACKAGE_ID to enable mint previews.")),
   ];
 }
 
@@ -2567,6 +2608,11 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
   const evidenceStatus: MatterhornCapabilityStatus = "working";
   const walletStatus: MatterhornCapabilityStatus = "preview";
 
+  const imageProviderConfig = resolveImageGenerationProviderFromEnv(process.env);
+  const imageProvider = createImageGenerationProvider(imageProviderConfig);
+  const imageProviderStatus = await imageProvider.status();
+  const nftEnvConfig = resolveNftEnvironmentConfig(process.env);
+
   return {
     success: true,
     version: "matterhorn.backend.capabilities.v1",
@@ -2677,6 +2723,11 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       ...capability(securityStatus, "Security posture", "Security is based on local binding, bearer tokens, host token, approvals, authorized roots, CORS, request logging, and memory write guards."),
       ...securityItems,
     },
+    imageGeneration: buildImageGenerationCapability(imageProviderStatus),
+    imageEditing: buildImageEditingCapability(imageProviderStatus),
+    walrusStorage: buildWalrusStorageCapability(nftEnvConfig),
+    nftMinting: buildNftMintingCapability(nftEnvConfig),
+    nftMarketplaceListing: buildNftMarketplaceListingCapability(nftEnvConfig),
     settings: backendSettingsSections({
       readOnly: !writeEnabled,
       modelStatus,
@@ -2686,6 +2737,8 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       evidenceStatus,
       walletStatus,
       securityStatus,
+      imageStatus: imageProviderStatus.status,
+      nftStatus: buildNftMintingCapability(nftEnvConfig).status,
     }),
   };
 }
@@ -2695,6 +2748,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   const opencodeDbPath = resolveOpencodeDbPath();
   const workflowRunsPath = join(workspace.path, ".matterhorn-work", "task-logs", workspace.id);
   const outputsPath = join(workspace.path, "outputs");
+  const imageOutputsPath = join(workspace.path, ".matterhorn-work", "outputs", "images");
   const walletEvidencePath = join(outputsPath, "sui");
   const modelPreferencePath = workspaceModelSelectionPath(workspace);
   const dataPolicyPath = workspaceDataPolicyPath(workspace);
@@ -2715,6 +2769,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
     modelPreferencePath,
     dataPolicyPath,
     outputsPath,
+    imageOutputsPath,
     feedbackPath,
   ];
 
@@ -2838,6 +2893,18 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         ...capability(existsSync(outputsPath) ? "working" : "needs_setup", "Outputs", "User-visible deliverables should be saved under outputs/<desk>/<session-slug>/."),
         scope: "workspace",
         path: outputsPath,
+        format: "directory",
+        containsUserContent: true,
+        containsSecrets: "redacted",
+        retention: "user_controlled",
+        exportable: true,
+        deletable: true,
+      }),
+      imageOutputs: dataStore({
+        id: "imageOutputs",
+        ...capability(existsSync(imageOutputsPath) ? "working" : "preview", "Generated images", "AI-generated images are stored under .matterhorn-work/outputs/images with metadata and linked to project evidence."),
+        scope: "workspace",
+        path: imageOutputsPath,
         format: "directory",
         containsUserContent: true,
         containsSecrets: "redacted",
@@ -10276,6 +10343,12 @@ function createRoutes(
     }
     return jsonResponse({ ok: true, allowed: result.allowed });
   });
+
+  addGeneratedMediaRoutes(
+    (method, path, authMode, handler) => addRoute(routes, method, path, authMode, handler),
+    config,
+    resolveWorkspace,
+  );
 
   return routes;
 }
