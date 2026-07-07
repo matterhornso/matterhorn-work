@@ -1387,6 +1387,37 @@ describe("backend control plane routes", () => {
       href: "/workspace/ws_backend/outputs?path=:outputPath",
       destructive: true,
     });
+    expect(result.payload.stores.imageOutputs.export.actions).toContainEqual(expect.objectContaining({
+      id: "generated-media.open-history",
+      kind: "app_route",
+      href: "/workspace/ws_backend/history?kind=image",
+    }));
+    expect(result.payload.stores.imageOutputs.export.actions).toContainEqual(expect.objectContaining({
+      id: "generated-media.history",
+      method: "GET",
+      href: "/workspace/ws_backend/generated-media/history",
+    }));
+    expect(result.payload.stores.imageOutputs.export.actions).toContainEqual(expect.objectContaining({
+      id: "generated-media.images",
+      method: "GET",
+      href: "/workspace/ws_backend/images",
+    }));
+    expect(result.payload.stores.imageOutputs.export.actions).toContainEqual(expect.objectContaining({
+      id: "generated-media.nft-drafts",
+      method: "GET",
+      href: "/workspace/ws_backend/nft-drafts",
+    }));
+    expect(result.payload.stores.imageOutputs.export.actions).toContainEqual(expect.objectContaining({
+      id: "generated-media.image-ledger",
+      method: "GET",
+      href: "/workspace/ws_backend/data-ledger?kind=image",
+    }));
+    expect(result.payload.stores.imageOutputs.export.actions).toContainEqual(expect.objectContaining({
+      id: "generated-media.nft-ledger",
+      method: "GET",
+      href: "/workspace/ws_backend/data-ledger?kind=nft",
+    }));
+    expect(result.payload.stores.imageOutputs.deletion.status).toBe("unsupported");
     expect(result.payload.stores.modelPreferences.export.actions).toContainEqual(expect.objectContaining({
       id: "model-preference.open-settings",
       kind: "app_route",
