@@ -5,6 +5,31 @@ Owner: Kimi
 Recommended branch: `kimi/image-generation-sui-nft`
 Base: latest `origin/dev`
 
+## Codex Integration Addendum
+
+Branch/PR after integration: `kimi/image-generation-sui-nft-integration`, draft PR #735.
+
+Codex verified Kimi's lane and added a follow-up slice to keep the Sui NFT flow truthful while it remains preview/scaffolding:
+
+- Image generation now appears inside the live session/chat surface through `SessionImageGenerationPanel`.
+- Mock image generation returns real PNG bytes for browser previews and tests.
+- NFT drafts now expose a first-class `status` field instead of relying on suppressed TypeScript writes.
+- Walrus storage reports `preview` when endpoints are configured, not `working`; direct upload returns `501 walrus_upload_not_implemented` until the real connector exists.
+- Mint preview errors now return structured setup requirements for `MATTERHORN_SUI_NFT_PACKAGE_ID`.
+- Mint preview success returns a Sui wallet-standard handoff manifest with package id, module name, function name, metadata, storage URL, and wallet-signing steps.
+- Marketplace listing now requires both `MATTERHORN_SUI_KIOSK_PACKAGE_ID` and `MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID`, and returns a Sui Kiosk handoff manifest when both are configured.
+- The chat NFT sheet now renders unresolved setup requirements from server error details instead of showing only a generic toast.
+
+Verification after Codex integration:
+
+- `bun test apps/server/src/generated-media-routes.e2e.test.ts` -> 16 pass, 0 fail.
+- `bun test apps/app/tests/image-generation-ui-contract.test.ts` -> 9 pass, 0 fail.
+- `bun test apps/app/tests/` -> 322 pass, 0 fail.
+- `apps/server/node_modules/.bin/tsc -p apps/server/tsconfig.json --noEmit` -> pass.
+- `apps/app/node_modules/.bin/tsc -p apps/app/tsconfig.json --noEmit` -> pass.
+- `git diff --check` -> pass.
+- Full server suite: `bun test apps/server/src/` -> 557 pass, 1 fail. The remaining failure is the pre-existing/unrelated `apps/server/src/tools/bittensor.test.ts` watch-alert assertion, not generated media, Sui, capability, or data-policy code.
+
 ## Read This First
 
 You are taking the full image generation and NFT publishing lane for Matterhorn Work.

@@ -182,6 +182,7 @@ export interface MatterhornImageNftDraft {
   id: string;
   workspaceId: string;
   imageId: string;
+  status: MatterhornNftDraftStatus;
   title: string;
   description: string;
   creatorAddress?: string | null;
@@ -220,6 +221,36 @@ export interface MatterhornWalrusStorageCapability extends MatterhornCapability 
   relayConfigured: boolean;
 }
 
+export type MatterhornNftSetupRequirementStatus = "configured" | "missing" | "not_implemented";
+
+export type MatterhornNftSetupRequirementKey =
+  | "walrus_publisher"
+  | "walrus_relay"
+  | "walrus_upload_connector"
+  | "sui_nft_package"
+  | "sui_nft_module"
+  | "sui_kiosk_package"
+  | "sui_transfer_policy";
+
+export interface MatterhornNftSetupRequirement {
+  key: MatterhornNftSetupRequirementKey;
+  label: string;
+  status: MatterhornNftSetupRequirementStatus;
+  envVar?: string;
+  description: string;
+}
+
+export interface MatterhornNftPreviewErrorDetails {
+  custody: false;
+  canSubmit: false;
+  setupRequirements: MatterhornNftSetupRequirement[];
+}
+
+export interface MatterhornNftPreviewStep {
+  label: string;
+  description: string;
+}
+
 export interface MatterhornImageListResponse {
   success: true;
   images: MatterhornGeneratedImage[];
@@ -249,8 +280,14 @@ export interface MatterhornNftMintPreviewResponse {
     kind: "sui_wallet_standard";
     network: "sui-testnet" | "sui-mainnet";
     transactionKind: "programmable";
+    packageId: string;
+    moduleName: string;
+    functionName: "mint";
+    storageUrl?: string | null;
     metadata: MatterhornNftDraftMetadata;
+    steps: MatterhornNftPreviewStep[];
   };
+  setupRequirements: MatterhornNftSetupRequirement[];
   draft: MatterhornImageNftDraft;
 }
 
@@ -263,8 +300,14 @@ export interface MatterhornNftListingPreviewResponse {
     kind: "sui_wallet_standard";
     network: "sui-testnet" | "sui-mainnet";
     transactionKind: "kiosk_listing";
+    marketplace: "sui_kiosk";
+    kioskPackageId: string;
+    transferPolicyPackageId: string;
     priceMist?: string;
+    objectId?: string | null;
+    steps: MatterhornNftPreviewStep[];
   };
+  setupRequirements: MatterhornNftSetupRequirement[];
   draft: MatterhornImageNftDraft;
 }
 

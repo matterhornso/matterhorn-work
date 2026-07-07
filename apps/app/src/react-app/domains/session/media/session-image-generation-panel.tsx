@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "lucide-react";
 
-import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
+import { MatterhornServerError, type MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import { Button } from "@/components/ui/button";
 import type { ReactComposerNotice } from "../surface/composer/notice";
 import type {
@@ -14,6 +14,8 @@ import type {
   MatterhornImageGenerationInput,
   MatterhornImageNftDraft,
   MatterhornImageNftDraftInput,
+  MatterhornNftPreviewErrorDetails,
+  MatterhornNftSetupRequirement,
 } from "@matterhorn-work/types/generated-media";
 import {
   GeneratedImageCard,
@@ -59,6 +61,12 @@ function generatedImageErrorMessage(error: unknown) {
   return "Image generation failed.";
 }
 
+function nftSetupRequirementsFromError(error: unknown): MatterhornNftSetupRequirement[] {
+  if (!(error instanceof MatterhornServerError)) return [];
+  const details = error.details as Partial<MatterhornNftPreviewErrorDetails> | undefined;
+  return Array.isArray(details?.setupRequirements) ? details.setupRequirements : [];
+}
+
 export function SessionImageGenerationPanel(props: SessionImageGenerationPanelProps) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(props.defaultOpen ?? false);
@@ -69,6 +77,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
   const [nftPanelOpen, setNftPanelOpen] = useState(false);
   const [nftImage, setNftImage] = useState<MatterhornGeneratedImage | null>(null);
   const [nftDraft, setNftDraft] = useState<MatterhornImageNftDraft | null>(null);
+  const [nftSetupRequirements, setNftSetupRequirements] = useState<MatterhornNftSetupRequirement[]>([]);
   const [nftBusy, setNftBusy] = useState(false);
 
   const capabilitiesQuery = useQuery({
@@ -104,6 +113,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     setNftPanelOpen(false);
     setNftImage(null);
     setNftDraft(null);
+    setNftSetupRequirements([]);
   }, [props.workspaceId, props.sessionId]);
 
   useEffect(() => {
@@ -177,6 +187,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
   const openNftDraft = useCallback(async (image: MatterhornGeneratedImage) => {
     setNftImage(image);
     setNftPanelOpen(true);
+    setNftSetupRequirements([]);
     setNftBusy(true);
     try {
       await refreshDraftForImage(image);
@@ -195,9 +206,18 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     try {
       const response = await action(nftDraft.id);
       setNftDraft(response.draft);
+      setNftSetupRequirements([]);
     } catch (nextError) {
+      const setupRequirements = nftSetupRequirementsFromError(nextError);
+      setNftSetupRequirements(setupRequirements);
       props.onNotice?.({
         title: generatedImageErrorMessage(nextError),
+        description: setupRequirements.length
+          ? setupRequirements
+            .filter((requirement) => requirement.status !== "configured")
+            .map((requirement) => requirement.envVar ?? requirement.label)
+            .join(", ")
+          : undefined,
         tone: "warning",
       });
     } finally {
@@ -211,6 +231,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     try {
       const response = await props.client.createImageNftDraft(props.workspaceId, nftImage.id, input);
       setNftDraft(response.draft);
+      setNftSetupRequirements([]);
       props.onNotice?.({
         title: "NFT draft created",
         description: "Stored locally until you choose public storage or wallet signing.",
@@ -287,6 +308,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
           imageUrl={previewUrl ?? undefined}
           capabilities={nftCapabilities}
           draft={nftDraft}
+          setupRequirements={nftSetupRequirements}
           isLoading={nftBusy}
           onCreateDraft={createDraft}
           onPrepareStorage={() => void updateDraft((draftId) => props.client.prepareNftStorage(props.workspaceId, draftId))}

@@ -77,14 +77,18 @@ beforeEach(() => {
     MATTERHORN_WALRUS_PUBLISHER_URL: process.env.MATTERHORN_WALRUS_PUBLISHER_URL,
     MATTERHORN_WALRUS_RELAY_URL: process.env.MATTERHORN_WALRUS_RELAY_URL,
     MATTERHORN_SUI_NFT_PACKAGE_ID: process.env.MATTERHORN_SUI_NFT_PACKAGE_ID,
+    MATTERHORN_SUI_NFT_MODULE_NAME: process.env.MATTERHORN_SUI_NFT_MODULE_NAME,
     MATTERHORN_SUI_KIOSK_PACKAGE_ID: process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID,
+    MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID: process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID,
   };
   process.env.MATTERHORN_IMAGE_PROVIDER = "mock";
   delete process.env.OPENAI_API_KEY;
   delete process.env.MATTERHORN_WALRUS_PUBLISHER_URL;
   delete process.env.MATTERHORN_WALRUS_RELAY_URL;
   delete process.env.MATTERHORN_SUI_NFT_PACKAGE_ID;
+  delete process.env.MATTERHORN_SUI_NFT_MODULE_NAME;
   delete process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID;
+  delete process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID;
 });
 
 afterEach(async () => {
@@ -154,7 +158,175 @@ describe("Generated media routes", () => {
     });
     expect(draftResult.response.status).toBe(200);
     expect(draftResult.payload.draft.title).toBe("Test NFT");
+    expect(draftResult.payload.draft.status).toBe("draft");
     expect(draftResult.payload.draft.storage.status).toBe("local_only");
+  });
+});
+
+describe("Generated media Sui NFT setup previews", () => {
+  async function createDraft(base: string) {
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "a mountain workspace" }),
+    });
+    const imageId = generated.payload.image.id;
+    const draft = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${imageId}/nft-draft`, {
+      method: "POST",
+      body: JSON.stringify({ title: "Matterhorn NFT", listingPriceMist: "1000" }),
+    });
+    return draft.payload.draft;
+  }
+
+  test("storage prepare reports exact missing Walrus setup", async () => {
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/storage/prepare`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(503);
+    expect(result.payload.code).toBe("walrus_needs_setup");
+    expect(result.payload.details.custody).toBe(false);
+    expect(result.payload.details.canSubmit).toBe(false);
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "walrus_publisher",
+        status: "missing",
+        envVar: "MATTERHORN_WALRUS_PUBLISHER_URL",
+      }),
+    );
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "walrus_relay",
+        status: "missing",
+        envVar: "MATTERHORN_WALRUS_RELAY_URL",
+      }),
+    );
+  });
+
+  test("storage prepare marks a draft ready for Walrus upload handoff when endpoints exist", async () => {
+    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = "https://publisher.example.test";
+    process.env.MATTERHORN_WALRUS_RELAY_URL = "https://relay.example.test";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/storage/prepare`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.draft.status).toBe("storage_ready");
+    expect(result.payload.draft.storage.provider).toBe("walrus");
+    expect(result.payload.draft.storage.status).toBe("ready_to_upload");
+  });
+
+  test("storage upload does not fake a Walrus blob before the connector exists", async () => {
+    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = "https://publisher.example.test";
+    process.env.MATTERHORN_WALRUS_RELAY_URL = "https://relay.example.test";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/storage/upload`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(501);
+    expect(result.payload.code).toBe("walrus_upload_not_implemented");
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "walrus_upload_connector",
+        status: "not_implemented",
+      }),
+    );
+  });
+
+  test("mint preview reports missing Sui NFT package setup", async () => {
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/preview`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(503);
+    expect(result.payload.code).toBe("sui_nft_package_needs_setup");
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "sui_nft_package",
+        status: "missing",
+        envVar: "MATTERHORN_SUI_NFT_PACKAGE_ID",
+      }),
+    );
+  });
+
+  test("mint preview returns a wallet handoff manifest when package config exists", async () => {
+    process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = "0xmintpackage";
+    process.env.MATTERHORN_SUI_NFT_MODULE_NAME = "matterhorn_media";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/preview`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.custody).toBe(false);
+    expect(result.payload.canSubmit).toBe(false);
+    expect(result.payload.handoff.kind).toBe("sui_wallet_standard");
+    expect(result.payload.handoff.packageId).toBe("0xmintpackage");
+    expect(result.payload.handoff.moduleName).toBe("matterhorn_media");
+    expect(result.payload.handoff.functionName).toBe("mint");
+    expect(result.payload.handoff.steps.length).toBeGreaterThan(0);
+    expect(result.payload.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "sui_nft_package",
+        status: "configured",
+      }),
+    );
+    expect(result.payload.draft.status).toBe("mint_preview_ready");
+  });
+
+  test("listing preview requires both Kiosk and TransferPolicy config", async () => {
+    process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = "0xkiosk";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/preview`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(503);
+    expect(result.payload.code).toBe("sui_kiosk_package_needs_setup");
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "sui_transfer_policy",
+        status: "missing",
+        envVar: "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID",
+      }),
+    );
+  });
+
+  test("listing preview returns a Sui Kiosk handoff manifest when config exists", async () => {
+    process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = "0xkiosk";
+    process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = "0xpolicy";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/preview`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.custody).toBe(false);
+    expect(result.payload.canSubmit).toBe(false);
+    expect(result.payload.handoff.marketplace).toBe("sui_kiosk");
+    expect(result.payload.handoff.kioskPackageId).toBe("0xkiosk");
+    expect(result.payload.handoff.transferPolicyPackageId).toBe("0xpolicy");
+    expect(result.payload.handoff.priceMist).toBe("1000");
+    expect(result.payload.handoff.steps.length).toBeGreaterThan(0);
+    expect(result.payload.draft.listing.kioskId).toBe("0xkiosk");
+    expect(result.payload.draft.listing.transferPolicyId).toBe("0xpolicy");
   });
 });
 

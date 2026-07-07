@@ -66,13 +66,13 @@ export function buildImageEditingCapability(
 export function buildWalrusStorageCapability(config: NftEnvironmentConfig): MatterhornWalrusStorageCapability {
   const publisherConfigured = Boolean(config.walrusPublisherUrl?.trim());
   const relayConfigured = Boolean(config.walrusRelayUrl?.trim());
-  const status = publisherConfigured && relayConfigured ? "working" : "needs_setup";
+  const status = publisherConfigured && relayConfigured ? "preview" : "needs_setup";
   return {
     ...capability(
       status,
       "Walrus storage",
-      status === "working"
-        ? "Walrus publisher and relay are configured for public NFT media storage."
+      status === "preview"
+        ? "Walrus publisher and relay are configured for upload handoff previews. Direct upload remains disabled until the connector is implemented."
         : "Walrus public storage is not configured. Set MATTERHORN_WALRUS_PUBLISHER_URL and MATTERHORN_WALRUS_RELAY_URL.",
       {
         publisherConfigured,
@@ -110,7 +110,7 @@ export function buildNftMintingCapability(config: NftEnvironmentConfig): Matterh
 export function buildNftMarketplaceListingCapability(
   config: NftEnvironmentConfig,
 ): MatterhornNftMarketplaceListingCapability {
-  const packageConfigured = Boolean(config.suiKioskPackageId?.trim() || config.suiTransferPolicyPackageId?.trim());
+  const packageConfigured = Boolean(config.suiKioskPackageId?.trim() && config.suiTransferPolicyPackageId?.trim());
   const status = packageConfigured ? "preview" : "needs_setup";
   return {
     ...capability(
@@ -118,7 +118,7 @@ export function buildNftMarketplaceListingCapability(
       "NFT marketplace listing",
       status === "preview"
         ? "Kiosk/TransferPolicy listing previews can be prepared. Listing transactions are signed by the user's Sui wallet."
-        : "Kiosk/TransferPolicy config is not configured. Set MATTERHORN_SUI_KIOSK_PACKAGE_ID to enable listing previews.",
+        : "Kiosk/TransferPolicy config is not configured. Set MATTERHORN_SUI_KIOSK_PACKAGE_ID and MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID to enable listing previews.",
       {
         network: config.suiNetwork ?? "sui-testnet",
         packageConfigured,

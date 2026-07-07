@@ -7,6 +7,7 @@ import {
   GeneratedImageLoadingCard,
   GeneratedImageErrorCard,
   ImageGenerationComposer,
+  NftSetupRequirements,
   NftDraftPanel,
   SessionImageGenerationPanel,
 } from "../src/react-app/domains/session/media";
@@ -36,6 +37,7 @@ const mockDraft: MatterhornImageNftDraft = {
   id: "nft_test",
   workspaceId: "ws_test",
   imageId: "img_test",
+  status: "draft",
   title: "Test NFT",
   description: "A test NFT",
   creatorAddress: null,
@@ -179,5 +181,31 @@ describe("NFT draft panel", () => {
       }),
     );
     expect(typeof html).toBe("string");
+  });
+
+  test("component renders backend NFT setup requirements", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(NftSetupRequirements, {
+        requirements: [
+          {
+            key: "sui_nft_package",
+            label: "Sui NFT package",
+            status: "missing",
+            envVar: "MATTERHORN_SUI_NFT_PACKAGE_ID",
+            description: "Mint previews need the Move package id.",
+          },
+          {
+            key: "sui_nft_module",
+            label: "Sui NFT module",
+            status: "configured",
+            envVar: "MATTERHORN_SUI_NFT_MODULE_NAME",
+            description: "Defaults to matterhorn_nft.",
+          },
+        ],
+      }),
+    );
+    expect(html).toContain("Setup needed");
+    expect(html).toContain("MATTERHORN_SUI_NFT_PACKAGE_ID");
+    expect(html).not.toContain("MATTERHORN_SUI_NFT_MODULE_NAME");
   });
 });

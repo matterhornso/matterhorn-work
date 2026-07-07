@@ -8,6 +8,8 @@ import type {
   MatterhornImageResponse,
   MatterhornNftListingPreviewResponse,
   MatterhornNftMintPreviewResponse,
+  MatterhornNftPreviewErrorDetails,
+  MatterhornNftSetupRequirement,
   MatterhornNftReceiptRequest,
   MatterhornNftReceiptResponse,
 } from "@matterhorn-work/types/generated-media";
@@ -210,11 +212,16 @@ export function addGeneratedMediaRoutes(
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const publisherConfigured = Boolean(nftEnv.walrusPublisherUrl?.trim());
     const relayConfigured = Boolean(nftEnv.walrusRelayUrl?.trim());
+    const setupRequirements = buildWalrusSetupRequirements(nftEnv);
     if (!publisherConfigured || !relayConfigured) {
-      throw new ApiError(503, "walrus_needs_setup", "Walrus publisher and relay must be configured to prepare public storage.");
+      throwNftSetupError(
+        "walrus_needs_setup",
+        "Walrus publisher and relay must be configured to prepare public storage.",
+        setupRequirements,
+      );
     }
 
-    const updated = await store.updateStorageStatus(draft.id, "ready_to_upload");
+    const updated = await store.updateStorageStatus(draft.id, "ready_to_upload", { provider: "walrus" });
     const response: MatterhornImageNftDraftResponse = { success: true, draft: updated! };
     return jsonResponse(response);
   });
@@ -230,16 +237,29 @@ export function addGeneratedMediaRoutes(
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const publisherConfigured = Boolean(nftEnv.walrusPublisherUrl?.trim());
     const relayConfigured = Boolean(nftEnv.walrusRelayUrl?.trim());
+    const setupRequirements = buildWalrusSetupRequirements(nftEnv);
     if (!publisherConfigured || !relayConfigured) {
-      throw new ApiError(503, "walrus_needs_setup", "Walrus publisher and relay must be configured to upload.");
+      throwNftSetupError(
+        "walrus_needs_setup",
+        "Walrus publisher and relay must be configured to upload.",
+        setupRequirements,
+      );
     }
 
-    // Walrus upload is not implemented in this phase; we record a mock blob id for the preview flow.
-    const blobId = `walrus://${draft.id}`;
-    const url = nftEnv.walrusRelayUrl ? `${nftEnv.walrusRelayUrl}/v1/${blobId}` : undefined;
-    const updated = await store.updateStorageStatus(draft.id, "uploaded", { blobId, url });
-    const response: MatterhornImageNftDraftResponse = { success: true, draft: updated! };
-    return jsonResponse(response);
+    throw new ApiError(
+      501,
+      "walrus_upload_not_implemented",
+      "Walrus upload is not live yet. Matterhorn can prepare the draft, but the upload connector still needs to be implemented.",
+      nftPreviewErrorDetails([
+        ...setupRequirements,
+        {
+          key: "walrus_upload_connector",
+          label: "Walrus upload connector",
+          status: "not_implemented",
+          description: "Implement the server-side Walrus upload connector before this route can publish image bytes.",
+        },
+      ]),
+    );
   });
 
   addRoute("POST", "/workspace/:id/nft-drafts/:draftId/mint/preview", "client", async (ctx) => {
@@ -251,8 +271,13 @@ export function addGeneratedMediaRoutes(
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
-    if (!nftEnv.suiNftPackageId?.trim()) {
-      throw new ApiError(503, "sui_nft_package_needs_setup", "MATTERHORN_SUI_NFT_PACKAGE_ID is required for mint previews.");
+    const setupRequirements = buildMintSetupRequirements(nftEnv);
+    if (hasMissingSetup(setupRequirements)) {
+      throwNftSetupError(
+        "sui_nft_package_needs_setup",
+        "Sui NFT package config is required for mint previews.",
+        setupRequirements,
+      );
     }
 
     const updated = await store.updateMintStatus(draft.id, "preview_ready", { packageId: nftEnv.suiNftPackageId });
@@ -265,8 +290,23 @@ export function addGeneratedMediaRoutes(
         kind: "sui_wallet_standard",
         network: draft.network,
         transactionKind: "programmable",
+        packageId: nftEnv.suiNftPackageId!,
+        moduleName: nftEnv.suiNftModuleName || "matterhorn_nft",
+        functionName: "mint",
+        storageUrl: draft.storage.url ?? draft.metadata.imageUrl ?? null,
         metadata: updated!.metadata,
+        steps: [
+          {
+            label: "Review metadata",
+            description: "Confirm the NFT name, description, attributes, and public image URI before wallet signing.",
+          },
+          {
+            label: "Sign in Sui wallet",
+            description: "Matterhorn prepares a preview manifest only; the connected Sui wallet signs the transaction.",
+          },
+        ],
       },
+      setupRequirements,
       draft: updated!,
     };
     return jsonResponse(response);
@@ -317,12 +357,18 @@ export function addGeneratedMediaRoutes(
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
-    if (!nftEnv.suiKioskPackageId?.trim()) {
-      throw new ApiError(503, "sui_kiosk_package_needs_setup", "MATTERHORN_SUI_KIOSK_PACKAGE_ID is required for listing previews.");
+    const setupRequirements = buildListingSetupRequirements(nftEnv);
+    if (hasMissingSetup(setupRequirements)) {
+      throwNftSetupError(
+        "sui_kiosk_package_needs_setup",
+        "Kiosk and TransferPolicy config are required for listing previews.",
+        setupRequirements,
+      );
     }
 
     const updated = await store.updateListingStatus(draft.id, "preview_ready", {
       kioskId: nftEnv.suiKioskPackageId,
+      transferPolicyId: nftEnv.suiTransferPolicyPackageId,
     });
     const response: MatterhornNftListingPreviewResponse = {
       success: true,
@@ -333,8 +379,23 @@ export function addGeneratedMediaRoutes(
         kind: "sui_wallet_standard",
         network: draft.network,
         transactionKind: "kiosk_listing",
+        marketplace: "sui_kiosk",
+        kioskPackageId: nftEnv.suiKioskPackageId!,
+        transferPolicyPackageId: nftEnv.suiTransferPolicyPackageId!,
         priceMist: updated!.listing.priceMist ?? undefined,
+        objectId: draft.mint.objectId ?? null,
+        steps: [
+          {
+            label: "Review listing terms",
+            description: "Confirm object id, Kiosk, TransferPolicy, and price before wallet signing.",
+          },
+          {
+            label: "Sign in Sui wallet",
+            description: "Matterhorn records the public listing receipt after the user's wallet signs and submits.",
+          },
+        ],
       },
+      setupRequirements,
       draft: updated!,
     };
     return jsonResponse(response);
@@ -397,6 +458,95 @@ function jsonResponse(data: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function buildWalrusSetupRequirements(config: ReturnType<typeof resolveNftEnvironmentConfig>): MatterhornNftSetupRequirement[] {
+  return [
+    setupRequirement({
+      key: "walrus_publisher",
+      label: "Walrus publisher",
+      envVar: "MATTERHORN_WALRUS_PUBLISHER_URL",
+      configured: Boolean(config.walrusPublisherUrl?.trim()),
+      description: "Public storage needs a Walrus publisher endpoint.",
+    }),
+    setupRequirement({
+      key: "walrus_relay",
+      label: "Walrus relay",
+      envVar: "MATTERHORN_WALRUS_RELAY_URL",
+      configured: Boolean(config.walrusRelayUrl?.trim()),
+      description: "NFT metadata needs a public relay URL for stored image media.",
+    }),
+  ];
+}
+
+function buildMintSetupRequirements(config: ReturnType<typeof resolveNftEnvironmentConfig>): MatterhornNftSetupRequirement[] {
+  return [
+    setupRequirement({
+      key: "sui_nft_package",
+      label: "Sui NFT package",
+      envVar: "MATTERHORN_SUI_NFT_PACKAGE_ID",
+      configured: Boolean(config.suiNftPackageId?.trim()),
+      description: "Mint previews need the Move package id that defines the NFT mint entrypoint.",
+    }),
+    setupRequirement({
+      key: "sui_nft_module",
+      label: "Sui NFT module",
+      envVar: "MATTERHORN_SUI_NFT_MODULE_NAME",
+      configured: true,
+      description: `Move module name for mint previews. Defaults to ${config.suiNftModuleName || "matterhorn_nft"}.`,
+    }),
+  ];
+}
+
+function buildListingSetupRequirements(config: ReturnType<typeof resolveNftEnvironmentConfig>): MatterhornNftSetupRequirement[] {
+  return [
+    setupRequirement({
+      key: "sui_kiosk_package",
+      label: "Sui Kiosk package",
+      envVar: "MATTERHORN_SUI_KIOSK_PACKAGE_ID",
+      configured: Boolean(config.suiKioskPackageId?.trim()),
+      description: "Marketplace listing previews need the Kiosk package/config id.",
+    }),
+    setupRequirement({
+      key: "sui_transfer_policy",
+      label: "Sui TransferPolicy",
+      envVar: "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID",
+      configured: Boolean(config.suiTransferPolicyPackageId?.trim()),
+      description: "Listings need the TransferPolicy config that controls marketplace transfer rules.",
+    }),
+  ];
+}
+
+function setupRequirement(input: {
+  key: MatterhornNftSetupRequirement["key"];
+  label: string;
+  envVar?: string;
+  configured: boolean;
+  description: string;
+}): MatterhornNftSetupRequirement {
+  return {
+    key: input.key,
+    label: input.label,
+    envVar: input.envVar,
+    status: input.configured ? "configured" : "missing",
+    description: input.description,
+  };
+}
+
+function hasMissingSetup(requirements: MatterhornNftSetupRequirement[]): boolean {
+  return requirements.some((requirement) => requirement.status === "missing");
+}
+
+function nftPreviewErrorDetails(requirements: MatterhornNftSetupRequirement[]): MatterhornNftPreviewErrorDetails {
+  return {
+    custody: false,
+    canSubmit: false,
+    setupRequirements: requirements,
+  };
+}
+
+function throwNftSetupError(code: string, message: string, requirements: MatterhornNftSetupRequirement[]): never {
+  throw new ApiError(503, code, message, nftPreviewErrorDetails(requirements));
 }
 
 async function readJsonBody(request: Request): Promise<unknown> {

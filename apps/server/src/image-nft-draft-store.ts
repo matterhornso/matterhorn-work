@@ -42,12 +42,13 @@ export function initialNftDraftFromImage(
     { trait_type: "provider", value: image.provider },
     { trait_type: "model", value: image.model },
   ];
-  return {
-    id: draftId,
-    workspaceId,
-    imageId: image.id,
-    title,
-    description,
+    return {
+      id: draftId,
+      workspaceId,
+      imageId: image.id,
+      status: "draft",
+      title,
+      description,
     creatorAddress: input?.creatorAddress ?? null,
     network: input?.network ?? "sui-testnet",
     metadata: {
@@ -67,6 +68,7 @@ export function initialNftDraftFromImage(
     },
     listing: {
       status: "not_ready",
+      priceMist: input?.listingPriceMist || null,
     },
     createdAt: nowIso(),
     updatedAt: nowIso(),
@@ -162,10 +164,11 @@ export class MatterhornImageNftDraftStore {
   async updateStorageStatus(
     draftId: string,
     status: MatterhornNftStorageStatus,
-    updates?: { blobId?: string; url?: string; error?: string },
+    updates?: { provider?: "walrus" | "local"; blobId?: string; url?: string; error?: string },
   ): Promise<MatterhornImageNftDraft | null> {
     const draft = await this.get(draftId);
     if (!draft) return null;
+    if (updates?.provider !== undefined) draft.storage.provider = updates.provider;
     draft.storage.status = status;
     if (updates?.blobId !== undefined) draft.storage.blobId = updates.blobId || null;
     if (updates?.url !== undefined) draft.storage.url = updates.url || null;
@@ -214,19 +217,14 @@ export class MatterhornImageNftDraftStore {
 
   private deriveDraftStatus(draft: MatterhornImageNftDraft): void {
     if (draft.listing.status === "listed") {
-      // @ts-expect-error status union is derived
       draft.status = "listed";
     } else if (draft.mint.status === "confirmed") {
-      // @ts-expect-error status union is derived
       draft.status = "minted";
     } else if (draft.mint.status === "preview_ready") {
-      // @ts-expect-error status union is derived
       draft.status = "mint_preview_ready";
     } else if (draft.storage.status === "uploaded" || draft.storage.status === "ready_to_upload") {
-      // @ts-expect-error status union is derived
       draft.status = "storage_ready";
     } else {
-      // @ts-expect-error status union is derived
       draft.status = "draft";
     }
   }

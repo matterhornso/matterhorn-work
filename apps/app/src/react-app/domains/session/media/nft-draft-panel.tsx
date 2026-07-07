@@ -16,6 +16,7 @@ import type {
   MatterhornGeneratedImage,
   MatterhornImageNftDraft,
   MatterhornImageNftDraftInput,
+  MatterhornNftSetupRequirement,
 } from "@matterhorn-work/types/generated-media";
 
 export interface NftDraftPanelProps {
@@ -29,6 +30,7 @@ export interface NftDraftPanelProps {
     nftMarketplaceListing: "working" | "needs_setup" | "preview";
   };
   draft?: MatterhornImageNftDraft | null;
+  setupRequirements?: MatterhornNftSetupRequirement[];
   isLoading?: boolean;
   onCreateDraft: (input: MatterhornImageNftDraftInput) => void;
   onPrepareStorage: () => void;
@@ -102,6 +104,9 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
             </div>
           ) : (
             <div className="flex flex-col gap-4">
+              {props.setupRequirements?.length ? (
+                <NftSetupRequirements requirements={props.setupRequirements} />
+              ) : null}
               <NftStep
                 status={props.draft.storage.status}
                 label="Storage"
@@ -138,6 +143,26 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+export function NftSetupRequirements(props: { requirements: MatterhornNftSetupRequirement[] }) {
+  const unresolved = props.requirements.filter((requirement) => requirement.status !== "configured");
+  if (!unresolved.length) return null;
+
+  return (
+    <div className="rounded-md bg-dls-surface-muted/45 px-3 py-2.5">
+      <div className="mb-2 text-xs font-medium text-dls-text">Setup needed</div>
+      <div className="space-y-2">
+        {unresolved.map((requirement) => (
+          <div key={requirement.key} className="text-xs leading-5 text-muted-foreground">
+            <span className="text-dls-text">{requirement.label}</span>
+            {requirement.envVar ? <span className="ml-1 font-mono text-[11px]">{requirement.envVar}</span> : null}
+            <div>{requirement.description}</div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
