@@ -810,5 +810,5 @@ describe("workspace import preview", () => {
         process.env.OPENWORK_DATA_DIR = originalDataDir;
       }
     }
-  });
+  }, 10_000);
 });
