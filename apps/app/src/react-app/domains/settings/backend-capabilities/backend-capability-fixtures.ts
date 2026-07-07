@@ -84,7 +84,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
   providers: {
     ...cap("working", "Providers"),
     sources: ["opencode"],
-    description: "Agent answers flow through OpenCode/OpenWork.",
+    description: "Agent answers flow through the local agent engine.",
   },
   storage: {
     ...cap("working", "Storage"),

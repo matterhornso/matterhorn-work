@@ -308,7 +308,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("backendModels?.catalog");
     expect(source).toContain('catalog?.errorCode === "opencode_unconfigured"');
     expect(source).toContain("Local agent engine needs setup");
-    expect(source).toContain("OpenCode is not connected for this workspace");
+    expect(source).toContain("Start the local stack with managed engine");
+    expect(source).toContain("attach an existing engine URL");
     expect(source).toContain("buildModelReadinessSummary");
     expect(source).toContain("Agent model");
     expect(source).toContain("See what answers prompts");
@@ -432,8 +433,8 @@ describe("backend capability UI contract", () => {
   test("model and wallet helpers expose Sui as preview instead of hidden", () => {
     const result = capabilities();
     expect(summarizeModelSource(result)).toBe("opencode/big-pickle");
-    expect(summarizeModelRoutingPolicy(result)).toContain("OpenCode session prompts");
-    expect(summarizeModelRoutingPolicy(result)).toContain("OpenCode provider list");
+    expect(summarizeModelRoutingPolicy(result)).toContain("Local session prompts");
+    expect(summarizeModelRoutingPolicy(result)).toContain("Local provider list");
     expect(summarizeModelRoutingPolicy(result)).toContain("model picker");
     const walletRows = walletFamilySummary(result);
     expect(walletRows.map((row) => [row.family, row.label, row.status])).toEqual([

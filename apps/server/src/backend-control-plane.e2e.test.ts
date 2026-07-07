@@ -210,7 +210,7 @@ describe("backend control plane routes", () => {
     expect(result.payload.success).toBe(true);
     expect(result.payload.version).toBe("matterhorn.backend.capabilities.v1");
     expect(result.payload.models.status).toBe("needs_setup");
-    expect(result.payload.models.label).toBe("OpenCode connection missing");
+    expect(result.payload.models.label).toBe("Local engine not connected");
     expect(result.payload.models.defaultModel).toEqual({ providerId: "opencode", modelId: "big-pickle" });
     expect(result.payload.models.providerListSource).toBe("opencode");
     expect(result.payload.models.routing.answerPath).toBe("opencode_session_prompt_async");
@@ -222,7 +222,7 @@ describe("backend control plane routes", () => {
       requiredFor: ["start_chat", "start_desk_task"],
     });
     expect(result.payload.models.actions).toContainEqual({
-      id: "settings.models.connect-opencode",
+      id: "settings.models.connect-local-engine",
       label: "Connect local engine",
       kind: "route",
       href: "/settings/ai",
@@ -310,7 +310,7 @@ describe("backend control plane routes", () => {
     const result = await jsonFetch(base, "/api/backend/capabilities");
     expect(result.response.status).toBe(200);
     expect(result.payload.models.status).toBe("working");
-    expect(result.payload.models.label).toBe("OpenCode model routing");
+    expect(result.payload.models.label).toBe("Agent model routing");
     expect(result.payload.models.details).toMatchObject({
       opencodeConfigured: true,
       configuredWorkspaceCount: 1,
@@ -613,6 +613,16 @@ describe("backend control plane routes", () => {
       preset: "default",
     });
     expect(result.payload.checks.opencode_connection.status).toBe("needs_setup");
+    expect(result.payload.checks.opencode_connection.description).toContain("no local agent engine URL is attached");
+    expect(result.payload.checks.opencode_connection.details).toMatchObject({
+      baseUrlConfigured: false,
+      directoryConfigured: true,
+      managedEngineSupported: true,
+      setupCommands: [
+        "OPENWORK_MANAGE_OPENCODE=1 pnpm dev:matterhorn-local",
+        "MATTERHORN_LOCAL_OPENCODE_URL=http://127.0.0.1:<port> pnpm dev:matterhorn-local",
+      ],
+    });
     expect(result.payload.checks.workspace_writable.status).toBe("working");
     expect(result.payload.features.start_chat.ready).toBe(false);
     expect(result.payload.features.start_desk_task.blockingCheckIds).toContain("opencode_connection");
@@ -626,7 +636,8 @@ describe("backend control plane routes", () => {
       kind: "connect_local_engine",
       label: "Connect the local agent engine",
       severity: "blocking",
-      surface: "settings",
+      surface: "terminal",
+      command: "OPENWORK_MANAGE_OPENCODE=1 pnpm dev:matterhorn-local",
       checkIds: ["opencode_connection"],
       featureIds: ["start_chat", "start_desk_task"],
       href: "settings:ai",
@@ -674,6 +685,8 @@ describe("backend control plane routes", () => {
     expect(result.payload.readiness.summary.recommendedActions[0]).toMatchObject({
       actionId: "connect-local-engine",
       label: "Connect the local agent engine",
+      surface: "terminal",
+      command: "OPENWORK_MANAGE_OPENCODE=1 pnpm dev:matterhorn-local",
     });
     expect(result.payload.summary.exportableStores).toBeGreaterThan(0);
     expect(result.payload.summary.deletableStores).toBeGreaterThan(0);
@@ -799,6 +812,8 @@ describe("backend control plane routes", () => {
       actionId: "connect-local-engine",
       kind: "connect_local_engine",
       label: "Connect the local agent engine",
+      surface: "terminal",
+      command: "OPENWORK_MANAGE_OPENCODE=1 pnpm dev:matterhorn-local",
     }));
     expect(result.payload.readiness.features.start_desk_task.ready).toBe(false);
     expect(result.payload.models.defaultModel).toMatchObject({

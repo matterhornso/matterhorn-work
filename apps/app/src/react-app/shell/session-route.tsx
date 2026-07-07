@@ -320,7 +320,11 @@ function describeTaskCreateError(error: unknown) {
   const lower = message.toLowerCase();
   if (
     lower.includes("opencode_unconfigured") ||
-    lower.includes("opencode base url is missing") ||
+    lower.includes("opencode base url is missing")
+  ) {
+    return "The local agent engine is not connected. Start Matterhorn Work with managed engine, or open AI settings to attach an existing engine URL.";
+  }
+  if (
     lower.includes("failed to fetch") ||
     lower.includes("connection") ||
     lower.includes("fetch failed") ||

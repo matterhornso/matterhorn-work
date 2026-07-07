@@ -55,10 +55,10 @@ export function summarizeModelRoutingPolicy(capabilities: MatterhornBackendCapab
   const routing = capabilities.models.routing;
   if (!routing) return "Model routing policy is not reported by the backend.";
   const answerPath = routing.answerPath === "opencode_session_prompt_async"
-    ? "OpenCode session prompts"
+    ? "Local session prompts"
     : "unknown route";
   const modelList = routing.modelListTool === "opencode_provider_list"
-    ? "OpenCode provider list"
+    ? "Local provider list"
     : routing.modelListTool === "matterhorn_backend_registry"
       ? "Matterhorn registry"
       : "unknown source";
