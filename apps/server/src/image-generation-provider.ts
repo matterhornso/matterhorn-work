@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { deflateSync } from "node:zlib";
 import type {
   MatterhornImageFormat,
   MatterhornImageGenerationInput,
@@ -95,13 +96,36 @@ function imageSizeDimensions(size: MatterhornImageSize): { width: number; height
   }
 }
 
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(buffers: Buffer[]): number {
+  let c = 0xffffffff;
+  for (const buffer of buffers) {
+    for (const byte of buffer) {
+      c = CRC32_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
+    }
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
 function buildMockPng(width: number, height: number): Buffer {
-  // Minimal valid PNG: IHDR + IDAT + IEND.
-  // The IDAT contains a single uncompressed scanline of opaque gray pixels.
-  const { deflateSync } = require("node:zlib");
   const scanline = Buffer.alloc(1 + width * 3, 0x80);
-  scanline[0] = 0x00; // filter byte
-  const idat = deflateSync(scanline);
+  scanline[0] = 0x00;
+  const raw = Buffer.alloc(scanline.length * height);
+  for (let y = 0; y < height; y++) {
+    scanline.copy(raw, y * scanline.length);
+  }
+  const idat = deflateSync(raw);
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
@@ -115,7 +139,7 @@ function buildMockPng(width: number, height: number): Buffer {
     const len = Buffer.alloc(4);
     len.writeUInt32BE(data.length, 0);
     const typeBuf = Buffer.from(type, "ascii");
-    const crc = require("node:crypto").createHash("md5").update(typeBuf).update(data).digest().readUInt32BE(0);
+    const crc = crc32([typeBuf, data]);
     const crcBuf = Buffer.alloc(4);
     crcBuf.writeUInt32BE(crc, 0);
     return Buffer.concat([len, typeBuf, data, crcBuf]);

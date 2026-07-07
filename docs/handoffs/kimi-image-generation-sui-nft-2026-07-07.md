@@ -549,9 +549,7 @@ bun test apps/app/tests/
 
 ```bash
 bun test apps/server/src/
-# 545 pass, 3 fail (unrelated timeouts / pre-existing Bittensor test)
-# - reload watcher fingerprints > suppresses internal workspace bootstrap writes after refreshing the baseline [timeout]
-# - backend control plane routes > workspace data policy persists feedback preference, blocks feedback writes, and audits updates [timeout]
+# 550 pass, 1 fail (unrelated pre-existing Bittensor watch-alert assertion)
 # - executeBittensorChatWorkflow > checks configured watches with actionable alert prompts
 ```
 
@@ -561,11 +559,32 @@ apps/app/node_modules/.bin/tsc -p apps/app/tsconfig.json --noEmit
 # TYPECHECK OK
 ```
 
-Codex integration check also reran the generated-media, project-evidence, and adjacent control-plane/data-ledger paths after rebasing onto `origin/dev`. One grouped backend-control-plane run timed out on the data-policy test; the same test passed in isolation in about one second.
+Codex integration check also reran the generated-media, project-evidence, and adjacent control-plane/data-ledger paths after rebasing onto `origin/dev`.
+
+```bash
+bun test apps/server/src/generated-media-routes.e2e.test.ts
+# 9 pass, 0 fail
+
+bun test apps/server/src/generated-media-routes.e2e.test.ts apps/server/src/backend-control-plane.e2e.test.ts apps/server/src/project-data-ledger-routes.e2e.test.ts apps/server/src/project-evidence-routes.e2e.test.ts
+# 49 pass, 0 fail
+
+git diff --check
+# OK
+```
+
+Codex live API smoke started Matterhorn locally with `MATTERHORN_IMAGE_PROVIDER=mock` and verified:
+
+- backend capabilities report `imageGeneration: working`, `provider: mock`, `nftMinting: needs_setup`, and `walrusStorage: needs_setup`;
+- `POST /workspace/:id/images/generate` creates an image;
+- `GET /workspace/:id/images/:imageId/file` returns `image/png` bytes with a valid PNG signature;
+- NFT draft creation returns `storage: local_only` on `sui-testnet`;
+- mint/listing receipt routes reject private keys, seed phrases, signatures, and wallet-export-shaped payloads.
+
+Browser UI smoke loaded the local app successfully, but did not find a visible image generation or NFT entry point in the session/home shell.
 
 ### Not Completed
 
-- Browser smoke run not executed. The app and server start paths were not manually exercised in a browser due to time constraints; the route and UI contract tests cover the surface.
+- The React image/NFT components exist, and app client methods exist, but the components are not yet wired into the live session composer/chat surface. A user cannot currently generate an image from the visible UI.
 - Walrus upload is stubbed to a mock blob id; true upload requires configured publisher/relay.
 - NFT mint/listing transaction building is scaffolding only; no Move package or transaction construction is implemented.
 
@@ -573,7 +592,7 @@ Codex integration check also reran the generated-media, project-evidence, and ad
 
 - [x] No server-side signing or custody.
 - [x] Seed/private-key/raw-signature inputs are not stored or returned.
-- [ ] Harden receipt routes to reject unexpected signature/private-key fields instead of ignoring them before marking this ready for merge.
+- [x] Receipt routes reject unexpected signature/private-key/wallet-secret fields.
 - [x] Public upload, minting, and listing require explicit user action.
 - [x] Provider secrets excluded from data map, support report, ledger, and route responses.
 - [x] Secret-shaped prompts rejected by provider layer.
@@ -584,9 +603,9 @@ Codex integration check also reran the generated-media, project-evidence, and ad
 ```md
 ## Summary
 
-- Adds chat-native image generation for Matterhorn Work with workspace output storage.
+- Adds image generation backend support for Matterhorn Work with workspace output storage.
 - Adds generated image metadata, project evidence, and data-ledger events.
-- Adds image-to-Sui-NFT draft flow with explicit Walrus, mint, and marketplace setup states.
+- Adds image-to-Sui-NFT draft backend flow with explicit Walrus, mint, and marketplace setup states.
 - Extends backend capabilities/settings truth for image generation, Walrus storage, NFT minting, and marketplace listing.
 
 ## Safety
@@ -602,5 +621,6 @@ Codex integration check also reran the generated-media, project-evidence, and ad
 - [x] App focused tests
 - [x] Server typecheck
 - [x] App typecheck
-- [ ] Browser smoke
+- [x] Browser smoke for app load
+- [ ] Live chat UI image-generation entry point
 ```

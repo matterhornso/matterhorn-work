@@ -100,7 +100,7 @@ afterEach(async () => {
 
 describe("Generated media routes", () => {
   test("POST /workspace/:id/images/generate creates a mock image", async () => {
-    const { base, dir } = await boot();
+    const { base } = await boot();
     const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
       method: "POST",
       body: JSON.stringify({ prompt: "a tiny robot" }),
@@ -110,6 +110,23 @@ describe("Generated media routes", () => {
     expect(result.payload.image.provider).toBe("mock");
     expect(result.payload.image.prompt).toBe("a tiny robot");
     expect(result.payload.image.relativePath).toMatch(/\.matterhorn-work\/outputs\/images\/img_/);
+  });
+
+  test("GET /workspace/:id/images/:imageId/file returns renderable PNG bytes", async () => {
+    const { base } = await boot();
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "a tiny robot" }),
+    });
+    const imageId = generated.payload.image.id;
+    const response = await fetch(`${base}/workspace/${WORKSPACE_ID}/images/${imageId}/file`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/png");
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    expect(Array.from(bytes.slice(0, 8))).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(bytes.length).toBeGreaterThan(100);
   });
 
   test("GET /workspace/:id/images lists generated images", async () => {
@@ -162,6 +179,24 @@ describe("Generated media security", () => {
     expect(result.payload.code).toBe("image_prompt_secret_rejected");
   });
 
+  test("NFT draft creation rejects nested wallet secrets", async () => {
+    const { base } = await boot();
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "a cat" }),
+    });
+    const imageId = generated.payload.image.id;
+    const draft = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${imageId}/nft-draft`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: "Leaky draft",
+        metadata: { usageNote: "my seed phrase is abandon ability able" },
+      }),
+    });
+    expect(draft.response.status).toBe(400);
+    expect(draft.payload.code).toBe("generated_media_sensitive_input_rejected");
+  });
+
   test("NFT mint receipt rejects raw signature input", async () => {
     const { base } = await boot();
     const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
@@ -182,9 +217,31 @@ describe("Generated media security", () => {
         privateKey: "0xdeadbeef",
       }),
     });
-    expect(receipt.response.status).toBe(200);
-    const serialized = JSON.stringify(receipt.payload);
-    expect(serialized).not.toContain("0xdeadbeef");
-    expect(serialized).not.toContain("privateKey");
+    expect(receipt.response.status).toBe(400);
+    expect(receipt.payload.code).toBe("generated_media_sensitive_input_rejected");
+  });
+
+  test("NFT listing receipt rejects signature payloads", async () => {
+    const { base } = await boot();
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "a cat" }),
+    });
+    const imageId = generated.payload.image.id;
+    const draft = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${imageId}/nft-draft`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    const receipt = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.payload.draft.id}/listing/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "dig",
+        objectId: "obj",
+        network: "sui-testnet",
+        rawSignature: "serialized-wallet-signature",
+      }),
+    });
+    expect(receipt.response.status).toBe(400);
+    expect(receipt.payload.code).toBe("generated_media_sensitive_input_rejected");
   });
 });

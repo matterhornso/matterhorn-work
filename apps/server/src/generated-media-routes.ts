@@ -60,6 +60,7 @@ export function addGeneratedMediaRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
+    rejectSensitiveGeneratedMediaInput(body, { skipKeys: IMAGE_GENERATION_SECRET_SCAN_SKIP_KEYS });
     const input = validateImageGenerationInput(body);
 
     if (detectSecretShapedInput(input.prompt)) {
@@ -144,6 +145,7 @@ export function addGeneratedMediaRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
+    rejectSensitiveGeneratedMediaInput(body);
     const input = validateNftDraftInput(body);
     const imageStore = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const image = await imageStore.get(ctx.params.imageId);
@@ -188,6 +190,7 @@ export function addGeneratedMediaRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
+    rejectSensitiveGeneratedMediaInput(body);
     const input = validateNftDraftInput(body);
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.update(ctx.params.draftId, input);
@@ -274,6 +277,7 @@ export function addGeneratedMediaRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
+    rejectSensitiveGeneratedMediaInput(body);
     const receipt = validateNftReceiptRequest(body);
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
@@ -341,6 +345,7 @@ export function addGeneratedMediaRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request);
+    rejectSensitiveGeneratedMediaInput(body);
     const receipt = validateNftReceiptRequest(body);
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
@@ -400,6 +405,71 @@ async function readJsonBody(request: Request): Promise<unknown> {
   } catch {
     throw new ApiError(400, "invalid_json_body", "Request body is not valid JSON.");
   }
+}
+
+const SENSITIVE_INPUT_KEYS = new Set([
+  "mnemonic",
+  "privatekey",
+  "private_key",
+  "rawsignature",
+  "raw_signature",
+  "seed",
+  "seedphrase",
+  "seed_phrase",
+  "secretkey",
+  "secret_key",
+  "signature",
+  "signedtransaction",
+  "signed_transaction",
+  "walletexport",
+  "wallet_export",
+]);
+
+const SENSITIVE_TEXT_PATTERNS = [
+  /\b-----BEGIN (RSA |EC |OPENSSH |PGP )?(PRIVATE KEY|SECRET KEY)-----/i,
+  /\bmnemonic\b/i,
+  /\bprivate key\b/i,
+  /\bseed phrase\b/i,
+  /\bsk-[a-zA-Z0-9]{20,}\b/,
+];
+
+const IMAGE_GENERATION_SECRET_SCAN_SKIP_KEYS = new Set(["prompt"]);
+
+function rejectSensitiveGeneratedMediaInput(
+  value: unknown,
+  options?: { skipKeys?: ReadonlySet<string> },
+): void {
+  const rejected = findSensitiveGeneratedMediaInput(value, options);
+  if (rejected) {
+    throw new ApiError(
+      400,
+      "generated_media_sensitive_input_rejected",
+      "Generated media routes do not accept private keys, seed phrases, raw signatures, or wallet exports.",
+    );
+  }
+}
+
+function findSensitiveGeneratedMediaInput(
+  value: unknown,
+  options?: { skipKeys?: ReadonlySet<string> },
+): boolean {
+  if (typeof value === "string") {
+    return SENSITIVE_TEXT_PATTERNS.some((pattern) => pattern.test(value));
+  }
+  if (!value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some((item) => findSensitiveGeneratedMediaInput(item, options));
+
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    const normalized = key.replace(/[\s-]/g, "").toLowerCase();
+    if (options?.skipKeys?.has(normalized) || options?.skipKeys?.has(key)) {
+      continue;
+    }
+    if (SENSITIVE_INPUT_KEYS.has(normalized) || SENSITIVE_INPUT_KEYS.has(key.toLowerCase())) {
+      return true;
+    }
+    if (findSensitiveGeneratedMediaInput(nested, options)) return true;
+  }
+  return false;
 }
 
 function validateImageGenerationInput(body: unknown): MatterhornImageGenerationInput {
