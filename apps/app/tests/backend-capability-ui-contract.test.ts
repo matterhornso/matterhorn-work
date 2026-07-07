@@ -295,6 +295,9 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("client.clearWorkspaceModelSelection(runtimeWorkspaceId)");
     expect(source).toContain("runtimeWorkspaceId?: string | null");
     expect(source).toContain("backendModels?.catalog");
+    expect(source).toContain('catalog?.errorCode === "opencode_unconfigured"');
+    expect(source).toContain("Local agent engine needs setup");
+    expect(source).toContain("OpenCode is not connected for this workspace");
     expect(source).toContain("buildModelReadinessSummary");
     expect(source).toContain("Model routing");
     expect(source).toContain("Choose which model answers workspace prompts");
