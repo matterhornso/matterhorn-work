@@ -4,6 +4,7 @@ import {
   buildDefaultWorkspaceBlueprint,
   defaultBlueprintStartersForPreset,
 } from "../src/app/lib/workspace-blueprints";
+import en from "../src/i18n/locales/en";
 
 describe("Matterhorn workspace blueprints", () => {
   test("default starter cards are Matterhorn protocol desks", () => {
@@ -23,9 +24,14 @@ describe("Matterhorn workspace blueprints", () => {
 
   test("default empty session copy does not show generic automation examples", () => {
     const blueprint = buildDefaultWorkspaceBlueprint("starter");
-    const copy = JSON.stringify(blueprint);
+    const copy = JSON.stringify({
+      blueprint,
+      emptySession: en["session.select_or_create_session"],
+    });
 
     for (const forbidden of [
+      "Select or create a session to get started",
+      "Try one of these to get started",
       "Edit a CSV",
       "Automate a browser task",
       "Search Craigslist",
