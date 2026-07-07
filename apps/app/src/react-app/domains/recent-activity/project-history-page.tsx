@@ -4,9 +4,12 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   BrainCircuit,
+  CalendarClock,
   Clock3,
   Download,
+  Files,
   FileText,
+  Hash,
   ListFilter,
   Lock,
   MessageSquareText,
@@ -25,6 +28,13 @@ import type {
   MatterhornProjectDataLedgerResponse,
 } from "@matterhorn-work/types/project-data-ledger";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { ErrorState } from "../shell/error-state";
 
@@ -80,6 +90,16 @@ function downloadJsonFile(filename: string, content: string) {
 function formatActivityTimestamp(timestamp: string) {
   const timestampMs = Date.parse(timestamp);
   return Number.isFinite(timestampMs) ? formatRelativeTime(timestampMs) : "Unknown time";
+}
+
+function formatAbsoluteTimestamp(timestamp: string) {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return "Unknown time";
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }
 
 function deskLabel(value?: string) {
@@ -170,7 +190,39 @@ function entryContext(entry: MatterhornProjectDataLedgerEntry) {
   ].filter(Boolean).join(" · ");
 }
 
-function ProjectHistoryRow({ entry }: { entry: MatterhornProjectDataLedgerEntry }) {
+function humanizeValue(value: string) {
+  return value.replace(/_/g, " ");
+}
+
+function yesNo(value: boolean) {
+  return value ? "Yes" : "No";
+}
+
+function outputPathsForEntry(entry: MatterhornProjectDataLedgerEntry) {
+  return Array.from(new Set([
+    entry.outputPath,
+    ...(entry.artifactPaths ?? []),
+  ].filter((path): path is string => Boolean(path?.trim()))));
+}
+
+function DetailLine(props: { label: string; value?: string }) {
+  if (!props.value) return null;
+
+  return (
+    <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3 text-xs">
+      <dt className="text-muted-foreground">{props.label}</dt>
+      <dd className="min-w-0 break-words text-dls-text">{props.value}</dd>
+    </div>
+  );
+}
+
+function ProjectHistoryRow({
+  entry,
+  onSelect,
+}: {
+  entry: MatterhornProjectDataLedgerEntry;
+  onSelect: () => void;
+}) {
   const meta = KIND_META[entry.kind];
   const Icon = meta.icon;
   const title = titleForEntry(entry);
@@ -179,7 +231,12 @@ function ProjectHistoryRow({ entry }: { entry: MatterhornProjectDataLedgerEntry 
   const showDesk = Boolean(desk && !isTaskStartEntry(entry));
 
   return (
-    <article className="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] gap-3 px-3 py-3.5 transition-colors hover:bg-dls-hover/25">
+    <button
+      type="button"
+      className="grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] gap-3 px-3 py-3.5 text-left transition-colors hover:bg-dls-hover/30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+      onClick={onSelect}
+      aria-label={`${title}, ${formatActivityTimestamp(entry.timestamp)}`}
+    >
       <span className={cn("mt-0.5 flex size-5 items-center justify-center", meta.tone)} aria-hidden="true">
         <Icon className="size-3.5" />
       </span>
@@ -210,7 +267,114 @@ function ProjectHistoryRow({ entry }: { entry: MatterhornProjectDataLedgerEntry 
       <time className="shrink-0 text-xs leading-5 text-dls-secondary" dateTime={entry.timestamp}>
         {formatActivityTimestamp(entry.timestamp)}
       </time>
-    </article>
+    </button>
+  );
+}
+
+function ProjectHistoryDetailSheet({
+  entry,
+  onOpenChange,
+}: {
+  entry: MatterhornProjectDataLedgerEntry | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  if (!entry) return null;
+
+  const title = titleForEntry(entry);
+  const summary = entryDisplaySummary(entry) || "Recorded in the project ledger.";
+  const desk = deskLabel(entry.desk);
+  const outputPaths = outputPathsForEntry(entry);
+  const actor = [entry.actor?.type, entry.actor?.scope].filter(Boolean).join(" · ");
+
+  return (
+    <Sheet open={Boolean(entry)} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="w-[min(100vw,430px)] border-dls-border bg-dls-background sm:max-w-[430px]"
+      >
+        <SheetHeader className="border-b border-dls-border/60 px-5 py-4">
+          <SheetTitle className="text-sm font-semibold text-dls-text">{title}</SheetTitle>
+          <SheetDescription className="text-xs leading-5 text-dls-secondary">
+            {summary}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+          <section className="space-y-2">
+            <div className="flex items-center gap-2 text-xs font-medium text-dls-text">
+              <CalendarClock className="size-3.5 text-muted-foreground" aria-hidden="true" />
+              Timing
+            </div>
+            <dl className="space-y-1.5">
+              <DetailLine label="Recorded" value={formatAbsoluteTimestamp(entry.timestamp)} />
+              <DetailLine label="Relative" value={formatActivityTimestamp(entry.timestamp)} />
+            </dl>
+          </section>
+
+          <section className="space-y-2">
+            <div className="flex items-center gap-2 text-xs font-medium text-dls-text">
+              <Hash className="size-3.5 text-muted-foreground" aria-hidden="true" />
+              Source
+            </div>
+            <dl className="space-y-1.5">
+              <DetailLine label="Kind" value={humanizeValue(entry.kind)} />
+              <DetailLine label="Source" value={sourceLabel(entry.source)} />
+              <DetailLine label="Event" value={entry.eventType} />
+              <DetailLine label="Desk" value={desk || undefined} />
+              <DetailLine label="Session" value={entry.sessionSlug ?? entry.sessionId} />
+              <DetailLine label="Task" value={entry.taskId} />
+              <DetailLine label="Note" value={entry.noteId} />
+              <DetailLine label="Actor" value={actor || undefined} />
+              <DetailLine label="Ledger id" value={entry.id} />
+            </dl>
+          </section>
+
+          {entry.summary ? (
+            <section className="space-y-1.5">
+              <p className="text-xs font-medium text-dls-text">Summary</p>
+              <p className="text-xs leading-5 text-dls-secondary">{entry.summary}</p>
+            </section>
+          ) : null}
+
+          {outputPaths.length > 0 ? (
+            <section className="space-y-2">
+              <div className="flex items-center gap-2 text-xs font-medium text-dls-text">
+                <Files className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                Outputs
+              </div>
+              <div className="space-y-1">
+                {outputPaths.map((path) => (
+                  <div
+                    key={path}
+                    className="min-w-0 rounded-md bg-dls-surface-muted/20 px-2 py-1.5 text-xs text-dls-text"
+                    title={path}
+                  >
+                    <span className="block truncate">{compactLedgerPath(path)}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="space-y-2">
+            <div className="flex items-center gap-2 text-xs font-medium text-dls-text">
+              <ShieldCheck className="size-3.5 text-muted-foreground" aria-hidden="true" />
+              Data policy
+            </div>
+            <dl className="space-y-1.5">
+              <DetailLine label="Data class" value={humanizeValue(entry.dataClass)} />
+              <DetailLine label="User content" value={yesNo(entry.containsUserContent)} />
+              <DetailLine label="Secrets" value={humanizeValue(entry.containsSecrets)} />
+              <DetailLine label="Retention" value={humanizeValue(entry.retention)} />
+              <DetailLine label="Exportable" value={yesNo(entry.exportable)} />
+              <DetailLine label="Deletable" value={yesNo(entry.deletable)} />
+              <DetailLine label="Redacted" value={yesNo(entry.redactionApplied)} />
+              <DetailLine label="Training use" value={humanizeValue(entry.trainingUse)} />
+            </dl>
+          </section>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -223,6 +387,7 @@ export function ProjectHistoryPage({
 }) {
   const [historySearchParams, setHistorySearchParams] = useSearchParams();
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const activeFilter = projectHistoryFilterFromParam(historySearchParams.get("kind"));
   const activeDesk = projectHistoryDeskFromParam(historySearchParams.get("desk"));
   const activeFilterConfig = PROJECT_HISTORY_FILTERS.find((filter) => filter.id === activeFilter) ?? PROJECT_HISTORY_FILTERS[0];
@@ -270,6 +435,7 @@ export function ProjectHistoryPage({
   });
 
   const rows = ledgerQuery.data?.items ?? [];
+  const selectedEntry = rows.find((entry) => entry.id === selectedEntryId) ?? null;
   const latest = rows[0] ?? null;
   const visiblePolicy = summaryQuery.data?.policy ?? ledgerQuery.data?.policy ?? null;
   const filterCounts = useMemo(() => (
@@ -419,11 +585,21 @@ export function ProjectHistoryPage({
             ) : null}
             <div className="divide-y divide-dls-border/20">
               {rows.map((entry) => (
-                <ProjectHistoryRow key={entry.id} entry={entry} />
+                <ProjectHistoryRow
+                  key={entry.id}
+                  entry={entry}
+                  onSelect={() => setSelectedEntryId(entry.id)}
+                />
               ))}
             </div>
           </div>
         )}
+        <ProjectHistoryDetailSheet
+          entry={selectedEntry}
+          onOpenChange={(open) => {
+            if (!open) setSelectedEntryId(null);
+          }}
+        />
       </div>
     </div>
   );
