@@ -1180,6 +1180,12 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.memory.details.workspaceRoutes).toContain("/workspace/ws_backend/memory/capture");
     expect(result.payload.stores.memory.details.isolation).toBe("tagged_records_in_machine_vault");
     expect(result.payload.stores.chat.scope).toBe("opencode_runtime");
+    expect(result.payload.stores.chat.details).toMatchObject({
+      fullTranscriptExport: false,
+      metadataLedgerExport: true,
+      ledgerRoute: "/workspace/ws_backend/data-ledger?kind=chat",
+      transcriptStore: "opencode_runtime",
+    });
     expect(result.payload.stores.modelPreferences.scope).toBe("workspace");
     expect(result.payload.stores.modelPreferences.path).toBe(join(dir, ".matterhorn-work", "models", "selection.json"));
     expect(result.payload.stores.modelPreferences.containsSecrets).toBe("never");
@@ -1216,6 +1222,12 @@ describe("backend control plane routes", () => {
       id: "chat.open-session",
       kind: "app_route",
       href: "/workspace/ws_backend/session",
+    }));
+    expect(result.payload.stores.chat.export.actions).toContainEqual(expect.objectContaining({
+      id: "chat.ledger-metadata",
+      kind: "api_route",
+      method: "GET",
+      href: "/workspace/ws_backend/data-ledger?kind=chat",
     }));
     expect(result.payload.stores.notes.export.actions).toContainEqual(expect.objectContaining({
       id: "notes.open-app",

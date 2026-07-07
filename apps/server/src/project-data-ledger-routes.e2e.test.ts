@@ -353,6 +353,12 @@ describe("project data ledger routes", () => {
     const dataMap = await jsonFetch(base, "/workspace/ws_ledger/backend/data-map");
     expect(dataMap.response.status).toBe(200);
     expect(dataMap.payload.stores.chat.description).toContain("project ledger exports session counts");
+    expect(dataMap.payload.stores.chat.details).toMatchObject({
+      fullTranscriptExport: false,
+      metadataLedgerExport: true,
+      ledgerRoute: "/workspace/ws_ledger/data-ledger?kind=chat",
+      transcriptStore: "opencode_runtime",
+    });
     expect(dataMap.payload.stores.feedback.status).toBe("working");
     expect(dataMap.payload.stores.feedback.path).toBe(join(dir, "openwork-data", "feedback", "ws_ledger.jsonl"));
     expect(dataMap.payload.stores.feedback.containsSecrets).toBe("redacted");
@@ -363,6 +369,14 @@ describe("project data ledger routes", () => {
     expect(dataControls.response.status).toBe(200);
     expect(dataControls.payload.version).toBe("matterhorn.backend.data-controls.v1");
     expect(dataControls.payload.stores.chat.export.summary).toContain("metadata only");
+    expect(dataControls.payload.stores.chat.export.actions).toContainEqual(
+      expect.objectContaining({
+        id: "chat.ledger-metadata",
+        label: "Export chat metadata",
+        method: "GET",
+        href: "/workspace/ws_ledger/data-ledger?kind=chat",
+      }),
+    );
     expect(dataControls.payload.stores.feedback.export.actions).toContainEqual(
       expect.objectContaining({
         id: "feedback.open-review",
