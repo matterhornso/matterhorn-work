@@ -2,6 +2,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   MatterhornImageGenerationInput,
+  MatterhornGeneratedMediaHistoryItem,
+  MatterhornGeneratedMediaHistoryResponse,
   MatterhornImageListResponse,
   MatterhornImageNftDraft,
   MatterhornImageNftDraftInput,
@@ -65,6 +67,51 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const images = await store.list();
     const response: MatterhornImageListResponse = { success: true, images };
+    return jsonResponse(response);
+  });
+
+  addRoute("GET", "/workspace/:id/generated-media/history", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const imageStore = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+    const draftStore = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+    const [images, drafts] = await Promise.all([imageStore.list(), draftStore.list()]);
+    const draftsByImage = new Map<string, MatterhornImageNftDraft[]>();
+
+    for (const draft of drafts) {
+      const current = draftsByImage.get(draft.imageId) ?? [];
+      current.push(draft);
+      draftsByImage.set(draft.imageId, current);
+    }
+
+    const items: MatterhornGeneratedMediaHistoryItem[] = images.map((image) => {
+      const imageDrafts = [...(draftsByImage.get(image.id) ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      const latestDraft = imageDrafts[0] ?? null;
+      const updatedAt = latestDraft && latestDraft.updatedAt.localeCompare(image.createdAt) > 0
+        ? latestDraft.updatedAt
+        : image.createdAt;
+
+      return {
+        id: image.id,
+        workspaceId: workspace.id,
+        image,
+        drafts: imageDrafts,
+        latestDraft,
+        status: generatedMediaHistoryStatus(latestDraft),
+        createdAt: image.createdAt,
+        updatedAt,
+      };
+    }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+    const response: MatterhornGeneratedMediaHistoryResponse = {
+      success: true,
+      items,
+      counts: {
+        images: images.length,
+        drafts: drafts.length,
+        minted: drafts.filter((draft) => draft.mint.status === "confirmed").length,
+        listed: drafts.filter((draft) => draft.listing.status === "listed").length,
+      },
+    };
     return jsonResponse(response);
   });
 
@@ -607,6 +654,17 @@ export function addGeneratedMediaRoutes(
     };
     return jsonResponse(response);
   });
+}
+
+function generatedMediaHistoryStatus(
+  draft: MatterhornImageNftDraft | null | undefined,
+): MatterhornGeneratedMediaHistoryItem["status"] {
+  if (!draft) return "generated";
+  if (draft.listing.status === "listed") return "listed";
+  if (draft.mint.status === "confirmed") return "minted";
+  if (draft.mint.status === "preview_ready") return "mint_preview_ready";
+  if (draft.storage.status === "uploaded" || draft.storage.status === "ready_to_upload") return "storage_ready";
+  return "draft";
 }
 
 function ensureWritable(config: ServerConfig): void {

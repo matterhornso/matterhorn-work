@@ -1,4 +1,5 @@
 export * from "./generated-image-card";
+export * from "./generated-media-history";
 export * from "./image-generation-composer";
 export * from "./nft-draft-wallet-bridge";
 export * from "./nft-draft-panel";

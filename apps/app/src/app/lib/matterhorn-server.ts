@@ -32,6 +32,7 @@ import type {
 import type {
   MatterhornImageGenerationInput,
   MatterhornImageGenerationResponse,
+  MatterhornGeneratedMediaHistoryResponse,
   MatterhornImageListResponse,
   MatterhornImageNftDraftInput,
   MatterhornImageNftDraftListResponse,
@@ -1792,6 +1793,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       requestJson<MatterhornImageListResponse>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/images`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    listGeneratedMediaHistory: (workspaceId: string) =>
+      requestJson<MatterhornGeneratedMediaHistoryResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/generated-media/history`,
         { token, hostToken, timeoutMs: timeouts.capabilities },
       ),
     generateImage: (workspaceId: string, input: MatterhornImageGenerationInput) =>

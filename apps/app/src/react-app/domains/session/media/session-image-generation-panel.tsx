@@ -29,6 +29,7 @@ import {
 import {
   ImageGenerationComposer,
 } from "./image-generation-composer";
+import { GeneratedMediaHistory } from "./generated-media-history";
 import {
   NftDraftWalletBridge,
 } from "./nft-draft-wallet-bridge";
@@ -108,21 +109,22 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     staleTime: 30_000,
     queryFn: () => props.client.backendCapabilities(),
   });
-  const generatedImagesQueryKey = useMemo(
-    () => ["session-generated-images", props.workspaceId] as const,
+  const generatedMediaHistoryQueryKey = useMemo(
+    () => ["session-generated-media-history", props.workspaceId] as const,
     [props.workspaceId],
   );
-  const generatedImagesQuery = useQuery({
-    queryKey: generatedImagesQueryKey,
+  const generatedMediaHistoryQuery = useQuery({
+    queryKey: generatedMediaHistoryQueryKey,
     enabled: open,
     staleTime: 10_000,
-    queryFn: () => props.client.listGeneratedImages(props.workspaceId),
+    queryFn: () => props.client.listGeneratedMediaHistory(props.workspaceId),
   });
 
   const capabilities = props.capabilitiesOverride ?? capabilitiesQuery.data;
   const imageGenerationStatus = capabilities?.imageGeneration?.status;
   const canGenerate = capabilityReady(imageGenerationStatus);
-  const latestImage = selectedImage ?? generatedImagesQuery.data?.images?.[0] ?? null;
+  const historyItems = generatedMediaHistoryQuery.data?.items ?? [];
+  const latestImage = selectedImage ?? historyItems[0]?.image ?? null;
   const capabilityLabel = capabilitiesQuery.isLoading && !capabilities
     ? "Checking image provider..."
     : canGenerate
@@ -188,7 +190,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
         throw new Error(response.message);
       }
       setSelectedImage(response.image);
-      await queryClient.invalidateQueries({ queryKey: generatedImagesQueryKey });
+      await queryClient.invalidateQueries({ queryKey: generatedMediaHistoryQueryKey });
       props.onNotice?.({
         title: "Image generated",
         description: "Saved to project outputs.",
@@ -201,7 +203,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     }
   }, [
     canGenerate,
-    generatedImagesQueryKey,
+    generatedMediaHistoryQueryKey,
     props.client,
     props.onNotice,
     props.sessionId,
@@ -241,6 +243,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       setNftSetupRequirements([]);
       setNftMintPreview(null);
       setNftListingPreview(null);
+      await queryClient.invalidateQueries({ queryKey: generatedMediaHistoryQueryKey });
     } catch (nextError) {
       const setupRequirements = nftSetupRequirementsFromError(nextError);
       setNftSetupRequirements(setupRequirements);
@@ -257,7 +260,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     } finally {
       setNftBusy(false);
     }
-  }, [nftDraft, props.onNotice]);
+  }, [generatedMediaHistoryQueryKey, nftDraft, props.onNotice, queryClient]);
 
   const createDraft = useCallback(async (input: MatterhornImageNftDraftInput) => {
     if (!nftImage) return;
@@ -268,6 +271,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       setNftSetupRequirements([]);
       setNftMintPreview(null);
       setNftListingPreview(null);
+      await queryClient.invalidateQueries({ queryKey: generatedMediaHistoryQueryKey });
       props.onNotice?.({
         title: "NFT draft created",
         description: "Stored locally until you choose public storage or wallet signing.",
@@ -281,7 +285,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     } finally {
       setNftBusy(false);
     }
-  }, [nftImage, props.client, props.onNotice, props.workspaceId]);
+  }, [generatedMediaHistoryQueryKey, nftImage, props.client, props.onNotice, props.workspaceId, queryClient]);
 
   const previewMint = useCallback(async () => {
     if (!nftDraft) return;
@@ -292,6 +296,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       setNftSetupRequirements(response.setupRequirements ?? []);
       setNftMintPreview(response);
       setNftListingPreview(null);
+      await queryClient.invalidateQueries({ queryKey: generatedMediaHistoryQueryKey });
       props.onNotice?.({
         title: "Mint plan ready",
         description: "Review it, then sign with your connected Sui wallet.",
@@ -314,7 +319,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     } finally {
       setNftBusy(false);
     }
-  }, [nftDraft, props.client, props.onNotice, props.workspaceId]);
+  }, [generatedMediaHistoryQueryKey, nftDraft, props.client, props.onNotice, props.workspaceId, queryClient]);
 
   const recordMintReceipt = useCallback(async (receipt: MatterhornNftReceiptRequest) => {
     if (!nftDraft) return;
@@ -324,6 +329,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       setNftDraft(response.draft);
       setNftSetupRequirements([]);
       setNftMintPreview(null);
+      await queryClient.invalidateQueries({ queryKey: generatedMediaHistoryQueryKey });
       props.onNotice?.({
         title: "Mint receipt recorded",
         description: "The NFT draft now points at the public Sui object.",
@@ -337,7 +343,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     } finally {
       setNftBusy(false);
     }
-  }, [nftDraft, props.client, props.onNotice, props.workspaceId]);
+  }, [generatedMediaHistoryQueryKey, nftDraft, props.client, props.onNotice, props.workspaceId, queryClient]);
 
   const previewListing = useCallback(async (input: MatterhornNftListingPreviewInput) => {
     if (!nftDraft) return;
@@ -347,6 +353,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       setNftDraft(response.draft);
       setNftSetupRequirements(response.setupRequirements ?? []);
       setNftListingPreview(response);
+      await queryClient.invalidateQueries({ queryKey: generatedMediaHistoryQueryKey });
       props.onNotice?.({
         title: "Listing plan ready",
         description: "Review the Sui Kiosk inputs before signing externally.",
@@ -369,7 +376,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     } finally {
       setNftBusy(false);
     }
-  }, [nftDraft, props.client, props.onNotice, props.workspaceId]);
+  }, [generatedMediaHistoryQueryKey, nftDraft, props.client, props.onNotice, props.workspaceId, queryClient]);
 
   const recordListingReceipt = useCallback(async (receipt: MatterhornNftReceiptRequest) => {
     if (!nftDraft) return;
@@ -379,6 +386,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       setNftDraft(response.draft);
       setNftSetupRequirements([]);
       setNftListingPreview(null);
+      await queryClient.invalidateQueries({ queryKey: generatedMediaHistoryQueryKey });
       props.onNotice?.({
         title: "Listing receipt recorded",
         description: "The marketplace handoff is now part of this image's evidence.",
@@ -392,7 +400,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     } finally {
       setNftBusy(false);
     }
-  }, [nftDraft, props.client, props.onNotice, props.workspaceId]);
+  }, [generatedMediaHistoryQueryKey, nftDraft, props.client, props.onNotice, props.workspaceId, queryClient]);
 
   const nftCapabilities = nftDraftPublishingCapabilitiesFromBackend(capabilities);
 
@@ -440,6 +448,12 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
               onMakeNft={() => void openNftDraft(latestImage)}
             />
           ) : null}
+          <GeneratedMediaHistory
+            items={historyItems}
+            selectedImageId={latestImage?.id ?? null}
+            onSelectImage={setSelectedImage}
+            onMakeNft={(image) => void openNftDraft(image)}
+          />
         </div>
       ) : null}
 
