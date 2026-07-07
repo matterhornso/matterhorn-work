@@ -59,7 +59,7 @@ describe("Project Activity contract tests", () => {
     test("RecentActivitySection exposes API error state", () => {
       const source = readAppSource("domains/recent-activity/recent-activity-section.tsx");
       expect(source).toContain("isError");
-      expect(source).toContain("No activity recorded yet");
+      expect(source).toContain("Project activity could not load");
     });
 
     test("RecentActivitySection Retry button calls refetch", () => {
