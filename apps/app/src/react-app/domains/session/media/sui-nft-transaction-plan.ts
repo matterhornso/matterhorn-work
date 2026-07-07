@@ -102,12 +102,7 @@ function transactionArgument(tx: Transaction, argument: MatterhornSuiTransaction
 
 function findCreatedObjectId(value: unknown): string | null {
   const seen = new Set<unknown>();
-  const queue: unknown[] = [
-    objectRecord(value)?.effects,
-    objectRecord(value)?.objectChanges,
-    objectRecord(value)?.changedObjects,
-    value,
-  ];
+  const queue: unknown[] = [value];
 
   while (queue.length) {
     const current = queue.shift();
@@ -121,17 +116,30 @@ function findCreatedObjectId(value: unknown): string | null {
 
     const record = objectRecord(current);
     if (!record) continue;
-    const kind = stringValue(record.type) ?? stringValue(record.$kind);
     const objectId =
       stringValue(record.objectId) ??
       stringValue(record.id) ??
       stringValue(objectRecord(record.reference)?.objectId) ??
       stringValue(objectRecord(record.object)?.objectId);
-    if (objectId && (!kind || /created|object/i.test(kind))) return objectId;
+    if (objectId && isCreatedObjectRecord(record)) return objectId;
     for (const nested of Object.values(record)) queue.push(nested);
   }
 
   return null;
+}
+
+function isCreatedObjectRecord(record: Record<string, unknown>) {
+  const kind = [
+    stringValue(record.type),
+    stringValue(record.$kind),
+    stringValue(record.kind),
+    stringValue(record.idOperation),
+  ].filter(Boolean).join(" ");
+  if (/created/i.test(kind)) return true;
+
+  const inputState = stringValue(record.inputState);
+  const outputState = stringValue(record.outputState);
+  return inputState === "DoesNotExist" && Boolean(outputState && outputState !== "DoesNotExist");
 }
 
 function objectRecord(value: unknown): Record<string, unknown> | null {
