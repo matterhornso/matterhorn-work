@@ -255,7 +255,11 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("settings-team-access");
     expect(source).toContain("client.workspaceTeamAccess(workspaceId)");
     expect(source).toContain("TeamAccessControls");
-    expect(source).toContain("Token details stay host-protected.");
+    expect(source).toContain("teamAccessInviteText");
+    expect(source).toContain("Copy invite");
+    expect(source).toContain("Teammates use Connect custom remote in the same Matterhorn interface.");
+    expect(source).toContain("This is local server access, not durable Matterhorn Cloud team membership.");
+    expect(source).toContain("Durable org invites and shared cloud workspaces still require Matterhorn Cloud.");
     expect(source).toContain("teamAccessSummaryQuery.data.sharingMode.label");
     expect(source).toContain("props.summary?.sharingMode.description");
     expect(source).toContain("props.summary?.scopeCapabilities");
