@@ -1,0 +1,60 @@
+#!/usr/bin/env node
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const script = readFileSync("scripts/generated-media-flow-smoke.mjs", "utf8");
+const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+
+for (const endpoint of [
+  "/api/backend/capabilities",
+  "/images/generate",
+  "/nft-draft",
+  "/storage/upload",
+  "/mint/preview",
+  "/mint/receipt",
+  "/listing/preview",
+]) {
+  assert.ok(script.includes(endpoint), `generated-media flow smoke should call ${endpoint}`);
+}
+
+for (const stageId of [
+  "workspace",
+  "capabilities",
+  "image.generate",
+  "nft.draft",
+  "walrus.upload",
+  "sui.mint_preview",
+  "sui.mint_receipt",
+  "sui.listing_preview",
+]) {
+  assert.ok(script.includes(stageId), `generated-media flow smoke should report stage ${stageId}`);
+}
+
+assert.ok(
+  script.includes("nonCustodial: true") &&
+    script.includes("liveSubmissionEnabled: false") &&
+    script.includes("asksForSecrets: false"),
+  "generated-media flow smoke should report the no-custody safety boundary",
+);
+assert.ok(
+  script.includes("matterhorn-media-smoke-client-token") &&
+    script.includes("http://127.0.0.1:4125"),
+  "generated-media flow smoke should default to dev:generated-media-smoke",
+);
+assert.ok(
+  script.includes("--json-output") && script.includes("--strict"),
+  "generated-media flow smoke should support JSON artifacts and strict exit behavior",
+);
+
+assert.equal(
+  packageJson.scripts?.["smoke:generated-media-flow"],
+  "node scripts/generated-media-flow-smoke.mjs --strict",
+  "package.json should expose the generated-media flow smoke",
+);
+assert.equal(
+  packageJson.scripts?.["test:generated-media-flow-smoke"],
+  "node scripts/generated-media-flow-smoke.test.mjs",
+  "package.json should expose the generated-media flow smoke contract gate",
+);
+
+console.log("Generated-media flow smoke contract passed.");
