@@ -32,6 +32,13 @@ const dirs: string[] = [];
 let mockProvider: { base: string; stop: () => Promise<void> };
 let startServer: StartServer;
 
+function configureMockProviderEnv(): void {
+  process.env.HYPERLIQUID_INFO_URL = `${mockProvider.base}/hyperliquid/info`;
+  process.env.POLYMARKET_GAMMA_URL = `${mockProvider.base}/gamma`;
+  process.env.POLYMARKET_CLOB_URL = `${mockProvider.base}/clob`;
+  process.env.POLYMARKET_GEOBLOCK_URL = `${mockProvider.base}/geoblock`;
+}
+
 function jsonResponse(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { "content-type": "application/json" });
   res.end(JSON.stringify(body));
@@ -163,6 +170,7 @@ async function boot(): Promise<{ base: string }> {
   dirs.push(dir);
   process.env.OPENWORK_ENV_STORE = join(dir, "env.json");
   process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
+  configureMockProviderEnv();
   const server = await startServer(baseConfig(await getFreePort()));
   stops.push(() => server.stop(true));
   return { base: `http://127.0.0.1:${server.port}` };
@@ -191,10 +199,7 @@ function expectSafeActionPayload(payload: Record<string, unknown>, venue: "hyper
 
 beforeAll(async () => {
   mockProvider = await createMockProvider();
-  process.env.HYPERLIQUID_INFO_URL = `${mockProvider.base}/hyperliquid/info`;
-  process.env.POLYMARKET_GAMMA_URL = `${mockProvider.base}/gamma`;
-  process.env.POLYMARKET_CLOB_URL = `${mockProvider.base}/clob`;
-  process.env.POLYMARKET_GEOBLOCK_URL = `${mockProvider.base}/geoblock`;
+  configureMockProviderEnv();
   ({ startServer } = await import("./server.js"));
 });
 

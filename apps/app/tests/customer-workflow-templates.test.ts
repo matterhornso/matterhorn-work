@@ -10,6 +10,7 @@ const expectedTemplateIds = [
   "bittensor_operator",
   "hyperliquid_trader",
   "polymarket_researcher",
+  "sui_wallet_workflow",
   "wellness_creator_workflow",
   "blank_chat_workflow",
 ];
@@ -23,6 +24,7 @@ describe("customer workflow template launch cards", () => {
     expect(titles).toContain("Bittensor");
     expect(titles).toContain("Hyperliquid");
     expect(titles).toContain("Polymarket");
+    expect(titles).toContain("Sui");
     expect(titles).toContain("Longevity");
   });
 
@@ -31,6 +33,7 @@ describe("customer workflow template launch cards", () => {
     const bittensor = cards.find((card) => card.id === "bittensor_operator");
     const hyperliquid = cards.find((card) => card.id === "hyperliquid_trader");
     const polymarket = cards.find((card) => card.id === "polymarket_researcher");
+    const sui = cards.find((card) => card.id === "sui_wallet_workflow");
 
     expect(bittensor?.prompt).toContain("Bittensor task");
     expect(bittensor?.prompt).toContain("Scope: TAO");
@@ -42,6 +45,14 @@ describe("customer workflow template launch cards", () => {
       expect(card?.prompt).toContain("Live submission: Off");
       expect(card?.prompt).toContain("Matterhorn never signs");
     }
+
+    expect(sui?.prompt).toContain("Sui task");
+    expect(sui?.prompt).toContain("Scope: Sui public addresses");
+    expect(sui?.prompt).toContain("wallet-standard account reads");
+    expect(sui?.prompt).toContain("Do not ask for seed phrases");
+    expect(sui?.prompt).toContain("raw signatures");
+    expect(sui?.safetySummary).toContain("Use your Sui wallet");
+    expect(sui?.safetySummary).toContain("public receipts only");
   });
 
   test("wellness prompts stay educational and services stay hidden from customer launchers", () => {

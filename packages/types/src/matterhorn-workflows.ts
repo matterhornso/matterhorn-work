@@ -26,6 +26,7 @@ export const MATTERHORN_WORKFLOW_SERVICE_HOOK_TYPES = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
 ] as const;
 export type MatterhornWorkflowServiceHookType =
   (typeof MATTERHORN_WORKFLOW_SERVICE_HOOK_TYPES)[number];
@@ -1033,6 +1034,156 @@ export const POLYMARKET_PREVIEW_WORKFLOW: MatterhornWorkflowManifest = {
   },
 };
 
+export const SUI_WALLET_WORKFLOW: MatterhornWorkflowManifest = {
+  version: "matterhorn.workflow.manifest.v1",
+  workflowId: "sui_wallet_workflow",
+  name: "Sui Wallet Preview",
+  category: "web3",
+  targetUserPersona: "Sui wallet user or builder",
+  description:
+    "Read public Sui account context, prepare transfer previews, hand off signing to the user's wallet, and save public receipt evidence.",
+  status: "preview_only",
+  inputPrompts: [
+    {
+      id: "sender_address",
+      label: "Sender public Sui address",
+      required: true,
+      type: "text",
+      helpText: "Public Sui address only. Never provide a seed phrase, private key, or wallet export.",
+    },
+    {
+      id: "recipient_address",
+      label: "Recipient public Sui address",
+      required: false,
+      type: "text",
+      helpText: "Used only for transfer previews.",
+    },
+    {
+      id: "amount_sui",
+      label: "Amount",
+      required: false,
+      type: "text",
+      helpText: "SUI amount for a non-custodial transfer preview.",
+    },
+    {
+      id: "transaction_digest",
+      label: "Transaction digest",
+      required: false,
+      type: "text",
+      helpText: "Public digest for receipt import after the user acts in their wallet.",
+    },
+  ],
+  requiredPublicContext: ["sender_address", "recipient_address", "amount_sui", "transaction_digest"],
+  generatedArtifacts: [
+    {
+      id: "account_snapshot",
+      name: "Account Snapshot",
+      mimeType: "application/json",
+      public: true,
+      generatedByStep: "stage_1_account_context",
+      description: "Public Sui account and balance context.",
+    },
+    {
+      id: "transfer_preview",
+      name: "Transfer Preview",
+      mimeType: "application/json",
+      public: true,
+      generatedByStep: "stage_2_transfer_preview",
+      description: "Non-custodial transfer preview for review in the user's Sui wallet.",
+    },
+    {
+      id: "wallet_handoff",
+      name: "Wallet Handoff",
+      mimeType: "application/json",
+      public: true,
+      generatedByStep: "stage_3_wallet_handoff",
+      description: "Checklist for signing in the user's wallet or external client.",
+    },
+    {
+      id: "receipt_evidence",
+      name: "Receipt Evidence",
+      mimeType: "application/json",
+      public: true,
+      generatedByStep: "stage_4_receipt_evidence",
+      description: "Public transaction digest, status, explorer link, and evidence path.",
+    },
+  ],
+  steps: [
+    {
+      id: "stage_1_account_context",
+      name: "Account context",
+      description: "Read public Sui account and balance context before any preview.",
+      serviceHook: "sui",
+      inputPromptIds: ["sender_address"],
+      outputArtifactIds: ["account_snapshot"],
+      status: "preview_only",
+      requiresExternalSigner: false,
+      requiresCustomerConfirmation: false,
+    },
+    {
+      id: "stage_2_transfer_preview",
+      name: "Transfer preview",
+      description: "Prepare a non-custodial transfer preview for review. Matterhorn does not sign or submit it.",
+      serviceHook: "sui",
+      inputPromptIds: ["sender_address", "recipient_address", "amount_sui"],
+      outputArtifactIds: ["transfer_preview"],
+      status: "preview_only",
+      requiresExternalSigner: false,
+      requiresCustomerConfirmation: false,
+    },
+    {
+      id: "stage_3_wallet_handoff",
+      name: "Wallet handoff",
+      description: "Hand off the reviewed preview for signing in the user's Sui wallet or external client.",
+      serviceHook: "sui",
+      inputPromptIds: ["sender_address", "recipient_address", "amount_sui"],
+      outputArtifactIds: ["wallet_handoff"],
+      status: "external_handoff_required",
+      requiresExternalSigner: true,
+      requiresCustomerConfirmation: true,
+    },
+    {
+      id: "stage_4_receipt_evidence",
+      name: "Receipt evidence",
+      description: "Import a public transaction digest and save receipt evidence after the user acts in their wallet.",
+      serviceHook: "sui",
+      inputPromptIds: ["transaction_digest"],
+      outputArtifactIds: ["receipt_evidence"],
+      status: "preview_only",
+      requiresExternalSigner: false,
+      requiresCustomerConfirmation: false,
+    },
+  ],
+  serviceHooks: [{ hook: "sui", status: "preview_only" }],
+  safetyPolicy: {
+    canExecute: false,
+    liveExecutionEnabled: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    requiresPreviewBeforeExecution: true,
+    requiresConfirmationBeforeExecution: true,
+  },
+  qaContract: {
+    checklist: [
+      "Only public Sui addresses and public transaction digests are accepted",
+      "Transfer previews are non-custodial and non-submittable",
+      "Signing happens in the user's Sui wallet or external client",
+      "Receipt evidence stores public transaction metadata only",
+    ],
+    requiredTests: ["apps/server/src/tools/sui.test.ts"],
+    successCriteria: [
+      "Workflow status is preview_only",
+      "Safety policy has canSubmit: false and liveExecutionEnabled: false",
+      "No seed phrases, private keys, raw signatures, or wallet exports are requested",
+    ],
+    owner: "codex",
+  },
+};
+
 export const DECENTRALIZED_SERVICES_PLANNER_WORKFLOW: MatterhornWorkflowManifest = {
   version: "matterhorn.workflow.manifest.v1",
   workflowId: "decentralized_services_planner",
@@ -1137,6 +1288,7 @@ export const MATTERHORN_WORKFLOW_FIXTURES: Record<string, MatterhornWorkflowMani
   market_read_preview: MARKET_READ_PREVIEW_WORKFLOW,
   hyperliquid_preview: HYPERLIQUID_PREVIEW_WORKFLOW,
   polymarket_preview: POLYMARKET_PREVIEW_WORKFLOW,
+  sui_wallet_workflow: SUI_WALLET_WORKFLOW,
   decentralized_services_planner: DECENTRALIZED_SERVICES_PLANNER_WORKFLOW,
 };
 
@@ -1883,6 +2035,7 @@ export const MATTERHORN_CUSTOMER_WORKFLOW_ICON_HINTS = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
   "wellness",
   "services",
   "blank",
@@ -1901,6 +2054,7 @@ export const MATTERHORN_CUSTOMER_WORKFLOW_ROUTING_CHAT_MODES = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
   "wellness",
   "services",
   "general",
@@ -1912,6 +2066,7 @@ export const MATTERHORN_CUSTOMER_WORKFLOW_OPEN_PANELS = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
 ] as const;
 export type MatterhornCustomerWorkflowOpenPanel =
   (typeof MATTERHORN_CUSTOMER_WORKFLOW_OPEN_PANELS)[number];
@@ -2645,6 +2800,7 @@ export const MATTERHORN_PROTOCOL_WORKSPACE_IDS = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
   "wellness",
   "decentralized_services",
 ] as const;
@@ -2670,6 +2826,7 @@ export type MatterhornProtocolWorkspaceLaunchBehavior =
 
 export const MATTERHORN_PROTOCOL_WORKSPACE_CARD_KINDS = [
   "balance_card",
+  "wallet_card",
   "market_card",
   "validator_card",
   "preview_card",
@@ -2819,6 +2976,46 @@ export const POLYMARKET_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspace
   launchBehavior: "opens_desk",
 };
 
+export const SUI_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceManifest = {
+  version: "matterhorn.protocol.workspace.manifest.v1",
+  id: "sui",
+  displayName: "Sui",
+  category: "web3",
+  customerStatus: "preview_only",
+  allowedIntents: [
+    "read account",
+    "read balance",
+    "preview transfer",
+    "prepare wallet handoff",
+    "import receipt",
+  ],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  primaryPanelRouteId: "/workspaces/sui",
+  mcpCliHints: {
+    cli: 'matterhorn-work sui account "<public Sui address>" --json',
+    mcp: "matterhorn_sui_read_account",
+  },
+  supportedCardKinds: [
+    "wallet_card",
+    "balance_card",
+    "preview_card",
+    "handoff_card",
+    "receipt_card",
+  ],
+  demoPrompt: "Show my Sui wallet",
+  launchBehavior: "opens_desk",
+};
+
 export const WELLNESS_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceManifest = {
   version: "matterhorn.protocol.workspace.manifest.v1",
   id: "wellness",
@@ -2904,6 +3101,7 @@ export const MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY: Record<
   bittensor: BITTENSOR_PROTOCOL_WORKSPACE_MANIFEST,
   hyperliquid: HYPERLIQUID_PROTOCOL_WORKSPACE_MANIFEST,
   polymarket: POLYMARKET_PROTOCOL_WORKSPACE_MANIFEST,
+  sui: SUI_PROTOCOL_WORKSPACE_MANIFEST,
   wellness: WELLNESS_PROTOCOL_WORKSPACE_MANIFEST,
   decentralized_services: DECENTRALIZED_SERVICES_PROTOCOL_WORKSPACE_MANIFEST,
 };
@@ -2915,6 +3113,7 @@ export const MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE: Record<
   bittensor_operator: "bittensor",
   hyperliquid_trader: "hyperliquid",
   polymarket_researcher: "polymarket",
+  sui_wallet_workflow: "sui",
   wellness_creator_workflow: "wellness",
   decentralized_services_operator: "decentralized_services",
 };
@@ -3378,6 +3577,7 @@ export const MATTERHORN_DESK_IDS = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
   "wellness",
   "memory",
   "mcp",
@@ -3482,6 +3682,28 @@ export const POLYMARKET_DESK_MANIFEST: MatterhornDeskManifest = {
   customerSafetyStrip: "Compliance-gated handoff only. No live submission, signing, custody, or secrets.",
   status: "preview_only",
   allowedSurfaces: ["protocol_desk", "workflow_chat"],
+  liveSubmissionEnabled: false,
+  acceptsPrivateKeys: false,
+  acceptsSeedPhrases: false,
+  acceptsApiSecrets: false,
+  acceptsRawSignatures: false,
+  acceptsSignedPayloads: false,
+  acceptsWalletExports: false,
+  requiresExternalSigner: false,
+  isPrimaryCustomerDesk: true,
+};
+
+export const SUI_DESK_MANIFEST: MatterhornDeskManifest = {
+  version: "matterhorn.desk.manifest.v1",
+  deskId: "sui",
+  deskDisplayName: "Sui",
+  deskShortName: "Sui",
+  deskDescription: "Sui account reads, wallet-standard previews, external handoffs, and public receipt evidence.",
+  deskAccent: "matterhorn_blue",
+  customerPrimaryAction: "Read wallet or preview transfer",
+  customerSafetyStrip: "Wallet signing only. No custody, no seed phrases, no private keys, and no silent submission.",
+  status: "preview_only",
+  allowedSurfaces: ["protocol_desk", "workflow_chat", "evidence_packet"],
   liveSubmissionEnabled: false,
   acceptsPrivateKeys: false,
   acceptsSeedPhrases: false,
@@ -3607,6 +3829,7 @@ export const MATTERHORN_DESK_MANIFEST_REGISTRY: Record<MatterhornDeskId, Matterh
   bittensor: BITTENSOR_DESK_MANIFEST,
   hyperliquid: HYPERLIQUID_DESK_MANIFEST,
   polymarket: POLYMARKET_DESK_MANIFEST,
+  sui: SUI_DESK_MANIFEST,
   wellness: WELLNESS_DESK_MANIFEST,
   memory: MEMORY_DESK_MANIFEST,
   mcp: MCP_DESK_MANIFEST,
@@ -3618,6 +3841,7 @@ export const MATTERHORN_CUSTOMER_TEMPLATE_TO_DESK: Record<string, MatterhornDesk
   bittensor_operator: "bittensor",
   hyperliquid_trader: "hyperliquid",
   polymarket_researcher: "polymarket",
+  sui_wallet_workflow: "sui",
   wellness_creator_workflow: "wellness",
   decentralized_services_operator: "services",
   blank_chat_workflow: "settings",
@@ -3634,6 +3858,7 @@ export type ProtocolDeskVisualStatus = (typeof PROTOCOL_DESK_VISUAL_STATUSES)[nu
 export const PROTOCOL_DESK_CATEGORIES = [
   "web3",
   "bittensor",
+  "sui",
   "markets",
   "wellness",
   "memory",
@@ -3645,6 +3870,8 @@ export type ProtocolDeskCategory = (typeof PROTOCOL_DESK_CATEGORIES)[number];
 export const PROTOCOL_DESK_WALLET_REQUIREMENTS = [
   "none",
   "evm_read_only",
+  "sui_wallet_standard",
+  "sui_external_handoff",
   "ss58_read_only",
   "ss58_external_signer",
 ] as const;
@@ -3653,6 +3880,8 @@ export type ProtocolDeskWalletRequirement = (typeof PROTOCOL_DESK_WALLET_REQUIRE
 export const PROTOCOL_DESK_WALLET_RAIL_MODES = [
   "external_signer",
   "evm_preview",
+  "sui_wallet",
+  "sui_handoff",
   "none",
 ] as const;
 export type ProtocolDeskWalletRailMode = (typeof PROTOCOL_DESK_WALLET_RAIL_MODES)[number];
@@ -4170,6 +4399,125 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     primaryActionId: "research-market",
   },
 };
+
+export const SUI_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
+  version: "matterhorn.protocol.desk.manifest.v1",
+  id: "sui",
+  displayName: "Sui",
+  shortDescription: "Sui wallet account reads, transfer previews, and receipt evidence.",
+  launcherTitle: "Sui",
+  launcherDescription: "Connect a Sui wallet in web or prepare an external wallet handoff on desktop.",
+  launcherPrompt: "Show my Sui wallet or prepare a Sui transfer preview",
+  rightRailSummary: "Use your Sui wallet on web, or an external handoff on desktop. No custody, no seed phrases, and no silent submission.",
+  logoAssetId: "sui-logo",
+  officialLogoAssetId: "sui-logo",
+  logoAlt: "Sui logo",
+  category: "sui",
+  status: "preview_only",
+  readinessTone: "preview_only",
+  backendStatus: "preview",
+  actionStatus: "preview_only",
+  extensionStatus: "built_in_live",
+  statusBadgeLabel: "Preview",
+  statusBadgeTone: "info",
+  routeOrPanelId: "/workspaces/sui",
+  logoAssetKey: "sui-logo",
+  preferredColorToken: "--desk-sui-accent",
+  lightThemeTokenHints: {
+    background: "#F0F9FF",
+    surface: "#FFFFFF",
+    accent: "#0284C7",
+    accentHover: "#0369A1",
+    textPrimary: "#0F172A",
+    textSecondary: "#475569",
+    border: "#BAE6FD",
+    safetyStrip: "#E0F2FE",
+    iconFill: "#0284C7",
+  },
+  darkThemeTokenHints: {
+    background: "#070A10",
+    surface: "#0C0C0C",
+    accent: "#38BDF8",
+    accentHover: "#0EA5E9",
+    textPrimary: "#F8FAFC",
+    textSecondary: "#CBD5E1",
+    border: "#1F2937",
+    safetyStrip: "#082F49",
+    iconFill: "#38BDF8",
+  },
+  primaryActions: [
+    {
+      actionId: "read-account",
+      label: "Read account",
+      iconHint: "wallet",
+      intent: "read account",
+      requiresConfirmation: false,
+      surface: "desk_panel",
+    },
+    {
+      actionId: "preview-transfer",
+      label: "Preview transfer",
+      iconHint: "preview",
+      intent: "preview transfer",
+      requiresConfirmation: false,
+      surface: "desk_panel",
+    },
+  ],
+  primaryActionLabel: "Read or preview",
+  secondaryActions: [
+    {
+      actionId: "import-receipt",
+      label: "Import receipt",
+      iconHint: "receipt",
+      intent: "import receipt",
+      requiresConfirmation: false,
+      surface: "chat",
+    },
+  ],
+  walletRequirements: ["sui_wallet_standard", "sui_external_handoff"],
+  walletRailMode: "sui_wallet",
+  safetyBoundaries: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    medicalClaimsAllowed: false,
+  },
+  customerVisible: true,
+  capabilityBullets: [
+    "Read public Sui account and balance context",
+    "Prepare transfer previews without custody",
+    "Sign only in the user's Sui wallet or external client",
+    "Import public transaction receipts as project evidence",
+  ],
+  safetySummary: "Sui signing stays in the user's wallet. Matterhorn never asks for seed phrases, private keys, raw signatures, or wallet exports.",
+  customerCapabilitySummary: "Read Sui accounts and balances, prepare transfer previews, and save public receipts to project evidence.",
+  noCustodySafetyLine: "Matterhorn never holds Sui keys. Web signing happens in the connected wallet; desktop uses an external handoff.",
+  suggestedPromptTitles: [
+    "Show my Sui wallet",
+    "Read my SUI balance",
+    "Prepare a Sui transfer preview",
+    "Import a Sui transaction receipt",
+  ],
+  emptyStateCopy: {
+    headline: "Open a Sui wallet workflow",
+    body: "Connect a Sui wallet-standard wallet on web, or prepare a desktop handoff for an external Sui wallet.",
+    primaryActionId: "read-account",
+  },
+  degradedStateCopy: {
+    headline: "Sui preview unavailable",
+    body: "Sui provider data is temporarily unreachable. Saved previews and public receipts remain in Project history.",
+    primaryActionId: "import-receipt",
+  },
+};
+
 export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   version: "matterhorn.protocol.desk.manifest.v1",
   id: "wellness",
@@ -4522,6 +4870,7 @@ export const PROTOCOL_DESK_MANIFEST_REGISTRY: Record<string, ProtocolDeskManifes
   bittensor: BITTENSOR_PROTOCOL_DESK_MANIFEST,
   hyperliquid: HYPERLIQUID_PROTOCOL_DESK_MANIFEST,
   polymarket: POLYMARKET_PROTOCOL_DESK_MANIFEST,
+  sui: SUI_PROTOCOL_DESK_MANIFEST,
   wellness: WELLNESS_PROTOCOL_DESK_MANIFEST,
   memory: MEMORY_PROTOCOL_DESK_MANIFEST,
   mcps: MCPS_PROTOCOL_DESK_MANIFEST,
@@ -4531,6 +4880,7 @@ export const CUSTOMER_DESK_ORDER: string[] = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
   "wellness",
   "memory",
   "mcps",
@@ -4628,6 +4978,17 @@ export const POLYMARKET_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
   fallbackInitials: "PM",
 };
 
+export const SUI_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
+  version: "matterhorn.protocol.brand.asset.v1",
+  assetKey: "sui-logo",
+  protocol: "sui",
+  sourceUrl: "https://sui.io/brand",
+  allowedUseNote: "Use only in Matterhorn Work UI surfaces. Do not imply custody, wallet ownership, or official Sui endorsement.",
+  lightAssetPath: "",
+  darkAssetPath: "",
+  fallbackInitials: "SUI",
+};
+
 export const WELLNESS_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
   version: "matterhorn.protocol.brand.asset.v1",
   assetKey: "wellness-logo",
@@ -4665,6 +5026,7 @@ export const PROTOCOL_BRAND_ASSET_REGISTRY: Record<string, ProtocolBrandAssetMan
   "bittensor-logo": BITTENSOR_BRAND_ASSET_MANIFEST,
   "hyperliquid-logo": HYPERLIQUID_BRAND_ASSET_MANIFEST,
   "polymarket-logo": POLYMARKET_BRAND_ASSET_MANIFEST,
+  "sui-logo": SUI_BRAND_ASSET_MANIFEST,
   "wellness-logo": WELLNESS_BRAND_ASSET_MANIFEST,
   "memory-logo": MEMORY_BRAND_ASSET_MANIFEST,
   "mcp-logo": MCP_BRAND_ASSET_MANIFEST,

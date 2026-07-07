@@ -14,6 +14,7 @@ export type CustomerProtocolDeskId =
   | "bittensor"
   | "hyperliquid"
   | "polymarket"
+  | "sui"
   | "wellness"
   | "memory"
   | "mcps";
@@ -22,6 +23,7 @@ export const CUSTOMER_PROTOCOL_DESK_IDS = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
   "wellness",
   "memory",
   "mcps",
@@ -31,6 +33,7 @@ export const CUSTOMER_LAUNCHER_DESK_IDS = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
   "wellness",
 ] as const satisfies readonly CustomerProtocolDeskId[];
 
@@ -38,6 +41,7 @@ export const CUSTOMER_RAIL_DESK_IDS = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
   "wellness",
 ] as const satisfies readonly CustomerProtocolDeskId[];
 
@@ -90,6 +94,7 @@ const WORKSPACE_TO_DESK_ID: Record<string, CustomerProtocolDeskId | undefined> =
   bittensor: "bittensor",
   hyperliquid: "hyperliquid",
   polymarket: "polymarket",
+  sui: "sui",
   wellness: "wellness",
 };
 
@@ -139,6 +144,9 @@ function safetySummary(manifest: ProtocolDeskManifest): string {
   if (manifest.id === "hyperliquid" || manifest.id === "polymarket") {
     return "Runs read and preview tasks with external handoff. Matterhorn never stores keys, API secrets, raw signatures, or signed payloads.";
   }
+  if (manifest.id === "sui") {
+    return "Use your Sui wallet on web, or an external handoff on desktop. Matterhorn stores previews and public receipts only.";
+  }
   if (manifest.id === "wellness") {
     return "Standalone business workflow. Not Web3, not markets, no medical advice, and no live payments/email/hosting.";
   }
@@ -161,6 +169,9 @@ function railTitle(manifest: ProtocolDeskManifest): string {
   if (manifest.id === "polymarket") {
     return "Polymarket: markets, outcomes, liquidity, compliance, watches, and trade handoffs";
   }
+  if (manifest.id === "sui") {
+    return "Sui: account reads, transfer previews, wallet handoffs, and receipt evidence";
+  }
   if (manifest.id === "wellness") {
     return "Longevity: standalone service workflows, program packets, progress check-ins, and client handoffs";
   }
@@ -181,6 +192,9 @@ function sessionBoundary(manifest: ProtocolDeskManifest): string {
   }
   if (manifest.id === "polymarket") {
     return "Runs market research, compliance checks, and external-wallet handoffs. Blocked regions get no executable bet fields.";
+  }
+  if (manifest.id === "sui") {
+    return "Runs public Sui account reads and transfer previews. Web signing happens in the connected wallet; desktop signing stays external.";
   }
   if (manifest.id === "wellness") {
     return "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.";
@@ -240,6 +254,7 @@ const DESK_WORKFLOW_ID: Record<CustomerProtocolDeskId, string | undefined> = {
   bittensor: "bittensor_operator",
   hyperliquid: "hyperliquid_preview",
   polymarket: "polymarket_preview",
+  sui: "sui_wallet_workflow",
   wellness: "wellness_creator_services",
   memory: undefined,
   mcps: undefined,
@@ -260,6 +275,8 @@ export function deskToneStyle(id: CustomerProtocolDeskId | string): CSSPropertie
         return ["--desk-hyperliquid", "--desk-hyperliquid-rgb", "--desk-hyperliquid-secondary"];
       case "polymarket":
         return ["--desk-polymarket", "--desk-polymarket-rgb", "--desk-polymarket-secondary"];
+      case "sui":
+        return ["--desk-sui", "--desk-sui-rgb", "--desk-sui-secondary"];
       case "wellness":
         return ["--desk-wellness", "--desk-wellness-rgb", "--desk-wellness-secondary"];
       default:

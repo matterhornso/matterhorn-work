@@ -94,6 +94,55 @@ describe("Matterhorn memory suggestion producers", () => {
     expect(body).not.toHaveProperty("liveSubmissionEnabled");
   });
 
+  test("suggests public Sui wallet context without treating public addresses as secrets", () => {
+    const suiAddress = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+    const suggestions = buildMatterhornMemorySuggestions({
+      desk: "sui",
+      prompt: `Show my Sui wallet ${suiAddress} on testnet.`,
+      source: "chat_capture",
+      sourceId: "producer-sui-test",
+      workspaceId: "workspace-test",
+      sessionId: "session-test",
+    });
+
+    expect(suggestions).toHaveLength(1);
+    const suggestion = suggestions[0]!;
+    const body = bodyOf(suggestion);
+    expect(suggestion.desk).toBe("sui");
+    expect(suggestion.useCase).toBe("sui_wallet_label");
+    expect(suggestion.captureMode).toBe("user_confirmed_only");
+    expect(suggestion.canAutoCapture).toBe(false);
+    expect(suggestion.requiresExplicitConsent).toBe(true);
+    expect(suggestion.reason).toContain("visible chat");
+    expect(suggestion.reason).toContain("0x1234...cdef");
+    expect(suggestion.proposedRecord.kind).toBe("protocol_address");
+    expect(suggestion.proposedRecord.canExport).toBe(true);
+    expect(body.suiAddress).toBe(suiAddress);
+    expect(body).not.toHaveProperty("privateKey");
+    expect(body).not.toHaveProperty("signedPayload");
+  });
+
+  test("suggests Sui receipt context without executable signing data", () => {
+    const suggestions = buildMatterhornMemorySuggestions({
+      desk: "sui",
+      prompt: "Import this Sui transaction digest receipt for project evidence review.",
+      source: "chat_capture",
+      sourceId: "producer-sui-receipt-test",
+      workspaceId: "workspace-test",
+      sessionId: "session-test",
+    });
+
+    expect(suggestions).toHaveLength(1);
+    const suggestion = suggestions[0]!;
+    const body = bodyOf(suggestion);
+    expect(suggestion.desk).toBe("sui");
+    expect(suggestion.useCase).toBe("sui_receipt_context");
+    expect(suggestion.proposedRecord.kind).toBe("receipt");
+    expect(body.venue).toBe("sui");
+    expect(body.publicReceiptOnly).toBe(true);
+    expect(JSON.stringify(body)).not.toMatch(/\b(privateKey|seedPhrase|signedPayload|rawSignature|walletExport)\b/);
+  });
+
   test("refuses secret-shaped market prompt input", () => {
     const suggestions = buildMatterhornMemorySuggestions({
       desk: "hyperliquid",

@@ -679,17 +679,17 @@ export function findForbiddenPolymarketCredentialInput(value: unknown, rootPath:
 // ---------------------------------------------------------------------------
 
 export class PolymarketInfoProvider implements PolymarketProvider {
-  private readonly gammaBaseUrl: string;
-  private readonly clobBaseUrl: string;
-  private readonly geoblockUrl: string;
+  private readonly configuredGammaBaseUrl?: string;
+  private readonly configuredClobBaseUrl?: string;
+  private readonly configuredGeoblockUrl?: string;
   private readonly fetcher: Fetcher;
   private readonly timeoutMs: number;
   private readonly cache = new Map<string, CacheEntry>();
 
   constructor(options: { gammaBaseUrl?: string; clobBaseUrl?: string; geoblockUrl?: string; fetcher?: Fetcher; timeoutMs?: number } = {}) {
-    this.gammaBaseUrl = (options.gammaBaseUrl ?? process.env.POLYMARKET_GAMMA_URL ?? GAMMA_BASE_URL).replace(/\/+$/, "");
-    this.clobBaseUrl = (options.clobBaseUrl ?? process.env.POLYMARKET_CLOB_URL ?? CLOB_BASE_URL).replace(/\/+$/, "");
-    this.geoblockUrl = options.geoblockUrl ?? process.env.POLYMARKET_GEOBLOCK_URL ?? GEOBLOCK_URL;
+    this.configuredGammaBaseUrl = options.gammaBaseUrl;
+    this.configuredClobBaseUrl = options.clobBaseUrl;
+    this.configuredGeoblockUrl = options.geoblockUrl;
     this.fetcher = options.fetcher ?? defaultFetcher;
     this.timeoutMs = options.timeoutMs ?? 10_000;
   }
@@ -782,10 +782,11 @@ export class PolymarketInfoProvider implements PolymarketProvider {
   }
 
   private async getJsonCached(key: string, url: string): Promise<unknown> {
-    const cached = this.cache.get(key);
+    const cacheKey = key + ":" + url;
+    const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.value;
     const value = await this.getJson(url);
-    this.cache.set(key, { expiresAt: Date.now() + POLYMARKET_CACHE_MS, value });
+    this.cache.set(cacheKey, { expiresAt: Date.now() + POLYMARKET_CACHE_MS, value });
     return value;
   }
 
@@ -801,6 +802,18 @@ export class PolymarketInfoProvider implements PolymarketProvider {
       throw new Error("Polymarket endpoint failed (" + response.status + "): " + detail);
     }
     return response.json();
+  }
+
+  private get gammaBaseUrl(): string {
+    return (this.configuredGammaBaseUrl ?? process.env.POLYMARKET_GAMMA_URL ?? GAMMA_BASE_URL).replace(/\/+$/, "");
+  }
+
+  private get clobBaseUrl(): string {
+    return (this.configuredClobBaseUrl ?? process.env.POLYMARKET_CLOB_URL ?? CLOB_BASE_URL).replace(/\/+$/, "");
+  }
+
+  private get geoblockUrl(): string {
+    return this.configuredGeoblockUrl ?? process.env.POLYMARKET_GEOBLOCK_URL ?? GEOBLOCK_URL;
   }
 }
 

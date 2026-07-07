@@ -462,12 +462,12 @@ export function findForbiddenHyperliquidCredentialInput(value: unknown, path: st
 }
 
 export class HyperliquidInfoProvider implements HyperliquidProvider {
-  private readonly infoUrl: string;
+  private readonly configuredInfoUrl?: string;
   private readonly fetcher: Fetcher;
   private readonly cache = new Map<string, CacheEntry>();
 
   constructor(options: { infoUrl?: string; fetcher?: Fetcher } = {}) {
-    this.infoUrl = options.infoUrl ?? process.env.HYPERLIQUID_INFO_URL ?? HYPERLIQUID_INFO_URL;
+    this.configuredInfoUrl = options.infoUrl;
     this.fetcher = options.fetcher ?? (globalThis.fetch as Fetcher);
   }
 
@@ -612,10 +612,11 @@ export class HyperliquidInfoProvider implements HyperliquidProvider {
   }
 
   private async postInfoCached(key: string, body: Record<string, unknown>): Promise<unknown> {
-    const cached = this.cache.get(key);
+    const cacheKey = this.infoUrl + ":" + key;
+    const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.value;
     const value = await this.postInfo(body);
-    this.cache.set(key, { expiresAt: Date.now() + HYPERLIQUID_CACHE_MS, value });
+    this.cache.set(cacheKey, { expiresAt: Date.now() + HYPERLIQUID_CACHE_MS, value });
     return value;
   }
 
@@ -635,6 +636,10 @@ export class HyperliquidInfoProvider implements HyperliquidProvider {
       throw new Error("Hyperliquid info endpoint failed (" + response.status + "): " + detail);
     }
     return response.json();
+  }
+
+  private get infoUrl(): string {
+    return this.configuredInfoUrl ?? process.env.HYPERLIQUID_INFO_URL ?? HYPERLIQUID_INFO_URL;
   }
 
   private normalizeLevels(value: unknown): HyperliquidBookLevel[] {

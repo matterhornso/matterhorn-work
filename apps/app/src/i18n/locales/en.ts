@@ -733,6 +733,7 @@ export default {
   "notes.filter_memory_suggested": "Memory suggested",
   "notes.filter_outputs": "Outputs",
   "notes.filter_polymarket": "Polymarket",
+  "notes.filter_sui": "Sui",
   "notes.loading": "Loading project notes...",
   "notes.memory_not_created": "Memory did not create a suggestion from this note.",
   "notes.memory_send_error": "Could not send to Memory: {message}",

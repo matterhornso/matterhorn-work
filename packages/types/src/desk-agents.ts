@@ -2,6 +2,7 @@ export type MatterhornDeskAgentDeskId =
   | "bittensor"
   | "hyperliquid"
   | "polymarket"
+  | "sui"
   | "wellness"
   | "memory"
   | "mcps"
@@ -117,6 +118,35 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "- Research first, show source/freshness, then prepare a compliance-gated handoff only when safe.",
     ].join("\n"),
   },
+  sui: {
+    version: "matterhorn.desk.agent.v1",
+    deskId: "sui",
+    agentId: "matterhorn-sui",
+    workflowId: "sui_wallet_workflow",
+    workflowManifestRef: "matterhorn.workflow.manifest.v1/sui_wallet_workflow",
+    outputDeskId: "sui",
+    defaultStageId: "stage_1_account_context",
+    defaultActionId: "read_or_preview",
+    toolAllowlist: [
+      "matterhorn_sui_",
+      "matterhorn_wallet_",
+      "matterhorn_status",
+      "matterhorn_read_files",
+      "matterhorn_write_files",
+    ],
+    displayName: "Sui Agent",
+    description: "Sui wallet-standard account reads, transfer previews, wallet signing handoffs, and public receipt evidence.",
+    instructions: [
+      AGENT_SHARED_BOUNDARY,
+      "",
+      "Desk scope:",
+      "- Work in Sui-native terms: SUI, testnet/mainnet, wallet-standard accounts, public addresses, transfer previews, transaction digests, receipts, and explorer links.",
+      "- Read public account and balance context only.",
+      "- Prepare non-custodial transfer previews. On web, signing must happen in the user's connected Sui wallet; on desktop, prepare an external wallet handoff.",
+      "- Never ask for seed phrases, private keys, mnemonics, wallet exports, raw signatures, signed payloads, or custody.",
+      "- Save previews and public receipts as project evidence under outputs/sui/<session-slug>/ when available.",
+    ].join("\n"),
+  },
   wellness: {
     version: "matterhorn.desk.agent.v1",
     deskId: "wellness",
@@ -224,7 +254,7 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "Desk scope:",
       "- Use this only when no dedicated desk agent is a better fit.",
       "- Keep project context visible, ask for missing file or output details, and save deliverables under outputs/blank/<session-slug>/ when creating files.",
-      "- If the user asks for Bittensor, Hyperliquid, Polymarket, Longevity, Memory, or MCP setup, hand off to that dedicated Matterhorn desk agent.",
+      "- If the user asks for Bittensor, Hyperliquid, Polymarket, Sui, Longevity, Memory, or MCP setup, hand off to that dedicated Matterhorn desk agent.",
     ].join("\n"),
   },
 };

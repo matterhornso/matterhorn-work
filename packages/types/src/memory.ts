@@ -400,6 +400,8 @@ export const MATTERHORN_MEMORY_SUGGESTION_USE_CASES = [
   "bittensor_subnet_watch_preference",
   "bittensor_validator_watch_preference",
   "bittensor_receipt_context",
+  "sui_wallet_label",
+  "sui_receipt_context",
   "hyperliquid_watched_market",
   "polymarket_watched_market",
   "wellness_client_preference",
@@ -890,6 +892,7 @@ export const MATTERHORN_MEMORY_DESKS = [
   "bittensor",
   "hyperliquid",
   "polymarket",
+  "sui",
   "wellness",
   "decentralized_services",
   "generic_workspace",
@@ -959,6 +962,23 @@ export const MATTERHORN_MEMORY_DESK_POLICY_MATRIX: Record<
       "wallet exports",
     ],
   },
+  sui: {
+    desk: "sui",
+    allowedKinds: ["protocol_address", "watchlist", "user_preference", "decision", "receipt"],
+    defaultSensitivity: "public",
+    canUseInChat: true,
+    canExport: true,
+    canSendToMcpApi: true,
+    forbiddenCases: [
+      "private keys",
+      "seed phrases",
+      "mnemonics",
+      "raw signatures",
+      "signed payloads",
+      "wallet exports",
+      "custodial key material",
+    ],
+  },
   wellness: {
     desk: "wellness",
     allowedKinds: ["user_preference", "client_profile", "decision", "workflow_artifact"],
@@ -1015,6 +1035,7 @@ export function detectMemoryDeskFromRecord(record: MatterhornMemoryRecord): Matt
   if (tags.includes("bittensor")) return "bittensor";
   if (tags.includes("hyperliquid")) return "hyperliquid";
   if (tags.includes("polymarket")) return "polymarket";
+  if (tags.includes("sui")) return "sui";
   if (tags.includes("wellness") || tags.includes("longevity") || tags.includes("health") || tags.includes("clinical")) {
     return "wellness";
   }
@@ -1100,7 +1121,7 @@ export function validateMemoryRecordAgainstDeskPolicy(
   }
 
   if (desk === "generic_workspace") {
-    const forbiddenTags = ["bittensor", "hyperliquid", "polymarket", "wellness", "longevity", "clinical", "wallet"];
+    const forbiddenTags = ["bittensor", "hyperliquid", "polymarket", "sui", "wellness", "longevity", "clinical", "wallet"];
     if (record.tags.some((tag) => forbiddenTags.includes(tag.toLowerCase()))) {
       errors.push(
         "generic_workspace memory must not silently include protocol, wallet, or medical data",

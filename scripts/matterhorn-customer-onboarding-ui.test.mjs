@@ -683,7 +683,13 @@ for (const phrase of [
 }
 assert.equal(sessionPage.includes("ProfileRailPanel"), false, "Profile rail should use the real Account settings page, not a custom mini-panel");
 assert.equal(sessionPage.includes('activeSidePanel === "wallet" || isVenueSidePanel(activeSidePanel)'), false, "Wallet rail should not be merged with protocol action panels");
-assert.ok(sessionPage.includes("isVenueSidePanel(visibleSidePanel) ? ("), "protocol desks should still render the action/wallet panel");
+assert.ok(
+  sessionPage.includes('visibleSidePanel === "sui" ? (') &&
+    sessionPage.includes("SuiWorkflowPanel") &&
+    sessionPage.includes("isLegacyCryptoVenueSidePanel(visibleSidePanel) ? (") &&
+    sessionPage.includes("WalletPanel"),
+  "protocol desks should still render the Sui workflow panel and legacy crypto action/wallet panel",
+);
 assert.equal(statusBar.includes("openworklabs.com/docs"), false, "status bar docs should not point customers to OpenWork docs");
 assert.equal(cryptoPrompt.includes("wallet_signTypedData"), false, "prompt should not push direct signing as default");
 assert.equal(sessionRoute.includes("wallet.snapshot.isConnected && shouldInjectCryptoPrompt"), false, "crypto prompt injection must not require connected EVM wallet");

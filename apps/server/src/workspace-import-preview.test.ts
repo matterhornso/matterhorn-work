@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { MATTERHORN_DESK_AGENT_MANIFESTS } from "@matterhorn-work/types/desk-agents";
+
 import { auditLogPath } from "./audit.js";
 import { buildCommandContent } from "./commands.js";
 import { startServer } from "./server.js";
@@ -17,6 +19,10 @@ import {
 } from "./workspace-import-preview.js";
 
 const tempDirs: string[] = [];
+const DEFAULT_MATTERHORN_AGENT_FILE_COUNT = new Set(
+  Object.values(MATTERHORN_DESK_AGENT_MANIFESTS).map((agent) => agent.agentId),
+).size;
+const REPLACE_IMPORT_FIXTURE_DELETE_COUNT = 3;
 
 afterEach(async () => {
   while (tempDirs.length > 0) {
@@ -418,12 +424,12 @@ describe("workspace import preview", () => {
       expect(response.status).toBe(409);
       const body = await response.json() as {
         code: string;
-        preview: { fingerprint: string; summary: { create: number } };
+        preview: { fingerprint: string; summary: { update: number } };
       };
       expect(body.code).toBe("workspace_import_preview_required");
       expect(typeof body.preview.fingerprint).toBe("string");
-      expect(body.preview.summary.create).toBe(1);
-      expect(await pathExists(join(workspace, "opencode.jsonc"))).toBe(false);
+      expect(body.preview.summary.update).toBe(1);
+      expect(await readFile(join(workspace, "opencode.jsonc"), "utf8")).not.toContain("demo");
       expect(await pathExists(auditLogPath("workspace"))).toBe(false);
     } finally {
       server.stop(true);
@@ -465,8 +471,9 @@ describe("workspace import preview", () => {
       });
 
       expect(response.status).toBe(200);
-      const body = await response.json() as { preview: { summary: { create: number } } };
-      expect(body.preview.summary.create).toBe(3);
+      const body = await response.json() as { preview: { summary: { create: number; update: number } } };
+      expect(body.preview.summary.create).toBe(2);
+      expect(body.preview.summary.update).toBe(1);
       expect(await readFile(join(workspace, "opencode.jsonc"), "utf8")).toContain('"plugin"');
       expect(await readFile(join(workspace, ".opencode", "skills", "demo", "SKILL.md"), "utf8")).toContain("Demo skill");
       expect(await readFile(join(workspace, ".opencode", "agents", "demo.md"), "utf8")).toBe("Demo agent\n");
@@ -533,7 +540,7 @@ describe("workspace import preview", () => {
       const body = await response.json() as {
         preview: { summary: { delete: number; unchanged: number } };
       };
-      expect(body.preview.summary.delete).toBe(3);
+      expect(body.preview.summary.delete).toBe(REPLACE_IMPORT_FIXTURE_DELETE_COUNT + DEFAULT_MATTERHORN_AGENT_FILE_COUNT);
       expect(body.preview.summary.unchanged).toBe(3);
       expect(await pathExists(join(workspace, ".opencode", "skills", "remove-me"))).toBe(false);
       expect(await pathExists(join(workspace, ".opencode", "commands", "remove-me.md"))).toBe(false);
@@ -541,7 +548,9 @@ describe("workspace import preview", () => {
       expect(await readFile(join(workspace, ".opencode", "skills", "keep", "SKILL.md"), "utf8")).toBe(keepSkillContent);
       expect(await readFile(join(workspace, ".opencode", "commands", "keep-command.md"), "utf8")).toBe(keepCommandContent);
       expect(await readFile(join(workspace, ".opencode", "tools", "shared.ts"), "utf8")).toBe("shared tool\n");
-      expect(await readFile(auditLogPath("workspace"), "utf8")).toContain("Imported workspace config (remove 3)");
+      expect(await readFile(auditLogPath("workspace"), "utf8")).toContain(
+        `Imported workspace config (remove ${REPLACE_IMPORT_FIXTURE_DELETE_COUNT + DEFAULT_MATTERHORN_AGENT_FILE_COUNT})`,
+      );
     } finally {
       server.stop(true);
       if (originalDataDir === undefined) {
@@ -587,7 +596,7 @@ describe("workspace import preview", () => {
       const body = await response.json() as {
         preview: { summary: { delete: number } };
       };
-      expect(body.preview.summary.delete).toBe(3);
+      expect(body.preview.summary.delete).toBe(REPLACE_IMPORT_FIXTURE_DELETE_COUNT + DEFAULT_MATTERHORN_AGENT_FILE_COUNT);
       expect(await pathExists(join(workspace, ".opencode", "skills", "old-skill"))).toBe(false);
       expect(await pathExists(join(workspace, ".opencode", "commands", "old-command.md"))).toBe(false);
       expect(await pathExists(join(workspace, ".opencode", "agents", "old.md"))).toBe(false);

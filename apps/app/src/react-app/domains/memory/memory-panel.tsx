@@ -183,6 +183,9 @@ function suggestionDeskReason(suggestion: MatterhornMemorySuggestion) {
   if (suggestion.desk === "hyperliquid" || suggestion.desk === "polymarket") {
     return "Market memory is read/preview/watch context only. It cannot enable live submission, custody, exchange API secrets, raw signatures, or signed payloads.";
   }
+  if (suggestion.desk === "sui") {
+    return "Sui memory is limited to public address, wallet preference, preview, watch, and receipt context. It never stores seed phrases, private keys, raw signatures, signed payloads, or wallet exports.";
+  }
   if (suggestion.desk === "wellness") {
     return "Longevity memory stays opt-in and restricted by default. It should describe preferences or workflow context, not hidden medical or clinical records.";
   }

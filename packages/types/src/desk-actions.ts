@@ -526,6 +526,56 @@ export const POLYMARKET_IMPORT_RECEIPT_ACTION: DeskActionManifest = {
   resultCardKinds: ["receipt_card"],
 };
 
+// --- Sui actions ---
+
+export const SUI_ACCOUNT_READ_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "sui_account_read",
+  deskId: "sui",
+  title: "Read Sui wallet",
+  description: "Read a public Sui address, network, and balance without custody.",
+  requiredContextFields: ["suiAddress"],
+  optionalContextFields: ["network"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Show Sui account context for {suiAddress}",
+  mcpToolHints: ["sui_read_account", "sui_read_balance"],
+  cliCommandHints: ["matterhorn-work sui account {suiAddress}"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const SUI_TRANSFER_PREVIEW_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "sui_transfer_preview",
+  deskId: "sui",
+  title: "Preview transfer",
+  description: "Prepare a Sui transfer preview and save the non-custodial handoff as project evidence.",
+  requiredContextFields: ["sender", "recipient", "amountSui"],
+  optionalContextFields: ["network", "memo"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "preview_only",
+  promptTemplate: "Prepare a Sui transfer preview from {sender} to {recipient} for {amountSui} SUI",
+  mcpToolHints: ["sui_preview_transfer"],
+  cliCommandHints: ["matterhorn-work sui preview-transfer --from {sender} --to {recipient} --amount {amountSui}"],
+  resultCardKinds: ["preview_card", "handoff_card"],
+};
+
+export const SUI_IMPORT_RECEIPT_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "sui_import_receipt",
+  deskId: "sui",
+  title: "Import receipt",
+  description: "Import public Sui transaction metadata after the user signs in their own wallet.",
+  requiredContextFields: ["transactionDigest"],
+  optionalContextFields: ["previewSha256", "network", "explorerUrl"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Import this public Sui transaction receipt: {transactionDigest}",
+  mcpToolHints: ["sui_import_receipt"],
+  cliCommandHints: ["matterhorn-work sui receipt {transactionDigest}"],
+  resultCardKinds: ["receipt_card"],
+};
+
 // --- Wellness actions ---
 
 export const WELLNESS_BUILD_PROGRAM_ACTION: DeskActionManifest = {
@@ -762,6 +812,12 @@ export const POLYMARKET_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest>
   polymarket_import_receipt: POLYMARKET_IMPORT_RECEIPT_ACTION,
 };
 
+export const SUI_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest> = {
+  sui_account_read: SUI_ACCOUNT_READ_ACTION,
+  sui_transfer_preview: SUI_TRANSFER_PREVIEW_ACTION,
+  sui_import_receipt: SUI_IMPORT_RECEIPT_ACTION,
+};
+
 export const WELLNESS_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest> = {
   wellness_build_program: WELLNESS_BUILD_PROGRAM_ACTION,
   wellness_generate_artifacts: WELLNESS_GENERATE_ARTIFACTS_ACTION,
@@ -787,6 +843,7 @@ export const DESK_ACTION_REGISTRY: Record<string, Record<string, DeskActionManif
   bittensor: BITTENSOR_DESK_ACTION_REGISTRY,
   hyperliquid: HYPERLIQUID_DESK_ACTION_REGISTRY,
   polymarket: POLYMARKET_DESK_ACTION_REGISTRY,
+  sui: SUI_DESK_ACTION_REGISTRY,
   wellness: WELLNESS_DESK_ACTION_REGISTRY,
   memory: MEMORY_DESK_ACTION_REGISTRY,
   mcps: MCPS_DESK_ACTION_REGISTRY,

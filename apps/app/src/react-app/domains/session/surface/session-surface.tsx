@@ -17,6 +17,7 @@ import {
   Info,
   Minimize2,
   ShieldCheck,
+  Wallet as WalletIcon,
 } from "lucide-react";
 
 import { createClient, unwrap } from "../../../../app/lib/opencode";
@@ -133,6 +134,7 @@ const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof
   bittensor: BrainCircuit,
   hyperliquid: BarChart3,
   polymarket: ShieldCheck,
+  sui: WalletIcon,
   wellness: Dumbbell,
   services: FileText,
   blank: FileText,
@@ -144,7 +146,7 @@ function ProtocolLogo({ iconHint, size = 18 }: { iconHint: CustomerWorkflowIconH
   return <ProtocolBrandLogo id={iconHint} visual={visual} size={size} />;
 }
 
-type MatterhornDeskMode = "bittensor" | "hyperliquid" | "polymarket" | "wellness";
+type MatterhornDeskMode = "bittensor" | "hyperliquid" | "polymarket" | "sui" | "wellness";
 
 type MatterhornDeskPrompt = {
   title: string;
@@ -209,6 +211,23 @@ const MATTERHORN_DESK_EMPTY_PROMPTS: Record<MatterhornDeskMode, MatterhornDeskPr
       prompt: "Prepare a Polymarket compliance-gated external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
     },
   ],
+  sui: [
+    {
+      title: "Read wallet",
+      detail: "Read a public Sui address, network, and balance without custody.",
+      prompt: "Show my Sui wallet for this public address: <paste public Sui address>. Use public Sui account and balance context only and never ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
+    },
+    {
+      title: "Preview transfer",
+      detail: "Prepare a transfer preview and save it as project evidence before wallet signing.",
+      prompt: "Prepare a Sui transfer preview. Ask for sender, recipient, network, amount, and memo if missing. Signing must happen in my connected Sui wallet on web or in an external Sui wallet/client on desktop.",
+    },
+    {
+      title: "Import receipt",
+      detail: "Import a public transaction digest after signing in the wallet.",
+      prompt: "Import a Sui transaction receipt from this public transaction digest: <paste transaction digest>. Use only public receipt metadata and save it as project evidence.",
+    },
+  ],
   wellness: [
     {
       title: "1. Intake",
@@ -255,6 +274,7 @@ function deriveMatterhornDeskMode(chunks: string[]): MatterhornDeskMode | null {
     ["bittensor", [/bittensor task/i, /bittensor agent/i, /use the bittensor desk/i, /\bshow my tao\b/i, /\bsubnet\b/i, /\bss58\b/i]],
     ["hyperliquid", [/hyperliquid task/i, /hyperliquid agent/i, /use the hyperliquid desk/i, /\bbtc-perp\b/i, /\borderbook\b/i]],
     ["polymarket", [/polymarket task/i, /polymarket agent/i, /use the polymarket desk/i, /\bpolymarket market\b/i, /\bcompliance\b/i]],
+    ["sui", [/sui task/i, /sui agent/i, /use the sui desk/i, /\bsui wallet\b/i, /\bsui transfer\b/i, /\btransaction digest\b/i]],
   ];
   return candidates.find(([, patterns]) => patterns.some((pattern) => pattern.test(text)))?.[0] ?? null;
 }
@@ -329,8 +349,10 @@ function MatterhornDeskFocusedEmptyState({
     ? "Runs public SS58 reads and unsigned previews. Signing stays in an external Bittensor-compatible wallet."
     : mode === "wellness"
       ? "Standalone longevity workflow. Educational only, non-medical, and no live payments/email/hosting."
-      : mode === "polymarket"
-        ? "Runs market research, compliance checks, and external-wallet handoffs. Matterhorn never places bets inside the app."
+    : mode === "polymarket"
+      ? "Runs market research, compliance checks, and external-wallet handoffs. Matterhorn never places bets inside the app."
+      : mode === "sui"
+        ? "Runs public Sui account reads and transfer previews. Signing stays in your Sui wallet or external client."
         : "Runs read-only market/account checks and prepares external-client handoffs. Matterhorn never submits orders inside the app.";
 
   return (

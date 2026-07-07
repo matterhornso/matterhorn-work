@@ -67,6 +67,9 @@ function buildStagePrompt(deskId: string, stage: MatterhornWorkflowStep, manifes
   if (deskId === "polymarket") {
     return `${stage.name} on Polymarket`;
   }
+  if (deskId === "sui") {
+    return `${stage.name} on Sui`;
+  }
   return `${stage.name} in ${manifest.name}`;
 }
 
@@ -90,6 +93,9 @@ function evidenceHintForStep(step: MatterhornWorkflowStep): string[] {
   }
   if (serviceHook === "polymarket") {
     return ["reads: public market, outcome, and compliance context"];
+  }
+  if (serviceHook === "sui") {
+    return ["reads: public Sui account and receipt context"];
   }
   return [];
 }

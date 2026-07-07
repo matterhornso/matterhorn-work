@@ -11,6 +11,7 @@ const {
   BITTENSOR_DESK_ACTION_REGISTRY,
   HYPERLIQUID_DESK_ACTION_REGISTRY,
   POLYMARKET_DESK_ACTION_REGISTRY,
+  SUI_DESK_ACTION_REGISTRY,
   WELLNESS_DESK_ACTION_REGISTRY,
   MEMORY_DESK_ACTION_REGISTRY,
   MCPS_DESK_ACTION_REGISTRY,
@@ -37,6 +38,7 @@ for (const token of [
   "BITTENSOR_DESK_ACTION_REGISTRY",
   "HYPERLIQUID_DESK_ACTION_REGISTRY",
   "POLYMARKET_DESK_ACTION_REGISTRY",
+  "SUI_DESK_ACTION_REGISTRY",
   "WELLNESS_DESK_ACTION_REGISTRY",
   "MEMORY_DESK_ACTION_REGISTRY",
   "MCPS_DESK_ACTION_REGISTRY",
@@ -47,12 +49,21 @@ for (const token of [
   assert.ok(types.includes(token), `types missing desk action token: ${token}`);
 }
 
-const expectedDesks = ["bittensor", "hyperliquid", "polymarket", "wellness", "memory", "mcps"];
-const minActionsPerDesk = 4;
+const expectedDesks = ["bittensor", "hyperliquid", "polymarket", "sui", "wellness", "memory", "mcps"];
+const minActionsPerDesk = {
+  bittensor: 4,
+  hyperliquid: 4,
+  polymarket: 4,
+  sui: 3,
+  wellness: 4,
+  memory: 4,
+  mcps: 4,
+};
 const registries = {
   bittensor: BITTENSOR_DESK_ACTION_REGISTRY,
   hyperliquid: HYPERLIQUID_DESK_ACTION_REGISTRY,
   polymarket: POLYMARKET_DESK_ACTION_REGISTRY,
+  sui: SUI_DESK_ACTION_REGISTRY,
   wellness: WELLNESS_DESK_ACTION_REGISTRY,
   memory: MEMORY_DESK_ACTION_REGISTRY,
   mcps: MCPS_DESK_ACTION_REGISTRY,
@@ -63,9 +74,10 @@ for (const deskId of expectedDesks) {
   const registry = registries[deskId];
   assert.ok(registry, `${deskId} desk action registry must exist`);
   const actions = Object.values(registry);
+  const requiredActionCount = minActionsPerDesk[deskId];
   assert.ok(
-    actions.length >= minActionsPerDesk,
-    `${deskId} must have at least ${minActionsPerDesk} actions (found ${actions.length})`,
+    actions.length >= requiredActionCount,
+    `${deskId} must have at least ${requiredActionCount} actions (found ${actions.length})`,
   );
 }
 
@@ -118,8 +130,8 @@ for (const action of bittensorActions) {
   }
 }
 
-// 7. Hyperliquid and Polymarket actions always have canSubmit:false and liveSubmissionEnabled:false.
-for (const deskId of ["hyperliquid", "polymarket"]) {
+// 7. Hyperliquid, Polymarket, and Sui actions never submit or enable live execution.
+for (const deskId of ["hyperliquid", "polymarket", "sui"]) {
   const actions = Object.values(registries[deskId]);
   for (const action of actions) {
     assert.equal(action.safetyBoundary.canSubmit, false, `${action.id} must set canSubmit false`);
