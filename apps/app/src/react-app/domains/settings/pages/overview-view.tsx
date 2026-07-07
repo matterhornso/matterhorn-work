@@ -34,6 +34,7 @@ import {
 import type { MatterhornServerClient, MatterhornTaskRun } from "../../../../app/lib/matterhorn-server";
 import type {
   MatterhornDataStoreDescriptor,
+  MatterhornSettingsSectionCapability,
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
 import type {
@@ -202,6 +203,13 @@ function CapabilityBadge(props: { status?: string | null }) {
       ? props.status
       : "error";
   return <StatusBadge tone={backendCapabilityTone(status)}>{backendCapabilityLabel(status)}</StatusBadge>;
+}
+
+function settingsCapability(
+  capabilities: { settings?: MatterhornSettingsSectionCapability[] } | null | undefined,
+  section: MatterhornSettingsSectionCapability["section"],
+): MatterhornSettingsSectionCapability | null {
+  return capabilities?.settings?.find((item) => item.section === section) ?? null;
 }
 
 function ProjectLedgerControlSummary(props: {
@@ -1235,6 +1243,7 @@ export function SettingsOverviewView(props: {
   const workspaceDataMap = workspaceBackendControlPlaneQuery.data?.dataMap ?? workspaceDataMapQuery.data;
   const workspaceDataControls = workspaceBackendControlPlaneQuery.data?.dataControls ?? workspaceDataControlsQuery.data;
   const workspaceDataPolicy = workspaceBackendControlPlaneQuery.data?.dataPolicy ?? workspaceDataPolicyQuery.data;
+  const profileCapability = settingsCapability(backendCapabilities, "profile");
   const updateWorkspaceDataPolicyMutation = useMutation({
     mutationFn: async (feedbackUse: MatterhornWorkspaceFeedbackUse) => {
       const client = props.matterhornServerClient;
@@ -1385,13 +1394,29 @@ export function SettingsOverviewView(props: {
         <SettingsCard
           icon={<CircleUser size={18} />}
           title="Profile"
-          description="Your account and sign-in status."
-          status={<StatusBadge tone="setup">Needs setup</StatusBadge>}
+          description="Account and local/cloud profile readiness."
+          status={
+            profileCapability ? (
+              <CapabilityBadge status={profileCapability.status} />
+            ) : backendCapabilitiesLoading ? (
+              <StatusBadge>Loading</StatusBadge>
+            ) : (
+              <StatusBadge tone="error">Unavailable</StatusBadge>
+            )
+          }
         >
           <Row
-            label="Account"
-            hint="You are not signed in to a Matterhorn Work account. Sign in to sync cloud workspaces. Local use needs no account."
-            value={<StatusBadge tone="setup">Signed out</StatusBadge>}
+            label={profileCapability?.label ?? "Profile status"}
+            hint={profileCapability?.description ?? "Open account settings to sign in, manage cloud account state, or keep using Matterhorn locally."}
+            value={
+              profileCapability ? (
+                <CapabilityBadge status={profileCapability.status} />
+              ) : backendCapabilitiesLoading ? (
+                <StatusBadge>Loading</StatusBadge>
+              ) : (
+                <StatusBadge tone="error">Unavailable</StatusBadge>
+              )
+            }
           />
           <div>
             <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => onSelectTab("cloud-account")}>
