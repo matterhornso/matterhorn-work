@@ -187,11 +187,30 @@ describe("backend control plane routes", () => {
     expect(result.response.status).toBe(200);
     expect(result.payload.success).toBe(true);
     expect(result.payload.version).toBe("matterhorn.backend.capabilities.v1");
+    expect(result.payload.models.status).toBe("needs_setup");
+    expect(result.payload.models.label).toBe("OpenCode connection missing");
     expect(result.payload.models.defaultModel).toEqual({ providerId: "opencode", modelId: "big-pickle" });
     expect(result.payload.models.providerListSource).toBe("opencode");
     expect(result.payload.models.routing.answerPath).toBe("opencode_session_prompt_async");
     expect(result.payload.models.routing.modelListTool).toBe("opencode_provider_list");
     expect(result.payload.models.routing.userSelectable).toBe(true);
+    expect(result.payload.models.details).toMatchObject({
+      opencodeConfigured: false,
+      configuredWorkspaceCount: 0,
+      requiredFor: ["start_chat", "start_desk_task"],
+    });
+    expect(result.payload.models.actions).toContainEqual({
+      id: "settings.models.connect-opencode",
+      label: "Connect local engine",
+      kind: "route",
+      href: "/settings/ai",
+    });
+    expect(result.payload.providers.status).toBe("needs_setup");
+    expect(result.payload.providers.details).toMatchObject({
+      opencodeConfigured: false,
+      configuredWorkspaceCount: 0,
+      source: "opencode_provider_list",
+    });
     expect(result.payload.memory.scope).toBe("machine_global");
     expect(result.payload.wallets.families.evm.status).toBe("working");
     expect(result.payload.wallets.families.bittensor.signing).toBe("external_signer");
@@ -233,6 +252,8 @@ describe("backend control plane routes", () => {
     expect(result.payload.security.cors.status).toBe("needs_setup");
     expect(result.payload.security.memoryWriteGuards.status).toBe("working");
     expect(result.payload.settings.map((section: { section: string }) => section.section)).toContain("wallet");
+    expect(result.payload.settings.find((section: { section: string }) => section.section === "models")?.status).toBe("needs_setup");
+    expect(result.payload.settings.find((section: { section: string }) => section.section === "providers")?.status).toBe("needs_setup");
     expect(result.payload.settings.find((section: { section: string }) => section.section === "wallet")).toMatchObject({
       route: "/settings/wallet",
       workspaceScoped: true,
@@ -254,6 +275,35 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
     expect(serialized).not.toContain("Sui is not implemented yet");
+  });
+
+  test("GET /api/backend/capabilities reports model routing as working when OpenCode is configured", async () => {
+    const opencodeBaseUrl = await startProviderCatalogServer({
+      all: [{ id: "opencode", name: "OpenCode", models: { "big-pickle": { name: "Big Pickle" } } }],
+      default: { opencode: "big-pickle" },
+      connected: ["opencode"],
+    });
+    const { base } = await boot({ opencodeBaseUrl });
+
+    const result = await jsonFetch(base, "/api/backend/capabilities");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.models.status).toBe("working");
+    expect(result.payload.models.label).toBe("OpenCode model routing");
+    expect(result.payload.models.details).toMatchObject({
+      opencodeConfigured: true,
+      configuredWorkspaceCount: 1,
+      requiredFor: ["start_chat", "start_desk_task"],
+    });
+    expect(result.payload.models.actions).toBeUndefined();
+    expect(result.payload.providers.status).toBe("working");
+    expect(result.payload.providers.details).toMatchObject({
+      opencodeConfigured: true,
+      configuredWorkspaceCount: 1,
+      source: "opencode_provider_list",
+    });
+    expect(result.payload.providers.actions).toBeUndefined();
+    expect(result.payload.settings.find((section: { section: string }) => section.section === "models")?.status).toBe("working");
+    expect(result.payload.settings.find((section: { section: string }) => section.section === "providers")?.status).toBe("working");
   });
 
   test("GET /api/backend/models reports the agent answer and model-selection contract", async () => {

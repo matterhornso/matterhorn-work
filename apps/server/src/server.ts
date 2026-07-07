@@ -2240,6 +2240,8 @@ async function safeMemoryCounts(memoryVault: MatterhornMemoryVault): Promise<{ p
 
 function backendSettingsSections(input: {
   readOnly: boolean;
+  modelStatus: MatterhornCapabilityStatus;
+  providerStatus: MatterhornCapabilityStatus;
   memoryStatus: MatterhornCapabilityStatus;
   notesStatus: MatterhornCapabilityStatus;
   evidenceStatus: MatterhornCapabilityStatus;
@@ -2338,8 +2340,8 @@ function backendSettingsSections(input: {
   return [
     base("overview", capability("working", "Overview", "Workspace overview is available from local server state.")),
     base("profile", capability("preview", "Profile", "Profile preferences are local/cloud mixed and should use backend capability statuses.")),
-    base("models", capability("working", "Models", "Models are selected through OpenCode provider discovery.")),
-    base("providers", capability("working", "Providers", "Provider setup is managed by OpenCode and optional Matterhorn Cloud imports.")),
+    base("models", capability(input.modelStatus, "Models", "Models are selected through OpenCode provider discovery.")),
+    base("providers", capability(input.providerStatus, "Providers", "Provider setup is managed by OpenCode and optional Matterhorn Cloud imports.")),
     base("wallet", capability(input.walletStatus, "Wallet", "EVM and Sui can connect in web; Bittensor uses public reads and external signing.")),
     base("memory", capability(input.memoryStatus, "Memory", "User-controlled Memory review is available through the local memory vault.")),
     base("notes", capability(input.notesStatus, "Notes", "Workspace notes are stored as local markdown plus an index.")),
@@ -2361,6 +2363,18 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
   const corsWildcard = config.corsOrigins.includes("*");
   const loopback = config.host === "127.0.0.1" || config.host === "localhost" || config.host === "::1";
   const authorizedRootCount = config.authorizedRoots.length;
+  const configuredOpencodeWorkspaces = config.workspaces.filter((workspace) =>
+    Boolean(resolveWorkspaceOpencodeConnection(config, workspace).baseUrl?.trim())
+  ).length;
+  const opencodeConfigured = configuredOpencodeWorkspaces > 0 || Boolean(config.opencodeBaseUrl?.trim());
+  const modelStatus: MatterhornCapabilityStatus = opencodeConfigured ? "working" : "needs_setup";
+  const providerStatus: MatterhornCapabilityStatus = opencodeConfigured ? "working" : "needs_setup";
+  const connectOpenCodeAction = {
+    id: "settings.models.connect-opencode",
+    label: "Connect local engine",
+    kind: "route" as const,
+    href: "/settings/ai",
+  };
   const securityItems = {
     loopback: capability(
       loopback ? "working" : "needs_setup",
@@ -2566,7 +2580,19 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       approvalMode: config.approval.mode,
     },
     models: {
-      ...capability("working", "OpenCode model routing", "Agent responses are routed through OpenCode/OpenWork using the selected local model preference."),
+      ...capability(
+        modelStatus,
+        opencodeConfigured ? "OpenCode model routing" : "OpenCode connection missing",
+        opencodeConfigured
+          ? "Agent responses are routed through OpenCode/OpenWork using the selected local model preference."
+          : "The local Matterhorn server is reachable, but this workspace does not have an OpenCode base URL configured, so chats and desk tasks cannot run yet.",
+        {
+          opencodeConfigured,
+          configuredWorkspaceCount: configuredOpencodeWorkspaces,
+          requiredFor: ["start_chat", "start_desk_task"],
+        },
+        opencodeConfigured ? undefined : [connectOpenCodeAction],
+      ),
       defaultModel: { providerId: "opencode", modelId: "big-pickle" },
       providerListSource: "opencode",
       selectedModelSource: "local_preferences",
@@ -2580,7 +2606,19 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
     },
     providers: {
-      ...capability("working", "Provider discovery", "The app reads available models from OpenCode provider.list; Matterhorn Cloud providers can be imported separately."),
+      ...capability(
+        providerStatus,
+        opencodeConfigured ? "Provider discovery" : "Provider discovery unavailable",
+        opencodeConfigured
+          ? "The app reads available models from OpenCode provider.list; Matterhorn Cloud providers can be imported separately."
+          : "Provider discovery depends on the workspace OpenCode connection. Configure the local engine before selecting live providers.",
+        {
+          opencodeConfigured,
+          configuredWorkspaceCount: configuredOpencodeWorkspaces,
+          source: "opencode_provider_list",
+        },
+        opencodeConfigured ? undefined : [connectOpenCodeAction],
+      ),
       sources: ["opencode", "matterhorn_cloud", "managed_openwork_models"],
     },
     storage: {
@@ -2640,6 +2678,8 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     },
     settings: backendSettingsSections({
       readOnly: !writeEnabled,
+      modelStatus,
+      providerStatus,
       memoryStatus,
       notesStatus,
       evidenceStatus,
@@ -3576,6 +3616,8 @@ async function buildWorkspaceBackendControlPlane(
   const dataControls = buildWorkspaceDataControls(workspace, memoryVault);
   const dataPolicy = buildWorkspaceDataPolicyResponse(workspace);
   const capabilitiesStatus = mergeCapabilityStatuses([
+    capabilities.models.status,
+    capabilities.providers.status,
     capabilities.memory.status,
     capabilities.notes.status,
     capabilities.evidence.status,
