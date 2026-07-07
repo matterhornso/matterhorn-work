@@ -27,6 +27,7 @@ describe("wallet runtime contract", () => {
 
   test("web Sui uses connected-wallet signing while desktop and Electron use external handoffs", () => {
     expect(WEB_WALLET_RUNTIME_CAPABILITY.protocols.sui).toMatchObject({
+      connectionMode: "wallet_standard",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -35,6 +36,7 @@ describe("wallet runtime contract", () => {
     });
 
     expect(DESKTOP_WALLET_RUNTIME_CAPABILITY.protocols.sui).toMatchObject({
+      connectionMode: "external_handoff",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -43,6 +45,7 @@ describe("wallet runtime contract", () => {
     });
 
     expect(ELECTRON_WALLET_RUNTIME_CAPABILITY.protocols.sui).toMatchObject({
+      connectionMode: "external_handoff",
       canRead: true,
       canPreview: true,
       canSubmit: false,
@@ -53,11 +56,20 @@ describe("wallet runtime contract", () => {
 
   test("unknown runtime does not claim Sui support", () => {
     expect(getWalletRuntimeCapability("unknown").protocols.sui).toMatchObject({
+      connectionMode: "unsupported",
       canRead: false,
       canPreview: false,
       canSubmit: false,
       liveSubmissionEnabled: false,
       signerRequirement: "none",
     });
+  });
+
+  test("runtime capabilities report direct and handoff connection modes explicitly", () => {
+    expect(WEB_WALLET_RUNTIME_CAPABILITY.protocols.hyperliquid.connectionMode).toBe("injected_evm");
+    expect(WEB_WALLET_RUNTIME_CAPABILITY.protocols.polymarket.connectionMode).toBe("injected_evm");
+    expect(WEB_WALLET_RUNTIME_CAPABILITY.protocols.bittensor.connectionMode).toBe("external_handoff");
+    expect(DESKTOP_WALLET_RUNTIME_CAPABILITY.safetyCopy.publicAddressLine).toContain("complete signing in your own wallet");
+    expect(DESKTOP_WALLET_RUNTIME_CAPABILITY.safetyCopy.publicAddressLine).not.toContain("planned wallet strategy");
   });
 });
