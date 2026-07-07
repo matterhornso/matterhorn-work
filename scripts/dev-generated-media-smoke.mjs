@@ -1,0 +1,404 @@
+#!/usr/bin/env node
+import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:http";
+import { existsSync } from "node:fs";
+import net from "node:net";
+import os from "node:os";
+import path from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.resolve(__dirname, "..");
+
+const clientToken = process.env.MATTERHORN_MEDIA_SMOKE_CLIENT_TOKEN?.trim() || "matterhorn-media-smoke-client-token";
+const hostToken = process.env.MATTERHORN_MEDIA_SMOKE_HOST_TOKEN?.trim() || "matterhorn-media-smoke-host-token";
+const preferredServerPort = Number(process.env.MATTERHORN_MEDIA_SMOKE_SERVER_PORT?.trim() || "4125");
+const preferredAppPort = Number(process.env.MATTERHORN_MEDIA_SMOKE_APP_PORT?.trim() || "5182");
+const workspaceRoot = path.resolve(process.env.MATTERHORN_MEDIA_SMOKE_WORKSPACE?.trim() || rootDir);
+const storageEpochs = process.env.MATTERHORN_MEDIA_SMOKE_WALRUS_EPOCHS?.trim() || "3";
+
+const fakeSuiIds = {
+  nftPackage: "0x1111111111111111111111111111111111111111111111111111111111111111",
+  kioskPackage: "0x2222222222222222222222222222222222222222222222222222222222222222",
+  transferPolicyPackage: "0x3333333333333333333333333333333333333333333333333333333333333333",
+  kiosk: "0x4444444444444444444444444444444444444444444444444444444444444444",
+  kioskOwnerCap: "0x5555555555555555555555555555555555555555555555555555555555555555",
+  transferPolicy: "0x6666666666666666666666666666666666666666666666666666666666666666",
+};
+
+const children = new Set();
+let fakeWalrusServer;
+let shuttingDown = false;
+
+function help() {
+  return [
+    "Matterhorn generated-media smoke launcher",
+    "",
+    "Starts a local Matterhorn Work app wired to:",
+    "- mock image generation",
+    "- a fake loopback Walrus publisher/relay",
+    "- preview-only Sui package, Kiosk, and TransferPolicy ids",
+    "",
+    "Usage:",
+    "  node scripts/dev-generated-media-smoke.mjs",
+    "",
+    "Useful env vars:",
+    "  MATTERHORN_MEDIA_SMOKE_WORKSPACE=/path/to/workspace",
+    "  MATTERHORN_MEDIA_SMOKE_SERVER_PORT=4125",
+    "  MATTERHORN_MEDIA_SMOKE_APP_PORT=5182",
+    "",
+    "No OpenAI key, wallet secret, seed phrase, or server-side signing is used.",
+  ].join(os.EOL);
+}
+
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(help());
+  process.exit(0);
+}
+
+function canConnect(port, host = "127.0.0.1") {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host, port });
+    const done = (value) => {
+      socket.destroy();
+      resolve(value);
+    };
+    socket.setTimeout(350);
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+    socket.once("timeout", () => done(false));
+  });
+}
+
+async function findPort(preferred) {
+  for (let offset = 0; offset < 30; offset += 1) {
+    const candidate = preferred + offset;
+    if (!(await canConnect(candidate))) return candidate;
+  }
+
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      server.close(() => {
+        if (address && typeof address === "object") resolve(address.port);
+        else reject(new Error("Could not allocate a local port"));
+      });
+    });
+  });
+}
+
+function spawnChild(label, command, args, options = {}) {
+  const child = spawn(command, args, {
+    cwd: rootDir,
+    stdio: ["ignore", "pipe", "pipe"],
+    ...options,
+  });
+  children.add(child);
+
+  const prefix = `[${label}]`;
+  child.stdout?.on("data", (chunk) => {
+    process.stdout.write(String(chunk).split("\n").map((line) => line ? `${prefix} ${line}` : line).join("\n"));
+  });
+  child.stderr?.on("data", (chunk) => {
+    process.stderr.write(String(chunk).split("\n").map((line) => line ? `${prefix} ${line}` : line).join("\n"));
+  });
+  child.once("exit", (code, signal) => {
+    children.delete(child);
+    if (!shuttingDown) {
+      const detail = signal ? `signal ${signal}` : `exit code ${code ?? 1}`;
+      console.error(`${prefix} stopped with ${detail}`);
+      void shutdown(1);
+    }
+  });
+  child.once("error", (error) => {
+    children.delete(child);
+    if (!shuttingDown) {
+      console.error(`${prefix} failed to start: ${error.message}`);
+      void shutdown(1);
+    }
+  });
+
+  return child;
+}
+
+function serverCommand() {
+  const probe = spawnSync("bun", ["--version"], { stdio: "ignore" });
+  if (probe.status === 0) {
+    return { command: "bun", args: [path.join(rootDir, "apps", "server", "src", "cli.ts")] };
+  }
+  const binary = path.join(rootDir, "apps", "server", "dist", "bin", "matterhorn-work-server");
+  if (existsSync(binary)) return { command: binary, args: [] };
+  throw new Error("Bun or a built Matterhorn Work server binary is required.");
+}
+
+function appCommand(appPort) {
+  const appDir = path.join(rootDir, "apps", "app");
+  const viteBin = path.join(appDir, "node_modules", ".bin", process.platform === "win32" ? "vite.cmd" : "vite");
+  const viteArgs = [
+    "--host",
+    "127.0.0.1",
+    "--port",
+    String(appPort),
+    "--strictPort",
+  ];
+
+  if (existsSync(viteBin)) {
+    return { command: viteBin, args: viteArgs, cwd: appDir };
+  }
+
+  return {
+    command: "npx",
+    args: [
+      "pnpm@10.27.0",
+      "--filter",
+      "@matterhorn-work/app",
+      "exec",
+      "vite",
+      ...viteArgs,
+    ],
+    cwd: rootDir,
+  };
+}
+
+function startFakeWalrus() {
+  const blobs = new Map();
+  const server = createServer(async (request, response) => {
+    const url = new URL(request.url || "/", "http://127.0.0.1");
+    response.setHeader("Access-Control-Allow-Origin", "*");
+    response.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
+    response.setHeader("Access-Control-Allow-Headers", "authorization, content-type");
+
+    if (request.method === "OPTIONS") {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+
+    if (request.method === "PUT" && url.pathname === "/v1/blobs") {
+      const chunks = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const bytes = Buffer.concat(chunks);
+      const blobId = `matterhorn_smoke_blob_${String(blobs.size + 1).padStart(3, "0")}`;
+      blobs.set(blobId, {
+        bytes,
+        contentType: request.headers["content-type"] || "application/octet-stream",
+      });
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify({
+        newlyCreated: {
+          blobObject: {
+            id: `0xsmokeblob${String(blobs.size).padStart(4, "0")}`,
+            blobId,
+            storage: { endEpoch: 42 },
+          },
+        },
+      }));
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname.startsWith("/v1/blobs/")) {
+      const blobId = decodeURIComponent(url.pathname.replace("/v1/blobs/", ""));
+      const blob = blobs.get(blobId);
+      if (!blob) {
+        response.writeHead(404, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ message: "Fake Walrus blob not found." }));
+        return;
+      }
+      response.writeHead(200, { "Content-Type": blob.contentType });
+      response.end(blob.bytes);
+      return;
+    }
+
+    response.writeHead(404, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ message: "Fake Walrus route not found." }));
+  });
+
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      fakeWalrusServer = server;
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        reject(new Error("Could not start fake Walrus server."));
+        return;
+      }
+      resolve(`http://127.0.0.1:${address.port}`);
+    });
+  });
+}
+
+async function waitForJson(url, options = {}) {
+  const timeoutMs = options.timeoutMs ?? 30_000;
+  const startedAt = Date.now();
+  let lastError = "";
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(url, {
+        headers: options.headers,
+        signal: AbortSignal.timeout(1500),
+      });
+      if (response.ok) return await response.json();
+      lastError = `${response.status} ${response.statusText}`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+
+  throw new Error(`Timed out waiting for ${url}${lastError ? ` (${lastError})` : ""}`);
+}
+
+async function waitForHttp(url, options = {}) {
+  const timeoutMs = options.timeoutMs ?? 30_000;
+  const startedAt = Date.now();
+  let lastError = "";
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(1500) });
+      if (response.ok) return;
+      lastError = `${response.status} ${response.statusText}`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+
+  throw new Error(`Timed out waiting for ${url}${lastError ? ` (${lastError})` : ""}`);
+}
+
+async function shutdown(exitCode = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  for (const child of Array.from(children)) {
+    child.kill("SIGTERM");
+  }
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  for (const child of Array.from(children)) {
+    if (child.exitCode === null) child.kill("SIGKILL");
+  }
+  fakeWalrusServer?.close();
+
+  process.exit(exitCode);
+}
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.once(signal, () => {
+    void shutdown(0);
+  });
+}
+
+async function main() {
+  if (!existsSync(workspaceRoot)) {
+    throw new Error(`Workspace path does not exist: ${workspaceRoot}`);
+  }
+
+  const fakeWalrusUrl = await startFakeWalrus();
+  const serverPort = await findPort(preferredServerPort);
+  const appPort = await findPort(preferredAppPort);
+  const serverUrl = `http://127.0.0.1:${serverPort}`;
+  const appUrl = `http://127.0.0.1:${appPort}`;
+  const { command, args: baseServerArgs } = serverCommand();
+  const serverArgs = [
+    ...baseServerArgs,
+    "--host", "127.0.0.1",
+    "--port", String(serverPort),
+    "--token", clientToken,
+    "--host-token", hostToken,
+    "--workspace", workspaceRoot,
+    "--approval", "auto",
+    "--approval-timeout", "30000",
+    "--cors", "loopback",
+    "--opencode-directory", workspaceRoot,
+    "--log-format", "pretty",
+    "--no-log-requests",
+  ];
+
+  console.log("Starting Matterhorn generated-media smoke stack...");
+  console.log(`Workspace: ${workspaceRoot}`);
+  console.log(`Fake Walrus: ${fakeWalrusUrl}`);
+  console.log("Image generation: mock provider, no OpenAI key required.");
+  console.log("Sui: preview-only fake package/Kiosk/TransferPolicy ids; no custody or signing.");
+
+  spawnChild("server", command, serverArgs, {
+    env: {
+      ...process.env,
+      OPENWORK_DEV_MODE: "1",
+      MATTERHORN_IMAGE_PROVIDER: "mock",
+      MATTERHORN_WALRUS_PUBLISHER_URL: fakeWalrusUrl,
+      MATTERHORN_WALRUS_RELAY_URL: fakeWalrusUrl,
+      MATTERHORN_WALRUS_STORAGE_EPOCHS: storageEpochs,
+      MATTERHORN_SUI_NETWORK: "sui-testnet",
+      MATTERHORN_SUI_NFT_PACKAGE_ID: fakeSuiIds.nftPackage,
+      MATTERHORN_SUI_NFT_MODULE_NAME: "matterhorn_media",
+      MATTERHORN_SUI_NFT_TYPE: `${fakeSuiIds.nftPackage}::matterhorn_media::MatterhornNFT`,
+      MATTERHORN_SUI_KIOSK_PACKAGE_ID: fakeSuiIds.kioskPackage,
+      MATTERHORN_SUI_KIOSK_ID: fakeSuiIds.kiosk,
+      MATTERHORN_SUI_KIOSK_OWNER_CAP_ID: fakeSuiIds.kioskOwnerCap,
+      MATTERHORN_SUI_TRANSFER_POLICY_ID: fakeSuiIds.transferPolicy,
+      MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID: fakeSuiIds.transferPolicyPackage,
+    },
+  });
+
+  await waitForJson(`${serverUrl}/health`, { timeoutMs: 45_000 });
+  const workspaceList = await waitForJson(`${serverUrl}/workspaces`, {
+    timeoutMs: 15_000,
+    headers: { Authorization: `Bearer ${clientToken}` },
+  });
+  const activeWorkspaceId =
+    String(workspaceList.activeId ?? "").trim() ||
+    String(workspaceList.items?.[0]?.id ?? workspaceList.workspaces?.[0]?.id ?? "").trim();
+
+  if (!activeWorkspaceId) {
+    throw new Error("Matterhorn Work server started, but it did not report an active workspace.");
+  }
+
+  const app = appCommand(appPort);
+  spawnChild("app", app.command, app.args, {
+    cwd: app.cwd,
+    env: {
+      ...process.env,
+      CI: "true",
+      OPENWORK_DEV_MODE: "1",
+      VITE_MATTERHORN_WORK_URL: serverUrl,
+      VITE_MATTERHORN_WORK_TOKEN: clientToken,
+      VITE_MATTERHORN_WORK_HOST_TOKEN: hostToken,
+      VITE_MATTERHORN_WORK_FORCE_SETTINGS: "1",
+    },
+  });
+
+  await waitForHttp(appUrl, { timeoutMs: 45_000 });
+
+  const sessionUrl = `${appUrl}/workspace/${encodeURIComponent(activeWorkspaceId)}/session`;
+  const settingsUrl = `${appUrl}/workspace/${encodeURIComponent(activeWorkspaceId)}/settings/overview`;
+  const lines = [
+    "",
+    "Matterhorn generated-media smoke app is ready.",
+    `App:       ${sessionUrl}`,
+    `Settings:  ${settingsUrl}`,
+    `Server:    ${serverUrl}`,
+    `Walrus:    ${fakeWalrusUrl}`,
+    `Workspace: ${workspaceRoot}`,
+    `Client token: ${clientToken}`,
+    "",
+    "Suggested smoke flow:",
+    "1. Open a chat session and generate an image.",
+    "2. Click Make NFT on the generated image.",
+    "3. Prepare/upload to Walrus; the fake publisher stores and serves the image bytes locally.",
+    "4. Prepare mint/listing previews; they produce wallet handoff plans only.",
+    "",
+    "Keep this command running while you test the generated-media flow.",
+    "",
+  ];
+  console.log(lines.join(os.EOL));
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  void shutdown(1);
+});
