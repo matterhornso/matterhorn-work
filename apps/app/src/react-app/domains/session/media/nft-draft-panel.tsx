@@ -52,9 +52,11 @@ export interface NftWalletExecutionState {
   isSigning?: boolean;
   error?: string | null;
   lastMintReceipt?: MatterhornSuiWalletExecutionReceipt | null;
+  lastListingReceipt?: MatterhornSuiWalletExecutionReceipt | null;
   onConnectWallet?: (walletId: string) => void | Promise<void>;
   onDisconnectWallet?: () => void | Promise<void>;
   onSignMint?: () => void | Promise<void>;
+  onSignListing?: () => void | Promise<void>;
 }
 
 export interface NftDraftPanelProps {
@@ -124,6 +126,12 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
       setListingObjectId(receipt.objectId);
     }
   }, [walletExecution?.lastMintReceipt]);
+
+  useEffect(() => {
+    const receipt = walletExecution?.lastListingReceipt;
+    if (!receipt) return;
+    setListingDigest(receipt.digest);
+  }, [walletExecution?.lastListingReceipt]);
 
   const unresolvedSetup = useMemo(() => (
     props.setupRequirements?.filter((requirement) => requirement.status !== "configured") ?? []
@@ -319,7 +327,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
               <NftSection
                 title="Marketplace listing"
                 status={draft.listing.status}
-                description={canList ? "Review Sui Kiosk inputs. Execution stays manual until the Kiosk SDK is wired." : "Kiosk and TransferPolicy config are not configured."}
+                description={canList ? "Prepare the Sui Kiosk listing plan, then sign it in your wallet." : "Kiosk and TransferPolicy config are not configured."}
               >
                 <div className="grid gap-3">
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -353,6 +361,14 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
                       {copyLabel === "listing" ? "Copied" : "Copy plan"}
                     </Button>
                   ) : null}
+                  <Button
+                    size="sm"
+                    onClick={() => void walletExecution?.onSignListing?.()}
+                    disabled={!props.listingPreview || !walletExecution?.connectedAddress || walletExecution?.isSigning || props.isLoading}
+                  >
+                    {walletExecution?.isSigning ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />}
+                    Sign listing in wallet
+                  </Button>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="nft-listing-digest" className="text-xs">Listing transaction digest</Label>
