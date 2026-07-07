@@ -114,14 +114,14 @@ export function feedbackCapabilityCopy(capability: MatterhornCapability | undefi
 } {
   if (!capability || capability.status === "unsupported") {
     return {
-      label: "Feedback link",
-      hint: "Feedback is currently a user-facing link, not a structured training loop.",
+      label: capability ? capabilityStatusLabel(capability.status) : "Status unavailable",
+      hint: capability?.description || "Structured local feedback is unavailable from the backend. Use the configured support link if provided.",
     };
   }
   if (capability.status === "preview") {
     return {
       label: "Preview",
-      hint: "Structured feedback may be available in a future build. Today feedback is still a link.",
+      hint: capability.description || "Structured feedback is stored locally for product quality and routing. No training by default.",
     };
   }
   return {

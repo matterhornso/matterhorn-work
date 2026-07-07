@@ -125,8 +125,10 @@ describe("Backend capabilities section renders all capability states", () => {
     expect(html).toContain("Public read / external signer");
     expect(html).toContain("Wallet-standard preview");
     expect(html).toContain("Machine / global");
+    expect(html).toContain("Structured feedback is stored locally for evaluation, routing, and product quality only.");
     expect(html).toContain("Route: /settings/wallet");
     expect(html).toContain("backend dependencies");
+    expect(html).not.toContain("Today feedback is still a link");
   });
 
   test("needs_setup state", () => {
@@ -141,6 +143,8 @@ describe("Backend capabilities section renders all capability states", () => {
     expect(html).toContain("Preview");
     expect(html).toContain("Cloud teams");
     expect(html).toContain("Sui wallet");
+    expect(html).toContain("Structured feedback is in preview.");
+    expect(html).not.toContain("Today feedback is still a link");
   });
 
   test("unsupported state", () => {
