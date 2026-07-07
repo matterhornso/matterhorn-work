@@ -127,21 +127,21 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
         : "No workspace default is saved yet. The app uses a local picker choice when you make one, then the engine fallback.",
     },
     effectiveModel: {
-      label: "Engine fallback",
+      label: "Fallback model",
       value: effectiveModelValue,
-      detail: "Used when this app session has no local picker choice.",
+      detail: "Used when this app has no local picker choice or saved workspace default.",
     },
     answerPath: {
       label: "Agent answers",
       value: answerPathValue,
-      detail: "Prompt requests include the selected provider/model identifier.",
+      detail: "Chats and desk tasks call session.promptAsync. Requests include providerID/modelID when a picker choice or workspace default exists.",
     },
     providerList: {
       label: "Model list",
       value: providerListValue,
       detail: routing?.registry.serverOwned
         ? "The Matterhorn backend owns the model registry for this workspace."
-        : "The live list still comes from OpenCode provider.list.",
+        : "The live selectable list is fetched from OpenCode provider.list for this workspace.",
     },
     providerCatalog: {
       label: "Connected catalog",
@@ -157,7 +157,7 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
     },
     trainingPolicy:
       backendModels?.privacy.trainingUse === "none_by_default"
-        ? "No model training by default. Feedback is kept for eval, routing, and product quality only."
+        ? "No model training by default. Feedback is kept only for eval, routing, and product quality review."
         : "Training policy is unavailable.",
     details: [
       {

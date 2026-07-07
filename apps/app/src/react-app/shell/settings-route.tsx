@@ -483,6 +483,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const [errorsByWorkspaceId, setErrorsByWorkspaceId] = useState<Record<string, string | null>>({});
   const [workspaceConnectionOverrides, setWorkspaceConnectionOverrides] = useState<Record<string, WorkspaceConnectionState>>({});
   const [legacySelectedWorkspaceId, setLegacySelectedWorkspaceId] = useState(() => navigationWorkspaceId ?? readActiveWorkspaceId() ?? "");
+  const legacySelectedWorkspaceIdRef = useRef(legacySelectedWorkspaceId);
   const selectedWorkspaceId = routeWorkspaceId || legacySelectedWorkspaceId;
 
   useEffect(() => {
@@ -1321,17 +1322,21 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       const { normalizedBaseUrl, resolvedToken, resolvedHostToken } = await resolveMatterhornConnection();
 
       if (!normalizedBaseUrl || !resolvedToken) {
+        const nextSelectedWorkspaceId =
+          legacySelectedWorkspaceIdRef.current ||
+          readActiveWorkspaceId() ||
+          resolveWorkspaceListSelectedId(desktopList) ||
+          desktopWorkspaces[0]?.id ||
+          "";
         setOpenworkClient(null);
         setBaseUrl("");
         setToken("");
         setWorkspaces(desktopWorkspaces);
         setSessionsByWorkspaceId({});
         setErrorsByWorkspaceId({});
-        setLegacySelectedWorkspaceId((current) => {
-          const next = current || readActiveWorkspaceId() || resolveWorkspaceListSelectedId(desktopList) || desktopWorkspaces[0]?.id || "";
-          writeActiveWorkspaceId(next || null);
-          return next;
-        });
+        legacySelectedWorkspaceIdRef.current = nextSelectedWorkspaceId;
+        setLegacySelectedWorkspaceId(nextSelectedWorkspaceId);
+        writeActiveWorkspaceId(nextSelectedWorkspaceId || null);
         return;
       }
 
@@ -1400,13 +1405,18 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         }
         return next;
       });
-      setLegacySelectedWorkspaceId((current) => {
-        const sessionWorkspaceId = findSessionWorkspaceId(navigationSessionId, sessionEntries);
-        const preferred = routeWorkspaceId || sessionWorkspaceId || navigationWorkspaceId || current || readActiveWorkspaceId() || "";
-        const next = reconcileSelectedWorkspaceId(preferred, list, desktopList, nextWorkspaces);
-        writeActiveWorkspaceId(next || null);
-        return next;
-      });
+      const sessionWorkspaceId = findSessionWorkspaceId(navigationSessionId, sessionEntries);
+      const preferred =
+        routeWorkspaceId ||
+        sessionWorkspaceId ||
+        navigationWorkspaceId ||
+        legacySelectedWorkspaceIdRef.current ||
+        readActiveWorkspaceId() ||
+        "";
+      const nextSelectedWorkspaceId = reconcileSelectedWorkspaceId(preferred, list, desktopList, nextWorkspaces);
+      legacySelectedWorkspaceIdRef.current = nextSelectedWorkspaceId;
+      setLegacySelectedWorkspaceId(nextSelectedWorkspaceId);
+      writeActiveWorkspaceId(nextSelectedWorkspaceId || null);
     } catch (error) {
       const message = describeRouteError(error);
       console.error("[settings-route] refreshRouteState failed", error);
@@ -1417,12 +1427,16 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       });
       setRouteError(message);
       if (desktopWorkspaces.length > 0) {
+        const nextSelectedWorkspaceId =
+          legacySelectedWorkspaceIdRef.current ||
+          readActiveWorkspaceId() ||
+          resolveWorkspaceListSelectedId(desktopList) ||
+          desktopWorkspaces[0]?.id ||
+          "";
         setWorkspaces(desktopWorkspaces);
-        setLegacySelectedWorkspaceId((current) => {
-          const next = current || readActiveWorkspaceId() || resolveWorkspaceListSelectedId(desktopList) || desktopWorkspaces[0]?.id || "";
-          writeActiveWorkspaceId(next || null);
-          return next;
-        });
+        legacySelectedWorkspaceIdRef.current = nextSelectedWorkspaceId;
+        setLegacySelectedWorkspaceId(nextSelectedWorkspaceId);
+        writeActiveWorkspaceId(nextSelectedWorkspaceId || null);
       }
     } finally {
       setLoading(false);
@@ -1437,6 +1451,10 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   useEffect(() => {
     workspacesRef.current = workspaces;
   }, [workspaces]);
+
+  useEffect(() => {
+    legacySelectedWorkspaceIdRef.current = legacySelectedWorkspaceId;
+  }, [legacySelectedWorkspaceId]);
 
   useEffect(() => {
     const activeWorkspaceIds = new Set(workspaces.map((workspace) => workspace.id));
