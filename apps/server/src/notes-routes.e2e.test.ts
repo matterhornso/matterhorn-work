@@ -166,7 +166,11 @@ describe("Matterhorn notes API routes", () => {
     expect(memorySearch.response.status).toBe(200);
     expect(memorySearch.payload.count).toBe(0);
 
-    const memorySuggestions = await jsonFetch(base, "/api/memory/suggestions?desk=wellness&limit=5");
+    const globalMemorySuggestions = await jsonFetch(base, "/api/memory/suggestions?desk=wellness&limit=5");
+    expect(globalMemorySuggestions.response.status).toBe(200);
+    expect(globalMemorySuggestions.payload.count).toBe(0);
+
+    const memorySuggestions = await jsonFetch(base, "/workspace/ws_notes/memory/suggestions?desk=wellness&limit=5");
     expect(memorySuggestions.response.status).toBe(200);
     expect(memorySuggestions.payload.count).toBe(1);
     expect(memorySuggestions.payload.entries[0].suggestion.source).toBe("user_note");

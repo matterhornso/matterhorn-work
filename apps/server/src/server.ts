@@ -1272,10 +1272,10 @@ type WorkspaceMemoryStorageMode = "tagged_global_vault" | "workspace_local_vault
 
 function workspaceMemoryStorageMode(): WorkspaceMemoryStorageMode {
   const value = process.env.MATTERHORN_WORK_MEMORY_SCOPE?.trim().toLowerCase();
-  if (value === "workspace" || value === "workspace_local" || value === "workspace-local") {
-    return "workspace_local_vault";
+  if (value === "global" || value === "machine_global" || value === "machine-global" || value === "tagged_global" || value === "tagged-global") {
+    return "tagged_global_vault";
   }
-  return "tagged_global_vault";
+  return "workspace_local_vault";
 }
 
 function workspaceLocalMemoryRoot(workspace: WorkspaceInfo): string {
@@ -2629,11 +2629,12 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
           ...capability(
             memoryStatus,
             "Memory vault",
-            "Memory defaults to a machine-level vault; workspace memory routes can use a workspace-local vault when MATTERHORN_WORK_MEMORY_SCOPE=workspace.",
+            "Global memory APIs use a machine-level vault. Workspace memory routes default to .matterhorn-work/memory and can opt into tagged global storage with MATTERHORN_WORK_MEMORY_SCOPE=global.",
             {
               workspaceRoutePrefix: "/workspace/:id/memory",
               namespace: "workspace_tag",
-              defaultMode: "tagged_global_vault",
+              defaultMode: "workspace_local_vault",
+              taggedGlobalOptInEnv: "MATTERHORN_WORK_MEMORY_SCOPE=global",
               workspaceLocalMode: "workspace_local_vault",
             },
           ),
@@ -5698,7 +5699,8 @@ function createRoutes(
         throw new ApiError(404, "note_not_found", "Note not found");
       }
       const suggestion = namespaceWorkspaceMemorySuggestion(buildNoteMemorySuggestion(note, input), workspace);
-      const inbox = await memoryVault.storeSuggestions([suggestion]);
+      const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
+      const inbox = await workspaceVault.storeSuggestions([suggestion]);
       const entry = inbox.entries[0];
       if (!entry) {
         throw new ApiError(500, "memory_suggestion_not_created", "Memory suggestion was not created");

@@ -12606,7 +12606,23 @@ export function buildBittensorWatchEvaluationCards(evaluations: BittensorWatchEv
       data: { evaluations },
     }];
   }
-  return evaluations.slice(0, 8).map((evaluation) => ({
+  const visibleEvaluations = evaluations
+    .slice()
+    .sort((a, b) => {
+      const priority = (evaluation: BittensorWatchEvaluation) => {
+        if (evaluation.status === "warning") return 0;
+        if (evaluation.shouldNotify) return 1;
+        if (evaluation.copilotActions?.length || evaluation.actionPrompt) return 2;
+        if (evaluation.status === "unavailable") return 3;
+        return 4;
+      };
+      const priorityDelta = priority(a) - priority(b);
+      if (priorityDelta !== 0) return priorityDelta;
+      return b.checkedAt.localeCompare(a.checkedAt);
+    })
+    .slice(0, 8);
+
+  return visibleEvaluations.map((evaluation) => ({
     kind: "watchlist",
     title: evaluation.watch.label,
     subtitle: `${titleCase(evaluation.watch.kind)} · ${titleCase(evaluation.status)}`,

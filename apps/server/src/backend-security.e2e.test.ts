@@ -838,7 +838,7 @@ describe("Data-map contract: must not leak secrets", () => {
     expect(result.response.status).toBe(200);
     expect(result.payload.success).toBe(true);
     expect(result.payload.version).toBe("matterhorn.backend.data-map.v1");
-    expect(result.payload.stores.memory.scope).toBe("machine_global");
+    expect(result.payload.stores.memory.scope).toBe("workspace");
     expect(result.payload.stores.notes.scope).toBe("workspace");
     expect(result.payload.policy.trainingUse).toBe("none_by_default");
 
