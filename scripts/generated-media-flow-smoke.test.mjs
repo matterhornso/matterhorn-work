@@ -14,6 +14,8 @@ for (const endpoint of [
   "/mint/receipt",
   "/listing/preview",
   "/listing/receipt",
+  "/evidence?source=task_events",
+  "/data-ledger?kind=nft",
 ]) {
   assert.ok(script.includes(endpoint), `generated-media flow smoke should call ${endpoint}`);
 }
@@ -28,6 +30,7 @@ for (const stageId of [
   "sui.mint_receipt",
   "sui.listing_preview",
   "sui.listing_receipt",
+  "nft.preview_outputs",
 ]) {
   assert.ok(script.includes(stageId), `generated-media flow smoke should report stage ${stageId}`);
 }
@@ -46,6 +49,14 @@ assert.ok(
 assert.ok(
   script.includes("--json-output") && script.includes("--strict"),
   "generated-media flow smoke should support JSON artifacts and strict exit behavior",
+);
+assert.ok(
+  script.includes("nft-previews") &&
+    script.includes("mint-preview.json") &&
+    script.includes("listing-preview.json") &&
+    script.includes("nftOutputKind") &&
+    script.includes("containsSignatureMaterial"),
+  "generated-media flow smoke should verify public NFT preview handoffs in evidence and ledger",
 );
 
 assert.equal(

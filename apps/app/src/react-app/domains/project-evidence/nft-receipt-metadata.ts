@@ -2,6 +2,7 @@ import type { MatterhornProjectEvidenceMetadata } from "@matterhorn-work/types/p
 
 export type NftReceiptMetadata = {
   kind?: "mint" | "listing" | string;
+  outputKind?: string;
   network?: string;
   transactionDigest?: string;
   objectId?: string;
@@ -25,8 +26,11 @@ function booleanField(metadata: MatterhornProjectEvidenceMetadata | undefined, k
 export function nftReceiptMetadataFromEvidence(
   metadata: MatterhornProjectEvidenceMetadata | undefined,
 ): NftReceiptMetadata | undefined {
+  const kind = stringField(metadata, "nftReceiptKind");
+  const outputKind = stringField(metadata, "nftOutputKind");
   const receipt: NftReceiptMetadata = {
-    kind: stringField(metadata, "nftReceiptKind"),
+    kind: kind ?? outputKind,
+    outputKind,
     network: stringField(metadata, "nftNetwork"),
     transactionDigest: stringField(metadata, "nftTransactionDigest"),
     objectId: stringField(metadata, "nftObjectId"),
@@ -47,6 +51,8 @@ export function compactNftReceiptValue(value: string | undefined): string | unde
 }
 
 export function nftReceiptKindLabel(kind: NftReceiptMetadata["kind"]): string {
+  if (kind === "listing_preview") return "Listing preview";
+  if (kind === "mint_preview") return "Mint preview";
   if (kind === "listing") return "Listing";
   if (kind === "mint") return "Mint";
   return "NFT";

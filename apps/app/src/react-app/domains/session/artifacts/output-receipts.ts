@@ -6,7 +6,7 @@ import {
 } from "../../project-evidence/nft-receipt-metadata";
 import { classifyOpenTarget, type OpenTarget } from "./open-target";
 
-export type WorkflowOutputReceiptStatus = "saved" | "completed" | "failed" | "cancelled" | "generated" | "published";
+export type WorkflowOutputReceiptStatus = "saved" | "completed" | "failed" | "cancelled" | "generated" | "preview" | "published";
 export type WorkflowOutputReceiptKind = "workflow" | "image" | "nft";
 
 export type WorkflowOutputReceipt = {
@@ -38,6 +38,7 @@ const RECEIPT_EVENT_TYPES = new Set<MatterhornProjectEvidenceEvent["type"]>([
 
 const STATUS_PRIORITY: Record<WorkflowOutputReceiptStatus, number> = {
   published: 5,
+  preview: 4,
   generated: 4,
   saved: 4,
   completed: 3,
@@ -58,6 +59,7 @@ function basename(path: string): string {
 }
 
 function statusForEvent(event: MatterhornProjectEvidenceEvent): WorkflowOutputReceiptStatus | null {
+  if (event.type === "task.output_saved" && typeof event.metadata?.nftOutputKind === "string") return "preview";
   if (event.type === "task.output_saved") return "saved";
   if (event.type === "task.completed") return "completed";
   if (event.type === "task.failed") return "failed";
@@ -69,6 +71,7 @@ function statusForEvent(event: MatterhornProjectEvidenceEvent): WorkflowOutputRe
 
 function kindForEvent(event: MatterhornProjectEvidenceEvent): WorkflowOutputReceiptKind {
   if (event.type === "image.generated") return "image";
+  if (typeof event.metadata?.nftOutputKind === "string") return "nft";
   if (event.type.startsWith("nft.")) return "nft";
   return "workflow";
 }

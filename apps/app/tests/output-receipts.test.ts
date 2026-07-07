@@ -133,6 +133,46 @@ describe("workflow output receipts", () => {
     });
   });
 
+  test("maps NFT preview output handoffs into NFT preview receipts", () => {
+    const receipts = workflowOutputReceiptsFromEvidence([
+      makeEvent({
+        id: "nft_preview_evt",
+        type: "task.output_saved",
+        title: "Sui NFT mint preview",
+        summary: "nft;nft_draft_1",
+        desk: "nft",
+        sessionSlug: "nft_draft_1",
+        taskId: "nft_mint_preview_nft_draft_1",
+        outputPath: ".matterhorn-work/outputs/nft-previews/nft_draft_1/mint-preview.json",
+        artifactPaths: [".matterhorn-work/outputs/nft-previews/nft_draft_1/mint-preview.json"],
+        metadata: {
+          nftOutputKind: "mint_preview",
+          nftNetwork: "sui-testnet",
+          nftPackageId: "0xmintpackage",
+          custody: false,
+          containsSignatureMaterial: false,
+        },
+      }),
+    ]);
+
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({
+      kind: "nft",
+      status: "preview",
+      title: "Sui NFT mint preview",
+      outputPath: ".matterhorn-work/outputs/nft-previews/nft_draft_1/mint-preview.json",
+      taskId: "nft_mint_preview_nft_draft_1",
+      nftReceipt: {
+        kind: "mint_preview",
+        outputKind: "mint_preview",
+        network: "sui-testnet",
+        packageId: "0xmintpackage",
+        custody: false,
+        containsSignatureMaterial: false,
+      },
+    });
+  });
+
   test("uses completed task runs as a fallback for outputs without saved events", () => {
     const receipts = workflowOutputReceiptsFromEvidence([
       makeEvent({

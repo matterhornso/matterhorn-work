@@ -592,8 +592,9 @@ describe("Generated media Sui NFT setup previews", () => {
   test("mint preview returns a wallet transaction plan when package config and public media exist", async () => {
     process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = "0xmintpackage";
     process.env.MATTERHORN_SUI_NFT_MODULE_NAME = "matterhorn_media";
-    const { base } = await boot();
+    const { base, dir } = await boot();
     const draft = await createDraft(base);
+    const mintPreviewPath = `.matterhorn-work/outputs/nft-previews/${draft.id}/mint-preview.json`;
     await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}`, {
       method: "PATCH",
       body: JSON.stringify({
@@ -635,6 +636,56 @@ describe("Generated media Sui NFT setup previews", () => {
       }),
     );
     expect(result.payload.draft.status).toBe("mint_preview_ready");
+
+    const previewFile = JSON.parse(readFileSync(join(dir, mintPreviewPath), "utf8"));
+    expect(previewFile).toMatchObject({
+      version: "matterhorn.nft-preview.v1",
+      kind: "mint_preview",
+      draftId: draft.id,
+      imageId: draft.imageId,
+      network: "sui-testnet",
+      custody: false,
+      canSubmit: false,
+      containsSignatureMaterial: false,
+      transactionPlan: {
+        kind: "sui_move_call",
+        custody: false,
+        canSubmit: false,
+      },
+    });
+    expect(JSON.stringify(previewFile)).not.toContain("rawSignature");
+    expect(JSON.stringify(previewFile)).not.toContain("privateKey");
+
+    const evidence = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/evidence?source=task_events&limit=20`);
+    expect(evidence.response.status).toBe(200);
+    expect(evidence.payload.items).toContainEqual(expect.objectContaining({
+      type: "task.output_saved",
+      title: `Sui NFT mint preview: mint-preview.json`,
+      desk: "nft",
+      sessionSlug: draft.id,
+      taskId: `nft_mint_preview_${draft.id}`,
+      outputPath: mintPreviewPath,
+      artifactPaths: [mintPreviewPath],
+      metadata: expect.objectContaining({
+        nftOutputKind: "mint_preview",
+        nftNetwork: "sui-testnet",
+        nftPackageId: "0xmintpackage",
+        custody: false,
+        containsSignatureMaterial: false,
+      }),
+    }));
+
+    const nftLedger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=nft&limit=20`);
+    expect(nftLedger.response.status).toBe(200);
+    expect(nftLedger.payload.items).toContainEqual(expect.objectContaining({
+      kind: "nft",
+      eventType: "task.output_saved",
+      outputPath: mintPreviewPath,
+      metadata: expect.objectContaining({
+        nftOutputKind: "mint_preview",
+        containsSignatureMaterial: false,
+      }),
+    }));
   });
 
   test("listing preview requires both Kiosk and TransferPolicy config", async () => {
@@ -708,8 +759,9 @@ describe("Generated media Sui NFT setup previews", () => {
   test("listing preview returns a Sui Kiosk transaction plan when config and user inputs exist", async () => {
     process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = "0xkioskpackage";
     process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = "0xpolicypackage";
-    const { base } = await boot();
+    const { base, dir } = await boot();
     const draft = await createDraft(base);
+    const listingPreviewPath = `.matterhorn-work/outputs/nft-previews/${draft.id}/listing-preview.json`;
     await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
       method: "POST",
       body: JSON.stringify({
@@ -753,6 +805,61 @@ describe("Generated media Sui NFT setup previews", () => {
     expect(result.payload.draft.listing.kioskOwnerCapId).toBe("0xownercap");
     expect(result.payload.draft.listing.transferPolicyId).toBe("0xtransferpolicy");
     expect(result.payload.draft.listing.itemType).toBe("0xmintpackage::matterhorn_media::MatterhornNFT");
+
+    const previewFile = JSON.parse(readFileSync(join(dir, listingPreviewPath), "utf8"));
+    expect(previewFile).toMatchObject({
+      version: "matterhorn.nft-preview.v1",
+      kind: "listing_preview",
+      draftId: draft.id,
+      imageId: draft.imageId,
+      network: "sui-testnet",
+      custody: false,
+      canSubmit: false,
+      containsSignatureMaterial: false,
+      transactionPlan: {
+        kind: "sui_kiosk_listing",
+        marketplace: "sui_kiosk",
+        nftObjectId: "0xnftobject",
+        kioskId: "0xuserkiosk",
+        transferPolicyId: "0xtransferpolicy",
+      },
+    });
+    expect(JSON.stringify(previewFile)).not.toContain("rawSignature");
+    expect(JSON.stringify(previewFile)).not.toContain("privateKey");
+
+    const evidence = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/evidence?source=task_events&limit=20`);
+    expect(evidence.response.status).toBe(200);
+    expect(evidence.payload.items).toContainEqual(expect.objectContaining({
+      type: "task.output_saved",
+      title: `Sui Kiosk listing preview: listing-preview.json`,
+      desk: "nft",
+      sessionSlug: draft.id,
+      taskId: `nft_listing_preview_${draft.id}`,
+      outputPath: listingPreviewPath,
+      artifactPaths: [listingPreviewPath],
+      metadata: expect.objectContaining({
+        nftOutputKind: "listing_preview",
+        nftNetwork: "sui-testnet",
+        nftObjectId: "0xnftobject",
+        nftKioskId: "0xuserkiosk",
+        nftTransferPolicyId: "0xtransferpolicy",
+        custody: false,
+        containsSignatureMaterial: false,
+      }),
+    }));
+
+    const nftLedger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=nft&limit=20`);
+    expect(nftLedger.response.status).toBe(200);
+    expect(nftLedger.payload.items).toContainEqual(expect.objectContaining({
+      kind: "nft",
+      eventType: "task.output_saved",
+      outputPath: listingPreviewPath,
+      metadata: expect.objectContaining({
+        nftOutputKind: "listing_preview",
+        nftObjectId: "0xnftobject",
+        containsSignatureMaterial: false,
+      }),
+    }));
   });
 
   test("mint and listing receipts appear in project evidence and data ledger", async () => {

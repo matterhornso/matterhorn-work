@@ -151,6 +151,10 @@ async function resolveWorkspaceId(config) {
   return id;
 }
 
+function assertSmoke(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
 async function runGeneratedMediaFlow(config) {
   const report = {
     ready: false,
@@ -227,6 +231,10 @@ async function runGeneratedMediaFlow(config) {
       id: draft.draft?.id,
       status: draft.draft?.status,
     };
+    const nftPreviewPaths = {
+      mint: `.matterhorn-work/outputs/nft-previews/${draft.draft.id}/mint-preview.json`,
+      listing: `.matterhorn-work/outputs/nft-previews/${draft.draft.id}/listing-preview.json`,
+    };
 
     const upload = await stage("walrus.upload", "Upload media to Walrus", () => fetchJson(config, `/workspace/${workspaceId}/nft-drafts/${draft.draft.id}/storage/upload`, {
       method: "POST",
@@ -245,6 +253,7 @@ async function runGeneratedMediaFlow(config) {
     report.artifacts.mintPreview = {
       kind: mintPreview.transactionPlan?.kind,
       target: mintPreview.transactionPlan?.moveCalls?.[0]?.target,
+      outputPath: nftPreviewPaths.mint,
       custody: mintPreview.custody,
       canSubmit: mintPreview.canSubmit,
     };
@@ -277,6 +286,7 @@ async function runGeneratedMediaFlow(config) {
     report.artifacts.listingPreview = {
       kind: listingPreview.transactionPlan?.kind,
       marketplace: listingPreview.transactionPlan?.marketplace,
+      outputPath: nftPreviewPaths.listing,
       custody: listingPreview.custody,
       canSubmit: listingPreview.canSubmit,
     };
@@ -297,6 +307,37 @@ async function runGeneratedMediaFlow(config) {
       marketplace: listingReceipt.draft?.listing?.marketplace,
       kioskId: listingReceipt.draft?.listing?.kioskId,
     };
+
+    const previewOutputs = await stage("nft.preview_outputs", "Verify NFT preview output handoffs", async () => {
+      const evidence = await fetchJson(config, `/workspace/${workspaceId}/evidence?source=task_events&limit=50`);
+      const ledger = await fetchJson(config, `/workspace/${workspaceId}/data-ledger?kind=nft&limit=50`);
+      const evidenceItems = Array.isArray(evidence.items) ? evidence.items : [];
+      const ledgerItems = Array.isArray(ledger.items) ? ledger.items : [];
+      const hasEvidenceOutput = (path, kind) => evidenceItems.some((item) =>
+        item?.type === "task.output_saved" &&
+        item?.outputPath === path &&
+        item?.metadata?.nftOutputKind === kind &&
+        item?.metadata?.containsSignatureMaterial === false);
+      const hasLedgerOutput = (path, kind) => ledgerItems.some((item) =>
+        item?.kind === "nft" &&
+        item?.eventType === "task.output_saved" &&
+        item?.outputPath === path &&
+        item?.metadata?.nftOutputKind === kind &&
+        item?.metadata?.containsSignatureMaterial === false);
+
+      assertSmoke(hasEvidenceOutput(nftPreviewPaths.mint, "mint_preview"), "mint preview handoff missing from project evidence");
+      assertSmoke(hasEvidenceOutput(nftPreviewPaths.listing, "listing_preview"), "listing preview handoff missing from project evidence");
+      assertSmoke(hasLedgerOutput(nftPreviewPaths.mint, "mint_preview"), "mint preview handoff missing from NFT data ledger");
+      assertSmoke(hasLedgerOutput(nftPreviewPaths.listing, "listing_preview"), "listing preview handoff missing from NFT data ledger");
+
+      return {
+        mintPreviewPath: nftPreviewPaths.mint,
+        listingPreviewPath: nftPreviewPaths.listing,
+        evidenceCount: evidenceItems.length,
+        ledgerCount: ledgerItems.length,
+      };
+    });
+    report.artifacts.previewOutputs = previewOutputs;
 
     report.ready = report.stages.every((item) => item.status === "pass");
   } catch (error) {

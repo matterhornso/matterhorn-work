@@ -43,6 +43,7 @@ import { shortId } from "./utils.js";
 import { uploadBlobToWalrus, WalrusUploadError } from "./walrus-storage.js";
 
 type NftReceiptKind = "mint" | "listing";
+type NftPreviewKind = "mint_preview" | "listing_preview";
 
 type PublicNftReceiptMetadata = Record<string, string | number | boolean | null>;
 
@@ -442,6 +443,38 @@ export function addGeneratedMediaRoutes(
       },
     ];
     const transactionPlan = buildMintTransactionPlan(responseDraft, nftEnv, storageUrl!, steps);
+    const recordedAtMs = Date.now();
+    const previewMetadata = publicNftPreviewMetadata("mint_preview", responseDraft, transactionPlan);
+    const previewPath = await writePublicNftPreviewFile({
+      workspaceRoot: workspace.path,
+      workspaceId: workspace.id,
+      draft: responseDraft,
+      kind: "mint_preview",
+      transactionPlan,
+      setupRequirements: [...setupRequirements, ...inputRequirements],
+      recordedAt: new Date(recordedAtMs).toISOString(),
+    });
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.nft.mint_preview_prepared",
+      target: previewPath,
+      summary: `Prepared Sui mint preview for NFT draft ${draft.id}`,
+      timestamp: recordedAtMs,
+      metadata: previewMetadata,
+    });
+    await recordTaskEvent({
+      id: `task_evt_${shortId()}`,
+      workspaceId: workspace.id,
+      taskId: `nft_mint_preview_${draft.id}`,
+      type: "artifact_saved",
+      timestamp: recordedAtMs,
+      summary: "Sui NFT mint preview",
+      detail: `nft;${draft.id}`,
+      artifactPath: previewPath,
+      metadata: previewMetadata,
+    });
     const response: MatterhornNftMintPreviewResponse = {
       success: true,
       custody: false,
@@ -582,6 +615,39 @@ export function addGeneratedMediaRoutes(
       },
     ];
     const transactionPlan = buildKioskListingTransactionPlan(draft, listingInputs as ResolvedListingPreviewInputsReady);
+    const responseDraft = redactNftDraftForResponse(updated!);
+    const recordedAtMs = Date.now();
+    const previewMetadata = publicNftPreviewMetadata("listing_preview", responseDraft, transactionPlan);
+    const previewPath = await writePublicNftPreviewFile({
+      workspaceRoot: workspace.path,
+      workspaceId: workspace.id,
+      draft: responseDraft,
+      kind: "listing_preview",
+      transactionPlan,
+      setupRequirements: [...setupRequirements, ...inputRequirements],
+      recordedAt: new Date(recordedAtMs).toISOString(),
+    });
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.nft.listing_preview_prepared",
+      target: previewPath,
+      summary: `Prepared Sui Kiosk listing preview for NFT draft ${draft.id}`,
+      timestamp: recordedAtMs,
+      metadata: previewMetadata,
+    });
+    await recordTaskEvent({
+      id: `task_evt_${shortId()}`,
+      workspaceId: workspace.id,
+      taskId: `nft_listing_preview_${draft.id}`,
+      type: "artifact_saved",
+      timestamp: recordedAtMs,
+      summary: "Sui Kiosk listing preview",
+      detail: `nft;${draft.id}`,
+      artifactPath: previewPath,
+      metadata: previewMetadata,
+    });
     const response: MatterhornNftListingPreviewResponse = {
       success: true,
       custody: false,
@@ -600,7 +666,7 @@ export function addGeneratedMediaRoutes(
       },
       transactionPlan,
       setupRequirements: [...setupRequirements, ...inputRequirements],
-      draft: redactNftDraftForResponse(updated!),
+      draft: responseDraft,
     };
     return jsonResponse(response);
   });
@@ -697,6 +763,11 @@ function nftReceiptRelativePath(draftId: string, kind: NftReceiptKind): string {
   return [".matterhorn-work", "outputs", "nft-receipts", draftId, fileName].join("/");
 }
 
+function nftPreviewRelativePath(draftId: string, kind: NftPreviewKind): string {
+  const fileName = kind === "mint_preview" ? "mint-preview.json" : "listing-preview.json";
+  return [".matterhorn-work", "outputs", "nft-previews", draftId, fileName].join("/");
+}
+
 function publicNftReceiptMetadata(kind: NftReceiptKind, receipt: MatterhornNftReceiptRequest): PublicNftReceiptMetadata {
   return {
     nftReceiptKind: kind,
@@ -706,6 +777,23 @@ function publicNftReceiptMetadata(kind: NftReceiptKind, receipt: MatterhornNftRe
     nftPackageId: receipt.packageId ?? null,
     nftKioskId: receipt.kioskId ?? null,
     nftTransferPolicyId: receipt.transferPolicyId ?? null,
+    custody: false,
+    containsSignatureMaterial: false,
+  };
+}
+
+function publicNftPreviewMetadata(
+  kind: NftPreviewKind,
+  draft: MatterhornImageNftDraft,
+  transactionPlan: MatterhornNftMintTransactionPlan | MatterhornNftKioskListingTransactionPlan,
+): PublicNftReceiptMetadata {
+  return {
+    nftOutputKind: kind,
+    nftNetwork: draft.network,
+    nftObjectId: transactionPlan.kind === "sui_kiosk_listing" ? transactionPlan.nftObjectId : null,
+    nftPackageId: transactionPlan.kind === "sui_move_call" ? transactionPlan.moveCalls[0]?.packageId ?? null : draft.mint.packageId ?? null,
+    nftKioskId: transactionPlan.kind === "sui_kiosk_listing" ? transactionPlan.kioskId : null,
+    nftTransferPolicyId: transactionPlan.kind === "sui_kiosk_listing" ? transactionPlan.transferPolicyId : null,
     custody: false,
     containsSignatureMaterial: false,
   };
@@ -735,6 +823,38 @@ async function writePublicNftReceiptFile(input: {
     kioskId: input.receipt.kioskId ?? null,
     transferPolicyId: input.receipt.transferPolicyId ?? null,
     custody: false,
+    containsSignatureMaterial: false,
+    recordedAt: input.recordedAt,
+  }, null, 2), "utf8");
+  return relativePath;
+}
+
+async function writePublicNftPreviewFile(input: {
+  workspaceRoot: string;
+  workspaceId: string;
+  draft: MatterhornImageNftDraft;
+  kind: NftPreviewKind;
+  transactionPlan: MatterhornNftMintTransactionPlan | MatterhornNftKioskListingTransactionPlan;
+  setupRequirements: MatterhornNftSetupRequirement[];
+  recordedAt: string;
+}): Promise<string> {
+  const relativePath = nftPreviewRelativePath(input.draft.id, input.kind);
+  const filePath = join(input.workspaceRoot, ...relativePath.split("/"));
+  await mkdir(join(input.workspaceRoot, ".matterhorn-work", "outputs", "nft-previews", input.draft.id), { recursive: true });
+  await writeFile(filePath, JSON.stringify({
+    version: "matterhorn.nft-preview.v1",
+    kind: input.kind,
+    workspaceId: input.workspaceId,
+    draftId: input.draft.id,
+    imageId: input.draft.imageId,
+    network: input.draft.network,
+    title: input.draft.title,
+    description: input.draft.description,
+    metadata: input.draft.metadata,
+    transactionPlan: input.transactionPlan,
+    setupRequirements: input.setupRequirements,
+    custody: false,
+    canSubmit: false,
     containsSignatureMaterial: false,
     recordedAt: input.recordedAt,
   }, null, 2), "utf8");
