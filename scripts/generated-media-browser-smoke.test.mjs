@@ -31,6 +31,7 @@ assert.ok(
 );
 for (const stageId of [
   "open_app",
+  "home_wallet_readiness",
   "open_chat",
   "open_image_panel",
   "generate_image",
@@ -43,6 +44,9 @@ for (const stageId of [
   assert.ok(script.includes(stageId), `generated-media browser smoke should report stage ${stageId}`);
 }
 for (const visibleText of [
+  "Wallet readiness",
+  "Sui signing stays in your wallet; desktop uses external handoff.",
+  "Open wallet",
   "Generate image",
   "Describe an image to generate...",
   "Image saved to outputs",
