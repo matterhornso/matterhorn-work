@@ -394,7 +394,9 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("matterhorn:task-log-updated");
     expect(source).toContain("matterhorn:project-evidence-updated");
     expect(source).toContain("No custody");
-    expect(source).toContain("only through your connected Sui wallet");
+    expect(source).toContain("Sui wallet workflow");
+    expect(source).toContain("Use wallet");
+    expect(source).toContain("wallet-only. Matterhorn does not hold keys or submit directly.");
     expect(source).toContain("Do not paste signatures or signed payloads");
     expect(sessionSource).toContain("Sui workflow");
     expect(sessionSource).toContain('setCurrentSidePanel("wallet")');
