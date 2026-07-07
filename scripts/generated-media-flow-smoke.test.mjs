@@ -13,6 +13,7 @@ for (const endpoint of [
   "/mint/preview",
   "/mint/receipt",
   "/listing/preview",
+  "/listing/receipt",
 ]) {
   assert.ok(script.includes(endpoint), `generated-media flow smoke should call ${endpoint}`);
 }
@@ -26,6 +27,7 @@ for (const stageId of [
   "sui.mint_preview",
   "sui.mint_receipt",
   "sui.listing_preview",
+  "sui.listing_receipt",
 ]) {
   assert.ok(script.includes(stageId), `generated-media flow smoke should report stage ${stageId}`);
 }
