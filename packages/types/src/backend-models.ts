@@ -68,6 +68,7 @@ export interface MatterhornBackendModelProviderSummary {
   source?: "env" | "api" | "config" | "custom" | "unknown" | string;
   connected: boolean;
   modelCount: number;
+  modelIds: string[];
   sampleModels: string[];
 }
 
