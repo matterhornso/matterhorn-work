@@ -139,6 +139,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
   });
   const backendModels = workspaceBackendModelsQuery.data ?? backendModelsQuery.data;
   const catalog = backendModels?.catalog;
+  const opencodeSetupMissing = catalog?.errorCode === "opencode_unconfigured";
   const workspaceSelection = workspaceModelSelectionQuery.data?.selection ?? backendModels?.workspaceSelection ?? null;
   const effectiveWorkspaceModel = workspaceModelSelectionQuery.data?.effectiveModel ?? backendModels?.defaultModel ?? null;
   const catalogQueryFailed = workspaceBackendModelsQuery.isError || backendModelsQuery.isError;
@@ -179,6 +180,12 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             Choose which model answers workspace prompts, and whether that choice is saved for this project.
           </LayoutSectionDescription>
         </LayoutSectionHeader>
+
+        {opencodeSetupMissing ? (
+          <SettingsNotice>
+            Local agent engine needs setup. OpenCode is not connected for this workspace, so chats and desk tasks cannot run yet.
+          </SettingsNotice>
+        ) : null}
 
         <LayoutSectionItem className="rounded-lg border border-dls-border/40 bg-dls-card/35 px-4 py-4 shadow-sm shadow-black/5">
           <LayoutSectionItemHeader>
