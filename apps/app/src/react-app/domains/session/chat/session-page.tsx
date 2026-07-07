@@ -2094,7 +2094,7 @@ export function SessionPage(props: SessionPageProps) {
                           <div className="flex min-w-0 flex-col gap-2 text-xs text-dls-secondary sm:flex-row sm:items-center sm:justify-between">
                             <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                               <span className="inline-flex min-w-0 items-baseline gap-2">
-                                <span className="font-medium text-dls-text">Folder</span>
+                                <span className="font-medium text-dls-text">Project</span>
                                 <span
                                   className="min-w-0 max-w-[18rem] truncate font-mono text-[11px] leading-4 text-dls-secondary"
                                   title={homeProjectPath || "No local project folder selected"}
@@ -2104,7 +2104,6 @@ export function SessionPage(props: SessionPageProps) {
                               </span>
                               <span className="hidden h-3 w-px bg-dls-border/30 sm:block" aria-hidden="true" />
                               <span className="inline-flex min-w-0 items-baseline gap-2">
-                                <span className="font-medium text-dls-text">Outputs</span>
                                 <span className="font-mono text-[11px] leading-4 text-dls-secondary" title={homeOutputsPath}>outputs/</span>
                               </span>
                             </div>

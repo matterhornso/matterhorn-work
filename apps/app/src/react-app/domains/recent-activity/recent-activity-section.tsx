@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ElementType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
+  ArrowRight,
   BrainCircuit,
   CalendarClock,
   CheckCircle2,
@@ -204,7 +205,7 @@ function ActivityRow(props: { item: RecentActivityItem; onSelect: () => void }) 
   );
 }
 
-function LatestActivitySummary({ item, count }: { item: RecentActivityItem; count: number }) {
+function LatestActivitySummary({ item }: { item: RecentActivityItem }) {
   const title = activityDisplayTitle(item);
   const context = item.desk ? deskLabel(item.desk) : item.source.replace(/_/g, " ");
 
@@ -214,10 +215,45 @@ function LatestActivitySummary({ item, count }: { item: RecentActivityItem; coun
       <span className="truncate text-xs leading-5 text-dls-secondary">
         {context} · {formatActivityTimestamp(item.timestamp)}
       </span>
-      <span className="shrink-0 text-xs leading-5 text-dls-secondary/70">
-        {count} recent
-      </span>
     </span>
+  );
+}
+
+function LatestActivityPreview(props: {
+  item: RecentActivityItem;
+  count: number;
+  onSelect: () => void;
+  onOpenHistory: () => void;
+}) {
+  const meta = KIND_META[props.item.kind];
+  const Icon = meta.icon;
+  const countLabel = `${props.count} recent ${props.count === 1 ? "event" : "events"}`;
+
+  return (
+    <div className="flex min-w-0 items-center gap-3 rounded-lg bg-dls-surface-muted/10 px-3 py-2.5">
+      <button
+        type="button"
+        className="group flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+        onClick={props.onSelect}
+        aria-label={`${activityDisplayTitle(props.item)}, ${formatActivityTimestamp(props.item.timestamp)}`}
+      >
+        <span className={cn("flex size-5 shrink-0 items-center justify-center opacity-80", meta.tone)} aria-hidden="true">
+          <Icon className="size-3" />
+        </span>
+        <LatestActivitySummary item={props.item} />
+      </button>
+      <span className="hidden shrink-0 text-xs leading-5 text-dls-secondary/75 md:inline">
+        {countLabel}
+      </span>
+      <button
+        type="button"
+        className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-dls-text transition-colors hover:text-dls-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+        onClick={props.onOpenHistory}
+      >
+        Project history
+        <ArrowRight className="size-3" aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
@@ -393,6 +429,7 @@ export function RecentActivitySection({
   const items: RecentActivityItem[] = data?.items ? normalizeEvidenceEvents(data.items) : [];
   const selectedItem = items.find((item) => item.id === selectedItemId) ?? null;
   const latestItem = items[0] ?? null;
+  const hasHistoryRoute = Boolean(onOpenHistory);
 
   useEffect(() => {
     setHistoryOpen(defaultExpanded);
@@ -408,7 +445,7 @@ export function RecentActivitySection({
               <p className="mt-0.5 text-xs leading-5 text-dls-secondary">{description}</p>
             ) : null}
           </div>
-          {!isLoading && !isError && latestItem ? (
+          {!isLoading && !isError && latestItem && !hasHistoryRoute ? (
             <div className="flex shrink-0 items-center gap-3">
               <span className="hidden text-xs text-dls-secondary sm:inline">{items.length} recent</span>
               <button
@@ -454,6 +491,13 @@ export function RecentActivitySection({
           <ListTodo className="size-3.5 shrink-0" />
           Notes, tasks, and outputs will appear here as you work.
         </div>
+      ) : hasHistoryRoute && latestItem && onOpenHistory ? (
+        <LatestActivityPreview
+          item={latestItem}
+          count={items.length}
+          onSelect={() => setSelectedItemId(latestItem.id)}
+          onOpenHistory={onOpenHistory}
+        />
       ) : !historyOpen && latestItem ? (
         <button
           type="button"
@@ -468,7 +512,7 @@ export function RecentActivitySection({
           }}
         >
           <History className="size-3.5 shrink-0 text-dls-secondary" aria-hidden="true" />
-          <LatestActivitySummary item={latestItem} count={items.length} />
+          <LatestActivitySummary item={latestItem} />
         </button>
       ) : (
         <div className="overflow-hidden rounded-lg bg-dls-surface-muted/10">

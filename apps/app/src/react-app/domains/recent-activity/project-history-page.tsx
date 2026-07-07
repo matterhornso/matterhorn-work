@@ -236,7 +236,7 @@ function ProjectHistoryRow({
   return (
     <button
       type="button"
-      className="grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] gap-3 px-3 py-3.5 text-left transition-colors hover:bg-dls-hover/30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+      className="grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] gap-3 rounded-md px-3 py-3 text-left transition-colors hover:bg-dls-hover/25 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
       onClick={onSelect}
       aria-label={`${title}, ${formatActivityTimestamp(entry.timestamp)}`}
     >
@@ -485,7 +485,7 @@ export function ProjectHistoryPage({
       style={{ scrollbarGutter: "stable" }}
     >
       <div className="mx-auto w-full max-w-5xl space-y-5">
-        <header className="flex flex-col gap-3 border-b border-dls-border/30 pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <header className="flex flex-col gap-3 border-b border-dls-border/15 pb-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <h2 className="text-xl font-semibold tracking-[-0.01em] text-dls-text">Project history</h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
@@ -524,13 +524,13 @@ export function ProjectHistoryPage({
                   className={cn(
                     "inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border",
                     selected
-                      ? "bg-dls-text text-dls-background"
-                      : "bg-dls-surface-muted/25 text-dls-secondary hover:bg-dls-hover hover:text-dls-text",
+                      ? "bg-dls-hover text-dls-text"
+                      : "bg-transparent text-dls-secondary hover:bg-dls-surface-muted/20 hover:text-dls-text",
                   )}
                   onClick={() => setHistoryFilter(filter.id)}
                 >
                   <span>{filter.label}</span>
-                  <span className={cn("text-[11px]", selected ? "text-dls-background/75" : "text-dls-secondary/75")}>
+                  <span className="text-[11px] text-dls-secondary/75">
                     {summaryQuery.isLoading ? "…" : count}
                   </span>
                 </button>
@@ -579,14 +579,14 @@ export function ProjectHistoryPage({
             No {activeFilterConfig.label.toLowerCase()} recorded yet.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg bg-dls-surface-muted/10">
+          <div className="rounded-lg bg-dls-surface-muted/10 px-2 py-2">
             {latest ? (
               <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-dls-secondary">
                 <span>{rows.length} actual event{rows.length === 1 ? "" : "s"} shown</span>
                 <span>Latest {formatActivityTimestamp(latest.timestamp)}</span>
               </div>
             ) : null}
-            <div className="divide-y divide-dls-border/20">
+            <div className="space-y-1">
               {rows.map((entry) => (
                 <ProjectHistoryRow
                   key={entry.id}
