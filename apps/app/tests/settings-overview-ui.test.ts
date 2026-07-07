@@ -16,6 +16,9 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("walletFamilySummary");
     expect(source).toContain("storageLocationLabel");
     expect(source).toContain("workspaceDataPolicySummary");
+    expect(source).toContain("buildNftPublishingReadinessItems");
+    expect(source).toContain("NftPublishingReadinessRows");
+    expect(source).toContain("rollUpNftPublishingReadinessStatus");
   });
 
   test("queries backend capabilities and workspace data map", () => {
@@ -37,6 +40,8 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("client.workspaceDataPolicy(workspaceId)");
     expect(source).toContain("client.updateWorkspaceDataPolicy(workspaceId, { feedbackUse })");
     expect(source).toContain("Backend status");
+    expect(source).toContain("Image and NFT publishing");
+    expect(source).toContain("Generated images, public storage, Sui minting, and marketplace listing readiness.");
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
   });

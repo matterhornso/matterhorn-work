@@ -160,6 +160,15 @@ describe("Backend capabilities section renders all capability states", () => {
     const html = renderCapabilitiesSection(backendCapabilitiesWorkingFixture);
     expect(html).toContain("Working");
     expect(html).toContain("opencode/big-pickle");
+    expect(html).toContain("Image and NFT publishing");
+    expect(html).toContain("Image generation");
+    expect(html).toContain("mock/mock-image-1");
+    expect(html).toContain("Walrus storage");
+    expect(html).toContain("Publisher/relay needed");
+    expect(html).toContain("Sui NFT minting");
+    expect(html).toContain("Sui testnet");
+    expect(html).toContain("NFT marketplace listing");
+    expect(html).toContain("Kiosk/TransferPolicy needed");
     expect(html).toContain("Direct connect");
     expect(html).toContain("Public read / external signer");
     expect(html).toContain("Wallet-standard preview");

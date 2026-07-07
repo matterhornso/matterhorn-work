@@ -6,14 +6,21 @@ import {
   CircleUser,
   FolderCog,
   Info,
+  Image as ImageIcon,
   Lock,
   MessageSquare,
   NotebookPen,
   ShieldCheck,
+  Store,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
 import type { MatterhornBackendCapabilitiesResponse } from "@matterhorn-work/types/backend-capabilities";
+import {
+  buildNftPublishingReadinessItems,
+  NftPublishingReadinessRows,
+  rollUpNftPublishingReadinessStatus,
+} from "../../session/media";
 import {
   capabilityStatusLabel,
   capabilitySummary,
@@ -61,6 +68,8 @@ const sectionIcons: Record<string, LucideIcon> = {
   security: ShieldCheck,
   feedback: MessageSquare,
   mcp: Boxes,
+  "image-generation": ImageIcon,
+  nft: Store,
 };
 
 export interface BackendCapabilitiesSectionProps {
@@ -97,6 +106,13 @@ export function BackendCapabilitiesSection(props: BackendCapabilitiesSectionProp
   const caps = props.capabilities;
   const memory = memoryScopeCopy(caps.memory.scope);
   const feedback = feedbackCapabilityCopy(caps.settings.find((s) => s.section === "feedback"));
+  const publishingReadiness = buildNftPublishingReadinessItems({
+    imageGeneration: caps.imageGeneration,
+    walrusStorage: caps.walrusStorage,
+    nftMinting: caps.nftMinting,
+    nftMarketplaceListing: caps.nftMarketplaceListing,
+  });
+  const publishingStatus = rollUpNftPublishingReadinessStatus(publishingReadiness);
 
   return (
     <div className="divide-y divide-dls-border/45">
@@ -133,6 +149,16 @@ export function BackendCapabilitiesSection(props: BackendCapabilitiesSectionProp
           hint="Where the model list comes from."
           value={caps.models.providerListSource}
         />
+      </SectionCard>
+
+      {/* Image and NFT publishing */}
+      <SectionCard
+        icon={<ImageIcon size={18} />}
+        title="Image and NFT publishing"
+        description="Readiness for generated images, Walrus storage, Sui minting, and marketplace listing."
+        status={<BackendCapabilityStatusBadge status={publishingStatus} />}
+      >
+        <NftPublishingReadinessRows items={publishingReadiness} />
       </SectionCard>
 
       {/* Memory */}

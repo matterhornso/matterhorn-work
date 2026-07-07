@@ -51,6 +51,7 @@ function getFreePort(): Promise<number> {
 
 async function boot() {
   const dir = mkdtempSync(join(tmpdir(), "matterhorn-image-"));
+  process.env.OPENWORK_DATA_DIR = join(dir, ".openwork-test");
   dirs.push(dir);
   const port = await getFreePort();
   const server = await startServer(baseConfig(port, dir));
@@ -113,6 +114,7 @@ beforeEach(() => {
     MATTERHORN_SUI_KIOSK_OWNER_CAP_ID: process.env.MATTERHORN_SUI_KIOSK_OWNER_CAP_ID,
     MATTERHORN_SUI_TRANSFER_POLICY_ID: process.env.MATTERHORN_SUI_TRANSFER_POLICY_ID,
     MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID: process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID,
+    OPENWORK_DATA_DIR: process.env.OPENWORK_DATA_DIR,
   };
   process.env.MATTERHORN_IMAGE_PROVIDER = "mock";
   delete process.env.OPENAI_API_KEY;
@@ -128,6 +130,7 @@ beforeEach(() => {
   delete process.env.MATTERHORN_SUI_KIOSK_OWNER_CAP_ID;
   delete process.env.MATTERHORN_SUI_TRANSFER_POLICY_ID;
   delete process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID;
+  delete process.env.OPENWORK_DATA_DIR;
 });
 
 afterEach(async () => {
@@ -497,6 +500,111 @@ describe("Generated media Sui NFT setup previews", () => {
     expect(result.payload.draft.listing.kioskOwnerCapId).toBe("0xownercap");
     expect(result.payload.draft.listing.transferPolicyId).toBe("0xtransferpolicy");
     expect(result.payload.draft.listing.itemType).toBe("0xmintpackage::matterhorn_media::MatterhornNFT");
+  });
+
+  test("mint and listing receipts appear in project evidence and data ledger", async () => {
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const mintReceipt = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "0xmintdigest",
+        objectId: "0xmintedobject",
+        network: "sui-testnet",
+        packageId: "0xmintpackage",
+      }),
+    });
+    expect(mintReceipt.response.status).toBe(200);
+
+    const listingReceipt = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "0xlistingdigest",
+        objectId: "0xmintedobject",
+        network: "sui-testnet",
+        kioskId: "0xuserkiosk",
+        transferPolicyId: "0xtransferpolicy",
+      }),
+    });
+    expect(listingReceipt.response.status).toBe(200);
+
+    const evidence = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/evidence?source=task_events&limit=20`);
+    expect(evidence.response.status).toBe(200);
+    expect(evidence.payload.summary.nfts).toBe(2);
+    expect(evidence.payload.items).toContainEqual(expect.objectContaining({
+      type: "nft.minted",
+      title: "NFT minted",
+      desk: "nft",
+      sessionSlug: draft.id,
+      taskId: `nft_mint_${draft.id}`,
+    }));
+    expect(evidence.payload.items).toContainEqual(expect.objectContaining({
+      type: "nft.listed",
+      title: "NFT listed",
+      desk: "nft",
+      sessionSlug: draft.id,
+      taskId: `nft_listing_${draft.id}`,
+    }));
+
+    const nftLedger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=nft&limit=20`);
+    expect(nftLedger.response.status).toBe(200);
+    expect(nftLedger.payload.summary.nfts).toBe(2);
+    expect(nftLedger.payload.items.map((item: { eventType?: string }) => item.eventType)).toEqual([
+      "nft.listed",
+      "nft.minted",
+    ]);
+    expect(nftLedger.payload.items.every((item: { source: string; kind: string; containsSecrets: string; trainingUse: string }) =>
+      item.source === "project_evidence" &&
+      item.kind === "nft" &&
+      item.containsSecrets === "never" &&
+      item.trainingUse === "none",
+    )).toBe(true);
+
+    const imageLedger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=image&limit=20`);
+    expect(imageLedger.response.status).toBe(200);
+    expect(imageLedger.payload.summary.images).toBe(1);
+    expect(imageLedger.payload.items).toContainEqual(expect.objectContaining({
+      kind: "image",
+      eventType: "image.generated",
+    }));
+  });
+
+  test("NFT receipts must match the draft network and recorded minted object", async () => {
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const wrongNetwork = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "0xwrongnetwork",
+        objectId: "0xmintedobject",
+        network: "sui-mainnet",
+      }),
+    });
+    expect(wrongNetwork.response.status).toBe(400);
+    expect(wrongNetwork.payload.code).toBe("nft_receipt_network_mismatch");
+
+    const mintReceipt = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "0xmintdigest",
+        objectId: "0xmintedobject",
+        network: "sui-testnet",
+      }),
+    });
+    expect(mintReceipt.response.status).toBe(200);
+
+    const wrongObject = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "0xwrongobject",
+        objectId: "0xotherobject",
+        network: "sui-testnet",
+      }),
+    });
+    expect(wrongObject.response.status).toBe(400);
+    expect(wrongObject.payload.code).toBe("nft_receipt_object_mismatch");
   });
 });
 

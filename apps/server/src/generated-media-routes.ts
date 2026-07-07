@@ -392,6 +392,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
+    ensureReceiptMatchesDraft(receipt, draft);
 
     const updated = await store.updateMintStatus(draft.id, "confirmed", {
       transactionDigest: receipt.transactionDigest,
@@ -407,6 +408,15 @@ export function addGeneratedMediaRoutes(
       target: draft.id,
       summary: `Minted NFT ${receipt.objectId} on ${receipt.network}`,
       timestamp: Date.now(),
+    });
+    await recordTaskEvent({
+      id: `task_evt_${shortId()}`,
+      workspaceId: workspace.id,
+      taskId: `nft_mint_${draft.id}`,
+      type: "nft_minted",
+      timestamp: Date.now(),
+      summary: "NFT minted",
+      detail: `nft;${draft.id}`,
     });
 
     const response: MatterhornNftReceiptResponse = {
@@ -501,6 +511,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
+    ensureReceiptMatchesDraft(receipt, draft);
 
     const updated = await store.updateListingStatus(draft.id, "listed", {
       kioskId: receipt.kioskId ?? undefined,
@@ -515,6 +526,15 @@ export function addGeneratedMediaRoutes(
       target: draft.id,
       summary: `Listed NFT in kiosk ${receipt.kioskId ?? "unknown"} on ${receipt.network}`,
       timestamp: Date.now(),
+    });
+    await recordTaskEvent({
+      id: `task_evt_${shortId()}`,
+      workspaceId: workspace.id,
+      taskId: `nft_listing_${draft.id}`,
+      type: "nft_listed",
+      timestamp: Date.now(),
+      summary: "NFT listed",
+      detail: `nft;${draft.id}`,
     });
 
     const response: MatterhornNftReceiptResponse = {
@@ -987,4 +1007,14 @@ function validateNftReceiptRequest(body: unknown): MatterhornNftReceiptRequest {
     kioskId: typeof b.kioskId === "string" ? b.kioskId.trim() : undefined,
     transferPolicyId: typeof b.transferPolicyId === "string" ? b.transferPolicyId.trim() : undefined,
   };
+}
+
+function ensureReceiptMatchesDraft(receipt: MatterhornNftReceiptRequest, draft: MatterhornImageNftDraft): void {
+  if (receipt.network !== draft.network) {
+    throw new ApiError(400, "nft_receipt_network_mismatch", `Receipt network must match the draft network (${draft.network}).`);
+  }
+  const mintedObjectId = draft.mint.objectId?.trim();
+  if (mintedObjectId && receipt.objectId.trim() !== mintedObjectId) {
+    throw new ApiError(400, "nft_receipt_object_mismatch", "Receipt objectId must match the NFT object already recorded on this draft.");
+  }
 }

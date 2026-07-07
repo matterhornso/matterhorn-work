@@ -33,6 +33,7 @@ import type {
   MatterhornNftReceiptRequest,
   MatterhornNftSetupRequirement,
 } from "@matterhorn-work/types/generated-media";
+import { buildNftPublishingReadinessItems, NftPublishingReadinessRows } from "./nft-publishing-readiness";
 import type { MatterhornSuiWalletExecutionReceipt } from "./sui-nft-transaction-plan";
 
 export type NftCapabilityStatus = "working" | "needs_setup" | "preview";
@@ -104,6 +105,32 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
   const canList = props.capabilities.nftMarketplaceListing === "working" || props.capabilities.nftMarketplaceListing === "preview";
   const walletExecution = props.walletExecution;
   const draft = props.draft ?? null;
+  const publishingReadiness = useMemo(() => buildNftPublishingReadinessItems({
+    imageGeneration: {
+      status: "working",
+      label: "Generated image",
+      description: "This generated image is ready to use as NFT media.",
+      value: `${props.image.provider}/${props.image.model}`,
+    },
+    walrusStorage: {
+      status: props.capabilities.walrusStorage,
+      label: "Public storage",
+    },
+    nftMinting: {
+      status: props.capabilities.nftMinting,
+      label: "Sui minting",
+    },
+    nftMarketplaceListing: {
+      status: props.capabilities.nftMarketplaceListing,
+      label: "Marketplace listing",
+    },
+  }), [
+    props.capabilities.nftMarketplaceListing,
+    props.capabilities.nftMinting,
+    props.capabilities.walrusStorage,
+    props.image.model,
+    props.image.provider,
+  ]);
 
   useEffect(() => {
     if (!draft) return;
@@ -232,6 +259,13 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
               <p>{props.image.size} · {props.image.format}</p>
             </div>
           </div>
+
+          <NftPublishingReadinessRows
+            items={publishingReadiness}
+            title="Publishing readiness"
+            description="Create the local draft anytime. Public storage, minting, and listing unlock when setup is ready."
+            surface
+          />
 
           {!draft ? (
             <div className="grid gap-3 border-t border-dls-border/45 pt-4">

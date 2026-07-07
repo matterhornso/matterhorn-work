@@ -19,6 +19,8 @@ const TASK_EVENT_TYPE_MAP: Partial<Record<MatterhornTaskEvent["type"], Matterhor
   artifact_saved: "task.output_saved",
   artifact_deleted: "task.output_deleted",
   image_generated: "image.generated",
+  nft_minted: "nft.minted",
+  nft_listed: "nft.listed",
   completed: "task.completed",
   failed: "task.failed",
   cancelled: "task.cancelled",
