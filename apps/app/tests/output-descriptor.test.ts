@@ -89,6 +89,7 @@ describe("output descriptor", () => {
     };
     const receipt: WorkflowOutputReceipt = {
       id: "workflow-output:evt_1:outputs/longevity/session-alpha/plan.md",
+      kind: "workflow",
       outputPath: "outputs/longevity/session-alpha/plan.md",
       title: "Saved plan",
       summary: "longevity;session-alpha",
@@ -106,6 +107,7 @@ describe("output descriptor", () => {
 
     expect(descriptor).toMatchObject({
       receiptStatus: "saved",
+      receiptKind: "workflow",
       receiptTitle: "Saved plan",
       receiptSummary: "longevity;session-alpha",
       desk: "longevity",
@@ -117,6 +119,42 @@ describe("output descriptor", () => {
       originLabel: "Longevity",
     });
     expect(descriptor.updatedAt).toBe(1_700_000_000_000);
+  });
+
+  test("labels generated image receipts as generated image outputs", () => {
+    const target: OpenTarget = {
+      id: "file:.matterhorn-work/outputs/images/img_123.png",
+      kind: "file",
+      value: ".matterhorn-work/outputs/images/img_123.png",
+      name: "img_123.png",
+      preview: "image",
+      confidence: 98,
+      reason: "image output receipt",
+      exists: true,
+    };
+    const receipt: WorkflowOutputReceipt = {
+      id: "workflow-output:img_evt:.matterhorn-work/outputs/images/img_123.png",
+      kind: "image",
+      outputPath: ".matterhorn-work/outputs/images/img_123.png",
+      title: "Image generated: img_123.png",
+      summary: "mock;mock-image-1;.matterhorn-work/outputs/images/img_123.png",
+      taskId: "image_gen_img_123",
+      timestamp: "2026-07-07T10:00:00.000Z",
+      updatedAt: 1_720_000_000_000,
+      status: "generated",
+      source: "task_events",
+      artifactCount: 1,
+    };
+
+    expect(outputDescriptorFromOpenTarget(target, receipt)).toMatchObject({
+      title: "Image generated: img_123.png",
+      path: ".matterhorn-work/outputs/images/img_123.png",
+      preview: "image",
+      originLabel: "Generated image",
+      receiptStatus: "generated",
+      receiptKind: "image",
+      taskId: "image_gen_img_123",
+    });
   });
 
   test("uses readable titles for Sui preview and receipt output filenames", () => {

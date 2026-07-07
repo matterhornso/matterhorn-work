@@ -1,7 +1,7 @@
 import type { NoteAttachment, NoteOutputAttachment } from "../../notes/notes-types";
 import { getArtifactNoteContext } from "./artifact-note-context";
 import type { OpenTarget, OpenTargetPreview } from "./open-target";
-import type { WorkflowOutputReceipt, WorkflowOutputReceiptStatus } from "./output-receipts";
+import type { WorkflowOutputReceipt, WorkflowOutputReceiptKind, WorkflowOutputReceiptStatus } from "./output-receipts";
 
 export type OutputKind = "file" | "workflow-receipt" | "note-attachment";
 
@@ -32,6 +32,8 @@ export type OutputDescriptor = {
   originLabel?: string;
   /** Workflow receipt status when this output was observed through project evidence. */
   receiptStatus?: WorkflowOutputReceiptStatus;
+  /** Project receipt kind when this output was observed through project evidence. */
+  receiptKind?: WorkflowOutputReceiptKind;
   /** Workflow receipt title from Project Activity. */
   receiptTitle?: string;
   /** Compact workflow receipt detail from Project Activity. */
@@ -50,6 +52,7 @@ function legacyOriginLabel(kind: "opencode" | "openwork" | "outbox" | null | und
 }
 
 function friendlyTitleFromOutputPath(context: ReturnType<typeof getArtifactNoteContext>): string | null {
+  if (context.path.startsWith(".matterhorn-work/outputs/images/")) return "Generated image";
   if (context.desk !== "sui") return null;
   if (/^transfer-preview-[a-f0-9]+\.json$/i.test(context.fileName)) return "Sui transfer preview";
   if (/^transaction-receipt-[a-z0-9]+\.json$/i.test(context.fileName)) return "Sui transaction receipt";
@@ -75,12 +78,17 @@ export function outputDescriptorFromOpenTarget(target: OpenTarget, receipt?: Wor
     isLegacy: context.isLegacy,
     originLabel: context.isLegacy
       ? legacyOriginLabel(context.legacyKind)
-      : receipt?.desk
+      : receipt?.kind === "image"
+        ? "Generated image"
+        : receipt?.kind === "nft"
+        ? "NFT"
+        : receipt?.desk
         ? deskLabel(receipt.desk)
         : context.desk
         ? deskLabel(context.desk)
         : undefined,
     receiptStatus: receipt?.status,
+    receiptKind: receipt?.kind,
     receiptTitle: receipt?.title,
     receiptSummary: receipt?.summary,
     taskId: receipt?.taskId,

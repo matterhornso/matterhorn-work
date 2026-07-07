@@ -8,6 +8,8 @@ import { ArtifactIcon } from "./artifact-icon";
 import type { OutputDescriptor } from "./output-descriptor";
 
 function receiptStatusLabel(status: OutputDescriptor["receiptStatus"]): string {
+  if (status === "generated") return "Generated";
+  if (status === "published") return "Published";
   if (status === "saved") return "Saved";
   if (status === "completed") return "Completed";
   if (status === "failed") return "Failed";

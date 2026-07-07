@@ -2,10 +2,12 @@ import type { MatterhornProjectEvidenceEvent } from "@matterhorn-work/types/proj
 
 import { classifyOpenTarget, type OpenTarget } from "./open-target";
 
-export type WorkflowOutputReceiptStatus = "saved" | "completed" | "failed" | "cancelled";
+export type WorkflowOutputReceiptStatus = "saved" | "completed" | "failed" | "cancelled" | "generated" | "published";
+export type WorkflowOutputReceiptKind = "workflow" | "image" | "nft";
 
 export type WorkflowOutputReceipt = {
   id: string;
+  kind: WorkflowOutputReceiptKind;
   outputPath: string;
   title: string;
   summary?: string;
@@ -24,9 +26,14 @@ const RECEIPT_EVENT_TYPES = new Set<MatterhornProjectEvidenceEvent["type"]>([
   "task.completed",
   "task.failed",
   "task.cancelled",
+  "image.generated",
+  "nft.minted",
+  "nft.listed",
 ]);
 
 const STATUS_PRIORITY: Record<WorkflowOutputReceiptStatus, number> = {
+  published: 5,
+  generated: 4,
   saved: 4,
   completed: 3,
   failed: 2,
@@ -50,7 +57,15 @@ function statusForEvent(event: MatterhornProjectEvidenceEvent): WorkflowOutputRe
   if (event.type === "task.completed") return "completed";
   if (event.type === "task.failed") return "failed";
   if (event.type === "task.cancelled") return "cancelled";
+  if (event.type === "image.generated") return "generated";
+  if (event.type === "nft.minted" || event.type === "nft.listed") return "published";
   return null;
+}
+
+function kindForEvent(event: MatterhornProjectEvidenceEvent): WorkflowOutputReceiptKind {
+  if (event.type === "image.generated") return "image";
+  if (event.type.startsWith("nft.")) return "nft";
+  return "workflow";
 }
 
 function eventOutputPaths(event: MatterhornProjectEvidenceEvent): string[] {
@@ -95,10 +110,16 @@ export function workflowOutputReceiptsFromEvidence(events: MatterhornProjectEvid
       if (deletedAt !== undefined && (!Number.isFinite(timestampMs) || timestampMs <= deletedAt)) {
         continue;
       }
+      const kind = kindForEvent(event);
       const receipt: WorkflowOutputReceipt = {
         id: `workflow-output:${event.id}:${outputPath}`,
+        kind,
         outputPath,
-        title: event.title || basename(outputPath),
+        title: event.title && event.title !== "Image generated"
+          ? event.title
+          : kind === "image"
+            ? `Image generated: ${basename(outputPath)}`
+            : event.title || basename(outputPath),
         summary: event.summary,
         desk: event.desk,
         sessionSlug: event.sessionSlug,

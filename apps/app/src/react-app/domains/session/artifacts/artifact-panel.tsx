@@ -46,6 +46,12 @@ type ArtifactQueryState =
 
 type SaveArtifactInput = Data & { baseUpdatedAt: number | null };
 
+function outputReceiptKindLabel(kind: OutputDescriptor["receiptKind"]): string {
+  if (kind === "image") return "Image receipt";
+  if (kind === "nft") return "NFT receipt";
+  return "Workflow receipt";
+}
+
 function absoluteWorkspacePath(root: string, path: string) {
   const cleanRoot = root.trim().replace(/[/\\]+$/, "");
   const cleanPath = path.trim().replace(/^\.\//, "");
@@ -499,7 +505,7 @@ export function ArtifactPanel({
             {selectedOutput?.receiptTitle ? (
               <div className="flex min-w-0 items-center gap-2 border-b border-border/60 px-4 py-1.5 text-[11px]">
                 <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
-                  Workflow receipt
+                  {outputReceiptKindLabel(selectedOutput.receiptKind)}
                 </span>
                 <span className="truncate text-muted-foreground" title={selectedOutput.receiptSummary ?? selectedOutput.receiptTitle}>
                   {selectedOutput.receiptTitle}
