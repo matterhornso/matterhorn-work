@@ -658,6 +658,7 @@ export type SessionSurfaceProps = {
   onForkAtMessage?: (messageId: string) => void;
   onOpenTarget?: (target: OpenTarget, options?: { auto?: boolean }) => void;
   onOpenTargetsChange?: (targets: OpenTarget[]) => void;
+  onCreateDeskTask?: (prompt: string, options?: { title?: string; agent?: string; sendImmediately?: boolean }) => void;
 };
 
 function messageToReadableText(message: UIMessage) {
@@ -1596,6 +1597,31 @@ export function SessionSurface(props: SessionSurfaceProps) {
     await waitForControl(40);
   }, [props.sessionId, setComposerDraft]);
 
+  const startDeskTask = useCallback((deskId: MatterhornDeskMode, prompt: string) => {
+    if (props.onCreateDeskTask) {
+      const visual = getCustomerProtocolDeskVisual(deskId);
+      props.onCreateDeskTask(prompt, {
+        title: visual?.agentName ?? "Desk task",
+        agent: matterhornDeskAgentIdForDesk(deskId),
+        sendImmediately: true,
+      });
+      return;
+    }
+    void typeComposerText(prompt);
+  }, [props.onCreateDeskTask, typeComposerText]);
+
+  const startStarterTask = useCallback((item: CustomerWorkflowStarterCard) => {
+    if (props.onCreateDeskTask) {
+      props.onCreateDeskTask(item.prompt, {
+        title: item.title,
+        agent: item.agentId,
+        sendImmediately: true,
+      });
+      return;
+    }
+    void typeComposerText(item.prompt);
+  }, [props.onCreateDeskTask, typeComposerText]);
+
   useEffect(() => {
     const handleBittensorContextUpdated = (event: Event) => {
       if (!(event instanceof CustomEvent)) return;
@@ -2047,7 +2073,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     taskStatus={effectiveActivityStatus === "idle" ? "idle" : effectiveActivityStatus === "waiting" ? "waiting" : "running"}
                     stageActionDisabled={activeDeskStartBlocked}
                     stageActionTitle={activeDeskStartBlocker ?? undefined}
-                    onStartStage={(_, prompt) => void typeComposerText(prompt)}
+                    onStartStage={(_, prompt) => startDeskTask(activeDeskMode, prompt)}
                     onJotNote={() => {
                       const visual = getCustomerProtocolDeskVisual(activeDeskMode);
                       openQuickJot({
@@ -2079,7 +2105,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                             type="button"
                             style={deskToneStyle(item.iconHint)}
                             className="group grid min-h-[64px] min-w-0 grid-cols-[32px_minmax(0,1fr)] gap-2.5 rounded-md bg-dls-surface-muted/42 px-2.5 py-2 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
-                            onClick={() => void typeComposerText(item.prompt)}
+                            onClick={() => startStarterTask(item)}
                           >
                             <span className="flex size-8 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
                               {protocolLogo ?? <Icon className="size-4" />}

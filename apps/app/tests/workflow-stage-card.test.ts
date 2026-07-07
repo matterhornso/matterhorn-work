@@ -84,6 +84,21 @@ describe("WorkflowStageCard — render contract", () => {
     const source = readAppSource("domains/session/workflows/workflow-stage-card.tsx");
     expect(source).toContain('if (status === "idle") return null;');
   });
+
+  test("in-session desk starters launch real tasks when the shell supports it", () => {
+    const surfaceSrc = readAppSource("domains/session/surface/session-surface.tsx");
+    const pageSrc = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(surfaceSrc).toContain("onCreateDeskTask?");
+    expect(surfaceSrc).toContain("const startDeskTask = useCallback");
+    expect(surfaceSrc).toContain("const startStarterTask = useCallback");
+    expect(surfaceSrc).toContain("sendImmediately: true");
+    expect(surfaceSrc).toContain("props.onCreateDeskTask(prompt");
+    expect(surfaceSrc).toContain("startDeskTask(activeDeskMode, prompt)");
+    expect(surfaceSrc).toContain("startStarterTask(item)");
+    expect(pageSrc).toContain("onCreateDeskTask={(prompt, options)");
+    expect(pageSrc).toContain("props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, options)");
+  });
 });
 
 describe("DeskWorkflowStagePanel — uses WorkflowStageCard", () => {

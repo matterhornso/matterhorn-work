@@ -1908,6 +1908,9 @@ export function SessionPage(props: SessionPageProps) {
                   safeStringify={props.safeStringify}
                   onOpenTarget={openTarget}
                   onOpenTargetsChange={handleOpenTargetsChange}
+                  onCreateDeskTask={(prompt, options) => {
+                    props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, options);
+                  }}
                 />
               ) : null}
 
