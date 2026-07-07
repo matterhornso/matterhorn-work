@@ -18,6 +18,14 @@ assert.ok(
   "dev:matterhorn-local should still wire the local app to the Matterhorn server",
 );
 assert.ok(
+  script.includes('"apps", "app"') && script.includes('"node_modules", ".bin"') && script.includes("existsSync(viteBin)"),
+  "dev:matterhorn-local should prefer the installed app Vite binary before invoking pnpm",
+);
+assert.ok(
+  script.includes('command: "npx"'),
+  "dev:matterhorn-local should keep a pnpm fallback when the local Vite binary is unavailable",
+);
+assert.ok(
   script.includes("OpenCode engine: not connected. Chats and desk tasks will show Needs setup."),
   "dev:matterhorn-local should explain that chat and desk execution need OpenCode",
 );
