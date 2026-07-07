@@ -6,6 +6,8 @@
     "dev": "OPENWORK_DEV_MODE=1 OPENWORK_ELECTRON_REMOTE_DEBUG_PORT=${OPENWORK_ELECTRON_REMOTE_DEBUG_PORT:-9823} pnpm --filter @matterhorn-work/desktop dev",
     "dev:matterhorn-local": "node scripts/dev-matterhorn-local.mjs",
     "test:dev-matterhorn-local": "node scripts/dev-matterhorn-local.test.mjs",
+    "dev:generated-media-smoke": "node scripts/dev-generated-media-smoke.mjs",
+    "test:dev-generated-media-smoke": "node scripts/dev-generated-media-smoke.test.mjs",
     "dev:electron": "OPENWORK_DEV_MODE=1 pnpm --filter @matterhorn-work/desktop dev:electron",
     "dev:sandbox": "bash .devcontainer/dev-sandbox.sh",
     "dev:windows": ".\\scripts\\dev-windows.cmd",
