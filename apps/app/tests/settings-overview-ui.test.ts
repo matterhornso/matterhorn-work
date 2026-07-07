@@ -46,7 +46,14 @@ describe("Settings overview backend capability integration", () => {
 
     expect(source).toContain("DataPolicySection");
     expect(source).toContain("DATA_POLICY_STORE_ORDER");
+    expect(source).toContain('"modelPreferences"');
+    expect(source).toContain('"dataPolicy"');
+    expect(source).toContain('"walletEvidence"');
+    expect(source).toContain("Object.values(props.dataMap.stores)");
+    expect(source).toContain("orderedIds.has(store.id)");
     expect(source).toContain("storageLocationLabel(store)");
+    expect(source).toContain("controlQuickActions(props.controls)");
+    expect(source).toContain("dataControlActionTone(action)");
     expect(source).toContain("controlSummary(props.controls, store, \"export\")");
     expect(source).toContain("controlSummary(props.controls, store, \"deletion\")");
     expect(source).toContain("controlAppRoute(control)");
@@ -59,6 +66,8 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("Feedback collection");
     expect(source).toContain("Toggle workspace feedback collection");
     expect(source).toContain("Export and delete");
+    expect(source).toContain("Manage data");
+    expect(source).toContain("Open the owning surface for review, export, or deletion controls.");
     expect(source).toContain("Storage locations, routes, and controls");
     expect(source).toContain("Use the Manage links for user-controlled stores");
     expect(source).toContain("retentionPolicy.summary");

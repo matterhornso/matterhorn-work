@@ -250,9 +250,12 @@ function CopyButton(props: { text: string; label: string }) {
 
 const DATA_POLICY_STORE_ORDER: Array<keyof MatterhornWorkspaceDataMapResponse["stores"]> = [
   "chat",
+  "modelPreferences",
+  "dataPolicy",
   "notes",
   "memory",
   "outputs",
+  "walletEvidence",
   "feedback",
   "audit",
   "taskEvents",
@@ -301,6 +304,40 @@ function controlAppRoute(control?: MatterhornDataControlStore): MatterhornDataCo
   return [...control.export.actions, ...control.deletion.actions].find((action) => (
     action.kind === "app_route" && Boolean(action.href?.trim())
   )) ?? null;
+}
+
+function controlQuickActions(
+  controls: MatterhornWorkspaceDataControlsResponse | undefined,
+): MatterhornDataControlAction[] {
+  if (!controls) return [];
+  const order: Array<keyof MatterhornWorkspaceDataControlsResponse["stores"]> = [
+    "outputs",
+    "notes",
+    "memory",
+    "feedback",
+    "modelPreferences",
+    "walletEvidence",
+    "audit",
+    "dataPolicy",
+  ];
+  const seen = new Set<string>();
+  return order.flatMap((storeId) => {
+    const control = controls.stores[storeId];
+    if (!control) return [];
+    return [...control.export.actions, ...control.deletion.actions].filter((action) => {
+      if (action.kind !== "app_route" || !action.href?.trim()) return false;
+      const key = `${action.label}:${action.href}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }).slice(0, 7);
+}
+
+function dataControlActionTone(action: MatterhornDataControlAction) {
+  if (action.destructive) return "text-red-300 hover:text-red-200";
+  if (action.status === "needs_setup" || action.status === "error") return "text-amber-300 hover:text-amber-200";
+  return "text-dls-secondary hover:text-dls-text";
 }
 
 function feedbackKindLabel(value: string | null | undefined) {
@@ -458,9 +495,15 @@ function DataPolicySection(props: {
   onOpenControlRoute?: (href: string) => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const stores = DATA_POLICY_STORE_ORDER
+  const orderedStores = DATA_POLICY_STORE_ORDER
     .map((key) => props.dataMap.stores[key])
     .filter(Boolean);
+  const orderedIds = new Set(orderedStores.map((store) => store.id));
+  const stores = [
+    ...orderedStores,
+    ...Object.values(props.dataMap.stores).filter((store) => !orderedIds.has(store.id)),
+  ];
+  const quickActions = controlQuickActions(props.controls);
   const highlightedControls = stores
     .map((store) => props.controls?.stores[store.id as keyof MatterhornWorkspaceDataControlsResponse["stores"]])
     .filter((control): control is MatterhornDataControlStore => Boolean(control))
@@ -478,8 +521,36 @@ function DataPolicySection(props: {
         <p className="text-sm font-medium text-dls-text">Workspace data policy</p>
         <StatusBadge tone="ready">{workspaceDataPolicySummary(props.dataMap)}</StatusBadge>
       </div>
+      {quickActions.length ? (
+        <div className="mb-4 border-y border-dls-border/45 py-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-medium text-dls-text">Manage data</p>
+              <p className="mt-0.5 text-[11px] leading-4 text-dls-secondary">
+                Open the owning surface for review, export, or deletion controls.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5 sm:justify-end">
+              {quickActions.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  className={cn(
+                    "rounded-md px-1.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                    dataControlActionTone(action),
+                  )}
+                  title={action.description}
+                  onClick={() => props.onOpenControlRoute?.(action.href ?? "")}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="mb-4 grid gap-2 lg:grid-cols-3">
-        <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2.5">
+        <div className="border-t border-dls-border/45 pt-2.5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium text-dls-text">Model training</p>
             <StatusBadge>Off</StatusBadge>
@@ -488,7 +559,7 @@ function DataPolicySection(props: {
             Workspace data is not used for RL or model training.
           </p>
         </div>
-        <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
+        <div className="border-t border-dls-border/45 pt-2.5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-medium text-dls-text">Feedback collection</p>
@@ -512,7 +583,7 @@ function DataPolicySection(props: {
             <p className="mt-2 text-[11px] leading-4 text-dls-secondary">Saving...</p>
           ) : null}
         </div>
-        <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
+        <div className="border-t border-dls-border/45 pt-2.5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium text-dls-text">Export and delete</p>
             <StatusBadge>{exportableCount}/{stores.length} exportable</StatusBadge>
@@ -523,7 +594,7 @@ function DataPolicySection(props: {
         </div>
       </div>
 
-      <div className="mb-3 rounded-lg bg-dls-surface-muted/20 px-3 py-2.5">
+      <div className="mb-3 border-y border-dls-border/45 py-2.5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-medium text-dls-text">Retention</p>
