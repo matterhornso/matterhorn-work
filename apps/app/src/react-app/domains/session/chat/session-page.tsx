@@ -430,15 +430,44 @@ function HomeCapabilityOverview({
 function WorkflowDeskHomeSurface({
   deskId,
   launchState,
+  matterhornServerClient,
+  runtimeWorkspaceId,
   onBackHome,
   onStartStage,
 }: {
   deskId: WorkflowDeskId;
   launchState: WorkflowDeskLaunchState | null;
+  matterhornServerClient: MatterhornServerClient | null;
+  runtimeWorkspaceId: string | null;
   onBackHome: () => void;
   onStartStage: (stageId: string, prompt: string) => void;
 }) {
   const visual = getCustomerProtocolDeskVisual(deskId);
+  const readinessWorkspaceId = runtimeWorkspaceId?.trim() ?? "";
+  const readinessQuery = useQuery({
+    queryKey: ["workflow-desk-readiness", readinessWorkspaceId],
+    enabled: Boolean(matterhornServerClient && readinessWorkspaceId),
+    staleTime: 30_000,
+    queryFn: async () => {
+      if (!matterhornServerClient || !readinessWorkspaceId) throw new Error("Open a workspace to start desk tasks.");
+      return matterhornServerClient.workspaceReadiness(readinessWorkspaceId);
+    },
+  });
+  const startTaskFeature = readinessQuery.data?.features.start_desk_task;
+  const startTaskBlocked = Boolean(
+    !matterhornServerClient ||
+    !readinessWorkspaceId ||
+    (startTaskFeature && !startTaskFeature.ready),
+  );
+  const startTaskBlocker = !matterhornServerClient
+    ? "Matterhorn Work engine is offline."
+    : !readinessWorkspaceId
+      ? "Open a workspace before starting a desk task."
+      : startTaskFeature && !startTaskFeature.ready
+        ? `Start task needs ${startTaskFeature.blockingCheckIds
+          .map((checkId) => readinessQuery.data?.checks[checkId]?.label ?? checkId)
+          .join(", ")}.`
+        : null;
   const taskStatus = launchState?.run?.status ?? (
     launchState?.status === "staging"
       ? "staged"
@@ -495,10 +524,19 @@ function WorkflowDeskHomeSurface({
           </div>
         </section>
 
+        {startTaskBlocker ? (
+          <div className="flex items-start gap-2 rounded-lg bg-dls-surface/50 px-3 py-2 text-xs leading-5 text-dls-secondary">
+            <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" />
+            <span>{startTaskBlocker}</span>
+          </div>
+        ) : null}
+
         <DeskWorkflowStagePanel
           deskId={deskId}
           currentStageId={launchState?.run?.stageId}
           taskStatus={taskStatus}
+          stageActionDisabled={startTaskBlocked}
+          stageActionTitle={startTaskBlocker ?? undefined}
           onStartStage={onStartStage}
         />
       </div>
@@ -634,7 +672,7 @@ function ProtocolDeskEmptyState({
               objective={item.detail}
               status="idle"
               evidenceHints={[evidenceHint]}
-              actionLabel={draftConfig?.confirmCtaLabel ?? "Start task"}
+              actionLabel={startTaskBlocked ? "Needs setup" : draftConfig?.confirmCtaLabel ?? "Start task"}
               actionDisabled={startTaskBlocked}
               actionTitle={startTaskBlocker ?? undefined}
               onAction={() => {
@@ -1908,6 +1946,8 @@ export function SessionPage(props: SessionPageProps) {
                     <WorkflowDeskHomeSurface
                       deskId={activeWorkflowDeskId}
                       launchState={workflowLaunchState}
+                      matterhornServerClient={props.matterhornServerClient}
+                      runtimeWorkspaceId={props.runtimeWorkspaceId}
                       onBackHome={closeWorkflowDesk}
                       onStartStage={(stageId, prompt) => {
                         openWorkflowDesk(activeWorkflowDeskId, prompt, {
