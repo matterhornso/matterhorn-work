@@ -288,6 +288,43 @@ function matchesFilters(entry: MatterhornProjectDataLedgerEntry, options: Matter
   return true;
 }
 
+function ledgerOutputPaths(entry: MatterhornProjectDataLedgerEntry): string[] {
+  return [
+    ...(entry.artifactPaths ?? []),
+    ...(entry.outputPath ? [entry.outputPath] : []),
+  ].map((path) => path.trim()).filter(Boolean);
+}
+
+function isOutputDeletionEntry(entry: MatterhornProjectDataLedgerEntry): boolean {
+  return entry.eventType === "task.output_deleted" || entry.eventType === "workspace.output.delete";
+}
+
+function activeOutputCount(items: MatterhornProjectDataLedgerEntry[]): number {
+  const deletedAtByPath = new Map<string, number>();
+  for (const item of items) {
+    if (item.kind !== "output" || !isOutputDeletionEntry(item)) continue;
+    const timestamp = Date.parse(item.timestamp);
+    for (const path of ledgerOutputPaths(item)) {
+      const key = path.toLowerCase();
+      const current = deletedAtByPath.get(key) ?? 0;
+      deletedAtByPath.set(key, Math.max(current, Number.isFinite(timestamp) ? timestamp : 0));
+    }
+  }
+
+  const active = new Set<string>();
+  for (const item of items) {
+    if (item.kind !== "output" || isOutputDeletionEntry(item)) continue;
+    const timestamp = Date.parse(item.timestamp);
+    for (const path of ledgerOutputPaths(item)) {
+      const key = path.toLowerCase();
+      const deletedAt = deletedAtByPath.get(key);
+      if (deletedAt !== undefined && (!Number.isFinite(timestamp) || timestamp <= deletedAt)) continue;
+      active.add(key);
+    }
+  }
+  return active.size;
+}
+
 function summarize(items: MatterhornProjectDataLedgerEntry[]): MatterhornProjectDataLedgerResponse["summary"] {
   return {
     total: items.length,
@@ -297,7 +334,7 @@ function summarize(items: MatterhornProjectDataLedgerEntry[]): MatterhornProject
     wallets: items.filter((item) => item.kind === "wallet").length,
     chats: items.filter((item) => item.kind === "chat").length,
     tasks: items.filter((item) => item.kind === "task").length,
-    outputs: items.filter((item) => item.kind === "output").length,
+    outputs: activeOutputCount(items),
     audits: items.filter((item) => item.kind === "audit").length,
     feedback: items.filter((item) => item.kind === "feedback").length,
     redacted: items.filter((item) => item.redactionApplied).length,
