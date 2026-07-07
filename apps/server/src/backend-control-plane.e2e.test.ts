@@ -878,6 +878,13 @@ describe("backend control plane routes", () => {
       requiresReachableLocalServer: true,
       cloudTeamsStatus: "needs_setup",
     });
+    expect(summary.payload.connection).toMatchObject({
+      serverUrl: base,
+      reachableFromOtherDevices: false,
+      connectSurface: "connect_custom_remote",
+      tokenFieldLabel: "Access token",
+    });
+    expect(summary.payload.connection.instructions.join(" ")).toContain("Connect custom remote");
     expect(summary.payload.scopeCapabilities.viewer.canWriteWorkspace).toBe(false);
     expect(summary.payload.scopeCapabilities.collaborator.canWriteWorkspace).toBe(true);
     expect(summary.payload.policy).toMatchObject({
@@ -902,6 +909,8 @@ describe("backend control plane routes", () => {
       ]),
     );
     expect(result.payload.cloudTeams.status).toBe("needs_setup");
+    expect(result.payload.connection.serverUrl).toBe(base);
+    expect(result.payload.connection.reachableFromOtherDevices).toBe(false);
     expect(result.payload.sharingMode.limitations.join(" ")).toContain("not durable cloud org membership");
     expect(result.payload.scopeCapabilities.owner.canManageLocalTokens).toBe(true);
     expect(result.payload.policy.secretsReturned).toBe(false);
@@ -937,6 +946,11 @@ describe("backend control plane routes", () => {
       source: "token_store",
     });
     expect(created.payload.token.token).toMatch(/^owt_/);
+    expect(created.payload.connection).toMatchObject({
+      serverUrl: base,
+      connectSurface: "connect_custom_remote",
+      authScheme: "bearer_token",
+    });
     expect(created.payload.policy).toMatchObject({
       secretsReturned: "one_time_token",
       hostProtected: true,
