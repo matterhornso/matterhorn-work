@@ -355,6 +355,9 @@ describe("backend capability UI contract", () => {
     expect(walletSource).toContain("matterhornServerClient.backendCapabilities()");
     expect(walletSource).toContain('wallet.family === "Sui"');
     expect(walletSource).toContain("Sui wallet");
+    expect(walletSource).toContain("Connect EVM and Sui wallets where this runtime supports direct wallet connect.");
+    expect(walletSource).toContain("EVM and Sui handoffs live here.");
+    expect(walletSource).toContain("Sui previews and receipt import still work.");
     expect(walletSource).toContain("useWallets");
     expect(walletSource).toContain("connectSuiWallet");
     expect(walletSource).toContain("matterhornServerClient.suiAccount(account.address");
