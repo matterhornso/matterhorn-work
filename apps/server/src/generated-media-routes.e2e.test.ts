@@ -106,6 +106,7 @@ beforeEach(() => {
     MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN: process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN,
     MATTERHORN_WALRUS_RELAY_URL: process.env.MATTERHORN_WALRUS_RELAY_URL,
     MATTERHORN_WALRUS_STORAGE_EPOCHS: process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS,
+    MATTERHORN_SUI_NETWORK: process.env.MATTERHORN_SUI_NETWORK,
     MATTERHORN_SUI_NFT_PACKAGE_ID: process.env.MATTERHORN_SUI_NFT_PACKAGE_ID,
     MATTERHORN_SUI_NFT_MODULE_NAME: process.env.MATTERHORN_SUI_NFT_MODULE_NAME,
     MATTERHORN_SUI_NFT_TYPE: process.env.MATTERHORN_SUI_NFT_TYPE,
@@ -122,6 +123,7 @@ beforeEach(() => {
   delete process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN;
   delete process.env.MATTERHORN_WALRUS_RELAY_URL;
   delete process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS;
+  delete process.env.MATTERHORN_SUI_NETWORK;
   delete process.env.MATTERHORN_SUI_NFT_PACKAGE_ID;
   delete process.env.MATTERHORN_SUI_NFT_MODULE_NAME;
   delete process.env.MATTERHORN_SUI_NFT_TYPE;
@@ -156,6 +158,18 @@ describe("Generated media routes", () => {
     expect(result.payload.image.provider).toBe("mock");
     expect(result.payload.image.prompt).toBe("a tiny robot");
     expect(result.payload.image.relativePath).toMatch(/\.matterhorn-work\/outputs\/images\/img_/);
+  });
+
+  test("POST /workspace/:id/images/generate reports invalid provider setup as setup failure", async () => {
+    process.env.MATTERHORN_IMAGE_PROVIDER = "not-a-provider";
+    const { base } = await boot();
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "a tiny robot" }),
+    });
+    expect(result.response.status).toBe(503);
+    expect(result.payload.code).toBe("image_provider_invalid_config");
+    expect(result.payload.message).toContain("MATTERHORN_IMAGE_PROVIDER");
   });
 
   test("GET /workspace/:id/images/:imageId/file returns renderable PNG bytes", async () => {
@@ -243,6 +257,35 @@ describe("Generated media Sui NFT setup previews", () => {
         key: "walrus_relay",
         status: "missing",
         envVar: "MATTERHORN_WALRUS_RELAY_URL",
+      }),
+    );
+  });
+
+  test("storage prepare reports invalid Walrus setup distinctly from missing setup", async () => {
+    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = "ftp://publisher.example.test";
+    process.env.MATTERHORN_WALRUS_RELAY_URL = "https://relay.example.test";
+    process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS = "0";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/storage/prepare`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(503);
+    expect(result.payload.code).toBe("walrus_invalid_setup");
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "walrus_publisher",
+        status: "invalid",
+        envVar: "MATTERHORN_WALRUS_PUBLISHER_URL",
+      }),
+    );
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "walrus_storage_epochs",
+        status: "invalid",
+        envVar: "MATTERHORN_WALRUS_STORAGE_EPOCHS",
       }),
     );
   });
@@ -339,6 +382,27 @@ describe("Generated media Sui NFT setup previews", () => {
     );
   });
 
+  test("mint preview reports invalid Sui network before preparing a transaction plan", async () => {
+    process.env.MATTERHORN_SUI_NETWORK = "sui-devnet";
+    process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = "0xmintpackage";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/preview`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(503);
+    expect(result.payload.code).toBe("sui_nft_invalid_setup");
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "sui_network",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_NETWORK",
+      }),
+    );
+  });
+
   test("mint preview blocks until the draft has a public image URI", async () => {
     process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = "0xmintpackage";
     const { base } = await boot();
@@ -422,6 +486,28 @@ describe("Generated media Sui NFT setup previews", () => {
         key: "sui_transfer_policy",
         status: "missing",
         envVar: "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID",
+      }),
+    );
+  });
+
+  test("listing preview reports invalid Sui network before preparing a marketplace plan", async () => {
+    process.env.MATTERHORN_SUI_NETWORK = "sui-devnet";
+    process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = "0xkiosk";
+    process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = "0xpolicy";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/preview`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(503);
+    expect(result.payload.code).toBe("sui_kiosk_invalid_setup");
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "sui_network",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_NETWORK",
       }),
     );
   });
