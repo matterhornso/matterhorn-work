@@ -161,4 +161,69 @@ describe("normalizeEvidenceEvents", () => {
     expect(items[1].id).toBe("a");
     expect(items[2].id).toBe("c");
   });
+
+  test("collapses stage-start noise when the same task has a run-start event", () => {
+    const events = [
+      makeEvent({
+        id: "stage",
+        type: "task.stage_started",
+        taskId: "task_same",
+        desk: "bittensor",
+        sessionSlug: "run-one",
+        timestamp: "2026-07-04T12:05:00.000Z",
+      }),
+      makeEvent({
+        id: "started",
+        type: "task.started",
+        taskId: "task_same",
+        desk: "bittensor",
+        sessionSlug: "run-one",
+        timestamp: "2026-07-04T12:00:00.000Z",
+      }),
+    ];
+
+    const items = normalizeEvidenceEvents(events);
+    expect(items.map((item) => item.id)).toEqual(["started"]);
+  });
+
+  test("keeps standalone stage-start events when no run-start event exists", () => {
+    const items = normalizeEvidenceEvents([
+      makeEvent({
+        id: "stage-only",
+        type: "task.stage_started",
+        taskId: "task_stage_only",
+        desk: "hyperliquid",
+        sessionSlug: "run-two",
+      }),
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].kind).toBe("task_stage_started");
+  });
+
+  test("collapses duplicate run-start events for the same task", () => {
+    const events = [
+      makeEvent({
+        id: "newer",
+        type: "task.started",
+        taskId: "task_duplicate",
+        timestamp: "2026-07-04T12:01:00.000Z",
+      }),
+      makeEvent({
+        id: "older",
+        type: "task.started",
+        taskId: "task_duplicate",
+        timestamp: "2026-07-04T12:00:00.000Z",
+      }),
+      makeEvent({
+        id: "other",
+        type: "task.started",
+        taskId: "task_other",
+        timestamp: "2026-07-04T11:59:00.000Z",
+      }),
+    ];
+
+    const items = normalizeEvidenceEvents(events);
+    expect(items.map((item) => item.id)).toEqual(["newer", "other"]);
+  });
 });

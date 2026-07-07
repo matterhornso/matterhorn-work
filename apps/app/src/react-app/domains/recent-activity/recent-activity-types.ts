@@ -63,12 +63,24 @@ function buildDetail(event: MatterhornProjectEvidenceEvent): string {
   return event.summary ?? "";
 }
 
+function isStartOnlyActivity(item: RecentActivityItem): boolean {
+  return item.kind === "task_started" || item.kind === "task_stage_started";
+}
+
+function taskStartKey(item: RecentActivityItem): string {
+  if (item.taskId) return `task:${item.taskId}`;
+  if (item.sessionId) return `session:${item.desk ?? ""}:${item.sessionId}`;
+  if (item.sessionSlug) return `slug:${item.desk ?? ""}:${item.sessionSlug}`;
+  return "";
+}
+
 /**
  * Normalize an array of server evidence events into compact RecentActivityItems.
- * Returns items sorted by timestamp descending (newest first).
+ * Returns items sorted by timestamp descending (newest first), with duplicate
+ * task start/stage-start noise collapsed for Home and Settings summaries.
  */
 export function normalizeEvidenceEvents(events: MatterhornProjectEvidenceEvent[]): RecentActivityItem[] {
-  return events
+  const sorted = events
     .map((event): RecentActivityItem => ({
       id: event.id,
       kind: EVENT_TYPE_MAP[event.type],
@@ -87,4 +99,29 @@ export function normalizeEvidenceEvents(events: MatterhornProjectEvidenceEvent[]
       href: event.href,
     }))
     .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+
+  const taskStartedKeys = new Set(
+    sorted
+      .filter((item) => item.kind === "task_started")
+      .map(taskStartKey)
+      .filter(Boolean),
+  );
+  const emittedStartKeys = new Set<string>();
+
+  return sorted.filter((item) => {
+    if (!isStartOnlyActivity(item)) return true;
+
+    const key = taskStartKey(item);
+    if (!key) return true;
+
+    if (item.kind === "task_stage_started" && taskStartedKeys.has(key)) {
+      return false;
+    }
+
+    if (emittedStartKeys.has(key)) {
+      return false;
+    }
+    emittedStartKeys.add(key);
+    return true;
+  });
 }
