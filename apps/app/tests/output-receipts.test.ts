@@ -99,8 +99,18 @@ describe("workflow output receipts", () => {
         summary: "nft;nft_draft_1",
         desk: "nft",
         taskId: "nft_listing_nft_draft_1",
-        outputPath: "outputs/nft/nft_draft_1/listing-receipt.json",
-        artifactPaths: ["outputs/nft/nft_draft_1/listing-receipt.json"],
+        outputPath: ".matterhorn-work/outputs/nft-receipts/nft_draft_1/listing-receipt.json",
+        artifactPaths: [".matterhorn-work/outputs/nft-receipts/nft_draft_1/listing-receipt.json"],
+        metadata: {
+          nftReceiptKind: "listing",
+          nftNetwork: "sui-testnet",
+          nftTransactionDigest: "0xlistingdigest",
+          nftObjectId: "0xmintedobject",
+          nftKioskId: "0xuserkiosk",
+          nftTransferPolicyId: "0xtransferpolicy",
+          custody: false,
+          containsSignatureMaterial: false,
+        },
       }),
     ]);
 
@@ -108,8 +118,18 @@ describe("workflow output receipts", () => {
     expect(receipts[0]).toMatchObject({
       kind: "nft",
       status: "published",
-      outputPath: "outputs/nft/nft_draft_1/listing-receipt.json",
+      outputPath: ".matterhorn-work/outputs/nft-receipts/nft_draft_1/listing-receipt.json",
       taskId: "nft_listing_nft_draft_1",
+      nftReceipt: {
+        kind: "listing",
+        network: "sui-testnet",
+        transactionDigest: "0xlistingdigest",
+        objectId: "0xmintedobject",
+        kioskId: "0xuserkiosk",
+        transferPolicyId: "0xtransferpolicy",
+        custody: false,
+        containsSignatureMaterial: false,
+      },
     });
   });
 

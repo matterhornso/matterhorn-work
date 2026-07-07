@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type {
   MatterhornImageGenerationInput,
   MatterhornImageListResponse,
@@ -32,6 +33,10 @@ import { recordAudit } from "./audit.js";
 import { recordTaskEvent } from "./task-events.js";
 import { shortId } from "./utils.js";
 import { uploadBlobToWalrus, WalrusUploadError } from "./walrus-storage.js";
+
+type NftReceiptKind = "mint" | "listing";
+
+type PublicNftReceiptMetadata = Record<string, string | number | boolean | null>;
 
 export interface RequestContext {
   actor?: { type: "remote" | "host"; scope?: TokenScope };
@@ -421,6 +426,17 @@ export function addGeneratedMediaRoutes(
       objectId: receipt.objectId,
       packageId: receipt.packageId ?? undefined,
     });
+    const recordedAtMs = Date.now();
+    const recordedAt = new Date(recordedAtMs).toISOString();
+    const receiptMetadata = publicNftReceiptMetadata("mint", receipt);
+    const receiptPath = await writePublicNftReceiptFile({
+      workspaceRoot: workspace.path,
+      workspaceId: workspace.id,
+      draft: updated!,
+      kind: "mint",
+      receipt,
+      recordedAt,
+    });
 
     await recordAudit(workspace.path, {
       id: shortId(),
@@ -429,16 +445,19 @@ export function addGeneratedMediaRoutes(
       action: "workspace.nft.minted",
       target: draft.id,
       summary: `Minted NFT ${receipt.objectId} on ${receipt.network}`,
-      timestamp: Date.now(),
+      timestamp: recordedAtMs,
+      metadata: receiptMetadata,
     });
     await recordTaskEvent({
       id: `task_evt_${shortId()}`,
       workspaceId: workspace.id,
       taskId: `nft_mint_${draft.id}`,
       type: "nft_minted",
-      timestamp: Date.now(),
+      timestamp: recordedAtMs,
       summary: "NFT minted",
       detail: `nft;${draft.id}`,
+      artifactPath: receiptPath,
+      metadata: receiptMetadata,
     });
 
     const response: MatterhornNftReceiptResponse = {
@@ -546,6 +565,17 @@ export function addGeneratedMediaRoutes(
       kioskId: receipt.kioskId ?? undefined,
       transferPolicyId: receipt.transferPolicyId ?? undefined,
     });
+    const recordedAtMs = Date.now();
+    const recordedAt = new Date(recordedAtMs).toISOString();
+    const receiptMetadata = publicNftReceiptMetadata("listing", receipt);
+    const receiptPath = await writePublicNftReceiptFile({
+      workspaceRoot: workspace.path,
+      workspaceId: workspace.id,
+      draft: updated!,
+      kind: "listing",
+      receipt,
+      recordedAt,
+    });
 
     await recordAudit(workspace.path, {
       id: shortId(),
@@ -554,16 +584,19 @@ export function addGeneratedMediaRoutes(
       action: "workspace.nft.listed",
       target: draft.id,
       summary: `Listed NFT in kiosk ${receipt.kioskId ?? "unknown"} on ${receipt.network}`,
-      timestamp: Date.now(),
+      timestamp: recordedAtMs,
+      metadata: receiptMetadata,
     });
     await recordTaskEvent({
       id: `task_evt_${shortId()}`,
       workspaceId: workspace.id,
       taskId: `nft_listing_${draft.id}`,
       type: "nft_listed",
-      timestamp: Date.now(),
+      timestamp: recordedAtMs,
       summary: "NFT listed",
       detail: `nft;${draft.id}`,
+      artifactPath: receiptPath,
+      metadata: receiptMetadata,
     });
 
     const response: MatterhornNftReceiptResponse = {
@@ -590,6 +623,55 @@ function requireClientScope(ctx: RequestContext, required: TokenScope): void {
   if (currentRank < requiredRank) {
     throw new ApiError(403, "forbidden", `This action requires ${required} scope.`);
   }
+}
+
+function nftReceiptRelativePath(draftId: string, kind: NftReceiptKind): string {
+  const fileName = kind === "mint" ? "mint-receipt.json" : "listing-receipt.json";
+  return [".matterhorn-work", "outputs", "nft-receipts", draftId, fileName].join("/");
+}
+
+function publicNftReceiptMetadata(kind: NftReceiptKind, receipt: MatterhornNftReceiptRequest): PublicNftReceiptMetadata {
+  return {
+    nftReceiptKind: kind,
+    nftNetwork: receipt.network,
+    nftTransactionDigest: receipt.transactionDigest,
+    nftObjectId: receipt.objectId,
+    nftPackageId: receipt.packageId ?? null,
+    nftKioskId: receipt.kioskId ?? null,
+    nftTransferPolicyId: receipt.transferPolicyId ?? null,
+    custody: false,
+    containsSignatureMaterial: false,
+  };
+}
+
+async function writePublicNftReceiptFile(input: {
+  workspaceRoot: string;
+  workspaceId: string;
+  draft: MatterhornImageNftDraft;
+  kind: NftReceiptKind;
+  receipt: MatterhornNftReceiptRequest;
+  recordedAt: string;
+}): Promise<string> {
+  const relativePath = nftReceiptRelativePath(input.draft.id, input.kind);
+  const filePath = join(input.workspaceRoot, ...relativePath.split("/"));
+  await mkdir(join(input.workspaceRoot, ".matterhorn-work", "outputs", "nft-receipts", input.draft.id), { recursive: true });
+  await writeFile(filePath, JSON.stringify({
+    version: "matterhorn.nft-receipt.v1",
+    kind: input.kind,
+    workspaceId: input.workspaceId,
+    draftId: input.draft.id,
+    imageId: input.draft.imageId,
+    network: input.receipt.network,
+    transactionDigest: input.receipt.transactionDigest,
+    objectId: input.receipt.objectId,
+    packageId: input.receipt.packageId ?? null,
+    kioskId: input.receipt.kioskId ?? null,
+    transferPolicyId: input.receipt.transferPolicyId ?? null,
+    custody: false,
+    containsSignatureMaterial: false,
+    recordedAt: input.recordedAt,
+  }, null, 2), "utf8");
+  return relativePath;
 }
 
 function jsonResponse(data: unknown, status = 200): Response {

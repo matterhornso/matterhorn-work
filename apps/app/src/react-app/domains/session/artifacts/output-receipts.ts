@@ -1,5 +1,9 @@
 import type { MatterhornProjectEvidenceEvent } from "@matterhorn-work/types/project-evidence";
 
+import {
+  nftReceiptMetadataFromEvidence,
+  type NftReceiptMetadata,
+} from "../../project-evidence/nft-receipt-metadata";
 import { classifyOpenTarget, type OpenTarget } from "./open-target";
 
 export type WorkflowOutputReceiptStatus = "saved" | "completed" | "failed" | "cancelled" | "generated" | "published";
@@ -19,6 +23,7 @@ export type WorkflowOutputReceipt = {
   status: WorkflowOutputReceiptStatus;
   source: MatterhornProjectEvidenceEvent["source"];
   artifactCount: number;
+  nftReceipt?: NftReceiptMetadata;
 };
 
 const RECEIPT_EVENT_TYPES = new Set<MatterhornProjectEvidenceEvent["type"]>([
@@ -129,6 +134,7 @@ export function workflowOutputReceiptsFromEvidence(events: MatterhornProjectEvid
         status,
         source: event.source,
         artifactCount: paths.length,
+        nftReceipt: kind === "nft" ? nftReceiptMetadataFromEvidence(event.metadata) : undefined,
       };
       const existing = receiptsByPath.get(outputPath);
       if (!existing || shouldReplaceReceipt(existing, receipt)) {

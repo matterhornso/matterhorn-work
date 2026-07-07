@@ -35,6 +35,9 @@ describe("Outputs panel contract", () => {
     expect(listSource).toContain("output.isLegacy");
     expect(listSource).toContain("output.receiptStatus");
     expect(listSource).toContain("Receipt:");
+    expect(listSource).toContain("output.nftReceipt");
+    expect(listSource).toContain("nftReceiptKindLabel");
+    expect(listSource).toContain("compactNftReceiptValue");
   });
 
   test("workflow output receipts feed the Outputs rail and panel", () => {
@@ -50,6 +53,8 @@ describe("Outputs panel contract", () => {
     expect(artifactSource).toContain("Image receipt");
     expect(artifactSource).toContain("NFT receipt");
     expect(artifactSource).toContain("Workflow receipt");
+    expect(artifactSource).toContain("selectedOutput?.nftReceipt");
+    expect(artifactSource).toContain("nftReceiptKindLabel");
     expect(receiptSource).toContain('"task.output_saved"');
     expect(receiptSource).toContain('"task.completed"');
     expect(receiptSource).toContain('"image.generated"');

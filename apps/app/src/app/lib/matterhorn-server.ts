@@ -315,6 +315,9 @@ export type MatterhornTaskEventType =
   | "tool_called"
   | "artifact_saved"
   | "artifact_deleted"
+  | "image_generated"
+  | "nft_minted"
+  | "nft_listed"
   | "waiting_for_user"
   | "completed"
   | "failed"
@@ -336,6 +339,7 @@ export type MatterhornTaskEvent = {
   artifactPath?: string;
   toolName?: string;
   stageName?: string;
+  metadata?: Record<string, string | number | boolean | null>;
 };
 
 /** Collapsed view of a single task run, suitable for the task history list */

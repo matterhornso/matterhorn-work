@@ -113,6 +113,7 @@ function ledgerKindFromEvidence(event: MatterhornProjectEvidenceEvent): Matterho
 function evidenceToLedgerEntry(event: MatterhornProjectEvidenceEvent): MatterhornProjectDataLedgerEntry {
   const title = scrubString(event.title);
   const summary = scrubString(event.summary);
+  const eventMetadata = scrubAuditMetadata(event.metadata);
   const kind = ledgerKindFromEvidence(event);
   const containsUserContent = kind === "note" || kind === "memory_suggestion" || kind === "output";
   return {
@@ -137,9 +138,10 @@ function evidenceToLedgerEntry(event: MatterhornProjectEvidenceEvent): Matterhor
     retention: containsUserContent ? "user_controlled" : "runtime_controlled",
     exportable: true,
     deletable: kind === "note" || kind === "memory_suggestion",
-    redactionApplied: title.redacted || summary.redacted,
+    redactionApplied: title.redacted || summary.redacted || eventMetadata.redacted,
     trainingUse: "none",
     eventType: event.type,
+    metadata: eventMetadata.value,
   };
 }
 

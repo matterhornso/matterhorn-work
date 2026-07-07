@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, formatFileSize } from "@/lib/utils";
 import { ConfirmModal } from "../../../design-system/modals/confirm-modal";
+import {
+  compactNftReceiptValue,
+  nftReceiptKindLabel,
+} from "../../project-evidence/nft-receipt-metadata";
 import { getArtifactNoteContext } from "./artifact-note-context";
 import { ArtifactIcon } from "./artifact-icon";
 import type { BinaryData, Data, OpenTarget, TextData } from "./open-target";
@@ -509,6 +513,20 @@ export function ArtifactPanel({
                 </span>
                 <span className="truncate text-muted-foreground" title={selectedOutput.receiptSummary ?? selectedOutput.receiptTitle}>
                   {selectedOutput.receiptTitle}
+                </span>
+              </div>
+            ) : null}
+            {selectedOutput?.nftReceipt ? (
+              <div className="flex min-w-0 items-center gap-2 border-b border-border/60 px-4 py-1.5 text-[11px] text-muted-foreground">
+                <span className="shrink-0 text-[10px] font-medium">
+                  {nftReceiptKindLabel(selectedOutput.nftReceipt.kind)}
+                </span>
+                <span className="truncate" title={selectedOutput.nftReceipt.transactionDigest ?? selectedOutput.nftReceipt.objectId}>
+                  {[
+                    selectedOutput.nftReceipt.network,
+                    compactNftReceiptValue(selectedOutput.nftReceipt.objectId),
+                    compactNftReceiptValue(selectedOutput.nftReceipt.transactionDigest),
+                  ].filter(Boolean).join(" · ")}
                 </span>
               </div>
             ) : null}
