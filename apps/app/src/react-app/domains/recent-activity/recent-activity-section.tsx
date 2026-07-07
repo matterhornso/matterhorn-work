@@ -434,7 +434,7 @@ export function RecentActivitySection({
       ) : isError ? (
         <ErrorState
           error={error}
-          title="No activity recorded yet"
+          title="Project activity could not load"
           detail={error instanceof Error ? error.message : "Check the workspace connection and try again."}
           onRetry={() => void refetch()}
           className="rounded-lg bg-destructive/10 px-3 py-2.5"
