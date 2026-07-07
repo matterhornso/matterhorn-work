@@ -61,6 +61,38 @@ describe("normalizeEvidenceEvents", () => {
     expect(items[0].kind).toBe("task_output_saved");
   });
 
+  test("preserves NFT preview output metadata on saved output events", () => {
+    const items = normalizeEvidenceEvents([
+      makeEvent({
+        type: "task.output_saved",
+        title: "Sui NFT mint preview",
+        desk: "nft",
+        outputPath: ".matterhorn-work/outputs/nft-previews/nft_1/mint-preview.json",
+        metadata: {
+          nftOutputKind: "mint_preview",
+          nftNetwork: "sui-testnet",
+          nftPackageId: "0xmintpackage",
+          custody: false,
+          containsSignatureMaterial: false,
+        },
+      }),
+    ]);
+
+    expect(items[0]).toMatchObject({
+      kind: "task_output_saved",
+      desk: "nft",
+      outputPath: ".matterhorn-work/outputs/nft-previews/nft_1/mint-preview.json",
+      nftReceipt: {
+        kind: "mint_preview",
+        outputKind: "mint_preview",
+        network: "sui-testnet",
+        packageId: "0xmintpackage",
+        custody: false,
+        containsSignatureMaterial: false,
+      },
+    });
+  });
+
   test("maps task.output_deleted to task_output_deleted", () => {
     const items = normalizeEvidenceEvents([makeEvent({ type: "task.output_deleted", title: "Output deleted" })]);
     expect(items[0].kind).toBe("task_output_deleted");

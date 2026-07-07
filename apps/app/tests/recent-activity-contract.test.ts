@@ -95,6 +95,10 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("Failure detail");
       expect(source).toContain("onOpenOutputPath");
       expect(source).toContain("NFT receipt");
+      expect(source).toContain("NFT preview");
+      expect(source).toContain("Mint preview ready");
+      expect(source).toContain("Listing preview ready");
+      expect(source).toContain("Saved to Outputs for wallet review.");
       expect(source).toContain("compactNftReceiptValue");
       expect(source).toContain("Not stored");
     });
@@ -172,6 +176,8 @@ describe("Project Activity contract tests", () => {
       const source = readAppSource("domains/recent-activity/project-history-page.tsx");
       expect(source).toContain("export const PROJECT_HISTORY_FILTERS");
       expect(source).toContain('label: "Runs", kind: "task"');
+      expect(source).toContain('label: "Images", kind: "image"');
+      expect(source).toContain('label: "NFTs", kind: "nft"');
       expect(source).toContain('label: "Access", kind: "team_access"');
       expect(source).toContain('label: "Wallet", kind: "wallet"');
       expect(source).toContain('label: "Chats", kind: "chat"');
@@ -190,6 +196,10 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("entryDisplaySummary");
       expect(source).toContain("Actual local event recorded when the desk task started.");
       expect(source).toContain("actual event");
+      expect(source).toContain("Mint preview ready");
+      expect(source).toContain("Listing preview ready");
+      expect(source).toContain("data.summary.images");
+      expect(source).toContain("data.summary.nfts");
       expect(source).toContain("sourceLabel");
       expect(source).toContain("manifest.itemCount");
       expect(source).toContain("exportPayload.filename");
