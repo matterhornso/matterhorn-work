@@ -61,6 +61,7 @@
     "test:desktop-beta-first-run": "node scripts/desktop-beta-first-run.test.mjs",
     "test:monday-beta-rc-pack": "node scripts/monday-beta-rc-pack.test.mjs",
     "test:matterhorn-brand-assets": "node scripts/matterhorn-brand-assets.test.mjs",
+    "generate:matterhorn-brand-assets": "node scripts/generate-matterhorn-brand-assets.mjs",
     "test:matterhorn-design-system": "node scripts/matterhorn-design-system.test.mjs",
     "test:matterhorn-backend-frontend-linkage-audit": "node scripts/matterhorn-backend-frontend-linkage-audit.test.mjs",
     "test:wallet-profile-mcp-draft-polish": "node scripts/wallet-profile-mcp-draft-polish.test.mjs",
