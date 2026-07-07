@@ -12,10 +12,12 @@ import {
   FileText,
   Hash,
   History,
+  Image,
   ListTodo,
   Play,
   Save,
   Trash2,
+  WalletCards,
   XCircle,
 } from "lucide-react";
 
@@ -47,6 +49,11 @@ const KIND_META: Record<RecentActivityKind, { icon: ElementType; tone: string }>
   task_completed: { icon: CheckCircle2, tone: "text-emerald-300" },
   task_failed: { icon: XCircle, tone: "text-red-300" },
   task_cancelled: { icon: AlertCircle, tone: "text-muted-foreground" },
+  image_generated: { icon: Image, tone: "text-pink-300" },
+  image_failed: { icon: AlertCircle, tone: "text-muted-foreground" },
+  nft_draft_created: { icon: WalletCards, tone: "text-cyan-300" },
+  nft_minted: { icon: WalletCards, tone: "text-emerald-300" },
+  nft_listed: { icon: WalletCards, tone: "text-violet-300" },
 };
 
 function formatActivityTimestamp(timestamp: string) {

@@ -19,7 +19,12 @@ export type RecentActivityKind =
   | "task_output_deleted"
   | "task_completed"
   | "task_failed"
-  | "task_cancelled";
+  | "task_cancelled"
+  | "image_generated"
+  | "image_failed"
+  | "nft_draft_created"
+  | "nft_minted"
+  | "nft_listed";
 
 export interface RecentActivityItem {
   /** Stable identifier (original event id). */
@@ -55,6 +60,11 @@ const EVENT_TYPE_MAP: Record<MatterhornProjectEvidenceEvent["type"], RecentActiv
   "task.completed": "task_completed",
   "task.failed": "task_failed",
   "task.cancelled": "task_cancelled",
+  "image.generated": "image_generated",
+  "image.failed": "image_failed",
+  "nft.draft_created": "nft_draft_created",
+  "nft.minted": "nft_minted",
+  "nft.listed": "nft_listed",
 };
 
 /** Build a compact detail string: desk · sessionSlug or raw summary. */

@@ -30,6 +30,19 @@ import type {
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
 import type {
+  MatterhornImageGenerationInput,
+  MatterhornImageGenerationResponse,
+  MatterhornImageListResponse,
+  MatterhornImageNftDraftInput,
+  MatterhornImageNftDraftListResponse,
+  MatterhornImageNftDraftResponse,
+  MatterhornImageResponse,
+  MatterhornNftListingPreviewResponse,
+  MatterhornNftMintPreviewResponse,
+  MatterhornNftReceiptRequest,
+  MatterhornNftReceiptResponse,
+} from "@matterhorn-work/types/generated-media";
+import type {
   MatterhornBackendModelSelectionRequest,
   MatterhornBackendModelSelectionResponse,
   MatterhornBackendModelsResponse,
@@ -1769,6 +1782,90 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`,
         { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    listGeneratedImages: (workspaceId: string) =>
+      requestJson<MatterhornImageListResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/images`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    generateImage: (workspaceId: string, input: MatterhornImageGenerationInput) =>
+      requestJson<MatterhornImageGenerationResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/images/generate`,
+        { token, hostToken, method: "POST", body: input, timeoutMs: timeouts.config },
+      ),
+    getGeneratedImage: (workspaceId: string, imageId: string) =>
+      requestJson<MatterhornImageResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/images/${encodeURIComponent(imageId)}`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    getGeneratedImageFile: (workspaceId: string, imageId: string) =>
+      requestBinary(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/images/${encodeURIComponent(imageId)}/file`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    createImageNftDraft: (workspaceId: string, imageId: string, input?: MatterhornImageNftDraftInput) =>
+      requestJson<MatterhornImageNftDraftResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/images/${encodeURIComponent(imageId)}/nft-draft`,
+        { token, hostToken, method: "POST", body: input ?? {}, timeoutMs: timeouts.config },
+      ),
+    listImageNftDrafts: (workspaceId: string) =>
+      requestJson<MatterhornImageNftDraftListResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/nft-drafts`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    getImageNftDraft: (workspaceId: string, draftId: string) =>
+      requestJson<MatterhornImageNftDraftResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/nft-drafts/${encodeURIComponent(draftId)}`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    updateImageNftDraft: (workspaceId: string, draftId: string, input: MatterhornImageNftDraftInput) =>
+      requestJson<MatterhornImageNftDraftResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/nft-drafts/${encodeURIComponent(draftId)}`,
+        { token, hostToken, method: "PATCH", body: input, timeoutMs: timeouts.config },
+      ),
+    prepareNftStorage: (workspaceId: string, draftId: string) =>
+      requestJson<MatterhornImageNftDraftResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/nft-drafts/${encodeURIComponent(draftId)}/storage/prepare`,
+        { token, hostToken, method: "POST", timeoutMs: timeouts.config },
+      ),
+    uploadNftStorage: (workspaceId: string, draftId: string) =>
+      requestJson<MatterhornImageNftDraftResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/nft-drafts/${encodeURIComponent(draftId)}/storage/upload`,
+        { token, hostToken, method: "POST", timeoutMs: timeouts.config },
+      ),
+    previewNftMint: (workspaceId: string, draftId: string) =>
+      requestJson<MatterhornNftMintPreviewResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/nft-drafts/${encodeURIComponent(draftId)}/mint/preview`,
+        { token, hostToken, method: "POST", timeoutMs: timeouts.config },
+      ),
+    recordNftMintReceipt: (workspaceId: string, draftId: string, receipt: MatterhornNftReceiptRequest) =>
+      requestJson<MatterhornNftReceiptResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/nft-drafts/${encodeURIComponent(draftId)}/mint/receipt`,
+        { token, hostToken, method: "POST", body: receipt, timeoutMs: timeouts.config },
+      ),
+    previewNftListing: (workspaceId: string, draftId: string) =>
+      requestJson<MatterhornNftListingPreviewResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/nft-drafts/${encodeURIComponent(draftId)}/listing/preview`,
+        { token, hostToken, method: "POST", timeoutMs: timeouts.config },
+      ),
+    recordNftListingReceipt: (workspaceId: string, draftId: string, receipt: MatterhornNftReceiptRequest) =>
+      requestJson<MatterhornNftReceiptResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/nft-drafts/${encodeURIComponent(draftId)}/listing/receipt`,
+        { token, hostToken, method: "POST", body: receipt, timeoutMs: timeouts.config },
       ),
     workspaceDataControls: (workspaceId: string) =>
       requestJson<MatterhornWorkspaceDataControlsResponse>(

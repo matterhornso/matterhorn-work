@@ -1,4 +1,11 @@
 import type { MatterhornWorkspaceAppendOnlyRetentionPolicy } from "./backend-data-policy.js";
+import type {
+  MatterhornImageEditingCapability,
+  MatterhornImageGenerationCapability,
+  MatterhornNftMarketplaceListingCapability,
+  MatterhornNftMintingCapability,
+  MatterhornWalrusStorageCapability,
+} from "./generated-media.js";
 
 export const MATTERHORN_BACKEND_CAPABILITIES_VERSION = "matterhorn.backend.capabilities.v1" as const;
 export const MATTERHORN_BACKEND_DATA_MAP_VERSION = "matterhorn.backend.data-map.v1" as const;
@@ -127,7 +134,9 @@ export interface MatterhornSettingsSectionCapability extends MatterhornCapabilit
     | "teams"
     | "security"
     | "feedback"
-    | "mcp";
+    | "mcp"
+    | "image-generation"
+    | "nft";
   route: string;
   workspaceScoped: boolean;
   desktopOnly: boolean;
@@ -156,6 +165,11 @@ export interface MatterhornBackendCapabilitiesResponse {
   wallets: MatterhornWalletCapability;
   teams: MatterhornTeamCapability;
   security: MatterhornSecurityCapability;
+  imageGeneration: MatterhornImageGenerationCapability;
+  imageEditing: MatterhornImageEditingCapability;
+  walrusStorage: MatterhornWalrusStorageCapability;
+  nftMinting: MatterhornNftMintingCapability;
+  nftMarketplaceListing: MatterhornNftMarketplaceListingCapability;
   settings: MatterhornSettingsSectionCapability[];
 }
 
@@ -197,6 +211,7 @@ export interface MatterhornWorkspaceDataMapResponse {
     | "modelPreferences"
     | "memory"
     | "outputs"
+    | "imageOutputs"
     | "audit"
     | "taskEvents"
     | "workflowRuns"

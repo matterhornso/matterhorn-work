@@ -23,6 +23,8 @@ export type MatterhornProjectDataLedgerKind =
   | "chat"
   | "task"
   | "output"
+  | "image"
+  | "nft"
   | "audit"
   | "feedback";
 
@@ -89,6 +91,8 @@ export interface MatterhornProjectDataLedgerSummary {
   chats: number;
   tasks: number;
   outputs: number;
+  images: number;
+  nfts: number;
   audits: number;
   feedback: number;
   redacted: number;
@@ -164,7 +168,7 @@ export interface MatterhornProjectDataLedgerExportResponse {
       version?: MatterhornProjectDataLedgerExportControlPlaneSnapshot["version"];
       generatedAt?: string;
     };
-    includes: Array<"project_evidence" | "audit" | "opencode_runtime" | "feedback">;
+    includes: Array<"project_evidence" | "audit" | "opencode_runtime" | "feedback" | "images" | "nfts">;
     trainingUse: "none_by_default";
     feedbackUse: MatterhornWorkspaceFeedbackUse;
     limitations: string[];

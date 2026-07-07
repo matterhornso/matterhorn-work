@@ -10,6 +10,7 @@ import {
   Files,
   FileText,
   Hash,
+  Image,
   ListFilter,
   Lock,
   MessageSquareText,
@@ -66,6 +67,8 @@ const KIND_META: Record<MatterhornProjectDataLedgerKind, { icon: ElementType; to
   chat: { icon: MessageSquareText, tone: "text-blue-300" },
   task: { icon: Play, tone: "text-violet-300" },
   output: { icon: Save, tone: "text-emerald-300" },
+  image: { icon: Image, tone: "text-pink-300" },
+  nft: { icon: WalletCards, tone: "text-cyan-300" },
   audit: { icon: ShieldCheck, tone: "text-dls-secondary" },
   feedback: { icon: MessageSquareText, tone: "text-sky-300" },
 };

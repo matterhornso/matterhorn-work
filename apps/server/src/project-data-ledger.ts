@@ -105,6 +105,8 @@ function ledgerKindFromEvidence(event: MatterhornProjectEvidenceEvent): Matterho
   if (event.type === "note.created") return "note";
   if (event.type === "note.memory_suggested") return "memory_suggestion";
   if (event.type === "task.output_saved" || event.outputPath || event.artifactPaths?.length) return "output";
+  if (event.type === "image.generated" || event.type === "image.failed") return "image";
+  if (event.type.startsWith("nft.")) return "nft";
   return "task";
 }
 
@@ -387,6 +389,8 @@ function summarize(items: MatterhornProjectDataLedgerEntry[]): MatterhornProject
     chats: items.filter((item) => item.kind === "chat").length,
     tasks: items.filter((item) => item.kind === "task").length,
     outputs: activeOutputCount(items),
+    images: items.filter((item) => item.kind === "image").length,
+    nfts: items.filter((item) => item.kind === "nft").length,
     audits: items.filter((item) => item.kind === "audit").length,
     feedback: items.filter((item) => item.kind === "feedback").length,
     redacted: items.filter((item) => item.redactionApplied).length,
