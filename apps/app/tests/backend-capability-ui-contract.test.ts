@@ -340,6 +340,9 @@ describe("backend capability UI contract", () => {
     expect(walletSource).toContain("backendSui?.runtimeSupport?.[props.capability.runtime]");
     expect(walletSource).toContain("walletRuntimeSupportSummary");
     expect(walletSource).toContain("Wallet Standard");
+    expect(walletSource).toContain("Sui external handoff");
+    expect(walletSource).toContain("wallet-extension connect");
+    expect(walletSource).toContain("runtime={runtime}");
     expect(walletSource).toContain("Browser wallet extensions are available when installed and allowed.");
     expect(walletSource).not.toContain("planned wallet strategy");
     expect(walletSource).toContain("runtimeWorkspaceId?: string | null");
@@ -359,6 +362,9 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("workspaceSuiTransactionReceipt");
     expect(source).toContain("signAndExecuteTransaction");
     expect(source).toContain("new Transaction()");
+    expect(source).toContain("directWalletAvailable");
+    expect(source).toContain("Desktop handoff:");
+    expect(source).toContain("Copy handoff");
     expect(source).toContain("Sign in wallet");
     expect(source).toContain("matterhorn:task-log-updated");
     expect(source).toContain("matterhorn:project-evidence-updated");

@@ -82,6 +82,19 @@ describe("Sui workflow state", () => {
     expect(result.nextAction).toBe("sign_in_wallet");
   });
 
+  test("uses copy handoff instead of direct signing when wallet-standard connect is not available", () => {
+    const result = getSuiWorkflowAvailability({
+      ...READY_INPUT,
+      previewReady: true,
+      previewSender: "0x2",
+      directWalletAvailable: false,
+    });
+
+    expect(result.canSignPreview).toBe(false);
+    expect(result.signPreviewReason).toBe("Sign this handoff in an external Sui wallet or protocol client.");
+    expect(result.nextAction).toBe("copy_handoff");
+  });
+
   test("allows receipt import with a public digest even without a prepared preview", () => {
     const result = getSuiWorkflowAvailability({
       ...READY_INPUT,

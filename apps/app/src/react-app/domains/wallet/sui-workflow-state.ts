@@ -7,6 +7,7 @@ export type SuiWorkflowAvailabilityInput = {
   previewReady: boolean;
   previewSender?: string | null;
   connectedAddress?: string | null;
+  directWalletAvailable?: boolean;
   digest: string | null | undefined;
 };
 
@@ -26,6 +27,7 @@ export type SuiWorkflowAvailability = {
     | "prepare_preview"
     | "connect_sender_wallet"
     | "sign_in_wallet"
+    | "copy_handoff"
     | "import_receipt";
 };
 
@@ -64,12 +66,15 @@ function firstBlockingReason(input: SuiWorkflowAvailabilityInput): {
 export function getSuiWorkflowAvailability(input: SuiWorkflowAvailabilityInput): SuiWorkflowAvailability {
   const previewBlocker = firstBlockingReason(input);
   const canPreparePreview = previewBlocker.reason === null;
+  const directWalletAvailable = input.directWalletAvailable ?? true;
 
   let signPreviewReason: string | null = null;
   if (!canPreparePreview) {
     signPreviewReason = previewBlocker.reason;
   } else if (!input.previewReady) {
     signPreviewReason = "Prepare a Sui preview before signing.";
+  } else if (!directWalletAvailable) {
+    signPreviewReason = "Sign this handoff in an external Sui wallet or protocol client.";
   } else if (!hasValue(input.connectedAddress)) {
     signPreviewReason = "Connect the Sui wallet that owns the sender address.";
   } else if (!sameAddress(input.connectedAddress, input.previewSender ?? input.sender)) {
@@ -94,6 +99,7 @@ export function getSuiWorkflowAvailability(input: SuiWorkflowAvailabilityInput):
     if (canImportReceipt && !input.previewReady) return "import_receipt";
     if (!canPreparePreview) return previewBlocker.nextAction;
     if (!input.previewReady) return "prepare_preview";
+    if (!directWalletAvailable) return "copy_handoff";
     if (!hasValue(input.connectedAddress)) return "connect_sender_wallet";
     if (!sameAddress(input.connectedAddress, input.previewSender ?? input.sender)) return "connect_sender_wallet";
     if (canSignPreview) return "sign_in_wallet";

@@ -28,6 +28,7 @@ import type {
   MatterhornSuiTransactionPreviewResponse,
   MatterhornSuiTransactionReceiptResponse,
 } from "../../../app/lib/matterhorn-server";
+import { isDesktopRuntime, isElectronRuntime } from "../../../app/utils";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,20 @@ function fieldId(name: string) {
   return `matterhorn-sui-workflow-${name}`;
 }
 
+export type SuiWorkflowRuntime = "web" | "desktop" | "electron" | "unknown";
+
+function resolveSuiWorkflowRuntime(runtime?: SuiWorkflowRuntime): SuiWorkflowRuntime {
+  if (runtime) return runtime;
+  if (isElectronRuntime()) return "electron";
+  if (isDesktopRuntime()) return "desktop";
+  if (typeof window === "undefined") return "unknown";
+  return "web";
+}
+
+function supportsDirectSuiWallet(runtime: SuiWorkflowRuntime): boolean {
+  return runtime === "web";
+}
+
 function WorkflowField(props: {
   label: string;
   htmlFor: string;
@@ -89,6 +104,7 @@ export function SuiWorkflowPanel(props: {
   matterhornServerClient: MatterhornServerClient | null | undefined;
   workspaceId?: string | null;
   sessionId?: string | null;
+  runtime?: SuiWorkflowRuntime;
   compact?: boolean;
   onEvidenceSaved?: (path: string) => void;
 }) {
@@ -125,6 +141,8 @@ export function SuiWorkflowPanel(props: {
   const workspaceId = props.workspaceId?.trim() ?? "";
   const client = props.matterhornServerClient ?? null;
   const onEvidenceSaved = props.onEvidenceSaved;
+  const runtime = resolveSuiWorkflowRuntime(props.runtime);
+  const directWalletAvailable = supportsDirectSuiWallet(runtime);
 
   const accountQuery = useQuery({
     queryKey: ["sui-workflow-account", network, effectiveSender, Boolean(client)] as const,
@@ -338,14 +356,19 @@ export function SuiWorkflowPanel(props: {
     amountSui: amountSui.trim(),
     previewReady: Boolean(preview),
     previewSender: preview?.sender,
-    connectedAddress: account?.address,
+    connectedAddress: directWalletAvailable ? account?.address : null,
+    directWalletAvailable,
     digest: digest.trim(),
   });
   const canPreview = availability.canPreparePreview;
-  const canSignPreview = availability.canSignPreview;
+  const canSignPreview = directWalletAvailable && availability.canSignPreview;
   const canImportReceipt = availability.canImportReceipt;
   const accountBalance = accountQuery.data?.account.balance.balanceMist;
-  const connectedWalletLabel = account?.address
+  const connectedWalletLabel = !directWalletAvailable
+    ? effectiveSender
+      ? `Sender ${truncateAddress(effectiveSender)}`
+      : "External Sui wallet handoff"
+    : account?.address
     ? `${wallet?.name ?? "Sui wallet"} · ${truncateAddress(account.address)}`
     : "No Sui wallet connected";
 
@@ -365,7 +388,9 @@ export function SuiWorkflowPanel(props: {
             <h4 className="text-sm font-semibold text-dls-text">Sui workflow</h4>
           </div>
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
-            Read a public account, prepare a transfer preview, then import the wallet receipt as project evidence.
+            {directWalletAvailable
+              ? "Connect a wallet, prepare a transfer preview, then save the wallet receipt as project evidence."
+              : "Prepare a transfer preview, sign externally, then import the public receipt as project evidence."}
           </p>
         </div>
         <span className="shrink-0 rounded-md bg-dls-surface px-2 py-0.5 text-[11px] font-medium text-dls-secondary">
@@ -397,7 +422,7 @@ export function SuiWorkflowPanel(props: {
             >
               <RefreshCw className={cn("size-3", accountQuery.isFetching && "animate-spin")} />
             </Button>
-            {account?.address ? (
+            {directWalletAvailable && account?.address ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -412,7 +437,12 @@ export function SuiWorkflowPanel(props: {
           </div>
         </div>
 
-        {!account?.address && wallets.length > 0 ? (
+        {!directWalletAvailable ? (
+          <div className="rounded-md bg-background/35 px-3 py-2 text-xs leading-5 text-dls-secondary">
+            <span className="font-medium text-dls-text">Desktop handoff:</span>{" "}
+            copy the preview handoff, sign in your Sui wallet or protocol client, then paste the public digest below.
+          </div>
+        ) : !account?.address && wallets.length > 0 ? (
           <div className="grid gap-2">
             {wallets.slice(0, 3).map((availableWallet) => (
               <Button
@@ -516,20 +546,29 @@ export function SuiWorkflowPanel(props: {
           </div>
           <EvidencePath path={previewResponse?.evidence?.outputPath} />
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              disabled={!canSignPreview || busyAction === "sign"}
-              onClick={signPreviewInWallet}
-              title={availability.signPreviewReason ?? "Sign and submit with the connected Sui wallet"}
-            >
-              {busyAction === "sign" ? <RefreshCw className="size-3 animate-spin" /> : <Send className="size-3" />}
-              Sign in wallet
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => copyText("handoff", handoffText)}>
-              <Copy className="size-3" />
-              {copyLabel === "handoff" ? "Copied" : "Copy handoff"}
-            </Button>
+            {directWalletAvailable ? (
+              <Button
+                type="button"
+                size="sm"
+                disabled={!canSignPreview || busyAction === "sign"}
+                onClick={signPreviewInWallet}
+                title={availability.signPreviewReason ?? "Sign and submit with the connected Sui wallet"}
+              >
+                {busyAction === "sign" ? <RefreshCw className="size-3 animate-spin" /> : <Send className="size-3" />}
+                Sign in wallet
+              </Button>
+            ) : (
+              <Button type="button" size="sm" onClick={() => copyText("handoff", handoffText)}>
+                <Copy className="size-3" />
+                {copyLabel === "handoff" ? "Copied" : "Copy handoff"}
+              </Button>
+            )}
+            {directWalletAvailable ? (
+              <Button variant="outline" size="sm" onClick={() => copyText("handoff", handoffText)}>
+                <Copy className="size-3" />
+                {copyLabel === "handoff" ? "Copied" : "Copy handoff"}
+              </Button>
+            ) : null}
             <Button variant="ghost" size="sm" onClick={() => copyText("hash", preview.previewSha256)}>
               <Copy className="size-3" />
               {copyLabel === "hash" ? "Copied" : "Copy preview hash"}
