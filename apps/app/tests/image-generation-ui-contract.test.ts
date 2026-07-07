@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -10,8 +11,19 @@ import {
   NftSetupRequirements,
   NftDraftPanel,
   SessionImageGenerationPanel,
+  buildMintTransactionFromPlan,
+  receiptFromSuiWalletResult,
 } from "../src/react-app/domains/session/media";
-import type { MatterhornGeneratedImage, MatterhornImageNftDraft } from "@matterhorn-work/types/generated-media";
+import type {
+  MatterhornGeneratedImage,
+  MatterhornImageNftDraft,
+  MatterhornNftListingPreviewResponse,
+  MatterhornNftMintPreviewResponse,
+} from "@matterhorn-work/types/generated-media";
+
+const suiSender = `0x${"1".padStart(64, "0")}`;
+const suiPackageId = `0x${"2".padStart(64, "0")}`;
+const suiObjectId = `0x${"3".padStart(64, "0")}`;
 
 const mockImage: MatterhornGeneratedImage = {
   id: "img_test",
@@ -55,6 +67,125 @@ const mockDraft: MatterhornImageNftDraft = {
   listing: { status: "not_ready" },
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
+};
+
+const mockUploadedDraft: MatterhornImageNftDraft = {
+  ...mockDraft,
+  storage: {
+    provider: "walrus",
+    status: "uploaded",
+    url: "walrus://blob/test",
+  },
+  mint: {
+    status: "preview_ready",
+    packageId: suiPackageId,
+  },
+};
+
+const mockMintPreview: MatterhornNftMintPreviewResponse = {
+  success: true,
+  custody: false,
+  canSubmit: false,
+  signerPolicy: "client_wallet_required",
+  handoff: {
+    kind: "sui_wallet_standard",
+    network: "sui-testnet",
+    transactionKind: "programmable",
+    packageId: suiPackageId,
+    moduleName: "matterhorn_nft",
+    functionName: "mint",
+    storageUrl: "walrus://blob/test",
+    metadata: mockUploadedDraft.metadata,
+    steps: [{ label: "Sign", description: "Sign in a Sui wallet." }],
+  },
+  transactionPlan: {
+    version: "matterhorn.sui.transaction-plan.v1",
+    kind: "sui_move_call",
+    network: "sui-testnet",
+    custody: false,
+    canSubmit: false,
+    requiresWalletStandard: true,
+    sender: suiSender,
+    moveCalls: [
+      {
+        target: `${suiPackageId}::matterhorn_nft::mint`,
+        packageId: suiPackageId,
+        moduleName: "matterhorn_nft",
+        functionName: "mint",
+        typeArguments: [],
+        arguments: [
+          { label: "Name", kind: "pure", type: "string", value: "Test NFT" },
+          { label: "Description", kind: "pure", type: "string", value: "A test NFT" },
+          { label: "Image URL", kind: "pure", type: "string", value: "walrus://blob/test" },
+          { label: "Attributes JSON", kind: "pure", type: "string", value: "[]" },
+          { label: "Creator", kind: "pure", type: "address", value: suiSender },
+        ],
+      },
+    ],
+    sdkHints: {
+      packageName: "@mysten/sui",
+      importPath: "@mysten/sui/transactions",
+      builder: "new Transaction()",
+    },
+    missingInputs: [],
+  },
+  setupRequirements: [],
+  draft: mockUploadedDraft,
+};
+
+const mockListingPreview: MatterhornNftListingPreviewResponse = {
+  success: true,
+  custody: false,
+  canSubmit: false,
+  signerPolicy: "client_wallet_required",
+  handoff: {
+    kind: "sui_wallet_standard",
+    network: "sui-testnet",
+    transactionKind: "kiosk_listing",
+    marketplace: "sui_kiosk",
+    kioskPackageId: "0x2",
+    transferPolicyPackageId: "0x2",
+    priceMist: "1000000000",
+    objectId: suiObjectId,
+    steps: [{ label: "List", description: "Sign the Kiosk listing externally." }],
+  },
+  transactionPlan: {
+    version: "matterhorn.sui.transaction-plan.v1",
+    kind: "sui_kiosk_listing",
+    network: "sui-testnet",
+    custody: false,
+    canSubmit: false,
+    requiresWalletStandard: true,
+    sender: suiSender,
+    marketplace: "sui_kiosk",
+    nftObjectId: suiObjectId,
+    nftType: `${suiPackageId}::matterhorn_nft::MatterhornNFT`,
+    kioskId: `0x${"4".padStart(64, "0")}`,
+    kioskOwnerCapId: `0x${"5".padStart(64, "0")}`,
+    transferPolicyId: `0x${"6".padStart(64, "0")}`,
+    priceMist: "1000000000",
+    sdkHints: {
+      packageName: "@mysten/kiosk",
+      builder: "KioskTransaction",
+      method: "placeAndList",
+    },
+    missingInputs: [],
+  },
+  setupRequirements: [],
+  draft: {
+    ...mockUploadedDraft,
+    mint: {
+      status: "confirmed",
+      transactionDigest: "mint_digest",
+      objectId: suiObjectId,
+      packageId: suiPackageId,
+    },
+    listing: {
+      status: "preview_ready",
+      itemType: `${suiPackageId}::matterhorn_nft::MatterhornNFT`,
+      priceMist: "1000000000",
+    },
+  },
 };
 
 describe("Generated image card", () => {
@@ -116,8 +247,10 @@ describe("Session image generation panel", () => {
       createImageNftDraft: async () => ({ success: true, draft: mockDraft }),
       prepareNftStorage: async () => ({ success: true, draft: mockDraft }),
       uploadNftStorage: async () => ({ success: true, draft: mockDraft }),
-      previewNftMint: async () => ({ success: true, draft: mockDraft }),
-      previewNftListing: async () => ({ success: true, draft: mockDraft }),
+      previewNftMint: async () => mockMintPreview,
+      recordNftMintReceipt: async () => ({ success: true, custody: false, containsSignatureMaterial: false, draft: mockDraft }),
+      previewNftListing: async () => mockListingPreview,
+      recordNftListingReceipt: async () => ({ success: true, custody: false, containsSignatureMaterial: false, draft: mockDraft }),
     };
     const queryClient = new QueryClient();
     const html = renderToStaticMarkup(
@@ -183,6 +316,24 @@ describe("NFT draft panel", () => {
     expect(typeof html).toBe("string");
   });
 
+  test("component source exposes mint preview, wallet signing, and receipt fields", () => {
+    const source = readFileSync("apps/app/src/react-app/domains/session/media/nft-draft-panel.tsx", "utf8");
+    expect(source).toContain("Mint plan ready");
+    expect(source).toContain("Sign mint in wallet");
+    expect(source).toContain("Mint digest");
+    expect(source).toContain("Minted object id");
+    expect(source).toContain("onRecordMintReceipt");
+  });
+
+  test("component source exposes marketplace listing preview and receipt fields", () => {
+    const source = readFileSync("apps/app/src/react-app/domains/session/media/nft-draft-panel.tsx", "utf8");
+    expect(source).toContain("Marketplace listing");
+    expect(source).toContain("Listing plan ready");
+    expect(source).toContain("Price (MIST)");
+    expect(source).toContain("Listing transaction digest");
+    expect(source).toContain("onRecordListingReceipt");
+  });
+
   test("component renders backend NFT setup requirements", () => {
     const html = renderToStaticMarkup(
       React.createElement(NftSetupRequirements, {
@@ -207,5 +358,29 @@ describe("NFT draft panel", () => {
     expect(html).toContain("Setup needed");
     expect(html).toContain("MATTERHORN_SUI_NFT_PACKAGE_ID");
     expect(html).not.toContain("MATTERHORN_SUI_NFT_MODULE_NAME");
+  });
+});
+
+describe("Sui NFT transaction plan helpers", () => {
+  test("builds a wallet transaction from the backend mint plan", () => {
+    const transaction = buildMintTransactionFromPlan(mockMintPreview.transactionPlan, suiSender);
+    expect(transaction).toBeTruthy();
+  });
+
+  test("extracts digest and minted object id from wallet results", () => {
+    const receipt = receiptFromSuiWalletResult({
+      Transaction: {
+        digest: "9uMintDigest",
+        objectChanges: [
+          { type: "created", objectId: suiObjectId },
+        ],
+      },
+    });
+    expect(receipt).toEqual({
+      digest: "9uMintDigest",
+      status: "success",
+      objectId: suiObjectId,
+      error: null,
+    });
   });
 });

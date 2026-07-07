@@ -14,7 +14,11 @@ import type {
   MatterhornImageGenerationInput,
   MatterhornImageNftDraft,
   MatterhornImageNftDraftInput,
+  MatterhornNftListingPreviewInput,
+  MatterhornNftListingPreviewResponse,
+  MatterhornNftMintPreviewResponse,
   MatterhornNftPreviewErrorDetails,
+  MatterhornNftReceiptRequest,
   MatterhornNftSetupRequirement,
 } from "@matterhorn-work/types/generated-media";
 import {
@@ -26,8 +30,8 @@ import {
   ImageGenerationComposer,
 } from "./image-generation-composer";
 import {
-  NftDraftPanel,
-} from "./nft-draft-panel";
+  NftDraftWalletBridge,
+} from "./nft-draft-wallet-bridge";
 
 type NftCapabilityStatus = "working" | "needs_setup" | "preview";
 
@@ -79,6 +83,8 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
   const [nftDraft, setNftDraft] = useState<MatterhornImageNftDraft | null>(null);
   const [nftSetupRequirements, setNftSetupRequirements] = useState<MatterhornNftSetupRequirement[]>([]);
   const [nftBusy, setNftBusy] = useState(false);
+  const [nftMintPreview, setNftMintPreview] = useState<MatterhornNftMintPreviewResponse | null>(null);
+  const [nftListingPreview, setNftListingPreview] = useState<MatterhornNftListingPreviewResponse | null>(null);
 
   const capabilitiesQuery = useQuery({
     queryKey: ["session-image-generation-capabilities"],
@@ -114,6 +120,8 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     setNftImage(null);
     setNftDraft(null);
     setNftSetupRequirements([]);
+    setNftMintPreview(null);
+    setNftListingPreview(null);
   }, [props.workspaceId, props.sessionId]);
 
   useEffect(() => {
@@ -188,6 +196,8 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     setNftImage(image);
     setNftPanelOpen(true);
     setNftSetupRequirements([]);
+    setNftMintPreview(null);
+    setNftListingPreview(null);
     setNftBusy(true);
     try {
       await refreshDraftForImage(image);
@@ -207,6 +217,8 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       const response = await action(nftDraft.id);
       setNftDraft(response.draft);
       setNftSetupRequirements([]);
+      setNftMintPreview(null);
+      setNftListingPreview(null);
     } catch (nextError) {
       const setupRequirements = nftSetupRequirementsFromError(nextError);
       setNftSetupRequirements(setupRequirements);
@@ -232,6 +244,8 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       const response = await props.client.createImageNftDraft(props.workspaceId, nftImage.id, input);
       setNftDraft(response.draft);
       setNftSetupRequirements([]);
+      setNftMintPreview(null);
+      setNftListingPreview(null);
       props.onNotice?.({
         title: "NFT draft created",
         description: "Stored locally until you choose public storage or wallet signing.",
@@ -246,6 +260,117 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       setNftBusy(false);
     }
   }, [nftImage, props.client, props.onNotice, props.workspaceId]);
+
+  const previewMint = useCallback(async () => {
+    if (!nftDraft) return;
+    setNftBusy(true);
+    try {
+      const response = await props.client.previewNftMint(props.workspaceId, nftDraft.id);
+      setNftDraft(response.draft);
+      setNftSetupRequirements(response.setupRequirements ?? []);
+      setNftMintPreview(response);
+      setNftListingPreview(null);
+      props.onNotice?.({
+        title: "Mint plan ready",
+        description: "Review it, then sign with your connected Sui wallet.",
+        tone: "info",
+      });
+    } catch (nextError) {
+      const setupRequirements = nftSetupRequirementsFromError(nextError);
+      setNftSetupRequirements(setupRequirements);
+      setNftMintPreview(null);
+      props.onNotice?.({
+        title: generatedImageErrorMessage(nextError),
+        description: setupRequirements.length
+          ? setupRequirements
+            .filter((requirement) => requirement.status !== "configured")
+            .map((requirement) => requirement.envVar ?? requirement.label)
+            .join(", ")
+          : undefined,
+        tone: "warning",
+      });
+    } finally {
+      setNftBusy(false);
+    }
+  }, [nftDraft, props.client, props.onNotice, props.workspaceId]);
+
+  const recordMintReceipt = useCallback(async (receipt: MatterhornNftReceiptRequest) => {
+    if (!nftDraft) return;
+    setNftBusy(true);
+    try {
+      const response = await props.client.recordNftMintReceipt(props.workspaceId, nftDraft.id, receipt);
+      setNftDraft(response.draft);
+      setNftSetupRequirements([]);
+      setNftMintPreview(null);
+      props.onNotice?.({
+        title: "Mint receipt recorded",
+        description: "The NFT draft now points at the public Sui object.",
+        tone: "success",
+      });
+    } catch (nextError) {
+      props.onNotice?.({
+        title: generatedImageErrorMessage(nextError),
+        tone: "warning",
+      });
+    } finally {
+      setNftBusy(false);
+    }
+  }, [nftDraft, props.client, props.onNotice, props.workspaceId]);
+
+  const previewListing = useCallback(async (input: MatterhornNftListingPreviewInput) => {
+    if (!nftDraft) return;
+    setNftBusy(true);
+    try {
+      const response = await props.client.previewNftListing(props.workspaceId, nftDraft.id, input);
+      setNftDraft(response.draft);
+      setNftSetupRequirements(response.setupRequirements ?? []);
+      setNftListingPreview(response);
+      props.onNotice?.({
+        title: "Listing plan ready",
+        description: "Review the Sui Kiosk inputs before signing externally.",
+        tone: "info",
+      });
+    } catch (nextError) {
+      const setupRequirements = nftSetupRequirementsFromError(nextError);
+      setNftSetupRequirements(setupRequirements);
+      setNftListingPreview(null);
+      props.onNotice?.({
+        title: generatedImageErrorMessage(nextError),
+        description: setupRequirements.length
+          ? setupRequirements
+            .filter((requirement) => requirement.status !== "configured")
+            .map((requirement) => requirement.envVar ?? requirement.label)
+            .join(", ")
+          : undefined,
+        tone: "warning",
+      });
+    } finally {
+      setNftBusy(false);
+    }
+  }, [nftDraft, props.client, props.onNotice, props.workspaceId]);
+
+  const recordListingReceipt = useCallback(async (receipt: MatterhornNftReceiptRequest) => {
+    if (!nftDraft) return;
+    setNftBusy(true);
+    try {
+      const response = await props.client.recordNftListingReceipt(props.workspaceId, nftDraft.id, receipt);
+      setNftDraft(response.draft);
+      setNftSetupRequirements([]);
+      setNftListingPreview(null);
+      props.onNotice?.({
+        title: "Listing receipt recorded",
+        description: "The marketplace handoff is now part of this image's evidence.",
+        tone: "success",
+      });
+    } catch (nextError) {
+      props.onNotice?.({
+        title: generatedImageErrorMessage(nextError),
+        tone: "warning",
+      });
+    } finally {
+      setNftBusy(false);
+    }
+  }, [nftDraft, props.client, props.onNotice, props.workspaceId]);
 
   const nftCapabilities = {
     walrusStorage: nftCapabilityStatus(capabilities?.walrusStorage?.status),
@@ -301,38 +426,24 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       ) : null}
 
       {nftImage ? (
-        <NftDraftPanel
+        <NftDraftWalletBridge
           open={nftPanelOpen}
           onOpenChange={setNftPanelOpen}
           image={nftImage}
           imageUrl={previewUrl ?? undefined}
           capabilities={nftCapabilities}
           draft={nftDraft}
+          mintPreview={nftMintPreview}
+          listingPreview={nftListingPreview}
           setupRequirements={nftSetupRequirements}
           isLoading={nftBusy}
           onCreateDraft={createDraft}
           onPrepareStorage={() => void updateDraft((draftId) => props.client.prepareNftStorage(props.workspaceId, draftId))}
           onUploadStorage={() => void updateDraft((draftId) => props.client.uploadNftStorage(props.workspaceId, draftId))}
-          onPreviewMint={() => void updateDraft(async (draftId) => {
-            const response = await props.client.previewNftMint(props.workspaceId, draftId);
-            return { draft: response.draft };
-          })}
-          onRecordMintReceipt={() => {
-            props.onNotice?.({
-              title: "Record the public mint receipt after wallet signing.",
-              tone: "info",
-            });
-          }}
-          onPreviewListing={() => void updateDraft(async (draftId) => {
-            const response = await props.client.previewNftListing(props.workspaceId, draftId);
-            return { draft: response.draft };
-          })}
-          onRecordListingReceipt={() => {
-            props.onNotice?.({
-              title: "Record the public listing receipt after wallet signing.",
-              tone: "info",
-            });
-          }}
+          onPreviewMint={previewMint}
+          onRecordMintReceipt={recordMintReceipt}
+          onPreviewListing={previewListing}
+          onRecordListingReceipt={recordListingReceipt}
         />
       ) : null}
     </div>
