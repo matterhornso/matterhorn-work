@@ -206,8 +206,21 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("protocol-desk-readiness");
     expect(src).toContain("matterhornServerClient.workspaceReadiness(readinessWorkspaceId)");
     expect(src).toContain("features.start_desk_task");
+    expect(src).toContain('actionLabel={startTaskBlocked ? "Needs setup"');
     expect(src).toContain("actionDisabled={startTaskBlocked}");
     expect(src).toContain("actionTitle={startTaskBlocker ?? undefined}");
+  });
+
+  test("workflow desk stage cards reuse backend readiness blockers", () => {
+    const pageSrc = readAppSource("domains/session/chat/session-page.tsx");
+    const surfaceSrc = readAppSource("domains/session/surface/session-surface.tsx");
+
+    expect(pageSrc).toContain("workflow-desk-readiness");
+    expect(pageSrc).toContain("stageActionDisabled={startTaskBlocked}");
+    expect(pageSrc).toContain("stageActionTitle={startTaskBlocker ?? undefined}");
+    expect(surfaceSrc).toContain("session-desk-readiness");
+    expect(surfaceSrc).toContain("stageActionDisabled={activeDeskStartBlocked}");
+    expect(surfaceSrc).toContain("stageActionTitle={activeDeskStartBlocker ?? undefined}");
   });
 
   test("task launcher route can send the prompt immediately", () => {

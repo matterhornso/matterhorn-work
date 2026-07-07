@@ -5,6 +5,7 @@ import type { UIMessage } from "ai";
 import { useQuery } from "@tanstack/react-query";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
 import {
+  AlertCircle,
   ArrowDown,
   ArrowUp,
   BarChart3,
@@ -1175,6 +1176,19 @@ export function SessionSurface(props: SessionSurfaceProps) {
     if (activeDeskMode) return getMatterhornDeskAgent(activeDeskMode);
     return getMatterhornDeskAgentById(props.selectedAgent);
   }, [activeDeskMode, props.selectedAgent]);
+  const activeDeskReadinessQuery = useQuery({
+    queryKey: ["session-desk-readiness", props.workspaceId, activeDeskMode],
+    enabled: Boolean(activeDeskMode && props.workspaceId),
+    staleTime: 30_000,
+    queryFn: async () => props.client.workspaceReadiness(props.workspaceId),
+  });
+  const activeDeskStartFeature = activeDeskReadinessQuery.data?.features.start_desk_task;
+  const activeDeskStartBlocked = Boolean(activeDeskMode && activeDeskStartFeature && !activeDeskStartFeature.ready);
+  const activeDeskStartBlocker = activeDeskStartBlocked
+    ? `Start task needs ${activeDeskStartFeature?.blockingCheckIds
+      .map((checkId) => activeDeskReadinessQuery.data?.checks[checkId]?.label ?? checkId)
+      .join(", ")}.`
+    : null;
   useEffect(() => {
     const deskAgentId = matterhornDeskAgentIdForDesk(activeDeskMode);
     if (deskAgentId && props.selectedAgent !== deskAgentId) {
@@ -1999,19 +2013,29 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   onOpenModelPicker={props.onModelClick}
                 />
               ) : activeDeskMode ? (
-                <DeskWorkflowStagePanel
-                  deskId={activeDeskMode}
-                  taskStatus={effectiveActivityStatus === "idle" ? "idle" : effectiveActivityStatus === "waiting" ? "waiting" : "running"}
-                  onStartStage={(_, prompt) => void typeComposerText(prompt)}
-                  onJotNote={() => {
-                    const visual = getCustomerProtocolDeskVisual(activeDeskMode);
-                    openQuickJot({
-                      type: "desk",
-                      id: activeDeskMode,
-                      label: visual?.displayName ?? activeDeskMode,
-                    });
-                  }}
-                />
+                <div className="space-y-2">
+                  {activeDeskStartBlocker ? (
+                    <div className="mx-2 flex items-start gap-2 rounded-lg bg-dls-surface/50 px-3 py-2 text-xs leading-5 text-dls-secondary">
+                      <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" />
+                      <span>{activeDeskStartBlocker}</span>
+                    </div>
+                  ) : null}
+                  <DeskWorkflowStagePanel
+                    deskId={activeDeskMode}
+                    taskStatus={effectiveActivityStatus === "idle" ? "idle" : effectiveActivityStatus === "waiting" ? "waiting" : "running"}
+                    stageActionDisabled={activeDeskStartBlocked}
+                    stageActionTitle={activeDeskStartBlocker ?? undefined}
+                    onStartStage={(_, prompt) => void typeComposerText(prompt)}
+                    onJotNote={() => {
+                      const visual = getCustomerProtocolDeskVisual(activeDeskMode);
+                      openQuickJot({
+                        type: "desk",
+                        id: activeDeskMode,
+                        label: visual?.displayName ?? activeDeskMode,
+                      });
+                    }}
+                  />
+                </div>
               ) : shellConfig.starterCards ? (
                 <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-5 sm:px-6">
                   <div className="w-full max-w-[880px]">

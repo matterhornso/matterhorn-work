@@ -10,6 +10,8 @@ export type DeskWorkflowStagePanelProps = {
   deskId: CustomerProtocolDeskId | string;
   currentStageId?: string;
   taskStatus?: "idle" | "staged" | "running" | "waiting" | "completed" | "failed" | "cancelled";
+  stageActionDisabled?: boolean;
+  stageActionTitle?: string;
   onStartStage?: (stageId: string, prompt: string) => void;
   onJotNote?: () => void;
 };
@@ -95,6 +97,8 @@ export function DeskWorkflowStagePanel({
   deskId,
   currentStageId,
   taskStatus = "idle",
+  stageActionDisabled = false,
+  stageActionTitle,
   onStartStage,
   onJotNote,
 }: DeskWorkflowStagePanelProps) {
@@ -153,7 +157,9 @@ export function DeskWorkflowStagePanel({
                 requiresCustomerConfirmation={step.requiresCustomerConfirmation}
                 safetyBoundary={isCurrent ? visual.sessionBoundary : undefined}
                 isCurrent={isCurrent}
-                actionLabel={isCurrent ? "Start" : "Stage task"}
+                actionLabel={stageActionDisabled ? "Needs setup" : isCurrent ? "Start" : "Stage task"}
+                actionDisabled={stageActionDisabled}
+                actionTitle={stageActionTitle}
                 onAction={onStartStage ? () => onStartStage(step.id, rawPrompt) : undefined}
               />
             );

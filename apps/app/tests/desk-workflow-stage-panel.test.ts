@@ -113,4 +113,14 @@ describe("desk workflow stage panel metadata", () => {
       expect(manifestText).not.toContain(agent.systemPrompt.slice(0, 120));
     }
   });
+
+  test("stage panel accepts workspace readiness blockers for task actions", async () => {
+    const source = await Bun.file("apps/app/src/react-app/domains/session/workflows/desk-workflow-stage-panel.tsx").text();
+
+    expect(source).toContain("stageActionDisabled?: boolean");
+    expect(source).toContain("stageActionTitle?: string");
+    expect(source).toContain("actionDisabled={stageActionDisabled}");
+    expect(source).toContain("actionTitle={stageActionTitle}");
+    expect(source).toContain('stageActionDisabled ? "Needs setup"');
+  });
 });
