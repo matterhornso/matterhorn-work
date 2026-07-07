@@ -10,6 +10,23 @@ assert.ok(
   "generated-media smoke launcher should explain its purpose",
 );
 assert.ok(
+  script.includes("startFakeOpencode") &&
+    script.includes('url.pathname === "/session"') &&
+    script.includes('url.pathname === "/session/status"') &&
+    script.includes('action === "prompt_async"') &&
+    script.includes('action === "todo"'),
+  "generated-media smoke launcher should include a fake OpenCode engine for browser chat sessions",
+);
+assert.ok(
+  script.includes("--opencode-base-url") && script.includes("Fake OpenCode"),
+  "generated-media smoke launcher should wire the fake OpenCode engine into the Matterhorn server",
+);
+assert.ok(
+  script.includes('url.pathname === "/provider"') &&
+    script.includes('"big-pickle"'),
+  "generated-media smoke launcher should expose a minimal provider catalog",
+);
+assert.ok(
   script.includes('MATTERHORN_IMAGE_PROVIDER: "mock"'),
   "generated-media smoke launcher must force mock image generation",
 );
@@ -33,7 +50,9 @@ for (const envVar of [
   assert.ok(script.includes(envVar), `generated-media smoke launcher should wire ${envVar}`);
 }
 assert.ok(
-  script.includes("no OpenAI key required") && script.includes("no custody or signing"),
+  script.includes("no OpenAI key required") &&
+    script.includes("no custody or signing") &&
+    script.includes("create or open a chat session"),
   "generated-media smoke launcher should keep the no-secret/no-custody boundary visible",
 );
 assert.ok(
