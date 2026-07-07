@@ -385,6 +385,18 @@ describe("backend capability UI contract", () => {
     expect(routeSource).toContain("matterhornServerClient={matterhornClient}");
   });
 
+  test("Workspace Home exposes compact wallet runtime readiness", () => {
+    const sessionSource = readAppSource("react-app/domains/session/chat/session-page.tsx");
+    expect(sessionSource).toContain("HomeWalletRuntimeStatus");
+    expect(sessionSource).toContain("home-wallet-backend-capabilities");
+    expect(sessionSource).toContain("props.matterhornServerClient!.backendCapabilities()");
+    expect(sessionSource).toContain("walletFamilySummary(capabilities)");
+    expect(sessionSource).toContain("walletRuntimeSupportSummary(support)");
+    expect(sessionSource).toContain("Wallet readiness");
+    expect(sessionSource).toContain("Sui signing stays in your wallet; desktop uses external handoff.");
+    expect(sessionSource).toContain('onOpenWallet={() => setCurrentSidePanel("wallet")}');
+  });
+
   test("Sui workflow panel saves wallet preview and receipt evidence through workspace routes", () => {
     const source = readAppSource("react-app/domains/wallet/sui-workflow-panel.tsx");
     const sessionSource = readAppSource("react-app/domains/session/chat/session-page.tsx");
