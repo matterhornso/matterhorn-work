@@ -300,6 +300,7 @@ export type MatterhornTaskEventType =
   | "stage_started"
   | "tool_called"
   | "artifact_saved"
+  | "artifact_deleted"
   | "waiting_for_user"
   | "completed"
   | "failed"
