@@ -2735,6 +2735,12 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
           "working",
           "Chat/session history",
           "Chat history is managed by the OpenCode runtime store. The project ledger exports session counts, timestamps, and audit metadata only.",
+          {
+            fullTranscriptExport: false,
+            metadataLedgerExport: true,
+            ledgerRoute: `/workspace/${workspace.id}/data-ledger?kind=chat`,
+            transcriptStore: "opencode_runtime",
+          },
         ),
         scope: "opencode_runtime",
         path: opencodeDbPath,
@@ -3040,6 +3046,15 @@ function buildDataControlStore(
           label: "Open session",
           description: "Opens the workspace session shell where full chat history is managed by the agent runtime.",
           href: appRoutes.session,
+        }),
+        dataControlAction({
+          id: "chat.ledger-metadata",
+          label: "Export chat metadata",
+          description: "Returns redacted chat session counts, timestamps, and audit metadata. Message bodies remain in the OpenCode runtime store.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `${ledgerRoute}?kind=chat`,
         }),
       ],
     });
