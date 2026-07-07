@@ -10,6 +10,8 @@
     "test:dev-generated-media-smoke": "node scripts/dev-generated-media-smoke.test.mjs",
     "smoke:generated-media-flow": "node scripts/generated-media-flow-smoke.mjs --strict",
     "test:generated-media-flow-smoke": "node scripts/generated-media-flow-smoke.test.mjs",
+    "smoke:generated-media-browser": "node scripts/generated-media-browser-smoke.mjs --strict",
+    "test:generated-media-browser-smoke": "node scripts/generated-media-browser-smoke.test.mjs",
     "dev:electron": "OPENWORK_DEV_MODE=1 pnpm --filter @matterhorn-work/desktop dev:electron",
     "dev:sandbox": "bash .devcontainer/dev-sandbox.sh",
     "dev:windows": ".\\scripts\\dev-windows.cmd",
