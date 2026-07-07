@@ -2999,6 +2999,9 @@ function buildDataControlStore(
     notes: `${workspaceAppRoute}/session?panel=notes`,
     memory: `${workspaceAppRoute}/session?panel=memory`,
     history: `${workspaceAppRoute}/history`,
+    outputHistory: `${workspaceAppRoute}/history?kind=output`,
+    taskHistory: `${workspaceAppRoute}/history?kind=task`,
+    auditHistory: `${workspaceAppRoute}/history?kind=audit`,
     dataPolicy: `${workspaceAppRoute}/settings/overview#data-policy`,
     feedback: `${workspaceAppRoute}/settings/overview#feedback`,
     models: `${workspaceAppRoute}/settings/ai`,
@@ -3251,7 +3254,7 @@ function buildDataControlStore(
           id: "outputs.open-history",
           label: "Open Run history",
           description: "Opens Run history, where output receipts and workflow evidence are reviewed.",
-          href: appRoutes.history,
+          href: appRoutes.outputHistory,
         }),
         dataControlAction({
           id: "outputs.open-folder",
@@ -3373,7 +3376,7 @@ function buildDataControlStore(
           id: `${storeId}.open-history`,
           label: "Open Run history",
           description: "Opens Run history for append-only project activity and evidence.",
-          href: appRoutes.history,
+          href: storeId === "audit" ? appRoutes.auditHistory : storeId === "evidence" ? appRoutes.history : appRoutes.taskHistory,
         }),
         dataControlAction({
           id: `${storeId}.ledger`,

@@ -351,7 +351,20 @@ describe("project data ledger routes", () => {
     const dataControls = await jsonFetch(base, "/workspace/ws_ledger/backend/data-controls");
     expect(dataControls.response.status).toBe(200);
     expect(dataControls.payload.version).toBe("matterhorn.backend.data-controls.v1");
-    expect(dataControls.payload.stores.feedback.export.actions[0].href).toBe("/workspace/ws_ledger/data-ledger?source=feedback");
+    expect(dataControls.payload.stores.feedback.export.actions).toContainEqual(
+      expect.objectContaining({
+        id: "feedback.open-review",
+        kind: "app_route",
+        href: "/workspace/ws_ledger/settings/overview#feedback",
+      }),
+    );
+    expect(dataControls.payload.stores.feedback.export.actions).toContainEqual(
+      expect.objectContaining({
+        id: "feedback.ledger",
+        method: "GET",
+        href: "/workspace/ws_ledger/data-ledger?source=feedback",
+      }),
+    );
     expect(dataControls.payload.stores.feedback.deletion.status).toBe("working");
     expect(dataControls.payload.stores.feedback.deletion.actions[0].href).toBe("/workspace/:workspaceId/feedback/:feedbackId");
     expect(dataControls.payload.stores.feedback.deletion.actions).toContainEqual(
@@ -363,7 +376,20 @@ describe("project data ledger routes", () => {
       }),
     );
     expect(dataControls.payload.stores.walletEvidence.export.status).toBe("working");
-    expect(dataControls.payload.stores.walletEvidence.export.actions[0].href).toBe("/workspace/ws_ledger/data-ledger?kind=wallet");
+    expect(dataControls.payload.stores.walletEvidence.export.actions).toContainEqual(
+      expect.objectContaining({
+        id: "wallet-evidence.open-wallet",
+        kind: "app_route",
+        href: "/workspace/ws_ledger/settings/wallet",
+      }),
+    );
+    expect(dataControls.payload.stores.walletEvidence.export.actions).toContainEqual(
+      expect.objectContaining({
+        id: "wallet-evidence.ledger",
+        method: "GET",
+        href: "/workspace/ws_ledger/data-ledger?kind=wallet",
+      }),
+    );
     expect(dataControls.payload.stores.walletEvidence.deletion.status).toBe("unsupported");
     expect(dataControls.payload.stores.taskEvents.retention.mode).toBe("append_only");
     expect(dataControls.payload.policy.retention).toMatchObject({

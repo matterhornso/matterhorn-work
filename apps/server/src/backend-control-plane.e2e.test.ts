@@ -1262,7 +1262,7 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.outputs.export.actions).toContainEqual(expect.objectContaining({
       id: "outputs.open-history",
       kind: "app_route",
-      href: "/workspace/ws_backend/history",
+      href: "/workspace/ws_backend/history?kind=output",
     }));
     expect(result.payload.stores.outputs.deletion.actions[0]).toMatchObject({
       id: "outputs.delete-file",
@@ -1328,7 +1328,17 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.audit.export.actions).toContainEqual(expect.objectContaining({
       id: "audit.open-history",
       kind: "app_route",
-      href: "/workspace/ws_backend/history",
+      href: "/workspace/ws_backend/history?kind=audit",
+    }));
+    expect(result.payload.stores.taskEvents.export.actions).toContainEqual(expect.objectContaining({
+      id: "taskEvents.open-history",
+      kind: "app_route",
+      href: "/workspace/ws_backend/history?kind=task",
+    }));
+    expect(result.payload.stores.workflowRuns.export.actions).toContainEqual(expect.objectContaining({
+      id: "workflowRuns.open-history",
+      kind: "app_route",
+      href: "/workspace/ws_backend/history?kind=task",
     }));
     expect(result.payload.policy.retention.mode).toBe("accountability_default");
     expect(result.payload.policy.retention.stores).toEqual(["audit", "taskEvents", "workflowRuns"]);

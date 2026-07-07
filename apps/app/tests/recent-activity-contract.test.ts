@@ -174,6 +174,11 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("listProjectDataLedger");
       expect(source).toContain("exportProjectDataLedger");
       expect(source).toContain('queryKey: ["project-history-ledger"');
+      expect(source).toContain("useSearchParams");
+      expect(source).toContain("projectHistoryFilterFromParam(historySearchParams.get(\"kind\"))");
+      expect(source).toContain("projectHistoryDeskFromParam(historySearchParams.get(\"desk\"))");
+      expect(source).toContain("setHistoryFilter(filter.id)");
+      expect(source).toContain("setHistoryDesk(event.currentTarget.value)");
       expect(source).toContain("activeDesk");
       expect(source).toContain("desk: activeDesk");
       expect(source).toContain("manifest.itemCount");

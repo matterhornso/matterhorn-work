@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import { useMemo, useState, type ElementType } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   BrainCircuit,
@@ -121,6 +122,18 @@ function kindCount(data: MatterhornProjectDataLedgerResponse | undefined, filter
   return 0;
 }
 
+function projectHistoryFilterFromParam(value: string | null): ProjectHistoryFilter {
+  if (value && PROJECT_HISTORY_FILTERS.some((filter) => filter.id === value)) {
+    return value as ProjectHistoryFilter;
+  }
+  return "task";
+}
+
+function projectHistoryDeskFromParam(value: string | null): string {
+  const next = value?.trim();
+  return next ? next : ALL_DESKS;
+}
+
 function entryContext(entry: MatterhornProjectDataLedgerEntry) {
   return [
     deskLabel(entry.desk),
@@ -179,11 +192,27 @@ export function ProjectHistoryPage({
   matterhornServerClient: MatterhornServerClient | null;
   runtimeWorkspaceId: string | null;
 }) {
-  const [activeFilter, setActiveFilter] = useState<ProjectHistoryFilter>("task");
-  const [activeDesk, setActiveDesk] = useState<string>(ALL_DESKS);
+  const [historySearchParams, setHistorySearchParams] = useSearchParams();
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const activeFilter = projectHistoryFilterFromParam(historySearchParams.get("kind"));
+  const activeDesk = projectHistoryDeskFromParam(historySearchParams.get("desk"));
   const activeFilterConfig = PROJECT_HISTORY_FILTERS.find((filter) => filter.id === activeFilter) ?? PROJECT_HISTORY_FILTERS[0];
   const activeKind = activeFilterConfig.kind;
+
+  const setHistoryFilter = (filter: ProjectHistoryFilter) => {
+    const params = new URLSearchParams(historySearchParams);
+    if (filter === "task") params.delete("kind");
+    else params.set("kind", filter);
+    setHistorySearchParams(params);
+  };
+
+  const setHistoryDesk = (desk: string) => {
+    const params = new URLSearchParams(historySearchParams);
+    const nextDesk = desk.trim();
+    if (!nextDesk || nextDesk === ALL_DESKS) params.delete("desk");
+    else params.set("desk", nextDesk);
+    setHistorySearchParams(params);
+  };
 
   const summaryQuery = useQuery({
     queryKey: ["project-history-ledger-summary", runtimeWorkspaceId],
@@ -300,7 +329,7 @@ export function ProjectHistoryPage({
                       ? "bg-dls-text text-dls-background"
                       : "bg-dls-surface-muted/25 text-dls-secondary hover:bg-dls-hover hover:text-dls-text",
                   )}
-                  onClick={() => setActiveFilter(filter.id)}
+                  onClick={() => setHistoryFilter(filter.id)}
                 >
                   <span>{filter.label}</span>
                   <span className={cn("text-[11px]", selected ? "text-dls-background/75" : "text-dls-secondary/75")}>
@@ -316,7 +345,7 @@ export function ProjectHistoryPage({
               <select
                 className="h-8 min-w-40 rounded-md border border-dls-border/60 bg-dls-background px-2 text-xs text-dls-text outline-none transition-colors focus:border-dls-text"
                 value={activeDesk}
-                onChange={(event) => setActiveDesk(event.currentTarget.value)}
+                onChange={(event) => setHistoryDesk(event.currentTarget.value)}
               >
                 <option value={ALL_DESKS}>All desks</option>
                 {deskOptions.map((desk) => (
