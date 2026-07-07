@@ -70,12 +70,41 @@ async function jsonFetch(base: string, path: string, init?: RequestInit, token?:
   return { response, payload: await response.json().catch(() => ({})) };
 }
 
+function bootWalrusPublisher(payload: unknown) {
+  const calls: Array<{
+    method: string;
+    url: string;
+    contentType: string | null;
+    authorization: string | null;
+    byteLength: number;
+  }> = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const bytes = new Uint8Array(await request.arrayBuffer());
+      calls.push({
+        method: request.method,
+        url: request.url,
+        contentType: request.headers.get("content-type"),
+        authorization: request.headers.get("authorization"),
+        byteLength: bytes.byteLength,
+      });
+      return Response.json(payload);
+    },
+  });
+  stops.push(() => server.stop());
+  return { url: `http://127.0.0.1:${server.port}`, calls };
+}
+
 beforeEach(() => {
   priorEnv = {
     MATTERHORN_IMAGE_PROVIDER: process.env.MATTERHORN_IMAGE_PROVIDER,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     MATTERHORN_WALRUS_PUBLISHER_URL: process.env.MATTERHORN_WALRUS_PUBLISHER_URL,
+    MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN: process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN,
     MATTERHORN_WALRUS_RELAY_URL: process.env.MATTERHORN_WALRUS_RELAY_URL,
+    MATTERHORN_WALRUS_STORAGE_EPOCHS: process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS,
     MATTERHORN_SUI_NFT_PACKAGE_ID: process.env.MATTERHORN_SUI_NFT_PACKAGE_ID,
     MATTERHORN_SUI_NFT_MODULE_NAME: process.env.MATTERHORN_SUI_NFT_MODULE_NAME,
     MATTERHORN_SUI_KIOSK_PACKAGE_ID: process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID,
@@ -84,7 +113,9 @@ beforeEach(() => {
   process.env.MATTERHORN_IMAGE_PROVIDER = "mock";
   delete process.env.OPENAI_API_KEY;
   delete process.env.MATTERHORN_WALRUS_PUBLISHER_URL;
+  delete process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN;
   delete process.env.MATTERHORN_WALRUS_RELAY_URL;
+  delete process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS;
   delete process.env.MATTERHORN_SUI_NFT_PACKAGE_ID;
   delete process.env.MATTERHORN_SUI_NFT_MODULE_NAME;
   delete process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID;
@@ -221,8 +252,48 @@ describe("Generated media Sui NFT setup previews", () => {
     expect(result.payload.draft.storage.status).toBe("ready_to_upload");
   });
 
-  test("storage upload does not fake a Walrus blob before the connector exists", async () => {
-    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = "https://publisher.example.test";
+  test("storage upload sends image bytes to a Walrus publisher and stores public blob metadata", async () => {
+    const publisher = bootWalrusPublisher({
+      newlyCreated: {
+        blobObject: {
+          id: "0xblobobject",
+          blobId: "blob_test_123",
+          storage: { endEpoch: 42 },
+        },
+      },
+    });
+    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = publisher.url;
+    process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN = "walrus-test-token";
+    process.env.MATTERHORN_WALRUS_RELAY_URL = "https://relay.example.test/base";
+    process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS = "3";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/storage/upload`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(200);
+    expect(publisher.calls.length).toBe(1);
+    expect(publisher.calls[0].method).toBe("PUT");
+    expect(new URL(publisher.calls[0].url).pathname).toBe("/v1/blobs");
+    expect(new URL(publisher.calls[0].url).searchParams.get("epochs")).toBe("3");
+    expect(publisher.calls[0].contentType).toBe("image/png");
+    expect(publisher.calls[0].authorization).toBe("Bearer walrus-test-token");
+    expect(publisher.calls[0].byteLength).toBeGreaterThan(100);
+    expect(result.payload.draft.status).toBe("storage_ready");
+    expect(result.payload.draft.storage.provider).toBe("walrus");
+    expect(result.payload.draft.storage.status).toBe("uploaded");
+    expect(result.payload.draft.storage.blobId).toBe("blob_test_123");
+    expect(result.payload.draft.storage.objectId).toBe("0xblobobject");
+    expect(result.payload.draft.storage.endEpoch).toBe(42);
+    expect(result.payload.draft.storage.url).toBe("https://relay.example.test/base/v1/blobs/blob_test_123");
+    expect(result.payload.draft.metadata.imageUrl).toBe("https://relay.example.test/base/v1/blobs/blob_test_123");
+  });
+
+  test("storage upload stores a failed state when the Walrus publisher rejects the blob", async () => {
+    const publisher = bootWalrusPublisher({ message: "publisher rejected blob" });
+    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = publisher.url;
     process.env.MATTERHORN_WALRUS_RELAY_URL = "https://relay.example.test";
     const { base } = await boot();
     const draft = await createDraft(base);
@@ -231,14 +302,11 @@ describe("Generated media Sui NFT setup previews", () => {
       method: "POST",
     });
 
-    expect(result.response.status).toBe(501);
-    expect(result.payload.code).toBe("walrus_upload_not_implemented");
-    expect(result.payload.details.setupRequirements).toContainEqual(
-      expect.objectContaining({
-        key: "walrus_upload_connector",
-        status: "not_implemented",
-      }),
-    );
+    expect(result.response.status).toBe(502);
+    expect(result.payload.code).toBe("walrus_invalid_response");
+    const refreshed = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}`);
+    expect(refreshed.payload.draft.storage.status).toBe("failed");
+    expect(refreshed.payload.draft.storage.error).toContain("stored blob");
   });
 
   test("mint preview reports missing Sui NFT package setup", async () => {

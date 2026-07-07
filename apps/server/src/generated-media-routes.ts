@@ -26,6 +26,7 @@ import { resolveNftEnvironmentConfig } from "./image-nft-capabilities.js";
 import { recordAudit } from "./audit.js";
 import { recordTaskEvent } from "./task-events.js";
 import { shortId } from "./utils.js";
+import { uploadBlobToWalrus, WalrusUploadError } from "./walrus-storage.js";
 
 export interface RequestContext {
   actor?: { type: "remote" | "host"; scope?: TokenScope };
@@ -233,6 +234,9 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
+    const imageStore = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+    const image = await imageStore.get(draft.imageId);
+    if (!image) throw new ApiError(404, "image_not_found", "Generated image not found for this NFT draft.");
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const publisherConfigured = Boolean(nftEnv.walrusPublisherUrl?.trim());
@@ -246,20 +250,67 @@ export function addGeneratedMediaRoutes(
       );
     }
 
-    throw new ApiError(
-      501,
-      "walrus_upload_not_implemented",
-      "Walrus upload is not live yet. Matterhorn can prepare the draft, but the upload connector still needs to be implemented.",
-      nftPreviewErrorDetails([
-        ...setupRequirements,
-        {
-          key: "walrus_upload_connector",
-          label: "Walrus upload connector",
-          status: "not_implemented",
-          description: "Implement the server-side Walrus upload connector before this route can publish image bytes.",
-        },
-      ]),
-    );
+    let bytes: Uint8Array;
+    try {
+      bytes = await readFile(imageFilePath(workspace.path, image.fileName));
+    } catch {
+      throw new ApiError(404, "image_file_not_found", "Image file not found on disk.");
+    }
+
+    try {
+      const upload = await uploadBlobToWalrus({
+        publisherUrl: nftEnv.walrusPublisherUrl!,
+        aggregatorUrl: nftEnv.walrusRelayUrl,
+        bearerToken: nftEnv.walrusPublisherBearerToken,
+        contentType: image.contentType,
+        bytes,
+        epochs: nftEnv.walrusStorageEpochs ?? 1,
+      });
+      const updated = await store.updateStorageStatus(draft.id, "uploaded", {
+        provider: "walrus",
+        blobId: upload.blobId,
+        objectId: upload.objectId,
+        transactionDigest: upload.transactionDigest,
+        endEpoch: upload.endEpoch,
+        url: upload.url,
+        uploadedAt: upload.uploadedAt,
+        error: "",
+      });
+      if (updated) {
+        updated.metadata.imageUrl = upload.url ?? `walrus://${upload.blobId}`;
+        await store.save(updated);
+      }
+
+      await recordAudit(workspace.path, {
+        id: shortId(),
+        workspaceId: workspace.id,
+        actor: ctx.actor ?? { type: "remote" },
+        action: "workspace.nft.storage_uploaded",
+        target: draft.id,
+        summary: `Uploaded NFT media ${draft.id} to Walrus blob ${upload.blobId}`,
+        timestamp: Date.now(),
+      });
+      await recordTaskEvent({
+        id: `task_evt_${shortId()}`,
+        workspaceId: workspace.id,
+        taskId: `nft_storage_${draft.id}`,
+        type: "artifact_saved",
+        timestamp: Date.now(),
+        summary: "NFT media uploaded",
+        detail: `sui;${draft.id};${upload.blobId}`,
+        artifactPath: image.relativePath,
+      });
+
+      const response: MatterhornImageNftDraftResponse = { success: true, draft: updated! };
+      return jsonResponse(response);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Walrus upload failed.";
+      await store.updateStorageStatus(draft.id, "failed", { provider: "walrus", error: message });
+      if (error instanceof WalrusUploadError) {
+        throw new ApiError(error.status ?? 502, error.code, message);
+      }
+      throw new ApiError(502, "walrus_upload_failed", message);
+    }
   });
 
   addRoute("POST", "/workspace/:id/nft-drafts/:draftId/mint/preview", "client", async (ctx) => {
@@ -474,7 +525,7 @@ function buildWalrusSetupRequirements(config: ReturnType<typeof resolveNftEnviro
       label: "Walrus relay",
       envVar: "MATTERHORN_WALRUS_RELAY_URL",
       configured: Boolean(config.walrusRelayUrl?.trim()),
-      description: "NFT metadata needs a public relay URL for stored image media.",
+      description: "NFT metadata needs a public aggregator or relay URL for stored image media.",
     }),
   ];
 }

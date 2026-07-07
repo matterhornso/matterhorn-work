@@ -42,13 +42,13 @@ export function initialNftDraftFromImage(
     { trait_type: "provider", value: image.provider },
     { trait_type: "model", value: image.model },
   ];
-    return {
-      id: draftId,
-      workspaceId,
-      imageId: image.id,
-      status: "draft",
-      title,
-      description,
+  return {
+    id: draftId,
+    workspaceId,
+    imageId: image.id,
+    status: "draft",
+    title,
+    description,
     creatorAddress: input?.creatorAddress ?? null,
     network: input?.network ?? "sui-testnet",
     metadata: {
@@ -164,14 +164,27 @@ export class MatterhornImageNftDraftStore {
   async updateStorageStatus(
     draftId: string,
     status: MatterhornNftStorageStatus,
-    updates?: { provider?: "walrus" | "local"; blobId?: string; url?: string; error?: string },
+    updates?: {
+      provider?: "walrus" | "local";
+      blobId?: string;
+      objectId?: string;
+      transactionDigest?: string;
+      endEpoch?: number;
+      url?: string;
+      uploadedAt?: string;
+      error?: string;
+    },
   ): Promise<MatterhornImageNftDraft | null> {
     const draft = await this.get(draftId);
     if (!draft) return null;
     if (updates?.provider !== undefined) draft.storage.provider = updates.provider;
     draft.storage.status = status;
     if (updates?.blobId !== undefined) draft.storage.blobId = updates.blobId || null;
+    if (updates?.objectId !== undefined) draft.storage.objectId = updates.objectId || null;
+    if (updates?.transactionDigest !== undefined) draft.storage.transactionDigest = updates.transactionDigest || null;
+    if (updates?.endEpoch !== undefined) draft.storage.endEpoch = Number.isFinite(updates.endEpoch) ? updates.endEpoch : null;
     if (updates?.url !== undefined) draft.storage.url = updates.url || null;
+    if (updates?.uploadedAt !== undefined) draft.storage.uploadedAt = updates.uploadedAt || null;
     if (updates?.error !== undefined) draft.storage.error = updates.error || null;
     draft.updatedAt = nowIso();
     this.deriveDraftStatus(draft);

@@ -30,6 +30,35 @@ Verification after Codex integration:
 - `git diff --check` -> pass.
 - Full server suite: `bun test apps/server/src/` -> 557 pass, 1 fail. The remaining failure is the pre-existing/unrelated `apps/server/src/tools/bittensor.test.ts` watch-alert assertion, not generated media, Sui, capability, or data-policy code.
 
+## Codex Walrus Upload Follow-Up
+
+Branch after PR #735 merged: `codex/walrus-sui-nft-preview`.
+
+PR #735 was merged into `dev` as `b36fb4c9`. Codex then started the next backend slice from fresh `origin/dev` and implemented the first real Walrus upload connector boundary:
+
+- Added `apps/server/src/walrus-storage.ts` for Walrus HTTP publisher uploads.
+- Upload uses `PUT <MATTERHORN_WALRUS_PUBLISHER_URL>/v1/blobs?epochs=<n>` with generated image bytes.
+- Optional publisher bearer auth is read from `MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN` and is never returned in capabilities, routes, ledgers, or handoffs.
+- Public image URL is derived from `MATTERHORN_WALRUS_RELAY_URL` / aggregator as `/v1/blobs/<blobId>`.
+- NFT draft storage now records public blob metadata: `blobId`, optional object id, transaction digest, end epoch, URL, and upload timestamp.
+- Walrus capability is `working` when publisher and relay are configured; missing config remains `needs_setup`.
+- Upload success records `workspace.nft.storage_uploaded` audit evidence and a project task event.
+- Upload failure sets the draft storage status to `failed` and returns a clean `walrus_*` API error.
+
+Verification for the Walrus upload follow-up:
+
+- `bun test apps/server/src/generated-media-routes.e2e.test.ts` -> 17 pass, 0 fail.
+- `bun test apps/server/src/generated-media-routes.e2e.test.ts apps/server/src/backend-control-plane.e2e.test.ts apps/server/src/project-evidence-routes.e2e.test.ts` -> 45 pass, 0 fail.
+- `bun test apps/app/tests/image-generation-backend-capability-contract.test.ts apps/app/tests/image-generation-ui-contract.test.ts apps/app/tests/backend-capability-ui.test.ts` -> 44 pass, 0 fail.
+- `apps/server/node_modules/.bin/tsc -p apps/server/tsconfig.json --noEmit` -> pass.
+- `apps/app/node_modules/.bin/tsc -p apps/app/tsconfig.json --noEmit` -> pass.
+
+Remaining NFT work after the Walrus upload follow-up:
+
+- Build real Sui Move/Kiosk transaction payloads for wallet signing.
+- Add browser smoke using a configured local/fake Walrus publisher route if a browser-accessible fixture is desired.
+- Consider adding transaction-byte generation only after checking current `@mysten/sui` transaction APIs against official docs.
+
 ## Read This First
 
 You are taking the full image generation and NFT publishing lane for Matterhorn Work.
