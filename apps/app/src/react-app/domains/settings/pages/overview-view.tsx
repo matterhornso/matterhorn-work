@@ -68,7 +68,9 @@ import { useQuickJot } from "../../notes";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
 import {
   buildNftPublishingReadinessItems,
+  buildNftPublishingSetupRequirements,
   NftPublishingReadinessRows,
+  NftPublishingSetupRows,
   rollUpNftPublishingReadinessStatus,
 } from "../../session/media";
 import {
@@ -1260,6 +1262,14 @@ export function SettingsOverviewView(props: {
   const publishingStatus = publishingReadiness.length
     ? rollUpNftPublishingReadinessStatus(publishingReadiness)
     : null;
+  const publishingSetupRequirements = backendCapabilities
+    ? buildNftPublishingSetupRequirements({
+      imageGeneration: backendCapabilities.imageGeneration,
+      walrusStorage: backendCapabilities.walrusStorage,
+      nftMinting: backendCapabilities.nftMinting,
+      nftMarketplaceListing: backendCapabilities.nftMarketplaceListing,
+    })
+    : [];
   const updateWorkspaceDataPolicyMutation = useMutation({
     mutationFn: async (feedbackUse: MatterhornWorkspaceFeedbackUse) => {
       const client = props.matterhornServerClient;
@@ -1518,6 +1528,11 @@ export function SettingsOverviewView(props: {
                     {publishingStatus ? <CapabilityBadge status={publishingStatus} /> : null}
                   </div>
                   <NftPublishingReadinessRows items={publishingReadiness} />
+                  <NftPublishingSetupRows
+                    requirements={publishingSetupRequirements}
+                    className="mt-3"
+                    description="These are backend setup gates only. Wallet signing still happens in the user's Sui wallet."
+                  />
                 </div>
               ) : null}
               <Row

@@ -18,7 +18,9 @@ import {
 import type { MatterhornBackendCapabilitiesResponse } from "@matterhorn-work/types/backend-capabilities";
 import {
   buildNftPublishingReadinessItems,
+  buildNftPublishingSetupRequirements,
   NftPublishingReadinessRows,
+  NftPublishingSetupRows,
   rollUpNftPublishingReadinessStatus,
 } from "../../session/media";
 import {
@@ -112,6 +114,12 @@ export function BackendCapabilitiesSection(props: BackendCapabilitiesSectionProp
     nftMinting: caps.nftMinting,
     nftMarketplaceListing: caps.nftMarketplaceListing,
   });
+  const publishingSetupRequirements = buildNftPublishingSetupRequirements({
+    imageGeneration: caps.imageGeneration,
+    walrusStorage: caps.walrusStorage,
+    nftMinting: caps.nftMinting,
+    nftMarketplaceListing: caps.nftMarketplaceListing,
+  });
   const publishingStatus = rollUpNftPublishingReadinessStatus(publishingReadiness);
 
   return (
@@ -159,6 +167,11 @@ export function BackendCapabilitiesSection(props: BackendCapabilitiesSectionProp
         status={<BackendCapabilityStatusBadge status={publishingStatus} />}
       >
         <NftPublishingReadinessRows items={publishingReadiness} />
+        <NftPublishingSetupRows
+          requirements={publishingSetupRequirements}
+          className="mt-3"
+          description="Backend setup gates for public storage, mint previews, and Sui Kiosk listing."
+        />
       </SectionCard>
 
       {/* Memory */}

@@ -11,8 +11,10 @@ import {
   NftSetupRequirements,
   NftDraftPanel,
   NftPublishingReadinessRows,
+  NftPublishingSetupRows,
   SessionImageGenerationPanel,
   buildNftPublishingReadinessItems,
+  buildNftPublishingSetupRequirements,
   buildKioskListingTransactionFromPlan,
   buildMintTransactionFromPlan,
   receiptFromSuiWalletResult,
@@ -371,6 +373,34 @@ describe("NFT draft panel", () => {
     expect(html).toContain("Setup needed");
     expect(html).toContain("MATTERHORN_SUI_NFT_PACKAGE_ID");
     expect(html).not.toContain("MATTERHORN_SUI_NFT_MODULE_NAME");
+  });
+
+  test("component renders capability setup requirements before NFT actions", () => {
+    const requirements = buildNftPublishingSetupRequirements({
+      imageGeneration: {
+        status: "needs_setup",
+        setupRequirements: [{
+          key: "openai_api_key",
+          label: "OpenAI API key",
+          status: "missing",
+          envVar: "OPENAI_API_KEY",
+          description: "Set OPENAI_API_KEY to enable OpenAI image generation.",
+        }],
+      },
+      walrusStorage: { status: "needs_setup", publisherConfigured: false, relayConfigured: false },
+      nftMinting: { status: "needs_setup", network: "sui-testnet", custody: false, signing: "client_wallet", packageConfigured: false, kioskConfigured: false },
+      nftMarketplaceListing: { status: "needs_setup", network: "sui-testnet", custody: false, signing: "client_wallet", packageConfigured: false, kioskConfigured: false },
+    });
+    const html = renderToStaticMarkup(React.createElement(NftPublishingSetupRows, {
+      requirements,
+      description: "These setup gates come from the local Matterhorn backend.",
+    }));
+
+    expect(html).toContain("Required setup");
+    expect(html).toContain("OPENAI_API_KEY");
+    expect(html).toContain("MATTERHORN_WALRUS_PUBLISHER_URL");
+    expect(html).toContain("MATTERHORN_SUI_NFT_PACKAGE_ID");
+    expect(html).toContain("MATTERHORN_SUI_KIOSK_PACKAGE_ID");
   });
 
   test("publishing readiness rows summarize generated image and NFT setup states", () => {

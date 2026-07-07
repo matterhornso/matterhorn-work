@@ -17,7 +17,9 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("storageLocationLabel");
     expect(source).toContain("workspaceDataPolicySummary");
     expect(source).toContain("buildNftPublishingReadinessItems");
+    expect(source).toContain("buildNftPublishingSetupRequirements");
     expect(source).toContain("NftPublishingReadinessRows");
+    expect(source).toContain("NftPublishingSetupRows");
     expect(source).toContain("rollUpNftPublishingReadinessStatus");
   });
 
@@ -42,6 +44,7 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("Backend status");
     expect(source).toContain("Image and NFT publishing");
     expect(source).toContain("Generated images, public storage, Sui minting, and marketplace listing readiness.");
+    expect(source).toContain("These are backend setup gates only.");
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
   });
@@ -97,7 +100,7 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("Bittensor:");
     expect(source).toContain("external Bittensor-compatible signer");
     expect(source).toContain("No secret storage");
-    expect(source).not.toContain("Sui wallet");
+    expect(source).toContain("Wallet signing still happens in the user's Sui wallet.");
     expect(source).not.toContain("direct-connect");
   });
 });
