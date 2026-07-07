@@ -3712,7 +3712,7 @@ async function buildWorkspaceBackendControlPlane(
   workspace: WorkspaceInfo,
   memoryVault: MatterhornMemoryVault,
 ): Promise<MatterhornBackendControlPlaneResponse> {
-  const [capabilities, models] = await Promise.all([
+  const [baseCapabilities, models] = await Promise.all([
     buildBackendCapabilities(config, memoryVault),
     buildWorkspaceBackendModels(config, workspace),
   ]);
@@ -3720,6 +3720,34 @@ async function buildWorkspaceBackendControlPlane(
   const dataMap = buildWorkspaceDataMap(workspace, memoryVault);
   const dataControls = buildWorkspaceDataControls(workspace, memoryVault);
   const dataPolicy = buildWorkspaceDataPolicyResponse(workspace);
+  const workspaceMemoryStore = dataMap.stores.memory;
+  const capabilities: MatterhornBackendCapabilitiesResponse = {
+    ...baseCapabilities,
+    memory: {
+      ...baseCapabilities.memory,
+      scope: workspaceMemoryStore.scope === "workspace" ? "workspace" : baseCapabilities.memory.scope,
+      rootPath: workspaceMemoryStore.path ?? workspaceMemoryStore.paths?.[0] ?? baseCapabilities.memory.rootPath,
+      description: workspaceMemoryStore.description ?? baseCapabilities.memory.description,
+      details: {
+        ...(baseCapabilities.memory.details ?? {}),
+        workspaceStorage: {
+          scope: workspaceMemoryStore.scope,
+          path: workspaceMemoryStore.path,
+          paths: workspaceMemoryStore.paths,
+          mode: workspaceMemoryStore.details?.mode,
+          isolation: workspaceMemoryStore.details?.isolation,
+          workspaceNamespaceTag: workspaceMemoryStore.details?.workspaceNamespaceTag,
+        },
+      },
+    },
+    storage: {
+      ...baseCapabilities.storage,
+      stores: {
+        ...baseCapabilities.storage.stores,
+        memory: workspaceMemoryStore,
+      },
+    },
+  };
   const capabilitiesStatus = mergeCapabilityStatuses([
     capabilities.models.status,
     capabilities.providers.status,
