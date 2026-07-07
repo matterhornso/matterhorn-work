@@ -155,6 +155,16 @@ export function readStoredDefaultModel(): ModelRef {
   }
 }
 
+export function readStoredDefaultModelOverride(): ModelRef | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = window.localStorage.getItem(MODEL_PREF_KEY);
+    return parseModelRef(stored);
+  } catch {
+    return null;
+  }
+}
+
 export function writeStoredDefaultModel(model: ModelRef): void {
   if (typeof window === "undefined") return;
   try {
