@@ -27,6 +27,15 @@ const manageOpencode =
 const children = new Set();
 let shuttingDown = false;
 
+function opencodeSetupHintLines() {
+  return [
+    "OpenCode engine: not connected. Chats and desk tasks will show Needs setup.",
+    "To enable execution, start with one of:",
+    "  MATTERHORN_LOCAL_OPENCODE_URL=http://127.0.0.1:<port> pnpm dev:matterhorn-local",
+    "  OPENWORK_MANAGE_OPENCODE=1 pnpm dev:matterhorn-local",
+  ];
+}
+
 function canConnect(port, host = "127.0.0.1") {
   return new Promise((resolve) => {
     const socket = net.createConnection({ host, port });
@@ -237,7 +246,7 @@ async function main() {
   } else if (manageOpencode) {
     console.log(opencodeBin ? `OpenCode engine: managed local sidecar (${opencodeBin})` : "OpenCode engine: managed from PATH");
   } else {
-    console.log("OpenCode engine: not provided. Chat creation may stay disabled until an engine is connected.");
+    console.log(opencodeSetupHintLines().join(os.EOL));
   }
 
   spawnChild("server", command, serverArgs, {
@@ -301,6 +310,7 @@ async function main() {
     `Workspace: ${workspaceRoot}`,
     `Client token: ${clientToken}`,
     `Host token:   ${hostToken}`,
+    ...(opencodeBaseUrl || manageOpencode ? [] : ["", ...opencodeSetupHintLines()]),
     "",
     "Keep this command running while you test the app.",
     "",
