@@ -596,6 +596,75 @@ describe("project data ledger routes", () => {
     expect(byWindow.payload.items.map((item: { taskId?: string }) => item.taskId)).toEqual(["task_sui_preview"]);
   });
 
+  test("data-ledger output summaries count live outputs after deletion tombstones", async () => {
+    const { base } = await boot();
+    const startedAt = Date.parse("2026-07-06T12:00:00.000Z");
+    const deletedPath = "outputs/bittensor/sess_deleted/receipt.md";
+    const restoredPath = "outputs/bittensor/sess_restored/receipt.md";
+
+    await recordTaskEvent({
+      id: "evt_deleted_output_saved",
+      workspaceId: "ws_ledger",
+      taskId: "task_deleted_output",
+      type: "artifact_saved",
+      timestamp: startedAt,
+      summary: "Output saved",
+      detail: "bittensor;sess_deleted",
+      artifactPath: deletedPath,
+    });
+    await recordTaskEvent({
+      id: "evt_deleted_output_removed",
+      workspaceId: "ws_ledger",
+      taskId: "task_deleted_output",
+      type: "artifact_deleted",
+      timestamp: startedAt + 1_000,
+      summary: "Output deleted",
+      detail: "bittensor;sess_deleted",
+      artifactPath: deletedPath,
+    });
+    await recordTaskEvent({
+      id: "evt_restored_output_removed_first",
+      workspaceId: "ws_ledger",
+      taskId: "task_restored_output",
+      type: "artifact_deleted",
+      timestamp: startedAt + 2_000,
+      summary: "Output deleted",
+      detail: "bittensor;sess_restored",
+      artifactPath: restoredPath,
+    });
+    await recordTaskEvent({
+      id: "evt_restored_output_saved_after_delete",
+      workspaceId: "ws_ledger",
+      taskId: "task_restored_output",
+      type: "artifact_saved",
+      timestamp: startedAt + 3_000,
+      summary: "Output saved",
+      detail: "bittensor;sess_restored",
+      artifactPath: restoredPath,
+    });
+
+    const outputLedger = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?kind=output&limit=20");
+    expect(outputLedger.response.status).toBe(200);
+    expect(outputLedger.payload.summary.outputs).toBe(1);
+    expect(outputLedger.payload.items.map((item: { eventType?: string }) => item.eventType)).toEqual([
+      "task.output_saved",
+      "task.output_deleted",
+      "task.output_deleted",
+      "task.output_saved",
+    ]);
+    expect(outputLedger.payload.items.filter((item: { outputPath?: string }) => item.outputPath === deletedPath)).toHaveLength(2);
+    expect(outputLedger.payload.items.filter((item: { outputPath?: string }) => item.outputPath === restoredPath)).toHaveLength(2);
+
+    const allLedger = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?limit=20");
+    expect(allLedger.response.status).toBe(200);
+    expect(allLedger.payload.summary.outputs).toBe(1);
+
+    const exportPayload = await jsonFetch(base, "/workspace/ws_ledger/data-ledger/export?kind=output&limit=20");
+    expect(exportPayload.response.status).toBe(200);
+    expect(exportPayload.payload.ledger.summary.outputs).toBe(1);
+    expect(exportPayload.payload.manifest.itemCount).toBe(4);
+  });
+
   test("data-ledger rejects unknown filters", async () => {
     const { base } = await boot();
 
