@@ -175,10 +175,10 @@ describe("model readiness summary", () => {
     });
 
     expect(summary.workspaceDefault.value).toBe("Not saved");
-    expect(summary.workspaceDefault.detail).toContain("local picker first");
+    expect(summary.workspaceDefault.detail).toContain("local picker choice when you make one");
     expect(summary.effectiveModel.value).toBe("openai/gpt-4.1-mini");
     expect(summary.selectionPolicy.value).toBe("Local app");
-    expect(summary.selectionPolicy.detail).toContain("stored in this app profile");
+    expect(summary.selectionPolicy.detail).toContain("chosen picker model is stored");
   });
 
   test("marks engine failures without hiding known local provider counts", () => {

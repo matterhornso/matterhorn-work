@@ -124,7 +124,7 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
       value: workspaceDefaultValue,
       detail: workspaceSelection
         ? "Saved in this workspace for agents that do not have a local picker override."
-        : "No workspace default is saved yet. The app uses the local picker first, then the engine fallback.",
+        : "No workspace default is saved yet. The app uses a local picker choice when you make one, then the engine fallback.",
     },
     effectiveModel: {
       label: "Engine fallback",
@@ -153,7 +153,7 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
       value: preferenceStore,
       detail: routing?.selection.serverPersisted
         ? "A server-side workspace default exists. Local app overrides can still apply."
-        : "The current picker choice is stored in this app profile unless you save a workspace default.",
+        : "A chosen picker model is stored in this app profile unless you save a workspace default.",
     },
     trainingPolicy:
       backendModels?.privacy.trainingUse === "none_by_default"

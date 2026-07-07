@@ -13,7 +13,7 @@ import {
 import { THINKING_PREF_KEY } from "../../app/constants";
 import { coerceReleaseChannel } from "../../app/lib/release-channels";
 import type { ModelRef, ReleaseChannel, SettingsTab, View } from "../../app/types";
-import { readStoredDefaultModel } from "./model-config";
+import { readStoredDefaultModelOverride } from "./model-config";
 
 export type LocalUIState = {
   view: View;
@@ -80,6 +80,41 @@ function readPersisted<T>(key: string, fallback: T): T {
   }
 }
 
+function readPersistedRaw(key: string): unknown {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+const hasOwn = (value: Record<string, unknown>, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(value, key);
+
+export function hydrateLocalPreferences(
+  raw: unknown,
+  legacyDefaultModel: ModelRef | null,
+): LocalPreferences {
+  const rawRecord =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? raw as Record<string, unknown>
+      : null;
+  const persisted = rawRecord
+    ? { ...INITIAL_PREFS, ...rawRecord } as LocalPreferences
+    : INITIAL_PREFS;
+
+  if (rawRecord && hasOwn(rawRecord, "defaultModel")) {
+    return persisted;
+  }
+
+  return {
+    ...persisted,
+    defaultModel: legacyDefaultModel,
+  };
+}
+
 function writePersisted(key: string, value: unknown) {
   if (typeof window === "undefined") return;
   try {
@@ -97,16 +132,9 @@ export function LocalProvider({ children }: LocalProviderProps) {
   const [ui, setUiRaw] = useState<LocalUIState>(() =>
     readPersisted(UI_STORAGE_KEY, INITIAL_UI),
   );
-  const [prefs, setPrefsRaw] = useState<LocalPreferences>(() => {
-    const persisted = readPersisted(PREFS_STORAGE_KEY, INITIAL_PREFS);
-    if (persisted.defaultModel) {
-      return persisted;
-    }
-    return {
-      ...persisted,
-      defaultModel: readStoredDefaultModel(),
-    };
-  });
+  const [prefs, setPrefsRaw] = useState<LocalPreferences>(() =>
+    hydrateLocalPreferences(readPersistedRaw(PREFS_STORAGE_KEY), readStoredDefaultModelOverride()),
+  );
   const ready = true;
   const migratedThinkingRef = useRef(false);
 
