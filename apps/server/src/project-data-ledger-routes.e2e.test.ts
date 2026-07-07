@@ -249,6 +249,14 @@ describe("project data ledger routes", () => {
       target: "ses_ledger_chat",
       summary: `Submitted prompt to chat session without exporting private key ${SECRET_HEX}.`,
       timestamp: Date.now() - 1_000,
+      metadata: {
+        modelSource: "request",
+        modelProviderId: "openai",
+        modelId: "gpt-4.1",
+        modelRef: "openai/gpt-4.1",
+        agent: "build",
+        promptPreview: `private key ${SECRET_HEX}`,
+      },
     });
 
     const ledger = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?limit=50");
@@ -301,6 +309,16 @@ describe("project data ledger routes", () => {
       href: "/workspace/ws_ledger/session/ses_ledger_chat",
       containsSecrets: "redacted",
       redactionApplied: true,
+      metadata: {
+        auditAction: "session.prompt",
+        target: "ses_ledger_chat",
+        modelSource: "request",
+        modelProviderId: "openai",
+        modelId: "gpt-4.1",
+        modelRef: "openai/gpt-4.1",
+        agent: "build",
+        promptPreview: "[redacted] [redacted]",
+      },
     });
 
     const serialized = JSON.stringify(ledger.payload);

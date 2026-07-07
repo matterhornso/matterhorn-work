@@ -514,6 +514,29 @@ describe("workspace session read APIs", () => {
       noReply: true,
       parts: [{ type: "text", text: "Summarize this workspace" }],
     });
+
+    const ledgerResponse = await fetch(`${base}/workspace/ws_1/data-ledger?kind=chat&limit=10`, {
+      headers: auth(openwork.token),
+    });
+    expect(ledgerResponse.status).toBe(200);
+    const ledgerBody = await ledgerResponse.json();
+    const promptEntry = ledgerBody.items.find((item: { eventType?: string }) => item.eventType === "session.prompt");
+    expect(promptEntry).toMatchObject({
+      kind: "chat",
+      sessionId: "ses_1",
+      title: "Chat prompt submitted",
+      metadata: {
+        auditAction: "session.prompt",
+        target: "ses_1",
+        modelSource: "request",
+        modelProviderId: "openai",
+        modelId: "gpt-4.1",
+        modelRef: "openai/gpt-4.1",
+        agent: "build",
+        noReply: true,
+      },
+    });
+    expect(JSON.stringify(ledgerBody)).not.toContain("Summarize this workspace");
   });
 
   test("rejects empty session prompts before calling upstream", async () => {

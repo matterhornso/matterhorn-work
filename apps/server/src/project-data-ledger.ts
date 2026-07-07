@@ -21,6 +21,8 @@ type BuildProjectDataLedgerOptions = MatterhornProjectDataLedgerListOptions & {
   backendControlPlane?: MatterhornProjectDataLedgerExportControlPlaneSnapshot;
 };
 
+type LedgerMetadata = NonNullable<MatterhornProjectDataLedgerEntry["metadata"]>;
+
 const SECRET_PATTERNS: RegExp[] = [
   /\b(seed phrase|mnemonic|private key|privateKey|wallet export|api secret|raw signature|signed payload)\b/gi,
   /\bBearer\s+[A-Za-z0-9._-]{8,}\b/g,
@@ -42,6 +44,44 @@ function scrubString(value: string | undefined): { value: string | undefined; re
     });
   }
   return { value: output, redacted };
+}
+
+function scrubAuditMetadata(metadata: AuditEntry["metadata"] | undefined): { value: LedgerMetadata | undefined; redacted: boolean } {
+  if (!metadata) return { value: undefined, redacted: false };
+  const output: LedgerMetadata = {};
+  let redacted = false;
+  let index = 0;
+
+  for (const [rawKey, rawValue] of Object.entries(metadata)) {
+    const keyScrub = scrubString(rawKey);
+    const key = keyScrub.redacted
+      ? `redacted_key_${index}`
+      : rawKey.replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 80) || `field_${index}`;
+    redacted ||= keyScrub.redacted;
+    index += 1;
+
+    if (typeof rawValue === "string") {
+      const value = scrubString(rawValue);
+      redacted ||= value.redacted;
+      output[key] = (value.value ?? "").slice(0, 500);
+      continue;
+    }
+
+    if (typeof rawValue === "number") {
+      output[key] = Number.isFinite(rawValue) ? rawValue : null;
+      redacted ||= !Number.isFinite(rawValue);
+      continue;
+    }
+
+    if (typeof rawValue === "boolean" || rawValue === null) {
+      output[key] = rawValue;
+    }
+  }
+
+  return {
+    value: Object.keys(output).length ? output : undefined,
+    redacted,
+  };
 }
 
 function actorFromAudit(entry: AuditEntry): MatterhornProjectDataLedgerEntry["actor"] {
@@ -156,6 +196,19 @@ function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry
   const isOutputAudit = Boolean(outputTitle);
   const isChatAudit = Boolean(chatTitle);
   const isModelSelectionAudit = Boolean(modelSelectionTitle);
+  const auditMetadata = scrubAuditMetadata(entry.metadata);
+  const canonicalMetadata = isMemoryAudit || isTeamAccessAudit || isWalletAudit || isOutputAudit || isChatAudit || isModelSelectionAudit
+    ? {
+      auditAction: entry.action,
+      target: target.value ?? null,
+    }
+    : undefined;
+  const metadata = auditMetadata.value || canonicalMetadata
+    ? {
+      ...(auditMetadata.value ?? {}),
+      ...(canonicalMetadata ?? {}),
+    }
+    : undefined;
   return {
     id: `audit:${entry.id}`,
     workspaceId: entry.workspaceId,
@@ -194,15 +247,10 @@ function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry
     retention: "append_only",
     exportable: true,
     deletable: false,
-    redactionApplied: title.redacted || summary.redacted || target.redacted,
+    redactionApplied: title.redacted || summary.redacted || target.redacted || auditMetadata.redacted,
     trainingUse: "none",
     eventType: entry.action,
-    metadata: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isOutputAudit || isChatAudit || isModelSelectionAudit
-      ? {
-        auditAction: entry.action,
-        target: target.value ?? null,
-      }
-      : undefined,
+    metadata,
   };
 }
 
