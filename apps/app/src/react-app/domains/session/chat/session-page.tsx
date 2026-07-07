@@ -31,6 +31,17 @@ import { getDisplaySessionTitle } from "../../../../app/lib/session-title";
 import type { BootPhase } from "../../../../app/lib/startup-boot";
 import type { WorkspaceInfo } from "../../../../app/lib/desktop";
 import type {
+  MatterhornBackendCapabilitiesResponse,
+  MatterhornCapabilityStatus,
+  MatterhornWalletRuntime,
+  MatterhornWalletRuntimeSupport,
+} from "@matterhorn-work/types/backend-capabilities";
+import {
+  backendCapabilityLabel,
+  walletFamilySummary,
+  walletRuntimeSupportSummary,
+} from "../../settings/backend-capability-status";
+import type {
   PendingPermission,
   PendingQuestion,
   ProviderListItem,
@@ -76,7 +87,7 @@ import {
   useUiStateStore,
 } from "../../../shell/ui-state-store";
 
-import { isElectronRuntime } from "../../../../app/utils";
+import { isDesktopRuntime, isElectronRuntime } from "../../../../app/utils";
 import { isCollectibleArtifactTarget, isLocalhostBrowserTarget, type OpenTarget } from "../artifacts/open-target";
 import {
   mergeOpenTargetsWithWorkflowOutputReceipts,
@@ -365,6 +376,108 @@ function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
     summary: visual.shortDescription,
     proof: visual.safetySummary,
   }));
+}
+
+function homeWalletRuntime(): MatterhornWalletRuntime {
+  if (isElectronRuntime()) return "electron";
+  if (isDesktopRuntime()) return "desktop";
+  return "web";
+}
+
+function homeWalletTone(status: MatterhornCapabilityStatus | null): string {
+  switch (status) {
+    case "working":
+      return "bg-emerald-500/10 text-emerald-300";
+    case "needs_setup":
+      return "bg-sky-500/10 text-sky-300";
+    case "preview":
+      return "bg-amber-500/10 text-amber-300";
+    case "error":
+      return "bg-red-500/10 text-red-300";
+    case "unsupported":
+    default:
+      return "bg-dls-surface-muted text-dls-secondary";
+  }
+}
+
+function homeWalletRuntimeSummary(support: MatterhornWalletRuntimeSupport | undefined) {
+  const summary = walletRuntimeSupportSummary(support);
+  if (summary.status) return summary;
+  return {
+    label: "Runtime status unavailable",
+    detail: "Open Wallet settings to see the full wallet-family readiness contract.",
+    status: null,
+  };
+}
+
+function HomeWalletRuntimeStatus({
+  capabilities,
+  loading,
+  error,
+  runtime,
+  onOpenWallet,
+}: {
+  capabilities?: MatterhornBackendCapabilitiesResponse | null;
+  loading?: boolean;
+  error?: boolean;
+  runtime: MatterhornWalletRuntime;
+  onOpenWallet: () => void;
+}) {
+  const rows = capabilities ? walletFamilySummary(capabilities) : [];
+  const sui = rows.find((row) => row.family === "Sui");
+  const suiRuntime = homeWalletRuntimeSummary(sui?.runtimeSupport?.[runtime]);
+  const headline = loading
+    ? "Checking wallet readiness"
+    : error
+      ? "Wallet readiness unavailable"
+      : rows.length
+        ? rows.map((row) => `${row.family}: ${backendCapabilityLabel(row.status)}`).join(" · ")
+        : "Wallet readiness not reported";
+
+  return (
+    <details className="group rounded-lg bg-dls-surface-muted/25 px-3 py-2.5 text-sm">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-left marker:hidden">
+        <span className="flex min-w-0 items-center gap-2">
+          <WalletIcon className="size-4 shrink-0 text-dls-secondary" />
+          <span className="font-medium text-dls-text">Wallet readiness</span>
+          <span className="min-w-0 truncate text-xs text-dls-secondary">{headline}</span>
+        </span>
+        <span className="shrink-0 text-xs text-dls-secondary transition-colors group-open:text-dls-text">
+          Details
+        </span>
+      </summary>
+      <div className="mt-3 grid gap-2 border-t border-dls-border/35 pt-3">
+        {rows.length ? rows.map((row) => {
+          const runtimeSummary = homeWalletRuntimeSummary(row.runtimeSupport?.[runtime]);
+          return (
+            <div key={row.family} className="grid gap-1 text-xs leading-5 sm:grid-cols-[7rem_minmax(0,1fr)_auto] sm:items-start">
+              <span className="font-medium text-dls-text">{row.family}</span>
+              <span className="min-w-0 text-dls-secondary">{row.family === "Sui" ? suiRuntime.detail : runtimeSummary.detail}</span>
+              <span className={cn("w-fit rounded-md px-2 py-0.5 font-medium", homeWalletTone(row.status))}>
+                {backendCapabilityLabel(row.status)}
+              </span>
+            </div>
+          );
+        }) : (
+          <p className="text-xs leading-5 text-dls-secondary">
+            Start the Matterhorn Work engine to read wallet-family status.
+          </p>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <span className="text-xs leading-5 text-dls-secondary">
+            Sui signing stays in your wallet; desktop uses external handoff.
+          </span>
+          <button
+            type="button"
+            className="rounded-md px-2 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
+            onClick={onOpenWallet}
+          >
+            Open wallet
+          </button>
+        </div>
+      </div>
+    </details>
+  );
 }
 
 function DeskBrandMark({
@@ -908,6 +1021,7 @@ export function SessionPage(props: SessionPageProps) {
   const wallet = useWallet();
   const sessionWallet = useSessionWallet(wallet.store);
   useJobCron(wallet.store);
+  const currentWalletRuntime = useMemo(() => homeWalletRuntime(), []);
   const [commandOpen, setCommandOpen] = useState(false);
 
   // Cmd+K / Ctrl+K command palette
@@ -975,6 +1089,12 @@ export function SessionPage(props: SessionPageProps) {
   const [, setExtensionStateVersion] = useState(0);
   const loadedHiddenTargetsKeyRef = useRef<string | null>(null);
   const outputReceiptWorkspaceId = (props.runtimeWorkspaceId ?? props.selectedWorkspaceId).trim();
+  const homeWalletCapabilitiesQuery = useQuery({
+    queryKey: ["home-wallet-backend-capabilities", outputReceiptWorkspaceId] as const,
+    queryFn: () => props.matterhornServerClient!.backendCapabilities(),
+    enabled: Boolean(props.matterhornServerClient && outputReceiptWorkspaceId),
+    staleTime: 30_000,
+  });
   const outputReceiptsQuery = useQuery({
     queryKey: ["workflow-output-receipts", outputReceiptWorkspaceId] as const,
     queryFn: () => props.matterhornServerClient!.listProjectEvidence(outputReceiptWorkspaceId, { limit: 200 }),
@@ -2158,6 +2278,13 @@ export function SessionPage(props: SessionPageProps) {
                             </div>
                           </div>
                         </section>
+                        <HomeWalletRuntimeStatus
+                          capabilities={homeWalletCapabilitiesQuery.data ?? null}
+                          loading={homeWalletCapabilitiesQuery.isLoading}
+                          error={homeWalletCapabilitiesQuery.isError}
+                          runtime={currentWalletRuntime}
+                          onOpenWallet={() => setCurrentSidePanel("wallet")}
+                        />
                         {props.matterhornServerClient && props.runtimeWorkspaceId ? (
                           <RecentActivitySection
                             matterhornServerClient={props.matterhornServerClient}
