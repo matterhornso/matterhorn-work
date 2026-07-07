@@ -151,6 +151,10 @@ import { getReactQueryClient } from "../infra/query-client";
 import { useStatusToasts } from "../domains/shell-feedback/status-toasts";
 import { useSessionControlActions } from "../domains/session/control/session-control-actions";
 import { ProjectFeedbackDialog } from "../domains/feedback/project-feedback-dialog";
+import {
+  WORKSPACE_MODEL_SELECTION_CHANGED_EVENT,
+  type WorkspaceModelSelectionChangedDetail,
+} from "../domains/settings/model-selection-events";
 import { legacySessionRoute, workspaceNotesRoute, workspaceRunHistoryRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
 import { WorkspaceProvider } from "./workspace-provider";
 import type { OpenTarget } from "../domains/session/artifacts/open-target";
@@ -1583,25 +1587,38 @@ export function SessionRoute() {
     baseUrl: opencodeBaseUrl,
     directory: selectedWorkspaceRoot || undefined,
   });
-  useEffect(() => {
-    let cancelled = false;
+  const refreshWorkspaceModelSelection = useCallback((options?: { signal?: AbortSignal }) => {
     if (!client || !selectedWorkspaceId) {
       setWorkspaceModelSelection(null);
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
     void client.workspaceModelSelection(selectedWorkspaceId)
       .then((selection) => {
-        if (!cancelled) setWorkspaceModelSelection(selection);
+        if (!options?.signal?.aborted) setWorkspaceModelSelection(selection);
       })
       .catch(() => {
-        if (!cancelled) setWorkspaceModelSelection(null);
+        if (!options?.signal?.aborted) setWorkspaceModelSelection(null);
       });
-    return () => {
-      cancelled = true;
-    };
   }, [client, selectedWorkspaceId]);
+  useEffect(() => {
+    const controller = new AbortController();
+    refreshWorkspaceModelSelection({ signal: controller.signal });
+    return () => {
+      controller.abort();
+    };
+  }, [refreshWorkspaceModelSelection]);
+  useEffect(() => {
+    if (!selectedWorkspaceId) return undefined;
+    const handleModelSelectionChanged = (event: Event) => {
+      const detail = (event as CustomEvent<WorkspaceModelSelectionChangedDetail>).detail;
+      if (detail?.workspaceId && detail.workspaceId !== selectedWorkspaceId) return;
+      refreshWorkspaceModelSelection();
+    };
+    window.addEventListener(WORKSPACE_MODEL_SELECTION_CHANGED_EVENT, handleModelSelectionChanged);
+    return () => {
+      window.removeEventListener(WORKSPACE_MODEL_SELECTION_CHANGED_EVENT, handleModelSelectionChanged);
+    };
+  }, [refreshWorkspaceModelSelection, selectedWorkspaceId]);
   const workspaceDefaultModel = useMemo<ModelRef | null>(() => {
     const effective = workspaceModelSelection?.effectiveModel;
     if (!effective?.providerId || !effective.modelId) return null;
