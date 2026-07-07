@@ -107,6 +107,33 @@ function titleForEntry(entry: MatterhornProjectDataLedgerEntry) {
   return entry.title || "Project event";
 }
 
+function sourceLabel(source: MatterhornProjectDataLedgerEntry["source"]) {
+  if (source === "project_evidence") return "Project evidence";
+  if (source === "opencode_runtime") return "Chat runtime";
+  return source.replace(/_/g, " ");
+}
+
+function compactLedgerPath(path: string) {
+  const parts = path.trim().replace(/[\\]+/g, "/").split("/").filter(Boolean);
+  if (parts.length <= 2) return parts.join("/");
+  return parts.slice(-2).join("/");
+}
+
+function isTaskStartEntry(entry: MatterhornProjectDataLedgerEntry) {
+  return entry.eventType === "task.started" || entry.eventType === "task.stage_started";
+}
+
+function entryDisplaySummary(entry: MatterhornProjectDataLedgerEntry) {
+  if (entry.outputPath) return compactLedgerPath(entry.outputPath);
+  if (entry.eventType === "task.started") return "Actual local event recorded when the desk task started.";
+  if (entry.eventType === "task.stage_started") return "Actual local event recorded when a workflow stage started.";
+  if (entry.eventType === "task.completed") return "Desk run finished and was recorded in this workspace.";
+  if (entry.eventType === "task.failed") return entry.summary || "Desk run failed; details are kept in the project ledger.";
+  if (entry.eventType === "task.cancelled") return "Desk run was cancelled.";
+  if (entry.kind === "output") return entry.summary || "Output receipt saved for this workspace.";
+  return entry.summary || entryContext(entry);
+}
+
 function kindCount(data: MatterhornProjectDataLedgerResponse | undefined, filter: ProjectHistoryFilter) {
   if (!data) return 0;
   if (filter === "all") return data.summary.total;
@@ -146,9 +173,10 @@ function entryContext(entry: MatterhornProjectDataLedgerEntry) {
 function ProjectHistoryRow({ entry }: { entry: MatterhornProjectDataLedgerEntry }) {
   const meta = KIND_META[entry.kind];
   const Icon = meta.icon;
-  const context = entryContext(entry);
   const title = titleForEntry(entry);
-  const summary = entry.outputPath || entry.summary || context;
+  const summary = entryDisplaySummary(entry);
+  const desk = deskLabel(entry.desk);
+  const showDesk = Boolean(desk && !isTaskStartEntry(entry));
 
   return (
     <article className="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] gap-3 px-3 py-3.5 transition-colors hover:bg-dls-hover/25">
@@ -158,7 +186,7 @@ function ProjectHistoryRow({ entry }: { entry: MatterhornProjectDataLedgerEntry 
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <h3 className="truncate text-sm font-medium leading-5 text-dls-text">{title}</h3>
-          {entry.desk ? <span className="text-xs leading-5 text-dls-secondary">{deskLabel(entry.desk)}</span> : null}
+          {showDesk ? <span className="text-xs leading-5 text-dls-secondary">{desk}</span> : null}
           {entry.trainingUse !== "none" ? (
             <span className="inline-flex items-center gap-1 text-xs leading-5 text-dls-secondary">
               <Lock className="size-3" aria-hidden="true" />
@@ -172,9 +200,10 @@ function ProjectHistoryRow({ entry }: { entry: MatterhornProjectDataLedgerEntry 
           </p>
         ) : null}
         <div className="mt-1 flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-[11px] leading-4 text-dls-secondary/80">
-          <span>{entry.source.replace(/_/g, " ")}</span>
-          {entry.taskId ? <span className="truncate">task {entry.taskId}</span> : null}
-          {entry.noteId ? <span className="truncate">note {entry.noteId}</span> : null}
+          <span>{sourceLabel(entry.source)}</span>
+          {isTaskStartEntry(entry) && desk ? <span>{desk}</span> : null}
+          {entry.outputPath ? <span>output receipt</span> : null}
+          {entry.retention === "append_only" ? <span>append-only</span> : null}
           {entry.containsSecrets === "redacted" ? <span>secret-safe</span> : null}
         </div>
       </div>
@@ -218,7 +247,7 @@ export function ProjectHistoryPage({
     queryKey: ["project-history-ledger-summary", runtimeWorkspaceId],
     enabled: Boolean(matterhornServerClient && runtimeWorkspaceId),
     queryFn: async () => {
-      if (!matterhornServerClient || !runtimeWorkspaceId) throw new Error("Open a workspace to see run history.");
+      if (!matterhornServerClient || !runtimeWorkspaceId) throw new Error("Open a workspace to see project history.");
       return matterhornServerClient.listProjectDataLedger(runtimeWorkspaceId, { limit: 300 });
     },
     staleTime: 30_000,
@@ -229,7 +258,7 @@ export function ProjectHistoryPage({
     queryKey: ["project-history-ledger", runtimeWorkspaceId, activeKind ?? "all", activeDesk],
     enabled: Boolean(matterhornServerClient && runtimeWorkspaceId),
     queryFn: async () => {
-      if (!matterhornServerClient || !runtimeWorkspaceId) throw new Error("Open a workspace to see run history.");
+      if (!matterhornServerClient || !runtimeWorkspaceId) throw new Error("Open a workspace to see project history.");
       return matterhornServerClient.listProjectDataLedger(runtimeWorkspaceId, {
         limit: 120,
         ...(activeKind ? { kind: activeKind } : {}),
@@ -289,9 +318,9 @@ export function ProjectHistoryPage({
       <div className="mx-auto w-full max-w-5xl space-y-5">
         <header className="flex flex-col gap-3 border-b border-dls-border/30 pb-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
-            <h2 className="text-xl font-semibold tracking-[-0.01em] text-dls-text">Run history</h2>
+            <h2 className="text-xl font-semibold tracking-[-0.01em] text-dls-text">Project history</h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
-              Runs stay here with their outputs, notes, memory reviews, feedback, and audit events.
+              Actual local events from this workspace: runs, outputs, notes, memory reviews, wallet receipts, feedback, access, and audit records.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -384,7 +413,7 @@ export function ProjectHistoryPage({
           <div className="overflow-hidden rounded-lg bg-dls-surface-muted/10">
             {latest ? (
               <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-dls-secondary">
-                <span>{rows.length} shown</span>
+                <span>{rows.length} actual event{rows.length === 1 ? "" : "s"} shown</span>
                 <span>Latest {formatActivityTimestamp(latest.timestamp)}</span>
               </div>
             ) : null}
