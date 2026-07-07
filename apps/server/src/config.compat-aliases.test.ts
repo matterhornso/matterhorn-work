@@ -48,6 +48,12 @@ afterEach(() => {
 });
 
 describe("Matterhorn Work env aliases", () => {
+  test("defaults CORS to loopback-only development origins", async () => {
+    const config = await resolveServerConfig(baseCli(makeConfigPath()));
+
+    expect(config.corsOrigins).toEqual(["loopback"]);
+  });
+
   test("prefers MATTERHORN_WORK token env vars over legacy OPENWORK vars", async () => {
     process.env.OPENWORK_TOKEN = "legacy-client";
     process.env.MATTERHORN_WORK_TOKEN = "matterhorn-client";

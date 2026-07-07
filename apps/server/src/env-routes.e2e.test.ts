@@ -19,14 +19,14 @@ const priorTokenStore = process.env.OPENWORK_TOKEN_STORE;
 const priorOpenAiApiKey = process.env.OPENAI_API_KEY;
 const nativeFetch = globalThis.fetch;
 
-function baseConfig(): ServerConfig {
+function baseConfig(input: Partial<Pick<ServerConfig, "corsOrigins">> = {}): ServerConfig {
   return {
     host: "127.0.0.1",
     port: 0,
     token: "owt_env_client_token",
     hostToken: HOST_TOKEN,
     approval: { mode: "auto", timeoutMs: 1000 },
-    corsOrigins: ["*"],
+    corsOrigins: input.corsOrigins ?? ["*"],
     workspaces: [],
     authorizedRoots: [],
     readOnly: false,
@@ -38,8 +38,8 @@ function baseConfig(): ServerConfig {
   } as ServerConfig;
 }
 
-async function boot() {
-  const server = await startServer(baseConfig()) as Served;
+async function boot(input: Partial<Pick<ServerConfig, "corsOrigins">> = {}) {
+  const server = await startServer(baseConfig(input)) as Served;
   stops.push(() => server.stop(true));
   return {
     server,
@@ -128,6 +128,29 @@ describe("env routes", () => {
     });
     expect(response.status).toBe(204);
     expect(response.headers.get("access-control-allow-methods")).toContain("PUT");
+  });
+
+  test("loopback CORS allows local web app ports without wildcarding the internet", async () => {
+    const { base } = await boot({ corsOrigins: ["loopback"] });
+    const allowed = await fetch(`${base}/env`, {
+      method: "OPTIONS",
+      headers: {
+        origin: "http://127.0.0.1:5175",
+        "access-control-request-method": "PUT",
+      },
+    });
+    expect(allowed.status).toBe(204);
+    expect(allowed.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:5175");
+
+    const denied = await fetch(`${base}/env`, {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://evil.example",
+        "access-control-request-method": "PUT",
+      },
+    });
+    expect(denied.status).toBe(204);
+    expect(denied.headers.get("access-control-allow-origin")).toBeNull();
   });
 
   test("PUT + GET round-trips a single entry and returns raw values", async () => {
