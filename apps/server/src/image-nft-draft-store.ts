@@ -213,13 +213,22 @@ export class MatterhornImageNftDraftStore {
   async updateListingStatus(
     draftId: string,
     status: MatterhornNftListingStatus,
-    updates?: { kioskId?: string; transferPolicyId?: string; priceMist?: string; error?: string },
+    updates?: {
+      kioskId?: string;
+      kioskOwnerCapId?: string;
+      transferPolicyId?: string;
+      itemType?: string;
+      priceMist?: string;
+      error?: string;
+    },
   ): Promise<MatterhornImageNftDraft | null> {
     const draft = await this.get(draftId);
     if (!draft) return null;
     draft.listing.status = status;
     if (updates?.kioskId !== undefined) draft.listing.kioskId = updates.kioskId || null;
+    if (updates?.kioskOwnerCapId !== undefined) draft.listing.kioskOwnerCapId = updates.kioskOwnerCapId || null;
     if (updates?.transferPolicyId !== undefined) draft.listing.transferPolicyId = updates.transferPolicyId || null;
+    if (updates?.itemType !== undefined) draft.listing.itemType = updates.itemType || null;
     if (updates?.priceMist !== undefined) draft.listing.priceMist = updates.priceMist || null;
     if (updates?.error !== undefined) draft.listing.error = updates.error || null;
     draft.updatedAt = nowIso();

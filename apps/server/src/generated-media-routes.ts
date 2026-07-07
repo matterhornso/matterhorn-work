@@ -2,13 +2,18 @@ import { readFile } from "node:fs/promises";
 import type {
   MatterhornImageGenerationInput,
   MatterhornImageListResponse,
+  MatterhornImageNftDraft,
   MatterhornImageNftDraftInput,
   MatterhornImageNftDraftListResponse,
   MatterhornImageNftDraftResponse,
   MatterhornImageResponse,
+  MatterhornNftKioskListingTransactionPlan,
+  MatterhornNftListingPreviewInput,
   MatterhornNftListingPreviewResponse,
+  MatterhornNftMintTransactionPlan,
   MatterhornNftMintPreviewResponse,
   MatterhornNftPreviewErrorDetails,
+  MatterhornNftPreviewStep,
   MatterhornNftSetupRequirement,
   MatterhornNftReceiptRequest,
   MatterhornNftReceiptResponse,
@@ -331,7 +336,29 @@ export function addGeneratedMediaRoutes(
       );
     }
 
+    const storageUrl = publicImageUriForMint(draft);
+    const inputRequirements = buildMintInputRequirements(draft);
+    if (hasMissingSetup(inputRequirements)) {
+      throwNftPreviewError(
+        409,
+        "sui_nft_public_storage_required",
+        "Public image storage is required before preparing a Sui mint transaction.",
+        [...setupRequirements, ...inputRequirements],
+      );
+    }
+
     const updated = await store.updateMintStatus(draft.id, "preview_ready", { packageId: nftEnv.suiNftPackageId });
+    const steps: MatterhornNftPreviewStep[] = [
+      {
+        label: "Review metadata",
+        description: "Confirm the NFT name, description, attributes, and public image URI before wallet signing.",
+      },
+      {
+        label: "Sign in Sui wallet",
+        description: "Matterhorn prepares a transaction plan only; the connected Sui wallet builds, signs, and submits.",
+      },
+    ];
+    const transactionPlan = buildMintTransactionPlan(updated!, nftEnv, storageUrl!, steps);
     const response: MatterhornNftMintPreviewResponse = {
       success: true,
       custody: false,
@@ -344,20 +371,12 @@ export function addGeneratedMediaRoutes(
         packageId: nftEnv.suiNftPackageId!,
         moduleName: nftEnv.suiNftModuleName || "matterhorn_nft",
         functionName: "mint",
-        storageUrl: draft.storage.url ?? draft.metadata.imageUrl ?? null,
+        storageUrl,
         metadata: updated!.metadata,
-        steps: [
-          {
-            label: "Review metadata",
-            description: "Confirm the NFT name, description, attributes, and public image URI before wallet signing.",
-          },
-          {
-            label: "Sign in Sui wallet",
-            description: "Matterhorn prepares a preview manifest only; the connected Sui wallet signs the transaction.",
-          },
-        ],
+        steps,
       },
-      setupRequirements,
+      transactionPlan,
+      setupRequirements: [...setupRequirements, ...inputRequirements],
       draft: updated!,
     };
     return jsonResponse(response);
@@ -403,6 +422,9 @@ export function addGeneratedMediaRoutes(
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readOptionalJsonBody(ctx.request);
+    rejectSensitiveGeneratedMediaInput(body);
+    const input = validateNftListingPreviewInput(body);
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
@@ -417,10 +439,35 @@ export function addGeneratedMediaRoutes(
       );
     }
 
+    const listingInputs = resolveListingPreviewInputs(draft, nftEnv, input);
+    const inputRequirements = buildListingInputRequirements(listingInputs);
+    if (hasMissingSetup(inputRequirements)) {
+      throwNftPreviewError(
+        409,
+        "sui_kiosk_listing_inputs_required",
+        "A minted NFT object, item type, user Kiosk, owner cap, transfer policy, and price are required before preparing a listing transaction.",
+        [...setupRequirements, ...inputRequirements],
+      );
+    }
+
     const updated = await store.updateListingStatus(draft.id, "preview_ready", {
-      kioskId: nftEnv.suiKioskPackageId,
-      transferPolicyId: nftEnv.suiTransferPolicyPackageId,
+      kioskId: listingInputs.kioskId!,
+      kioskOwnerCapId: listingInputs.kioskOwnerCapId!,
+      transferPolicyId: listingInputs.transferPolicyId!,
+      itemType: listingInputs.nftType!,
+      priceMist: listingInputs.priceMist!,
     });
+    const steps: MatterhornNftPreviewStep[] = [
+      {
+        label: "Review listing terms",
+        description: "Confirm object id, Kiosk, TransferPolicy, and price before wallet signing.",
+      },
+      {
+        label: "Sign in Sui wallet",
+        description: "Matterhorn prepares a Kiosk listing plan only; the user's wallet signs and submits.",
+      },
+    ];
+    const transactionPlan = buildKioskListingTransactionPlan(draft, listingInputs as ResolvedListingPreviewInputsReady);
     const response: MatterhornNftListingPreviewResponse = {
       success: true,
       custody: false,
@@ -434,19 +481,11 @@ export function addGeneratedMediaRoutes(
         kioskPackageId: nftEnv.suiKioskPackageId!,
         transferPolicyPackageId: nftEnv.suiTransferPolicyPackageId!,
         priceMist: updated!.listing.priceMist ?? undefined,
-        objectId: draft.mint.objectId ?? null,
-        steps: [
-          {
-            label: "Review listing terms",
-            description: "Confirm object id, Kiosk, TransferPolicy, and price before wallet signing.",
-          },
-          {
-            label: "Sign in Sui wallet",
-            description: "Matterhorn records the public listing receipt after the user's wallet signs and submits.",
-          },
-        ],
+        objectId: listingInputs.objectId ?? null,
+        steps,
       },
-      setupRequirements,
+      transactionPlan,
+      setupRequirements: [...setupRequirements, ...inputRequirements],
       draft: updated!,
     };
     return jsonResponse(response);
@@ -568,6 +607,192 @@ function buildListingSetupRequirements(config: ReturnType<typeof resolveNftEnvir
   ];
 }
 
+function publicImageUriForMint(draft: MatterhornImageNftDraft): string | null {
+  return draft.storage.url || draft.metadata.imageUrl || null;
+}
+
+function buildMintInputRequirements(draft: MatterhornImageNftDraft): MatterhornNftSetupRequirement[] {
+  return [
+    setupRequirement({
+      key: "sui_public_image_uri",
+      label: "Public image URI",
+      configured: Boolean(publicImageUriForMint(draft)),
+      description: "Upload the generated image to public storage before preparing a mint transaction.",
+    }),
+  ];
+}
+
+function buildMintTransactionPlan(
+  draft: MatterhornImageNftDraft,
+  config: ReturnType<typeof resolveNftEnvironmentConfig>,
+  storageUrl: string,
+  steps: MatterhornNftPreviewStep[],
+): MatterhornNftMintTransactionPlan {
+  const moduleName = config.suiNftModuleName || "matterhorn_nft";
+  const functionName = "mint";
+  const args = [
+    pureArg("name", "string", draft.metadata.name),
+    pureArg("description", "string", draft.metadata.description),
+    pureArg("image_url", "string", storageUrl),
+    pureArg("attributes_json", "string", JSON.stringify(draft.metadata.attributes ?? [])),
+  ];
+  if (draft.creatorAddress) {
+    args.push(pureArg("creator", "address", draft.creatorAddress));
+  }
+
+  return {
+    version: "matterhorn.sui.transaction-plan.v1",
+    kind: "sui_move_call",
+    network: draft.network,
+    custody: false,
+    canSubmit: false,
+    requiresWalletStandard: true,
+    sender: draft.creatorAddress ?? null,
+    moveCalls: [
+      {
+        target: `${config.suiNftPackageId}::${moduleName}::${functionName}`,
+        packageId: config.suiNftPackageId!,
+        moduleName,
+        functionName,
+        typeArguments: [],
+        arguments: args,
+      },
+    ],
+    sdkHints: {
+      packageName: "@mysten/sui",
+      importPath: "@mysten/sui/transactions",
+      builder: "new Transaction()",
+    },
+    missingInputs: [],
+  };
+}
+
+interface ResolvedListingPreviewInputs {
+  objectId?: string | null;
+  nftType?: string | null;
+  kioskId?: string | null;
+  kioskOwnerCapId?: string | null;
+  transferPolicyId?: string | null;
+  priceMist?: string | null;
+  sender?: string | null;
+}
+
+interface ResolvedListingPreviewInputsReady {
+  objectId: string;
+  nftType: string;
+  kioskId: string;
+  kioskOwnerCapId: string;
+  transferPolicyId: string;
+  priceMist: string;
+  sender?: string | null;
+}
+
+function resolveListingPreviewInputs(
+  draft: MatterhornImageNftDraft,
+  config: ReturnType<typeof resolveNftEnvironmentConfig>,
+  input: MatterhornNftListingPreviewInput,
+): ResolvedListingPreviewInputs {
+  return {
+    objectId: input.objectId ?? draft.mint.objectId ?? null,
+    nftType: input.nftType ?? draft.listing.itemType ?? config.suiNftType ?? null,
+    kioskId: input.kioskId ?? draft.listing.kioskId ?? config.suiKioskId ?? null,
+    kioskOwnerCapId: input.kioskOwnerCapId ?? draft.listing.kioskOwnerCapId ?? config.suiKioskOwnerCapId ?? null,
+    transferPolicyId:
+      input.transferPolicyId ??
+      draft.listing.transferPolicyId ??
+      config.suiTransferPolicyId ??
+      null,
+    priceMist: input.priceMist ?? draft.listing.priceMist ?? null,
+    sender: input.sender ?? draft.creatorAddress ?? null,
+  };
+}
+
+function buildListingInputRequirements(input: ResolvedListingPreviewInputs): MatterhornNftSetupRequirement[] {
+  return [
+    setupRequirement({
+      key: "sui_minted_object",
+      label: "Minted NFT object",
+      configured: Boolean(input.objectId),
+      description: "Record the public mint receipt or provide the minted NFT object id before listing.",
+    }),
+    setupRequirement({
+      key: "sui_nft_type",
+      label: "NFT item type",
+      envVar: "MATTERHORN_SUI_NFT_TYPE",
+      configured: Boolean(input.nftType),
+      description: "Provide the full Move type for the minted NFT, for example 0x...::module::MatterhornNFT.",
+    }),
+    setupRequirement({
+      key: "sui_kiosk_id",
+      label: "User Kiosk id",
+      envVar: "MATTERHORN_SUI_KIOSK_ID",
+      configured: Boolean(input.kioskId),
+      description: "Provide the user-owned Kiosk object id that will hold the listing.",
+    }),
+    setupRequirement({
+      key: "sui_kiosk_owner_cap",
+      label: "Kiosk owner cap",
+      envVar: "MATTERHORN_SUI_KIOSK_OWNER_CAP_ID",
+      configured: Boolean(input.kioskOwnerCapId),
+      description: "Provide the public owner-cap object id for the user's Kiosk. Do not paste private keys or signatures.",
+    }),
+    setupRequirement({
+      key: "sui_transfer_policy",
+      label: "TransferPolicy object",
+      envVar: "MATTERHORN_SUI_TRANSFER_POLICY_ID",
+      configured: Boolean(input.transferPolicyId),
+      description: "Provide the TransferPolicy object id that applies to this NFT type.",
+    }),
+    setupRequirement({
+      key: "sui_listing_price",
+      label: "Listing price",
+      configured: Boolean(input.priceMist),
+      description: "Set a listing price in MIST before preparing the Kiosk listing transaction.",
+    }),
+  ];
+}
+
+function buildKioskListingTransactionPlan(
+  draft: MatterhornImageNftDraft,
+  input: ResolvedListingPreviewInputsReady,
+): MatterhornNftKioskListingTransactionPlan {
+  return {
+    version: "matterhorn.sui.transaction-plan.v1",
+    kind: "sui_kiosk_listing",
+    network: draft.network,
+    custody: false,
+    canSubmit: false,
+    requiresWalletStandard: true,
+    sender: input.sender ?? null,
+    marketplace: "sui_kiosk",
+    nftObjectId: input.objectId,
+    nftType: input.nftType,
+    kioskId: input.kioskId,
+    kioskOwnerCapId: input.kioskOwnerCapId,
+    transferPolicyId: input.transferPolicyId,
+    priceMist: input.priceMist,
+    sdkHints: {
+      packageName: "@mysten/kiosk",
+      builder: "KioskTransaction",
+      method: "placeAndList",
+    },
+    missingInputs: [],
+  };
+}
+
+function pureArg(
+  label: string,
+  type: MatterhornNftMintTransactionPlan["moveCalls"][number]["arguments"][number]["type"],
+  value: string,
+): MatterhornNftMintTransactionPlan["moveCalls"][number]["arguments"][number] {
+  return {
+    label,
+    kind: "pure",
+    type,
+    value,
+  };
+}
+
 function setupRequirement(input: {
   key: MatterhornNftSetupRequirement["key"];
   label: string;
@@ -600,9 +825,28 @@ function throwNftSetupError(code: string, message: string, requirements: Matterh
   throw new ApiError(503, code, message, nftPreviewErrorDetails(requirements));
 }
 
+function throwNftPreviewError(
+  status: number,
+  code: string,
+  message: string,
+  requirements: MatterhornNftSetupRequirement[],
+): never {
+  throw new ApiError(status, code, message, nftPreviewErrorDetails(requirements));
+}
+
 async function readJsonBody(request: Request): Promise<unknown> {
   try {
     return await request.json();
+  } catch {
+    throw new ApiError(400, "invalid_json_body", "Request body is not valid JSON.");
+  }
+}
+
+async function readOptionalJsonBody(request: Request): Promise<unknown> {
+  const text = await request.text();
+  if (!text.trim()) return {};
+  try {
+    return JSON.parse(text);
   } catch {
     throw new ApiError(400, "invalid_json_body", "Request body is not valid JSON.");
   }
@@ -704,6 +948,20 @@ function validateNftDraftInput(body: unknown): MatterhornImageNftDraftInput {
     metadata: b.metadata && typeof b.metadata === "object" ? (b.metadata as MatterhornImageNftDraftInput["metadata"]) : undefined,
     attributes: Array.isArray(b.attributes) ? (b.attributes as MatterhornImageNftDraftInput["attributes"]) : undefined,
     listingPriceMist: typeof b.listingPriceMist === "string" ? b.listingPriceMist : undefined,
+  };
+}
+
+function validateNftListingPreviewInput(body: unknown): MatterhornNftListingPreviewInput {
+  if (!body || typeof body !== "object") return {};
+  const b = body as Record<string, unknown>;
+  return {
+    objectId: typeof b.objectId === "string" ? b.objectId.trim() : undefined,
+    nftType: typeof b.nftType === "string" ? b.nftType.trim() : undefined,
+    kioskId: typeof b.kioskId === "string" ? b.kioskId.trim() : undefined,
+    kioskOwnerCapId: typeof b.kioskOwnerCapId === "string" ? b.kioskOwnerCapId.trim() : undefined,
+    transferPolicyId: typeof b.transferPolicyId === "string" ? b.transferPolicyId.trim() : undefined,
+    priceMist: typeof b.priceMist === "string" ? b.priceMist.trim() : undefined,
+    sender: typeof b.sender === "string" ? b.sender.trim() : undefined,
   };
 }
 

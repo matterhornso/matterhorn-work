@@ -107,7 +107,11 @@ beforeEach(() => {
     MATTERHORN_WALRUS_STORAGE_EPOCHS: process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS,
     MATTERHORN_SUI_NFT_PACKAGE_ID: process.env.MATTERHORN_SUI_NFT_PACKAGE_ID,
     MATTERHORN_SUI_NFT_MODULE_NAME: process.env.MATTERHORN_SUI_NFT_MODULE_NAME,
+    MATTERHORN_SUI_NFT_TYPE: process.env.MATTERHORN_SUI_NFT_TYPE,
     MATTERHORN_SUI_KIOSK_PACKAGE_ID: process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID,
+    MATTERHORN_SUI_KIOSK_ID: process.env.MATTERHORN_SUI_KIOSK_ID,
+    MATTERHORN_SUI_KIOSK_OWNER_CAP_ID: process.env.MATTERHORN_SUI_KIOSK_OWNER_CAP_ID,
+    MATTERHORN_SUI_TRANSFER_POLICY_ID: process.env.MATTERHORN_SUI_TRANSFER_POLICY_ID,
     MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID: process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID,
   };
   process.env.MATTERHORN_IMAGE_PROVIDER = "mock";
@@ -118,7 +122,11 @@ beforeEach(() => {
   delete process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS;
   delete process.env.MATTERHORN_SUI_NFT_PACKAGE_ID;
   delete process.env.MATTERHORN_SUI_NFT_MODULE_NAME;
+  delete process.env.MATTERHORN_SUI_NFT_TYPE;
   delete process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID;
+  delete process.env.MATTERHORN_SUI_KIOSK_ID;
+  delete process.env.MATTERHORN_SUI_KIOSK_OWNER_CAP_ID;
+  delete process.env.MATTERHORN_SUI_TRANSFER_POLICY_ID;
   delete process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID;
 });
 
@@ -328,11 +336,36 @@ describe("Generated media Sui NFT setup previews", () => {
     );
   });
 
-  test("mint preview returns a wallet handoff manifest when package config exists", async () => {
+  test("mint preview blocks until the draft has a public image URI", async () => {
+    process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = "0xmintpackage";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/preview`, {
+      method: "POST",
+    });
+
+    expect(result.response.status).toBe(409);
+    expect(result.payload.code).toBe("sui_nft_public_storage_required");
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "sui_public_image_uri",
+        status: "missing",
+      }),
+    );
+  });
+
+  test("mint preview returns a wallet transaction plan when package config and public media exist", async () => {
     process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = "0xmintpackage";
     process.env.MATTERHORN_SUI_NFT_MODULE_NAME = "matterhorn_media";
     const { base } = await boot();
     const draft = await createDraft(base);
+    await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        metadata: { imageUrl: "https://relay.example.test/v1/blobs/blob_test_123" },
+      }),
+    });
 
     const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/preview`, {
       method: "POST",
@@ -345,7 +378,22 @@ describe("Generated media Sui NFT setup previews", () => {
     expect(result.payload.handoff.packageId).toBe("0xmintpackage");
     expect(result.payload.handoff.moduleName).toBe("matterhorn_media");
     expect(result.payload.handoff.functionName).toBe("mint");
+    expect(result.payload.handoff.storageUrl).toBe("https://relay.example.test/v1/blobs/blob_test_123");
     expect(result.payload.handoff.steps.length).toBeGreaterThan(0);
+    expect(result.payload.transactionPlan.kind).toBe("sui_move_call");
+    expect(result.payload.transactionPlan.custody).toBe(false);
+    expect(result.payload.transactionPlan.canSubmit).toBe(false);
+    expect(result.payload.transactionPlan.requiresWalletStandard).toBe(true);
+    expect(result.payload.transactionPlan.sdkHints.importPath).toBe("@mysten/sui/transactions");
+    expect(result.payload.transactionPlan.moveCalls[0].target).toBe("0xmintpackage::matterhorn_media::mint");
+    expect(result.payload.transactionPlan.moveCalls[0].arguments).toContainEqual(
+      expect.objectContaining({
+        label: "image_url",
+        kind: "pure",
+        type: "string",
+        value: "https://relay.example.test/v1/blobs/blob_test_123",
+      }),
+    );
     expect(result.payload.setupRequirements).toContainEqual(
       expect.objectContaining({
         key: "sui_nft_package",
@@ -375,7 +423,7 @@ describe("Generated media Sui NFT setup previews", () => {
     );
   });
 
-  test("listing preview returns a Sui Kiosk handoff manifest when config exists", async () => {
+  test("listing preview requires minted object and user-owned Kiosk inputs", async () => {
     process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = "0xkiosk";
     process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = "0xpolicy";
     const { base } = await boot();
@@ -385,16 +433,70 @@ describe("Generated media Sui NFT setup previews", () => {
       method: "POST",
     });
 
+    expect(result.response.status).toBe(409);
+    expect(result.payload.code).toBe("sui_kiosk_listing_inputs_required");
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "sui_minted_object",
+        status: "missing",
+      }),
+    );
+    expect(result.payload.details.setupRequirements).toContainEqual(
+      expect.objectContaining({
+        key: "sui_kiosk_owner_cap",
+        status: "missing",
+      }),
+    );
+  });
+
+  test("listing preview returns a Sui Kiosk transaction plan when config and user inputs exist", async () => {
+    process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = "0xkioskpackage";
+    process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = "0xpolicypackage";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+    await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "0xdigest",
+        objectId: "0xnftobject",
+        network: "sui-testnet",
+        packageId: "0xmintpackage",
+      }),
+    });
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/preview`, {
+      method: "POST",
+      body: JSON.stringify({
+        nftType: "0xmintpackage::matterhorn_media::MatterhornNFT",
+        kioskId: "0xuserkiosk",
+        kioskOwnerCapId: "0xownercap",
+        transferPolicyId: "0xtransferpolicy",
+        priceMist: "1000",
+        sender: "0xsender",
+      }),
+    });
+
     expect(result.response.status).toBe(200);
     expect(result.payload.custody).toBe(false);
     expect(result.payload.canSubmit).toBe(false);
     expect(result.payload.handoff.marketplace).toBe("sui_kiosk");
-    expect(result.payload.handoff.kioskPackageId).toBe("0xkiosk");
-    expect(result.payload.handoff.transferPolicyPackageId).toBe("0xpolicy");
+    expect(result.payload.handoff.kioskPackageId).toBe("0xkioskpackage");
+    expect(result.payload.handoff.transferPolicyPackageId).toBe("0xpolicypackage");
     expect(result.payload.handoff.priceMist).toBe("1000");
+    expect(result.payload.handoff.objectId).toBe("0xnftobject");
     expect(result.payload.handoff.steps.length).toBeGreaterThan(0);
-    expect(result.payload.draft.listing.kioskId).toBe("0xkiosk");
-    expect(result.payload.draft.listing.transferPolicyId).toBe("0xpolicy");
+    expect(result.payload.transactionPlan.kind).toBe("sui_kiosk_listing");
+    expect(result.payload.transactionPlan.marketplace).toBe("sui_kiosk");
+    expect(result.payload.transactionPlan.nftObjectId).toBe("0xnftobject");
+    expect(result.payload.transactionPlan.nftType).toBe("0xmintpackage::matterhorn_media::MatterhornNFT");
+    expect(result.payload.transactionPlan.kioskId).toBe("0xuserkiosk");
+    expect(result.payload.transactionPlan.kioskOwnerCapId).toBe("0xownercap");
+    expect(result.payload.transactionPlan.transferPolicyId).toBe("0xtransferpolicy");
+    expect(result.payload.transactionPlan.sdkHints.packageName).toBe("@mysten/kiosk");
+    expect(result.payload.draft.listing.kioskId).toBe("0xuserkiosk");
+    expect(result.payload.draft.listing.kioskOwnerCapId).toBe("0xownercap");
+    expect(result.payload.draft.listing.transferPolicyId).toBe("0xtransferpolicy");
+    expect(result.payload.draft.listing.itemType).toBe("0xmintpackage::matterhorn_media::MatterhornNFT");
   });
 });
 
