@@ -149,7 +149,11 @@ export interface MatterhornNftDraftStorage {
   provider: "walrus" | "local";
   status: MatterhornNftStorageStatus;
   blobId?: string | null;
+  objectId?: string | null;
+  transactionDigest?: string | null;
+  endEpoch?: number | null;
   url?: string | null;
+  uploadedAt?: string | null;
   error?: string | null;
 }
 

@@ -15,10 +15,13 @@ export interface NftEnvironmentConfig {
   suiKioskPackageId?: string;
   suiTransferPolicyPackageId?: string;
   walrusPublisherUrl?: string;
+  walrusPublisherBearerToken?: string;
   walrusRelayUrl?: string;
+  walrusStorageEpochs?: number;
 }
 
 export function resolveNftEnvironmentConfig(env: typeof process.env): NftEnvironmentConfig {
+  const storageEpochs = Number(env.MATTERHORN_WALRUS_STORAGE_EPOCHS ?? "");
   return {
     suiNetwork: env.MATTERHORN_SUI_NETWORK as "sui-testnet" | "sui-mainnet" | undefined,
     suiNftPackageId: env.MATTERHORN_SUI_NFT_PACKAGE_ID?.trim(),
@@ -26,7 +29,9 @@ export function resolveNftEnvironmentConfig(env: typeof process.env): NftEnviron
     suiKioskPackageId: env.MATTERHORN_SUI_KIOSK_PACKAGE_ID?.trim(),
     suiTransferPolicyPackageId: env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID?.trim(),
     walrusPublisherUrl: env.MATTERHORN_WALRUS_PUBLISHER_URL?.trim(),
+    walrusPublisherBearerToken: env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN?.trim(),
     walrusRelayUrl: env.MATTERHORN_WALRUS_RELAY_URL?.trim(),
+    walrusStorageEpochs: Number.isFinite(storageEpochs) && storageEpochs > 0 ? Math.floor(storageEpochs) : undefined,
   };
 }
 
@@ -66,17 +71,18 @@ export function buildImageEditingCapability(
 export function buildWalrusStorageCapability(config: NftEnvironmentConfig): MatterhornWalrusStorageCapability {
   const publisherConfigured = Boolean(config.walrusPublisherUrl?.trim());
   const relayConfigured = Boolean(config.walrusRelayUrl?.trim());
-  const status = publisherConfigured && relayConfigured ? "preview" : "needs_setup";
+  const status = publisherConfigured && relayConfigured ? "working" : "needs_setup";
   return {
     ...capability(
       status,
       "Walrus storage",
-      status === "preview"
-        ? "Walrus publisher and relay are configured for upload handoff previews. Direct upload remains disabled until the connector is implemented."
+      status === "working"
+        ? "Walrus publisher and relay are configured for explicit public NFT media upload."
         : "Walrus public storage is not configured. Set MATTERHORN_WALRUS_PUBLISHER_URL and MATTERHORN_WALRUS_RELAY_URL.",
       {
         publisherConfigured,
         relayConfigured,
+        storageEpochs: config.walrusStorageEpochs ?? 1,
       },
     ),
     publisherConfigured,
