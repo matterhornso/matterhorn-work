@@ -8,6 +8,8 @@ const DEFAULT_URL = "http://127.0.0.1:5182/workspace/ws_d6a5b5572860/session";
 const DEFAULT_OUTPUT_DIR = "qa-reports/generated-media-browser-smoke";
 const DEFAULT_PROMPT = "sleek Matterhorn Work console showing generated media receipt cards";
 const SMOKE_NFT_OBJECT_ID = "0x7777777777777777777777777777777777777777777777777777777777777777";
+const SMOKE_MINT_DIGEST = "smokeMintDigest111111111111111111111111111111111111111111";
+const SMOKE_LISTING_DIGEST = "smokeListingDigest222222222222222222222222222222222222222";
 const SMOKE_LISTING_PRICE_MIST = "1000000000";
 
 function parseArgs(argv = process.argv.slice(2)) {
@@ -65,9 +67,9 @@ Expected stack:
 
 Boundaries:
   This browser smoke creates a local NFT draft, uploads to fake Walrus, prepares
-  a Sui mint preview, and prepares a Sui Kiosk listing preview. It does not sign
-  wallet transactions or record receipts; receipt coverage lives in the backend
-  generated-media flow smoke.
+  a Sui mint preview, records public mint receipt metadata, prepares a Sui Kiosk
+  listing preview, and records public listing receipt metadata. It does not sign
+  wallet transactions or submit anything on-chain.
 `);
 }
 
@@ -275,13 +277,46 @@ async function runSmoke(config) {
       report.artifacts.mintPreview = { ready: true, custody: false };
     });
 
+    await stage(report, "record_mint_receipt", "Record public mint receipt", async () => {
+      const dialog = nftDialog(page);
+      await dialog.getByLabel("Mint digest", { exact: true }).fill(SMOKE_MINT_DIGEST);
+      await dialog.getByLabel("Minted object id", { exact: true }).fill(SMOKE_NFT_OBJECT_ID);
+      await dialog.getByRole("button", { name: "Record mint receipt", exact: true }).click();
+      await dialog.getByText("confirmed", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Mint receipt recorded", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+      report.artifacts.mintReceipt = {
+        recorded: true,
+        objectId: SMOKE_NFT_OBJECT_ID,
+      };
+    });
+
     await stage(report, "preview_listing", "Prepare Sui Kiosk listing preview", async () => {
-      await fillIfPresent(page, "NFT object id", SMOKE_NFT_OBJECT_ID);
+      const dialog = nftDialog(page);
+      await dialog.getByLabel("NFT object id", { exact: true }).fill(SMOKE_NFT_OBJECT_ID);
       await fillIfPresent(page, "Price (MIST)", SMOKE_LISTING_PRICE_MIST);
       const previewListing = await waitForEnabled(page.getByRole("button", { name: "Preview listing", exact: true }), "Preview listing button", 20_000);
       await previewListing.click();
       await nftDialog(page).getByText("Listing plan ready", { exact: false }).waitFor({ state: "visible", timeout: 20_000 });
       report.artifacts.listingPreview = { ready: true, custody: false };
+    });
+
+    await stage(report, "record_listing_receipt", "Record public listing receipt", async () => {
+      const dialog = nftDialog(page);
+      await dialog.getByLabel("Listing transaction digest", { exact: true }).fill(SMOKE_LISTING_DIGEST);
+      await dialog.getByRole("button", { name: "Record listing receipt", exact: true }).click();
+      await dialog.getByText("listed", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Listing receipt recorded", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+      await page
+        .getByLabel("Generated media history")
+        .locator("button")
+        .filter({ hasText: config.prompt })
+        .filter({ hasText: "Listed" })
+        .first()
+        .waitFor({ state: "visible", timeout: 20_000 });
+      report.artifacts.listingReceipt = {
+        recorded: true,
+        objectId: SMOKE_NFT_OBJECT_ID,
+      };
     });
 
     const screenshotPath = resolve(config.outputDir, "generated-media-browser-smoke.png");
