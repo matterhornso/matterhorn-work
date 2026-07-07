@@ -18,8 +18,16 @@ assert.ok(
   "dev:matterhorn-local should still wire the local app to the Matterhorn server",
 );
 assert.ok(
-  script.includes("OpenCode engine: not provided"),
-  "dev:matterhorn-local should still explain when OpenCode is not configured",
+  script.includes("OpenCode engine: not connected. Chats and desk tasks will show Needs setup."),
+  "dev:matterhorn-local should explain that chat and desk execution need OpenCode",
+);
+assert.ok(
+  script.includes("MATTERHORN_LOCAL_OPENCODE_URL=http://127.0.0.1:<port> pnpm dev:matterhorn-local"),
+  "dev:matterhorn-local should show the explicit external OpenCode URL setup path",
+);
+assert.ok(
+  script.includes("OPENWORK_MANAGE_OPENCODE=1 pnpm dev:matterhorn-local"),
+  "dev:matterhorn-local should show the managed sidecar setup path",
 );
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
