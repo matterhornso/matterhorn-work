@@ -20,6 +20,7 @@ const priorEnv = {
   openworkDataDir: process.env.OPENWORK_DATA_DIR,
   tokenStore: process.env.OPENWORK_TOKEN_STORE,
   memoryRoot: process.env.MATTERHORN_WORK_MEMORY_ROOT,
+  memoryScope: process.env.MATTERHORN_WORK_MEMORY_SCOPE,
   opencodeDb: process.env.OPENCODE_DB,
 };
 const stops: Array<() => void | Promise<void>> = [];
@@ -90,13 +91,15 @@ async function startProviderCatalogServer(payload: unknown): Promise<string> {
   return `http://127.0.0.1:${port}`;
 }
 
-async function boot(options: { readOnly?: boolean; opencodeBaseUrl?: string } = {}) {
+async function boot(options: { readOnly?: boolean; opencodeBaseUrl?: string; workspaceMemoryScope?: string } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "matterhorn-backend-control-plane-"));
   dirs.push(dir);
   process.env.OPENWORK_DATA_DIR = join(dir, "openwork-data");
   process.env.OPENWORK_ENV_STORE = join(dir, "env.json");
   process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
   process.env.MATTERHORN_WORK_MEMORY_ROOT = join(dir, "memory");
+  if (options.workspaceMemoryScope) process.env.MATTERHORN_WORK_MEMORY_SCOPE = options.workspaceMemoryScope;
+  else delete process.env.MATTERHORN_WORK_MEMORY_SCOPE;
   process.env.OPENCODE_DB = join(dir, "opencode.db");
   const server = await startServer(baseConfig(await getFreePort(), dir, options.readOnly ?? false, options.opencodeBaseUrl)) as Served;
   stops.push(() => server.stop(true));
@@ -176,6 +179,7 @@ afterEach(async () => {
   restoreEnv("openworkDataDir", "OPENWORK_DATA_DIR");
   restoreEnv("tokenStore", "OPENWORK_TOKEN_STORE");
   restoreEnv("memoryRoot", "MATTERHORN_WORK_MEMORY_ROOT");
+  restoreEnv("memoryScope", "MATTERHORN_WORK_MEMORY_SCOPE");
   restoreEnv("opencodeDb", "OPENCODE_DB");
 });
 
@@ -646,6 +650,27 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain(HOST_TOKEN);
     expect(serialized).not.toContain("Basic ");
     expect(serialized).not.toContain("Authorization");
+  });
+
+  test("workspace control plane reports workspace-local memory mode through capabilities", async () => {
+    const { base, dir } = await boot({ workspaceMemoryScope: "workspace" });
+    const workspaceMemoryRoot = join(dir, ".matterhorn-work", "memory");
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/control-plane");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.dataMap.stores.memory.scope).toBe("workspace");
+    expect(result.payload.dataMap.stores.memory.details.mode).toBe("workspace_local_vault");
+    expect(result.payload.capabilities.memory.scope).toBe("workspace");
+    expect(result.payload.capabilities.memory.rootPath).toBe(workspaceMemoryRoot);
+    expect(result.payload.capabilities.memory.description).toContain(".matterhorn-work/memory");
+    expect(result.payload.capabilities.memory.details.workspaceStorage).toMatchObject({
+      scope: "workspace",
+      mode: "workspace_local_vault",
+      isolation: "workspace_local_vault",
+      workspaceNamespaceTag: "workspace:ws_backend",
+    });
+    expect(result.payload.capabilities.storage.stores.memory.scope).toBe("workspace");
+    expect(result.payload.capabilities.storage.stores.memory.paths[0]).toBe(workspaceMemoryRoot);
   });
 
   test("GET /workspace/:id/backend/support-report returns a redacted diagnostic artifact", async () => {
