@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -71,6 +71,7 @@ import {
   compareBittensorValidators,
   checkBittensorSubnetAdapterLaunchGate,
   checkSubtensorSidecarHealth,
+  clearBittensorWatches,
   createBittensorSigningHandoff,
   createBittensorSigningReceipt,
   createBittensorWatch,
@@ -117,6 +118,14 @@ delete process.env.BITTENSOR_WALLET_TIMELINE_DISABLE_PERSISTENCE;
 delete process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE;
 delete process.env.BITTENSOR_WALLET_TIMELINE_PATH;
 delete process.env.BITTENSOR_WALLET_TIMELINE_RETENTION_LIMIT;
+
+beforeEach(() => {
+  clearBittensorWatches();
+});
+
+afterEach(() => {
+  clearBittensorWatches();
+});
 
 const VALID_SS58 = "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF";
 
@@ -3583,7 +3592,7 @@ describe("executeBittensorChatWorkflow", () => {
 
   test("checks configured watches with actionable alert prompts", async () => {
     await withMockedFivePromptSidecar(async () => {
-      createBittensorWatch({
+      const watch = createBittensorWatch({
         kind: "slippage",
         netuid: 77,
         label: "Slippage alert",
@@ -3598,6 +3607,7 @@ describe("executeBittensorChatWorkflow", () => {
         notificationIntent?: string;
         shouldNotify?: boolean;
         status: string;
+        watch: { id: string };
       }> | undefined;
       expect(result.execution).toBe("answered");
       expect(result.cards[0]?.kind).toBe("watchlist");
@@ -3606,11 +3616,15 @@ describe("executeBittensorChatWorkflow", () => {
       expect(evaluations?.some((evaluation) => evaluation.alertKey?.includes("slippage"))).toBe(true);
       expect(evaluations?.some((evaluation) => evaluation.notificationIntent === "review_slippage")).toBe(true);
       expect(evaluations?.some((evaluation) => evaluation.copilotActions?.some((action) => action.label === "Prepare fresh preview"))).toBe(true);
-      const alertCard = result.cards.find((card) =>
-        card.actions?.some((action) => String(action.payload?.prompt ?? "").includes("fresh unsigned Bittensor staking preview")),
-      );
+      const alertEvaluation = evaluations?.find((evaluation) => evaluation.watch.id === watch.id);
+      expect(alertEvaluation?.copilotActions?.some((action) => action.label === "Prepare fresh preview")).toBe(true);
+      const alertCard = result.cards.find((card) => {
+        const data = card.data as { evaluation?: { watch?: { id?: string } } } | undefined;
+        return data?.evaluation?.watch?.id === watch.id;
+      });
       expect(alertCard?.items.some((item) => item.label === "Next actions")).toBe(true);
       expect(alertCard?.items.some((item) => item.label === "Intent" && item.value === "review_slippage")).toBe(true);
+      expect(alertCard?.actions?.some((action) => String(action.payload?.prompt ?? "").includes("fresh unsigned Bittensor staking preview"))).toBe(true);
       expect(alertCard?.actions?.some((action) => String(action.payload?.alertKey ?? "").includes("slippage"))).toBe(true);
       expect(alertCard?.actions?.some((action) => action.payload?.notificationIntent === "review_slippage")).toBe(true);
       const guidance = result.cards.find((card) => card.kind === "customer_guidance");

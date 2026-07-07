@@ -10060,6 +10060,14 @@ export function listBittensorWatches(): BittensorWatch[] {
   return [...watchlist.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+export function clearBittensorWatches(): number {
+  loadPersistedWatchlist();
+  const cleared = watchlist.size;
+  watchlist.clear();
+  persistWatchlist();
+  return cleared;
+}
+
 export function createBittensorWatch(input: Partial<BittensorWatch>): BittensorWatch {
   loadPersistedWatchlist();
   const id = `bt-watch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
