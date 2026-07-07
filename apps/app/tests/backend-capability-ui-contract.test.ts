@@ -298,6 +298,7 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("Choose which model answers workspace prompts");
     expect(source).toContain("onOpenModelPicker");
     expect(source).toContain("Change model");
+    expect(source).toContain("Use workspace default");
     expect(source).toContain("Save workspace default");
     expect(source).toContain("modelReadiness.workspaceDefault");
     expect(source).toContain("modelReadiness.effectiveModel");
@@ -310,6 +311,9 @@ describe("backend capability UI contract", () => {
     expect(routeSource).toContain("defaultModelRef={defaultModelRef}");
     expect(routeSource).toContain("defaultModelProviderId={local.prefs.defaultModel?.providerID ?? null}");
     expect(routeSource).toContain("defaultModelId={local.prefs.defaultModel?.modelID ?? null}");
+    expect(routeSource).toContain("hasLocalModelOverride={Boolean(local.prefs.defaultModel)}");
+    expect(routeSource).toContain("onUseWorkspaceDefault={() =>");
+    expect(routeSource).toContain("defaultModel: null");
     expect(routeSource).toContain("onOpenModelPicker={() =>");
     expect(routeSource).toContain("matterhornServerClient={matterhornClient}");
     expect(routeSource).toContain("runtimeWorkspaceId={runtimeWorkspaceId}");

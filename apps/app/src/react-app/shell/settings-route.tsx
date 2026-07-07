@@ -2044,6 +2044,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             defaultModelRef={defaultModelRef}
             defaultModelProviderId={local.prefs.defaultModel?.providerID ?? null}
             defaultModelId={local.prefs.defaultModel?.modelID ?? null}
+            hasLocalModelOverride={Boolean(local.prefs.defaultModel)}
             connectedModelCount={connectedModelCount}
             providerStatusLabel={providerStatusLabel}
             providerStatusStyle={providerStatusStyle}
@@ -2056,6 +2057,13 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             onOpenModelPicker={() => {
               setModelPickerQuery("");
               setModelPickerOpen(true);
+            }}
+            onUseWorkspaceDefault={() => {
+              local.setPrefs((previous) => ({
+                ...previous,
+                defaultModel: null,
+                modelVariant: null,
+              }));
             }}
             onOpenProviderAuth={handleOpenProviderAuth}
             onDisconnectProvider={async (providerId) => {
