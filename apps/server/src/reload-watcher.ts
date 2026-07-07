@@ -87,9 +87,15 @@ function startWorkspaceReloadWatcher(input: {
   let closed = false;
   let rootWatcher: FSWatcher | null = null;
   let opencodeRootWatcher: FSWatcher | null = null;
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let baselineRefresh = Promise.resolve();
 
   const closeAll = () => {
     closed = true;
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
     for (const pending of pendingChecks.values()) {
       clearTimeout(pending.timer);
     }
@@ -101,16 +107,50 @@ function startWorkspaceReloadWatcher(input: {
     opencodeRootWatcher?.close();
   };
 
-  const refreshBaseline = async (reasons: ReloadReason[] = fingerprintedReloadReasons) => {
+  const writeBaseline = async (reasons: ReloadReason[] = fingerprintedReloadReasons) => {
     for (const reason of reasons) {
       if (!fingerprintedReloadReasons.includes(reason)) continue;
       baselines.set(reason, await computeReloadFingerprint(root, reason));
     }
   };
 
+  const refreshBaseline = (reasons: ReloadReason[] = fingerprintedReloadReasons) => {
+    baselineRefresh = baselineRefresh.then(
+      () => writeBaseline(reasons),
+      () => writeBaseline(reasons),
+    );
+    return baselineRefresh;
+  };
+
+  const inferReloadTrigger = (reason: ReloadReason): ReloadTrigger | undefined => {
+    if (reason === "config" || reason === "mcp") {
+      const rootConfigPath = existsSync(join(root, "opencode.jsonc"))
+        ? join(root, "opencode.jsonc")
+        : existsSync(join(root, "opencode.json"))
+          ? join(root, "opencode.json")
+          : null;
+      const hiddenConfigPath = existsSync(join(opencodeRoot, "opencode.jsonc"))
+        ? join(opencodeRoot, "opencode.jsonc")
+        : existsSync(join(opencodeRoot, "opencode.json"))
+          ? join(opencodeRoot, "opencode.json")
+          : null;
+      const configPath = rootConfigPath ?? hiddenConfigPath;
+      return configPath
+        ? { type: "config", name: basename(configPath), action: "updated", path: configPath }
+        : undefined;
+    }
+
+    if (reason === "agents" && existsSync(join(root, "AGENTS.md"))) {
+      return { type: "agent", name: "AGENTS.md", action: "updated", path: join(root, "AGENTS.md") };
+    }
+
+    return undefined;
+  };
+
   const checkReason = async (reason: ReloadReason, trigger?: ReloadTrigger) => {
     if (closed) return;
     if (!fingerprintedReloadReasons.includes(reason)) return;
+    await baselineRefresh;
 
     const current = await computeReloadFingerprint(root, reason);
     const previous = baselines.get(reason);
@@ -135,6 +175,19 @@ function startWorkspaceReloadWatcher(input: {
       void checkReason(reason, pending?.trigger ?? trigger);
     }, debounceMs);
     pendingChecks.set(reason, { timer, trigger });
+  };
+
+  const startFingerprintPoller = () => {
+    if (pollTimer) return;
+    const pollIntervalMs = Math.max(100, Math.min(500, debounceMs));
+    pollTimer = setInterval(() => {
+      if (closed) return;
+      for (const reason of fingerprintedReloadReasons) {
+        if (reason === "mcp") continue;
+        void checkReason(reason, inferReloadTrigger(reason));
+      }
+    }, pollIntervalMs);
+    pollTimer.unref?.();
   };
 
   const ensureOpencodeRootWatcher = () => {
@@ -313,6 +366,7 @@ function startWorkspaceReloadWatcher(input: {
     tree.scheduleRescan();
   }
   void refreshBaseline();
+  startFingerprintPoller();
 
   return { close: closeAll, refreshBaseline };
 }

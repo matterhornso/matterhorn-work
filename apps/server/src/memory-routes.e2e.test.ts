@@ -378,7 +378,7 @@ describe("Matterhorn memory API routes", () => {
   });
 
   test("workspace memory can use a workspace-local physical vault", async () => {
-    const { base, dir } = await boot({ workspaceMemoryScope: "workspace" });
+    const { base, dir } = await boot();
     const workspaceMemoryRoot = join(dir, ".matterhorn-work", "memory");
 
     const dataMap = await jsonFetch(base, "/workspace/ws_memory/backend/data-map");
@@ -414,6 +414,34 @@ describe("Matterhorn memory API routes", () => {
     const otherWorkspace = await jsonFetch(base, "/workspace/ws_other/memory/entities?tags=bittensor&limit=10");
     expect(otherWorkspace.response.status).toBe(200);
     expect(otherWorkspace.payload.records.map((item: { id: string }) => item.id)).not.toContain("mem_workspace_local_vault");
+  });
+
+  test("workspace memory can opt into tagged global machine-vault storage", async () => {
+    const { base, dir } = await boot({ workspaceMemoryScope: "global" });
+
+    const dataMap = await jsonFetch(base, "/workspace/ws_memory/backend/data-map");
+    expect(dataMap.response.status).toBe(200);
+    expect(dataMap.payload.stores.memory.scope).toBe("machine_global");
+    expect(dataMap.payload.stores.memory.paths[0]).toBe(join(dir, "memory"));
+    expect(dataMap.payload.stores.memory.details.mode).toBe("tagged_global_vault");
+    expect(dataMap.payload.stores.memory.details.isolation).toBe("tagged_records_in_machine_vault");
+
+    const captured = await jsonFetch(base, "/workspace/ws_memory/memory/capture", {
+      method: "POST",
+      body: JSON.stringify({
+        record: record({
+          id: "mem_workspace_global_vault",
+          title: "Tagged global TAO wallet",
+          tags: ["bittensor"],
+        }),
+      }),
+    });
+    expect(captured.response.status).toBe(201);
+    expect(captured.payload.record.tags).toContain("workspace:ws_memory");
+
+    const globalListed = await jsonFetch(base, "/api/memory/entities?tags=workspace:ws_memory&limit=10");
+    expect(globalListed.response.status).toBe(200);
+    expect(globalListed.payload.records.map((item: { id: string }) => item.id)).toContain("mem_workspace_global_vault");
   });
 
   test("workspace memory suggestions resolve into workspace-scoped records", async () => {

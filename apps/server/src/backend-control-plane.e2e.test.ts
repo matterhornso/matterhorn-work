@@ -653,7 +653,7 @@ describe("backend control plane routes", () => {
   });
 
   test("workspace control plane reports workspace-local memory mode through capabilities", async () => {
-    const { base, dir } = await boot({ workspaceMemoryScope: "workspace" });
+    const { base, dir } = await boot();
     const workspaceMemoryRoot = join(dir, ".matterhorn-work", "memory");
 
     const result = await jsonFetch(base, "/workspace/ws_backend/backend/control-plane");
@@ -671,6 +671,19 @@ describe("backend control plane routes", () => {
     });
     expect(result.payload.capabilities.storage.stores.memory.scope).toBe("workspace");
     expect(result.payload.capabilities.storage.stores.memory.paths[0]).toBe(workspaceMemoryRoot);
+  });
+
+  test("workspace memory can opt into the tagged global machine vault", async () => {
+    const { base, dir } = await boot({ workspaceMemoryScope: "global" });
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/control-plane");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.dataMap.stores.memory.scope).toBe("machine_global");
+    expect(result.payload.dataMap.stores.memory.details.mode).toBe("tagged_global_vault");
+    expect(result.payload.dataMap.stores.memory.details.isolation).toBe("tagged_records_in_machine_vault");
+    expect(result.payload.capabilities.memory.scope).toBe("machine_global");
+    expect(result.payload.capabilities.memory.rootPath).toBe(join(dir, "memory"));
+    expect(result.payload.capabilities.storage.stores.memory.paths[0]).toBe(join(dir, "memory"));
   });
 
   test("GET /workspace/:id/backend/support-report returns a redacted diagnostic artifact", async () => {
@@ -1199,11 +1212,12 @@ describe("backend control plane routes", () => {
     expect(result.payload.workspace.id).toBe("ws_backend");
     expect(result.payload.stores.notes.scope).toBe("workspace");
     expect(result.payload.stores.notes.paths).toContain(join(dir, "notes"));
-    expect(result.payload.stores.memory.scope).toBe("machine_global");
-    expect(result.payload.stores.memory.paths[0]).toBe(join(dir, "memory"));
+    expect(result.payload.stores.memory.scope).toBe("workspace");
+    expect(result.payload.stores.memory.paths[0]).toBe(join(dir, ".matterhorn-work", "memory"));
     expect(result.payload.stores.memory.details.workspaceNamespaceTag).toBe("workspace:ws_backend");
     expect(result.payload.stores.memory.details.workspaceRoutes).toContain("/workspace/ws_backend/memory/capture");
-    expect(result.payload.stores.memory.details.isolation).toBe("tagged_records_in_machine_vault");
+    expect(result.payload.stores.memory.details.isolation).toBe("workspace_local_vault");
+    expect(result.payload.stores.memory.details.globalFallbackPath).toBe(join(dir, "memory"));
     expect(result.payload.stores.chat.scope).toBe("opencode_runtime");
     expect(result.payload.stores.chat.details).toMatchObject({
       fullTranscriptExport: false,
