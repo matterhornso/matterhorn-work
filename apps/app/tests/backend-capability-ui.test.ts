@@ -15,6 +15,7 @@ import {
   capabilityStatusLabel,
   capabilityStatusTone,
   getBackendCapabilitiesResult,
+  walletFamilySigningCopy,
 } from "../src/react-app/domains/settings/backend-capabilities";
 import { ProfileCapabilityStatus } from "../src/react-app/domains/profile/profile-capability-status";
 import { getSettingsTabStatus } from "../src/react-app/domains/settings/shell/settings-page";
@@ -48,6 +49,19 @@ describe("Backend capability status helpers", () => {
     expect(capabilityStatusTone("unsupported")).toBe("neutral");
     expect(capabilityStatusTone("error")).toBe("error");
     expect(capabilityStatusTone("unavailable")).toBe("neutral");
+  });
+
+  test("does not describe Sui as unimplemented when direct connect is unsupported in a runtime", () => {
+    const copy = walletFamilySigningCopy({
+      ...backendCapabilitiesWorkingFixture.wallets.families.sui,
+      status: "unsupported",
+      directConnect: false,
+    });
+
+    expect(copy.label).toBe("Not supported here");
+    expect(copy.hint).toContain("Sui direct wallet connect is not available in this runtime.");
+    expect(copy.hint).toContain("Backend previews, handoffs, and receipt evidence remain available");
+    expect(copy.hint).not.toContain("not implemented");
   });
 });
 
