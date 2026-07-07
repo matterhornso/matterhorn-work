@@ -297,6 +297,95 @@ describe("Generated media routes", () => {
     expect(history.payload.items[0].image.promptRedacted).toBe(true);
   });
 
+  test("GET NFT draft list detail and history redact stale secret-shaped metadata", async () => {
+    const { base, dir } = await boot();
+    const secret = "sk-proj-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const imageDir = join(dir, ".matterhorn-work", "outputs", "images");
+    const draftDir = join(dir, ".matterhorn-work", "outputs", "nft-drafts");
+    mkdirSync(imageDir, { recursive: true });
+    mkdirSync(draftDir, { recursive: true });
+    writeFileSync(join(imageDir, "img_legacy_draft_secret.metadata.json"), JSON.stringify({
+      id: "img_legacy_draft_secret",
+      workspaceId: WORKSPACE_ID,
+      outputId: "out_legacy_draft_secret",
+      provider: "mock",
+      model: "mock-image-1",
+      prompt: "a safe image prompt",
+      size: "1024x1024",
+      quality: "auto",
+      format: "png",
+      fileName: "img_legacy_draft_secret.png",
+      relativePath: ".matterhorn-work/outputs/images/img_legacy_draft_secret.png",
+      contentType: "image/png",
+      byteLength: 100,
+      sha256: "b".repeat(64),
+      createdAt: "2026-07-07T00:00:00.000Z",
+      status: "generated",
+      safety: { secretsRejected: false },
+    }, null, 2));
+    writeFileSync(join(draftDir, "nft_legacy_secret.json"), JSON.stringify({
+      id: "nft_legacy_secret",
+      workspaceId: WORKSPACE_ID,
+      imageId: "img_legacy_draft_secret",
+      status: "draft",
+      title: `contains ${secret}`,
+      description: "contains seed phrase material",
+      creatorAddress: secret,
+      network: "sui-testnet",
+      metadata: {
+        name: `name ${secret}`,
+        description: "metadata includes seed phrase material",
+        imageUrl: `https://example.test/${secret}`,
+        attributes: [
+          { trait_type: "private key", value: secret },
+          { trait_type: "safe_number", value: 7 },
+        ],
+        license: `license ${secret}`,
+        usageNote: "my seed phrase is abandon ability able",
+      },
+      storage: {
+        provider: "local",
+        status: "failed",
+        error: `upload failed with ${secret}`,
+      },
+      mint: {
+        status: "failed",
+        error: "mint saw seed phrase material",
+      },
+      listing: {
+        status: "failed",
+        error: `listing saw ${secret}`,
+      },
+      privateKey: secret,
+      createdAt: "2026-07-07T00:00:00.000Z",
+      updatedAt: "2026-07-07T00:01:00.000Z",
+    }, null, 2));
+
+    const list = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts`);
+    expect(list.response.status).toBe(200);
+    expect(JSON.stringify(list.payload)).not.toContain("sk-proj-");
+    expect(JSON.stringify(list.payload)).not.toContain("seed phrase");
+    expect(JSON.stringify(list.payload)).not.toContain("privateKey");
+    expect(list.payload.drafts[0].title).toBe("[redacted: secret-shaped input detected]");
+    expect(list.payload.drafts[0].metadata.attributes[0].value).toBe("[redacted: secret-shaped input detected]");
+    expect(list.payload.drafts[0].storage.error).toBe("[redacted: secret-shaped input detected]");
+    expect(list.payload.drafts[0].metadata.attributes[1].value).toBe(7);
+
+    const detail = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/nft_legacy_secret`);
+    expect(detail.response.status).toBe(200);
+    expect(JSON.stringify(detail.payload)).not.toContain("sk-proj-");
+    expect(JSON.stringify(detail.payload)).not.toContain("seed phrase");
+    expect(detail.payload.draft.metadata.usageNote).toBe("[redacted: secret-shaped input detected]");
+
+    const history = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/generated-media/history`);
+    expect(history.response.status).toBe(200);
+    expect(JSON.stringify(history.payload)).not.toContain("sk-proj-");
+    expect(JSON.stringify(history.payload)).not.toContain("seed phrase");
+    expect(history.payload.counts.drafts).toBe(1);
+    expect(history.payload.items[0].latestDraft.title).toBe("[redacted: secret-shaped input detected]");
+    expect(history.payload.items[0].drafts[0].metadata.name).toBe("[redacted: secret-shaped input detected]");
+  });
+
 describe("Generated media Sui NFT setup previews", () => {
   async function createDraft(base: string) {
     const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {

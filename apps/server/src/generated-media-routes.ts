@@ -11,16 +11,21 @@ import type {
   MatterhornImageNftDraftListResponse,
   MatterhornImageNftDraftResponse,
   MatterhornImageResponse,
+  MatterhornNftAttribute,
   MatterhornNftKioskListingTransactionPlan,
+  MatterhornNftListingStatus,
   MatterhornNftListingPreviewInput,
   MatterhornNftListingPreviewResponse,
+  MatterhornNftDraftStatus,
   MatterhornNftMintTransactionPlan,
+  MatterhornNftMintStatus,
   MatterhornNftMintPreviewResponse,
   MatterhornNftPreviewErrorDetails,
   MatterhornNftPreviewStep,
   MatterhornNftSetupRequirement,
   MatterhornNftReceiptRequest,
   MatterhornNftReceiptResponse,
+  MatterhornNftStorageStatus,
 } from "@matterhorn-work/types/generated-media";
 import type { ServerConfig, TokenScope, WorkspaceInfo } from "./types.js";
 import { ApiError } from "./errors.js";
@@ -77,9 +82,10 @@ export function addGeneratedMediaRoutes(
     const draftStore = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const [storedImages, drafts] = await Promise.all([imageStore.list(), draftStore.list()]);
     const images = storedImages.map(redactGeneratedImageForResponse);
+    const responseDrafts = drafts.map(redactNftDraftForResponse);
     const draftsByImage = new Map<string, MatterhornImageNftDraft[]>();
 
-    for (const draft of drafts) {
+    for (const draft of responseDrafts) {
       const current = draftsByImage.get(draft.imageId) ?? [];
       current.push(draft);
       draftsByImage.set(draft.imageId, current);
@@ -109,9 +115,9 @@ export function addGeneratedMediaRoutes(
       items,
       counts: {
         images: images.length,
-        drafts: drafts.length,
-        minted: drafts.filter((draft) => draft.mint.status === "confirmed").length,
-        listed: drafts.filter((draft) => draft.listing.status === "listed").length,
+        drafts: responseDrafts.length,
+        minted: responseDrafts.filter((draft) => draft.mint.status === "confirmed").length,
+        listed: responseDrafts.filter((draft) => draft.listing.status === "listed").length,
       },
     };
     return jsonResponse(response);
@@ -179,7 +185,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const image = await store.get(ctx.params.imageId);
     if (!image) throw new ApiError(404, "image_not_found", "Generated image not found.");
-    const response: MatterhornImageResponse = { success: true, image };
+    const response: MatterhornImageResponse = { success: true, image: redactGeneratedImageForResponse(image) };
     return jsonResponse(response);
   });
 
@@ -227,14 +233,14 @@ export function addGeneratedMediaRoutes(
       timestamp: Date.now(),
     });
 
-    const response: MatterhornImageNftDraftResponse = { success: true, draft };
+    const response: MatterhornImageNftDraftResponse = { success: true, draft: redactNftDraftForResponse(draft) };
     return jsonResponse(response);
   });
 
   addRoute("GET", "/workspace/:id/nft-drafts", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
-    const drafts = await store.list();
+    const drafts = (await store.list()).map(redactNftDraftForResponse);
     const response: MatterhornImageNftDraftListResponse = { success: true, drafts };
     return jsonResponse(response);
   });
@@ -244,7 +250,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
-    const response: MatterhornImageNftDraftResponse = { success: true, draft };
+    const response: MatterhornImageNftDraftResponse = { success: true, draft: redactNftDraftForResponse(draft) };
     return jsonResponse(response);
   });
 
@@ -258,7 +264,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.update(ctx.params.draftId, input);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
-    const response: MatterhornImageNftDraftResponse = { success: true, draft };
+    const response: MatterhornImageNftDraftResponse = { success: true, draft: redactNftDraftForResponse(draft) };
     return jsonResponse(response);
   });
 
@@ -290,7 +296,7 @@ export function addGeneratedMediaRoutes(
     }
 
     const updated = await store.updateStorageStatus(draft.id, "ready_to_upload", { provider: "walrus" });
-    const response: MatterhornImageNftDraftResponse = { success: true, draft: updated! };
+    const response: MatterhornImageNftDraftResponse = { success: true, draft: redactNftDraftForResponse(updated!) };
     return jsonResponse(response);
   });
 
@@ -375,7 +381,7 @@ export function addGeneratedMediaRoutes(
         artifactPath: image.relativePath,
       });
 
-      const response: MatterhornImageNftDraftResponse = { success: true, draft: updated! };
+      const response: MatterhornImageNftDraftResponse = { success: true, draft: redactNftDraftForResponse(updated!) };
       return jsonResponse(response);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Walrus upload failed.";
@@ -424,6 +430,7 @@ export function addGeneratedMediaRoutes(
     }
 
     const updated = await store.updateMintStatus(draft.id, "preview_ready", { packageId: nftEnv.suiNftPackageId });
+    const responseDraft = redactNftDraftForResponse(updated!);
     const steps: MatterhornNftPreviewStep[] = [
       {
         label: "Review metadata",
@@ -434,7 +441,7 @@ export function addGeneratedMediaRoutes(
         description: "Matterhorn prepares a transaction plan only; the connected Sui wallet builds, signs, and submits.",
       },
     ];
-    const transactionPlan = buildMintTransactionPlan(updated!, nftEnv, storageUrl!, steps);
+    const transactionPlan = buildMintTransactionPlan(responseDraft, nftEnv, storageUrl!, steps);
     const response: MatterhornNftMintPreviewResponse = {
       success: true,
       custody: false,
@@ -448,12 +455,12 @@ export function addGeneratedMediaRoutes(
         moduleName: nftEnv.suiNftModuleName || "matterhorn_nft",
         functionName: "mint",
         storageUrl,
-        metadata: updated!.metadata,
+        metadata: responseDraft.metadata,
         steps,
       },
       transactionPlan,
       setupRequirements: [...setupRequirements, ...inputRequirements],
-      draft: updated!,
+      draft: responseDraft,
     };
     return jsonResponse(response);
   });
@@ -513,7 +520,7 @@ export function addGeneratedMediaRoutes(
       success: true,
       custody: false,
       containsSignatureMaterial: false,
-      draft: updated!,
+      draft: redactNftDraftForResponse(updated!),
     };
     return jsonResponse(response);
   });
@@ -593,7 +600,7 @@ export function addGeneratedMediaRoutes(
       },
       transactionPlan,
       setupRequirements: [...setupRequirements, ...inputRequirements],
-      draft: updated!,
+      draft: redactNftDraftForResponse(updated!),
     };
     return jsonResponse(response);
   });
@@ -652,7 +659,7 @@ export function addGeneratedMediaRoutes(
       success: true,
       custody: false,
       containsSignatureMaterial: false,
-      draft: updated!,
+      draft: redactNftDraftForResponse(updated!),
     };
     return jsonResponse(response);
   });
@@ -1122,6 +1129,39 @@ const SENSITIVE_TEXT_PATTERNS = [
 ];
 
 const IMAGE_GENERATION_SECRET_SCAN_SKIP_KEYS = new Set(["prompt"]);
+const GENERATED_MEDIA_RESPONSE_REDACTION = "[redacted: secret-shaped input detected]";
+const NFT_DRAFT_STATUSES: readonly MatterhornNftDraftStatus[] = [
+  "draft",
+  "storage_ready",
+  "mint_preview_ready",
+  "minted",
+  "listed",
+  "needs_setup",
+  "blocked",
+];
+const NFT_STORAGE_STATUSES: readonly MatterhornNftStorageStatus[] = [
+  "local_only",
+  "ready_to_upload",
+  "uploaded",
+  "needs_setup",
+  "failed",
+];
+const NFT_MINT_STATUSES: readonly MatterhornNftMintStatus[] = [
+  "not_ready",
+  "preview_ready",
+  "signed",
+  "submitted",
+  "confirmed",
+  "needs_setup",
+  "failed",
+];
+const NFT_LISTING_STATUSES: readonly MatterhornNftListingStatus[] = [
+  "not_ready",
+  "preview_ready",
+  "listed",
+  "needs_setup",
+  "failed",
+];
 
 function rejectSensitiveGeneratedMediaInput(
   value: unknown,
@@ -1166,14 +1206,103 @@ function redactGeneratedImageForResponse(image: MatterhornGeneratedImage): Matte
   if (!promptSecret && !revisedPromptSecret) return image;
   return {
     ...image,
-    prompt: promptSecret ? "[redacted: secret-shaped input detected]" : image.prompt,
-    promptRevised: revisedPromptSecret ? "[redacted: secret-shaped input detected]" : image.promptRevised,
+    prompt: promptSecret ? GENERATED_MEDIA_RESPONSE_REDACTION : image.prompt,
+    promptRevised: revisedPromptSecret ? GENERATED_MEDIA_RESPONSE_REDACTION : image.promptRevised,
     promptRedacted: true,
     safety: {
       ...image.safety,
       secretsRejected: true,
     },
   };
+}
+
+function redactNftDraftForResponse(draft: MatterhornImageNftDraft): MatterhornImageNftDraft {
+  const raw = recordValue(draft);
+  const metadata = recordValue(raw.metadata);
+  const storage = recordValue(raw.storage);
+  const mint = recordValue(raw.mint);
+  const listing = recordValue(raw.listing);
+  return {
+    id: redactResponseString(raw.id, ""),
+    workspaceId: redactResponseString(raw.workspaceId, ""),
+    imageId: redactResponseString(raw.imageId, ""),
+    status: enumValue(raw.status, NFT_DRAFT_STATUSES, "draft"),
+    title: redactResponseString(raw.title, ""),
+    description: redactResponseString(raw.description, ""),
+    creatorAddress: redactNullableResponseString(raw.creatorAddress),
+    network: raw.network === "sui-mainnet" ? "sui-mainnet" : "sui-testnet",
+    metadata: {
+      name: redactResponseString(metadata.name, ""),
+      description: redactResponseString(metadata.description, ""),
+      imageUrl: redactNullableResponseString(metadata.imageUrl),
+      attributes: Array.isArray(metadata.attributes)
+        ? metadata.attributes.map(redactNftAttributeForResponse)
+        : [],
+      license: redactNullableResponseString(metadata.license),
+      usageNote: redactNullableResponseString(metadata.usageNote),
+    },
+    storage: {
+      provider: storage.provider === "walrus" ? "walrus" : "local",
+      status: enumValue(storage.status, NFT_STORAGE_STATUSES, "local_only"),
+      blobId: redactNullableResponseString(storage.blobId),
+      objectId: redactNullableResponseString(storage.objectId),
+      transactionDigest: redactNullableResponseString(storage.transactionDigest),
+      endEpoch: typeof storage.endEpoch === "number" && Number.isFinite(storage.endEpoch)
+        ? storage.endEpoch
+        : null,
+      url: redactNullableResponseString(storage.url),
+      uploadedAt: redactNullableResponseString(storage.uploadedAt),
+      error: redactNullableResponseString(storage.error),
+    },
+    mint: {
+      status: enumValue(mint.status, NFT_MINT_STATUSES, "not_ready"),
+      transactionDigest: redactNullableResponseString(mint.transactionDigest),
+      objectId: redactNullableResponseString(mint.objectId),
+      packageId: redactNullableResponseString(mint.packageId),
+      error: redactNullableResponseString(mint.error),
+    },
+    listing: {
+      status: enumValue(listing.status, NFT_LISTING_STATUSES, "not_ready"),
+      kioskId: redactNullableResponseString(listing.kioskId),
+      kioskOwnerCapId: redactNullableResponseString(listing.kioskOwnerCapId),
+      transferPolicyId: redactNullableResponseString(listing.transferPolicyId),
+      itemType: redactNullableResponseString(listing.itemType),
+      priceMist: redactNullableResponseString(listing.priceMist),
+      error: redactNullableResponseString(listing.error),
+    },
+    createdAt: redactResponseString(raw.createdAt, ""),
+    updatedAt: redactResponseString(raw.updatedAt, ""),
+  };
+}
+
+function redactNftAttributeForResponse(attribute: unknown): MatterhornNftAttribute {
+  const raw = recordValue(attribute);
+  const value = raw.value;
+  return {
+    trait_type: redactResponseString(raw.trait_type, "attribute"),
+    value: typeof value === "number" || typeof value === "boolean"
+      ? value
+      : redactResponseString(value, ""),
+  };
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function enumValue<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return typeof value === "string" && (allowed as readonly string[]).includes(value) ? value as T : fallback;
+}
+
+function redactResponseString(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  return findSensitiveGeneratedMediaInput(value) ? GENERATED_MEDIA_RESPONSE_REDACTION : value;
+}
+
+function redactNullableResponseString(value: unknown): string | null {
+  return typeof value === "string" ? redactResponseString(value, "") : null;
 }
 
 function validateImageGenerationInput(body: unknown): MatterhornImageGenerationInput {
