@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { CircleUser } from "lucide-react";
+import { CircleUser, Users } from "lucide-react";
 import type { MatterhornBackendCapabilitiesResponse } from "@matterhorn-work/types/backend-capabilities";
 import { capabilitySummary, capabilityStatusLabel } from "../settings/backend-capabilities/backend-capability-helpers";
 import { BackendCapabilityStatusBadge, BackendCapabilityStatusRow } from "../settings/backend-capabilities/backend-capability-status";
@@ -12,7 +12,10 @@ export interface ProfileCapabilityStatusProps {
 
 export function ProfileCapabilityStatus(props: ProfileCapabilityStatusProps) {
   const profileCapability = props.capabilities?.settings.find((s) => s.section === "profile");
+  const teamCapability = props.capabilities?.teams;
   const accountStatus = profileCapability?.status ?? "unavailable";
+  const localTeamStatus = teamCapability?.localTokenSharing.status ?? "unavailable";
+  const cloudTeamStatus = teamCapability?.cloudTeams.status ?? "unavailable";
 
   if (props.isLoading) {
     return (
@@ -52,7 +55,7 @@ export function ProfileCapabilityStatus(props: ProfileCapabilityStatusProps) {
 
       <div className="flex flex-col divide-y divide-dls-border/45 pl-12">
         <BackendCapabilityStatusRow
-          label="Account"
+          label="Cloud account"
           status={accountStatus}
           hint="Cloud account sync status from the backend. Local use needs no account."
           value={
@@ -63,10 +66,41 @@ export function ProfileCapabilityStatus(props: ProfileCapabilityStatusProps) {
           }
         />
         <BackendCapabilityStatusRow
+          label="Local teammate access"
+          status={localTeamStatus}
+          hint="Local workspace sharing uses scoped tokens and the Matterhorn Work engine. It is not cloud collaboration."
+          value={
+            <BackendCapabilityStatusBadge
+              status={localTeamStatus}
+              label={capabilityStatusLabel(localTeamStatus)}
+            />
+          }
+        />
+        <BackendCapabilityStatusRow
+          label="Cloud teammates"
+          status={cloudTeamStatus}
+          hint="Shared cloud workspaces require Matterhorn Cloud team setup."
+          value={
+            <BackendCapabilityStatusBadge
+              status={cloudTeamStatus}
+              label={capabilityStatusLabel(cloudTeamStatus)}
+            />
+          }
+        />
+        <BackendCapabilityStatusRow
           label="Backend version"
           status={profileCapability?.status ?? "unavailable"}
           value={props.capabilities.server.version}
         />
+      </div>
+
+      <div className="flex items-start gap-2 pl-12 text-xs leading-5 text-dls-secondary">
+        <Users className="mt-0.5 size-3.5 shrink-0 text-dls-muted" />
+        <p>
+          {teamCapability
+            ? capabilitySummary(teamCapability)
+            : "Team sharing status is unavailable until the backend control plane responds."}
+        </p>
       </div>
     </div>
   );

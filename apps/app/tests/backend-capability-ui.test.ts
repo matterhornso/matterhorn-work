@@ -171,6 +171,10 @@ describe("Profile capability status renders all states", () => {
   test("working profile", () => {
     const html = renderProfile(backendCapabilitiesWorkingFixture);
     expect(html).toContain("Profile");
+    expect(html).toContain("Cloud account");
+    expect(html).toContain("Local teammate access");
+    expect(html).toContain("Cloud teammates");
+    expect(html).toContain("Local token sharing works. Cloud teams are in preview.");
     expect(html).toContain("Backend version");
     expect(html).toContain(backendCapabilitiesWorkingFixture.server.version);
   });
