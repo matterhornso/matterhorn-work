@@ -121,6 +121,58 @@ describe("output descriptor", () => {
     expect(descriptor.updatedAt).toBe(1_700_000_000_000);
   });
 
+  test("adds public NFT receipt metadata to OpenTarget descriptors", () => {
+    const target: OpenTarget = {
+      id: "file:.matterhorn-work/outputs/nft-receipts/nft_1/mint-receipt.json",
+      kind: "file",
+      value: ".matterhorn-work/outputs/nft-receipts/nft_1/mint-receipt.json",
+      name: "mint-receipt.json",
+      preview: "json",
+      confidence: 98,
+      reason: "workflow output receipt",
+      exists: true,
+    };
+    const receipt: WorkflowOutputReceipt = {
+      id: "workflow-output:nft_evt:.matterhorn-work/outputs/nft-receipts/nft_1/mint-receipt.json",
+      kind: "nft",
+      outputPath: ".matterhorn-work/outputs/nft-receipts/nft_1/mint-receipt.json",
+      title: "NFT minted",
+      summary: "nft;nft_1",
+      desk: "nft",
+      sessionSlug: "nft_1",
+      taskId: "nft_mint_nft_1",
+      timestamp: "2026-07-08T10:00:00.000Z",
+      updatedAt: 1_720_000_000_000,
+      status: "published",
+      source: "task_events",
+      artifactCount: 1,
+      nftReceipt: {
+        kind: "mint",
+        network: "sui-testnet",
+        transactionDigest: "0xmintdigest",
+        objectId: "0xmintedobject",
+        packageId: "0xmintpackage",
+        custody: false,
+        containsSignatureMaterial: false,
+      },
+    };
+
+    expect(outputDescriptorFromOpenTarget(target, receipt)).toMatchObject({
+      originLabel: "NFT",
+      receiptKind: "nft",
+      receiptStatus: "published",
+      nftReceipt: {
+        kind: "mint",
+        network: "sui-testnet",
+        transactionDigest: "0xmintdigest",
+        objectId: "0xmintedobject",
+        packageId: "0xmintpackage",
+        custody: false,
+        containsSignatureMaterial: false,
+      },
+    });
+  });
+
   test("labels generated image receipts as generated image outputs", () => {
     const target: OpenTarget = {
       id: "file:.matterhorn-work/outputs/images/img_123.png",

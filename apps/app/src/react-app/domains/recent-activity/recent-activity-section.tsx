@@ -34,6 +34,10 @@ import {
 import { cn } from "@/lib/utils";
 import { ErrorState } from "../shell/error-state";
 import {
+  compactNftReceiptValue,
+  nftReceiptKindLabel,
+} from "../project-evidence/nft-receipt-metadata";
+import {
   normalizeEvidenceEvents,
   type RecentActivityItem,
   type RecentActivityKind,
@@ -268,6 +272,11 @@ function DetailLine(props: { label: string; value?: string }) {
   );
 }
 
+function receiptBooleanLabel(value: boolean | undefined) {
+  if (value === undefined) return undefined;
+  return value ? "Yes" : "No";
+}
+
 function ActivityDetailSheet(props: {
   item: RecentActivityItem | null;
   items: RecentActivityItem[];
@@ -283,6 +292,7 @@ function ActivityDetailSheet(props: {
   const statusLine = activityStatusLine(item, outputPaths.length);
   const isStartOnlyRun = isStartOnlyTaskEvent(item) && outputPaths.length === 0;
   const isFailedRun = item.kind === "task_failed";
+  const receipt = item.nftReceipt;
 
   return (
     <Sheet open={Boolean(item)} onOpenChange={onOpenChange}>
@@ -327,6 +337,26 @@ function ActivityDetailSheet(props: {
             <section className="space-y-1.5">
               <p className="text-xs font-medium text-dls-text">Detail</p>
               <p className="text-xs leading-5 text-dls-secondary">{item.detail}</p>
+            </section>
+          ) : null}
+
+          {receipt ? (
+            <section className="space-y-2">
+              <div className="flex items-center gap-2 text-xs font-medium text-dls-text">
+                <WalletCards className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                NFT receipt
+              </div>
+              <dl className="space-y-1.5">
+                <DetailLine label="Action" value={nftReceiptKindLabel(receipt.kind)} />
+                <DetailLine label="Network" value={receipt.network} />
+                <DetailLine label="Digest" value={compactNftReceiptValue(receipt.transactionDigest)} />
+                <DetailLine label="Object" value={compactNftReceiptValue(receipt.objectId)} />
+                <DetailLine label="Package" value={compactNftReceiptValue(receipt.packageId)} />
+                <DetailLine label="Kiosk" value={compactNftReceiptValue(receipt.kioskId)} />
+                <DetailLine label="Policy" value={compactNftReceiptValue(receipt.transferPolicyId)} />
+                <DetailLine label="Custody" value={receiptBooleanLabel(receipt.custody)} />
+                <DetailLine label="Signature" value={receipt.containsSignatureMaterial === false ? "Not stored" : undefined} />
+              </dl>
             </section>
           ) : null}
 

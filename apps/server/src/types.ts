@@ -265,6 +265,8 @@ export interface MatterhornTaskEvent {
   toolName?: string;
   /** Stage name (only for stage_started / waiting_for_user events) */
   stageName?: string;
+  /** Public, display-safe event metadata. Never store signatures, keys, or raw payloads here. */
+  metadata?: Record<string, string | number | boolean | null>;
 }
 
 export interface MatterhornTaskRun {

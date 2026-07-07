@@ -26,6 +26,10 @@ export type MatterhornProjectEvidenceSource =
   | "task_events"
   | "task_runs";
 
+export type MatterhornProjectEvidenceMetadataValue = string | number | boolean | null;
+
+export type MatterhornProjectEvidenceMetadata = Record<string, MatterhornProjectEvidenceMetadataValue>;
+
 export interface MatterhornProjectEvidenceEvent {
   id: string;
   workspaceId: string;
@@ -44,6 +48,7 @@ export interface MatterhornProjectEvidenceEvent {
   memorySuggestionId?: string;
   memorySuggestionStatus?: MatterhornNote["memorySuggestionStatus"];
   href?: string;
+  metadata?: MatterhornProjectEvidenceMetadata;
 }
 
 export interface MatterhornProjectEvidenceListOptions {

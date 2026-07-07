@@ -95,6 +95,7 @@ function taskEventToEvidence(event: MatterhornTaskEvent): MatterhornProjectEvide
     taskId: event.taskId,
     outputPath: event.artifactPath,
     artifactPaths: event.artifactPath ? [event.artifactPath] : undefined,
+    metadata: event.metadata,
   };
 }
 

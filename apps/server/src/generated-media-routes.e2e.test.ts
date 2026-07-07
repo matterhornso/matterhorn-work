@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -589,8 +589,10 @@ describe("Generated media Sui NFT setup previews", () => {
   });
 
   test("mint and listing receipts appear in project evidence and data ledger", async () => {
-    const { base } = await boot();
+    const { base, dir } = await boot();
     const draft = await createDraft(base);
+    const mintReceiptPath = `.matterhorn-work/outputs/nft-receipts/${draft.id}/mint-receipt.json`;
+    const listingReceiptPath = `.matterhorn-work/outputs/nft-receipts/${draft.id}/listing-receipt.json`;
 
     const mintReceipt = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
       method: "POST",
@@ -615,6 +617,34 @@ describe("Generated media Sui NFT setup previews", () => {
     });
     expect(listingReceipt.response.status).toBe(200);
 
+    const mintReceiptFile = JSON.parse(readFileSync(join(dir, mintReceiptPath), "utf8"));
+    expect(mintReceiptFile).toMatchObject({
+      version: "matterhorn.nft-receipt.v1",
+      kind: "mint",
+      draftId: draft.id,
+      imageId: draft.imageId,
+      network: "sui-testnet",
+      transactionDigest: "0xmintdigest",
+      objectId: "0xmintedobject",
+      packageId: "0xmintpackage",
+      custody: false,
+      containsSignatureMaterial: false,
+    });
+    const listingReceiptFile = JSON.parse(readFileSync(join(dir, listingReceiptPath), "utf8"));
+    expect(listingReceiptFile).toMatchObject({
+      version: "matterhorn.nft-receipt.v1",
+      kind: "listing",
+      draftId: draft.id,
+      network: "sui-testnet",
+      transactionDigest: "0xlistingdigest",
+      objectId: "0xmintedobject",
+      kioskId: "0xuserkiosk",
+      transferPolicyId: "0xtransferpolicy",
+      custody: false,
+      containsSignatureMaterial: false,
+    });
+    expect(JSON.stringify([mintReceiptFile, listingReceiptFile])).not.toContain("signature");
+
     const evidence = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/evidence?source=task_events&limit=20`);
     expect(evidence.response.status).toBe(200);
     expect(evidence.payload.summary.nfts).toBe(2);
@@ -624,6 +654,16 @@ describe("Generated media Sui NFT setup previews", () => {
       desk: "nft",
       sessionSlug: draft.id,
       taskId: `nft_mint_${draft.id}`,
+      outputPath: mintReceiptPath,
+      artifactPaths: [mintReceiptPath],
+      metadata: expect.objectContaining({
+        nftReceiptKind: "mint",
+        nftNetwork: "sui-testnet",
+        nftTransactionDigest: "0xmintdigest",
+        nftObjectId: "0xmintedobject",
+        nftPackageId: "0xmintpackage",
+        containsSignatureMaterial: false,
+      }),
     }));
     expect(evidence.payload.items).toContainEqual(expect.objectContaining({
       type: "nft.listed",
@@ -631,6 +671,17 @@ describe("Generated media Sui NFT setup previews", () => {
       desk: "nft",
       sessionSlug: draft.id,
       taskId: `nft_listing_${draft.id}`,
+      outputPath: listingReceiptPath,
+      artifactPaths: [listingReceiptPath],
+      metadata: expect.objectContaining({
+        nftReceiptKind: "listing",
+        nftNetwork: "sui-testnet",
+        nftTransactionDigest: "0xlistingdigest",
+        nftObjectId: "0xmintedobject",
+        nftKioskId: "0xuserkiosk",
+        nftTransferPolicyId: "0xtransferpolicy",
+        containsSignatureMaterial: false,
+      }),
     }));
 
     const nftLedger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=nft&limit=20`);
@@ -640,6 +691,26 @@ describe("Generated media Sui NFT setup previews", () => {
       "nft.listed",
       "nft.minted",
     ]);
+    expect(nftLedger.payload.items).toContainEqual(expect.objectContaining({
+      eventType: "nft.minted",
+      outputPath: mintReceiptPath,
+      metadata: expect.objectContaining({
+        nftTransactionDigest: "0xmintdigest",
+        nftObjectId: "0xmintedobject",
+        containsSignatureMaterial: false,
+      }),
+    }));
+    expect(nftLedger.payload.items).toContainEqual(expect.objectContaining({
+      eventType: "nft.listed",
+      outputPath: listingReceiptPath,
+      metadata: expect.objectContaining({
+        nftTransactionDigest: "0xlistingdigest",
+        nftObjectId: "0xmintedobject",
+        nftKioskId: "0xuserkiosk",
+        nftTransferPolicyId: "0xtransferpolicy",
+        containsSignatureMaterial: false,
+      }),
+    }));
     expect(nftLedger.payload.items.every((item: { source: string; kind: string; containsSecrets: string; trainingUse: string }) =>
       item.source === "project_evidence" &&
       item.kind === "nft" &&

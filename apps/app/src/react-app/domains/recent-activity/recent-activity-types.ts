@@ -7,6 +7,10 @@
  */
 
 import type { MatterhornProjectEvidenceEvent } from "@matterhorn-work/types/project-evidence";
+import {
+  nftReceiptMetadataFromEvidence,
+  type NftReceiptMetadata,
+} from "../project-evidence/nft-receipt-metadata";
 
 /** Compact UI activity kind — derived from server event types but surfaced as
  *  first-class union so consumers don't need to import project-evidence types. */
@@ -46,6 +50,7 @@ export interface RecentActivityItem {
   outputPath?: string;
   artifactPaths?: string[];
   memorySuggestionStatus?: MatterhornProjectEvidenceEvent["memorySuggestionStatus"];
+  nftReceipt?: NftReceiptMetadata;
   /** Clickable route for this item (e.g. /workspace/ws1/notes). */
   href?: string;
 }
@@ -108,6 +113,7 @@ export function normalizeEvidenceEvents(events: MatterhornProjectEvidenceEvent[]
       outputPath: event.outputPath,
       artifactPaths: event.artifactPaths,
       memorySuggestionStatus: event.memorySuggestionStatus,
+      nftReceipt: nftReceiptMetadataFromEvidence(event.metadata),
       href: event.href,
     }))
     .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));

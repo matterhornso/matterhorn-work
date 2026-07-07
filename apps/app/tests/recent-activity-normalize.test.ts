@@ -154,6 +154,15 @@ describe("normalizeEvidenceEvents", () => {
         artifactPaths: ["outputs/hyperliquid/trade-session/brief.md"],
         memorySuggestionStatus: "pending",
         href: "/workspace/ws_test/notes",
+        metadata: {
+          nftReceiptKind: "mint",
+          nftNetwork: "sui-testnet",
+          nftTransactionDigest: "0xmintdigest",
+          nftObjectId: "0xmintedobject",
+          nftPackageId: "0xmintpackage",
+          custody: false,
+          containsSignatureMaterial: false,
+        },
       }),
     ]);
     expect(items[0].source).toBe("task_events");
@@ -165,6 +174,15 @@ describe("normalizeEvidenceEvents", () => {
     expect(items[0].outputPath).toBe("outputs/hyperliquid/trade-session/brief.md");
     expect(items[0].artifactPaths).toEqual(["outputs/hyperliquid/trade-session/brief.md"]);
     expect(items[0].memorySuggestionStatus).toBe("pending");
+    expect(items[0].nftReceipt).toEqual({
+      kind: "mint",
+      network: "sui-testnet",
+      transactionDigest: "0xmintdigest",
+      objectId: "0xmintedobject",
+      packageId: "0xmintpackage",
+      custody: false,
+      containsSignatureMaterial: false,
+    });
     expect(items[0].href).toBe("/workspace/ws_test/notes");
   });
 

@@ -26,6 +26,7 @@ describe("Project Activity contract tests", () => {
       const source = readSource("app/lib/matterhorn-server.ts");
       expect(source).toContain('| "artifact_deleted"');
       expect(source).toContain("artifactPath?: string");
+      expect(source).toContain("metadata?: Record<string, string | number | boolean | null>");
     });
 
     test("EVENT_TYPE_MAP covers all five required activity kinds", () => {
@@ -93,6 +94,9 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("This may still be running or may have ended without a saved receipt.");
       expect(source).toContain("Failure detail");
       expect(source).toContain("onOpenOutputPath");
+      expect(source).toContain("NFT receipt");
+      expect(source).toContain("compactNftReceiptValue");
+      expect(source).toContain("Not stored");
     });
 
     test("RecentActivitySection supports a collapsed run-history summary", () => {

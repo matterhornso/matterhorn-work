@@ -4,6 +4,10 @@ import { Copy, ExternalLink, FileText, FolderOpen, NotebookPen, Trash2 } from "l
 import { Button } from "@/components/ui/button";
 import { cn, formatFileSize } from "@/lib/utils";
 import { formatRelativeTime } from "../../../../app/utils";
+import {
+  compactNftReceiptValue,
+  nftReceiptKindLabel,
+} from "../../project-evidence/nft-receipt-metadata";
 import { ArtifactIcon } from "./artifact-icon";
 import type { OutputDescriptor } from "./output-descriptor";
 
@@ -73,6 +77,16 @@ export function OutputList({
                 {output.receiptTitle ? (
                   <span className="block truncate text-[11px] text-muted-foreground" title={output.receiptSummary ?? output.receiptTitle}>
                     Receipt: {output.receiptTitle}
+                  </span>
+                ) : null}
+                {output.nftReceipt ? (
+                  <span
+                    className="block truncate text-[11px] text-muted-foreground"
+                    title={output.nftReceipt.transactionDigest ?? output.nftReceipt.objectId}
+                  >
+                    NFT: {nftReceiptKindLabel(output.nftReceipt.kind)}
+                    {output.nftReceipt.network ? ` · ${output.nftReceipt.network}` : ""}
+                    {output.nftReceipt.objectId ? ` · ${compactNftReceiptValue(output.nftReceipt.objectId)}` : ""}
                   </span>
                 ) : null}
                 <span className="mt-1 flex flex-wrap items-center gap-1.5">

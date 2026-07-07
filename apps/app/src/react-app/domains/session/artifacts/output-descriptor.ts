@@ -1,4 +1,5 @@
 import type { NoteAttachment, NoteOutputAttachment } from "../../notes/notes-types";
+import type { NftReceiptMetadata } from "../../project-evidence/nft-receipt-metadata";
 import { getArtifactNoteContext } from "./artifact-note-context";
 import type { OpenTarget, OpenTargetPreview } from "./open-target";
 import type { WorkflowOutputReceipt, WorkflowOutputReceiptKind, WorkflowOutputReceiptStatus } from "./output-receipts";
@@ -42,6 +43,8 @@ export type OutputDescriptor = {
   taskId?: string;
   /** Number of outputs reported by the same workflow receipt event. */
   receiptArtifactCount?: number;
+  /** Public NFT receipt metadata when this output records a mint or listing. */
+  nftReceipt?: NftReceiptMetadata;
 };
 
 function legacyOriginLabel(kind: "opencode" | "openwork" | "outbox" | null | undefined): string {
@@ -93,6 +96,7 @@ export function outputDescriptorFromOpenTarget(target: OpenTarget, receipt?: Wor
     receiptSummary: receipt?.summary,
     taskId: receipt?.taskId,
     receiptArtifactCount: receipt?.artifactCount,
+    nftReceipt: receipt?.nftReceipt,
   };
 }
 
