@@ -41,6 +41,7 @@ export type AiSettingsViewProps = {
   defaultModelRef: string;
   defaultModelProviderId?: string | null;
   defaultModelId?: string | null;
+  hasLocalModelOverride?: boolean;
   connectedModelCount: number;
   providerStatusLabel: string;
   providerStatusStyle: string;
@@ -51,6 +52,7 @@ export type AiSettingsViewProps = {
   providerDisconnectStatus: string | null;
   providerDisconnectError: string | null;
   onOpenModelPicker: () => void | Promise<void>;
+  onUseWorkspaceDefault?: () => void | Promise<void>;
   onOpenProviderAuth: () => void | Promise<void>;
   onDisconnectProvider: (providerId: string) => void | Promise<void>;
   canDisconnectProvider: (source?: ConnectedProvider["source"]) => boolean;
@@ -78,6 +80,7 @@ function providerStatusTone(label: string): "ready" | "warning" | "neutral" {
 export function AiSettingsView(props: AiSettingsViewProps) {
   const runtimeWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
   const [modelDetailsOpen, setModelDetailsOpen] = useState(false);
+  const [localModelStatus, setLocalModelStatus] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const workspaceBackendModelsQuery = useQuery({
     queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId],
@@ -144,6 +147,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
   const modelReadiness = buildModelReadinessSummary({
     currentModelLabel: props.defaultModelLabel,
     currentModelRef: props.defaultModelRef,
+    hasLocalModelOverride: props.hasLocalModelOverride,
     backendModels,
     workspaceSelection,
     effectiveWorkspaceModel,
@@ -152,8 +156,10 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     connectedModelCount,
   });
   const canSaveWorkspaceDefault = Boolean(props.defaultModelProviderId && props.defaultModelId && props.matterhornServerClient && runtimeWorkspaceId);
+  const canUseWorkspaceDefault = Boolean(props.hasLocalModelOverride && workspaceSelection && props.onUseWorkspaceDefault);
   const modelSelectionStatus =
-    saveWorkspaceDefaultMutation.error instanceof Error
+    localModelStatus ??
+    (saveWorkspaceDefaultMutation.error instanceof Error
       ? saveWorkspaceDefaultMutation.error.message
       : clearWorkspaceDefaultMutation.error instanceof Error
         ? clearWorkspaceDefaultMutation.error.message
@@ -161,7 +167,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
           ? "Workspace default saved."
           : clearWorkspaceDefaultMutation.isSuccess
             ? "Workspace default reset."
-            : null;
+            : null);
 
   return (
     <LayoutStack>
@@ -188,9 +194,24 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               <Button variant="outline" onClick={() => void props.onOpenModelPicker()} disabled={props.busy}>
                 Change model
               </Button>
+              {canUseWorkspaceDefault ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setLocalModelStatus("Using the workspace default in this app.");
+                    void props.onUseWorkspaceDefault?.();
+                  }}
+                  disabled={props.busy}
+                >
+                  Use workspace default
+                </Button>
+              ) : null}
               <Button
                 variant="outline"
-                onClick={() => saveWorkspaceDefaultMutation.mutate()}
+                onClick={() => {
+                  setLocalModelStatus(null);
+                  saveWorkspaceDefaultMutation.mutate();
+                }}
                 disabled={props.busy || !canSaveWorkspaceDefault || saveWorkspaceDefaultMutation.isPending}
               >
                 Save workspace default
@@ -198,7 +219,10 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               {workspaceSelection ? (
                 <Button
                   variant="ghost"
-                  onClick={() => clearWorkspaceDefaultMutation.mutate()}
+                  onClick={() => {
+                    setLocalModelStatus(null);
+                    clearWorkspaceDefaultMutation.mutate();
+                  }}
                   disabled={props.busy || clearWorkspaceDefaultMutation.isPending}
                 >
                   Reset

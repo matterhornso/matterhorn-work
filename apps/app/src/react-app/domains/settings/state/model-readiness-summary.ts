@@ -30,6 +30,7 @@ export type ModelReadinessSummary = {
 type BuildModelReadinessSummaryInput = {
   currentModelLabel: string;
   currentModelRef: string;
+  hasLocalModelOverride?: boolean;
   backendModels?: MatterhornBackendModelsResponse | null;
   workspaceSelection?: MatterhornBackendModelsResponse["workspaceSelection"];
   effectiveWorkspaceModel?: MatterhornBackendModelRef & { source?: string } | null;
@@ -88,7 +89,18 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
   const status = statusForCatalog(catalog, input.catalogQueryFailed);
   const providerCount = catalog?.serverFetched ? catalog.connectedProviderCount : input.connectedProviderCount;
   const modelCount = catalog?.serverFetched ? catalog.modelCount : input.connectedModelCount;
-  const currentChoiceValue = input.currentModelRef.trim() || "Default";
+  const currentModelRef = input.currentModelRef.trim();
+  const hasLocalModelOverride =
+    input.hasLocalModelOverride ??
+    Boolean(currentModelRef && currentModelRef.toLowerCase() !== "default");
+  const currentChoiceValue = hasLocalModelOverride
+    ? currentModelRef || "Local picker"
+    : workspaceSelection
+      ? "Workspace default"
+      : "Engine fallback";
+  const currentChoiceLabel = hasLocalModelOverride
+    ? input.currentModelLabel.trim() || currentChoiceValue
+    : currentChoiceValue;
   const workspaceDefaultValue = workspaceSelection ? modelRefLabel(workspaceSelection) : "Not saved";
   const effectiveModelValue = modelRefLabel(effectiveModel);
   const providerListValue = providerListLabel(routing, catalog);
@@ -100,8 +112,12 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
     statusTone: status.tone,
     currentChoice: {
       label: "Current picker choice",
-      value: input.currentModelLabel.trim() || currentChoiceValue,
-      detail: `${currentChoiceValue} is sent with prompts from this app session when selected.`,
+      value: currentChoiceLabel,
+      detail: hasLocalModelOverride
+        ? `${currentChoiceValue} is sent with prompts from this app session.`
+        : workspaceSelection
+          ? "This app session follows the saved workspace default."
+          : "This app session falls back to the engine default until you choose or save a model.",
     },
     workspaceDefault: {
       label: "Workspace default",

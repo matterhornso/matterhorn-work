@@ -73,6 +73,7 @@ describe("model readiness summary", () => {
     const summary = buildModelReadinessSummary({
       currentModelLabel: "OpenAI - GPT 4.1",
       currentModelRef: "openai/gpt-4.1",
+      hasLocalModelOverride: true,
       backendModels: {
         ...baseBackendModels,
         defaultModel: {
@@ -122,6 +123,46 @@ describe("model readiness summary", () => {
     expect(summary.providerCatalog.value).toBe("1 providers · 2 models");
     expect(summary.selectionPolicy.value).toBe("Workspace");
     expect(summary.trainingPolicy).toContain("No model training by default");
+  });
+
+  test("shows workspace default as the current choice after local override is cleared", () => {
+    const summary = buildModelReadinessSummary({
+      currentModelLabel: "Default",
+      currentModelRef: "Default",
+      hasLocalModelOverride: false,
+      backendModels: {
+        ...baseBackendModels,
+        defaultModel: {
+          providerId: "openai",
+          modelId: "gpt-4.1",
+          source: "server_workspace_preference",
+        },
+        workspaceSelection: {
+          providerId: "openai",
+          modelId: "gpt-4.1",
+          source: "server_workspace_preference",
+          savedAt: "2026-07-06T01:00:00.000Z",
+        },
+      },
+      workspaceSelection: {
+        providerId: "openai",
+        modelId: "gpt-4.1",
+        source: "server_workspace_preference",
+        savedAt: "2026-07-06T01:00:00.000Z",
+      },
+      effectiveWorkspaceModel: {
+        providerId: "openai",
+        modelId: "gpt-4.1",
+        source: "server_workspace_preference",
+      },
+      connectedProviderCount: 1,
+      connectedModelCount: 2,
+    });
+
+    expect(summary.currentChoice.value).toBe("Workspace default");
+    expect(summary.currentChoice.detail).toContain("follows the saved workspace default");
+    expect(summary.workspaceDefault.value).toBe("openai/gpt-4.1");
+    expect(summary.effectiveModel.value).toBe("openai/gpt-4.1");
   });
 
   test("explains local preference fallback when no workspace default is saved", () => {
