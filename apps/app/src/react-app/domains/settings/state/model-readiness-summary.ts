@@ -46,9 +46,9 @@ function modelRefLabel(model: MatterhornBackendModelRef | null | undefined): str
 
 function answerPathLabel(routing: MatterhornBackendModelRouting | undefined): string {
   if (routing?.answerPath.transport === "opencode_session_prompt_async") {
-    return "OpenCode session prompts";
+    return "Local session prompts";
   }
-  return routing?.answerPath.label ?? "OpenCode session prompts";
+  return routing?.answerPath.label ?? "Local session prompts";
 }
 
 function providerListLabel(
@@ -57,7 +57,7 @@ function providerListLabel(
 ): string {
   if (routing?.registry.source === "matterhorn_backend_registry") return "Matterhorn model registry";
   if (routing?.registry.source === "opencode_provider_list" || catalog?.source === "opencode_provider_list") {
-    return "OpenCode provider list";
+    return "Local provider list";
   }
   return routing?.registry.label ?? "Provider source unavailable";
 }
@@ -65,7 +65,9 @@ function providerListLabel(
 function providerCatalogDetail(catalog: MatterhornBackendModelCatalogSnapshot | undefined): string {
   if (!catalog) return "Using the app provider list until the engine reports a workspace catalog.";
   if (catalog.serverFetched) return "Fetched from the local workspace engine.";
-  if (catalog.errorCode === "opencode_unconfigured") return "The local engine is reachable, but OpenCode is not configured yet.";
+  if (catalog.errorCode === "opencode_unconfigured") {
+    return "The local engine is reachable, but this workspace is not connected to an agent engine yet.";
+  }
   return "Using delegated app state until a live workspace catalog is available.";
 }
 
@@ -141,7 +143,7 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
       value: providerListValue,
       detail: routing?.registry.serverOwned
         ? "The Matterhorn backend owns the model registry for this workspace."
-        : "The live selectable list is fetched from OpenCode provider.list for this workspace.",
+        : "The live selectable list is fetched from the local engine provider list for this workspace.",
     },
     providerCatalog: {
       label: "Connected catalog",

@@ -198,7 +198,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
 
         {opencodeSetupMissing ? (
           <SettingsNotice>
-            Local agent engine needs setup. OpenCode is not connected for this workspace, so chats and desk tasks cannot run yet.
+            Local agent engine needs setup. Start the local stack with managed engine, or attach an existing engine URL before starting chats and desk tasks.
           </SettingsNotice>
         ) : null}
 

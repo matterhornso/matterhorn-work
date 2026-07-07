@@ -1063,8 +1063,8 @@ function providerListToBackendModelCatalog(value: unknown): MatterhornBackendMod
 
   return {
     status: "working",
-    label: "OpenCode provider catalog",
-    description: "Matterhorn asked OpenCode for the provider and model catalog for this workspace, then normalized it into safe counts and IDs.",
+    label: "Local provider catalog",
+    description: "Matterhorn asked the local agent engine for the provider and model catalog for this workspace, then normalized it into safe counts and IDs.",
     source: "opencode_provider_list",
     serverFetched: true,
     providerCount: providerSummaries.length,
@@ -1081,8 +1081,8 @@ function unavailableBackendModelCatalog(
 ): MatterhornBackendModelCatalogSnapshot {
   return {
     status: "needs_setup",
-    label: "OpenCode provider catalog unavailable",
-    description: "Matterhorn could not ask OpenCode for this workspace's live provider list. Model routing can still use the selected local preference once the engine is connected.",
+    label: "Local provider catalog unavailable",
+    description: "Matterhorn could not ask the local agent engine for this workspace's live provider list. Model routing can still use the selected local preference once the engine is connected.",
     source: "opencode_provider_list",
     serverFetched: false,
     providerCount: 0,
@@ -2379,8 +2379,8 @@ function backendSettingsSections(input: {
   return [
     base("overview", capability("working", "Overview", "Workspace overview is available from local server state.")),
     base("profile", capability("preview", "Profile", "Profile preferences are local/cloud mixed and should use backend capability statuses.")),
-    base("models", capability(input.modelStatus, "Models", "Models are selected through OpenCode provider discovery.")),
-    base("providers", capability(input.providerStatus, "Providers", "Provider setup is managed by OpenCode and optional Matterhorn Cloud imports.")),
+    base("models", capability(input.modelStatus, "Models", "Models are selected through local engine provider discovery.")),
+    base("providers", capability(input.providerStatus, "Providers", "Provider setup is managed by the local engine and optional Matterhorn Cloud imports.")),
     base("wallet", capability(input.walletStatus, "Wallet", "EVM and Sui can connect in web; Bittensor uses public reads and external signing.")),
     base("memory", capability(input.memoryStatus, "Memory", "User-controlled Memory review is available through the local memory vault.")),
     base("notes", capability(input.notesStatus, "Notes", "Workspace notes are stored as local markdown plus an index.")),
@@ -2411,7 +2411,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
   const modelStatus: MatterhornCapabilityStatus = opencodeConfigured ? "working" : "needs_setup";
   const providerStatus: MatterhornCapabilityStatus = opencodeConfigured ? "working" : "needs_setup";
   const connectOpenCodeAction = {
-    id: "settings.models.connect-opencode",
+    id: "settings.models.connect-local-engine",
     label: "Connect local engine",
     kind: "route" as const,
     href: "/settings/ai",
@@ -2628,10 +2628,10 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     models: {
       ...capability(
         modelStatus,
-        opencodeConfigured ? "OpenCode model routing" : "OpenCode connection missing",
+        opencodeConfigured ? "Agent model routing" : "Local engine not connected",
         opencodeConfigured
-          ? "Agent responses are routed through OpenCode/OpenWork using the selected local model preference."
-          : "The local Matterhorn server is reachable, but this workspace does not have an OpenCode base URL configured, so chats and desk tasks cannot run yet.",
+          ? "Agent responses are routed through the local engine using the selected model preference."
+          : "The local Matterhorn server is reachable, but this workspace is not connected to a local agent engine yet, so chats and desk tasks cannot run.",
         {
           opencodeConfigured,
           configuredWorkspaceCount: configuredOpencodeWorkspaces,
@@ -2656,8 +2656,8 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
         providerStatus,
         opencodeConfigured ? "Provider discovery" : "Provider discovery unavailable",
         opencodeConfigured
-          ? "The app reads available models from OpenCode provider.list; Matterhorn Cloud providers can be imported separately."
-          : "Provider discovery depends on the workspace OpenCode connection. Configure the local engine before selecting live providers.",
+          ? "The app reads available models from the local engine; Matterhorn Cloud providers can be imported separately."
+          : "Provider discovery depends on the workspace local engine connection. Configure the local engine before selecting live providers.",
         {
           opencodeConfigured,
           configuredWorkspaceCount: configuredOpencodeWorkspaces,
@@ -3609,13 +3609,21 @@ function readinessActionForCheck(
     };
   }
   if (checkId === "opencode_connection") {
+    const details = check.details ?? {};
+    const setupCommands = Array.isArray(details.setupCommands)
+      ? details.setupCommands.filter((command): command is string => typeof command === "string" && command.trim().length > 0)
+      : [];
+    const managedEngineSupported = details.managedEngineSupported === true;
     return {
       ...base,
       actionId: "connect-local-engine",
       kind: "connect_local_engine",
       label: "Connect the local agent engine",
-      description: "Open AI settings or restart Matterhorn Work so OpenCode is reachable before starting chats or desk tasks.",
-      surface: "settings",
+      description: managedEngineSupported
+        ? "Start the local stack with a managed agent engine, or attach an existing engine URL in AI settings."
+        : "Attach an existing local agent engine URL in AI settings before starting chats or desk tasks.",
+      surface: managedEngineSupported ? "terminal" : "settings",
+      ...(managedEngineSupported && setupCommands[0] ? { command: setupCommands[0] } : {}),
       href: "settings:ai",
     };
   }
@@ -3667,7 +3675,13 @@ function buildWorkspaceReadiness(
 ): MatterhornBackendReadinessResponse {
   const dataMap = buildWorkspaceDataMap(workspace, memoryVault);
   const connection = resolveWorkspaceOpencodeConnection(config, workspace);
-  const opencodeConfigured = Boolean(connection.baseUrl?.trim());
+  const opencodeBaseUrl = connection.baseUrl?.trim() ?? "";
+  const opencodeConfigured = Boolean(opencodeBaseUrl);
+  const opencodeDirectory = resolveOpencodeDirectory(workspace);
+  const opencodeDirectoryConfigured = Boolean(opencodeDirectory?.trim());
+  const managedEngineSupported = !config.readOnly && opencodeDirectoryConfigured;
+  const managedEngineCommand = "OPENWORK_MANAGE_OPENCODE=1 pnpm dev:matterhorn-local";
+  const attachedEngineCommand = "MATTERHORN_LOCAL_OPENCODE_URL=http://127.0.0.1:<port> pnpm dev:matterhorn-local";
   const notesStore = dataMap.stores.notes;
   const memoryStore = dataMap.stores.memory;
   const outputsStore = dataMap.stores.outputs;
@@ -3693,10 +3707,20 @@ function buildWorkspaceReadiness(
     opencode_connection: readinessCheck({
       checkId: "opencode_connection",
       status: opencodeConfigured ? "working" : "needs_setup",
-      label: opencodeConfigured ? "OpenCode connection configured" : "OpenCode connection missing",
+      label: opencodeConfigured ? "Agent engine connected" : "Agent engine not connected",
       description: opencodeConfigured
-        ? "This workspace has an OpenCode base URL configured. Credentials are not exposed in this response."
-        : "Set up the local Matterhorn/OpenCode engine connection before starting chats or desk tasks.",
+        ? "This workspace has a local agent engine URL configured. Credentials are not exposed in this response."
+        : opencodeDirectoryConfigured
+          ? "The workspace directory is known, but no local agent engine URL is attached. Start the local stack with managed engine, or attach an existing engine URL."
+          : "Attach a local agent engine URL before starting chats or desk tasks.",
+      details: {
+        baseUrlConfigured: opencodeConfigured,
+        directoryConfigured: opencodeDirectoryConfigured,
+        managedEngineSupported,
+        setupCommands: managedEngineSupported
+          ? [managedEngineCommand, attachedEngineCommand]
+          : [attachedEngineCommand],
+      },
       requiredFor: ["start_chat", "start_desk_task"],
     }),
     notes_store: readinessCheck({

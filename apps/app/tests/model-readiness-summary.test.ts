@@ -15,8 +15,8 @@ const baseBackendModels: MatterhornBackendModelsResponse = {
   workspaceSelection: null,
   catalog: {
     status: "working",
-    label: "OpenCode provider list",
-    description: "Provider list fetched from OpenCode.",
+    label: "Local provider list",
+    description: "Provider list fetched from the local engine.",
     source: "opencode_provider_list",
     serverFetched: true,
     providerCount: 1,
@@ -37,7 +37,7 @@ const baseBackendModels: MatterhornBackendModelsResponse = {
   routing: {
     answerPath: {
       status: "working",
-      label: "OpenCode session prompts",
+      label: "Local session prompts",
       description: "Prompts are sent through session.promptAsync.",
       transport: "opencode_session_prompt_async",
       requestModelField: "model.providerID_modelID",
@@ -53,8 +53,8 @@ const baseBackendModels: MatterhornBackendModelsResponse = {
     },
     registry: {
       status: "preview",
-      label: "OpenCode provider list",
-      description: "The live model list comes from OpenCode.",
+      label: "Local provider list",
+      description: "The live model list comes from the local engine.",
       source: "opencode_provider_list",
       serverOwned: false,
       clientTool: "opencode_client_provider_list",
@@ -119,10 +119,10 @@ describe("model readiness summary", () => {
     expect(summary.workspaceDefault.detail).toContain("Saved in this workspace");
     expect(summary.effectiveModel.value).toBe("openai/gpt-4.1");
     expect(summary.effectiveModel.label).toBe("Fallback model");
-    expect(summary.answerPath.value).toBe("OpenCode session prompts");
+    expect(summary.answerPath.value).toBe("Local session prompts");
     expect(summary.answerPath.detail).toContain("session.promptAsync");
-    expect(summary.providerList.value).toBe("OpenCode provider list");
-    expect(summary.providerList.detail).toContain("OpenCode provider.list");
+    expect(summary.providerList.value).toBe("Local provider list");
+    expect(summary.providerList.detail).toContain("local engine provider list");
     expect(summary.providerCatalog.value).toBe("1 providers · 2 models");
     expect(summary.selectionPolicy.value).toBe("Workspace");
     expect(summary.trainingPolicy).toContain("No model training by default");
@@ -208,6 +208,6 @@ describe("model readiness summary", () => {
     expect(summary.statusLabel).toBe("Needs engine");
     expect(summary.statusTone).toBe("warning");
     expect(summary.providerCatalog.value).toBe("2 providers · 8 models");
-    expect(summary.providerCatalog.detail).toContain("OpenCode is not configured yet");
+    expect(summary.providerCatalog.detail).toContain("workspace is not connected to an agent engine yet");
   });
 });

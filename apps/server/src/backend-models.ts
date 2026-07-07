@@ -217,8 +217,8 @@ export function buildBackendModels(input: {
       answerPath: {
         ...capability(
           "working",
-          "OpenCode session prompts",
-          "Agent answers are sent through OpenCode/OpenWork session.promptAsync with an explicit providerID/modelID when the user has selected a model.",
+          "Local session prompts",
+          "Agent answers are sent through the local agent engine with an explicit providerID/modelID when the user has selected a model.",
         ),
         transport: "opencode_session_prompt_async",
         requestModelField: "model.providerID_modelID",
@@ -239,8 +239,8 @@ export function buildBackendModels(input: {
       registry: {
         ...capability(
           "preview",
-          "OpenCode provider list",
-          "The live model list currently comes from the OpenCode client provider.list path. A server-owned Matterhorn model registry is planned.",
+          "Local provider list",
+          "The live model list currently comes from the local engine provider list. A server-owned Matterhorn model registry is planned.",
         ),
         source: "opencode_provider_list",
         serverOwned: false,
@@ -253,7 +253,7 @@ export function buildBackendModels(input: {
       feedbackUse: "eval_routing_product_quality_only",
     },
     limitations: [
-      "The global endpoint reports the routing contract. Use the workspace endpoint to see the server-normalized OpenCode provider catalog for a selected workspace.",
+      "The global endpoint reports the routing contract. Use the workspace endpoint to see the server-normalized local provider catalog for a selected workspace.",
       input.selection
         ? "A workspace default model is saved server-side; individual app sessions may still hold local overrides until the prompt path is fully unified."
         : "Model preference falls back to this browser/app profile until a workspace default is saved.",
