@@ -29,6 +29,7 @@ const fakeSuiIds = {
 
 const children = new Set();
 let fakeWalrusServer;
+let fakeOpencodeServer;
 let shuttingDown = false;
 
 function help() {
@@ -36,6 +37,7 @@ function help() {
     "Matterhorn generated-media smoke launcher",
     "",
     "Starts a local Matterhorn Work app wired to:",
+    "- a fake loopback OpenCode engine for browser chat sessions",
     "- mock image generation",
     "- a fake loopback Walrus publisher/relay",
     "- preview-only Sui package, Kiosk, and TransferPolicy ids",
@@ -230,6 +232,196 @@ function startFakeWalrus() {
   });
 }
 
+async function readJsonBody(request) {
+  const chunks = [];
+  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  if (chunks.length === 0) return null;
+  const text = Buffer.concat(chunks).toString("utf8").trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function startFakeOpencode() {
+  const sessions = new Map();
+  const messages = new Map();
+  let sessionSequence = 0;
+  let messageSequence = 0;
+
+  const json = (response, status, payload) => {
+    response.writeHead(status, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(payload));
+  };
+
+  const createSession = (request, body) => {
+    sessionSequence += 1;
+    const id = `ses_generated_media_smoke_${String(sessionSequence).padStart(3, "0")}`;
+    const now = Math.floor(Date.now() / 1000);
+    const title = typeof body?.title === "string" && body.title.trim()
+      ? body.title.trim()
+      : "Generated media smoke";
+    const session = {
+      id,
+      title,
+      slug: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "generated-media-smoke",
+      directory: request.headers["x-opencode-directory"] || workspaceRoot,
+      time: { created: now, updated: now },
+    };
+    sessions.set(id, session);
+    messages.set(id, []);
+    return session;
+  };
+
+  const providerList = {
+    all: [
+      {
+        id: "opencode",
+        name: "OpenCode",
+        source: "config",
+        models: {
+          "big-pickle": { name: "Big Pickle" },
+        },
+      },
+    ],
+    default: { opencode: "big-pickle" },
+    connected: ["opencode"],
+  };
+
+  const server = createServer(async (request, response) => {
+    const url = new URL(request.url || "/", "http://127.0.0.1");
+    response.setHeader("Access-Control-Allow-Origin", "*");
+    response.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    response.setHeader("Access-Control-Allow-Headers", "authorization, content-type, x-opencode-directory");
+
+    if (request.method === "OPTIONS") {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+
+    if (url.pathname === "/health" && request.method === "GET") {
+      json(response, 200, { healthy: true });
+      return;
+    }
+
+    if (url.pathname === "/provider" && request.method === "GET") {
+      json(response, 200, providerList);
+      return;
+    }
+
+    if (url.pathname === "/session" && request.method === "POST") {
+      const body = await readJsonBody(request);
+      json(response, 200, createSession(request, body));
+      return;
+    }
+
+    if (url.pathname === "/session" && request.method === "GET") {
+      json(response, 200, Array.from(sessions.values()).sort((a, b) => b.time.updated - a.time.updated));
+      return;
+    }
+
+    if (url.pathname === "/session/status" && request.method === "GET") {
+      json(
+        response,
+        200,
+        Object.fromEntries(Array.from(sessions.keys()).map((sessionId) => [sessionId, { type: "idle" }])),
+      );
+      return;
+    }
+
+    const sessionMatch = url.pathname.match(/^\/session\/([^/]+)(?:\/([^/]+))?$/);
+    if (sessionMatch) {
+      const sessionId = decodeURIComponent(sessionMatch[1] || "");
+      const action = sessionMatch[2] ? decodeURIComponent(sessionMatch[2]) : "";
+      const session = sessions.get(sessionId);
+      if (!session) {
+        json(response, 404, { code: "not_found", message: "Fake OpenCode session not found." });
+        return;
+      }
+
+      if (!action && request.method === "GET") {
+        json(response, 200, session);
+        return;
+      }
+
+      if (action === "message" && request.method === "GET") {
+        json(response, 200, messages.get(sessionId) || []);
+        return;
+      }
+
+      if (action === "todo" && request.method === "GET") {
+        json(response, 200, []);
+        return;
+      }
+
+      if (action === "prompt_async" && request.method === "POST") {
+        const body = await readJsonBody(request);
+        messageSequence += 1;
+        const now = Math.floor(Date.now() / 1000);
+        const textPart = Array.isArray(body?.parts)
+          ? body.parts.find((part) => part && typeof part === "object" && part.type === "text")
+          : null;
+        const text = typeof textPart?.text === "string" && textPart.text.trim()
+          ? textPart.text.trim()
+          : "Generated media smoke prompt";
+        const nextMessages = messages.get(sessionId) || [];
+        nextMessages.push({
+          info: {
+            id: `msg_smoke_${String(messageSequence).padStart(3, "0")}`,
+            sessionID: sessionId,
+            role: "user",
+            time: { created: now, completed: now },
+          },
+          parts: [
+            {
+              id: `prt_smoke_${String(messageSequence).padStart(3, "0")}`,
+              messageID: `msg_smoke_${String(messageSequence).padStart(3, "0")}`,
+              sessionID: sessionId,
+              type: "text",
+              text,
+            },
+          ],
+        });
+        messages.set(sessionId, nextMessages);
+        session.time.updated = now;
+        sessions.set(sessionId, session);
+        json(response, 200, { ok: true });
+        return;
+      }
+
+      if (action === "command" && request.method === "POST") {
+        json(response, 200, { ok: true });
+        return;
+      }
+
+      if (!action && request.method === "DELETE") {
+        sessions.delete(sessionId);
+        messages.delete(sessionId);
+        json(response, 200, { ok: true });
+        return;
+      }
+    }
+
+    json(response, 404, { code: "not_found", message: "Fake OpenCode route not found." });
+  });
+
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      fakeOpencodeServer = server;
+      const address = server.address();
+      if (!address || typeof address !== "object") {
+        reject(new Error("Could not start fake OpenCode server."));
+        return;
+      }
+      resolve(`http://127.0.0.1:${address.port}`);
+    });
+  });
+}
+
 async function waitForJson(url, options = {}) {
   const timeoutMs = options.timeoutMs ?? 30_000;
   const startedAt = Date.now();
@@ -283,6 +475,7 @@ async function shutdown(exitCode = 0) {
     if (child.exitCode === null) child.kill("SIGKILL");
   }
   fakeWalrusServer?.close();
+  fakeOpencodeServer?.close();
 
   process.exit(exitCode);
 }
@@ -299,6 +492,7 @@ async function main() {
   }
 
   const fakeWalrusUrl = await startFakeWalrus();
+  const fakeOpencodeUrl = await startFakeOpencode();
   const serverPort = await findPort(preferredServerPort);
   const appPort = await findPort(preferredAppPort);
   const serverUrl = `http://127.0.0.1:${serverPort}`;
@@ -315,12 +509,14 @@ async function main() {
     "--approval-timeout", "30000",
     "--cors", "loopback",
     "--opencode-directory", workspaceRoot,
+    "--opencode-base-url", fakeOpencodeUrl,
     "--log-format", "pretty",
     "--no-log-requests",
   ];
 
   console.log("Starting Matterhorn generated-media smoke stack...");
   console.log(`Workspace: ${workspaceRoot}`);
+  console.log(`Fake OpenCode: ${fakeOpencodeUrl}`);
   console.log(`Fake Walrus: ${fakeWalrusUrl}`);
   console.log("Image generation: mock provider, no OpenAI key required.");
   console.log("Sui: preview-only fake package/Kiosk/TransferPolicy ids; no custody or signing.");
@@ -382,12 +578,13 @@ async function main() {
     `App:       ${sessionUrl}`,
     `Settings:  ${settingsUrl}`,
     `Server:    ${serverUrl}`,
+    `OpenCode:  ${fakeOpencodeUrl}`,
     `Walrus:    ${fakeWalrusUrl}`,
     `Workspace: ${workspaceRoot}`,
     `Client token: ${clientToken}`,
     "",
     "Suggested smoke flow:",
-    "1. Open a chat session and generate an image.",
+    "1. Open the App link, create or open a chat session, and generate an image.",
     "2. Click Make NFT on the generated image.",
     "3. Prepare/upload to Walrus; the fake publisher stores and serves the image bytes locally.",
     "4. Prepare mint/listing previews; they produce wallet handoff plans only.",
