@@ -545,6 +545,7 @@ describe("Sui NFT transaction plan helpers", () => {
 
   test("extracts digest and minted object id from wallet results", () => {
     const receipt = receiptFromSuiWalletResult({
+      $kind: "Transaction",
       Transaction: {
         digest: "9uMintDigest",
         objectChanges: [
@@ -557,6 +558,82 @@ describe("Sui NFT transaction plan helpers", () => {
       status: "success",
       objectId: suiObjectId,
       error: null,
+    });
+  });
+
+  test("extracts minted object id from parsed Sui transaction effects", () => {
+    const receipt = receiptFromSuiWalletResult({
+      $kind: "Transaction",
+      Transaction: {
+        digest: "9uMintDigest",
+        effects: {
+          status: { success: true, error: null },
+          gasObject: {
+            objectId: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            inputState: "Exists",
+            outputState: "ObjectWrite",
+            idOperation: "None",
+          },
+          changedObjects: [
+            {
+              objectId: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              inputState: "Exists",
+              outputState: "ObjectWrite",
+              idOperation: "None",
+            },
+            {
+              objectId: suiObjectId,
+              inputState: "DoesNotExist",
+              outputState: "ObjectWrite",
+              idOperation: "Created",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(receipt.objectId).toBe(suiObjectId);
+  });
+
+  test("does not mistake gas or mutated objects for minted object ids", () => {
+    const receipt = receiptFromSuiWalletResult({
+      $kind: "Transaction",
+      Transaction: {
+        digest: "9uMintDigest",
+        effects: {
+          status: { success: true, error: null },
+          changedObjects: [
+            {
+              objectId: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              inputState: "Exists",
+              outputState: "ObjectWrite",
+              idOperation: "None",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(receipt.objectId).toBeNull();
+  });
+
+  test("extracts wallet failure messages from dApp Kit failed transaction results", () => {
+    const receipt = receiptFromSuiWalletResult({
+      $kind: "FailedTransaction",
+      FailedTransaction: {
+        digest: "9uFailedDigest",
+        status: {
+          success: false,
+          error: { message: "MoveAbort in NFT mint" },
+        },
+      },
+    });
+
+    expect(receipt).toEqual({
+      digest: "9uFailedDigest",
+      status: "failure",
+      objectId: null,
+      error: "MoveAbort in NFT mint",
     });
   });
 });
