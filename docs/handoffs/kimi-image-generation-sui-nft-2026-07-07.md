@@ -53,11 +53,31 @@ Verification for the Walrus upload follow-up:
 - `apps/server/node_modules/.bin/tsc -p apps/server/tsconfig.json --noEmit` -> pass.
 - `apps/app/node_modules/.bin/tsc -p apps/app/tsconfig.json --noEmit` -> pass.
 
-Remaining NFT work after the Walrus upload follow-up:
+## Codex Transaction Contract Test Follow-Up
 
-- Build real Sui Move/Kiosk transaction payloads for wallet signing.
-- Add browser smoke using a configured local/fake Walrus publisher route if a browser-accessible fixture is desired.
-- Consider adding transaction-byte generation only after checking current `@mysten/sui` transaction APIs against official docs.
+Branch after PR #742 merged: `codex/next-backend-spine`.
+
+Codex re-tested the current `dev` image/NFT stack and found that the older "not completed" bullets were stale: Walrus upload, app-side Sui mint transaction construction, and app-side Sui Kiosk listing transaction construction are now implemented. This follow-up tightened the remaining weak test contract:
+
+- `apps/app/tests/image-generation-ui-contract.test.ts` now inspects the `@mysten/sui` `Transaction#getData()` snapshot for mint transaction plans.
+- The same test now inspects the Kiosk `place_and_list` transaction snapshot, including sender, object inputs, type arguments, and argument wiring.
+- The handoff limitations now describe the real current boundary: configured Walrus/Sui/Kiosk values are still required, Matterhorn does not deploy or custody the Move package, and third-party marketplace adapters remain future work.
+
+Verification for this follow-up:
+
+- `bun test apps/app/tests/image-generation-ui-contract.test.ts` -> 16 pass, 0 fail.
+- `bun test apps/server/src/generated-media-routes.e2e.test.ts` -> 25 pass, 0 fail.
+- `bun test apps/app/tests/` -> 332 pass, 0 fail.
+- `bun test apps/server/src/generated-media-routes.e2e.test.ts apps/server/src/backend-control-plane.e2e.test.ts apps/server/src/project-data-ledger-routes.e2e.test.ts apps/server/src/project-evidence-routes.e2e.test.ts apps/server/src/image-nft-capabilities.test.ts` -> 69 pass, 0 fail.
+- `apps/app/node_modules/.bin/tsc -p apps/app/tsconfig.json --noEmit` -> pass.
+- `apps/server/node_modules/.bin/tsc -p apps/server/tsconfig.json --noEmit` -> pass.
+- `git diff --check` -> pass.
+
+Remaining NFT follow-up after this pass:
+
+- Configure real Walrus publisher/relay and Sui package/Kiosk/TransferPolicy values for an environment smoke test.
+- Add browser smoke against a browser-accessible fake or staging Walrus publisher if desired.
+- Add third-party marketplace adapters beyond Sui Kiosk when a target marketplace is chosen.
 
 ## Read This First
 
@@ -644,10 +664,12 @@ Follow-up browser UI smoke loaded the local app with `MATTERHORN_IMAGE_PROVIDER=
 - creating a local NFT draft shows truthful setup blockers for Walrus publisher/relay, Sui NFT package, and Kiosk/TransferPolicy listing config;
 - browser console had no app-level errors during the image/NFT smoke.
 
-### Not Completed
+### Current Limitations
 
-- Walrus upload is stubbed to a mock blob id; true upload requires configured publisher/relay.
-- NFT mint/listing transaction building is scaffolding only; no Move package or transaction construction is implemented.
+- Walrus upload is implemented through a configured publisher/relay, but the default local app still reports `Needs setup` until those endpoints are provided.
+- Sui mint/listing transaction construction is implemented as client-wallet transaction builders. Matterhorn still does not deploy or own the Move NFT package; operators must configure package, Kiosk, and TransferPolicy ids.
+- Marketplace publishing currently targets Sui Kiosk listing transactions through the connected wallet. Third-party marketplace adapters remain future work.
+- Browser smoke with a browser-accessible fake Walrus publisher is optional follow-up; route-level fake Walrus coverage is already in place.
 
 ### Safety Checklist
 

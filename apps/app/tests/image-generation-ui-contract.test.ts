@@ -403,12 +403,72 @@ describe("NFT draft panel", () => {
 describe("Sui NFT transaction plan helpers", () => {
   test("builds a wallet transaction from the backend mint plan", () => {
     const transaction = buildMintTransactionFromPlan(mockMintPreview.transactionPlan, suiSender);
-    expect(transaction).toBeTruthy();
+    const data = transaction.getData();
+    const moveCall = data.commands[0] as {
+      MoveCall?: {
+        package: string;
+        module: string;
+        function: string;
+        typeArguments: string[];
+        arguments: Array<{ Input: number; type?: string; $kind: string }>;
+      };
+    };
+
+    expect(data.sender).toBe(suiSender);
+    expect(data.inputs).toHaveLength(5);
+    expect(data.commands).toHaveLength(1);
+    expect(moveCall.MoveCall).toMatchObject({
+      package: suiPackageId,
+      module: "matterhorn_nft",
+      function: "mint",
+      typeArguments: [],
+    });
+    expect(moveCall.MoveCall?.arguments).toEqual([
+      { Input: 0, type: "pure", $kind: "Input" },
+      { Input: 1, type: "pure", $kind: "Input" },
+      { Input: 2, type: "pure", $kind: "Input" },
+      { Input: 3, type: "pure", $kind: "Input" },
+      { Input: 4, type: "pure", $kind: "Input" },
+    ]);
   });
 
   test("builds a wallet transaction from the backend Kiosk listing plan", () => {
     const transaction = buildKioskListingTransactionFromPlan(mockListingPreview.transactionPlan, suiSender);
-    expect(transaction).toBeTruthy();
+    const data = transaction.getData();
+    const moveCall = data.commands[0] as {
+      MoveCall?: {
+        package: string;
+        module: string;
+        function: string;
+        typeArguments: string[];
+        arguments: Array<{ Input: number; type?: string; $kind: string }>;
+      };
+    };
+
+    expect(data.sender).toBe(suiSender);
+    expect(data.inputs).toHaveLength(4);
+    expect(data.inputs).toContainEqual(expect.objectContaining({
+      UnresolvedObject: { objectId: mockListingPreview.transactionPlan.kioskId },
+    }));
+    expect(data.inputs).toContainEqual(expect.objectContaining({
+      UnresolvedObject: { objectId: mockListingPreview.transactionPlan.kioskOwnerCapId },
+    }));
+    expect(data.inputs).toContainEqual(expect.objectContaining({
+      UnresolvedObject: { objectId: mockListingPreview.transactionPlan.nftObjectId },
+    }));
+    expect(data.commands).toHaveLength(1);
+    expect(moveCall.MoveCall).toMatchObject({
+      package: "0x0000000000000000000000000000000000000000000000000000000000000002",
+      module: "kiosk",
+      function: "place_and_list",
+      typeArguments: [mockListingPreview.transactionPlan.nftType],
+    });
+    expect(moveCall.MoveCall?.arguments).toEqual([
+      { Input: 0, type: "object", $kind: "Input" },
+      { Input: 1, type: "object", $kind: "Input" },
+      { Input: 2, type: "object", $kind: "Input" },
+      { Input: 3, type: "pure", $kind: "Input" },
+    ]);
   });
 
   test("extracts digest and minted object id from wallet results", () => {
