@@ -49,6 +49,8 @@ export const PROJECT_HISTORY_FILTERS: Array<{
 }> = [
   { id: "task", label: "Runs", kind: "task" },
   { id: "output", label: "Outputs", kind: "output" },
+  { id: "image", label: "Images", kind: "image" },
+  { id: "nft", label: "NFTs", kind: "nft" },
   { id: "note", label: "Notes", kind: "note" },
   { id: "memory_suggestion", label: "Memory", kind: "memory_suggestion" },
   { id: "team_access", label: "Access", kind: "team_access" },
@@ -122,12 +124,19 @@ function deskLabel(value?: string) {
 function titleForEntry(entry: MatterhornProjectDataLedgerEntry) {
   if (entry.eventType === "task.started") return "Run started";
   if (entry.eventType === "task.stage_started") return "Stage started";
-  if (entry.eventType === "task.output_saved") return "Output saved";
+  if (entry.eventType === "task.output_saved") return nftPreviewTitle(entry) ?? "Output saved";
   if (entry.eventType === "task.completed") return "Run completed";
   if (entry.eventType === "task.failed") return "Run failed";
   if (entry.eventType === "task.cancelled") return "Run cancelled";
   if (entry.kind === "memory_suggestion") return entry.title || "Memory review";
   return entry.title || "Project event";
+}
+
+function nftPreviewTitle(entry: MatterhornProjectDataLedgerEntry) {
+  const outputKind = typeof entry.metadata?.nftOutputKind === "string" ? entry.metadata.nftOutputKind : "";
+  if (outputKind === "mint_preview") return "Mint preview ready";
+  if (outputKind === "listing_preview") return "Listing preview ready";
+  return null;
 }
 
 function sourceLabel(source: MatterhornProjectDataLedgerEntry["source"]) {
@@ -167,6 +176,8 @@ function kindCount(data: MatterhornProjectDataLedgerResponse | undefined, filter
   if (filter === "chat") return data.summary.chats;
   if (filter === "task") return data.summary.tasks;
   if (filter === "output") return data.summary.outputs;
+  if (filter === "image") return data.summary.images;
+  if (filter === "nft") return data.summary.nfts;
   if (filter === "audit") return data.summary.audits;
   if (filter === "feedback") return data.summary.feedback;
   return 0;

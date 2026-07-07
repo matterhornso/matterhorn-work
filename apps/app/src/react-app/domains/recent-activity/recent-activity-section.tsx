@@ -93,7 +93,7 @@ function deskLabel(desk?: string) {
 function activityDisplayTitle(item: RecentActivityItem) {
   if (item.kind === "task_started") return "Run started";
   if (item.kind === "task_stage_started") return "Stage started";
-  if (item.kind === "task_output_saved") return "Output saved";
+  if (item.kind === "task_output_saved") return nftPreviewTitle(item.nftReceipt?.kind) ?? "Output saved";
   if (item.kind === "task_output_deleted") return "Output deleted";
   if (item.kind === "task_completed") return `${deskLabel(item.desk)} run completed`;
   if (item.kind === "task_failed") return `${deskLabel(item.desk)} run failed`;
@@ -114,6 +114,7 @@ function activityStatusLine(item: RecentActivityItem, relatedOutputCount: number
   if (isStartOnlyTaskEvent(item)) {
     return `${relatedOutputCount} output ${relatedOutputCount === 1 ? "receipt" : "receipts"} recorded.`;
   }
+  if (item.kind === "task_output_saved" && isNftPreview(item.nftReceipt?.kind)) return "Saved to Outputs for wallet review.";
   if (item.kind === "task_output_saved") return "Saved to Outputs.";
   if (item.kind === "task_completed") return relatedOutputCount > 0 ? "Completed with output receipts." : "Completed without saved outputs.";
   if (item.kind === "task_failed") return "Run failed.";
@@ -124,6 +125,16 @@ function activityStatusLine(item: RecentActivityItem, relatedOutputCount: number
 
 function cleanOutputPath(path: string) {
   return path.trim().replace(/[\\]+/g, "/").replace(/^\.\//, "").replace(/^[\/]+/, "");
+}
+
+function isNftPreview(kind: string | undefined) {
+  return kind === "mint_preview" || kind === "listing_preview";
+}
+
+function nftPreviewTitle(kind: string | undefined) {
+  if (kind === "mint_preview") return "Mint preview ready";
+  if (kind === "listing_preview") return "Listing preview ready";
+  return null;
 }
 
 function compactOutputPath(path: string) {
@@ -344,7 +355,7 @@ function ActivityDetailSheet(props: {
             <section className="space-y-2">
               <div className="flex items-center gap-2 text-xs font-medium text-dls-text">
                 <WalletCards className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                NFT receipt
+                {isNftPreview(receipt.kind) ? "NFT preview" : "NFT receipt"}
               </div>
               <dl className="space-y-1.5">
                 <DetailLine label="Action" value={nftReceiptKindLabel(receipt.kind)} />
