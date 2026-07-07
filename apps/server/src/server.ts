@@ -3372,6 +3372,71 @@ function buildDataControlStore(
         }),
       ],
     });
+  } else if (storeId === "imageOutputs") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Generated media ledger",
+      summary: "Generated images, NFT drafts, previews, and public receipts are reviewable through generated-media APIs and the redacted project ledger.",
+      actions: [
+        appRouteDataControlAction({
+          id: "generated-media.open-history",
+          label: "Open media history",
+          description: "Opens Project history filtered to generated images.",
+          href: `${appRoutes.history}?kind=image`,
+        }),
+        dataControlAction({
+          id: "generated-media.history",
+          label: "List generated media",
+          description: "Returns generated images joined with the latest NFT draft state.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/generated-media/history`,
+        }),
+        dataControlAction({
+          id: "generated-media.images",
+          label: "List generated images",
+          description: "Returns generated image metadata and file routes. Image bytes stay in workspace storage.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/images`,
+        }),
+        dataControlAction({
+          id: "generated-media.nft-drafts",
+          label: "List NFT drafts",
+          description: "Returns Sui NFT draft, public-storage, preview, and public receipt state.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/nft-drafts`,
+        }),
+        dataControlAction({
+          id: "generated-media.image-ledger",
+          label: "Export image ledger",
+          description: "Returns redacted project ledger entries for generated images.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `${ledgerRoute}?kind=image`,
+        }),
+        dataControlAction({
+          id: "generated-media.nft-ledger",
+          label: "Export NFT ledger",
+          description: "Returns redacted project ledger entries for NFT drafts, previews, mint receipts, and listing receipts.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `${ledgerRoute}?kind=nft`,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "unsupported",
+      label: "No generated-media delete route",
+      summary: "Generated image and NFT draft delete APIs are not exposed yet. Output receipt files can be removed from the Outputs surface when they live under outputs/.",
+      actions: [],
+    });
   } else if (storeId === "feedback") {
     exportCapability = dataControlCapability({
       status: "working",

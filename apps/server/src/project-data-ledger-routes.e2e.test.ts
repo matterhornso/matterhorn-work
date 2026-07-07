@@ -423,6 +423,20 @@ describe("project data ledger routes", () => {
         label: "Open Project history",
       }),
     );
+    expect(dataControls.payload.stores.imageOutputs.export.actions).toContainEqual(
+      expect.objectContaining({
+        id: "generated-media.history",
+        label: "List generated media",
+        href: "/workspace/ws_ledger/generated-media/history",
+      }),
+    );
+    expect(dataControls.payload.stores.imageOutputs.export.actions).toContainEqual(
+      expect.objectContaining({
+        id: "generated-media.nft-ledger",
+        href: "/workspace/ws_ledger/data-ledger?kind=nft",
+      }),
+    );
+    expect(dataControls.payload.stores.imageOutputs.deletion.status).toBe("unsupported");
     expect(dataControls.payload.stores.taskEvents.export.actions).toContainEqual(
       expect.objectContaining({
         id: "taskEvents.open-history",
