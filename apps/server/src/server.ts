@@ -3432,10 +3432,33 @@ function buildDataControlStore(
       ],
     });
     deletionCapability = dataControlCapability({
-      status: "unsupported",
-      label: "No generated-media delete route",
-      summary: "Generated image and NFT draft delete APIs are not exposed yet. Output receipt files can be removed from the Outputs surface when they live under outputs/.",
-      actions: [],
+      status: "working",
+      label: "Local generated media delete",
+      summary: "Local generated images and non-public NFT drafts can be deleted. Public storage, mint, and listing state is retained for accountability.",
+      actions: [
+        dataControlAction({
+          id: "generated-media.delete-image",
+          label: "Delete generated image",
+          description: "Deletes one generated image file and metadata record when no NFT drafts depend on it.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/images/:imageId`,
+          destructive: true,
+          requirements: ["collaborator", "writable_server", "specific_record_id"],
+        }),
+        dataControlAction({
+          id: "generated-media.delete-nft-draft",
+          label: "Delete NFT draft",
+          description: "Deletes one local NFT draft before it has public storage, mint, or listing state.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/nft-drafts/:draftId`,
+          destructive: true,
+          requirements: ["collaborator", "writable_server", "specific_record_id"],
+        }),
+      ],
     });
   } else if (storeId === "feedback") {
     exportCapability = dataControlCapability({

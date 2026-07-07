@@ -1417,7 +1417,19 @@ describe("backend control plane routes", () => {
       method: "GET",
       href: "/workspace/ws_backend/data-ledger?kind=nft",
     }));
-    expect(result.payload.stores.imageOutputs.deletion.status).toBe("unsupported");
+    expect(result.payload.stores.imageOutputs.deletion.status).toBe("working");
+    expect(result.payload.stores.imageOutputs.deletion.actions).toContainEqual(expect.objectContaining({
+      id: "generated-media.delete-image",
+      method: "DELETE",
+      href: "/workspace/ws_backend/images/:imageId",
+      destructive: true,
+    }));
+    expect(result.payload.stores.imageOutputs.deletion.actions).toContainEqual(expect.objectContaining({
+      id: "generated-media.delete-nft-draft",
+      method: "DELETE",
+      href: "/workspace/ws_backend/nft-drafts/:draftId",
+      destructive: true,
+    }));
     expect(result.payload.stores.modelPreferences.export.actions).toContainEqual(expect.objectContaining({
       id: "model-preference.open-settings",
       kind: "app_route",

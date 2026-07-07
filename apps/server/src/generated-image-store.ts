@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { MatterhornGeneratedImage } from "@matterhorn-work/types/generated-media";
 import { exists } from "./utils.js";
@@ -65,5 +65,13 @@ export class MatterhornGeneratedImageStore {
       }
     }
     return images.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async delete(imageId: string): Promise<MatterhornGeneratedImage | null> {
+    const image = await this.get(imageId);
+    if (!image) return null;
+    await rm(metadataPath(this.workspaceRoot, imageId), { force: true });
+    await rm(imageFilePath(this.workspaceRoot, image.fileName), { force: true });
+    return image;
   }
 }
