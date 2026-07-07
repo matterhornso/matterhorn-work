@@ -37,6 +37,7 @@ import type {
   MatterhornImageNftDraftListResponse,
   MatterhornImageNftDraftResponse,
   MatterhornImageResponse,
+  MatterhornNftListingPreviewInput,
   MatterhornNftListingPreviewResponse,
   MatterhornNftMintPreviewResponse,
   MatterhornNftReceiptRequest,
@@ -1855,11 +1856,11 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         `/workspace/${encodeURIComponent(workspaceId)}/nft-drafts/${encodeURIComponent(draftId)}/mint/receipt`,
         { token, hostToken, method: "POST", body: receipt, timeoutMs: timeouts.config },
       ),
-    previewNftListing: (workspaceId: string, draftId: string) =>
+    previewNftListing: (workspaceId: string, draftId: string, input?: MatterhornNftListingPreviewInput) =>
       requestJson<MatterhornNftListingPreviewResponse>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/nft-drafts/${encodeURIComponent(draftId)}/listing/preview`,
-        { token, hostToken, method: "POST", timeoutMs: timeouts.config },
+        { token, hostToken, method: "POST", body: input ?? {}, timeoutMs: timeouts.config },
       ),
     recordNftListingReceipt: (workspaceId: string, draftId: string, receipt: MatterhornNftReceiptRequest) =>
       requestJson<MatterhornNftReceiptResponse>(

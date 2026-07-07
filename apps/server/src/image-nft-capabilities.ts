@@ -12,7 +12,11 @@ export interface NftEnvironmentConfig {
   suiNetwork?: "sui-testnet" | "sui-mainnet";
   suiNftPackageId?: string;
   suiNftModuleName?: string;
+  suiNftType?: string;
   suiKioskPackageId?: string;
+  suiKioskId?: string;
+  suiKioskOwnerCapId?: string;
+  suiTransferPolicyId?: string;
   suiTransferPolicyPackageId?: string;
   walrusPublisherUrl?: string;
   walrusPublisherBearerToken?: string;
@@ -26,7 +30,11 @@ export function resolveNftEnvironmentConfig(env: typeof process.env): NftEnviron
     suiNetwork: env.MATTERHORN_SUI_NETWORK as "sui-testnet" | "sui-mainnet" | undefined,
     suiNftPackageId: env.MATTERHORN_SUI_NFT_PACKAGE_ID?.trim(),
     suiNftModuleName: env.MATTERHORN_SUI_NFT_MODULE_NAME?.trim(),
+    suiNftType: env.MATTERHORN_SUI_NFT_TYPE?.trim(),
     suiKioskPackageId: env.MATTERHORN_SUI_KIOSK_PACKAGE_ID?.trim(),
+    suiKioskId: env.MATTERHORN_SUI_KIOSK_ID?.trim(),
+    suiKioskOwnerCapId: env.MATTERHORN_SUI_KIOSK_OWNER_CAP_ID?.trim(),
+    suiTransferPolicyId: env.MATTERHORN_SUI_TRANSFER_POLICY_ID?.trim(),
     suiTransferPolicyPackageId: env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID?.trim(),
     walrusPublisherUrl: env.MATTERHORN_WALRUS_PUBLISHER_URL?.trim(),
     walrusPublisherBearerToken: env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN?.trim(),

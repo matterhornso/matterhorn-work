@@ -168,7 +168,9 @@ export interface MatterhornNftDraftMint {
 export interface MatterhornNftDraftListing {
   status: MatterhornNftListingStatus;
   kioskId?: string | null;
+  kioskOwnerCapId?: string | null;
   transferPolicyId?: string | null;
+  itemType?: string | null;
   priceMist?: string | null;
   error?: string | null;
 }
@@ -231,10 +233,16 @@ export type MatterhornNftSetupRequirementKey =
   | "walrus_publisher"
   | "walrus_relay"
   | "walrus_upload_connector"
+  | "sui_public_image_uri"
   | "sui_nft_package"
   | "sui_nft_module"
+  | "sui_nft_type"
+  | "sui_minted_object"
   | "sui_kiosk_package"
-  | "sui_transfer_policy";
+  | "sui_kiosk_id"
+  | "sui_kiosk_owner_cap"
+  | "sui_transfer_policy"
+  | "sui_listing_price";
 
 export interface MatterhornNftSetupRequirement {
   key: MatterhornNftSetupRequirementKey;
@@ -254,6 +262,66 @@ export interface MatterhornNftPreviewStep {
   label: string;
   description: string;
 }
+
+export interface MatterhornSuiTransactionArgumentPlan {
+  label: string;
+  kind: "pure" | "object";
+  type: "string" | "address" | "u64" | "object";
+  value: string;
+}
+
+export interface MatterhornSuiMoveCallPlan {
+  target: string;
+  packageId: string;
+  moduleName: string;
+  functionName: string;
+  typeArguments: string[];
+  arguments: MatterhornSuiTransactionArgumentPlan[];
+}
+
+export interface MatterhornNftMintTransactionPlan {
+  version: "matterhorn.sui.transaction-plan.v1";
+  kind: "sui_move_call";
+  network: "sui-testnet" | "sui-mainnet";
+  custody: false;
+  canSubmit: false;
+  requiresWalletStandard: true;
+  sender?: string | null;
+  moveCalls: MatterhornSuiMoveCallPlan[];
+  sdkHints: {
+    packageName: "@mysten/sui";
+    importPath: "@mysten/sui/transactions";
+    builder: "new Transaction()";
+  };
+  missingInputs: string[];
+}
+
+export interface MatterhornNftKioskListingTransactionPlan {
+  version: "matterhorn.sui.transaction-plan.v1";
+  kind: "sui_kiosk_listing";
+  network: "sui-testnet" | "sui-mainnet";
+  custody: false;
+  canSubmit: false;
+  requiresWalletStandard: true;
+  sender?: string | null;
+  marketplace: "sui_kiosk";
+  nftObjectId: string;
+  nftType: string;
+  kioskId: string;
+  kioskOwnerCapId: string;
+  transferPolicyId: string;
+  priceMist: string;
+  sdkHints: {
+    packageName: "@mysten/kiosk";
+    builder: "KioskTransaction";
+    method: "placeAndList";
+  };
+  missingInputs: string[];
+}
+
+export type MatterhornNftTransactionPlan =
+  | MatterhornNftMintTransactionPlan
+  | MatterhornNftKioskListingTransactionPlan;
 
 export interface MatterhornImageListResponse {
   success: true;
@@ -289,10 +357,21 @@ export interface MatterhornNftMintPreviewResponse {
     functionName: "mint";
     storageUrl?: string | null;
     metadata: MatterhornNftDraftMetadata;
-    steps: MatterhornNftPreviewStep[];
+        steps: MatterhornNftPreviewStep[];
   };
+  transactionPlan: MatterhornNftMintTransactionPlan;
   setupRequirements: MatterhornNftSetupRequirement[];
   draft: MatterhornImageNftDraft;
+}
+
+export interface MatterhornNftListingPreviewInput {
+  objectId?: string;
+  nftType?: string;
+  kioskId?: string;
+  kioskOwnerCapId?: string;
+  transferPolicyId?: string;
+  priceMist?: string;
+  sender?: string;
 }
 
 export interface MatterhornNftListingPreviewResponse {
@@ -308,9 +387,10 @@ export interface MatterhornNftListingPreviewResponse {
     kioskPackageId: string;
     transferPolicyPackageId: string;
     priceMist?: string;
-    objectId?: string | null;
-    steps: MatterhornNftPreviewStep[];
+        objectId?: string | null;
+        steps: MatterhornNftPreviewStep[];
   };
+  transactionPlan: MatterhornNftKioskListingTransactionPlan;
   setupRequirements: MatterhornNftSetupRequirement[];
   draft: MatterhornImageNftDraft;
 }
