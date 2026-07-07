@@ -210,6 +210,35 @@ function serverCommand() {
   return { command: "bun", args: [path.join(rootDir, "apps", "server", "src", "cli.ts")] };
 }
 
+function appCommand(appPort) {
+  const appDir = path.join(rootDir, "apps", "app");
+  const viteBin = path.join(appDir, "node_modules", ".bin", process.platform === "win32" ? "vite.cmd" : "vite");
+  const viteArgs = [
+    "--host",
+    "127.0.0.1",
+    "--port",
+    String(appPort),
+    "--strictPort",
+  ];
+
+  if (existsSync(viteBin)) {
+    return { command: viteBin, args: viteArgs, cwd: appDir };
+  }
+
+  return {
+    command: "npx",
+    args: [
+      "pnpm@10.27.0",
+      "--filter",
+      "@matterhorn-work/app",
+      "exec",
+      "vite",
+      ...viteArgs,
+    ],
+    cwd: rootDir,
+  };
+}
+
 async function main() {
   if (!existsSync(workspaceRoot)) {
     throw new Error(`Workspace path does not exist: ${workspaceRoot}`);
@@ -271,33 +300,19 @@ async function main() {
     throw new Error("Matterhorn Work server started, but it did not report an active workspace.");
   }
 
-  spawnChild(
-    "app",
-    "npx",
-    [
-      "pnpm@10.27.0",
-      "--filter",
-      "@matterhorn-work/app",
-      "exec",
-      "vite",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(appPort),
-      "--strictPort",
-    ],
-    {
-      env: {
-        ...process.env,
-        CI: "true",
-        OPENWORK_DEV_MODE: "1",
-        VITE_MATTERHORN_WORK_URL: serverUrl,
-        VITE_MATTERHORN_WORK_TOKEN: clientToken,
-        VITE_MATTERHORN_WORK_HOST_TOKEN: hostToken,
-        VITE_MATTERHORN_WORK_FORCE_SETTINGS: "1",
-      },
+  const app = appCommand(appPort);
+  spawnChild("app", app.command, app.args, {
+    cwd: app.cwd,
+    env: {
+      ...process.env,
+      CI: "true",
+      OPENWORK_DEV_MODE: "1",
+      VITE_MATTERHORN_WORK_URL: serverUrl,
+      VITE_MATTERHORN_WORK_TOKEN: clientToken,
+      VITE_MATTERHORN_WORK_HOST_TOKEN: hostToken,
+      VITE_MATTERHORN_WORK_FORCE_SETTINGS: "1",
     },
-  );
+  });
 
   await waitForHttp(appUrl, { timeoutMs: 45_000 });
 
