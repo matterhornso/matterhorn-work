@@ -1212,21 +1212,36 @@ describe("backend control plane routes", () => {
     expect(result.payload.workspace.id).toBe("ws_backend");
     expect(result.payload.summary.totalStores).toBeGreaterThanOrEqual(8);
     expect(result.payload.summary.appendOnlyStores).toBeGreaterThanOrEqual(3);
-    expect(result.payload.stores.notes.export.actions[0]).toMatchObject({
+    expect(result.payload.stores.chat.export.actions).toContainEqual(expect.objectContaining({
+      id: "chat.open-session",
+      kind: "app_route",
+      href: "/workspace/ws_backend/session",
+    }));
+    expect(result.payload.stores.notes.export.actions).toContainEqual(expect.objectContaining({
+      id: "notes.open-app",
+      kind: "app_route",
+      href: "/workspace/ws_backend/session?panel=notes",
+    }));
+    expect(result.payload.stores.notes.export.actions).toContainEqual(expect.objectContaining({
       id: "notes.list",
       method: "GET",
       href: "/workspace/ws_backend/notes",
-    });
+    }));
     expect(result.payload.stores.notes.deletion.actions[0]).toMatchObject({
       id: "notes.delete",
       method: "DELETE",
       destructive: true,
     });
-    expect(result.payload.stores.memory.export.actions[0]).toMatchObject({
+    expect(result.payload.stores.memory.export.actions).toContainEqual(expect.objectContaining({
+      id: "memory.open-review",
+      kind: "app_route",
+      href: "/workspace/ws_backend/session?panel=memory",
+    }));
+    expect(result.payload.stores.memory.export.actions).toContainEqual(expect.objectContaining({
       id: "memory.export",
       method: "POST",
       href: "/api/memory/export",
-    });
+    }));
     expect(result.payload.stores.memory.export.actions).toContainEqual(expect.objectContaining({
       id: "memory.workspace-list",
       method: "GET",
@@ -1244,27 +1259,42 @@ describe("backend control plane routes", () => {
       destructive: true,
     }));
     expect(result.payload.stores.outputs.deletion.status).toBe("working");
+    expect(result.payload.stores.outputs.export.actions).toContainEqual(expect.objectContaining({
+      id: "outputs.open-history",
+      kind: "app_route",
+      href: "/workspace/ws_backend/history",
+    }));
     expect(result.payload.stores.outputs.deletion.actions[0]).toMatchObject({
       id: "outputs.delete-file",
       method: "DELETE",
       href: "/workspace/ws_backend/outputs?path=:outputPath",
       destructive: true,
     });
-    expect(result.payload.stores.modelPreferences.export.actions[0]).toMatchObject({
+    expect(result.payload.stores.modelPreferences.export.actions).toContainEqual(expect.objectContaining({
+      id: "model-preference.open-settings",
+      kind: "app_route",
+      href: "/workspace/ws_backend/settings/ai",
+    }));
+    expect(result.payload.stores.modelPreferences.export.actions).toContainEqual(expect.objectContaining({
       id: "model-preference.read",
       method: "GET",
       href: "/workspace/ws_backend/backend/model-selection",
-    });
+    }));
     expect(result.payload.stores.modelPreferences.deletion.actions[0]).toMatchObject({
       id: "model-preference.clear",
       method: "DELETE",
       destructive: true,
     });
-    expect(result.payload.stores.dataPolicy.export.actions[0]).toMatchObject({
+    expect(result.payload.stores.dataPolicy.export.actions).toContainEqual(expect.objectContaining({
+      id: "data-policy.open-settings",
+      kind: "app_route",
+      href: "/workspace/ws_backend/settings/overview#data-policy",
+    }));
+    expect(result.payload.stores.dataPolicy.export.actions).toContainEqual(expect.objectContaining({
       id: "data-policy.read",
       method: "GET",
       href: "/workspace/ws_backend/backend/data-policy",
-    });
+    }));
     expect(result.payload.stores.dataPolicy.deletion.actions[0]).toMatchObject({
       id: "data-policy.reset-feedback",
       method: "PATCH",
@@ -1272,19 +1302,34 @@ describe("backend control plane routes", () => {
     });
     expect(result.payload.stores.feedback.retention.mode).toBe("user_controlled");
     expect(result.payload.stores.feedback.deletion.status).toBe("working");
+    expect(result.payload.stores.feedback.export.actions).toContainEqual(expect.objectContaining({
+      id: "feedback.open-review",
+      kind: "app_route",
+      href: "/workspace/ws_backend/settings/overview#feedback",
+    }));
     expect(result.payload.stores.feedback.deletion.actions[0]).toMatchObject({
       id: "feedback.delete",
       method: "DELETE",
       destructive: true,
     });
     expect(result.payload.stores.walletEvidence.export.status).toBe("working");
-    expect(result.payload.stores.walletEvidence.export.actions[0]).toMatchObject({
+    expect(result.payload.stores.walletEvidence.export.actions).toContainEqual(expect.objectContaining({
+      id: "wallet-evidence.open-wallet",
+      kind: "app_route",
+      href: "/workspace/ws_backend/settings/wallet",
+    }));
+    expect(result.payload.stores.walletEvidence.export.actions).toContainEqual(expect.objectContaining({
       id: "wallet-evidence.ledger",
       method: "GET",
       href: "/workspace/ws_backend/data-ledger?kind=wallet",
-    });
+    }));
     expect(result.payload.stores.walletEvidence.deletion.status).toBe("unsupported");
     expect(result.payload.stores.audit.retention.mode).toBe("append_only");
+    expect(result.payload.stores.audit.export.actions).toContainEqual(expect.objectContaining({
+      id: "audit.open-history",
+      kind: "app_route",
+      href: "/workspace/ws_backend/history",
+    }));
     expect(result.payload.policy.retention.mode).toBe("accountability_default");
     expect(result.payload.policy.retention.stores).toEqual(["audit", "taskEvents", "workflowRuns"]);
     expect(result.payload.policy.retention.exportRoute).toBe("/workspace/ws_backend/data-ledger/export");

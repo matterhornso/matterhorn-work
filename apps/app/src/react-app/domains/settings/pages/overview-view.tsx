@@ -37,6 +37,7 @@ import type {
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
 import type {
+  MatterhornDataControlAction,
   MatterhornDataControlStore,
   MatterhornWorkspaceDataControlsResponse,
 } from "@matterhorn-work/types/backend-data-controls";
@@ -76,7 +77,11 @@ import {
   type BackendCapabilityTone,
 } from "../backend-capability-status";
 import { GLOBAL_HOME_SIDE_PANEL_KEY, useUiStateStore } from "../../../shell/ui-state-store";
-import { workspaceNotesRoute, workspaceRunHistoryRoute, workspaceSessionRoute } from "../../../shell/workspace-routes";
+import {
+  workspaceNotesRoute,
+  workspaceRunHistoryRoute,
+  workspaceSessionRoute,
+} from "../../../shell/workspace-routes";
 import type { SettingsTab } from "../../../../app/types";
 import {
   getInitialThemeMode,
@@ -291,6 +296,13 @@ function controlSummary(
   return kind === "export" ? control.export.summary : control.deletion.summary;
 }
 
+function controlAppRoute(control?: MatterhornDataControlStore): MatterhornDataControlAction | null {
+  if (!control) return null;
+  return [...control.export.actions, ...control.deletion.actions].find((action) => (
+    action.kind === "app_route" && Boolean(action.href?.trim())
+  )) ?? null;
+}
+
 function feedbackKindLabel(value: string | null | undefined) {
   if (value === "thumbs_up") return "Worked well";
   if (value === "thumbs_down") return "Felt rough";
@@ -443,6 +455,7 @@ function DataPolicySection(props: {
   feedbackPolicySaving?: boolean;
   feedbackPolicyError?: string | null;
   onFeedbackPolicyChange?: (enabled: boolean) => void;
+  onOpenControlRoute?: (href: string) => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const stores = DATA_POLICY_STORE_ORDER
@@ -530,17 +543,18 @@ function DataPolicySection(props: {
               className="flex items-center gap-1.5 text-xs font-medium text-dls-secondary transition-colors hover:text-dls-text"
             >
               <ChevronDown className={cn("size-3.5 transition-transform", detailsOpen && "rotate-180")} />
-              Storage locations and controls
+              Storage locations, routes, and controls
             </button>
           )}
         />
         <CollapsibleContent>
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[680px] border-separate border-spacing-0 text-left text-xs">
+            <table className="w-full min-w-[760px] border-separate border-spacing-0 text-left text-xs">
               <thead className="text-dls-secondary">
                 <tr>
                   <th className="pb-2 pr-4 font-medium">Store</th>
                   <th className="pb-2 pr-4 font-medium">Location</th>
+                  <th className="pb-2 pr-4 font-medium">Manage</th>
                   <th className="pb-2 pr-4 font-medium">Retention</th>
                   <th className="pb-2 pr-4 font-medium">Export</th>
                   <th className="pb-2 pr-4 font-medium">Delete</th>
@@ -548,27 +562,44 @@ function DataPolicySection(props: {
                 </tr>
               </thead>
               <tbody>
-                {stores.map((store) => (
-                  <tr key={store.id} className="align-top">
-                    <td className="border-t border-dls-border/45 py-2 pr-4">
-                      <p className="font-medium text-dls-text">{store.label}</p>
-                      <p className="mt-0.5 text-[11px] text-dls-secondary">{scopeLabel(store.scope)}</p>
-                    </td>
-                    <td className="max-w-[260px] border-t border-dls-border/45 py-2 pr-4">
-                      <span className="block truncate font-mono text-[11px] text-dls-secondary" title={storageLocationLabel(store)}>
-                        {storageLocationLabel(store)}
-                      </span>
-                    </td>
-                    <td className="border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">{retentionLabel(store.retention)}</td>
-                    <td className="max-w-[220px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
-                      {controlSummary(props.controls, store, "export")}
-                    </td>
-                    <td className="max-w-[220px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
-                      {controlSummary(props.controls, store, "deletion")}
-                    </td>
-                    <td className="border-t border-dls-border/45 py-2 text-dls-secondary">{secretsLabel(store.containsSecrets)}</td>
-                  </tr>
-                ))}
+                {stores.map((store) => {
+                  const control = props.controls?.stores[store.id as keyof MatterhornWorkspaceDataControlsResponse["stores"]];
+                  const appRoute = controlAppRoute(control);
+                  return (
+                    <tr key={store.id} className="align-top">
+                      <td className="border-t border-dls-border/45 py-2 pr-4">
+                        <p className="font-medium text-dls-text">{store.label}</p>
+                        <p className="mt-0.5 text-[11px] text-dls-secondary">{scopeLabel(store.scope)}</p>
+                      </td>
+                      <td className="max-w-[220px] border-t border-dls-border/45 py-2 pr-4">
+                        <span className="block truncate font-mono text-[11px] text-dls-secondary" title={storageLocationLabel(store)}>
+                          {storageLocationLabel(store)}
+                        </span>
+                      </td>
+                      <td className="border-t border-dls-border/45 py-2 pr-4">
+                        {appRoute?.href ? (
+                          <button
+                            type="button"
+                            className="text-xs font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                            onClick={() => props.onOpenControlRoute?.(appRoute.href ?? "")}
+                          >
+                            {appRoute.label}
+                          </button>
+                        ) : (
+                          <span className="text-dls-secondary">-</span>
+                        )}
+                      </td>
+                      <td className="border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">{retentionLabel(store.retention)}</td>
+                      <td className="max-w-[190px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
+                        {controlSummary(props.controls, store, "export")}
+                      </td>
+                      <td className="max-w-[190px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
+                        {controlSummary(props.controls, store, "deletion")}
+                      </td>
+                      <td className="border-t border-dls-border/45 py-2 text-dls-secondary">{secretsLabel(store.containsSecrets)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -587,7 +618,7 @@ function DataPolicySection(props: {
         </CollapsibleContent>
       </Collapsible>
       <p className="mt-3 text-xs leading-5 text-dls-secondary">
-        User-controlled stores can be managed from their own surfaces. {retentionPolicy.summary}
+        Use the Manage links for user-controlled stores. Append-only history stays exportable through Run history. {retentionPolicy.summary}
       </p>
     </div>
   );
@@ -1463,6 +1494,7 @@ export function SettingsOverviewView(props: {
               feedbackPolicySaving={updateWorkspaceDataPolicyMutation.isPending}
               feedbackPolicyError={updateWorkspaceDataPolicyMutation.error instanceof Error ? updateWorkspaceDataPolicyMutation.error.message : null}
               onFeedbackPolicyChange={props.matterhornServerClient && props.runtimeWorkspaceId ? handleFeedbackPolicyChange : undefined}
+              onOpenControlRoute={(href) => navigate(href)}
             />
           ) : (
             <div className="px-1 py-3 text-sm leading-6 text-dls-secondary">

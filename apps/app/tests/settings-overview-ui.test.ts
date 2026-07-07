@@ -49,6 +49,8 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("storageLocationLabel(store)");
     expect(source).toContain("controlSummary(props.controls, store, \"export\")");
     expect(source).toContain("controlSummary(props.controls, store, \"deletion\")");
+    expect(source).toContain("controlAppRoute(control)");
+    expect(source).toContain("onOpenControlRoute");
     expect(source).toContain("retentionLabel(store.retention)");
     expect(source).toContain("secretsLabel(store.containsSecrets)");
     expect(source).toContain("Workspace data policy");
@@ -57,7 +59,8 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("Feedback collection");
     expect(source).toContain("Toggle workspace feedback collection");
     expect(source).toContain("Export and delete");
-    expect(source).toContain("Storage locations and controls");
+    expect(source).toContain("Storage locations, routes, and controls");
+    expect(source).toContain("Use the Manage links for user-controlled stores");
     expect(source).toContain("retentionPolicy.summary");
     expect(source).toContain("Where workspace data lives, what can be exported, and what can be deleted.");
   });

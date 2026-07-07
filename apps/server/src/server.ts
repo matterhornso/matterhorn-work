@@ -2939,6 +2939,16 @@ function dataControlCapability(input: MatterhornDataControlCapability): Matterho
   return input;
 }
 
+function appRouteDataControlAction(input: Omit<MatterhornDataControlAction, "kind" | "status"> & {
+  status?: MatterhornDataControlAction["status"];
+}): MatterhornDataControlAction {
+  return dataControlAction({
+    ...input,
+    kind: "app_route",
+    status: input.status ?? "working",
+  });
+}
+
 function retentionControl(store: MatterhornDataStoreDescriptor): MatterhornDataControlStore["retention"] {
   if (store.retention === "user_controlled") {
     return {
@@ -2983,6 +2993,17 @@ function buildDataControlStore(
   const modelSelectionRoute = `/workspace/${encodeURIComponent(workspace.id)}/backend/model-selection`;
   const notesRoute = `/workspace/${encodeURIComponent(workspace.id)}/notes`;
   const workspaceMemoryRoute = `/workspace/${encodeURIComponent(workspace.id)}/memory`;
+  const workspaceAppRoute = `/workspace/${encodeURIComponent(workspace.id)}`;
+  const appRoutes = {
+    session: `${workspaceAppRoute}/session`,
+    notes: `${workspaceAppRoute}/session?panel=notes`,
+    memory: `${workspaceAppRoute}/session?panel=memory`,
+    history: `${workspaceAppRoute}/history`,
+    dataPolicy: `${workspaceAppRoute}/settings/overview#data-policy`,
+    feedback: `${workspaceAppRoute}/settings/overview#feedback`,
+    models: `${workspaceAppRoute}/settings/ai`,
+    wallet: `${workspaceAppRoute}/settings/wallet`,
+  };
 
   let exportCapability: MatterhornDataControlCapability = dataControlCapability({
     status: store.exportable ? "preview" : "unsupported",
@@ -3001,12 +3022,32 @@ function buildDataControlStore(
     actions: [],
   });
 
-  if (storeId === "dataPolicy") {
+  if (storeId === "chat") {
+    exportCapability = dataControlCapability({
+      status: "preview",
+      label: "Runtime managed",
+      summary: "Chat history is managed by the local agent runtime. Open the session shell to review workspace chats.",
+      actions: [
+        appRouteDataControlAction({
+          id: "chat.open-session",
+          label: "Open session",
+          description: "Opens the workspace session shell where chat history is managed by the agent runtime.",
+          href: appRoutes.session,
+        }),
+      ],
+    });
+  } else if (storeId === "dataPolicy") {
     exportCapability = dataControlCapability({
       status: "working",
       label: "Data policy API",
       summary: "The workspace data policy reports training and feedback collection status without returning secrets.",
       actions: [
+        appRouteDataControlAction({
+          id: "data-policy.open-settings",
+          label: "Open data policy",
+          description: "Opens the Settings overview data policy section for this workspace.",
+          href: appRoutes.dataPolicy,
+        }),
         dataControlAction({
           id: "data-policy.read",
           label: "Read data policy",
@@ -3041,6 +3082,12 @@ function buildDataControlStore(
       label: "Model selection API",
       summary: "The workspace default model can be read without returning provider credentials.",
       actions: [
+        appRouteDataControlAction({
+          id: "model-preference.open-settings",
+          label: "Open model settings",
+          description: "Opens Settings > Agent model for workspace model selection.",
+          href: appRoutes.models,
+        }),
         dataControlAction({
           id: "model-preference.read",
           label: "Read model preference",
@@ -3076,6 +3123,12 @@ function buildDataControlStore(
       label: "Notes API",
       summary: "Notes can be listed and exported from the workspace notes API.",
       actions: [
+        appRouteDataControlAction({
+          id: "notes.open-app",
+          label: "Open Notes",
+          description: "Opens Notes inside the workspace session shell.",
+          href: appRoutes.notes,
+        }),
         dataControlAction({
           id: "notes.list",
           label: "List notes",
@@ -3111,6 +3164,12 @@ function buildDataControlStore(
       label: "Memory export",
       summary: "Memory can export a bundle from the local memory vault.",
       actions: [
+        appRouteDataControlAction({
+          id: "memory.open-review",
+          label: "Open Memory review",
+          description: "Opens the Memory review panel inside the workspace session shell.",
+          href: appRoutes.memory,
+        }),
         dataControlAction({
           id: "memory.export",
           label: "Export memory",
@@ -3188,6 +3247,12 @@ function buildDataControlStore(
       label: "Outputs folder",
       summary: "Outputs are regular files under the workspace outputs folder.",
       actions: [
+        appRouteDataControlAction({
+          id: "outputs.open-history",
+          label: "Open Run history",
+          description: "Opens Run history, where output receipts and workflow evidence are reviewed.",
+          href: appRoutes.history,
+        }),
         dataControlAction({
           id: "outputs.open-folder",
           label: "Open outputs folder",
@@ -3223,6 +3288,12 @@ function buildDataControlStore(
       label: "Ledger export",
       summary: "Feedback is exportable through the project data ledger and is not used for model training by default.",
       actions: [
+        appRouteDataControlAction({
+          id: "feedback.open-review",
+          label: "Open feedback review",
+          description: "Opens the local feedback review section in Settings.",
+          href: appRoutes.feedback,
+        }),
         dataControlAction({
           id: "feedback.ledger",
           label: "Export feedback ledger",
@@ -3269,6 +3340,12 @@ function buildDataControlStore(
       label: "Wallet ledger export",
       summary: "Wallet previews and receipts are exportable through the redacted project ledger.",
       actions: [
+        appRouteDataControlAction({
+          id: "wallet-evidence.open-wallet",
+          label: "Open wallet settings",
+          description: "Opens wallet settings and wallet-family readiness for this workspace.",
+          href: appRoutes.wallet,
+        }),
         dataControlAction({
           id: "wallet-evidence.ledger",
           label: "Export wallet evidence",
@@ -3292,6 +3369,12 @@ function buildDataControlStore(
       label: "Ledger export",
       summary: "Events are exportable through the redacted project data ledger.",
       actions: [
+        appRouteDataControlAction({
+          id: `${storeId}.open-history`,
+          label: "Open Run history",
+          description: "Opens Run history for append-only project activity and evidence.",
+          href: appRoutes.history,
+        }),
         dataControlAction({
           id: `${storeId}.ledger`,
           label: "Export ledger",
