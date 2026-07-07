@@ -20,15 +20,21 @@ import {
 import { t } from "../../../../i18n";
 import type { SettingsTab } from "../../../../app/types";
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
+import type { MatterhornSettingsSectionCapability } from "@matterhorn-work/types/backend-capabilities";
 import { Button } from "@/components/ui/button";
 import { getSessionActivityStatusLabel, type SessionActivityStatus } from "../../session/status/session-activity-store";
 import { useWorkflowTaskLog, type TaskLogSource } from "./use-workflow-task-log";
+import {
+  getSettingsTabStatus,
+  type SettingsReadinessStatus,
+} from "../shell/settings-page";
 
 export type GeneralSettingsViewProps = {
   onNavigateTab: (tab: SettingsTab) => void;
   developerMode: boolean;
   runtimeWorkspaceId?: string;
   matterhornServerClient?: MatterhornServerClient | null;
+  backendSettingsSections?: MatterhornSettingsSectionCapability[] | null;
   onSendFeedback: () => void;
   onJoinDiscord: () => void;
   onReportIssue: () => void;
@@ -39,21 +45,21 @@ type SettingsHubCard = {
   icon: typeof Sparkles;
   title: string;
   desc: string;
-  status: "Ready" | "Needs setup" | "Preview" | "Desktop only" | "Cloud only" | "Developer";
+  status: SettingsReadinessStatus;
   developerOnly?: boolean;
 };
 
 const workspaceCards: SettingsHubCard[] = [
-  { tab: "preferences", icon: Cog, title: "Preferences", desc: "Model and reasoning controls.", status: "Ready" },
-  { tab: "permissions", icon: FolderLock, title: "Permissions", desc: "Folders the agent can use.", status: "Ready" },
-  { tab: "extensions", icon: Puzzle, title: "MCPs & Tools", desc: "MCP servers and connectors.", status: "Ready" },
+  { tab: "preferences", icon: Cog, title: "Preferences", desc: "Model and reasoning controls.", status: "Working" },
+  { tab: "permissions", icon: FolderLock, title: "Permissions", desc: "Folders the agent can use.", status: "Working" },
+  { tab: "extensions", icon: Puzzle, title: "MCPs & Tools", desc: "MCP servers and connectors.", status: "Working" },
   { tab: "advanced", icon: Wrench, title: "Advanced", desc: "Runtime and developer options.", status: "Developer", developerOnly: true },
 ];
 
 const globalCards: SettingsHubCard[] = [
   { tab: "ai", icon: Sparkles, title: "AI Providers", desc: "Connect model providers.", status: "Needs setup" },
   { tab: "cloud-account", icon: Cloud, title: "Matterhorn Cloud", desc: "Account and organization.", status: "Needs setup" },
-  { tab: "appearance", icon: Paintbrush, title: "Appearance", desc: "Theme and text size.", status: "Ready" },
+  { tab: "appearance", icon: Paintbrush, title: "Appearance", desc: "Theme and text size.", status: "Working" },
   { tab: "updates", icon: RefreshCcw, title: "Updates", desc: "Version and update channel.", status: "Desktop only" },
   { tab: "cloud-workers", icon: Cloud, title: "Cloud Workers Preview", desc: "Cloud worker instances.", status: "Cloud only", developerOnly: true },
   { tab: "environment", icon: Terminal, title: "Environment", desc: "Local runtime variables.", status: "Developer", developerOnly: true },
@@ -68,7 +74,7 @@ function SettingsCard(props: {
   onClick: () => void;
 }) {
   const statusClass =
-    props.status === "Ready"
+    props.status === "Working"
       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
       : props.status === "Needs setup"
         ? "border-sky-500/30 bg-sky-500/10 text-sky-300"
@@ -202,16 +208,19 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
         <div className="grid gap-1 md:grid-cols-2">
           {workspaceCards
             .filter((card) => props.developerMode || !card.developerOnly)
-            .map((card) => (
-              <SettingsCard
-                key={card.tab}
-                icon={card.icon}
-                title={card.title}
-                desc={card.desc}
-                status={card.status}
-                onClick={() => props.onNavigateTab(card.tab)}
-              />
-            ))}
+            .map((card) => {
+              const liveStatus = getSettingsTabStatus(card.tab, props.backendSettingsSections);
+              return (
+                <SettingsCard
+                  key={card.tab}
+                  icon={card.icon}
+                  title={card.title}
+                  desc={card.desc}
+                  status={liveStatus ?? card.status}
+                  onClick={() => props.onNavigateTab(card.tab)}
+                />
+              );
+            })}
         </div>
       </section>
 
@@ -221,16 +230,19 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
         <div className="grid gap-1 md:grid-cols-2">
           {globalCards
             .filter((card) => props.developerMode || !card.developerOnly)
-            .map((card) => (
-              <SettingsCard
-                key={card.tab}
-                icon={card.icon}
-                title={card.title}
-                desc={card.desc}
-                status={card.status}
-                onClick={() => props.onNavigateTab(card.tab)}
-              />
-            ))}
+            .map((card) => {
+              const liveStatus = getSettingsTabStatus(card.tab, props.backendSettingsSections);
+              return (
+                <SettingsCard
+                  key={card.tab}
+                  icon={card.icon}
+                  title={card.title}
+                  desc={card.desc}
+                  status={liveStatus ?? card.status}
+                  onClick={() => props.onNavigateTab(card.tab)}
+                />
+              );
+            })}
         </div>
       </section>
 
