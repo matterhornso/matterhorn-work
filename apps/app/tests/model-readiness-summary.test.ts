@@ -30,6 +30,7 @@ const baseBackendModels: MatterhornBackendModelsResponse = {
       source: "api",
       connected: true,
       modelCount: 2,
+      modelIds: ["gpt-4.1", "gpt-4.1-mini"],
       sampleModels: ["gpt-4.1", "gpt-4.1-mini"],
     }],
   },

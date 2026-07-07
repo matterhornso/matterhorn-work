@@ -370,6 +370,7 @@ describe("backend control plane routes", () => {
       source: "api",
       connected: true,
       modelCount: 3,
+      modelIds: ["claude-3-haiku", "claude-3-opus", "claude-3-sonnet"],
       sampleModels: ["claude-3-haiku", "claude-3-opus", "claude-3-sonnet"],
     });
     expect(result.payload.defaultModel).toMatchObject({
@@ -427,6 +428,13 @@ describe("backend control plane routes", () => {
       body: JSON.stringify({ providerId: "openai", modelId: "seed phrase should not be here" }),
     });
     expect(invalid.response.status).toBe(400);
+
+    const unknownModel = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {
+      method: "PATCH",
+      body: JSON.stringify({ providerId: "openai", modelId: "not-in-provider-list" }),
+    });
+    expect(unknownModel.response.status).toBe(400);
+    expect(unknownModel.payload.code).toBe("invalid_model_selection");
 
     const saved = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {
       method: "PATCH",
@@ -738,6 +746,7 @@ describe("backend control plane routes", () => {
       source: "api",
       connected: true,
       modelCount: 2,
+      modelIds: ["gpt-4.1", "gpt-4.1-mini"],
       sampleModels: ["gpt-4.1", "gpt-4.1-mini"],
     });
     expect(result.payload.models.defaultModel).toMatchObject({

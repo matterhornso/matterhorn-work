@@ -314,6 +314,7 @@ import {
   buildBackendModels,
   buildWorkspaceModelSelectionResponse,
   clearWorkspaceModelSelection,
+  normalizeModelSelectionRequest,
   readWorkspaceModelSelection,
   workspaceModelSelectionPath,
   writeWorkspaceModelSelection,
@@ -1029,6 +1030,7 @@ function providerListToBackendModelCatalog(value: unknown): MatterhornBackendMod
         source: stringValue(provider.source) ?? "unknown",
         connected: connected.has(id),
         modelCount: models.length,
+        modelIds: models,
         sampleModels: models.slice(0, 5),
       };
     })
@@ -1090,6 +1092,21 @@ async function buildWorkspaceBackendModels(config: ServerConfig, workspace: Work
           ? "opencode_request_failed"
           : "unknown";
     return buildBackendModels({ catalog: unavailableBackendModelCatalog(errorCode), selection });
+  }
+}
+
+function assertModelSelectionInCatalog(
+  catalog: MatterhornBackendModelCatalogSnapshot,
+  selection: MatterhornBackendModelSelectionRequest,
+) {
+  if (!catalog.serverFetched) return;
+
+  const provider = catalog.providers.find((candidate) => candidate.id === selection.providerId);
+  if (!provider) {
+    throw new ApiError(400, "invalid_model_selection", `providerId ${selection.providerId} is not available in the workspace model catalog`);
+  }
+  if (!provider.modelIds.includes(selection.modelId)) {
+    throw new ApiError(400, "invalid_model_selection", `modelId ${selection.modelId} is not available for providerId ${selection.providerId}`);
   }
 }
 
@@ -4577,12 +4594,21 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const body = await readJsonBody(ctx.request) as Partial<MatterhornBackendModelSelectionRequest>;
-    let selection;
+    let requestSelection;
     try {
-      selection = await writeWorkspaceModelSelection(workspace, {
+      requestSelection = normalizeModelSelectionRequest({
         providerId: body.providerId,
         modelId: body.modelId,
-      } as MatterhornBackendModelSelectionRequest, ctx.actor ?? { type: "remote" });
+      } as MatterhornBackendModelSelectionRequest);
+    } catch (error) {
+      throw new ApiError(400, "invalid_model_selection", error instanceof Error ? error.message : "Invalid model selection");
+    }
+    const currentModels = await buildWorkspaceBackendModels(config, workspace);
+    assertModelSelectionInCatalog(currentModels.catalog, requestSelection);
+
+    let selection;
+    try {
+      selection = await writeWorkspaceModelSelection(workspace, requestSelection, ctx.actor ?? { type: "remote" });
     } catch (error) {
       throw new ApiError(400, "invalid_model_selection", error instanceof Error ? error.message : "Invalid model selection");
     }
