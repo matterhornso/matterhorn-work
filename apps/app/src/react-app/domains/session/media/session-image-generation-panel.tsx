@@ -32,7 +32,8 @@ import {
 import {
   NftDraftWalletBridge,
 } from "./nft-draft-wallet-bridge";
-import { buildNftPublishingSetupRequirements } from "./nft-publishing-readiness";
+import type { NftDraftPublishingCapabilities } from "./nft-draft-panel";
+import { buildNftPublishingSetupRequirements, type NftPublishingReadinessCapabilities } from "./nft-publishing-readiness";
 
 type NftCapabilityStatus = "working" | "needs_setup" | "preview";
 
@@ -42,12 +43,7 @@ export interface SessionImageGenerationPanelProps {
   sessionId: string;
   defaultOpen?: boolean;
   onNotice?: (notice: ReactComposerNotice) => void;
-  capabilitiesOverride?: {
-    imageGeneration?: { status: MatterhornCapabilityStatus };
-    walrusStorage?: { status: MatterhornCapabilityStatus };
-    nftMinting?: { status: MatterhornCapabilityStatus };
-    nftMarketplaceListing?: { status: MatterhornCapabilityStatus };
-  };
+  capabilitiesOverride?: NftPublishingReadinessCapabilities;
 }
 
 function capabilityReady(status: MatterhornCapabilityStatus | undefined) {
@@ -57,6 +53,25 @@ function capabilityReady(status: MatterhornCapabilityStatus | undefined) {
 function nftCapabilityStatus(status: MatterhornCapabilityStatus | undefined): NftCapabilityStatus {
   if (status === "working" || status === "preview") return status;
   return "needs_setup";
+}
+
+export function nftDraftPublishingCapabilitiesFromBackend(
+  capabilities: NftPublishingReadinessCapabilities | undefined,
+): NftDraftPublishingCapabilities {
+  return {
+    walrusStorage: {
+      ...(capabilities?.walrusStorage ?? {}),
+      status: nftCapabilityStatus(capabilities?.walrusStorage?.status),
+    },
+    nftMinting: {
+      ...(capabilities?.nftMinting ?? {}),
+      status: nftCapabilityStatus(capabilities?.nftMinting?.status),
+    },
+    nftMarketplaceListing: {
+      ...(capabilities?.nftMarketplaceListing ?? {}),
+      status: nftCapabilityStatus(capabilities?.nftMarketplaceListing?.status),
+    },
+  };
 }
 
 function generatedImageErrorMessage(error: unknown) {
@@ -379,11 +394,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
     }
   }, [nftDraft, props.client, props.onNotice, props.workspaceId]);
 
-  const nftCapabilities = {
-    walrusStorage: nftCapabilityStatus(capabilities?.walrusStorage?.status),
-    nftMinting: nftCapabilityStatus(capabilities?.nftMinting?.status),
-    nftMarketplaceListing: nftCapabilityStatus(capabilities?.nftMarketplaceListing?.status),
-  };
+  const nftCapabilities = nftDraftPublishingCapabilitiesFromBackend(capabilities);
 
   return (
     <div className="space-y-2" data-testid="session-image-generation-panel">

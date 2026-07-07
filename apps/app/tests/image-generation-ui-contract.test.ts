@@ -15,6 +15,7 @@ import {
   SessionImageGenerationPanel,
   buildNftPublishingReadinessItems,
   buildNftPublishingSetupRequirements,
+  nftDraftPublishingCapabilitiesFromBackend,
   buildKioskListingTransactionFromPlan,
   buildMintTransactionFromPlan,
   receiptFromSuiWalletResult,
@@ -319,6 +320,47 @@ describe("NFT draft panel", () => {
       }),
     );
     expect(typeof html).toBe("string");
+  });
+
+  test("session panel preserves configured backend capability details for NFT readiness", () => {
+    const nftCapabilities = nftDraftPublishingCapabilitiesFromBackend({
+      walrusStorage: {
+        status: "working",
+        publisherConfigured: true,
+        relayConfigured: true,
+      },
+      nftMinting: {
+        status: "preview",
+        network: "sui-testnet",
+        custody: false,
+        signing: "client_wallet",
+        packageConfigured: true,
+        kioskConfigured: false,
+      },
+      nftMarketplaceListing: {
+        status: "preview",
+        network: "sui-testnet",
+        custody: false,
+        signing: "client_wallet",
+        packageConfigured: true,
+        kioskConfigured: true,
+      },
+    });
+    const items = buildNftPublishingReadinessItems({
+      imageGeneration: {
+        status: "working",
+        value: `${mockImage.provider}/${mockImage.model}`,
+      },
+      ...nftCapabilities,
+    });
+
+    expect(items.map((item) => item.value)).toEqual([
+      "mock/mock-image-1",
+      "Publisher and relay configured",
+      "Sui testnet · Package configured",
+      "Sui testnet · Kiosk ready",
+    ]);
+    expect(items.map((item) => item.value).join(" ")).not.toContain("needed");
   });
 
   test("component source exposes mint preview, wallet signing, and receipt fields", () => {
