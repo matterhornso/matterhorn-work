@@ -294,6 +294,10 @@ describe("project data ledger routes", () => {
         messageCount: 2,
         userMessageCount: 1,
         assistantMessageCount: 1,
+        transcriptIncluded: false,
+        messageBodiesIncluded: false,
+        transcriptStore: "opencode_runtime",
+        exportBoundary: "metadata_only",
       },
     });
     const feedbackEntry = ledger.payload.items.find((item: { kind: string }) => item.kind === "feedback");
@@ -339,9 +343,16 @@ describe("project data ledger routes", () => {
     expect(runtimeLedger.payload.summary.chats).toBe(1);
     expect(runtimeLedger.payload.items).toHaveLength(1);
     expect(runtimeLedger.payload.items[0].summary).toBe("2 messages (1 user, 1 assistant)");
+    expect(runtimeLedger.payload.items[0].metadata).toMatchObject({
+      transcriptIncluded: false,
+      messageBodiesIncluded: false,
+      transcriptStore: "opencode_runtime",
+      exportBoundary: "metadata_only",
+    });
 
     const dataMap = await jsonFetch(base, "/workspace/ws_ledger/backend/data-map");
     expect(dataMap.response.status).toBe(200);
+    expect(dataMap.payload.stores.chat.description).toContain("project ledger exports session counts");
     expect(dataMap.payload.stores.feedback.status).toBe("working");
     expect(dataMap.payload.stores.feedback.path).toBe(join(dir, "openwork-data", "feedback", "ws_ledger.jsonl"));
     expect(dataMap.payload.stores.feedback.containsSecrets).toBe("redacted");
@@ -351,6 +362,7 @@ describe("project data ledger routes", () => {
     const dataControls = await jsonFetch(base, "/workspace/ws_ledger/backend/data-controls");
     expect(dataControls.response.status).toBe(200);
     expect(dataControls.payload.version).toBe("matterhorn.backend.data-controls.v1");
+    expect(dataControls.payload.stores.chat.export.summary).toContain("metadata only");
     expect(dataControls.payload.stores.feedback.export.actions).toContainEqual(
       expect.objectContaining({
         id: "feedback.open-review",
@@ -391,6 +403,18 @@ describe("project data ledger routes", () => {
       }),
     );
     expect(dataControls.payload.stores.walletEvidence.deletion.status).toBe("unsupported");
+    expect(dataControls.payload.stores.outputs.export.actions).toContainEqual(
+      expect.objectContaining({
+        id: "outputs.open-history",
+        label: "Open Project history",
+      }),
+    );
+    expect(dataControls.payload.stores.taskEvents.export.actions).toContainEqual(
+      expect.objectContaining({
+        id: "taskEvents.open-history",
+        label: "Open Project history",
+      }),
+    );
     expect(dataControls.payload.stores.taskEvents.retention.mode).toBe("append_only");
     expect(dataControls.payload.policy.retention).toMatchObject({
       mode: "accountability_default",
