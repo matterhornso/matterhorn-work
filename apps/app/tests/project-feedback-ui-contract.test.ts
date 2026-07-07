@@ -68,6 +68,7 @@ describe("project feedback UI contract", () => {
 
   test("settings overview exposes a local feedback review surface", () => {
     const source = readReactSource("domains/settings/pages/overview-view.tsx");
+    const helperSource = readReactSource("domains/settings/backend-capabilities/backend-capability-helpers.ts");
 
     expect(source).toContain("FeedbackReviewSection");
     expect(source).toContain('source: "feedback"');
@@ -79,5 +80,7 @@ describe("project feedback UI contract", () => {
     expect(source).toContain("Feedback deleted.");
     expect(source).toContain("Delete all local feedback for this workspace?");
     expect(source).toContain("Local feedback stored for product quality and routing. No training by default.");
+    expect(helperSource).toContain("Structured feedback is stored locally for product quality and routing. No training by default.");
+    expect(helperSource).not.toContain("Today feedback is still a link");
   });
 });
