@@ -1,6 +1,6 @@
 import type { MatterhornBackendControlPlaneResponse } from "./backend-control-plane.js";
 import type { MatterhornBackendCapabilitiesResponse } from "./backend-capabilities.js";
-import type { MatterhornBackendModelsResponse } from "./backend-models.js";
+import type { MatterhornBackendModelProviderSummary, MatterhornBackendModelsResponse } from "./backend-models.js";
 import type { MatterhornBackendTeamAccessSummaryResponse } from "./backend-team-access.js";
 import type { MatterhornWorkspaceDataControlsResponse } from "./backend-data-controls.js";
 import type {
@@ -42,8 +42,14 @@ export interface MatterhornBackendSupportReportResponse {
       | "connectedProviderCount"
       | "modelCount"
       | "connectedProviderIds"
+      | "defaultModels"
       | "errorCode"
-    >;
+    > & {
+      providers: Array<Pick<
+        MatterhornBackendModelProviderSummary,
+        "id" | "name" | "source" | "connected" | "modelCount" | "sampleModels"
+      >>;
+    };
   };
   dataPolicy: {
     dataMap: {

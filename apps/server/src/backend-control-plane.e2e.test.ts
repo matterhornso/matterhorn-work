@@ -670,7 +670,7 @@ describe("backend control plane routes", () => {
     expect(result.payload.models.routing.selection.preferenceStore).toBe("local_preferences");
     expect(result.payload.models.catalog.source).toBe("opencode_provider_list");
     expect(result.payload.models.catalog.providerCount).toBe(0);
-    expect(result.payload.models.catalog.providers).toBeUndefined();
+    expect(result.payload.models.catalog.providers).toEqual([]);
     expect(result.payload.dataPolicy.dataMap.version).toBe("matterhorn.backend.data-map.v1");
     expect(result.payload.dataPolicy.dataMap.stores.memory.details.workspaceNamespaceTag).toBe("workspace:ws_backend");
     expect(result.payload.dataPolicy.dataMap.stores.feedback.retention).toBe("user_controlled");
@@ -696,6 +696,49 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain("Basic ");
     expect(serialized).not.toContain("Authorization");
     expect(serialized).not.toContain("owt_should_not_leak");
+  });
+
+  test("backend support report includes sanitized model provider samples", async () => {
+    const opencodeBaseUrl = await startProviderCatalogServer({
+      all: [
+        {
+          id: "anthropic",
+          name: "Anthropic",
+          source: "api",
+          models: {
+            "claude-3-haiku": { name: "Claude 3 Haiku" },
+            "claude-3-opus": { name: "Claude 3 Opus" },
+            "claude-3-sonnet": { name: "Claude 3 Sonnet" },
+          },
+        },
+      ],
+      default: {
+        anthropic: "claude-3-sonnet",
+      },
+      connected: ["anthropic"],
+    });
+    const { base } = await boot({ opencodeBaseUrl });
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/support-report");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.models.catalog.defaultModels).toEqual({
+      anthropic: "claude-3-sonnet",
+    });
+    expect(result.payload.models.catalog.providers).toEqual([{
+      id: "anthropic",
+      name: "Anthropic",
+      source: "api",
+      connected: true,
+      modelCount: 3,
+      sampleModels: ["claude-3-haiku", "claude-3-opus", "claude-3-sonnet"],
+    }]);
+    expect(result.payload.models.catalog.providers[0].modelIds).toBeUndefined();
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+    expect(serialized).not.toContain("Basic ");
+    expect(serialized).not.toContain("Authorization");
   });
 
   test("GET /workspace/:id/backend/control-plane includes live model catalog counts", async () => {
