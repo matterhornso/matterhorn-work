@@ -257,6 +257,8 @@ describe("project data ledger routes", () => {
     expect(ledger.payload.version).toBe("matterhorn.project-data-ledger.v1");
     expect(ledger.payload.policy.trainingUse).toBe("none_by_default");
     expect(ledger.payload.policy.feedbackUse).toBe("eval_routing_product_quality_only");
+    expect(ledger.payload.policy.export.status).toBe("working");
+    expect(ledger.payload.policy.deletion.status).toBe("preview");
     expect(ledger.payload.summary.notes).toBeGreaterThanOrEqual(1);
     expect(ledger.payload.summary.audits).toBeGreaterThanOrEqual(1);
     expect(ledger.payload.summary.feedback).toBe(1);
