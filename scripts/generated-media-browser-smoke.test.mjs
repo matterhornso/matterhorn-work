@@ -39,7 +39,9 @@ for (const stageId of [
   "create_nft_draft",
   "upload_storage",
   "preview_mint",
+  "record_mint_receipt",
   "preview_listing",
+  "record_listing_receipt",
 ]) {
   assert.ok(script.includes(stageId), `generated-media browser smoke should report stage ${stageId}`);
 }
@@ -55,16 +57,26 @@ for (const visibleText of [
   "Prepare upload",
   "Upload",
   "Preview mint",
+  "Mint digest",
+  "Minted object id",
+  "Record mint receipt",
+  "Mint receipt recorded",
   "Preview listing",
   "Listing plan ready",
+  "Listing transaction digest",
+  "Record listing receipt",
+  "Listing receipt recorded",
+  "Generated media history",
+  "Listed",
 ]) {
   assert.ok(script.includes(visibleText), `generated-media browser smoke should exercise ${visibleText}`);
 }
 assert.ok(
-  script.includes("This browser smoke creates a local NFT draft") &&
+  script.includes("records public mint receipt metadata") &&
+    script.includes("records public listing receipt metadata") &&
     script.includes("It does not sign") &&
-    script.includes("receipt coverage lives in the backend"),
-  "generated-media browser smoke should document the no-custody receipt boundary",
+    script.includes("submit anything on-chain"),
+  "generated-media browser smoke should document the no-custody public receipt boundary",
 );
 assert.ok(
   script.includes("page.on(\"console\"") &&
