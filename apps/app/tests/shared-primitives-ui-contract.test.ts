@@ -82,6 +82,22 @@ describe("Shared primitives UI contract", () => {
     expect(composerSource).not.toContain("shadow-[0_8px_24px");
   });
 
+  test("desk info buttons use a slim icon affordance", () => {
+    const sourceByPath = new Map([
+      ["domains/session/chat/session-page.tsx", readAppSource("domains/session/chat/session-page.tsx")],
+      ["domains/session/surface/session-surface.tsx", readAppSource("domains/session/surface/session-surface.tsx")],
+      ["domains/session/workflows/desk-workflow-stage-panel.tsx", readAppSource("domains/session/workflows/desk-workflow-stage-panel.tsx")],
+    ]);
+
+    for (const [path, source] of sourceByPath) {
+      expect(source, path).toContain("rounded-full text-dls-muted");
+      expect(source, path).toContain("strokeWidth={1.55}");
+      expect(source, path).not.toContain("inline-flex size-5 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb)");
+      expect(source, path).not.toContain("inline-flex size-5 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-dls-hover");
+      expect(source, path).not.toContain("absolute right-2 top-2 inline-flex size-6 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb)");
+    }
+  });
+
   test("main Matterhorn surfaces avoid harsh divider-line scaffolding", () => {
     const sourceByPath = new Map([
       ["domains/memory/memory-panel.tsx", readAppSource("domains/memory/memory-panel.tsx")],

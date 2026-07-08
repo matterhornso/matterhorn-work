@@ -459,9 +459,9 @@ function HomeWalletRuntimeStatus({
               <button
                 type="button"
                 aria-label="Wallet readiness details"
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-dls-hover/35 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/30"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
               >
-                <Info className="size-3.5" aria-hidden="true" />
+                <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
               </button>
             }
           />
@@ -543,9 +543,9 @@ function HomeCapabilityOverview({
               <button
                 type="button"
                 aria-label="Open a desk details"
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-dls-hover/35 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/30"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
               >
-                <Info className="size-3.5" aria-hidden="true" />
+                <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
               </button>
             }
           />
@@ -592,9 +592,9 @@ function HomeCapabilityOverview({
                     <button
                       type="button"
                       aria-label={`${item.title} details`}
-                      className="absolute right-2 top-2 inline-flex size-6 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                      className="absolute right-2 top-2 inline-flex size-6 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
                     >
-                      <Info className="size-3.5" aria-hidden="true" />
+                      <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
                     </button>
                   }
                 />
@@ -903,9 +903,9 @@ function ProtocolDeskEmptyState({
                       <button
                         type="button"
                         aria-label={`${visual?.displayName ?? panel} desk safety info`}
-                        className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.11)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
                       >
-                        <Info className="size-3.5" aria-hidden="true" />
+                        <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
                       </button>
                     }
                   />
