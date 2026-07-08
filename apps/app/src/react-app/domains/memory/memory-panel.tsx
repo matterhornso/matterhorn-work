@@ -776,13 +776,13 @@ export function MemoryPanel(props: MemoryPanelProps) {
               title="Could not load memory"
               onRetry={() => void refresh()}
               tone="memory"
-              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"
+              className="rounded-lg bg-amber-500/10 px-3 py-2"
             />
           ) : null}
         </section>
 
         {visibleSelectedRecords.length ? (
-          <section className="rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3.5 ring-1 ring-[rgba(var(--matterhorn-blue-rgb),0.20)]">
+          <section className="rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3.5">
             <div className="flex flex-col gap-3">
               <div>
                 <div className="text-sm font-semibold">Using memories in chat</div>
@@ -833,7 +833,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
               title="Could not load memory review"
               onRetry={() => void refreshSuggestions()}
               tone="memory"
-              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"
+              className="rounded-lg bg-amber-500/10 px-3 py-2"
             />
           ) : null}
 
@@ -888,7 +888,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 const confidence = Math.round(suggestion.confidence * 100);
                 return (
                   <article key={entry.id} className={cn(
-                    "overflow-hidden rounded-md bg-dls-surface-muted/10 p-3.5 ring-1 ring-white/[0.04]",
+                    "overflow-hidden rounded-md bg-dls-surface-muted/10 p-3.5",
                     statusMeta.cardClassName,
                     resolved && "shadow-none",
                   )}>
@@ -937,12 +937,12 @@ export function MemoryPanel(props: MemoryPanelProps) {
                             <ChevronDown className="size-3 transition-transform group-open:rotate-180" />
                             Why suggested
                           </summary>
-                          <div className="mt-2 space-y-1.5 rounded-md bg-dls-background/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
+                          <div className="mt-2 space-y-1.5 rounded-md bg-dls-background/20 px-3 py-2 text-xs leading-5 text-dls-secondary">
                             <p className="break-words">
                               <span className="font-medium text-dls-text">Trigger:</span> {entry.reason || suggestion.reason}
                             </p>
                             <p className="break-words">
-                              <span className="font-medium text-dls-text">Boundary:</span> {suggestionDeskReason(suggestion)}
+                              <span className="font-medium text-dls-text">Desk rule:</span> {suggestionDeskReason(suggestion)}
                             </p>
                             <p className="break-words">
                               <span className="font-medium text-dls-text">Kind:</span> {formatKind(suggestion.proposedRecord.kind)}
@@ -956,7 +956,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     )}
 
                     {editing ? (
-                      <div className="mt-3 grid gap-2 rounded-md bg-dls-background/30 p-3 ring-1 ring-dls-border/20">
+                      <div className="mt-3 grid gap-2 rounded-md bg-dls-background/25 p-3">
                         <div className="text-xs font-semibold text-dls-text">Edit before saving</div>
                         <Input
                           value={suggestionEditDraft.title}

@@ -87,7 +87,7 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
       {/* Header */}
       <div className="ow-soft-card p-4 space-y-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/20">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-violet-500/10 text-violet-300">
             <Send className="size-5" />
           </div>
           <div>
@@ -109,10 +109,10 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
                 key={t.address}
                 onClick={() => setToken(t.address)}
                 className={cn(
-                  "flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all border",
+                  "flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-xs font-semibold transition-colors",
                   token === t.address
-                    ? "bg-violet-500 text-white border-violet-500 shadow-lg shadow-violet-500/20"
-                    : "bg-dls-surface text-dls-text border-dls-border hover:border-violet-500/30"
+                    ? "bg-violet-500/15 text-violet-100"
+                    : "bg-dls-surface-muted/15 text-dls-text hover:bg-dls-hover/45"
                 )}
               >
                 <TokenIcon symbol={t.symbol} logoUrl={meta?.logoUrl} size="sm" />
@@ -230,7 +230,7 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
       <Button
         onClick={handleSend}
         disabled={loading || !to || !amount || Number(amount) <= 0}
-        className="w-full h-12 bg-violet-500 hover:bg-violet-600 text-white font-semibold shadow-lg shadow-violet-500/20"
+        className="w-full h-12 font-semibold"
       >
         <Send className="size-4 mr-1.5" />
         {loading ? "Building..." : `Send ${selectedMeta?.symbol ?? "ETH"}`}
