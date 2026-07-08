@@ -51,6 +51,7 @@ for (const visibleText of [
   "Copy project path",
   "Open outputs folder",
   "Wallet readiness",
+  "Wallet readiness details",
   "Sui signing stays in your wallet; desktop uses external handoff.",
   "Open Bittensor",
   "Bittensor desk",

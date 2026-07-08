@@ -262,16 +262,15 @@ async function runSmoke(config) {
     });
 
     await stage(report, "wallet_readiness", "Check compact wallet readiness", async () => {
-      const readiness = page.locator("details").filter({ hasText: "Wallet readiness" }).first();
-      await readiness.waitFor({ state: "visible", timeout: 20_000 });
-      await readiness.getByText(/Sui: (Working|Preview|Needs setup|Not supported here)/).waitFor({
+      await page.getByText("Wallet readiness", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText(/Sui: (Working|Preview|Needs setup|Not supported here)/).waitFor({
         state: "visible",
         timeout: 20_000,
       });
-      await readiness.locator("summary").click();
-      await readiness.getByText("Sui signing stays in your wallet; desktop uses external handoff.", { exact: true })
+      await page.getByLabel("Wallet readiness details").click();
+      await page.getByText("Sui signing stays in your wallet; desktop uses external handoff.", { exact: true })
         .waitFor({ state: "visible", timeout: 10_000 });
-      await readiness.getByRole("button", { name: "Open wallet", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await page.getByRole("button", { name: "Open wallet", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     });
 
     await stage(report, "desk_task_start", "Start a Bittensor desk task", async () => {

@@ -205,6 +205,8 @@ export function getSettingsTabDescription(tab: SettingsTab) {
       return "Image generation, public storage, and Sui NFT publishing readiness.";
     case "marketplace":
       return "Future agent templates. Not live.";
+    case "billing":
+      return "Plan, checkout, usage, and entitlement status for this workspace.";
     case "general":
       return "Settings at a glance";
     default:
