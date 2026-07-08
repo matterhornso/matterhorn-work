@@ -286,6 +286,7 @@ import type {
   MatterhornBackendModelCatalogErrorCode,
   MatterhornBackendModelCatalogSnapshot,
   MatterhornBackendModelProviderSummary,
+  MatterhornBackendModelSelectionSource,
   MatterhornBackendModelSelectionRequest,
 } from "@matterhorn-work/types/backend-models";
 import type {
@@ -5969,8 +5970,8 @@ function createRoutes(
     }
     const body = await readJsonBody(ctx.request);
     const parts = parseSessionPromptParts(body);
-    const model = parseSessionPromptModel(body);
-    const auditMetadata = sessionPromptAuditMetadata(body, model);
+    const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
+    const auditMetadata = sessionPromptAuditMetadata(body, modelResolution);
     const directory = resolveOpencodeDirectory(workspace) ?? undefined;
     const opencode = createWorkspaceOpencodeClient(config, workspace);
     const sessionApi = opencode.session as typeof opencode.session & {
@@ -5989,7 +5990,7 @@ function createRoutes(
         sessionID: sessionId,
         ...(directory ? { directory } : {}),
         ...(typeof body.messageID === "string" && body.messageID.trim() ? { messageID: body.messageID.trim() } : {}),
-        ...(model ? { model } : {}),
+        ...(modelResolution.model ? { model: modelResolution.model } : {}),
         ...(typeof body.agent === "string" && body.agent.trim() ? { agent: body.agent.trim() } : {}),
         ...(typeof body.variant === "string" && body.variant.trim() ? { variant: body.variant.trim() } : {}),
         ...(typeof body.noReply === "boolean" ? { noReply: body.noReply } : {}),
@@ -10479,7 +10480,14 @@ function parseSessionPromptParts(body: Record<string, unknown>): unknown[] {
   throw new ApiError(400, "invalid_payload", "message or non-empty parts is required");
 }
 
-function parseSessionPromptModel(body: Record<string, unknown>): { providerID: string; modelID: string } | undefined {
+type SessionPromptModel = { providerID: string; modelID: string };
+type SessionPromptModelSource = Extract<MatterhornBackendModelSelectionSource, "server_workspace_preference" | "server_default"> | "request";
+type SessionPromptModelResolution = {
+  model: SessionPromptModel;
+  source: SessionPromptModelSource;
+};
+
+function parseSessionPromptModel(body: Record<string, unknown>): SessionPromptModel | undefined {
   if (isRecord(body.model)) {
     const providerID = typeof body.model.providerID === "string" ? body.model.providerID.trim() : "";
     const modelID = typeof body.model.modelID === "string" ? body.model.modelID.trim() : "";
@@ -10498,6 +10506,28 @@ function parseSessionPromptModel(body: Record<string, unknown>): { providerID: s
   return { providerID, modelID };
 }
 
+async function resolveSessionPromptModel(
+  config: ServerConfig,
+  workspace: WorkspaceInfo,
+  requestModel: SessionPromptModel | undefined,
+): Promise<SessionPromptModelResolution> {
+  if (requestModel) {
+    return {
+      model: requestModel,
+      source: "request",
+    };
+  }
+
+  const backendModels = await buildWorkspaceBackendModels(config, workspace);
+  return {
+    model: {
+      providerID: backendModels.defaultModel.providerId,
+      modelID: backendModels.defaultModel.modelId,
+    },
+    source: backendModels.defaultModel.source === "server_workspace_preference" ? "server_workspace_preference" : "server_default",
+  };
+}
+
 function boundedPromptAuditString(value: unknown, maxLength = 120): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -10506,19 +10536,17 @@ function boundedPromptAuditString(value: unknown, maxLength = 120): string | und
 
 function sessionPromptAuditMetadata(
   body: Record<string, unknown>,
-  model: { providerID: string; modelID: string } | undefined,
+  resolution: SessionPromptModelResolution,
 ): Record<string, string | boolean> {
   const metadata: Record<string, string | boolean> = {
-    modelSource: model ? "request" : "server_default",
+    modelSource: resolution.source,
   };
 
-  if (model) {
-    const providerID = model.providerID.slice(0, 120);
-    const modelID = model.modelID.slice(0, 120);
-    metadata.modelProviderId = providerID;
-    metadata.modelId = modelID;
-    metadata.modelRef = `${providerID}/${modelID}`.slice(0, 240);
-  }
+  const providerID = resolution.model.providerID.slice(0, 120);
+  const modelID = resolution.model.modelID.slice(0, 120);
+  metadata.modelProviderId = providerID;
+  metadata.modelId = modelID;
+  metadata.modelRef = `${providerID}/${modelID}`.slice(0, 240);
 
   const agent = boundedPromptAuditString(body.agent);
   if (agent) metadata.agent = agent;

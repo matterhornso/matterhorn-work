@@ -53,6 +53,32 @@ function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promis
         body,
       });
 
+      if (url.pathname === "/provider") {
+        return Response.json({
+          all: [
+            {
+              id: "openai",
+              name: "OpenAI",
+              source: "api",
+              models: {
+                "gpt-4.1": { name: "GPT 4.1" },
+                "gpt-4.1-mini": { name: "GPT 4.1 Mini" },
+              },
+            },
+            {
+              id: "anthropic",
+              name: "Anthropic",
+              source: "api",
+              models: {
+                "claude-3-sonnet": { name: "Claude 3 Sonnet" },
+              },
+            },
+          ],
+          default: { openai: "gpt-4.1-mini", anthropic: "claude-3-sonnet" },
+          connected: ["openai"],
+        });
+      }
+
       if (url.pathname === "/session" && request.method === "POST") {
         return Response.json({
           id: "ses_created",
@@ -537,6 +563,145 @@ describe("workspace session read APIs", () => {
       },
     });
     expect(JSON.stringify(ledgerBody)).not.toContain("Summarize this workspace");
+  });
+
+  test("submits stable route prompts with the server default model when no selection exists", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const promptResponse = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Use the workspace default model" }),
+    });
+
+    expect(promptResponse.status).toBe(202);
+    const promptRequest = mock.requests.find((request) => request.method === "POST" && request.pathname === "/session/ses_1/prompt_async");
+    expect(promptRequest?.body).toMatchObject({
+      model: { providerID: "openai", modelID: "gpt-4.1-mini" },
+      parts: [{ type: "text", text: "Use the workspace default model" }],
+    });
+
+    const ledgerResponse = await fetch(`${base}/workspace/ws_1/data-ledger?kind=chat&limit=10`, {
+      headers: auth(openwork.token),
+    });
+    expect(ledgerResponse.status).toBe(200);
+    const ledgerBody = await ledgerResponse.json();
+    const promptEntry = ledgerBody.items.find((item: { eventType?: string }) => item.eventType === "session.prompt");
+    expect(promptEntry).toMatchObject({
+      metadata: {
+        modelSource: "server_default",
+        modelProviderId: "openai",
+        modelId: "gpt-4.1-mini",
+        modelRef: "openai/gpt-4.1-mini",
+      },
+    });
+    expect(JSON.stringify(ledgerBody)).not.toContain("Use the workspace default model");
+  });
+
+  test("submits stable route prompts with the saved workspace model when request omits model", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const saved = await fetch(`${base}/workspace/ws_1/backend/model-selection`, {
+      method: "PATCH",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1" }),
+    });
+    expect(saved.status).toBe(200);
+
+    const promptResponse = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Use the saved workspace model", agent: "build" }),
+    });
+
+    expect(promptResponse.status).toBe(202);
+    const promptRequest = mock.requests.find((request) => request.method === "POST" && request.pathname === "/session/ses_1/prompt_async");
+    expect(promptRequest?.body).toMatchObject({
+      model: { providerID: "openai", modelID: "gpt-4.1" },
+      agent: "build",
+      parts: [{ type: "text", text: "Use the saved workspace model" }],
+    });
+
+    const ledgerResponse = await fetch(`${base}/workspace/ws_1/data-ledger?kind=chat&limit=10`, {
+      headers: auth(openwork.token),
+    });
+    expect(ledgerResponse.status).toBe(200);
+    const ledgerBody = await ledgerResponse.json();
+    const promptEntry = ledgerBody.items.find((item: { eventType?: string }) => item.eventType === "session.prompt");
+    expect(promptEntry).toMatchObject({
+      metadata: {
+        modelSource: "server_workspace_preference",
+        modelProviderId: "openai",
+        modelId: "gpt-4.1",
+        modelRef: "openai/gpt-4.1",
+        agent: "build",
+      },
+    });
+    expect(JSON.stringify(ledgerBody)).not.toContain("Use the saved workspace model");
+  });
+
+  test("request model overrides saved workspace model for stable route prompts", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const saved = await fetch(`${base}/workspace/ws_1/backend/model-selection`, {
+      method: "PATCH",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1" }),
+    });
+    expect(saved.status).toBe(200);
+
+    const promptResponse = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Use the request model",
+        model: { providerID: "anthropic", modelID: "claude-3-sonnet" },
+      }),
+    });
+
+    expect(promptResponse.status).toBe(202);
+    const promptRequest = mock.requests.find((request) => request.method === "POST" && request.pathname === "/session/ses_1/prompt_async");
+    expect(promptRequest?.body).toMatchObject({
+      model: { providerID: "anthropic", modelID: "claude-3-sonnet" },
+      parts: [{ type: "text", text: "Use the request model" }],
+    });
+
+    const ledgerResponse = await fetch(`${base}/workspace/ws_1/data-ledger?kind=chat&limit=10`, {
+      headers: auth(openwork.token),
+    });
+    expect(ledgerResponse.status).toBe(200);
+    const ledgerBody = await ledgerResponse.json();
+    const promptEntry = ledgerBody.items.find((item: { eventType?: string }) => item.eventType === "session.prompt");
+    expect(promptEntry).toMatchObject({
+      metadata: {
+        modelSource: "request",
+        modelProviderId: "anthropic",
+        modelId: "claude-3-sonnet",
+        modelRef: "anthropic/claude-3-sonnet",
+      },
+    });
+    expect(JSON.stringify(ledgerBody)).not.toContain("Use the request model");
   });
 
   test("rejects empty session prompts before calling upstream", async () => {
