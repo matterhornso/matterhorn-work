@@ -128,9 +128,19 @@ async function persistStripeWebhookBilling(input: {
   } catch {
     return false;
   }
+  const accountStore = new MatterhornBillingAccountStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+  const existingAccount = await accountStore.get();
+  if (
+    result.eventId &&
+    existingAccount?.source === "stripe_test_webhook" &&
+    existingAccount.lastProviderEventId === result.eventId
+  ) {
+    return true;
+  }
+
   const now = new Date().toISOString();
   const status = result.subscriptionStatus ?? (result.planId === "free" ? "none" : "active");
-  await new MatterhornBillingAccountStore({ workspaceRoot: workspace.path, workspaceId: workspace.id }).save({
+  await accountStore.save({
     version: "matterhorn.billing.account.v1",
     workspaceId: workspace.id,
     subscription: {
@@ -145,6 +155,9 @@ async function persistStripeWebhookBilling(input: {
     pendingCheckout: null,
     updatedAt: now,
     source: "stripe_test_webhook",
+    lastProviderEventId: result.eventId ?? null,
+    lastProviderEventType: result.eventType ?? null,
+    lastProviderSyncedAt: now,
   });
   await recordBillingAudit({
     workspace,

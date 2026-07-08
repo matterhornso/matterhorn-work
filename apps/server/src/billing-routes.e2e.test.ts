@@ -743,6 +743,69 @@ describe("Billing routes", () => {
     expect(status.payload.status.usage.generatedImages.limit).toBe(null);
   });
 
+  test("POST /api/billing/webhook/stripe is idempotent for duplicate Stripe event ids", async () => {
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET = "whsec_idempotent";
+
+    const { base } = await boot();
+    const rawBody = JSON.stringify({
+      id: "evt_billing_duplicate",
+      type: "checkout.session.completed",
+      livemode: false,
+      data: {
+        object: {
+          id: "cs_test_duplicate",
+          object: "checkout.session",
+          customer: "cus_test_duplicate",
+          subscription: "sub_test_duplicate",
+          metadata: {
+            workspace_id: WORKSPACE_ID,
+            plan_id: "plus",
+          },
+        },
+      },
+    });
+    const requestInit = {
+      method: "POST",
+      body: rawBody,
+      headers: { "stripe-signature": stripeSignatureHeader("whsec_idempotent", rawBody) },
+    };
+    const first = await jsonFetch(base, "/api/billing/webhook/stripe", requestInit, undefined);
+    const second = await jsonFetch(base, "/api/billing/webhook/stripe", requestInit, undefined);
+
+    expect(first.response.status).toBe(200);
+    expect(second.response.status).toBe(200);
+    expect(first.payload).toMatchObject({
+      verified: true,
+      handled: true,
+      workspaceSynced: true,
+      eventId: "evt_billing_duplicate",
+      planId: "plus",
+    });
+    expect(second.payload).toMatchObject({
+      verified: true,
+      handled: true,
+      workspaceSynced: true,
+      eventId: "evt_billing_duplicate",
+      planId: "plus",
+    });
+
+    const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(status.payload.status.subscription).toMatchObject({
+      planId: "plus",
+      status: "active",
+      providerCustomerId: "cus_test_duplicate",
+      providerSubscriptionId: "sub_test_duplicate",
+    });
+
+    const ledger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=billing&limit=10`);
+    const webhookRows = ledger.payload.items.filter((item: { eventType?: string }) =>
+      item.eventType === "workspace.billing.webhook"
+    );
+    expect(webhookRows).toHaveLength(1);
+  });
+
   test("POST /api/billing/portal creates a Stripe test Customer Portal session when a test customer is configured", async () => {
     const stripe = await startFakeStripe();
     process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";

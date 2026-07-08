@@ -14,6 +14,9 @@ export interface MatterhornBillingAccountSnapshot {
   pendingCheckout?: MatterhornBillingPendingCheckout | null;
   updatedAt: string;
   source: Exclude<MatterhornBillingAccountSource, "env_default">;
+  lastProviderEventId?: string | null;
+  lastProviderEventType?: string | null;
+  lastProviderSyncedAt?: string | null;
 }
 
 export interface BillingAccountStoreOptions {
