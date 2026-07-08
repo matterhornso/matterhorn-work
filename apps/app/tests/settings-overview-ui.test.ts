@@ -104,6 +104,19 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("Wallet signing still happens in the user's Sui wallet.");
     expect(source).not.toContain("direct-connect");
   });
+
+  test("surfaces billing team-seat limits before local token creation", () => {
+    const source = readAppSource("domains/settings/pages/overview-view.tsx");
+
+    expect(source).toContain("settings-workspace-billing-status");
+    expect(source).toContain("client.workspaceBillingStatus(workspaceId)");
+    expect(source).toContain("teamSeatUsageText");
+    expect(source).toContain("teamLimitReached");
+    expect(source).toContain("Team seats are full on this plan. Open Billing to upgrade before creating teammate tokens.");
+    expect(source).toContain("Upgrade to Matterhorn Max to create teammate tokens.");
+    expect(source).toContain("onOpenBilling={() => onSelectTab(\"billing\")}");
+    expect(source).toContain("refetchBilling={workspaceBillingStatusQuery.refetch}");
+  });
 });
 
 describe("Backend capability rendering layer files exist", () => {
