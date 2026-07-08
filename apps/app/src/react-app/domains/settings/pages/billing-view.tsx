@@ -391,6 +391,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
   const accountLinkage = status?.accountLinkage;
   const subscriptionCopy = subscriptionPeriodCopy(status?.subscription);
   const subscriptionLabel = status ? subscriptionStatusLabel(status.subscription.status) : null;
+  const pendingCheckoutExpiryCopy = formatBillingDate(status?.pendingCheckout?.expiresAt);
 
   const usageItems = useMemo(() => {
     if (!status) return [];
@@ -444,7 +445,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs leading-5 text-amber-200">
                 <span>
                   Checkout pending for {pendingPlan?.name ?? billingPlanDisplayName(status.pendingCheckout.planId)}. The plan changes after the
-                  Stripe test webhook confirms it.
+                  Stripe test webhook confirms it{pendingCheckoutExpiryCopy ? `, or expires ${pendingCheckoutExpiryCopy}` : ""}.
                 </span>
                 {workspaceId ? (
                   <Button

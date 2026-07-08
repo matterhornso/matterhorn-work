@@ -9,6 +9,7 @@ import type {
 } from "@matterhorn-work/types/billing";
 import { recordAudit } from "./audit.js";
 import {
+  activeMatterhornBillingPendingCheckout,
   buildBillingPlansResponse,
   buildBillingStatusResponse,
   buildBillingStatusResponseForSubscription,
@@ -77,17 +78,6 @@ function nextBillingPeriod(now = new Date()): { currentPeriodStart: string; curr
     currentPeriodStart: now.toISOString(),
     currentPeriodEnd: end.toISOString(),
   };
-}
-
-function activePendingCheckout(
-  pendingCheckout?: MatterhornBillingPendingCheckout | null,
-  now = new Date(),
-): MatterhornBillingPendingCheckout | null {
-  if (!pendingCheckout) return null;
-  if (!pendingCheckout.expiresAt) return pendingCheckout;
-  const expiresAt = new Date(pendingCheckout.expiresAt);
-  if (Number.isNaN(expiresAt.getTime())) return pendingCheckout;
-  return expiresAt.getTime() > now.getTime() ? pendingCheckout : null;
 }
 
 async function recordBillingAudit(input: {
@@ -219,7 +209,7 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       cloudStorageBytes: 0,
     };
     if (account) {
-      const pendingCheckout = activePendingCheckout(account.pendingCheckout);
+      const pendingCheckout = activeMatterhornBillingPendingCheckout(account.pendingCheckout);
       return jsonResponse(buildBillingStatusResponseForSubscription(
         provider.config,
         subscription,
