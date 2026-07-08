@@ -88,7 +88,7 @@ export function SettingsShell(props: SettingsShellProps) {
 
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col">
-            <SettingsPage {...props}>{props.children}</SettingsPage>
+            <SettingsPage {...props} showPanelHeading={false}>{props.children}</SettingsPage>
 
             {props.error ? (
               <div className="mx-auto w-full max-w-3xl px-4 pb-6">

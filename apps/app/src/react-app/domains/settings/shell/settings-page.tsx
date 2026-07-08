@@ -355,6 +355,7 @@ type SettingsPageProps = {
   onUpdateToolbarAction?: () => void;
   children: React.ReactNode;
   backendSettingsSections?: MatterhornSettingsSectionCapability[] | null;
+  showPanelHeading?: boolean;
 };
 
 type SettingsSidebarProps = Pick<SettingsPageProps, "activeTab" | "onSelectTab" | "developerMode"> & {
@@ -509,40 +510,47 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
 }
 
 export function SettingsPage(props: SettingsPageProps) {
+  const showHeading = props.showPanelHeading !== false;
+  const showToolbar = props.showUpdateToolbar && props.activeTab === "general";
+
   return (
     <SettingsContent>
-      <SettingsPanel>
-        <SettingsPanelHeading>
-          <SettingsPanelTitle>{getSettingsTabLabel(props.activeTab)}</SettingsPanelTitle>
-          <SettingsPanelDescription>{getSettingsTabDescription(props.activeTab)}</SettingsPanelDescription>
-        </SettingsPanelHeading>
+      {showHeading || showToolbar ? (
+        <SettingsPanel>
+          {showHeading ? (
+            <SettingsPanelHeading className="hidden md:flex">
+              <SettingsPanelTitle>{getSettingsTabLabel(props.activeTab)}</SettingsPanelTitle>
+              <SettingsPanelDescription>{getSettingsTabDescription(props.activeTab)}</SettingsPanelDescription>
+            </SettingsPanelHeading>
+          ) : null}
 
-        {props.showUpdateToolbar && props.activeTab === "general" ? (
-          <SettingsPanelToolbar>
-            <SettingsPanelToolbarActions>
-              <SettingsPanelToolbarStatus
-                tone={props.updateToolbarTone}
-                title={props.updateToolbarTitle}
-                spinning={props.updateToolbarSpinning}
-              >
-                {props.updateToolbarLabel}
-              </SettingsPanelToolbarStatus>
-              {props.updateToolbarActionLabel ? (
-                <SettingsPanelToolbarButton
-                  onClick={props.onUpdateToolbarAction}
-                  disabled={props.updateToolbarDisabled}
-                  title={props.updateRestartBlockedMessage ?? ""}
+          {showToolbar ? (
+            <SettingsPanelToolbar>
+              <SettingsPanelToolbarActions>
+                <SettingsPanelToolbarStatus
+                  tone={props.updateToolbarTone}
+                  title={props.updateToolbarTitle}
+                  spinning={props.updateToolbarSpinning}
                 >
-                  {props.updateToolbarActionLabel}
-                </SettingsPanelToolbarButton>
+                  {props.updateToolbarLabel}
+                </SettingsPanelToolbarStatus>
+                {props.updateToolbarActionLabel ? (
+                  <SettingsPanelToolbarButton
+                    onClick={props.onUpdateToolbarAction}
+                    disabled={props.updateToolbarDisabled}
+                    title={props.updateRestartBlockedMessage ?? ""}
+                  >
+                    {props.updateToolbarActionLabel}
+                  </SettingsPanelToolbarButton>
+                ) : null}
+              </SettingsPanelToolbarActions>
+              {props.updateRestartBlockedMessage ? (
+                <SettingsPanelToolbarMessage>{props.updateRestartBlockedMessage}</SettingsPanelToolbarMessage>
               ) : null}
-            </SettingsPanelToolbarActions>
-            {props.updateRestartBlockedMessage ? (
-              <SettingsPanelToolbarMessage>{props.updateRestartBlockedMessage}</SettingsPanelToolbarMessage>
-            ) : null}
-          </SettingsPanelToolbar>
-        ) : null}
-      </SettingsPanel>
+            </SettingsPanelToolbar>
+          ) : null}
+        </SettingsPanel>
+      ) : null}
 
       {props.children}
     </SettingsContent>

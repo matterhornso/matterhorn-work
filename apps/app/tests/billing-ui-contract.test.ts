@@ -5,6 +5,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BillingSettingsView } from "../src/react-app/domains/settings/pages/billing-view";
+import { StatusToastsProvider } from "../src/react-app/domains/shell-feedback/status-toasts";
 import {
   checkEntitlement,
   entitlementUsageStatus,
@@ -139,15 +140,21 @@ describe("Billing settings view", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const html = renderToStaticMarkup(
       React.createElement(
-        QueryClientProvider,
-        { client: queryClient },
-        React.createElement(BillingSettingsView, { matterhornServerClient: mockClient }),
+        StatusToastsProvider,
+        null,
+        React.createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          React.createElement(BillingSettingsView, { matterhornServerClient: mockClient }),
+        ),
       ),
     );
     expect(html).toContain("Billing");
-    expect(html).toContain("Plans and usage for generated media");
+    expect(html).toContain("Current plan");
+    expect(html).toContain("No raw card data");
+    expect(html).toContain("Billing plans could not load");
     expect(html).toContain("Test mode");
-    expect(html).toContain("Available plans");
+    expect(html).toContain("Plans");
     expect(html).toContain("Usage");
   });
 
@@ -195,9 +202,13 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("stripe_test_customer");
     expect(billingViewSource).toContain("status.usage.generatedImages.resetsAt");
     expect(billingViewSource).toContain("status.usage.nftDrafts.resetsAt");
-    expect(billingViewSource).toContain("formatEntitlementReset(item.resetsAt)");
+    expect(billingViewSource).toContain("formatEntitlementReset(props.resetsAt)");
     expect(billingViewSource).toContain("NFT mint previews");
-    expect(billingViewSource).toContain("entitlementUsageStatus(item.used, item.limit)");
+    expect(billingViewSource).toContain("entitlementUsageStatus(props.used, props.limit)");
+    expect(billingViewSource).toContain("useStatusToasts");
+    expect(billingViewSource).toContain("Checkout opened");
+    expect(billingViewSource).toContain("Billing portal unavailable");
+    expect(billingViewSource).toContain("Billing readiness");
     expect(settingsRouteSource).toContain("<BillingSettingsView matterhornServerClient={matterhornClient} runtimeWorkspaceId={runtimeWorkspaceId} />");
     expect(readFileSync(
       join(import.meta.dir, "../src/react-app/domains/settings/shell/settings-page.tsx"),
