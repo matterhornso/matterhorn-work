@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type {
   MatterhornBillingCheckoutRequest,
   MatterhornBillingPortalRequest,
+  MatterhornBillingPendingCheckout,
+  MatterhornBillingSubscription,
   MatterhornBillingWebhookStripeRequest,
 } from "@matterhorn-work/types/billing";
 import { recordAudit } from "./audit.js";
@@ -134,6 +136,7 @@ async function persistStripeWebhookBilling(input: {
       providerCustomerId: result.providerCustomerId ?? null,
       providerSubscriptionId: result.providerSubscriptionId ?? null,
     },
+    pendingCheckout: null,
     updatedAt: now,
     source: "stripe_test_webhook",
   });
@@ -200,7 +203,12 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       cloudStorageBytes: 0,
     };
     if (account) {
-      return jsonResponse(buildBillingStatusResponseForSubscription(provider.config, subscription, usage));
+      return jsonResponse(buildBillingStatusResponseForSubscription(
+        provider.config,
+        subscription,
+        usage,
+        account.pendingCheckout ?? null,
+      ));
     }
     return jsonResponse(buildBillingStatusResponseWithUsage(provider.config, usage));
   });
@@ -232,31 +240,45 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
     }).catch((error) => error);
     if (result instanceof Error) return providerError(result);
     const period = nextBillingPeriod();
-    const providerCustomerId = provider.config.provider === "stripe"
-      ? null
-      : `mock_cus_${workspace.id}`;
-    const providerSubscriptionId = provider.config.provider === "stripe"
-      ? result.providerSessionId ?? `stripe_test_checkout_${workspace.id}_${input.planId}`
-      : `mock_sub_${workspace.id}_${input.planId}`;
-    await new MatterhornBillingAccountStore({ workspaceRoot: workspace.path, workspaceId: workspace.id }).save({
+    const accountStore = new MatterhornBillingAccountStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+    const existingAccount = await accountStore.get();
+    const isStripeTestCheckout = provider.config.mode === "phase1_stripe_test" && provider.config.provider === "stripe";
+    const pendingCheckout: MatterhornBillingPendingCheckout | null = isStripeTestCheckout
+      ? {
+          planId: input.planId,
+          interval,
+          provider: "stripe",
+          mode: "stripe_test",
+          providerSessionId: result.providerSessionId ?? null,
+          createdAt: period.currentPeriodStart,
+          expiresAt: null,
+        }
+      : null;
+    const subscription: MatterhornBillingSubscription = isStripeTestCheckout
+      ? existingAccount?.subscription ?? buildMatterhornBillingSubscription(provider.config.currentPlanId)
+      : {
+          ...buildMatterhornBillingSubscription(input.planId),
+          interval,
+          currentPeriodStart: period.currentPeriodStart,
+          currentPeriodEnd: period.currentPeriodEnd,
+          providerCustomerId: `mock_cus_${workspace.id}`,
+          providerSubscriptionId: `mock_sub_${workspace.id}_${input.planId}`,
+        };
+    await accountStore.save({
       version: "matterhorn.billing.account.v1",
       workspaceId: workspace.id,
-      subscription: {
-        ...buildMatterhornBillingSubscription(input.planId),
-        interval,
-        currentPeriodStart: period.currentPeriodStart,
-        currentPeriodEnd: period.currentPeriodEnd,
-        providerCustomerId,
-        providerSubscriptionId,
-      },
+      subscription,
+      pendingCheckout,
       updatedAt: period.currentPeriodStart,
-      source: provider.config.mode === "phase1_stripe_test" ? "stripe_test_checkout" : "mock_checkout",
+      source: isStripeTestCheckout ? "stripe_test_checkout" : "mock_checkout",
     });
     await recordBillingAudit({
       workspace,
       actor: routeCtx.actor,
       action: "workspace.billing.checkout",
-      summary: `Updated workspace billing plan to ${input.planId}.`,
+      summary: isStripeTestCheckout
+        ? `Started Stripe test checkout for ${input.planId}.`
+        : `Updated workspace billing plan to ${input.planId}.`,
       planId: input.planId,
       interval,
       mode: provider.config.mode,

@@ -54,6 +54,16 @@ export interface MatterhornBillingSubscription {
   providerSubscriptionId?: string | null;
 }
 
+export interface MatterhornBillingPendingCheckout {
+  planId: MatterhornBillingPlanId;
+  interval: MatterhornBillingInterval;
+  provider: MatterhornBillingProvider;
+  mode: "stripe_test" | "mock";
+  providerSessionId?: string | null;
+  createdAt: string;
+  expiresAt?: string | null;
+}
+
 export interface MatterhornBillingUsageSnapshot {
   generatedImages: { used: number; limit: number | null; resetsAt?: string | null };
   nftDrafts: { used: number; limit: number | null; resetsAt?: string | null };
@@ -90,6 +100,7 @@ export interface MatterhornBillingStatus {
   mode: MatterhornBillingMode;
   provider: MatterhornBillingProvider;
   subscription: MatterhornBillingSubscription;
+  pendingCheckout?: MatterhornBillingPendingCheckout | null;
   usage: MatterhornBillingUsageSnapshot;
   setup: MatterhornBillingSetup;
   isLivePaymentsEnabled: false;

@@ -158,6 +158,9 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
   const plans = plansQuery.data?.plans ?? [];
   const status = statusQuery.data?.status;
   const currentPlanId = status?.subscription.planId ?? plansQuery.data?.currentPlanId ?? "free";
+  const pendingPlan = status?.pendingCheckout?.planId
+    ? plans.find((plan) => plan.id === status.pendingCheckout?.planId)
+    : null;
   const setupChecks = status?.setup.checks ?? [];
   const checkoutReady = status?.mode === "phase0_mock" || status?.setup.readyForTestCheckout === true;
   const portalReady =
@@ -237,6 +240,12 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               {(checkoutMutation.error ?? portalMutation.error) instanceof Error
                 ? (checkoutMutation.error ?? portalMutation.error)?.message
                 : "Billing action failed."}
+            </p>
+          ) : null}
+          {status?.pendingCheckout ? (
+            <p className="text-xs leading-5 text-amber-200">
+              Checkout pending for {pendingPlan?.name ?? status.pendingCheckout.planId}. Your current plan changes after
+              the Stripe test webhook confirms the subscription.
             </p>
           ) : null}
         </div>

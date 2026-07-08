@@ -1,12 +1,16 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { MatterhornBillingSubscription } from "@matterhorn-work/types/billing";
+import type {
+  MatterhornBillingPendingCheckout,
+  MatterhornBillingSubscription,
+} from "@matterhorn-work/types/billing";
 import { exists } from "./utils.js";
 
 export interface MatterhornBillingAccountSnapshot {
   version: "matterhorn.billing.account.v1";
   workspaceId: string;
   subscription: MatterhornBillingSubscription;
+  pendingCheckout?: MatterhornBillingPendingCheckout | null;
   updatedAt: string;
   source: "mock_checkout" | "stripe_test_checkout" | "stripe_test_webhook";
 }
@@ -37,6 +41,13 @@ function parseSnapshot(value: unknown, workspaceId: string): MatterhornBillingAc
   if (value.version !== "matterhorn.billing.account.v1") return null;
   if (value.workspaceId !== workspaceId) return null;
   if (!isObject(value.subscription)) return null;
+  if (
+    value.pendingCheckout !== undefined &&
+    value.pendingCheckout !== null &&
+    !isObject(value.pendingCheckout)
+  ) {
+    return null;
+  }
   if (value.source !== "mock_checkout" && value.source !== "stripe_test_checkout" && value.source !== "stripe_test_webhook") return null;
   if (typeof value.updatedAt !== "string") return null;
   return value as unknown as MatterhornBillingAccountSnapshot;
