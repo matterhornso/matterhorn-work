@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 
 function readRepoFile(path: string) {
@@ -9,7 +10,24 @@ function readReactSource(path: string) {
   return readFileSync(new URL(`../src/react-app/${path}`, import.meta.url), "utf8");
 }
 
+function readRepoBuffer(path: string) {
+  return readFileSync(new URL(`../../../${path}`, import.meta.url));
+}
+
+function sha256(path: string) {
+  return createHash("sha256").update(readRepoBuffer(path)).digest("hex");
+}
+
 describe("Matterhorn logo asset contract", () => {
+  test("canonical logo source remains the original Matterhorn mark", () => {
+    expect(sha256("scripts/assets/matterhorn-logo-original.png")).toBe("6ff20ea1fe18cf7bb75bbebacbe56624cd2b2403139fb97a0d3e394f9d1164d2");
+
+    const svg = readRepoFile("apps/app/public/matterhorn-logo-square.svg");
+    expect(svg).toContain('viewBox="0 0 120 126"');
+    expect(svg).toContain("data:image/png;base64,");
+    expect(svg).not.toContain('id="matterhorn-mark"');
+  });
+
   test("web tabs prefer the Matterhorn logo asset before legacy favicons", () => {
     const index = readRepoFile("apps/app/index.html");
 

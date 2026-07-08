@@ -4,16 +4,29 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const MATTERHORN_BLUE = "#D1F2FF";
-const MATTERHORN_INK = "#0C0C0C";
+const source = "scripts/assets/matterhorn-logo-original.png";
 
-const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Matterhorn Work">
+function pngDimensions(path) {
+  const bytes = readFileSync(path);
+  if (bytes.toString("hex", 0, 8) !== "89504e470d0a1a0a") {
+    throw new Error(`${path} is not a PNG file.`);
+  }
+  return {
+    width: bytes.readUInt32BE(16),
+    height: bytes.readUInt32BE(20),
+  };
+}
+
+function matterhornLogoSvg(path) {
+  const { width, height } = pngDimensions(path);
+  const data = readFileSync(path).toString("base64");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Matterhorn Work">
   <title>Matterhorn Work</title>
-  <rect width="512" height="512" rx="92" fill="${MATTERHORN_BLUE}"/>
-  <path id="matterhorn-mark" fill="${MATTERHORN_INK}" d="M48 342c42-3 74-18 97-46 19-24 31-55 42-92H276c12 0 23 2 32 7 15 8 27 24 38 49l66 152h-93l-54-130c-6-15-13-23-21-25v169h-82l11-162c-14 43-35 80-64 109-18 18-38 33-61 45V342Z"/>
+  <image width="${width}" height="${height}" href="data:image/png;base64,${data}"/>
 </svg>
 `;
+}
 
 const svgTargets = [
   "apps/app/public/matterhorn-logo.svg",
@@ -80,9 +93,9 @@ function buildIconset(source, output) {
   rmSync(tmp, { recursive: true, force: true });
 }
 
+const svg = matterhornLogoSvg(source);
 for (const target of svgTargets) writeFileSync(target, svg);
 
-const source = "apps/app/public/matterhorn-logo-square.svg";
 renderPng(source, "apps/app/public/matterhorn-logo.png", 512);
 renderPng(source, "apps/app/public/favicon-16x16.png", 16);
 renderPng(source, "apps/app/public/favicon-32x32.png", 32);
