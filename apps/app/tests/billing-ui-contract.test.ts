@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BillingSettingsView } from "../src/react-app/domains/settings/pages/billing-view";
 import {
   checkEntitlement,
+  entitlementUsageStatus,
   formatEntitlementReset,
   formatEntitlementUsage,
 } from "../src/react-app/domains/billing/entitlements";
@@ -190,6 +191,8 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("status.usage.generatedImages.resetsAt");
     expect(billingViewSource).toContain("status.usage.nftDrafts.resetsAt");
     expect(billingViewSource).toContain("formatEntitlementReset(item.resetsAt)");
+    expect(billingViewSource).toContain("NFT mint previews");
+    expect(billingViewSource).toContain("entitlementUsageStatus(item.used, item.limit)");
     expect(settingsRouteSource).toContain("<BillingSettingsView matterhornServerClient={matterhornClient} runtimeWorkspaceId={runtimeWorkspaceId} />");
   });
 });
@@ -222,9 +225,22 @@ describe("Entitlement helpers", () => {
     expect(formatEntitlementUsage(5, null)).toBe("5 used");
   });
 
+  test("format usage with missing entitlement", () => {
+    expect(formatEntitlementUsage(0, 0)).toBe("Not included");
+    expect(formatEntitlementUsage(2, 0)).toBe("2 used");
+  });
+
   test("format reset timestamp when available", () => {
     expect(formatEntitlementReset("2026-08-01T12:00:00.000Z")).toContain("Aug");
     expect(formatEntitlementReset(null)).toBeNull();
     expect(formatEntitlementReset("not-a-date")).toBeNull();
+  });
+
+  test("classifies billing usage status", () => {
+    expect(entitlementUsageStatus(0, null)).toBeNull();
+    expect(entitlementUsageStatus(0, 0)).toBeNull();
+    expect(entitlementUsageStatus(2, 0)).toEqual({ label: "Upgrade required", tone: "warning" });
+    expect(entitlementUsageStatus(8, 10)).toEqual({ label: "Almost at limit", tone: "warning" });
+    expect(entitlementUsageStatus(10, 10)).toEqual({ label: "Limit reached", tone: "error" });
   });
 });

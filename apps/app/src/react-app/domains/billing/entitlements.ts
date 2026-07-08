@@ -45,6 +45,9 @@ export function formatEntitlementUsage(used: number, limit: number | null): stri
   if (limit === null) {
     return `${used} used`;
   }
+  if (limit === 0) {
+    return used > 0 ? `${used} used` : "Not included";
+  }
   return `${used} / ${limit} used`;
 }
 
@@ -53,4 +56,26 @@ export function formatEntitlementReset(resetsAt?: string | null): string | null 
   const date = new Date(resetsAt);
   if (Number.isNaN(date.getTime())) return null;
   return `Resets ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+}
+
+export type EntitlementUsageStatus = {
+  label: string;
+  tone: "warning" | "error";
+} | null;
+
+export function entitlementUsageStatus(used: number, limit: number | null): EntitlementUsageStatus {
+  if (limit === null) return null;
+  if (limit === 0) {
+    return used > 0 ? { label: "Upgrade required", tone: "warning" } : null;
+  }
+  if (used >= limit) {
+    return { label: "Limit reached", tone: "error" };
+  }
+  if (limit <= 5 && used === limit - 1) {
+    return { label: "Almost at limit", tone: "warning" };
+  }
+  if (limit > 5 && used / limit >= 0.8) {
+    return { label: "Almost at limit", tone: "warning" };
+  }
+  return null;
 }

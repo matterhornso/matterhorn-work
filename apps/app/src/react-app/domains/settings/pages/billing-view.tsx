@@ -25,6 +25,7 @@ import {
 } from "../settings-section";
 import { backendCapabilityLabel, backendCapabilityTone } from "../backend-capability-status";
 import {
+  entitlementUsageStatus,
   formatEntitlementLimit,
   formatEntitlementReset,
   formatEntitlementUsage,
@@ -175,7 +176,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
         resetsAt: status.usage.generatedImages.resetsAt ?? null,
       },
       {
-        label: "NFT drafts",
+        label: "NFT mint previews",
         used: status.usage.nftDrafts.used,
         limit: status.usage.nftDrafts.limit,
         resetsAt: status.usage.nftDrafts.resetsAt ?? null,
@@ -263,6 +264,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
         <div className="flex flex-col gap-2">
           {usageItems.map((item) => {
             const resetLabel = formatEntitlementReset(item.resetsAt);
+            const usageStatus = entitlementUsageStatus(item.used, item.limit);
             return (
               <div
                 key={item.label}
@@ -273,6 +275,16 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
                   <span className="text-xs font-medium text-dls-text">
                     {formatEntitlementUsage(item.used, item.limit)}
                   </span>
+                  {usageStatus ? (
+                    <span
+                      className={cn(
+                        "text-[11px]",
+                        usageStatus.tone === "error" ? "text-red-300" : "text-amber-300",
+                      )}
+                    >
+                      {usageStatus.label}
+                    </span>
+                  ) : null}
                   {resetLabel ? <span className="text-[11px] text-muted-foreground">{resetLabel}</span> : null}
                 </span>
               </div>
