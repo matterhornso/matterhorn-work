@@ -140,14 +140,14 @@ function OrgPicker({
 
   if (orgs.length === 0) {
     return (
-      <div className="rounded-xl border border-dls-border bg-dls-surface px-4 py-6 text-center text-sm text-dls-secondary">
+      <div className="rounded-md bg-dls-surface-muted/15 px-4 py-6 text-center text-sm text-dls-secondary">
         No organizations found.{" "}
         <button
           type="button"
           className="font-medium text-dls-text underline underline-offset-2"
           onClick={() => void onRefresh()}
         >
-          Refresh
+          Try again
         </button>
       </div>
     );
@@ -167,7 +167,7 @@ function OrgPicker({
             key={org.id}
             type="button"
             disabled={disabled}
-            className="flex items-center gap-3 rounded-xl border border-dls-border bg-dls-surface px-4 py-3 text-left transition-colors hover:border-dls-text/20 hover:bg-dls-hover disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex items-center gap-3 rounded-md bg-dls-surface-muted/12 px-4 py-3 text-left transition-colors hover:bg-dls-hover/45 disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => void onSelect(org.id)}
           >
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-dls-hover text-dls-secondary">

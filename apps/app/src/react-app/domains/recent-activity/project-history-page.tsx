@@ -575,7 +575,7 @@ export function ProjectHistoryPage({
         ) : null}
 
         {ledgerQuery.isLoading ? (
-          <div className="flex items-center gap-2 rounded-lg bg-dls-surface-muted/15 px-3 py-3 text-xs text-dls-secondary">
+          <div className="flex items-center gap-2 rounded-md bg-dls-surface-muted/12 px-3 py-3 text-xs text-dls-secondary">
             <Clock3 className="size-3.5 animate-pulse" />
             Loading project history...
           </div>
@@ -585,15 +585,15 @@ export function ProjectHistoryPage({
             title="Project history could not load"
             detail={ledgerQuery.error instanceof Error ? ledgerQuery.error.message : "Check the workspace connection and try again."}
             onRetry={() => void ledgerQuery.refetch()}
-            className="rounded-lg bg-destructive/10 px-3 py-2.5"
+            className="rounded-md bg-destructive/10 px-3 py-2.5"
           />
         ) : rows.length === 0 ? (
-          <div className="flex items-center gap-2 rounded-lg bg-dls-surface-muted/15 px-3 py-3 text-xs text-dls-secondary">
+          <div className="flex items-center gap-2 rounded-md bg-dls-surface-muted/12 px-3 py-3 text-xs text-dls-secondary">
             <ListFilter className="size-3.5" />
             No {activeFilterConfig.label.toLowerCase()} recorded yet.
           </div>
         ) : (
-          <div className="rounded-lg bg-dls-surface-muted/10 px-2 py-2">
+          <div className="rounded-md bg-dls-surface-muted/8 px-2 py-2">
             {latest ? (
               <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-dls-secondary">
                 <span>{rows.length} actual event{rows.length === 1 ? "" : "s"} shown</span>

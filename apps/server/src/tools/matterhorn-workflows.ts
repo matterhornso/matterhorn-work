@@ -781,8 +781,8 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
   },
   {
     id: "blank_chat_workflow",
-    name: "Blank chat",
-    summary: "Start a free-form chat session with the Matterhorn Work engine.",
+    name: "Chat",
+    summary: "Start a flexible chat session with the Matterhorn Work engine.",
     promise: "Open-ended assistance. You choose the goal.",
     category: "future",
     examplePrompts: ["What can you do?", "Help me think through a problem", "Draft an email"],
@@ -801,7 +801,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     serviceHooks: [],
     chatMode: "free chat",
     launch: {
-      primaryCta: "Start blank chat",
+      primaryCta: "Start chat",
       secondaryCta: "Browse templates",
       defaultPrompt: "What can you do?",
       handoffContextLabel: "Goal",
@@ -810,7 +810,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "blank",
       accent: "neutral",
-      shortDescription: "Start a free-form chat with the Matterhorn Work engine.",
+      shortDescription: "Start a flexible chat with the Matterhorn Work engine.",
     },
     routing: {
       chatMode: "general",

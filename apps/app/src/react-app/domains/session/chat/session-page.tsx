@@ -77,6 +77,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { StatusBar, type StatusBarProps } from "./status-bar";
 import { OwDotTicker } from "../../../shell/dot-ticker";
 import { useReactRenderWatchdog } from "../../../shell/react-render-watchdog";
@@ -170,14 +171,14 @@ const GLOBAL_VOICE_SIDE_PANEL_KEY = "__matterhorn_voice__";
 const VENUE_SIDE_PANELS = ["bittensor", "hyperliquid", "polymarket", "sui"] as const;
 type VenueSidePanel = (typeof VENUE_SIDE_PANELS)[number];
 const RAIL_BUTTON_CLASS =
-  "h-auto min-h-12 w-full flex-col gap-1 rounded-md px-1 py-2 text-dls-text transition-colors hover:bg-white/[0.06] hover:text-dls-text";
-const RAIL_ACTIVE_CLASS = "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary";
+  "h-auto min-h-12 w-full flex-col gap-1 rounded-md px-1 py-2 text-dls-text transition-colors hover:bg-dls-hover/45 hover:text-dls-text";
+const RAIL_ACTIVE_CLASS = "bg-dls-hover/55 text-dls-text hover:bg-dls-hover/60 hover:text-dls-text";
 const RAIL_DESK_BUTTON_CLASS =
-  "h-auto min-h-12 w-full flex-col gap-1 rounded-md px-1 py-2 text-dls-text transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] hover:text-[var(--matterhorn-desk-color)]";
+  "h-auto min-h-12 w-full flex-col gap-1 rounded-md px-1 py-2 text-dls-text transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] hover:text-[var(--matterhorn-desk-color)]";
 const RAIL_LABEL_CLASS = "max-w-full truncate text-[11px] font-medium leading-4 text-current";
 const RAIL_OPTIONAL_LABEL_CLASS = `hidden ${RAIL_LABEL_CLASS} 2xl:inline`;
 const RAIL_SECTION_LABEL_CLASS =
-  "mt-1 w-full border-t border-white/[0.06] pt-2 text-center text-[10px] font-bold uppercase tracking-normal text-dls-text";
+  "mt-1 w-full border-t border-dls-border/25 pt-2 text-center text-[10px] font-medium tracking-normal text-dls-secondary";
 
 function isVenueSidePanel(panel: SidePanelItem | null): panel is VenueSidePanel {
   return panel === "bittensor" || panel === "hyperliquid" || panel === "polymarket" || panel === "sui";
@@ -524,9 +525,9 @@ function HomeCapabilityOverview({
             align="start"
             className="w-60 gap-1 rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-left text-[11px] leading-5 text-dls-text shadow-none"
           >
-            <span>Dedicated desk agents</span>
-            <span>Review before action</span>
-            <span>Outputs stay with the project</span>
+            <span>Each desk starts a focused agent task.</span>
+            <span>Risk details stay behind each info button.</span>
+            <span>Outputs and receipts stay with this project.</span>
           </PopoverContent>
         </Popover>
       </div>
@@ -785,9 +786,9 @@ function ProtocolDeskEmptyState({
                       <button
                         type="button"
                         aria-label={`${visual?.displayName ?? panel} desk safety info`}
-                        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-dls-border text-[11px] font-semibold leading-none text-dls-secondary transition-colors hover:border-[var(--matterhorn-desk-color)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                        className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.11)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                       >
-                        i
+                        <Info className="size-3.5" aria-hidden="true" />
                       </button>
                     }
                   />
@@ -1091,10 +1092,11 @@ export function SessionPage(props: SessionPageProps) {
     [navigate, openQuickJot, props.matterhornServerClient, props.runtimeWorkspaceId, props.selectedWorkspaceId],
   );
 
+  const sidePanelScopeId = props.selectedSessionId?.trim() || GLOBAL_HOME_SIDE_PANEL_KEY;
   const sidebarOpen = useUiStateStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUiStateStore((state) => state.setSidebarOpen);
   const sessionSidePanel = useUiStateStore((state) => (
-    state.sidePanelState[props.selectedSessionId ?? GLOBAL_HOME_SIDE_PANEL_KEY] ?? null
+    state.sidePanelState[sidePanelScopeId] ?? null
   ));
   const voiceSidePanelOpen = useUiStateStore((state) => state.sidePanelState[GLOBAL_VOICE_SIDE_PANEL_KEY] === "voice");
   const setSidePanelState = useUiStateStore((state) => state.setSidePanelState);
@@ -1151,7 +1153,13 @@ export function SessionPage(props: SessionPageProps) {
   const visibleArtifactTarget = artifactTarget ?? artifactFileTargets[0] ?? null;
   const artifactTargetCount = artifactFileTargets.length;
   const hasArtifactTargets = artifactTargetCount > 0;
-  const activeSidePanel = voiceSidePanelOpen ? "voice" : sessionSidePanel;
+  const routeSidePanel = useMemo(() => {
+    const requestedPanel = new URLSearchParams(location.search).get("panel");
+    return SIDE_PANEL_ITEMS.includes(requestedPanel as SidePanelItem)
+      ? requestedPanel as SidePanelItem
+      : null;
+  }, [location.search]);
+  const activeSidePanel = voiceSidePanelOpen ? "voice" : routeSidePanel ?? sessionSidePanel;
   const browserRailActive = activeSidePanel === "browser";
   const artifactRailActive = activeSidePanel === "artifacts";
   const showArtifactRailItem = hasArtifactTargets || artifactRailActive;
@@ -1161,13 +1169,32 @@ export function SessionPage(props: SessionPageProps) {
   const memoryRailActive = activeSidePanel === "memory";
   const notesRailActive = activeSidePanel === "notes";
   const walletRailActive = activeSidePanel === "wallet";
-  const bittensorRailActive = activeSidePanel === "bittensor";
-  const hyperliquidRailActive = activeSidePanel === "hyperliquid";
-  const polymarketRailActive = activeSidePanel === "polymarket";
   const focusedProtocolPanel = !props.selectedSessionId && isVenueSidePanel(activeSidePanel) ? activeSidePanel : null;
   const visibleSidePanel = focusedProtocolPanel ? null : activeSidePanel;
   const sidePanelOpen = visibleSidePanel !== null;
+  const isMobileViewport = useIsMobile();
+  const dockedSidePanelOpen = sidePanelOpen && !isMobileViewport;
+  const mobileSidePanelOpen = sidePanelOpen && isMobileViewport;
   const protocolSidePanelOpen = isVenueSidePanel(visibleSidePanel);
+  const sidePanelTitle = visibleSidePanel === "profile"
+    ? "Settings"
+    : visibleSidePanel === "wallet"
+      ? "Wallet"
+      : visibleSidePanel === "extensions"
+        ? "MCPs & Tools"
+        : visibleSidePanel === "memory"
+          ? "Memory"
+          : visibleSidePanel === "notes"
+            ? "Notes"
+            : visibleSidePanel === "artifacts"
+              ? "Outputs"
+              : visibleSidePanel === "voice"
+                ? "Voice"
+                : visibleSidePanel === "browser"
+                  ? "Browser"
+                  : isVenueSidePanel(visibleSidePanel)
+                    ? `${getCustomerProtocolDeskVisual(visibleSidePanel)?.displayName ?? "Desk"} desk`
+                    : "Panel";
   const renderCompactSettingsRail = (initialPath: "general" | "cloud-account" | "wallet" | "extensions") => {
     const slot = props.settingsSlotForPath?.(initialPath)
       ?? (initialPath === "extensions" ? props.settingsSlot : null);
@@ -1304,8 +1331,8 @@ export function SessionPage(props: SessionPageProps) {
   const setCurrentSidePanel = useCallback((panel: SidePanelItem | null) => {
     setSidePanelState(GLOBAL_VOICE_SIDE_PANEL_KEY, panel === "voice" ? "voice" : null);
     if (panel === "voice") return;
-    setSidePanelState(props.selectedSessionId ?? GLOBAL_HOME_SIDE_PANEL_KEY, panel);
-  }, [props.selectedSessionId, setSidePanelState]);
+    setSidePanelState(sidePanelScopeId, panel);
+  }, [setSidePanelState, sidePanelScopeId]);
 
   useEffect(() => {
     const requestedPanel = new URLSearchParams(location.search).get("panel");
@@ -1558,7 +1585,18 @@ export function SessionPage(props: SessionPageProps) {
   }, []);
   const closeRightPane = useCallback(() => {
     setCurrentSidePanel(null);
-  }, [setCurrentSidePanel]);
+    if (!routeSidePanel) return;
+    const params = new URLSearchParams(location.search);
+    params.delete("panel");
+    navigate(
+      {
+        pathname: location.pathname,
+        search: params.toString() ? `?${params.toString()}` : "",
+        hash: location.hash,
+      },
+      { replace: true },
+    );
+  }, [location.hash, location.pathname, location.search, navigate, routeSidePanel, setCurrentSidePanel]);
   const openBrowserRailPane = useCallback(() => {
     toggleCurrentSidePanel("browser");
   }, [toggleCurrentSidePanel]);
@@ -1650,6 +1688,74 @@ export function SessionPage(props: SessionPageProps) {
     setHiddenAccessibleTargetIds((current) => new Set(current).add(target.id));
     setArtifactTarget((current) => current?.id === target.id ? null : current);
   }, []);
+  const sidePanelContent = visibleSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot) ? (
+    renderCompactSettingsRail("extensions")
+  ) : visibleSidePanel === "voice" ? (
+    <VoicePanel
+      client={props.matterhornServerClient}
+      sessionId={props.selectedSessionId}
+      onClose={closeRightPane}
+    />
+  ) : visibleSidePanel === "profile" && props.settingsSlotForPath ? (
+    renderCompactSettingsRail("general")
+  ) : visibleSidePanel === "wallet" && props.settingsSlotForPath ? (
+    renderCompactSettingsRail("wallet")
+  ) : visibleSidePanel === "memory" ? (
+    <MemoryPanel
+      client={props.matterhornServerClient}
+      sessionId={props.selectedSessionId}
+      workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
+      onClose={closeRightPane}
+    />
+  ) : visibleSidePanel === "notes" ? (
+    <NotesPanel
+      client={props.matterhornServerClient}
+      workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
+    />
+  ) : visibleSidePanel === "artifacts" && visibleArtifactTarget && props.matterhornServerClient && props.runtimeWorkspaceId ? (
+    <ArtifactPanel
+      client={props.matterhornServerClient}
+      workspaceId={props.runtimeWorkspaceId}
+      workspaceRoot={props.selectedWorkspaceRoot}
+      workspaceName={props.selectedWorkspaceDisplay.displayName ?? props.selectedWorkspaceDisplay.name ?? ""}
+      isRemoteWorkspace={props.surface?.isRemoteWorkspace ?? false}
+      target={visibleArtifactTarget}
+      targets={artifactFileTargets}
+      outputReceipts={workflowOutputReceipts}
+      onSelectTarget={openTarget}
+      onAddNote={(artifactPath, desk, sessionSlug) => void addArtifactNote(artifactPath, desk, sessionSlug)}
+      onRevealPath={props.onRevealPath}
+      onDeletedTarget={removeAccessibleTarget}
+      onClose={closeRightPane}
+    />
+  ) : visibleSidePanel === "sui" ? (
+    <div
+      data-testid="protocol-side-panel-scroll-root"
+      className="flex h-full min-h-0 max-h-full flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain"
+    >
+      <SuiWorkflowPanel
+        matterhornServerClient={props.matterhornServerClient}
+        workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
+        sessionId={props.selectedSessionId}
+        compact
+        onEvidenceSaved={() => void outputReceiptsQuery.refetch()}
+      />
+    </div>
+  ) : isLegacyCryptoVenueSidePanel(visibleSidePanel) ? (
+    <div
+      data-testid="protocol-side-panel-scroll-root"
+      className="flex h-full min-h-0 max-h-full flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain"
+    >
+      <WalletPanel
+        store={wallet.store}
+        gasPriceGwei={sessionWallet.gasPriceGwei}
+        blockExplorerUrl={sessionWallet.blockExplorerUrl}
+        initialVenue={visibleSidePanel}
+      />
+    </div>
+  ) : (
+    <BrowserPanel onClose={closeRightPane} />
+  );
   useEffect(() => {
     const open = (event: Event) => {
       const requested = (event as CustomEvent<OpenTarget>).detail;
@@ -1879,12 +1985,12 @@ export function SessionPage(props: SessionPageProps) {
           <div className="flex min-h-0 flex-1">
           <ResizablePanelGroup
             orientation="horizontal"
-            onLayoutChanged={sidePanelOpen ? commitBrowserPanelWidth : undefined}
+            onLayoutChanged={dockedSidePanelOpen ? commitBrowserPanelWidth : undefined}
             className="min-h-0 flex-1"
           >
             <ResizablePanel minSize="360px" className="min-w-0">
               <main className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">
-          <header className="z-10 flex h-10 shrink-0 items-center justify-between bg-dls-surface/88 px-4 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.10)] backdrop-blur-xl md:px-6 mac:titlebar-drag mac:backdrop-saturate-150 @container/titlebar">
+          <header className="z-10 flex h-10 shrink-0 items-center justify-between bg-dls-surface/95 px-4 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.08)] md:px-6 mac:titlebar-drag @container/titlebar">
             <div className="flex min-w-0 items-center gap-3">
               {shellConfig.sidebar ? <SidebarTrigger className="mac:hidden" /> : null}
               {!showWorkspaceSetupEmptyState ? (
@@ -2526,7 +2632,7 @@ export function SessionPage(props: SessionPageProps) {
           ) : null}
               </main>
             </ResizablePanel>
-              {sidePanelOpen ? (
+              {dockedSidePanelOpen ? (
               <>
                 <ResizableHandle withHandle className="hidden lg:flex" />
                 <ResizablePanel
@@ -2537,74 +2643,7 @@ export function SessionPage(props: SessionPageProps) {
                   className="hidden h-full min-h-0 overflow-hidden lg:flex lg:flex-col"
                 >
                   <Suspense fallback={<LazyPanelFallback />}>
-                    {visibleSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot) ? (
-                      renderCompactSettingsRail("extensions")
-                    ) : visibleSidePanel === "voice" ? (
-                      <VoicePanel
-                        client={props.matterhornServerClient}
-                        sessionId={props.selectedSessionId}
-                        onClose={closeRightPane}
-                      />
-                    ) : visibleSidePanel === "profile" && props.settingsSlotForPath ? (
-                      renderCompactSettingsRail("general")
-                    ) : visibleSidePanel === "wallet" && props.settingsSlotForPath ? (
-                      renderCompactSettingsRail("wallet")
-                    ) : visibleSidePanel === "memory" ? (
-                      <MemoryPanel
-                        client={props.matterhornServerClient}
-                        sessionId={props.selectedSessionId}
-                        workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
-                        onClose={closeRightPane}
-                      />
-                    ) : visibleSidePanel === "notes" ? (
-                      <NotesPanel
-                        client={props.matterhornServerClient}
-                        workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
-                      />
-                    ) : visibleSidePanel === "artifacts" && visibleArtifactTarget && props.matterhornServerClient && props.runtimeWorkspaceId ? (
-                      <ArtifactPanel
-                        client={props.matterhornServerClient}
-                        workspaceId={props.runtimeWorkspaceId}
-                        workspaceRoot={props.selectedWorkspaceRoot}
-                        workspaceName={props.selectedWorkspaceDisplay.displayName ?? props.selectedWorkspaceDisplay.name ?? ""}
-                        isRemoteWorkspace={props.surface?.isRemoteWorkspace ?? false}
-                        target={visibleArtifactTarget}
-                        targets={artifactFileTargets}
-                        outputReceipts={workflowOutputReceipts}
-                        onSelectTarget={openTarget}
-                        onAddNote={(artifactPath, desk, sessionSlug) => void addArtifactNote(artifactPath, desk, sessionSlug)}
-                        onRevealPath={props.onRevealPath}
-                        onDeletedTarget={removeAccessibleTarget}
-                        onClose={closeRightPane}
-                      />
-                    ) : visibleSidePanel === "sui" ? (
-                      <div
-                        data-testid="protocol-side-panel-scroll-root"
-                        className="flex h-full min-h-0 max-h-full flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain"
-                      >
-                        <SuiWorkflowPanel
-                          matterhornServerClient={props.matterhornServerClient}
-                          workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
-                          sessionId={props.selectedSessionId}
-                          compact
-                          onEvidenceSaved={() => void outputReceiptsQuery.refetch()}
-                        />
-                      </div>
-                    ) : isLegacyCryptoVenueSidePanel(visibleSidePanel) ? (
-                      <div
-                        data-testid="protocol-side-panel-scroll-root"
-                        className="flex h-full min-h-0 max-h-full flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain"
-                      >
-                        <WalletPanel
-                          store={wallet.store}
-                          gasPriceGwei={sessionWallet.gasPriceGwei}
-                          blockExplorerUrl={sessionWallet.blockExplorerUrl}
-                          initialVenue={visibleSidePanel}
-                        />
-                      </div>
-                    ) : (
-                      <BrowserPanel onClose={closeRightPane} />
-                    )}
+                    {sidePanelContent}
                   </Suspense>
                 </ResizablePanel>
               </>
@@ -2773,11 +2812,7 @@ export function SessionPage(props: SessionPageProps) {
                 label: visual?.displayName ?? panel,
                 title: visual?.railTitle ?? `${panel}: protocol desk`,
                 active:
-                  panel === "bittensor"
-                    ? bittensorRailActive
-                    : panel === "hyperliquid"
-                      ? hyperliquidRailActive
-                      : polymarketRailActive,
+                  activeSidePanel === panel,
               };
               return (
                 <Button
@@ -2787,7 +2822,7 @@ export function SessionPage(props: SessionPageProps) {
                   style={deskToneStyle(item.panel)}
                   className={cn(
                     RAIL_DESK_BUTTON_CLASS,
-                    item.active && "bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)] ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.38)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.2)] hover:text-[var(--matterhorn-desk-color)]",
+                    item.active && "bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.16)] hover:text-[var(--matterhorn-desk-color)]",
                   )}
                   onClick={() => openVenueRailPane(item.panel)}
                   title={item.title}
@@ -2847,6 +2882,32 @@ export function SessionPage(props: SessionPageProps) {
             })}
           </aside>
           </div>
+          {mobileSidePanelOpen ? (
+            <div className="fixed inset-0 z-40 flex bg-background lg:hidden">
+              <div className="flex h-full min-h-0 w-full flex-col bg-background">
+                <div className="flex h-11 shrink-0 items-center justify-between border-b border-dls-border/35 px-3">
+                  <span className="min-w-0 truncate text-sm font-semibold text-dls-text">
+                    {sidePanelTitle}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="size-8 rounded-md text-dls-secondary hover:bg-dls-hover hover:text-dls-text"
+                    onClick={closeRightPane}
+                    title="Back to workspace"
+                    aria-label="Back to workspace"
+                  >
+                    <PanelRightClose className="size-4" />
+                  </Button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  <Suspense fallback={<LazyPanelFallback />}>
+                    {sidePanelContent}
+                  </Suspense>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </SidebarInset>
         {shellConfig.sidebar ? <SidebarTrigger className="hidden mac:absolute mac:left-[64px] top-[3px] z-50 mac:flex titlebar-no-drag" /> : null}
       </SidebarProvider>

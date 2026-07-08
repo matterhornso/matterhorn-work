@@ -1,4 +1,8 @@
 /** @jsxImportSource react */
+import { AlertTriangle, Check, CircleX, Info } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export type ReactComposerNotice = {
   title: string;
@@ -14,18 +18,19 @@ export function ReactComposerNotice(props: { notice: ReactComposerNotice | null 
 
   const toneClass =
     tone === "success"
-      ? "border-emerald-6/40 bg-emerald-4/80 text-emerald-11"
+      ? "bg-emerald-4 text-emerald-11"
       : tone === "warning"
-        ? "border-amber-6/40 bg-amber-4/80 text-amber-11"
+        ? "bg-amber-4 text-amber-11"
         : tone === "error"
-          ? "border-red-6/40 bg-red-4/80 text-red-11"
-          : "border-sky-6/40 bg-sky-4/80 text-sky-11";
+          ? "bg-red-4 text-red-11"
+          : "bg-sky-4 text-sky-11";
+  const ToneIcon = tone === "success" ? Check : tone === "warning" ? AlertTriangle : tone === "error" ? CircleX : Info;
 
   return (
-    <div className="absolute bottom-full right-0 z-30 mb-3 w-[min(26rem,calc(100vw-2rem))] max-w-full overflow-hidden rounded-xl bg-dls-surface/98 px-4 py-3 shadow-[0_16px_36px_rgba(0,0,0,0.20)] ring-1 ring-dls-border/25 backdrop-blur-xl">
+    <div className="absolute bottom-full right-0 z-30 mb-3 w-[min(26rem,calc(100vw-2rem))] max-w-full overflow-hidden rounded-lg bg-dls-surface px-4 py-3 shadow-lg ring-1 ring-dls-border/35">
       <div className="flex items-start gap-3">
-        <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[12px] font-semibold ring-1 ring-current/15 ${toneClass}`}>
-          {tone === "success" ? "✓" : tone === "warning" ? "!" : tone === "error" ? "×" : "i"}
+        <div className={cn("mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md", toneClass)}>
+          <ToneIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-[13px] font-medium leading-relaxed text-dls-text">{props.notice.title}</div>
@@ -33,13 +38,15 @@ export function ReactComposerNotice(props: { notice: ReactComposerNotice | null 
             <p className="mt-1 text-[12px] leading-relaxed text-dls-secondary">{props.notice.description}</p>
           ) : null}
           {props.notice.actionLabel && props.notice.onAction ? (
-            <button
+            <Button
               type="button"
-              className="mt-3 inline-flex items-center justify-center rounded-md bg-dls-hover px-3 py-1.5 text-[12px] font-medium text-dls-text transition-colors hover:bg-dls-surface-muted"
+              variant="secondary"
+              size="sm"
+              className="mt-3 h-7 px-2.5 text-xs"
               onClick={() => props.notice?.onAction?.()}
             >
               {props.notice.actionLabel}
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>

@@ -174,7 +174,7 @@ function statusLabel(status: CustomerWorkflowTemplate["status"] | undefined): st
     case "planned_not_live":
       return "Planned, not live";
     case "blank":
-      return "Blank chat";
+      return "Chat";
     default:
       return "Available";
   }
@@ -515,14 +515,14 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   },
   {
     id: "blank_chat_workflow",
-    name: "Blank chat",
-    summary: "Start a free-form session with the default Matterhorn Agent.",
+    name: "Chat",
+    summary: "Start a flexible session with the default Matterhorn Agent.",
     promise: "Open-ended assistance. You choose the goal.",
     category: "future",
     status: "blank",
     examplePrompts: ["What can you do?"],
     launch: {
-      primaryCta: "Start blank chat",
+      primaryCta: "Start chat",
       secondaryCta: "Browse templates",
       defaultPrompt: "What can you do?",
       handoffContextLabel: "Goal",
@@ -531,7 +531,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "blank",
       accent: "neutral",
-      shortDescription: "Start a free-form chat with the default Matterhorn Agent.",
+      shortDescription: "Start a flexible chat with the default Matterhorn Agent.",
     },
     routing: { chatMode: "general", startsSession: true },
     safetyBoundaries: {
@@ -570,7 +570,26 @@ export function normalizeCustomerWorkflowTemplates(input: CustomerWorkflowTempla
   const templates = Array.isArray(input.customerTemplates)
     ? input.customerTemplates.filter(isTemplate)
     : [];
-  return templates.length ? templates.map(enrichCustomerWorkflowTemplate) : FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES;
+  return (templates.length ? templates.map(enrichCustomerWorkflowTemplate) : FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES)
+    .map(normalizeWorkflowTemplateCopy);
+}
+
+function normalizeWorkflowTemplateCopy(template: CustomerWorkflowTemplate): CustomerWorkflowTemplate {
+  if (template.id !== "blank_chat_workflow") return template;
+
+  return {
+    ...template,
+    name: "Chat",
+    summary: "Start a flexible session with the default Matterhorn Agent.",
+    launch: {
+      ...template.launch,
+      primaryCta: "Start chat",
+    },
+    ui: {
+      ...template.ui,
+      shortDescription: "Start a flexible chat with the default Matterhorn Agent.",
+    },
+  };
 }
 
 export async function fetchCustomerWorkflowTemplates(): Promise<CustomerWorkflowTemplate[]> {
