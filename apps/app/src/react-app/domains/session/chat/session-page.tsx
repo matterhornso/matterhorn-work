@@ -536,7 +536,7 @@ function HomeCapabilityOverview({
             <article
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="matterhorn-capability-card group relative min-w-0 rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.055)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.10)]"
+              className="matterhorn-capability-card group grid min-w-0 gap-3 relative rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.055)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.10)]"
             >
               <button
                 type="button"
