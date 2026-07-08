@@ -60,12 +60,23 @@ assert.deepEqual(corsStage.command, ["node", "scripts/production-cors-readiness.
 const outputDir = mkdtempSync(join(tmpdir(), "matterhorn-product-readiness-smoke-"));
 try {
   const jsonOutput = join(outputDir, "product-readiness.json");
-  const outputRun = await run(["--dry-run", "--json-output", jsonOutput]);
+  const markdownOutput = join(outputDir, "product-readiness.md");
+  const outputRun = await run(["--dry-run", "--json-output", jsonOutput, "--markdown-output", markdownOutput]);
   assert.equal(outputRun.code, 0, outputRun.stderr || outputRun.stdout);
+  assert.ok(outputRun.stdout.includes(`JSON report: ${jsonOutput}`));
+  assert.ok(outputRun.stdout.includes(`Markdown report: ${markdownOutput}`));
   const outputReport = JSON.parse(readFileSync(jsonOutput, "utf8"));
   assert.equal(outputReport.ready, true);
   assert.equal(outputReport.dryRun, true);
   assert.ok(outputReport.stages.some((stage) => stage.id === "generated_media.history"));
+  const markdown = readFileSync(markdownOutput, "utf8");
+  assert.ok(markdown.includes("# Matterhorn Product Readiness"));
+  assert.ok(markdown.includes("## Stages"));
+  assert.ok(markdown.includes("workspace.resolve"));
+  assert.ok(markdown.includes("generated_media.history"));
+  assert.ok(markdown.includes("Non-custodial: yes"));
+  assert.ok(!/sk-[A-Za-z0-9_-]{20,}/.test(markdown));
+  assert.ok(!/owt_[A-Za-z0-9._-]{16,}/.test(markdown));
 } finally {
   rmSync(outputDir, { recursive: true, force: true });
 }
@@ -103,6 +114,8 @@ for (const required of [
   "scripts/generated-media-flow-smoke.mjs",
   "production.cors_readiness",
   "--include-generated-media-flow",
+  "--markdown-output",
+  "Markdown report",
 ]) {
   assert.ok(source.includes(required), `product readiness smoke missing contract ${required}`);
 }
@@ -131,6 +144,7 @@ for (const text of [
   "pnpm dev:generated-media-smoke",
   "pnpm smoke:product-readiness",
   "--include-generated-media-flow",
+  "--markdown-output",
 ]) {
   assert.ok(help.stdout.includes(text), `help missing ${text}`);
 }
