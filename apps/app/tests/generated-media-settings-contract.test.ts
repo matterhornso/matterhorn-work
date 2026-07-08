@@ -46,11 +46,15 @@ describe("Generated media settings surface", () => {
     expect(source).toContain("listImageNftDrafts");
     expect(source).toContain("workspaceDataControls");
     expect(source).toContain("generatedMediaDiagnostics");
+    expect(source).toContain("downloadGeneratedMediaReadinessReport");
     expect(source).toContain("deleteGeneratedImage");
     expect(source).toContain("deleteImageNftDraft");
     expect(source).toContain("buildNftPublishingReadinessItems");
     expect(source).toContain("NftPublishingSetupRows");
     expect(source).toContain("Run diagnostics");
+    expect(source).toContain("Copy report");
+    expect(source).toContain("Download report");
+    expect(source).toContain("Downloaded generated media readiness report.");
     expect(source).toContain("without generating images, uploading media, signing, or submitting transactions");
     expect(source).toContain("Production smoke plan");
     expect(source).toContain("Public writes require user action");
@@ -62,6 +66,7 @@ describe("Generated media settings surface", () => {
     expect(source).toContain("Delete local generated image");
     expect(source).toContain("Delete local NFT draft");
     expect(client).toContain("generatedMediaDiagnostics");
+    expect(client).toContain("generated-media/diagnostics/report");
     expect(client).toContain("deleteGeneratedImage");
     expect(client).toContain("deleteImageNftDraft");
   });

@@ -34,7 +34,11 @@ import {
   detectSecretShapedInput,
   resolveImageGenerationProviderFromEnv,
 } from "./image-generation-provider.js";
-import { buildGeneratedMediaDiagnostics } from "./generated-media-diagnostics.js";
+import {
+  buildGeneratedMediaDiagnostics,
+  buildGeneratedMediaReadinessMarkdown,
+  generatedMediaReadinessReportFilename,
+} from "./generated-media-diagnostics.js";
 import { MatterhornGeneratedImageStore, imageFilePath } from "./generated-image-store.js";
 import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
 import { resolveNftEnvironmentConfig, type NftEnvironmentConfig } from "./image-nft-capabilities.js";
@@ -75,6 +79,20 @@ export function addGeneratedMediaRoutes(
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const response = await buildGeneratedMediaDiagnostics({ workspaceId: workspace.id });
     return jsonResponse(response);
+  });
+
+  addRoute("GET", "/workspace/:id/generated-media/diagnostics/report", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const diagnostics = await buildGeneratedMediaDiagnostics({ workspaceId: workspace.id });
+    const markdown = buildGeneratedMediaReadinessMarkdown({ diagnostics });
+    const filename = generatedMediaReadinessReportFilename(workspace.id, diagnostics.checkedAt);
+    return new Response(markdown, {
+      headers: {
+        "Content-Type": "text/markdown; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "no-store",
+      },
+    });
   });
 
   addRoute("GET", "/workspace/:id/images", "client", async (ctx) => {

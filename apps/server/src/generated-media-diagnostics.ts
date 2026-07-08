@@ -35,6 +35,10 @@ export interface GeneratedMediaDiagnosticsOptions {
   timeoutMs?: number;
 }
 
+export interface GeneratedMediaReadinessMarkdownOptions {
+  diagnostics: MatterhornGeneratedMediaDiagnosticsResponse;
+}
+
 interface ProbeResult {
   ok: boolean;
   status: number | null;
@@ -499,4 +503,103 @@ function productionSmokeSummary(mode: MatterhornGeneratedMediaProductionSmokePla
     return "Local generated-media smoke can run, but production image generation still needs OpenAI setup.";
   }
   return `Production smoke is blocked by ${blockerCount} setup ${blockerCount === 1 ? "item" : "items"}.`;
+}
+
+export function generatedMediaReadinessReportFilename(workspaceId: string, checkedAt: string): string {
+  const workspace = workspaceId.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "workspace";
+  const date = checkedAt.slice(0, 10) || new Date().toISOString().slice(0, 10);
+  return `matterhorn-generated-media-readiness-${workspace}-${date}.md`;
+}
+
+export function buildGeneratedMediaReadinessMarkdown(
+  options: GeneratedMediaReadinessMarkdownOptions,
+): string {
+  const diagnostics = options.diagnostics;
+  const plan = diagnostics.productionSmokePlan;
+  const ready = diagnostics.status === "pass"
+    && plan.mode === "production_candidate"
+    && plan.canRunEndToEnd === true;
+  const lines = [
+    "# Matterhorn Generated Media Readiness",
+    "",
+    `Generated: ${markdownEscape(diagnostics.checkedAt)}`,
+    `Workspace: ${markdownEscape(diagnostics.workspaceId)}`,
+    `Mode: ${markdownEscape(productionModeLabel(plan.mode))}`,
+    `Status: ${markdownEscape(diagnostics.status)}`,
+    `End-to-end production flow: ${ready ? "ready" : "not ready"}`,
+    "No public writes were performed.",
+    "",
+    "## Summary",
+    "",
+    markdownEscape(diagnostics.summary || plan.summary || "Generated media readiness was checked."),
+    "",
+    "## Safety",
+    "",
+    "- Non-custodial: yes",
+    "- Can submit transactions: no",
+    `- Wallet signing: ${markdownEscape(diagnostics.safety.walletSigning)}`,
+    "- Public writes during diagnostics: no",
+    "- Stores secrets: no",
+    "- Public writes only after user action: yes",
+    "",
+    "## Checks",
+    "",
+    "| Check | Status | Summary |",
+    "| --- | --- | --- |",
+  ];
+
+  if (diagnostics.checks.length === 0) {
+    lines.push("| None | unknown | No checks returned. |");
+  } else {
+    for (const check of diagnostics.checks) {
+      lines.push(`| ${markdownEscape(check.label || check.id)} | ${markdownEscape(check.status)} | ${markdownEscape(check.summary)} |`);
+    }
+  }
+
+  lines.push(
+    "",
+    "## Production Stages",
+    "",
+    "| Stage | Status | Write scope | Wallet | Public write | Summary |",
+    "| --- | --- | --- | --- | --- | --- |",
+  );
+
+  if (plan.stages.length === 0) {
+    lines.push("| None | unknown | none | no | no | No stages returned. |");
+  } else {
+    for (const stage of plan.stages) {
+      lines.push(`| ${markdownEscape(stage.label || stage.id)} | ${markdownEscape(stage.status)} | ${markdownEscape(stage.writeScope)} | ${stage.requiresWallet ? "yes" : "no"} | ${stage.requiresPublicWrite ? "yes" : "no"} | ${markdownEscape(stage.summary)} |`);
+    }
+  }
+
+  lines.push("", "## Blockers", "");
+  if (plan.blockers.length === 0) {
+    lines.push("- None");
+  } else {
+    for (const blocker of plan.blockers) {
+      const env = blocker.envVar ? ` (${blocker.envVar})` : "";
+      lines.push(`- ${markdownListLine(blocker.label)}${env}: ${markdownListLine(blocker.description || blocker.status)}`);
+    }
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+function productionModeLabel(mode: MatterhornGeneratedMediaProductionSmokePlan["mode"]): string {
+  if (mode === "production_candidate") return "production candidate";
+  if (mode === "local_test") return "local test";
+  return "needs setup";
+}
+
+function markdownEscape(value: unknown): string {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .replace(/\n+/g, " ")
+    .trim();
+}
+
+function markdownListLine(value: unknown, fallback = "None"): string {
+  const text = String(value ?? "").trim();
+  return text ? markdownEscape(text) : fallback;
 }

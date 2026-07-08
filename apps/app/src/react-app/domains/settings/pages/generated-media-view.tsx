@@ -4,7 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   Clock3,
+  Copy,
   Database,
+  Download,
   ExternalLink,
   FileText,
   Image as ImageIcon,
@@ -163,6 +165,27 @@ function compact(value: string | undefined | null) {
   if (!value) return null;
   if (value.length <= 34) return value;
   return `${value.slice(0, 18)}...${value.slice(-10)}`;
+}
+
+function safeDownloadFilePart(value: string) {
+  return value.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "workspace";
+}
+
+function decodeReportText(data: ArrayBuffer) {
+  return new TextDecoder().decode(data);
+}
+
+function downloadMarkdownFile(filename: string, data: ArrayBuffer, contentType: string | null) {
+  if (typeof document === "undefined") return;
+  const blob = new Blob([data], { type: contentType ?? "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function isPublicDraft(draft: MatterhornImageNftDraft) {
@@ -482,6 +505,8 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
   const queryClient = useQueryClient();
   const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
   const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
+  const [readinessReportStatus, setReadinessReportStatus] = useState<string | null>(null);
+  const [readinessReportBusy, setReadinessReportBusy] = useState<"copy" | "download" | null>(null);
   const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
   const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
   const workspaceId = props.runtimeWorkspaceId?.trim() ?? "";
@@ -581,6 +606,44 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
       setDiagnosticsError(diagnosticError instanceof Error ? diagnosticError.message : "Generated media diagnostics could not run.");
     },
   });
+
+  const fetchReadinessReport = async () => {
+    const client = props.matterhornServerClient;
+    if (!client || !workspaceId) throw new Error("Open a workspace to export generated media readiness.");
+    return client.downloadGeneratedMediaReadinessReport(workspaceId);
+  };
+
+  const copyReadinessReport = async () => {
+    setReadinessReportBusy("copy");
+    setReadinessReportStatus(null);
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+        throw new Error("Clipboard is unavailable in this browser.");
+      }
+      const report = await fetchReadinessReport();
+      await navigator.clipboard.writeText(decodeReportText(report.data));
+      setReadinessReportStatus("Copied generated media readiness report.");
+    } catch (error) {
+      setReadinessReportStatus(error instanceof Error ? error.message : "Could not copy the readiness report.");
+    } finally {
+      setReadinessReportBusy(null);
+    }
+  };
+
+  const downloadReadinessReport = async () => {
+    setReadinessReportBusy("download");
+    setReadinessReportStatus(null);
+    try {
+      const report = await fetchReadinessReport();
+      const filename = report.filename ?? `matterhorn-generated-media-readiness-${safeDownloadFilePart(workspaceId)}-${new Date().toISOString().slice(0, 10)}.md`;
+      downloadMarkdownFile(filename, report.data, report.contentType);
+      setReadinessReportStatus("Downloaded generated media readiness report.");
+    } catch (error) {
+      setReadinessReportStatus(error instanceof Error ? error.message : "Could not download the readiness report.");
+    } finally {
+      setReadinessReportBusy(null);
+    }
+  };
 
   const deleteImage = (item: MatterhornGeneratedMediaHistoryItem) => {
     if (!canDeleteImage(item)) {
@@ -725,6 +788,26 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
           </SettingsSectionHeaderContent>
           <SettingsSectionHeaderActions>
             <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => void copyReadinessReport()}
+              disabled={!enabled || readinessReportBusy !== null}
+            >
+              <Copy className="size-3.5" />
+              {readinessReportBusy === "copy" ? "Copying" : "Copy report"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => void downloadReadinessReport()}
+              disabled={!enabled || readinessReportBusy !== null}
+            >
+              <Download className="size-3.5" />
+              {readinessReportBusy === "download" ? "Downloading" : "Download report"}
+            </Button>
+            <Button
               variant="outline"
               size="sm"
               className="gap-1.5 text-xs"
@@ -741,6 +824,7 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
           loading={diagnosticsMutation.isPending}
           error={diagnosticsError}
         />
+        {readinessReportStatus ? <SettingsNotice>{readinessReportStatus}</SettingsNotice> : null}
       </SettingsSection>
 
       <SettingsSection>
