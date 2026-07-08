@@ -194,6 +194,7 @@ function billingAuditTitle(entry: AuditEntry): string | null {
       ? "Billing checkout pending"
       : "Billing plan updated";
   }
+  if (entry.action === "workspace.billing.pending_checkout.clear") return "Billing pending checkout cleared";
   if (entry.action === "workspace.billing.subscription.clear") return "Billing subscription cleared";
   if (entry.action === "workspace.billing.webhook") return "Billing provider synced";
   return null;

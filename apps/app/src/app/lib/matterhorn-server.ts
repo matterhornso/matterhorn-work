@@ -32,6 +32,7 @@ import type {
 import type {
   MatterhornBillingCheckoutRequest,
   MatterhornBillingCheckoutResponse,
+  MatterhornBillingPendingCheckoutClearResponse,
   MatterhornBillingPlansResponse,
   MatterhornBillingPortalRequest,
   MatterhornBillingPortalResponse,
@@ -2664,6 +2665,17 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           hostToken,
           method: "POST",
           body: input ?? {},
+          timeoutMs: timeouts.config,
+        },
+      ),
+    workspaceBillingPendingCheckoutClear: (workspaceId: string) =>
+      requestJson<MatterhornBillingPendingCheckoutClearResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/billing/pending-checkout`,
+        {
+          token,
+          hostToken,
+          method: "DELETE",
           timeoutMs: timeouts.config,
         },
       ),
