@@ -31,8 +31,8 @@ function settingsCap(
     security: "/settings/permissions",
     feedback: "/settings/overview#feedback",
     mcp: "/settings/extensions/mcp",
-    "image-generation": "/settings/image-generation",
-    nft: "/settings/nft",
+    "image-generation": "/settings/generated-media",
+    nft: "/settings/generated-media",
   };
   return {
     ...cap(status, label, description),

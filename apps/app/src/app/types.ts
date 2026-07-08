@@ -192,6 +192,7 @@ export type SettingsTab =
   | "recovery"
   | "debug"
   | "wallet"
+  | "generated-media"
   | "marketplace";
 
 export type WorkspacePreset = "starter" | "automation" | "minimal";

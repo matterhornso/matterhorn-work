@@ -2357,18 +2357,18 @@ function backendSettingsSections(input: {
       primaryAction: { id: "settings.mcp.open", label: "Open MCPs", kind: "route", href: "/settings/extensions/mcp" },
     },
     "image-generation": {
-      route: "/settings/image-generation",
+      route: "/settings/generated-media",
       workspaceScoped: true,
       desktopOnly: false,
       backendDependencies: ["/workspace/:id/images", "/workspace/:id/images/generate"],
-      primaryAction: { id: "settings.image-generation.open", label: "Open image generation", kind: "route", href: "/settings/image-generation" },
+      primaryAction: { id: "settings.image-generation.open", label: "Open generated media", kind: "route", href: "/settings/generated-media" },
     },
     nft: {
-      route: "/settings/nft",
+      route: "/settings/generated-media",
       workspaceScoped: true,
       desktopOnly: false,
       backendDependencies: ["/workspace/:id/nft-drafts", "/workspace/:id/backend/capabilities"],
-      primaryAction: { id: "settings.nft.open", label: "Open NFT drafts", kind: "route", href: "/settings/nft" },
+      primaryAction: { id: "settings.nft.open", label: "Open generated media", kind: "route", href: "/settings/generated-media" },
     },
   };
   const base = (section: MatterhornSettingsSectionCapability["section"], item: MatterhornCapability): MatterhornSettingsSectionCapability => ({
