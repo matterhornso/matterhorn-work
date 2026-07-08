@@ -278,6 +278,10 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("Append-only history remains exportable for accountability.");
     expect(source).toContain("client.exportProjectDataLedger(workspaceId");
     expect(source).toContain("client.workspaceBackendSupportReport(workspaceId)");
+    expect(source).toContain("copySupportReport");
+    expect(source).toContain("writeClipboardText(JSON.stringify(report, null, 2))");
+    expect(source).toContain("Billing readiness is included without secrets.");
+    expect(source).toContain("The browser blocked clipboard access. Click the page and try again, or use Download report.");
     expect(source).toContain("summarizeModelRoutingPolicy");
     expect(source).toContain("Backend status");
     expect(source).toContain("Support report");

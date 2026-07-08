@@ -65,6 +65,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { useStatusToasts } from "../../shell-feedback/status-toasts";
 import { useQuickJot } from "../../notes";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
 import {
@@ -143,6 +144,49 @@ function downloadJsonFile(filename: string, content: string) {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+async function writeClipboardText(content: string) {
+  if (typeof navigator === "undefined" || !navigator.clipboard) {
+    throw new Error("Clipboard is unavailable in this browser.");
+  }
+  await navigator.clipboard.writeText(content);
+}
+
+type ExportActionStatus = {
+  tone: "info" | "success" | "error";
+  message: string;
+};
+
+function InlineActionStatus(props: { status: ExportActionStatus | null }) {
+  if (!props.status) return null;
+  const isError = props.status.tone === "error";
+  const icon = props.status.tone === "success"
+    ? <CheckCircle2 className="size-3.5 shrink-0" />
+    : isError
+      ? <AlertCircle className="size-3.5 shrink-0" />
+      : <Clock3 className="size-3.5 shrink-0" />;
+  return (
+    <p
+      role={isError ? "alert" : "status"}
+      className={cn(
+        "flex items-start gap-2 px-1 py-2 text-xs leading-5",
+        isError ? "text-red-10 dark:text-red-9" : "text-dls-secondary",
+        props.status.tone === "success" && "text-emerald-300",
+      )}
+    >
+      {icon}
+      <span>{props.status.message}</span>
+    </p>
+  );
+}
+
+function exportErrorMessage(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) return fallback;
+  if (/clipboard|document is not focused|writeText/i.test(error.message)) {
+    return "The browser blocked clipboard access. Click the page and try again, or use Download report.";
+  }
+  return error.message || fallback;
 }
 
 function SettingsCard(props: {
@@ -1222,13 +1266,14 @@ export function SettingsOverviewView(props: {
   const { onSelectTab } = props;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { showToast } = useStatusToasts();
   const { openQuickJot } = useQuickJot();
   const setSidePanelState = useUiStateStore((state) => state.setSidePanelState);
   const [theme, setTheme] = useState<ThemeMode>(getInitialThemeMode());
   const [density, setDensity] = useState<Density>(readDensity());
   const [memoryExportStatus, setMemoryExportStatus] = useState<string | null>(null);
-  const [ledgerExportStatus, setLedgerExportStatus] = useState<string | null>(null);
-  const [supportReportStatus, setSupportReportStatus] = useState<string | null>(null);
+  const [ledgerExportStatus, setLedgerExportStatus] = useState<ExportActionStatus | null>(null);
+  const [supportReportStatus, setSupportReportStatus] = useState<ExportActionStatus | null>(null);
   const notesWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
   const backendWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
 
@@ -1435,41 +1480,76 @@ export function SettingsOverviewView(props: {
     const client = props.matterhornServerClient;
     const workspaceId = props.runtimeWorkspaceId?.trim();
     if (!client || !workspaceId) {
-      setLedgerExportStatus("Open a connected workspace to export the project ledger.");
+      const message = "Open a connected workspace to export the project ledger.";
+      setLedgerExportStatus({ tone: "error", message });
+      showToast({ tone: "error", title: "Ledger export unavailable", description: message });
       return;
     }
-    setLedgerExportStatus("Exporting...");
+    setLedgerExportStatus({ tone: "info", message: "Exporting ledger JSON..." });
     try {
       const exportPayload = await client.exportProjectDataLedger(workspaceId, { limit: 300 });
       downloadJsonFile(
         exportPayload.filename || `matterhorn-project-ledger-${safeDownloadFilePart(workspaceId)}-${new Date().toISOString().slice(0, 10)}.json`,
         JSON.stringify(exportPayload, null, 2),
       );
-      setLedgerExportStatus(`Exported ${exportPayload.manifest.itemCount} ledger events.`);
+      const message = `Exported ${exportPayload.manifest.itemCount} ledger events.`;
+      setLedgerExportStatus({ tone: "success", message });
+      showToast({ tone: "success", title: "Ledger exported", description: message });
     } catch (error) {
-      setLedgerExportStatus(error instanceof Error ? error.message : "Could not export the project ledger.");
+      const message = exportErrorMessage(error, "Could not export the project ledger.");
+      setLedgerExportStatus({ tone: "error", message });
+      showToast({ tone: "error", title: "Ledger export failed", description: message });
     }
-  }, [props.matterhornServerClient, props.runtimeWorkspaceId]);
+  }, [props.matterhornServerClient, props.runtimeWorkspaceId, showToast]);
 
   const exportSupportReport = useCallback(async () => {
     const client = props.matterhornServerClient;
     const workspaceId = props.runtimeWorkspaceId?.trim();
     if (!client || !workspaceId) {
-      setSupportReportStatus("Open a connected workspace to download a support report.");
+      const message = "Open a connected workspace to download a support report.";
+      setSupportReportStatus({ tone: "error", message });
+      showToast({ tone: "error", title: "Support report unavailable", description: message });
       return;
     }
-    setSupportReportStatus("Preparing report...");
+    setSupportReportStatus({ tone: "info", message: "Preparing support report..." });
     try {
       const report = await client.workspaceBackendSupportReport(workspaceId);
       downloadJsonFile(
         report.filename || `matterhorn-backend-support-${safeDownloadFilePart(workspaceId)}-${new Date().toISOString().slice(0, 10)}.json`,
         JSON.stringify(report, null, 2),
       );
-      setSupportReportStatus("Downloaded backend support report.");
+      const message = "Downloaded redacted backend support report.";
+      setSupportReportStatus({ tone: "success", message });
+      showToast({ tone: "success", title: "Support report downloaded", description: "Billing readiness is included without secrets." });
     } catch (error) {
-      setSupportReportStatus(error instanceof Error ? error.message : "Could not download the support report.");
+      const message = exportErrorMessage(error, "Could not download the support report.");
+      setSupportReportStatus({ tone: "error", message });
+      showToast({ tone: "error", title: "Support report failed", description: message });
     }
-  }, [props.matterhornServerClient, props.runtimeWorkspaceId]);
+  }, [props.matterhornServerClient, props.runtimeWorkspaceId, showToast]);
+
+  const copySupportReport = useCallback(async () => {
+    const client = props.matterhornServerClient;
+    const workspaceId = props.runtimeWorkspaceId?.trim();
+    if (!client || !workspaceId) {
+      const message = "Open a connected workspace to copy a support report.";
+      setSupportReportStatus({ tone: "error", message });
+      showToast({ tone: "error", title: "Support report unavailable", description: message });
+      return;
+    }
+    setSupportReportStatus({ tone: "info", message: "Preparing support report..." });
+    try {
+      const report = await client.workspaceBackendSupportReport(workspaceId);
+      await writeClipboardText(JSON.stringify(report, null, 2));
+      const message = "Copied redacted backend support report.";
+      setSupportReportStatus({ tone: "success", message });
+      showToast({ tone: "success", title: "Support report copied", description: "Paste it into a GitHub issue or support thread when needed." });
+    } catch (error) {
+      const message = exportErrorMessage(error, "Could not copy the support report.");
+      setSupportReportStatus({ tone: "error", message });
+      showToast({ tone: "error", title: "Support report copy failed", description: message });
+    }
+  }, [props.matterhornServerClient, props.runtimeWorkspaceId, showToast]);
 
   const openMemoryReview = useCallback(() => {
     if (!notesWorkspaceId) return;
@@ -1665,9 +1745,19 @@ export function SettingsOverviewView(props: {
               />
               <div className="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Download redacted project evidence or a compact backend support report.
+                  Download redacted project evidence or copy a support report with backend, billing, wallet, and data-policy readiness.
                 </p>
                 <div className="flex flex-wrap items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
+                    onClick={() => void copySupportReport()}
+                    disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId || workspaceBackendControlPlaneQuery.isLoading}
+                  >
+                    <Copy className="size-3.5" />
+                    Copy report
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -1676,7 +1766,7 @@ export function SettingsOverviewView(props: {
                     disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId || workspaceBackendControlPlaneQuery.isLoading}
                   >
                     <Download className="size-3.5" />
-                    Support report
+                    Download report
                   </Button>
                   <Button
                     variant="ghost"
@@ -1690,11 +1780,7 @@ export function SettingsOverviewView(props: {
                   </Button>
                 </div>
               </div>
-              {supportReportStatus || ledgerExportStatus ? (
-                <p className="px-1 py-2 text-xs leading-5 text-dls-secondary">
-                  {[supportReportStatus, ledgerExportStatus].filter(Boolean).join(" ")}
-                </p>
-              ) : null}
+              <InlineActionStatus status={supportReportStatus ?? ledgerExportStatus} />
               <Row
                 label="Wallet families"
                 hint={walletFamilySummary(backendCapabilities)
