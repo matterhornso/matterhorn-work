@@ -196,10 +196,23 @@ describe("Generated media routes", () => {
     ]);
     expect(result.payload.checks.find((check: { id: string }) => check.id === "image_provider")?.status).toBe("pass");
     expect(result.payload.checks.find((check: { id: string }) => check.id === "walrus_storage")?.status).toBe("warning");
+    expect(result.payload.productionSmokePlan).toMatchObject({
+      mode: "needs_setup",
+      canRunEndToEnd: false,
+      publicWritesOnlyAfterUserAction: true,
+    });
+    expect(result.payload.productionSmokePlan.stages.find((stage: { id: string }) => stage.id === "chat_image_generation")).toMatchObject({
+      status: "ready",
+      writeScope: "workspace_output",
+      requiresPublicWrite: false,
+    });
+    expect(result.payload.productionSmokePlan.blockers.some((blocker: { envVar?: string }) => blocker.envVar === "OPENAI_API_KEY")).toBe(true);
   });
 
   test("GET /workspace/:id/generated-media/diagnostics checks fake Walrus and Sui config without upload", async () => {
     const walrus = bootWalrusDiagnosticEndpoint();
+    process.env.MATTERHORN_IMAGE_PROVIDER = "openai";
+    process.env.OPENAI_API_KEY = "sk-test-generated-media-diagnostics";
     process.env.MATTERHORN_WALRUS_PUBLISHER_URL = walrus.url;
     process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN = "secret-smoke-token";
     process.env.MATTERHORN_WALRUS_RELAY_URL = walrus.url;
@@ -223,6 +236,17 @@ describe("Generated media routes", () => {
       sui_marketplace_listing: "pass",
       non_custody_safety: "pass",
     });
+    expect(result.payload.productionSmokePlan).toMatchObject({
+      mode: "production_candidate",
+      canRunEndToEnd: true,
+      publicWritesOnlyAfterUserAction: true,
+      blockers: [],
+    });
+    expect(result.payload.productionSmokePlan.stages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "walrus_public_upload", status: "manual", writeScope: "public_storage", requiresPublicWrite: true }),
+      expect.objectContaining({ id: "sui_wallet_mint", status: "manual", writeScope: "wallet_signed_transaction", requiresWallet: true }),
+      expect.objectContaining({ id: "sui_kiosk_listing", status: "manual", writeScope: "wallet_signed_transaction", requiresWallet: true }),
+    ]));
     expect(walrus.calls.map((call) => call.method).sort()).toEqual(["HEAD", "OPTIONS"]);
     expect(walrus.calls.some((call) => call.method === "PUT")).toBe(false);
     expect(walrus.calls.every((call) => call.byteLength === 0)).toBe(true);

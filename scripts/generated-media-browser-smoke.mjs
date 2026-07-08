@@ -439,8 +439,21 @@ async function runSmoke(config) {
         state: "visible",
         timeout: 20_000,
       });
+      await page.getByText("Production smoke plan", { exact: true }).waitFor({
+        state: "visible",
+        timeout: 20_000,
+      });
+      await page.getByText("Local test", { exact: true }).waitFor({
+        state: "visible",
+        timeout: 20_000,
+      });
+      await page.getByText("Public writes require user action", { exact: true }).waitFor({
+        state: "visible",
+        timeout: 20_000,
+      });
       report.artifacts.generatedMediaDiagnostics = {
         status: "pass",
+        productionSmokeMode: "local_test",
         publicWritesDuringDiagnostics: false,
       };
     });
