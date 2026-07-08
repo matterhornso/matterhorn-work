@@ -58,6 +58,13 @@ assert.ok(
     script.includes("containsSignatureMaterial"),
   "generated-media flow smoke should verify public NFT preview handoffs in evidence and ledger",
 );
+assert.ok(
+  script.includes("DEFAULT_MINT_TRANSACTION_DIGEST") &&
+    script.includes("DEFAULT_LISTING_TRANSACTION_DIGEST") &&
+    !script.includes("0xsmokemintdigest") &&
+    !script.includes("0xsmokelistingdigest"),
+  "generated-media flow smoke should use public-shaped Sui transaction digests accepted by receipt validation",
+);
 
 assert.equal(
   packageJson.scripts?.["smoke:generated-media-flow"],

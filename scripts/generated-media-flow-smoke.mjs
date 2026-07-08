@@ -10,6 +10,8 @@ const DEFAULT_SENDER = "0x888888888888888888888888888888888888888888888888888888
 const DEFAULT_KIOSK_ID = "0x4444444444444444444444444444444444444444444444444444444444444444";
 const DEFAULT_KIOSK_OWNER_CAP_ID = "0x5555555555555555555555555555555555555555555555555555555555555555";
 const DEFAULT_TRANSFER_POLICY_ID = "0x6666666666666666666666666666666666666666666666666666666666666666";
+const DEFAULT_MINT_TRANSACTION_DIGEST = "abcdefabcdefabcdefabcdefabcdefabcdef";
+const DEFAULT_LISTING_TRANSACTION_DIGEST = "bcdefabcdefabcdefabcdefabcdefabcdefa";
 
 function parseArgs(argv) {
   const args = {
@@ -261,7 +263,7 @@ async function runGeneratedMediaFlow(config) {
     const mintReceipt = await stage("sui.mint_receipt", "Record Sui mint receipt", () => fetchJson(config, `/workspace/${workspaceId}/nft-drafts/${draft.draft.id}/mint/receipt`, {
       method: "POST",
       body: JSON.stringify({
-        transactionDigest: "0xsmokemintdigest",
+        transactionDigest: DEFAULT_MINT_TRANSACTION_DIGEST,
         objectId: config.nftObjectId,
         network: "sui-testnet",
         packageId,
@@ -294,7 +296,7 @@ async function runGeneratedMediaFlow(config) {
     const listingReceipt = await stage("sui.listing_receipt", "Record Sui Kiosk listing receipt", () => fetchJson(config, `/workspace/${workspaceId}/nft-drafts/${draft.draft.id}/listing/receipt`, {
       method: "POST",
       body: JSON.stringify({
-        transactionDigest: "0xsmokelistingdigest",
+        transactionDigest: DEFAULT_LISTING_TRANSACTION_DIGEST,
         objectId: config.nftObjectId,
         network: "sui-testnet",
         packageId: listingPreview.handoff?.kioskPackageId || config.kioskPackageId,
