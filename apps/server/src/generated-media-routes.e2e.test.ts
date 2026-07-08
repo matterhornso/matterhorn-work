@@ -703,6 +703,31 @@ describe("Generated media billing entitlements", () => {
     });
   });
 
+  test("workspace checkout plan raises image allowance without changing global billing env", async () => {
+    const { base } = await boot();
+
+    for (let index = 0; index < 10; index += 1) {
+      const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+        method: "POST",
+        body: JSON.stringify({ prompt: `workspace checkout allowance image ${index}` }),
+      });
+      expect(generated.response.status).toBe(200);
+    }
+
+    const checkout = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/checkout`, {
+      method: "POST",
+      body: JSON.stringify({ planId: "plus" }),
+    });
+    expect(checkout.response.status).toBe(200);
+
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "allowed by workspace plus checkout" }),
+    });
+    expect(generated.response.status).toBe(200);
+    expect(generated.payload.success).toBe(true);
+  });
+
   test("Free plan keeps local NFT drafts but blocks public NFT and Walrus preparation", async () => {
     const publisher = bootWalrusPublisher({ newlyCreated: { blobObject: { blobId: "should_not_upload" } } });
     process.env.MATTERHORN_WALRUS_PUBLISHER_URL = publisher.url;
@@ -790,6 +815,33 @@ describe("Generated media billing entitlements", () => {
     expect(listingPreview.response.status).toBe(402);
     expect(listingPreview.payload.details).toMatchObject({
       entitlementKey: "nft_marketplace_listing",
+      currentPlanId: "plus",
+      requiredPlanIds: ["max"],
+    });
+  });
+
+  test("workspace checkout Plus unlocks mint preview checks without global billing env", async () => {
+    const { base } = await boot();
+    const { draft } = await createDraft(base);
+
+    const checkout = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/checkout`, {
+      method: "POST",
+      body: JSON.stringify({ planId: "plus" }),
+    });
+    expect(checkout.response.status).toBe(200);
+
+    const mintPreview = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/preview`, {
+      method: "POST",
+    });
+    expect(mintPreview.response.status).toBe(503);
+    expect(mintPreview.payload.code).toBe("sui_nft_package_needs_setup");
+
+    const storagePrepare = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/storage/prepare`, {
+      method: "POST",
+    });
+    expect(storagePrepare.response.status).toBe(402);
+    expect(storagePrepare.payload.details).toMatchObject({
+      entitlementKey: "walrus_storage",
       currentPlanId: "plus",
       requiredPlanIds: ["max"],
     });
