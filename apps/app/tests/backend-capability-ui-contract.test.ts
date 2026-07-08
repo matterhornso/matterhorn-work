@@ -324,6 +324,10 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("Model catalog could not load");
     expect(source).toContain("ModelRoutingRow");
     expect(source).toContain("Model details");
+    expect(source).toContain("modelReadiness.catalogRows");
+    expect(source).toContain("Model catalog");
+    expect(source).toContain("row.modelCountLabel");
+    expect(source).toContain("row.sampleModels");
     expect(source).toContain("modelReadiness.trainingPolicy");
     expect(routeSource).toContain("connectedModelCount");
     expect(routeSource).toContain("defaultModelLabel={defaultModelLabel}");

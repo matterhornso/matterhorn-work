@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import type { MatterhornBackendModelsResponse } from "@matterhorn-work/types/backend-models";
-import { buildModelReadinessSummary } from "../src/react-app/domains/settings/state/model-readiness-summary";
+import {
+  buildModelCatalogRows,
+  buildModelReadinessSummary,
+} from "../src/react-app/domains/settings/state/model-readiness-summary";
 
 const baseBackendModels: MatterhornBackendModelsResponse = {
   success: true,
@@ -209,5 +212,66 @@ describe("model readiness summary", () => {
     expect(summary.statusTone).toBe("warning");
     expect(summary.providerCatalog.value).toBe("2 providers · 8 models");
     expect(summary.providerCatalog.detail).toContain("workspace is not connected to an agent engine yet");
+  });
+
+  test("builds readable backend model catalog rows from the live provider list", () => {
+    const catalog = {
+      ...baseBackendModels.catalog,
+      providers: [
+        {
+          id: "openai",
+          name: "OpenAI",
+          source: "api",
+          connected: true,
+          modelCount: 5,
+          modelIds: ["gpt-4.1", "gpt-4.1-mini", "gpt-4o", "o3", "o4-mini"],
+          sampleModels: ["gpt-4.1", "gpt-4.1-mini", "gpt-4o", "o3"],
+        },
+        {
+          id: "opencode",
+          name: "OpenCode",
+          source: "config",
+          connected: false,
+          modelCount: 1,
+          modelIds: ["big-pickle"],
+          sampleModels: [],
+        },
+      ],
+      defaultModels: {
+        openai: "gpt-4.1-mini",
+      },
+    };
+
+    expect(buildModelCatalogRows(catalog)).toEqual([
+      {
+        providerId: "openai",
+        providerName: "OpenAI",
+        sourceLabel: "API key",
+        connectedLabel: "Connected",
+        modelCountLabel: "5 models",
+        defaultModel: "gpt-4.1-mini",
+        sampleModels: "gpt-4.1, gpt-4.1-mini, gpt-4o, o3 +1 more",
+      },
+      {
+        providerId: "opencode",
+        providerName: "OpenCode",
+        sourceLabel: "Config",
+        connectedLabel: "Available",
+        modelCountLabel: "1 model",
+        defaultModel: "Not set",
+        sampleModels: "big-pickle",
+      },
+    ]);
+
+    const summary = buildModelReadinessSummary({
+      currentModelLabel: "Default",
+      currentModelRef: "Default",
+      backendModels: { ...baseBackendModels, catalog },
+      connectedProviderCount: 1,
+      connectedModelCount: 6,
+    });
+
+    expect(summary.catalogRows).toHaveLength(2);
+    expect(summary.catalogRows[0]?.sampleModels).toContain("+1 more");
   });
 });
