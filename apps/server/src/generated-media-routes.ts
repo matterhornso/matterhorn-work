@@ -28,7 +28,7 @@ import type {
   MatterhornNftReceiptResponse,
   MatterhornNftStorageStatus,
 } from "@matterhorn-work/types/generated-media";
-import type { ServerConfig, TokenScope, WorkspaceInfo } from "./types.js";
+import type { Actor, ServerConfig, TokenScope, WorkspaceInfo } from "./types.js";
 import { ApiError } from "./errors.js";
 import {
   createImageGenerationProvider,
@@ -170,7 +170,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const billingContext = await resolveGeneratedMediaBillingContext(workspace);
     const imageUsage = (await store.list()).filter((image) => isBillingUsageTimestampInPeriod(image.createdAt, billingContext.usagePeriod)).length;
-    await requireGeneratedMediaEntitlement(workspace, "image_generation", imageUsage, billingContext);
+    await requireGeneratedMediaEntitlement(workspace, "image_generation", imageUsage, billingContext, ctx.actor);
 
     if (detectSecretShapedInput(input.prompt)) {
       throw new ApiError(400, "image_prompt_secret_rejected", "Prompt contains secret-shaped input.");
@@ -389,7 +389,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
-    await requireGeneratedMediaEntitlement(workspace, "walrus_storage", await countWalrusStorageUsage(store, draft.id));
+    await requireGeneratedMediaEntitlement(workspace, "walrus_storage", await countWalrusStorageUsage(store, draft.id), undefined, ctx.actor);
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const publisherConfigured = Boolean(nftEnv.walrusPublisherUrl?.trim());
@@ -425,7 +425,7 @@ export function addGeneratedMediaRoutes(
     const imageStore = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const image = await imageStore.get(draft.imageId);
     if (!image) throw new ApiError(404, "image_not_found", "Generated image not found for this NFT draft.");
-    await requireGeneratedMediaEntitlement(workspace, "walrus_storage", await countWalrusStorageUsage(store, draft.id));
+    await requireGeneratedMediaEntitlement(workspace, "walrus_storage", await countWalrusStorageUsage(store, draft.id), undefined, ctx.actor);
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const publisherConfigured = Boolean(nftEnv.walrusPublisherUrl?.trim());
@@ -534,6 +534,7 @@ export function addGeneratedMediaRoutes(
       "nft_mint_preview",
       await countMintPreviewUsage(store, draft.id, billingContext.usagePeriod),
       billingContext,
+      ctx.actor,
     );
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
@@ -708,6 +709,7 @@ export function addGeneratedMediaRoutes(
       "nft_marketplace_listing",
       await countMarketplaceListingUsage(store, draft.id, billingContext.usagePeriod),
       billingContext,
+      ctx.actor,
     );
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
@@ -930,6 +932,7 @@ async function requireGeneratedMediaEntitlement(
   key: MatterhornEntitlementKey,
   used: number,
   billingContext?: GeneratedMediaBillingContext,
+  actor?: Actor,
 ): Promise<void> {
   const context = billingContext ?? await resolveGeneratedMediaBillingContext(workspace);
   const { effectiveBillingConfig } = context;
@@ -945,6 +948,33 @@ async function requireGeneratedMediaEntitlement(
   const message = check.reason === "limit_reached"
     ? `${check.label} limit reached on ${currentPlan}. Upgrade to ${requiredPlans} or wait for the allowance to reset.`
     : `${check.label} is not included on ${currentPlan}. Upgrade to ${requiredPlans} to continue.`;
+  const metadata = {
+    entitlementKey: check.key,
+    entitlementLabel: check.label,
+    currentPlanId: check.planId,
+    requiredPlanIds: check.allowedPlanIds.join(","),
+    requiredPlans,
+    used: check.used,
+    limit: check.limit,
+    reason: check.reason,
+    resetsAt: context.usagePeriod.resetsAt,
+    billingMode: effectiveBillingConfig.mode,
+    provider: effectiveBillingConfig.provider,
+    livePaymentsEnabled: effectiveBillingConfig.livePaymentsEnabled,
+  };
+
+  await recordAudit(workspace.path, {
+    id: shortId(),
+    workspaceId: workspace.id,
+    actor: actor ?? { type: "remote" },
+    action: "workspace.billing.entitlement.denied",
+    target: check.key,
+    summary: check.reason === "limit_reached"
+      ? `${check.label} limit reached on ${currentPlan}.`
+      : `${check.label} requires ${requiredPlans}.`,
+    timestamp: Date.now(),
+    metadata,
+  });
 
   throw new ApiError(status, code, message, {
     entitlementKey: check.key,

@@ -772,6 +772,27 @@ describe("Generated media billing entitlements", () => {
       limit: 10,
       reason: "limit_reached",
     });
+
+    const ledger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=billing&limit=5`);
+    expect(ledger.response.status).toBe(200);
+    expect(ledger.payload.summary.billing).toBe(1);
+    expect(ledger.payload.items[0]).toMatchObject({
+      kind: "billing",
+      title: "Billing limit reached",
+      eventType: "workspace.billing.entitlement.denied",
+      href: `/workspace/${WORKSPACE_ID}/settings/billing`,
+      metadata: {
+        auditAction: "workspace.billing.entitlement.denied",
+        entitlementKey: "image_generation",
+        currentPlanId: "free",
+        reason: "limit_reached",
+        used: 10,
+        limit: 10,
+      },
+    });
+    const serialized = JSON.stringify(ledger.payload);
+    expect(serialized).not.toContain("one image over the free allowance");
+    expect(serialized).not.toContain("test-token");
   });
 
   test("Free plan image allowance counts only the current billing period", async () => {
@@ -926,6 +947,25 @@ describe("Generated media billing entitlements", () => {
       requiredPlanIds: ["max"],
       reason: "not_included",
     });
+
+    const ledger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=billing&limit=10`);
+    expect(ledger.response.status).toBe(200);
+    expect(ledger.payload.summary.billing).toBe(4);
+    expect(ledger.payload.items.every((item: { kind: string }) => item.kind === "billing")).toBe(true);
+    expect(ledger.payload.items.map((item: { title: string }) => item.title)).toEqual(
+      expect.arrayContaining(["Billing upgrade required"]),
+    );
+    expect(ledger.payload.items.map((item: { eventType: string }) => item.eventType)).toEqual(
+      expect.arrayContaining(["workspace.billing.entitlement.denied"]),
+    );
+    expect(ledger.payload.items.map((item: { metadata: { entitlementKey: string } }) => item.metadata.entitlementKey)).toEqual(
+      expect.arrayContaining(["walrus_storage", "nft_mint_preview", "nft_marketplace_listing"]),
+    );
+    const serialized = JSON.stringify(ledger.payload);
+    expect(serialized).not.toContain("should_not_upload");
+    expect(serialized).not.toContain("0xabc");
+    expect(serialized).not.toContain("0x4568");
+    expect(serialized).not.toContain("test-token");
   });
 
   test("Plus plan allows mint preview checks but keeps Walrus and marketplace actions on Max", async () => {
