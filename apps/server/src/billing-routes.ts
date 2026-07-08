@@ -11,7 +11,9 @@ import {
   buildBillingStatusResponseForSubscription,
   buildBillingStatusResponseWithUsage,
   buildMatterhornBillingSubscription,
+  billingUsagePeriodForSubscription,
   createBillingProvider,
+  isBillingUsageTimestampInPeriod,
   resolveBillingProviderConfigFromEnv,
   type BillingProvider,
 } from "./billing.js";
@@ -187,14 +189,18 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id }).list(),
       ctx.countTeamMembers ? ctx.countTeamMembers(workspace).catch(() => 1) : Promise.resolve(1),
     ]);
+    const subscription = account?.subscription ?? buildMatterhornBillingSubscription(provider.config.currentPlanId);
+    const usagePeriod = billingUsagePeriodForSubscription(subscription);
     const usage = {
-      generatedImages: images.length,
-      nftDrafts: drafts.length,
+      generatedImages: images.filter((image) => isBillingUsageTimestampInPeriod(image.createdAt, usagePeriod)).length,
+      generatedImagesResetsAt: usagePeriod.resetsAt,
+      nftDrafts: drafts.filter((draft) => isBillingUsageTimestampInPeriod(draft.createdAt, usagePeriod)).length,
+      nftDraftsResetsAt: usagePeriod.resetsAt,
       teamMembers,
       cloudStorageBytes: 0,
     };
     if (account) {
-      return jsonResponse(buildBillingStatusResponseForSubscription(provider.config, account.subscription, usage));
+      return jsonResponse(buildBillingStatusResponseForSubscription(provider.config, subscription, usage));
     }
     return jsonResponse(buildBillingStatusResponseWithUsage(provider.config, usage));
   });

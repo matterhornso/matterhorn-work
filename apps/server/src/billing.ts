@@ -46,7 +46,9 @@ export interface BillingProvider {
 
 export type BillingUsageCounts = Partial<{
   generatedImages: number;
+  generatedImagesResetsAt: string | null;
   nftDrafts: number;
+  nftDraftsResetsAt: string | null;
   teamMembers: number;
   cloudStorageBytes: number;
 }>;
@@ -71,6 +73,12 @@ export type BillingEntitlementCheck =
       allowedPlanIds: MatterhornBillingPlanId[];
       reason: "not_included" | "limit_reached";
     };
+
+export interface BillingUsagePeriod {
+  currentPeriodStart: string;
+  currentPeriodEnd: string | null;
+  resetsAt: string | null;
+}
 
 const ENTITLEMENT_ORDER: MatterhornEntitlementKey[] = [
   "image_generation",
@@ -144,6 +152,47 @@ function planLimit(planId: MatterhornBillingPlanId, key: MatterhornEntitlementKe
   };
   const value = map[planId][key];
   return value === undefined ? 0 : value;
+}
+
+function validDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function currentCalendarBillingPeriod(now = new Date()): BillingUsagePeriod {
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+  return {
+    currentPeriodStart: start.toISOString(),
+    currentPeriodEnd: end.toISOString(),
+    resetsAt: end.toISOString(),
+  };
+}
+
+export function billingUsagePeriodForSubscription(
+  subscription: MatterhornBillingSubscription | null | undefined,
+  now = new Date(),
+): BillingUsagePeriod {
+  const fallback = currentCalendarBillingPeriod(now);
+  const start = validDate(subscription?.currentPeriodStart);
+  const end = validDate(subscription?.currentPeriodEnd);
+  if (!start) return fallback;
+  return {
+    currentPeriodStart: start.toISOString(),
+    currentPeriodEnd: end ? end.toISOString() : null,
+    resetsAt: end ? end.toISOString() : null,
+  };
+}
+
+export function isBillingUsageTimestampInPeriod(timestamp: string | null | undefined, period: BillingUsagePeriod): boolean {
+  const value = validDate(timestamp);
+  if (!value) return false;
+  const start = validDate(period.currentPeriodStart);
+  const end = validDate(period.currentPeriodEnd);
+  if (start && value.getTime() < start.getTime()) return false;
+  if (end && value.getTime() >= end.getTime()) return false;
+  return true;
 }
 
 function setupCheck(input: MatterhornBillingSetupCheck): MatterhornBillingSetupCheck {
@@ -305,12 +354,12 @@ export function buildMatterhornBillingUsageSnapshotForPlan(
     generatedImages: {
       used: usage?.generatedImages ?? 0,
       limit: planLimit(planId, "image_generation"),
-      resetsAt: null,
+      resetsAt: usage?.generatedImagesResetsAt ?? null,
     },
     nftDrafts: {
       used: usage?.nftDrafts ?? 0,
       limit: planLimit(planId, "nft_mint_preview"),
-      resetsAt: null,
+      resetsAt: usage?.nftDraftsResetsAt ?? null,
     },
     teamMembers: {
       used: usage?.teamMembers ?? 1,

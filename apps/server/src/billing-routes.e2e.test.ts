@@ -112,6 +112,15 @@ function stripeSignatureHeader(secret: string, rawBody: string, timestamp = Math
   return `t=${timestamp},v1=${signature}`;
 }
 
+function currentPeriodIso(): string {
+  return new Date().toISOString();
+}
+
+function previousPeriodIso(): string {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1, 0, 0, 0, 0)).toISOString();
+}
+
 async function jsonFetch(base: string, path: string, init?: RequestInit, token?: string) {
   const response = await fetch(`${base}${path}`, {
     ...init,
@@ -559,10 +568,12 @@ describe("Billing routes", () => {
     const { base, dir } = await boot();
     const imageStore = new MatterhornGeneratedImageStore({ workspaceRoot: dir, workspaceId: WORKSPACE_ID });
     const draftStore = new MatterhornImageNftDraftStore({ workspaceRoot: dir, workspaceId: WORKSPACE_ID });
-    const imageA = testImage(WORKSPACE_ID, "img_billing_a", "2026-07-08T00:00:00.000Z");
-    const imageB = testImage(WORKSPACE_ID, "img_billing_b", "2026-07-08T00:01:00.000Z");
+    const imageA = testImage(WORKSPACE_ID, "img_billing_current_a", currentPeriodIso());
+    const imageB = testImage(WORKSPACE_ID, "img_billing_current_b", currentPeriodIso());
+    const oldImage = testImage(WORKSPACE_ID, "img_billing_previous", previousPeriodIso());
     await imageStore.save(imageA);
     await imageStore.save(imageB);
+    await imageStore.save(oldImage);
     await draftStore.create(imageA, { title: "Billing usage NFT draft" });
 
     const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
@@ -571,7 +582,9 @@ describe("Billing routes", () => {
     expect(result.payload.success).toBe(true);
     expect(result.payload.status.subscription.planId).toBe("plus");
     expect(result.payload.status.usage.generatedImages).toMatchObject({ used: 2, limit: 100 });
+    expect(result.payload.status.usage.generatedImages.resetsAt).toEqual(expect.any(String));
     expect(result.payload.status.usage.nftDrafts).toMatchObject({ used: 1, limit: 20 });
+    expect(result.payload.status.usage.nftDrafts.resetsAt).toEqual(expect.any(String));
     expect(result.payload.status.usage.teamMembers).toMatchObject({ used: 1, limit: 1 });
   });
 

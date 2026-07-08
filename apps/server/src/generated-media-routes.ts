@@ -50,8 +50,12 @@ import { shortId } from "./utils.js";
 import { uploadBlobToWalrus, WalrusUploadError } from "./walrus-storage.js";
 import { normalizeMatterhornSuiAddress } from "./tools/sui.js";
 import {
+  billingUsagePeriodForSubscription,
   checkMatterhornBillingEntitlement,
+  isBillingUsageTimestampInPeriod,
   resolveBillingProviderConfigFromEnv,
+  type BillingProviderConfig,
+  type BillingUsagePeriod,
 } from "./billing.js";
 
 type NftReceiptKind = "mint" | "listing";
@@ -164,7 +168,9 @@ export function addGeneratedMediaRoutes(
     rejectSensitiveGeneratedMediaInput(body, { skipKeys: IMAGE_GENERATION_SECRET_SCAN_SKIP_KEYS });
     const input = validateImageGenerationInput(body);
     const store = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
-    await requireGeneratedMediaEntitlement(workspace, "image_generation", (await store.list()).length);
+    const billingContext = await resolveGeneratedMediaBillingContext(workspace);
+    const imageUsage = (await store.list()).filter((image) => isBillingUsageTimestampInPeriod(image.createdAt, billingContext.usagePeriod)).length;
+    await requireGeneratedMediaEntitlement(workspace, "image_generation", imageUsage, billingContext);
 
     if (detectSecretShapedInput(input.prompt)) {
       throw new ApiError(400, "image_prompt_secret_rejected", "Prompt contains secret-shaped input.");
@@ -522,7 +528,13 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
-    await requireGeneratedMediaEntitlement(workspace, "nft_mint_preview", await countMintPreviewUsage(store, draft.id));
+    const billingContext = await resolveGeneratedMediaBillingContext(workspace);
+    await requireGeneratedMediaEntitlement(
+      workspace,
+      "nft_mint_preview",
+      await countMintPreviewUsage(store, draft.id, billingContext.usagePeriod),
+      billingContext,
+    );
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const setupRequirements = buildMintSetupRequirements(nftEnv);
@@ -690,7 +702,13 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
-    await requireGeneratedMediaEntitlement(workspace, "nft_marketplace_listing", await countMarketplaceListingUsage(store, draft.id));
+    const billingContext = await resolveGeneratedMediaBillingContext(workspace);
+    await requireGeneratedMediaEntitlement(
+      workspace,
+      "nft_marketplace_listing",
+      await countMarketplaceListingUsage(store, draft.id, billingContext.usagePeriod),
+      billingContext,
+    );
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const setupRequirements = buildListingSetupRequirements(nftEnv);
@@ -889,7 +907,12 @@ function requireClientScope(ctx: RequestContext, required: TokenScope): void {
   }
 }
 
-async function requireGeneratedMediaEntitlement(workspace: WorkspaceInfo, key: MatterhornEntitlementKey, used: number): Promise<void> {
+interface GeneratedMediaBillingContext {
+  effectiveBillingConfig: BillingProviderConfig;
+  usagePeriod: BillingUsagePeriod;
+}
+
+async function resolveGeneratedMediaBillingContext(workspace: WorkspaceInfo): Promise<GeneratedMediaBillingContext> {
   const billingConfig = resolveBillingProviderConfigFromEnv(process.env);
   const account = await new MatterhornBillingAccountStore({
     workspaceRoot: workspace.path,
@@ -898,6 +921,18 @@ async function requireGeneratedMediaEntitlement(workspace: WorkspaceInfo, key: M
   const effectiveBillingConfig = account
     ? { ...billingConfig, currentPlanId: account.subscription.planId }
     : billingConfig;
+  const usagePeriod = billingUsagePeriodForSubscription(account?.subscription ?? null);
+  return { effectiveBillingConfig, usagePeriod };
+}
+
+async function requireGeneratedMediaEntitlement(
+  workspace: WorkspaceInfo,
+  key: MatterhornEntitlementKey,
+  used: number,
+  billingContext?: GeneratedMediaBillingContext,
+): Promise<void> {
+  const context = billingContext ?? await resolveGeneratedMediaBillingContext(workspace);
+  const { effectiveBillingConfig } = context;
   const check = checkMatterhornBillingEntitlement(effectiveBillingConfig, key, used);
   if (check.allowed) return;
 
@@ -919,6 +954,7 @@ async function requireGeneratedMediaEntitlement(workspace: WorkspaceInfo, key: M
     used: check.used,
     limit: check.limit,
     reason: check.reason,
+    resetsAt: context.usagePeriod.resetsAt,
     billingMode: effectiveBillingConfig.mode,
     provider: effectiveBillingConfig.provider,
     livePaymentsEnabled: effectiveBillingConfig.livePaymentsEnabled,
@@ -934,18 +970,28 @@ async function countWalrusStorageUsage(store: MatterhornImageNftDraftStore, curr
   }).length;
 }
 
-async function countMintPreviewUsage(store: MatterhornImageNftDraftStore, currentDraftId: string): Promise<number> {
+async function countMintPreviewUsage(
+  store: MatterhornImageNftDraftStore,
+  currentDraftId: string,
+  period: BillingUsagePeriod,
+): Promise<number> {
   return (await store.list()).filter((draft) => {
     if (draft.id === currentDraftId) return false;
+    if (!isBillingUsageTimestampInPeriod(draft.updatedAt, period)) return false;
     return draft.mint.status === "preview_ready"
       || draft.mint.status === "confirmed"
       || Boolean(draft.mint.packageId || draft.mint.objectId || draft.mint.transactionDigest);
   }).length;
 }
 
-async function countMarketplaceListingUsage(store: MatterhornImageNftDraftStore, currentDraftId: string): Promise<number> {
+async function countMarketplaceListingUsage(
+  store: MatterhornImageNftDraftStore,
+  currentDraftId: string,
+  period: BillingUsagePeriod,
+): Promise<number> {
   return (await store.list()).filter((draft) => {
     if (draft.id === currentDraftId) return false;
+    if (!isBillingUsageTimestampInPeriod(draft.updatedAt, period)) return false;
     return draft.listing.status === "preview_ready"
       || draft.listing.status === "listed"
       || Boolean(draft.listing.kioskId || draft.listing.transferPolicyId);
