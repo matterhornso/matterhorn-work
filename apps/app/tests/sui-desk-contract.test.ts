@@ -34,6 +34,8 @@ describe("Sui desk integration contract", () => {
     });
     expect(PROTOCOL_BRAND_ASSET_REGISTRY["sui-logo"]).toMatchObject({
       protocol: "sui",
+      lightAssetPath: "/assets/desks/sui/logo-light.svg",
+      darkAssetPath: "/assets/desks/sui/logo-dark.svg",
       fallbackInitials: "SUI",
     });
   });
