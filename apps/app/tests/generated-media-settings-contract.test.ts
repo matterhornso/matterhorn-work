@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { GeneratedMediaSettingsView } from "../src/react-app/domains/settings/pages/generated-media-view";
 import { backendCapabilitiesWorkingFixture } from "../src/react-app/domains/settings/backend-capabilities/backend-capability-fixtures";
+import { StatusToastsProvider } from "../src/react-app/domains/shell-feedback/status-toasts";
 
 function readAppSource(path: string) {
   return readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
@@ -55,7 +56,7 @@ describe("Generated media settings surface", () => {
     expect(source).toContain("Copy report");
     expect(source).toContain("Download report");
     expect(source).toContain("Downloaded generated media readiness report.");
-    expect(source).toContain("without generating images, uploading media, signing, or submitting transactions");
+    expect(source).toContain("Diagnostics do not generate images, upload media, sign, or submit transactions");
     expect(source).toContain("Production smoke plan");
     expect(source).toContain("Public writes require user action");
     expect(source).toContain("productionSmokePlan");
@@ -93,13 +94,15 @@ describe("Generated media settings surface", () => {
   test("empty/offline render explains the workspace requirement", () => {
     const queryClient = new QueryClient();
     const html = renderToStaticMarkup(
-      React.createElement(QueryClientProvider, { client: queryClient },
-        React.createElement(GeneratedMediaSettingsView, {
-          matterhornServerClient: null,
-          runtimeWorkspaceId: null,
-          onOpenWorkspaceChat: () => {},
-          onOpenRunHistory: () => {},
-        }),
+      React.createElement(StatusToastsProvider, null,
+        React.createElement(QueryClientProvider, { client: queryClient },
+          React.createElement(GeneratedMediaSettingsView, {
+            matterhornServerClient: null,
+            runtimeWorkspaceId: null,
+            onOpenWorkspaceChat: () => {},
+            onOpenRunHistory: () => {},
+          }),
+        ),
       ),
     );
     expect(html).toContain("Production readiness");
@@ -127,14 +130,16 @@ describe("Generated media settings surface", () => {
       },
     });
     const html = renderToStaticMarkup(
-      React.createElement(QueryClientProvider, { client: queryClient },
-        React.createElement(GeneratedMediaSettingsView, {
-          matterhornServerClient: {} as any,
-          runtimeWorkspaceId: "ws_test",
-          onOpenWorkspaceChat: () => {},
-          onOpenRunHistory: () => {},
-          onOpenImageProviderSetup: () => {},
-        }),
+      React.createElement(StatusToastsProvider, null,
+        React.createElement(QueryClientProvider, { client: queryClient },
+          React.createElement(GeneratedMediaSettingsView, {
+            matterhornServerClient: {} as any,
+            runtimeWorkspaceId: "ws_test",
+            onOpenWorkspaceChat: () => {},
+            onOpenRunHistory: () => {},
+            onOpenImageProviderSetup: () => {},
+          }),
+        ),
       ),
     );
     expect(html).toContain("Add an OpenAI image provider to generate real images from chat.");

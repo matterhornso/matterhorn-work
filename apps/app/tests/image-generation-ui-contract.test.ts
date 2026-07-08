@@ -209,8 +209,8 @@ describe("Generated image card", () => {
     expect(html).toContain("a tiny robot");
     expect(html).toContain("mock");
     expect(html).toContain("1024x1024");
-    expect(html).toContain("Edit prompt");
-    expect(html).toContain("Generate variant");
+    expect(html).toContain("Edit");
+    expect(html).toContain("Variant");
     expect(html).toContain("Save to outputs");
     expect(html).toContain("Make NFT");
   });
@@ -277,8 +277,8 @@ describe("Image generation composer", () => {
     const html = renderToStaticMarkup(
       React.createElement(ImageGenerationComposer, { capabilityStatus: "working", onGenerate: () => {} }),
     );
-    expect(html).toContain("Describe an image to generate");
-    expect(html).toContain("Generate");
+    expect(html).toContain("Describe the image");
+    expect(html).toContain("Create image");
   });
 
   test("needs_setup state shows setup message", () => {
@@ -286,7 +286,7 @@ describe("Image generation composer", () => {
       React.createElement(ImageGenerationComposer, { capabilityStatus: "needs_setup", onGenerate: () => {} }),
     );
     expect(html).toContain("needs setup");
-    expect(html).toContain("Configure an image provider");
+    expect(html).toContain("Add an image provider");
   });
 });
 
@@ -326,7 +326,7 @@ describe("Session image generation panel", () => {
     );
 
     expect(html).toContain("Generate image");
-    expect(html).toContain("Describe an image to generate");
+    expect(html).toContain("Describe the image");
     expect(html).toContain("Ready");
   });
 
@@ -462,7 +462,7 @@ describe("NFT draft panel", () => {
   test("component source exposes mint preview, wallet signing, and receipt fields", () => {
     const source = readFileSync("apps/app/src/react-app/domains/session/media/nft-draft-panel.tsx", "utf8");
     expect(source).toContain("Mint plan ready");
-    expect(source).toContain("Sign mint in wallet");
+    expect(source).toContain("Sign in wallet");
     expect(source).toContain("Mint digest");
     expect(source).toContain("Minted object id");
     expect(source).toContain("onRecordMintReceipt");
@@ -470,9 +470,9 @@ describe("NFT draft panel", () => {
 
   test("component source exposes marketplace listing preview and receipt fields", () => {
     const source = readFileSync("apps/app/src/react-app/domains/session/media/nft-draft-panel.tsx", "utf8");
-    expect(source).toContain("Marketplace listing");
+    expect(source).toContain("Marketplace");
     expect(source).toContain("Listing plan ready");
-    expect(source).toContain("Sign listing in wallet");
+    expect(source).toContain("Sign in wallet");
     expect(source).toContain("Price (MIST)");
     expect(source).toContain("Listing transaction digest");
     expect(source).toContain("onRecordListingReceipt");
@@ -480,8 +480,8 @@ describe("NFT draft panel", () => {
 
   test("component source exposes publishing readiness before NFT actions", () => {
     const source = readFileSync("apps/app/src/react-app/domains/session/media/nft-draft-panel.tsx", "utf8");
-    expect(source).toContain("Publishing readiness");
-    expect(source).toContain("Create the local draft anytime");
+    expect(source).toContain("Publishing path");
+    expect(source).toContain("Drafts are local first");
     expect(source).toContain("Public storage");
     expect(source).toContain("Sui minting");
     expect(source).toContain("Marketplace listing");
@@ -555,12 +555,12 @@ describe("NFT draft panel", () => {
     });
     const html = renderToStaticMarkup(React.createElement(NftPublishingReadinessRows, {
       items,
-      title: "Publishing readiness",
+      title: "Publishing path",
       description: "Public actions need setup.",
       surface: true,
     }));
 
-    expect(html).toContain("Publishing readiness");
+    expect(html).toContain("Publishing path");
     expect(html).toContain("mock/mock-image-1");
     expect(html).toContain("Publisher/relay needed");
     expect(html).toContain("Package needed");

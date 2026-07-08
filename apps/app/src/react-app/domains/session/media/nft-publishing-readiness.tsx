@@ -60,7 +60,7 @@ const statusLabels: Record<NftPublishingReadinessStatus, string> = {
 
 const badgeClasses: Record<NftPublishingReadinessStatus, string> = {
   working: "bg-emerald-500/10 text-emerald-300",
-  needs_setup: "bg-sky-500/10 text-sky-300",
+  needs_setup: "bg-dls-hover/70 text-dls-secondary",
   preview: "bg-amber-500/10 text-amber-300",
   unsupported: "bg-dls-surface-muted text-dls-secondary",
   error: "bg-red-500/10 text-red-300",
@@ -149,7 +149,7 @@ export function NftPublishingReadinessRows(props: {
     <section
       className={cn(
         "grid gap-2",
-        props.surface ? "rounded-md bg-dls-surface-muted/35 px-3 py-3" : null,
+        props.surface ? "rounded-lg bg-dls-surface-muted/18 px-3 py-3" : null,
         props.className,
       )}
     >
@@ -159,12 +159,12 @@ export function NftPublishingReadinessRows(props: {
           {props.description ? <p className="text-xs leading-5 text-dls-secondary">{props.description}</p> : null}
         </div>
       ) : null}
-      <div className="divide-y divide-dls-border/40">
+      <div className="grid gap-1">
         {props.items.map((item) => (
-          <div key={item.id} className="grid gap-2 py-2.5 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
+          <div key={item.id} className="grid gap-2 rounded-md px-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-dls-text">
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-dls-surface-muted text-dls-secondary">
+                <span className="flex size-5 shrink-0 items-center justify-center text-dls-secondary">
                   {item.icon}
                 </span>
                 <span className="truncate">{item.label}</span>
@@ -198,16 +198,18 @@ export function NftPublishingSetupRows(props: {
   if (!unresolved.length) return null;
 
   return (
-    <div className={cn("rounded-md bg-dls-surface-muted/30 px-3 py-2.5", props.className)}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-dls-text">{props.title ?? "Required setup"}</p>
-          {props.description ? <p className="mt-0.5 text-[11px] leading-4 text-dls-secondary">{props.description}</p> : null}
+    <details className={cn("group rounded-lg bg-dls-surface-muted/18 px-3 py-2.5", props.className)}>
+      <summary className="cursor-pointer list-none">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <span className="text-xs font-medium text-dls-text">{props.title ?? "Required setup"}</span>
+            {props.description ? <p className="mt-0.5 text-[11px] leading-4 text-dls-secondary">{props.description}</p> : null}
+          </div>
+          <span className="shrink-0 text-[11px] text-dls-secondary">
+            {unresolved.length}
+          </span>
         </div>
-        <span className="shrink-0 text-[11px] text-dls-secondary">
-          {unresolved.length}
-        </span>
-      </div>
+      </summary>
       <div className="mt-2 divide-y divide-dls-border/35">
         {unresolved.map((requirement) => (
           <div key={`${requirement.key}:${requirement.envVar ?? requirement.label}`} className="grid gap-1 py-2 first:pt-0 last:pb-0">
@@ -224,7 +226,7 @@ export function NftPublishingSetupRows(props: {
           </div>
         ))}
       </div>
-    </div>
+    </details>
   );
 }
 
