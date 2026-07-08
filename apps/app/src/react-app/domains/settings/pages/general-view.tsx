@@ -28,7 +28,6 @@ import type {
   MatterhornCapabilityStatus,
   MatterhornSettingsSectionCapability,
 } from "@matterhorn-work/types/backend-capabilities";
-import { Button } from "@/components/ui/button";
 import { getSessionActivityStatusLabel, type SessionActivityStatus } from "../../session/status/session-activity-store";
 import { useWorkflowTaskLog, type TaskLogSource } from "./use-workflow-task-log";
 import {
@@ -118,6 +117,9 @@ const projectSurfaceCards: ProjectSurfaceCard[] = [
     actionLabel: "Send",
   },
 ];
+
+const FEEDBACK_ACTION_CLASS =
+  "matterhorn-feedback-action inline-flex items-center gap-1.5 rounded-md px-0.5 py-1 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--matterhorn-blue-rgb),0.28)]";
 
 function capabilityStatusToSettingsStatus(status: MatterhornCapabilityStatus): SettingsReadinessStatus {
   if (status === "working") return "Working";
@@ -392,41 +394,40 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
       />
 
       {/* Feedback */}
-      <section className="rounded-lg bg-dls-surface/70 p-4 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
-        <div className="space-y-3">
-          <div>
+      <section className="rounded-lg bg-dls-surface-muted/[0.08] p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <LifeBuoy size={14} className="text-dls-text" />
+              <LifeBuoy size={14} className="text-dls-secondary" />
               <div className="text-[13px] font-medium text-dls-text">{t("settings.feedback_title")}</div>
             </div>
-            <div className="mt-1 max-w-[58ch] text-[12px] leading-5 text-dls-text">{t("settings.feedback_desc")}</div>
+            <div className="mt-1 max-w-[58ch] text-[12px] leading-5 text-dls-secondary">{t("settings.feedback_desc")}</div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
+          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5">
+            <button
+              type="button"
+              className={FEEDBACK_ACTION_CLASS}
               onClick={props.onSendFeedback}
             >
-              <MessageCircle size={12} />
               {t("settings.send_feedback")}
               <ArrowUpRight size={11} />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
+            </button>
+            <button
+              type="button"
+              className={FEEDBACK_ACTION_CLASS}
               onClick={props.onJoinDiscord}
             >
               {t("settings.join_discord")}
               <ArrowUpRight size={11} />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
+            </button>
+            <button
+              type="button"
+              className={FEEDBACK_ACTION_CLASS}
               onClick={props.onReportIssue}
             >
               {t("settings.report_issue")}
               <ArrowUpRight size={11} />
-            </Button>
+            </button>
           </div>
         </div>
       </section>

@@ -22,6 +22,14 @@ describe("Settings general hub project surfaces", () => {
     expect(source).toContain("props.onSendFeedback");
   });
 
+  test("renders feedback support actions as lightweight inline controls", () => {
+    const source = readReactSource("domains/settings/pages/general-view.tsx");
+
+    expect(source).toContain("matterhorn-feedback-action");
+    expect(source).toContain("bg-dls-surface-muted/[0.08]");
+    expect(source).not.toContain('variant="outline"\n              size="sm"\n              onClick={props.onSendFeedback}');
+  });
+
   test("routes project surface actions to real workspace surfaces", () => {
     const source = readReactSource("shell/settings-route.tsx");
 
