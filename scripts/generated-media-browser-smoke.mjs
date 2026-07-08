@@ -141,6 +141,39 @@ async function fillIfPresent(page, label, value) {
   return true;
 }
 
+function isStaticMissingResource(url) {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    return /\.(?:avif|bmp|gif|ico|jpg|jpeg|png|svg|webp|woff2?)$/.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
+function isWorkspaceOrApiRequest(url) {
+  try {
+    const pathname = new URL(url).pathname;
+    return (
+      pathname === "/api" ||
+      pathname.startsWith("/api/") ||
+      pathname.startsWith("/workspace/") ||
+      pathname.startsWith("/w/")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function networkFailureMessage(failure) {
+  return `${failure.method} ${failure.url} -> ${failure.status}`;
+}
+
+function shouldFailOnNetworkResponse(failure) {
+  if (failure.status < 400) return false;
+  if (failure.status === 404 && isStaticMissingResource(failure.url)) return false;
+  return isWorkspaceOrApiRequest(failure.url) || failure.status >= 500;
+}
+
 function nftDialog(page) {
   return page.locator('[role="dialog"]').filter({ hasText: "Make NFT" }).first();
 }
@@ -175,17 +208,35 @@ async function runSmoke(config) {
   let page;
   const consoleErrors = [];
   const resourceWarnings = [];
+  const networkFailures = [];
   const pageErrors = [];
 
   try {
     browser = await chromium.launch({ headless: !config.headed });
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     page = await context.newPage();
+    page.on("response", (response) => {
+      const status = response.status();
+      if (status < 400) return;
+      const request = response.request();
+      networkFailures.push({
+        status,
+        method: request.method(),
+        url: response.url(),
+        resourceType: request.resourceType(),
+      });
+    });
     page.on("console", (message) => {
       if (message.type() !== "error") return;
       const text = message.text();
       if (/^Failed to load resource: the server responded with a status of 404/i.test(text)) {
-        resourceWarnings.push({ message: text, location: message.location() });
+        const location = message.location();
+        const matchingFailure = networkFailures.find((failure) => failure.url === location.url);
+        resourceWarnings.push({
+          message: text,
+          location,
+          ...(matchingFailure ? { network: matchingFailure } : {}),
+        });
         return;
       }
       consoleErrors.push(text);
@@ -325,13 +376,21 @@ async function runSmoke(config) {
     report.artifacts.screenshot = screenshotPath;
     report.artifacts.finalUrl = page.url();
     report.warnings = resourceWarnings;
-    report.errors = [...consoleErrors, ...pageErrors];
+    const networkErrors = networkFailures
+      .filter(shouldFailOnNetworkResponse)
+      .map(networkFailureMessage);
+    report.networkFailures = networkFailures;
+    report.errors = [...consoleErrors, ...pageErrors, ...networkErrors];
     report.ready = report.stages.every((item) => item.status === "pass") && report.errors.length === 0;
   } catch (error) {
     report.ready = false;
     report.error = error instanceof Error ? error.message : String(error);
     report.warnings = resourceWarnings;
-    report.errors = [...consoleErrors, ...pageErrors];
+    const networkErrors = networkFailures
+      .filter(shouldFailOnNetworkResponse)
+      .map(networkFailureMessage);
+    report.networkFailures = networkFailures;
+    report.errors = [...consoleErrors, ...pageErrors, ...networkErrors];
     if (page) {
       try {
         await mkdir(config.outputDir, { recursive: true });
@@ -369,6 +428,12 @@ function emitReport(report, config) {
   }
   if (report.warnings.length) {
     process.stdout.write(`Browser warnings: ${report.warnings.length}\n`);
+  }
+  if (report.networkFailures?.length) {
+    process.stdout.write(`Network failures: ${report.networkFailures.length}\n`);
+    for (const failure of report.networkFailures) {
+      process.stdout.write(`  - ${networkFailureMessage(failure)}\n`);
+    }
   }
   process.stdout.write(`Report: ${report.artifacts.report}\n`);
   if (report.artifacts.screenshot || report.artifacts.failedScreenshot) {
