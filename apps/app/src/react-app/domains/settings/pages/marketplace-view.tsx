@@ -561,8 +561,8 @@ export default function MarketplaceView() {
       {/* Header */}
       <div className="px-6 pt-6 pb-4">
         <div className="flex items-center gap-3 mb-1">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/20 flex items-center justify-center">
-            <Bot className="w-4 h-4 text-purple-400" />
+          <div className="flex size-8 items-center justify-center rounded-md bg-dls-hover/45 text-dls-secondary">
+            <Bot className="size-4" />
           </div>
           <div>
             <h1 className="text-lg font-semibold text-gray-12">

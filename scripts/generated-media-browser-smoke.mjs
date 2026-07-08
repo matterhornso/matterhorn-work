@@ -220,9 +220,9 @@ async function ensureChatSession(page) {
       return;
     }
 
-    const startBlank = page.getByRole("button", { name: "Start blank chat", exact: true });
+    const startBlank = page.getByRole("button", { name: "Start chat", exact: true });
     if ((await startBlank.count()) > 0) {
-      await clickFirstVisible(startBlank, "Start blank chat button");
+      await clickFirstVisible(startBlank, "Start chat button");
       await page.getByTestId("session-image-generation-panel").waitFor({ state: "visible", timeout: 20_000 });
       return;
     }

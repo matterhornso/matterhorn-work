@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { Cpu } from "lucide-react";
+import { Cpu, RefreshCw } from "lucide-react";
 
 import { t } from "../../../../i18n";
 import { Button } from "@/components/ui/button";
@@ -94,10 +94,14 @@ export function PluginsView(props: PluginsViewProps) {
               {t("plugins.scope_global")}
             </Button>
             <Button
-              variant="outline"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("common.refresh")}
+              title={t("common.refresh")}
+              className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
               onClick={() => void extensions.refreshPlugins()}
             >
-              {t("common.refresh")}
+              <RefreshCw className="size-3.5" aria-hidden="true" />
             </Button>
           </div>
         </div>

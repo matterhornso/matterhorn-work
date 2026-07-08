@@ -2726,8 +2726,8 @@ export const DECENTRALIZED_SERVICES_OPERATOR_CUSTOMER_TEMPLATE: MatterhornCustom
 export const BLANK_CHAT_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTemplate = {
   version: "matterhorn.customer.workflow.template.v1",
   id: "blank_chat_workflow",
-  name: "Blank chat",
-  summary: "Start a free-form chat session with the Matterhorn Work engine.",
+  name: "Chat",
+  summary: "Start a flexible chat session with the Matterhorn Work engine.",
   promise: "Open-ended assistance. You choose the goal.",
   category: "future",
   examplePrompts: [
@@ -2757,7 +2757,7 @@ export const BLANK_CHAT_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTe
   serviceHooks: [],
   chatMode: "free chat",
   launch: {
-    primaryCta: "Start blank chat",
+    primaryCta: "Start chat",
     secondaryCta: "Browse templates",
     defaultPrompt: "What can you do?",
     handoffContextLabel: "Goal",
@@ -2767,7 +2767,7 @@ export const BLANK_CHAT_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTe
     iconHint: "blank",
     accent: "neutral",
     shortDescription:
-      "Start a free-form chat with the Matterhorn Work engine.",
+      "Start a flexible chat with the Matterhorn Work engine.",
   },
   routing: {
     chatMode: "general",

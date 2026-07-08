@@ -720,7 +720,7 @@ function formatBittensorProviderError(error: unknown): string {
   if (/failed to fetch|network|load failed|econnrefused|timeout/i.test(message)) {
     return "Matterhorn could not reach the Bittensor provider. Check the local server connection, then refresh the Bittensor desk.";
   }
-  return message || "Matterhorn could not load Bittensor data. Refresh this desk after reconnecting the local server.";
+  return message || "Matterhorn could not load Bittensor data. Reconnect the local server, then try again.";
 }
 
 function ProtocolMark({ venue, compact = false }: { venue: CryptoVenue; compact?: boolean }) {
@@ -1797,7 +1797,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 ) : cryptoReadiness?.ready && readiness?.ready ? (
                   <p className="text-xs leading-5 text-emerald-300">Protocol readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview demo flows.</p>
                 ) : (
-                  <p className="text-xs leading-5 text-dls-secondary">Refresh readiness before a test customer session.</p>
+                  <p className="text-xs leading-5 text-dls-secondary">Check readiness before a test customer session.</p>
                 )}
                 {cryptoReadinessNextAction || readinessNextAction ? (
                   <p className="text-xs leading-5 text-sky-200">Next: {cryptoReadinessNextAction ?? readinessNextAction}</p>
