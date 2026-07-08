@@ -34,7 +34,7 @@ function ShowcasePanel() {
         </div>
         <img
           className="size-12 rounded-md border border-border bg-[var(--matterhorn-blue)]"
-          src="/matterhorn-logo.png"
+          src="/matterhorn-logo-square.svg"
           alt="Matterhorn Work"
         />
       </div>

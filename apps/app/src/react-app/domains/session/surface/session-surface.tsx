@@ -362,7 +362,7 @@ function MatterhornDeskFocusedEmptyState({
       style={deskToneStyle(iconHint)}
     >
       <section className="w-full space-y-3">
-        <div className="matterhorn-desk-session-hero overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
+        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
@@ -389,7 +389,7 @@ function MatterhornDeskFocusedEmptyState({
           </div>
         </div>
 
-        <div className="matterhorn-desk-session-prompts overflow-hidden rounded-lg bg-dls-surface/44" aria-label="Chat starters">
+        <div className="matterhorn-desk-session-prompts overflow-hidden rounded-xl bg-dls-surface/44" aria-label="Chat starters">
           {prompts.map((item) => (
             <button
               key={item.title}
@@ -457,7 +457,7 @@ function LongevityDeskEmptyState({
   return (
     <div className="min-w-0 w-full px-2 py-3 sm:px-3 sm:py-4" style={deskToneStyle("wellness")}>
       <section className="w-full space-y-3">
-        <div className="matterhorn-desk-session-hero overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
+        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
@@ -505,7 +505,7 @@ function LongevityDeskEmptyState({
         </div>
 
         <div
-          className="matterhorn-desk-session-prompts overflow-hidden rounded-lg bg-dls-surface/44"
+          className="matterhorn-desk-session-prompts overflow-hidden rounded-xl bg-dls-surface/44"
           aria-label="Longevity workflow stages"
         >
           {stagePrompts.map((item) => (
