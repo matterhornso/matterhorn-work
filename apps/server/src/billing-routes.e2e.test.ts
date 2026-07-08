@@ -55,6 +55,8 @@ function getFreePort(): Promise<number> {
 async function boot(envOverrides?: Record<string, string>) {
   const dir = mkdtempSync(join(tmpdir(), "matterhorn-billing-"));
   dirs.push(dir);
+  process.env.OPENWORK_DATA_DIR = join(dir, "openwork-data");
+  process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
   const port = await getFreePort();
   const server = await startServer(baseConfig(port, dir));
   stops.push(() => server.stop());
@@ -94,6 +96,8 @@ beforeEach(() => {
     MATTERHORN_STRIPE_SECRET_KEY: process.env.MATTERHORN_STRIPE_SECRET_KEY,
     MATTERHORN_STRIPE_PRICE_ID_PLUS: process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS,
     MATTERHORN_STRIPE_PRICE_ID_MAX: process.env.MATTERHORN_STRIPE_PRICE_ID_MAX,
+    OPENWORK_DATA_DIR: process.env.OPENWORK_DATA_DIR,
+    OPENWORK_TOKEN_STORE: process.env.OPENWORK_TOKEN_STORE,
   };
   delete process.env.MATTERHORN_BILLING_MODE;
   delete process.env.MATTERHORN_BILLING_PROVIDER;
@@ -102,6 +106,8 @@ beforeEach(() => {
   delete process.env.MATTERHORN_STRIPE_SECRET_KEY;
   delete process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS;
   delete process.env.MATTERHORN_STRIPE_PRICE_ID_MAX;
+  delete process.env.OPENWORK_DATA_DIR;
+  delete process.env.OPENWORK_TOKEN_STORE;
 });
 
 function testImage(workspaceId: string, id: string, createdAt: string): MatterhornGeneratedImage {

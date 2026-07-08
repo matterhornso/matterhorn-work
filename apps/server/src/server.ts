@@ -232,9 +232,10 @@ import {
 } from "./billing-routes.js";
 import {
   buildMatterhornBillingCapability,
+  checkMatterhornBillingEntitlement,
   resolveBillingProviderConfigFromEnv,
 } from "./billing.js";
-import { matterhornBillingAccountPath } from "./billing-account-store.js";
+import { MatterhornBillingAccountStore, matterhornBillingAccountPath } from "./billing-account-store.js";
 import {
   hasForbiddenMatterhornMemorySuggestionInput,
   planMatterhornMemorySuggestions,
@@ -5180,6 +5181,38 @@ function createRoutes(
       throw new ApiError(400, "invalid_scope", "Team access tokens can be collaborator or viewer tokens.");
     }
     const label = typeof body.label === "string" ? body.label.trim().slice(0, 80) : undefined;
+    const existingTokens = await tokens.list();
+    const billingConfig = resolveBillingProviderConfigFromEnv(process.env);
+    const account = await new MatterhornBillingAccountStore({
+      workspaceRoot: workspace.path,
+      workspaceId: workspace.id,
+    }).get();
+    const effectiveBillingConfig = account
+      ? { ...billingConfig, currentPlanId: account.subscription.planId }
+      : billingConfig;
+    const currentTeamMembers = 1 + existingTokens.filter((token) => token.scope !== "owner").length;
+    const entitlement = checkMatterhornBillingEntitlement(effectiveBillingConfig, "team_members", currentTeamMembers);
+    if (!entitlement.allowed) {
+      throw new ApiError(
+        entitlement.reason === "limit_reached" ? 429 : 402,
+        entitlement.reason === "limit_reached" ? "billing_entitlement_limit_reached" : "billing_entitlement_required",
+        entitlement.reason === "limit_reached"
+          ? `${entitlement.label} limit reached on ${entitlement.planId}. Upgrade to Max to add another teammate.`
+          : `${entitlement.label} is not included on ${entitlement.planId}. Upgrade to Max to add teammates.`,
+        {
+          entitlementKey: entitlement.key,
+          entitlementLabel: entitlement.label,
+          currentPlanId: entitlement.planId,
+          requiredPlanIds: ["max"],
+          used: entitlement.used,
+          limit: entitlement.limit,
+          reason: entitlement.reason,
+          billingMode: effectiveBillingConfig.mode,
+          provider: effectiveBillingConfig.provider,
+          livePaymentsEnabled: effectiveBillingConfig.livePaymentsEnabled,
+        },
+      );
+    }
     const issued = await tokens.create(scope, { label });
 
     await recordAudit(workspace.path, {
@@ -10566,7 +10599,11 @@ function createRoutes(
 
   addBillingRoutes(
     (method, path, authMode, handler) => addRoute(routes, method, path, authMode, handler),
-    { ...billingRouteContext, resolveWorkspace },
+    {
+      ...billingRouteContext,
+      resolveWorkspace,
+      countTeamMembers: async () => 1 + (await tokens.list()).filter((token) => token.scope !== "owner").length,
+    },
   );
 
   return routes;

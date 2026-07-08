@@ -101,6 +101,7 @@ export interface BillingRouteContext {
   provider: BillingProvider;
   config: ServerConfig;
   resolveWorkspace?: (config: ServerConfig, id: string) => Promise<WorkspaceInfo>;
+  countTeamMembers?: (workspace: WorkspaceInfo) => Promise<number>;
 }
 
 export function createBillingRouteContext(config: ServerConfig): BillingRouteContext {
@@ -127,14 +128,15 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
     const workspace = await ctx.resolveWorkspace(ctx.config, routeCtx.params.id);
     const accountStore = new MatterhornBillingAccountStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const account = await accountStore.get();
-    const [images, drafts] = await Promise.all([
+    const [images, drafts, teamMembers] = await Promise.all([
       new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id }).list(),
       new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id }).list(),
+      ctx.countTeamMembers ? ctx.countTeamMembers(workspace).catch(() => 1) : Promise.resolve(1),
     ]);
     const usage = {
       generatedImages: images.length,
       nftDrafts: drafts.length,
-      teamMembers: 1,
+      teamMembers,
       cloudStorageBytes: 0,
     };
     if (account) {
