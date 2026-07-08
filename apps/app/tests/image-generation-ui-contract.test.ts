@@ -16,6 +16,7 @@ import {
   SessionImageGenerationPanel,
   buildNftPublishingReadinessItems,
   buildNftPublishingSetupRequirements,
+  buildNftDraftPreviewSummaries,
   nftDraftPublishingCapabilitiesFromBackend,
   buildKioskListingTransactionFromPlan,
   buildMintTransactionFromPlan,
@@ -359,6 +360,41 @@ describe("NFT draft panel", () => {
       }),
     );
     expect(typeof html).toBe("string");
+  });
+
+  test("component summarizes persisted preview-ready draft state without live preview objects", () => {
+    const draft: MatterhornImageNftDraft = {
+      ...mockUploadedDraft,
+      mint: {
+        status: "preview_ready",
+        packageId: suiPackageId,
+      },
+      listing: {
+        status: "preview_ready",
+        itemType: `${suiPackageId}::matterhorn_nft::MatterhornNFT`,
+        priceMist: "1000000000",
+      },
+    };
+    const summaries = buildNftDraftPreviewSummaries({ draft });
+
+    expect(summaries.mintPreviewReady).toBe(true);
+    expect(summaries.mint).toEqual({
+      title: "Mint preview ready",
+      lines: [
+        "Network sui-testnet",
+        `Package ${suiPackageId}`,
+        "Wallet signing only",
+      ],
+    });
+    expect(summaries.listingPreviewReady).toBe(true);
+    expect(summaries.listing).toEqual({
+      title: "Listing preview ready",
+      lines: [
+        "Network sui-testnet",
+        "Marketplace Sui Kiosk",
+        "Price 1000000000 MIST",
+      ],
+    });
   });
 
   test("session panel preserves configured backend capability details for NFT readiness", () => {

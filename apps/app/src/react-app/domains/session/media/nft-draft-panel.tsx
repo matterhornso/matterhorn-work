@@ -133,6 +133,11 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
   const canList = nftMarketplaceListing.status === "working" || nftMarketplaceListing.status === "preview";
   const walletExecution = props.walletExecution;
   const draft = props.draft ?? null;
+  const previewSummaries = buildNftDraftPreviewSummaries({
+    draft,
+    mintPreview: props.mintPreview,
+    listingPreview: props.listingPreview,
+  });
   const publishingReadiness = useMemo(() => buildNftPublishingReadinessItems({
     imageGeneration: {
       status: "working",
@@ -342,14 +347,10 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
                 description={canMint ? "Prepare the Sui mint plan, then sign in your wallet." : "Sui NFT package is not configured."}
               >
                 <WalletSummary walletExecution={walletExecution} />
-                {props.mintPreview ? (
+                {previewSummaries.mint ? (
                   <PlanSummary
-                    title="Mint plan ready"
-                    lines={[
-                      `Network ${props.mintPreview.transactionPlan.network}`,
-                      `Target ${props.mintPreview.transactionPlan.moveCalls[0]?.target ?? "unknown"}`,
-                      "Wallet signing only",
-                    ]}
+                    title={previewSummaries.mint.title}
+                    lines={previewSummaries.mint.lines}
                   />
                 ) : null}
                 <div className="flex flex-wrap gap-2">
@@ -377,7 +378,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
                   onDigestChange={setMintDigest}
                   onObjectIdChange={setMintObjectId}
                   onRecord={handleRecordMintReceipt}
-                  disabled={props.isLoading}
+                  disabled={props.isLoading || !previewSummaries.mintPreviewReady}
                 />
               </NftSection>
 
@@ -398,14 +399,10 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
                   </div>
                   <Field label="TransferPolicy id" value={transferPolicyId} onChange={setTransferPolicyId} placeholder="0x..." />
                 </div>
-                {props.listingPreview ? (
+                {previewSummaries.listing ? (
                   <PlanSummary
-                    title="Listing plan ready"
-                    lines={[
-                      `Network ${props.listingPreview.transactionPlan.network}`,
-                      `Marketplace ${props.listingPreview.transactionPlan.marketplace}`,
-                      `Price ${props.listingPreview.transactionPlan.priceMist} MIST`,
-                    ]}
+                    title={previewSummaries.listing.title}
+                    lines={previewSummaries.listing.lines}
                   />
                 ) : null}
                 <div className="flex flex-wrap gap-2">
@@ -436,7 +433,13 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
                     placeholder="Public Sui transaction digest"
                     className="h-8 text-sm"
                   />
-                  <Button size="sm" variant="outline" className="w-fit" onClick={handleRecordListingReceipt} disabled={props.isLoading}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-fit"
+                    onClick={handleRecordListingReceipt}
+                    disabled={props.isLoading || !previewSummaries.listingPreviewReady}
+                  >
                     Record listing receipt
                   </Button>
                 </div>
@@ -451,6 +454,59 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
       </SheetContent>
     </Sheet>
   );
+}
+
+type NftPreviewSummary = { title: string; lines: string[] };
+
+export function buildNftDraftPreviewSummaries(input: {
+  draft?: MatterhornImageNftDraft | null;
+  mintPreview?: MatterhornNftMintPreviewResponse | null;
+  listingPreview?: MatterhornNftListingPreviewResponse | null;
+}): {
+  mint: NftPreviewSummary | null;
+  listing: NftPreviewSummary | null;
+  mintPreviewReady: boolean;
+  listingPreviewReady: boolean;
+} {
+  const { draft, mintPreview, listingPreview } = input;
+  const mint = mintPreview ? {
+    title: "Mint plan ready",
+    lines: [
+      `Network ${mintPreview.transactionPlan.network}`,
+      `Target ${mintPreview.transactionPlan.moveCalls[0]?.target ?? "unknown"}`,
+      "Wallet signing only",
+    ],
+  } : draft?.mint.status === "preview_ready" ? {
+    title: "Mint preview ready",
+    lines: [
+      `Network ${draft.network}`,
+      `Package ${draft.mint.packageId ?? "configured"}`,
+      "Wallet signing only",
+    ],
+  } : null;
+
+  const listing = listingPreview ? {
+    title: "Listing plan ready",
+    lines: [
+      `Network ${listingPreview.transactionPlan.network}`,
+      `Marketplace ${listingPreview.transactionPlan.marketplace}`,
+      `Price ${listingPreview.transactionPlan.priceMist} MIST`,
+    ],
+  } : draft?.listing.status === "preview_ready" ? {
+    title: "Listing preview ready",
+    lines: [
+      `Network ${draft.network}`,
+      "Marketplace Sui Kiosk",
+      `Price ${draft.listing.priceMist ? `${draft.listing.priceMist} MIST` : "not set"}`,
+    ],
+  } : null;
+
+  return {
+    mint,
+    listing,
+    mintPreviewReady: Boolean(mintPreview) || draft?.mint.status === "preview_ready",
+    listingPreviewReady: Boolean(listingPreview) || draft?.listing.status === "preview_ready",
+  };
 }
 
 function normalizeNftCapabilityInput<T extends object>(
@@ -487,13 +543,14 @@ function NftSection(props: {
   children: ReactNode;
 }) {
   const completed = ["uploaded", "confirmed", "listed"].includes(props.status);
+  const ready = ["ready_to_upload", "preview_ready"].includes(props.status);
   return (
     <section className="grid gap-3 border-t border-dls-border/45 pt-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-sm font-medium text-dls-text">
-            {completed ? (
-              <CheckCircle2 size={14} className="text-emerald-300" />
+            {completed || ready ? (
+              <CheckCircle2 size={14} className={completed ? "text-emerald-300" : "text-dls-secondary"} />
             ) : (
               <AlertCircle size={14} className="text-amber-300" />
             )}
