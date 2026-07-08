@@ -67,6 +67,19 @@ describe("Shared primitives UI contract", () => {
     expect(source).not.toContain("tracking-[0.18em]");
   });
 
+  test("session composer avoids oversized pill controls", () => {
+    const composerSource = readAppSource("domains/session/surface/composer/composer.tsx");
+    const editorSource = readAppSource("domains/session/surface/composer/editor.tsx");
+
+    expect(composerSource).toContain("bg-dls-surface-muted/[0.08]");
+    expect(composerSource).toContain("inline-flex h-9 max-h-9 w-9 items-center justify-center rounded-lg");
+    expect(editorSource).toContain("min-h-[72px]");
+    expect(composerSource).not.toContain("border-[rgba(var(--matterhorn-blue-rgb),0.24)]");
+    expect(composerSource).not.toContain("rounded-full bg-gray-2/45");
+    expect(composerSource).not.toContain("h-11 max-h-11");
+    expect(composerSource).not.toContain("shadow-[0_8px_24px");
+  });
+
   test("main Matterhorn surfaces avoid harsh divider-line scaffolding", () => {
     const sourceByPath = new Map([
       ["domains/memory/memory-panel.tsx", readAppSource("domains/memory/memory-panel.tsx")],

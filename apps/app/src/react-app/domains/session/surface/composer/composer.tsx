@@ -1029,7 +1029,7 @@ export function ReactSessionComposer(props: ComposerProps) {
         {/* Main composer panel */}
         <div
           data-testid="session-composer-shell"
-          className={`relative overflow-visible rounded-lg border border-[rgba(var(--matterhorn-blue-rgb),0.24)] bg-dls-surface/98 shadow-none transition-colors focus-within:border-[rgba(var(--matterhorn-blue-rgb),0.54)] ${panelRoundedClass}`}
+          className={`relative overflow-visible rounded-lg border border-dls-border/25 bg-dls-surface-muted/[0.08] shadow-none transition-colors focus-within:border-dls-border/45 focus-within:bg-dls-surface-muted/[0.12] ${panelRoundedClass}`}
         >
           {props.topAccessory ? <div className="relative z-10 border-b border-dls-border/25 px-4 py-3 sm:px-5">{props.topAccessory}</div> : null}
           <ReactComposerNotice notice={props.notice} />
@@ -1086,7 +1086,7 @@ export function ReactSessionComposer(props: ComposerProps) {
             </div>
           ) : null}
 
-          <div className="px-4 pb-3 pt-4 sm:px-5 sm:pb-4">
+          <div className="px-3 pb-2.5 pt-3 sm:px-4 sm:pb-3">
             {/* Editor */}
             <LexicalPromptEditor
               value={props.draft}
@@ -1179,7 +1179,7 @@ export function ReactSessionComposer(props: ComposerProps) {
             />
 
             {/* Action row — attach/inbox/tools on the left, send on the right */}
-            <div className="mt-3 flex items-end justify-between gap-3">
+            <div className="mt-2 flex items-center justify-between gap-3">
               <div className="flex items-center gap-1.5">
                 <input
                   ref={(element) => {
@@ -1196,7 +1196,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                 />
                 <button
                   type="button"
-                  className={`inline-flex h-10 max-h-10 w-10 items-center justify-center rounded-full bg-gray-2/45 text-gray-10 ring-1 ring-dls-border/25 transition-colors hover:bg-gray-3 hover:text-gray-12 ${
+                  className={`inline-flex h-9 max-h-9 w-9 items-center justify-center rounded-lg bg-transparent text-dls-secondary transition-colors hover:bg-dls-hover/45 hover:text-dls-text ${
                     !props.attachmentsEnabled ? "cursor-not-allowed opacity-60" : ""
                   }`}
                   onClick={() => {
@@ -1211,7 +1211,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                 <div ref={toolMenuRef} className="relative">
                   <button
                     type="button"
-                    className={`inline-flex h-10 max-h-10 w-10 items-center justify-center rounded-full ring-1 ring-dls-border/25 transition-colors ${toolMenuOpen ? "bg-gray-3 text-gray-12" : "bg-gray-2/45 text-gray-10 hover:bg-gray-3 hover:text-gray-12"}`}
+                    className={`inline-flex h-9 max-h-9 w-9 items-center justify-center rounded-lg transition-colors ${toolMenuOpen ? "bg-dls-hover/55 text-dls-text" : "bg-transparent text-dls-secondary hover:bg-dls-hover/45 hover:text-dls-text"}`}
                     onClick={() => {
                       setMentionOpen(false);
                       setMentionItems([]);
@@ -1422,7 +1422,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                   <button
                     type="button"
                     onClick={props.onStop}
-                    className="inline-flex h-11 max-h-11 items-center gap-2 rounded-full bg-gray-12 px-5 text-[14px] font-medium text-gray-1 transition-colors hover:bg-gray-11"
+                    className="inline-flex h-9 max-h-9 items-center gap-2 rounded-lg bg-gray-12 px-3.5 text-[13px] font-medium text-gray-1 transition-colors hover:bg-gray-11"
                     title={t("composer.stop")}
                   >
                     <Square size={12} fill="currentColor" />
@@ -1433,9 +1433,9 @@ export function ReactSessionComposer(props: ComposerProps) {
                     type="button"
                     onClick={canSend ? props.onSend : props.busy ? props.onStop : undefined}
                     disabled={props.disabled || (!canSend && !props.busy)}
-                    className={`inline-flex h-11 max-h-11 items-center gap-2 rounded-full px-5 text-[14px] font-semibold shadow-[0_8px_24px_rgba(var(--matterhorn-blue-rgb),0.16)] transition-colors ${
+                    className={`inline-flex h-9 max-h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-medium transition-colors ${
                       !canSend || props.disabled
-                        ? "bg-gray-4 text-gray-10"
+                        ? "bg-dls-hover/35 text-dls-secondary/65"
                         : "bg-[var(--dls-accent)] text-[var(--dls-accent-fg)] hover:bg-[var(--dls-accent-hover)]"
                     }`}
                     title={t("composer.run_task")}
@@ -1450,7 +1450,7 @@ export function ReactSessionComposer(props: ComposerProps) {
         </div>
 
         {/* Below-panel control strip: agent + model + behavior variant */}
-        <div className="mt-2 flex items-center justify-between px-2">
+        <div className="mt-1.5 flex items-center justify-between px-1">
           <div className="flex flex-wrap items-center gap-1.5 text-gray-10 sm:gap-2.5">
             <div ref={agentMenuRef} className="relative">
               <button
