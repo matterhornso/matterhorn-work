@@ -5,6 +5,13 @@ import type { MatterhornBackendTeamAccessSummaryResponse } from "./backend-team-
 import type { MatterhornWorkspaceDataControlsResponse } from "./backend-data-controls.js";
 import type { MatterhornGeneratedMediaDiagnosticsResponse } from "./generated-media.js";
 import type {
+  MatterhornBillingMode,
+  MatterhornBillingPendingCheckout,
+  MatterhornBillingProvider,
+  MatterhornBillingSetupCheck,
+  MatterhornBillingStatusResponse,
+} from "./billing.js";
+import type {
   MatterhornProjectDataLedgerExportControlPlaneSnapshot,
   MatterhornProjectDataLedgerExportResponse,
   MatterhornProjectDataLedgerResponse,
@@ -79,6 +86,42 @@ export interface MatterhornBackendSupportReportResponse {
   };
   generatedMedia: {
     diagnostics: MatterhornGeneratedMediaDiagnosticsResponse;
+  };
+  billing: {
+    capability: MatterhornBackendCapabilitiesResponse["billing"];
+    status: MatterhornBillingStatusResponse;
+    diagnostics: {
+      mode: MatterhornBillingMode;
+      provider: MatterhornBillingProvider;
+      currentPlanId: MatterhornBillingStatusResponse["status"]["subscription"]["planId"];
+      workspacePlanId: MatterhornBillingStatusResponse["status"]["subscription"]["planId"];
+      livePaymentsEnabled: false;
+      checkoutSupported: boolean;
+      portalSupported: boolean;
+      readyForTestCheckout: boolean;
+      readyForWebhooks: boolean;
+      pendingCheckout:
+        | null
+        | (Pick<
+            MatterhornBillingPendingCheckout,
+            "planId" | "interval" | "provider" | "mode" | "createdAt" | "expiresAt"
+          > & {
+            providerSessionIdPresent: boolean;
+          });
+      usage: MatterhornBillingStatusResponse["status"]["usage"];
+      checks: MatterhornBillingSetupCheck[];
+      safety: {
+        liveCharges: false;
+        rawCardDataHandled: false;
+        secretsReturned: false;
+        providerWritesDuringDiagnostics: false;
+      };
+      recommendedActions: Array<{
+        id: string;
+        label: string;
+        status: MatterhornBillingSetupCheck["status"];
+      }>;
+    };
   };
   privacy: {
     trainingUse: MatterhornBackendControlPlaneResponse["privacy"]["trainingUse"];
