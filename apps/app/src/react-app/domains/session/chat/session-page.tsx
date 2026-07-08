@@ -2197,13 +2197,6 @@ export function SessionPage(props: SessionPageProps) {
                               </button>
                               <button
                                 type="button"
-                                className="inline-flex items-center rounded-md bg-dls-surface-muted/45 px-3 py-1.5 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
-                                onClick={() => setCurrentSidePanel("wallet")}
-                              >
-                                Sui workflow
-                              </button>
-                              <button
-                                type="button"
                                 className="inline-flex items-center rounded-md bg-transparent px-3 py-1.5 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
                                 onClick={() => openQuickJot()}
                               >
