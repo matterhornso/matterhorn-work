@@ -1810,6 +1810,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         `/workspace/${encodeURIComponent(workspaceId)}/generated-media/diagnostics`,
         { token, hostToken, timeoutMs: timeouts.status },
       ),
+    downloadGeneratedMediaReadinessReport: (workspaceId: string) =>
+      requestBinary(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/generated-media/diagnostics/report`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      ),
     generateImage: (workspaceId: string, input: MatterhornImageGenerationInput) =>
       requestJson<MatterhornImageGenerationResponse>(
         baseUrl,

@@ -71,6 +71,17 @@ async function jsonFetch(base: string, path: string, init?: RequestInit, token?:
   return { response, payload: await response.json().catch(() => ({})) };
 }
 
+async function textFetch(base: string, path: string, init?: RequestInit, token?: string) {
+  const response = await fetch(`${base}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token ?? TOKEN}`,
+      ...init?.headers,
+    },
+  });
+  return { response, text: await response.text() };
+}
+
 function bootWalrusPublisher(payload: unknown, options?: { status?: number; delayMs?: number }) {
   const calls: Array<{
     method: string;
@@ -254,6 +265,40 @@ describe("Generated media routes", () => {
     expect(walrus.calls.some((call) => call.method === "PUT")).toBe(false);
     expect(walrus.calls.every((call) => call.byteLength === 0)).toBe(true);
     expect(walrus.calls.find((call) => call.method === "OPTIONS")?.authorization).toBe("Bearer secret-smoke-token");
+  });
+
+  test("GET /workspace/:id/generated-media/diagnostics/report returns markdown without secret values or public writes", async () => {
+    const walrus = bootWalrusDiagnosticEndpoint();
+    process.env.MATTERHORN_IMAGE_PROVIDER = "openai";
+    process.env.OPENAI_API_KEY = "sk-test-generated-media-report-secret";
+    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = walrus.url;
+    process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN = "secret-generated-media-report-token";
+    process.env.MATTERHORN_WALRUS_RELAY_URL = walrus.url;
+    process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS = "3";
+    process.env.MATTERHORN_SUI_NETWORK = "sui-testnet";
+    process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = `0x${"1".repeat(64)}`;
+    process.env.MATTERHORN_SUI_NFT_MODULE_NAME = "matterhorn_nft";
+    process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = `0x${"2".repeat(64)}`;
+    process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = `0x${"3".repeat(64)}`;
+
+    const { base } = await boot();
+    const result = await textFetch(base, `/workspace/${WORKSPACE_ID}/generated-media/diagnostics/report`);
+
+    expect(result.response.status).toBe(200);
+    expect(result.response.headers.get("content-type")).toContain("text/markdown");
+    expect(result.response.headers.get("content-disposition")).toContain("matterhorn-generated-media-readiness-ws_test-");
+    expect(result.text).toContain("# Matterhorn Generated Media Readiness");
+    expect(result.text).toContain("No public writes were performed.");
+    expect(result.text).toContain("## Production Stages");
+    expect(result.text).toContain("Walrus storage");
+    expect(result.text).toContain("Sign Sui mint transaction");
+    expect(result.text).not.toContain("sk-test-generated-media-report-secret");
+    expect(result.text).not.toContain("secret-generated-media-report-token");
+    expect(result.text).not.toContain("Authorization");
+    expect(result.text).not.toContain("Bearer");
+    expect(walrus.calls.map((call) => call.method).sort()).toEqual(["HEAD", "OPTIONS"]);
+    expect(walrus.calls.some((call) => call.method === "PUT" || call.method === "POST")).toBe(false);
+    expect(walrus.calls.every((call) => call.byteLength === 0)).toBe(true);
   });
 
   test("GET /workspace/:id/generated-media/diagnostics fails invalid configured Sui ids", async () => {
