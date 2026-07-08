@@ -29,9 +29,9 @@ export function ImageGenerationComposer(props: ImageGenerationComposerProps) {
         ? "is not supported here"
         : "is unavailable";
     return (
-      <div className="flex items-center gap-2 rounded-md bg-dls-surface-muted/45 px-3 py-2 text-[12px] leading-5 text-dls-secondary">
+      <div className="flex items-center gap-2 rounded-md bg-dls-surface-muted/30 px-3 py-2 text-[12px] leading-5 text-dls-secondary">
         <Image size={14} />
-        Image generation {label}. Configure an image provider to use it in chat.
+        Image generation {label}. Add an image provider in Settings.
       </div>
     );
   }
@@ -42,14 +42,14 @@ export function ImageGenerationComposer(props: ImageGenerationComposerProps) {
         <Input
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Describe an image to generate..."
+          placeholder="Describe the image..."
           className="h-9 pr-8 text-sm"
           disabled={props.isGenerating}
         />
       </div>
       <Button type="submit" size="sm" className="h-9 gap-1 text-xs" disabled={!prompt.trim() || props.isGenerating}>
         {props.isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-        Generate
+        Create image
       </Button>
     </form>
   );

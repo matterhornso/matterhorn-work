@@ -39,7 +39,7 @@ export function GeneratedMediaHistory(props: GeneratedMediaHistoryProps) {
   if (items.length === 0) return null;
 
   return (
-    <div className="space-y-1" aria-label="Generated media history">
+    <div className="space-y-1.5" aria-label="Generated media history">
       <div className="flex items-center justify-between gap-2 px-1">
         <p className="text-[12px] font-medium text-dls-text">Recent images</p>
         <p className="text-[11px] text-dls-muted">{props.items.length} saved</p>
@@ -52,7 +52,7 @@ export function GeneratedMediaHistory(props: GeneratedMediaHistoryProps) {
               key={item.id}
               className={cn(
                 "group flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors",
-                selected ? "bg-dls-surface-muted/60" : "hover:bg-dls-hover/70",
+                selected ? "bg-dls-surface-muted/35" : "hover:bg-dls-hover/50",
               )}
             >
               <button
@@ -76,7 +76,7 @@ export function GeneratedMediaHistory(props: GeneratedMediaHistoryProps) {
                 onClick={() => props.onMakeNft(item.image)}
               >
                 <Shapes className="size-3" />
-                NFT
+                Make NFT
               </Button>
             </div>
           );

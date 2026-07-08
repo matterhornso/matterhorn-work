@@ -1,9 +1,9 @@
 /** @jsxImportSource react */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  AlertCircle,
   CheckCircle2,
   ChevronDown,
+  Circle,
   Copy,
   Image,
   Loader2,
@@ -261,16 +261,16 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
         <SheetHeader className="pb-4">
           <SheetTitle className="flex items-center gap-2 text-base">
             <Image size={18} />
-            Make NFT
+            Publish as NFT
           </SheetTitle>
           <SheetDescription className="text-xs">
-            Create a Sui NFT draft from this generated image. Public storage, minting, and listing require explicit action.
+            Create a local draft, then choose when to upload, mint, or list.
           </SheetDescription>
         </SheetHeader>
 
         <div className="flex flex-col gap-5 py-2">
           <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3">
-            <div className="relative flex aspect-square size-32 shrink-0 items-center justify-center overflow-hidden rounded-md bg-dls-surface-muted">
+            <div className="relative flex aspect-square size-32 shrink-0 items-center justify-center overflow-hidden rounded-md bg-dls-surface-muted/45">
               {props.imageUrl ? (
                 <img src={props.imageUrl} alt={props.image.prompt} className="h-full w-full object-contain" />
               ) : (
@@ -286,13 +286,13 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
 
           <NftPublishingReadinessRows
             items={publishingReadiness}
-            title="Publishing readiness"
-            description="Create the local draft anytime. Public storage, minting, and listing unlock when setup is ready."
+            title="Publishing path"
+            description="Drafts are local first. Public storage, minting, and listing require your next action."
             surface
           />
           <NftPublishingSetupRows
             requirements={props.readinessSetupRequirements ?? []}
-            description="These setup gates come from the local Matterhorn backend."
+            description="Backend setup needed before public publishing actions are available."
           />
 
           {!draft ? (
@@ -313,7 +313,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
               </div>
               <Button size="sm" className="w-fit gap-1 text-xs" onClick={handleCreateDraft} disabled={props.isLoading}>
                 {props.isLoading ? <Loader2 size={12} className="animate-spin" /> : <Lock size={12} />}
-                Create local draft
+                Create draft
               </Button>
             </div>
           ) : (
@@ -326,14 +326,14 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
               <NftSection
                 title="Storage"
                 status={draft.storage.status}
-                description={canUpload ? "Prepare and upload the image to Walrus." : "Walrus publisher and relay are not configured."}
+                description={canUpload ? "Prepare the media, then upload it to Walrus." : "Walrus publisher and relay are not configured."}
               >
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={() => void props.onPrepareStorage()} disabled={!canUpload || props.isLoading}>
-                    Prepare upload
+                    Prepare
                   </Button>
                   <Button size="sm" onClick={() => void props.onUploadStorage()} disabled={!canUpload || draft.storage.status !== "ready_to_upload" || props.isLoading}>
-                    Upload
+                    Upload to Walrus
                   </Button>
                 </div>
                 {draft.storage.url ? (
@@ -344,7 +344,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
               <NftSection
                 title="Mint"
                 status={draft.mint.status}
-                description={canMint ? "Prepare the Sui mint plan, then sign in your wallet." : "Sui NFT package is not configured."}
+                description={canMint ? "Prepare the mint plan, then sign it in your Sui wallet." : "Sui NFT package is not configured."}
               >
                 <WalletSummary walletExecution={walletExecution} />
                 {previewSummaries.mint ? (
@@ -355,7 +355,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={() => void props.onPreviewMint()} disabled={!canMint || draft.storage.status !== "uploaded" || props.isLoading}>
-                    Preview mint
+                    Preview
                   </Button>
                   <Button
                     size="sm"
@@ -363,7 +363,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
                     disabled={!props.mintPreview || !walletExecution?.connectedAddress || walletExecution?.isSigning || props.isLoading}
                   >
                     {walletExecution?.isSigning ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />}
-                    Sign mint in wallet
+                    Sign in wallet
                   </Button>
                   {props.mintPreview ? (
                     <Button size="sm" variant="ghost" onClick={() => void copyPlan("mint", props.mintPreview?.transactionPlan)}>
@@ -383,22 +383,28 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
               </NftSection>
 
               <NftSection
-                title="Marketplace listing"
+                title="Marketplace"
                 status={draft.listing.status}
-                description={canList ? "Prepare the Sui Kiosk listing plan, then sign it in your wallet." : "Kiosk and TransferPolicy config are not configured."}
+                description={canList ? "Prepare a Sui Kiosk listing plan, then sign it in your wallet." : "Kiosk and TransferPolicy config are not configured."}
               >
-                <div className="grid gap-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="NFT object id" value={listingObjectId} onChange={setListingObjectId} placeholder="0x..." />
-                    <Field label="Price (MIST)" value={priceMist} onChange={setPriceMist} placeholder="1000000000" />
+                <details className="group rounded-md bg-dls-surface-muted/18 px-3 py-2 text-xs">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-medium text-dls-text">
+                    Listing inputs
+                    <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="mt-3 grid gap-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="NFT object id" value={listingObjectId} onChange={setListingObjectId} placeholder="0x..." />
+                      <Field label="Price (MIST)" value={priceMist} onChange={setPriceMist} placeholder="1000000000" />
+                    </div>
+                    <Field label="NFT type" value={nftType} onChange={setNftType} placeholder="0x...::module::MatterhornNFT" />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Kiosk id" value={kioskId} onChange={setKioskId} placeholder="0x..." />
+                      <Field label="Owner cap id" value={kioskOwnerCapId} onChange={setKioskOwnerCapId} placeholder="0x..." />
+                    </div>
+                    <Field label="TransferPolicy id" value={transferPolicyId} onChange={setTransferPolicyId} placeholder="0x..." />
                   </div>
-                  <Field label="NFT type" value={nftType} onChange={setNftType} placeholder="0x...::module::MatterhornNFT" />
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Kiosk id" value={kioskId} onChange={setKioskId} placeholder="0x..." />
-                    <Field label="Owner cap id" value={kioskOwnerCapId} onChange={setKioskOwnerCapId} placeholder="0x..." />
-                  </div>
-                  <Field label="TransferPolicy id" value={transferPolicyId} onChange={setTransferPolicyId} placeholder="0x..." />
-                </div>
+                </details>
                 {previewSummaries.listing ? (
                   <PlanSummary
                     title={previewSummaries.listing.title}
@@ -407,7 +413,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={handlePreviewListing} disabled={!canList || props.isLoading}>
-                    Preview listing
+                    Preview
                   </Button>
                   {props.listingPreview ? (
                     <Button size="sm" variant="ghost" onClick={() => void copyPlan("listing", props.listingPreview?.transactionPlan)}>
@@ -421,7 +427,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
                     disabled={!props.listingPreview || !walletExecution?.connectedAddress || walletExecution?.isSigning || props.isLoading}
                   >
                     {walletExecution?.isSigning ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />}
-                    Sign listing in wallet
+                    Sign in wallet
                   </Button>
                 </div>
                 <div className="grid gap-2">
@@ -440,7 +446,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
                     onClick={handleRecordListingReceipt}
                     disabled={props.isLoading || !previewSummaries.listingPreviewReady}
                   >
-                    Record listing receipt
+                    Save listing receipt
                   </Button>
                 </div>
               </NftSection>
@@ -448,7 +454,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
           )}
 
           <p className="text-xs leading-5 text-muted-foreground">
-            Public storage and minting are explicit. Matterhorn never asks for your keys, signatures, or wallet exports.
+            Matterhorn never asks for keys, signatures, or wallet exports. Wallet actions happen only after you choose them.
           </p>
         </div>
       </SheetContent>
@@ -521,7 +527,7 @@ export function NftSetupRequirements(props: { requirements: MatterhornNftSetupRe
   if (!unresolved.length) return null;
 
   return (
-    <div className="rounded-md bg-dls-surface-muted/45 px-3 py-2.5">
+    <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2.5">
       <div className="mb-2 text-xs font-medium text-dls-text">Setup needed</div>
       <div className="space-y-2">
         {unresolved.map((requirement) => (
@@ -545,14 +551,14 @@ function NftSection(props: {
   const completed = ["uploaded", "confirmed", "listed"].includes(props.status);
   const ready = ["ready_to_upload", "preview_ready"].includes(props.status);
   return (
-    <section className="grid gap-3 border-t border-dls-border/45 pt-4">
+    <section className="grid gap-3 border-t border-dls-border/25 pt-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-sm font-medium text-dls-text">
             {completed || ready ? (
               <CheckCircle2 size={14} className={completed ? "text-emerald-300" : "text-dls-secondary"} />
             ) : (
-              <AlertCircle size={14} className="text-amber-300" />
+              <Circle size={8} className="text-dls-secondary" />
             )}
             {props.title}
           </div>
@@ -647,7 +653,7 @@ function ReceiptFields(props: {
         <Field label="Minted object id" value={props.objectId} onChange={props.onObjectIdChange} placeholder="0x..." />
       </div>
       <Button size="sm" variant="outline" className="w-fit" onClick={props.onRecord} disabled={props.disabled}>
-        Record mint receipt
+        Save mint receipt
       </Button>
     </div>
   );
@@ -681,7 +687,9 @@ function cleanListingInput(input: Record<keyof MatterhornNftListingPreviewInput,
 }
 
 function statusLabel(status: string) {
-  return status.replace(/_/g, " ");
+  return status
+    .replace(/_/g, " ")
+    .replace(/^\w/, (match) => match.toUpperCase());
 }
 
 function truncateMiddle(value: string) {

@@ -10,7 +10,6 @@ import {
   ExternalLink,
   FileText,
   Image as ImageIcon,
-  RefreshCw,
   ShieldCheck,
   Store,
   Trash2,
@@ -44,6 +43,7 @@ import {
 import {
   SettingsInset,
   SettingsNotice,
+  RefreshButton,
   SettingsSection,
   SettingsSectionHeader,
   SettingsSectionHeaderActions,
@@ -57,6 +57,7 @@ import {
   backendCapabilityTone,
   storageLocationLabel,
 } from "../backend-capability-status";
+import { useStatusToasts } from "../../shell-feedback/status-toasts";
 
 export type GeneratedMediaSettingsViewProps = {
   matterhornServerClient?: MatterhornServerClient | null;
@@ -69,7 +70,7 @@ export type GeneratedMediaSettingsViewProps = {
 function statusToneClass(status: MatterhornCapabilityStatus | "unavailable" | "local") {
   const tone = status === "local" ? "neutral" : status === "unavailable" ? "error" : backendCapabilityTone(status);
   if (tone === "ready") return "bg-emerald-500/10 text-emerald-300";
-  if (tone === "setup") return "bg-sky-500/10 text-sky-300";
+  if (tone === "setup") return "bg-dls-hover/70 text-dls-secondary";
   if (tone === "preview") return "bg-amber-500/10 text-amber-300";
   if (tone === "error") return "bg-red-500/10 text-red-300";
   return "bg-dls-hover/70 text-dls-secondary";
@@ -143,7 +144,7 @@ function CountStrip(props: {
     ["Listed", props.listed],
   ] as const;
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-y border-dls-border/30 py-2">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-dls-surface-muted/12 px-3 py-2">
       {items.map(([label, value]) => (
         <span key={label} className="inline-flex items-baseline gap-1.5 text-xs text-dls-secondary">
           <span className="font-semibold tabular-nums text-dls-text">{value}</span>
@@ -216,7 +217,7 @@ function RecentMediaRows(props: {
   if (!props.items.length) {
     return (
       <SettingsInset className="text-sm leading-6 text-dls-secondary">
-        No generated images yet. Open workspace chat to generate an image and save it to Outputs.
+        No generated images yet. Create one from chat and it will appear here with its output and NFT draft state.
       </SettingsInset>
     );
   }
@@ -503,6 +504,7 @@ function DataControlRows(props: { stores: MatterhornDataControlStore[]; loading:
 
 export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProps) {
   const queryClient = useQueryClient();
+  const { showToast } = useStatusToasts();
   const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
   const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
   const [readinessReportStatus, setReadinessReportStatus] = useState<string | null>(null);
@@ -570,10 +572,17 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
     },
     onSuccess: async () => {
       setDeleteStatus("Local generated image deleted.");
+      showToast({
+        title: "Generated image deleted",
+        description: "The local output file and metadata were removed.",
+        tone: "success",
+      });
       await refreshGeneratedMediaData();
     },
     onError: (deleteError) => {
-      setDeleteStatus(deleteError instanceof Error ? deleteError.message : "Generated image could not be deleted.");
+      const message = deleteError instanceof Error ? deleteError.message : "Generated image could not be deleted.";
+      setDeleteStatus(message);
+      showToast({ title: "Generated image was not deleted", description: message, tone: "error" });
     },
     onSettled: () => setDeletingImageId(null),
   });
@@ -587,10 +596,17 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
     },
     onSuccess: async () => {
       setDeleteStatus("Local NFT draft deleted.");
+      showToast({
+        title: "NFT draft deleted",
+        description: "The local draft was removed. Public receipts are retained when present.",
+        tone: "success",
+      });
       await refreshGeneratedMediaData();
     },
     onError: (deleteError) => {
-      setDeleteStatus(deleteError instanceof Error ? deleteError.message : "NFT draft could not be deleted.");
+      const message = deleteError instanceof Error ? deleteError.message : "NFT draft could not be deleted.";
+      setDeleteStatus(message);
+      showToast({ title: "NFT draft was not deleted", description: message, tone: "error" });
     },
     onSettled: () => setDeletingDraftId(null),
   });
@@ -602,8 +618,17 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
       return client.generatedMediaDiagnostics(workspaceId);
     },
     onMutate: () => setDiagnosticsError(null),
+    onSuccess: (diagnostics) => {
+      showToast({
+        title: diagnostics.status === "fail" ? "Diagnostics found blockers" : "Diagnostics complete",
+        description: diagnostics.summary,
+        tone: diagnostics.status === "fail" ? "warning" : "info",
+      });
+    },
     onError: (diagnosticError) => {
-      setDiagnosticsError(diagnosticError instanceof Error ? diagnosticError.message : "Generated media diagnostics could not run.");
+      const message = diagnosticError instanceof Error ? diagnosticError.message : "Generated media diagnostics could not run.";
+      setDiagnosticsError(message);
+      showToast({ title: "Diagnostics could not run", description: message, tone: "error" });
     },
   });
 
@@ -623,8 +648,15 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
       const report = await fetchReadinessReport();
       await navigator.clipboard.writeText(decodeReportText(report.data));
       setReadinessReportStatus("Copied generated media readiness report.");
+      showToast({
+        title: "Readiness report copied",
+        description: "The generated media setup report is on your clipboard.",
+        tone: "success",
+      });
     } catch (error) {
-      setReadinessReportStatus(error instanceof Error ? error.message : "Could not copy the readiness report.");
+      const message = error instanceof Error ? error.message : "Could not copy the readiness report.";
+      setReadinessReportStatus(message);
+      showToast({ title: "Readiness report was not copied", description: message, tone: "error" });
     } finally {
       setReadinessReportBusy(null);
     }
@@ -638,8 +670,15 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
       const filename = report.filename ?? `matterhorn-generated-media-readiness-${safeDownloadFilePart(workspaceId)}-${new Date().toISOString().slice(0, 10)}.md`;
       downloadMarkdownFile(filename, report.data, report.contentType);
       setReadinessReportStatus("Downloaded generated media readiness report.");
+      showToast({
+        title: "Readiness report downloaded",
+        description: filename,
+        tone: "success",
+      });
     } catch (error) {
-      setReadinessReportStatus(error instanceof Error ? error.message : "Could not download the readiness report.");
+      const message = error instanceof Error ? error.message : "Could not download the readiness report.";
+      setReadinessReportStatus(message);
+      showToast({ title: "Readiness report was not downloaded", description: message, tone: "error" });
     } finally {
       setReadinessReportBusy(null);
     }
@@ -648,6 +687,11 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
   const deleteImage = (item: MatterhornGeneratedMediaHistoryItem) => {
     if (!canDeleteImage(item)) {
       setDeleteStatus("Delete local NFT drafts before deleting this image.");
+      showToast({
+        title: "Delete NFT drafts first",
+        description: "Images with local NFT drafts stay linked until those drafts are removed.",
+        tone: "warning",
+      });
       return;
     }
     const label = compact(item.image.fileName) ?? item.image.id;
@@ -664,6 +708,11 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
   const deleteDraft = (draft: MatterhornImageNftDraft) => {
     if (!canDeleteDraft(draft)) {
       setDeleteStatus("Public storage, mint, or listing state is retained for accountability.");
+      showToast({
+        title: "Draft has public evidence",
+        description: "Public storage, mint, or listing records are retained for accountability.",
+        tone: "warning",
+      });
       return;
     }
     if (
@@ -723,15 +772,12 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
           <SettingsSectionHeaderContent>
             <SettingsSectionHeaderTitle>Production readiness</SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Image generation, Walrus storage, Sui NFT minting, and marketplace listing are reported by the local backend.
+              Image generation, public storage, Sui minting, and listing are reported by the local backend.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeaderContent>
           <SettingsSectionHeaderActions>
             <StatusText status={publishingStatus} />
-            <Button variant="ghost" size="icon-sm" className="border-0 bg-transparent shadow-none" onClick={refreshAll} disabled={isRefreshing}>
-              <span className="sr-only">Refresh generated media status</span>
-              <RefreshCw className={cn("size-3.5", isRefreshing && "animate-spin")} />
-            </Button>
+            <RefreshButton busy={isRefreshing} onRefresh={refreshAll}>Refresh generated media status</RefreshButton>
           </SettingsSectionHeaderActions>
         </SettingsSectionHeader>
 
@@ -745,13 +791,13 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
           <>
             <NftPublishingReadinessRows
               items={publishingReadiness}
-              title="Publishing readiness"
+              title="Publishing path"
               description="Image creation can work before public storage or NFT publishing is configured."
               surface
             />
             <NftPublishingSetupRows
               requirements={publishingSetupRequirements}
-              description="Configure these local backend values before public storage, mint previews, or listing previews are available."
+              description="Local backend values needed before public publishing actions are available."
             />
             {imageProviderSetupRequired && props.onOpenImageProviderSetup ? (
               <SettingsNotice className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -783,7 +829,7 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
           <SettingsSectionHeaderContent>
             <SettingsSectionHeaderTitle>Setup diagnostics</SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Run safe checks without generating images, uploading media, signing, or submitting transactions.
+              Safe checks only. Diagnostics do not generate images, upload media, sign, or submit transactions.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeaderContent>
           <SettingsSectionHeaderActions>
@@ -832,7 +878,7 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
           <SettingsSectionHeaderContent>
             <SettingsSectionHeaderTitle>Recent media</SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Generated images are saved under workspace outputs. NFT drafts remain local until public storage or wallet receipts are recorded.
+              Generated images, output files, and local NFT draft state for this workspace.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeaderContent>
           <SettingsSectionHeaderActions>
