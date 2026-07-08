@@ -159,7 +159,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
     <div className="flex flex-col gap-4 p-4 animate-fade-in">
       {/* Testnet banner */}
       {isTestnet && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5">
+        <div className="flex items-start gap-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5">
           <Shield className="size-4 text-emerald-400 shrink-0 mt-0.5" />
           <p className="text-xs text-emerald-300 leading-relaxed">
             Testnet mode — Transactions won't spend real money. Switch to mainnet in Settings &gt; Wallet when ready.

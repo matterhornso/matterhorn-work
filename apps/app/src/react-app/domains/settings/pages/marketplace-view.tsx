@@ -115,7 +115,7 @@ function AgentCard({
   return (
     <div
       className={cn(
-        "group relative rounded-xl border border-gray-4 bg-gray-2 p-5 cursor-pointer",
+        "group relative rounded-lg border border-gray-4 bg-gray-2 p-5 cursor-pointer",
         "hover:border-gray-6 hover:bg-gray-3 transition-all duration-200",
       )}
       onClick={() => onSelect(agent.id)}
@@ -362,7 +362,7 @@ export default function MarketplaceView() {
     const agent = agentBlueprints.find((a) => a.id === snapshot.selectedAgentId)
     if (!agent) return null
     return (
-      <div className="mt-6 rounded-xl border border-gray-4 bg-gray-2 overflow-hidden">
+      <div className="mt-6 rounded-lg border border-gray-4 bg-gray-2 overflow-hidden">
         <div className="h-1" style={{ background: agent.bgGradient }} />
         <div className="p-5">
           <div className="flex items-start justify-between mb-4">
@@ -442,7 +442,7 @@ export default function MarketplaceView() {
     return (
       <div
         className={cn(
-          "rounded-xl border border-gray-4 bg-gray-2 p-5 space-y-4",
+          "rounded-lg border border-gray-4 bg-gray-2 p-5 space-y-4",
           snapshot.isDeploying && "border-purple-500/30",
         )}
       >
@@ -706,7 +706,7 @@ export default function MarketplaceView() {
                 </Button>
               </div>
             ) : (
-              <div className="rounded-xl border border-gray-4 bg-gray-2 divide-y divide-gray-3">
+              <div className="rounded-lg border border-gray-4 bg-gray-2 divide-y divide-gray-3">
                 {/* Header row */}
                 <div className="flex items-center justify-between py-2 px-4 text-[10px] uppercase tracking-wider text-gray-9">
                   <span>Agent</span>
@@ -753,7 +753,7 @@ export default function MarketplaceView() {
                       <button
                         key={bp.id}
                         className={cn(
-                          "relative text-left rounded-xl border p-4 transition-all duration-200",
+                          "relative text-left rounded-lg border p-4 transition-all duration-200",
                           isSelected
                             ? "border-purple-500/50 bg-purple-500/5"
                             : "border-gray-4 bg-gray-2 hover:border-gray-6",

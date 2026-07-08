@@ -192,7 +192,7 @@ export function AddMcpModal(props: AddMcpModalProps) {
                 value={state.url}
                 onChange={(event) => dispatch({ url: event.currentTarget.value })}
               />
-              <div className="rounded-xl border border-dls-border bg-dls-hover/40 p-3">
+              <div className="rounded-lg border border-dls-border bg-dls-hover/40 p-3">
                 <div className="mb-2 text-xs font-medium text-dls-text">
                   {t("mcp.sign_in_section_label")}
                 </div>

@@ -29,13 +29,13 @@ const sectionTitleClass = "text-[15px] font-semibold tracking-[-0.2px] text-dls-
 const sectionDescClass = "text-[12px] text-dls-secondary";
 const cardClass =
   "rounded-lg border border-dls-border bg-dls-surface/95 p-5 space-y-4";
-const subCardClass = "rounded-xl border border-dls-border bg-dls-sidebar/40 p-4 space-y-3";
+const subCardClass = "rounded-lg border border-dls-border bg-dls-sidebar/40 p-4 space-y-3";
 const monoPreClass =
   "max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-dls-border bg-dls-sidebar/40 p-3 text-[11px] font-mono text-dls-text";
 const miniPreClass =
   "max-h-28 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-dls-border bg-dls-sidebar/30 p-2 text-[11px] font-mono text-dls-text";
 const compactDangerActionClass =
-  "inline-flex h-9 items-center gap-2 rounded-xl border border-red-7/40 bg-red-9 px-4 text-xs font-medium text-white transition-colors hover:bg-red-10 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex h-9 items-center gap-2 rounded-lg border border-red-7/40 bg-red-9 px-4 text-xs font-medium text-white transition-colors hover:bg-red-10 disabled:cursor-not-allowed disabled:opacity-60";
 
 type RuntimeSummary = {
   appVersionLabel: string;
@@ -748,7 +748,7 @@ export function DebugView(props: DebugViewProps) {
                 <div className="text-[12px] text-dls-secondary">{t("settings.custom_binary_label")}</div>
                 <div className="flex items-center gap-2">
                   <div
-                    className="min-w-0 flex-1 truncate rounded-xl border border-dls-border bg-dls-surface p-3 font-mono text-[11px] text-dls-secondary"
+                    className="min-w-0 flex-1 truncate rounded-lg border border-dls-border bg-dls-surface p-3 font-mono text-[11px] text-dls-secondary"
                     title={props.engineCustomBinPathLabel}
                   >
                     {props.engineCustomBinPathLabel}
@@ -782,7 +782,7 @@ export function DebugView(props: DebugViewProps) {
             {t("settings.startup_title")}
           </div>
 
-          <div className="flex items-center justify-between rounded-xl border border-dls-border bg-dls-surface p-3">
+          <div className="flex items-center justify-between rounded-lg border border-dls-border bg-dls-surface p-3">
             <div className="flex items-center gap-3">
               <div
                 className={`rounded-lg p-2 ${
@@ -824,7 +824,7 @@ export function DebugView(props: DebugViewProps) {
           <div className={sectionDescClass}>{t("settings.recovery_section_desc")}</div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-dls-border bg-dls-surface p-3">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-dls-border bg-dls-surface p-3">
           <div className="min-w-0">
             <div className="text-sm text-dls-text">{t("settings.reset_onboarding_title")}</div>
             <div className="text-[12px] text-dls-secondary">{t("settings.reset_onboarding_description")}</div>
@@ -840,7 +840,7 @@ export function DebugView(props: DebugViewProps) {
           </Button>
         </div>
 
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-dls-border bg-dls-surface p-3">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-dls-border bg-dls-surface p-3">
           <div className="min-w-0">
             <div className="text-sm text-dls-text">{t("settings.reset_app_data_title")}</div>
             <div className="text-[12px] text-dls-secondary">{t("settings.reset_app_data_description")}</div>
@@ -881,7 +881,7 @@ export function DebugView(props: DebugViewProps) {
             </Button>
           </div>
 
-          <div className="rounded-xl border border-green-7/25 bg-green-3/10 px-3 py-2 text-[12px] leading-relaxed text-green-11">
+          <div className="rounded-lg border border-green-7/25 bg-green-3/10 px-3 py-2 text-[12px] leading-relaxed text-green-11">
             Safe default: use <strong>Prepare migration data</strong> first. It writes the Electron snapshot only and does
             not replace, quit, or delete the Tauri app. The install handoff keeps rollback backup at{" "}
             <code className="font-mono">Matterhorn Work.app.migrate-bak</code>.
@@ -904,7 +904,7 @@ export function DebugView(props: DebugViewProps) {
             )}
           </div>
 
-          <details className="rounded-xl border border-dls-border bg-dls-sidebar/30 p-3">
+          <details className="rounded-lg border border-dls-border bg-dls-sidebar/30 p-3">
             <summary className="cursor-pointer select-none text-[11px] font-medium uppercase tracking-wider text-dls-secondary">
               Advanced manual artifact override
             </summary>
@@ -916,7 +916,7 @@ export function DebugView(props: DebugViewProps) {
                   value={props.electronMigrationUrl}
                   onChange={(event) => props.onSetElectronMigrationUrl(event.currentTarget.value)}
                   placeholder="Paste a trusted Electron .zip/.exe/AppImage URL"
-                  className="h-10 w-full rounded-xl border border-dls-border bg-dls-surface px-3 font-mono text-[11px] text-dls-text outline-none transition-colors placeholder:text-dls-secondary focus:border-dls-accent"
+                  className="h-10 w-full rounded-lg border border-dls-border bg-dls-surface px-3 font-mono text-[11px] text-dls-text outline-none transition-colors placeholder:text-dls-secondary focus:border-dls-accent"
                 />
               </label>
               <label className="space-y-1 text-[12px] text-dls-secondary">
@@ -926,7 +926,7 @@ export function DebugView(props: DebugViewProps) {
                   value={props.electronMigrationSha512}
                   onChange={(event) => props.onSetElectronMigrationSha512(event.currentTarget.value)}
                   placeholder="recommended"
-                  className="h-10 w-full rounded-xl border border-dls-border bg-dls-surface px-3 font-mono text-[11px] text-dls-text outline-none transition-colors placeholder:text-dls-secondary focus:border-dls-accent"
+                  className="h-10 w-full rounded-lg border border-dls-border bg-dls-surface px-3 font-mono text-[11px] text-dls-text outline-none transition-colors placeholder:text-dls-secondary focus:border-dls-accent"
                 />
               </label>
               <label className="space-y-1 text-[12px] text-dls-secondary md:col-span-2">
@@ -936,7 +936,7 @@ export function DebugView(props: DebugViewProps) {
                   value={props.electronMigrationSha256}
                   onChange={(event) => props.onSetElectronMigrationSha256(event.currentTarget.value)}
                   placeholder="Only needed when the artifact provider gives sha256 instead of latest-mac.yml sha512"
-                  className="h-10 w-full rounded-xl border border-dls-border bg-dls-surface px-3 font-mono text-[11px] text-dls-text outline-none transition-colors placeholder:text-dls-secondary focus:border-dls-accent"
+                  className="h-10 w-full rounded-lg border border-dls-border bg-dls-surface px-3 font-mono text-[11px] text-dls-text outline-none transition-colors placeholder:text-dls-secondary focus:border-dls-accent"
                 />
               </label>
             </div>

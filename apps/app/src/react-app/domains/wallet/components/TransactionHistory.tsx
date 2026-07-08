@@ -174,7 +174,7 @@ export function TransactionHistory({ txs, blockExplorerUrl }: { txs: TxRecord[];
           return (
             <div
               key={tx.hash}
-              className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs bg-dls-surface-muted/30 border border-dls-border hover:bg-dls-hover transition-colors"
+              className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-xs bg-dls-surface-muted/30 border border-dls-border hover:bg-dls-hover transition-colors"
             >
               <div className={cn("flex size-7 items-center justify-center rounded-lg shrink-0", info.color.replace("text-", "bg-").replace("400", "500/10"))}>
                 <span className={info.color}>{info.icon}</span>

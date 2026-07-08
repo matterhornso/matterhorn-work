@@ -18,14 +18,14 @@ export function StatusToast(props: StatusToastProps) {
   if (!props.open) return null;
   const tone = props.tone ?? "info";
 
-  const tileClass =
+  const iconClass =
     tone === "success"
-      ? "border-emerald-6/40 bg-emerald-4/80 text-emerald-11"
+      ? "text-emerald-300"
       : tone === "warning"
-        ? "border-amber-6/40 bg-amber-4/80 text-amber-11"
+        ? "text-amber-300"
         : tone === "error"
-          ? "border-red-6/40 bg-red-4/80 text-red-11"
-          : "border-sky-6/40 bg-sky-4/80 text-sky-11";
+          ? "text-red-300"
+          : "text-sky-300";
 
   const Icon =
     tone === "success"
@@ -35,24 +35,25 @@ export function StatusToast(props: StatusToastProps) {
         : tone === "error"
           ? CircleAlert
           : Info;
+  const liveRole = tone === "warning" || tone === "error" ? "alert" : "status";
 
   return (
-    <div className="w-full max-w-[24rem] overflow-hidden rounded-lg border border-dls-border/65 bg-dls-surface shadow-[var(--dls-shell-shadow)] animate-in fade-in slide-in-from-top-2 duration-200">
-      <div className="flex items-start gap-3 p-3.5">
-        <div
-          className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border ${tileClass}`.trim()}
-        >
-          <Icon size={16} />
-        </div>
+    <div
+      className="w-full max-w-[23rem] overflow-hidden rounded-lg border border-dls-border/45 bg-dls-surface shadow-[var(--dls-shell-shadow)] animate-in fade-in slide-in-from-top-2 duration-200"
+      role={liveRole}
+      aria-live={liveRole === "alert" ? "assertive" : "polite"}
+    >
+      <div className="flex items-start gap-2.5 p-3">
+        <Icon className={`mt-0.5 size-4 shrink-0 ${iconClass}`.trim()} aria-hidden="true" />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-gray-12">
+              <div className="text-sm font-medium leading-5 text-dls-text">
                 {props.title}
               </div>
               {props.description?.trim() ? (
-                <p className="mt-1 text-sm leading-relaxed text-gray-10">
+                <p className="mt-1 text-xs leading-5 text-dls-secondary">
                   {props.description}
                 </p>
               ) : null}
@@ -61,7 +62,7 @@ export function StatusToast(props: StatusToastProps) {
             <button
               type="button"
               onClick={props.onDismiss}
-              className="rounded-md p-1 text-gray-9 transition hover:bg-gray-3 hover:text-gray-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+              className="rounded-md p-1 text-dls-secondary transition-colors hover:bg-dls-hover/35 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
               aria-label={props.dismissLabel ?? "Dismiss"}
             >
               <X size={16} />
@@ -73,7 +74,7 @@ export function StatusToast(props: StatusToastProps) {
               <Button
                 type="button"
                 size="sm"
-                className="h-7 px-3 text-xs"
+                className="h-7 px-2.5 text-xs"
                 onClick={() => props.onAction?.()}
               >
                 {props.actionLabel}
@@ -82,7 +83,7 @@ export function StatusToast(props: StatusToastProps) {
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 bg-transparent px-3 text-xs hover:bg-dls-hover"
+                className="h-7 bg-transparent px-2.5 text-xs text-dls-secondary hover:bg-dls-hover/35 hover:text-dls-text"
                 onClick={props.onDismiss}
               >
                 {props.dismissLabel ?? "Dismiss"}

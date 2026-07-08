@@ -159,7 +159,7 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
           </div>
         )}
         {showAddressBook && addresses.length > 0 && (
-          <div className="space-y-1 rounded-xl border border-dls-border bg-dls-surface p-2">
+          <div className="space-y-1 rounded-lg border border-dls-border bg-dls-surface p-2">
             {addresses.map((a) => (
               <button
                 key={a.address}
@@ -220,7 +220,7 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
 
       {/* Review + Send */}
       {error && (
-        <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-xs text-red-300">
+        <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-xs text-red-300">
           <div className="flex size-5 items-center justify-center rounded-md bg-red-500/10">
             <span className="text-red-400 font-bold">!</span>
           </div>

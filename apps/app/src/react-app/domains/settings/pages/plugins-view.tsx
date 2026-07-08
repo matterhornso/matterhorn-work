@@ -192,7 +192,7 @@ export function PluginsView(props: PluginsViewProps) {
                     ))}
                   </div>
                   {isGuided && isGuideOpen ? (
-                    <div className="rounded-xl border border-gray-6/70 bg-gray-1/60 p-4 space-y-3">
+                    <div className="rounded-lg border border-gray-6/70 bg-gray-1/60 p-4 space-y-3">
                       {(plugin.steps ?? []).map((step, idx) => (
                         <div
                           key={`${plugin.packageName}:step:${step.title}:${step.command ?? step.url ?? step.path ?? step.description}`}
@@ -241,7 +241,7 @@ export function PluginsView(props: PluginsViewProps) {
         </div>
 
         {extensions.pluginList().length === 0 ? (
-          <div className="rounded-xl border border-gray-6/60 bg-gray-1/40 p-4 text-sm text-gray-10">
+          <div className="rounded-lg border border-gray-6/60 bg-gray-1/40 p-4 text-sm text-gray-10">
             {t("plugins.empty")}
           </div>
         ) : (
@@ -249,7 +249,7 @@ export function PluginsView(props: PluginsViewProps) {
             {extensions.pluginList().map((plugin) => (
               <div
                 key={plugin.name}
-                className="flex items-center justify-between rounded-xl border border-gray-6/60 bg-gray-1/40 px-4 py-2.5"
+                className="flex items-center justify-between rounded-lg border border-gray-6/60 bg-gray-1/40 px-4 py-2.5"
               >
                 <div>
                   <div className="text-sm text-gray-12 font-mono flex items-center gap-2">

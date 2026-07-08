@@ -97,7 +97,7 @@ export function CloudAccountSection({
 
 function ConnectedOrg({ org }: { org: DenOrgSummary }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-dls-border bg-dls-surface px-4 py-3">
+    <div className="flex items-center gap-3 rounded-lg border border-dls-border bg-dls-surface px-4 py-3">
       <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-green-3 text-green-11">
         <Building2 size={16} />
       </div>

@@ -61,7 +61,7 @@ export function ResetModal(props: ResetModalProps) {
         </AlertDialogHeader>
 
           <div className="mt-6 space-y-4">
-            <div className="rounded-xl bg-gray-1/20 border border-gray-6 p-3 text-xs text-gray-11">
+            <div className="rounded-lg bg-gray-1/20 border border-gray-6 p-3 text-xs text-gray-11">
               {props.mode === "onboarding"
                 ? t("settings.reset_onboarding_warning")
                 : t("settings.reset_app_data_warning")}
@@ -83,7 +83,7 @@ export function ResetModal(props: ResetModalProps) {
                 value={props.text}
                 onChange={(event) => props.onTextChange(event.currentTarget.value)}
                 disabled={props.busy}
-                className="w-full rounded-xl border border-dls-border bg-dls-surface px-4 py-3 text-[14px] text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.12)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-lg border border-dls-border bg-dls-surface px-4 py-3 text-[14px] text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.12)] disabled:cursor-not-allowed disabled:opacity-60"
               />
             </label>
           </div>

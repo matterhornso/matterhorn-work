@@ -174,7 +174,7 @@ export function QuestionPanel(props: QuestionPanelProps) {
                   key={`${opt.label}:${idx}`}
                   type="button"
                   disabled={props.busy}
-                  className={`flex w-full items-start justify-between gap-3 rounded-xl border px-3 py-2.5 text-left text-sm transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60
+                  className={`flex w-full items-start justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60
                         ${
                           isSelected
                             ? "bg-blue-9/10 border-blue-9/30 text-gray-12 shadow-sm"
@@ -218,7 +218,7 @@ export function QuestionPanel(props: QuestionPanelProps) {
                     value: event.currentTarget.value,
                   })
                 }
-                className="w-full px-4 py-3 rounded-xl bg-dls-surface border border-dls-border focus:border-dls-accent focus:ring-4 focus:ring-[rgba(var(--dls-accent-rgb),0.2)] focus:outline-none text-sm text-dls-text placeholder:text-dls-secondary transition-shadow"
+                className="w-full px-4 py-3 rounded-lg bg-dls-surface border border-dls-border focus:border-dls-accent focus:ring-4 focus:ring-[rgba(var(--dls-accent-rgb),0.2)] focus:outline-none text-sm text-dls-text placeholder:text-dls-secondary transition-shadow"
                 placeholder={t("question_modal.custom_answer_placeholder")}
                 disabled={props.busy}
                 onKeyDown={(event) => {

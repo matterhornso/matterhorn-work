@@ -119,7 +119,7 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
             <div className="space-y-1">
               <div className="text-[10px] text-dls-secondary uppercase tracking-wider">From</div>
               <select
-                className="w-full h-11 rounded-xl bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-blue-500/30 transition-colors"
+                className="w-full h-11 rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-blue-500/30 transition-colors"
                 value={fromChain}
                 onChange={(e) => setFromChain(Number(e.target.value))}
               >
@@ -134,7 +134,7 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
             <div className="space-y-1">
               <div className="text-[10px] text-dls-secondary uppercase tracking-wider">To</div>
               <select
-                className="w-full h-11 rounded-xl bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-blue-500/30 transition-colors"
+                className="w-full h-11 rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-blue-500/30 transition-colors"
                 value={toChain}
                 onChange={(e) => setToChain(Number(e.target.value))}
               >
@@ -148,7 +148,7 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
           <div className="ow-section-heading">Token & Amount</div>
           <div className="flex gap-2">
             <select
-              className="h-11 rounded-xl bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-blue-500/30 transition-colors shrink-0 w-28"
+              className="h-11 rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-blue-500/30 transition-colors shrink-0 w-28"
               value={selectedToken}
               onChange={(e) => setSelectedToken(e.target.value)}
             >
@@ -199,7 +199,7 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
             </div>
           )}
           {showAddressBook && addresses.length > 0 && (
-            <div className="space-y-1 rounded-xl border border-dls-border bg-dls-surface p-2">
+            <div className="space-y-1 rounded-lg border border-dls-border bg-dls-surface p-2">
               {addresses.map((a) => (
                 <button
                   key={a.address}
@@ -264,14 +264,14 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
       <div className="flex gap-2">
         <Button
           variant="outline"
-          className="flex-1 h-12 rounded-xl border-dls-border hover:bg-dls-hover"
+          className="flex-1 h-12 rounded-lg border-dls-border hover:bg-dls-hover"
           onClick={handleEstimate}
           disabled={loading || !amount || !effectiveRecipient}
         >
           {loading ? "Getting quote..." : "Get Quote"}
         </Button>
         <Button
-          className="flex-1 h-12 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/20"
+          className="flex-1 h-12 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg shadow-lg shadow-blue-500/20"
           onClick={handleBridge}
           disabled={!amount || !quoteData || !effectiveRecipient}
         >

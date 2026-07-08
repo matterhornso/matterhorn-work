@@ -138,7 +138,7 @@ function ModelPickerSearch(props: {
           value={props.query}
           onChange={(event) => props.onSetQuery(event.currentTarget.value)}
           placeholder={t("settings.search_models")}
-          className="w-full bg-dls-surface border border-dls-border rounded-xl py-2.5 pl-9 pr-3 text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-1 focus:ring-[rgba(var(--dls-accent-rgb),0.2)] focus:border-dls-accent"
+          className="w-full bg-dls-surface border border-dls-border rounded-lg py-2.5 pl-9 pr-3 text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-1 focus:ring-[rgba(var(--dls-accent-rgb),0.2)] focus:border-dls-accent"
         />
       </div>
       {props.query.trim() ? (
@@ -270,7 +270,7 @@ function ModelOptionRow(props: {
       tabIndex={0}
       ref={props.registerOptionRef(props.index)}
       className={[
-        "group w-full text-left rounded-xl px-3 py-2.5 transition-colors cursor-pointer",
+        "group w-full text-left rounded-lg px-3 py-2.5 transition-colors cursor-pointer",
         active
           ? "bg-gray-3 text-gray-12"
           : isKeyboardActive
@@ -379,7 +379,7 @@ function ProviderLinkRow(props: {
       tabIndex={0}
       ref={props.registerOptionRef(props.provider.index)}
       className={[
-        "group w-full text-left rounded-xl px-3 py-2.5 transition-colors cursor-pointer",
+        "group w-full text-left rounded-lg px-3 py-2.5 transition-colors cursor-pointer",
         isKeyboardActive ? "bg-gray-2 text-gray-12" : "text-gray-10 hover:bg-gray-1/70 hover:text-gray-11",
       ].join(" ")}
       onMouseEnter={() => props.onSetActiveIndex(props.provider.index)}

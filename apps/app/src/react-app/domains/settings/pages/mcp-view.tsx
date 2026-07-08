@@ -1177,7 +1177,7 @@ export function McpView(props: McpViewProps) {
       ) : null}
 
       {props.mcpStatus ? (
-        <div className="break-words rounded-xl border border-dls-border bg-dls-hover px-4 py-3 text-xs text-dls-secondary">
+        <div className="break-words rounded-lg border border-dls-border bg-dls-hover px-4 py-3 text-xs text-dls-secondary">
           <div className="font-medium text-dls-text">
             {mcpStatusIsEmpty ? "No external MCPs connected." : props.mcpStatus}
           </div>
@@ -1191,7 +1191,7 @@ export function McpView(props: McpViewProps) {
       ) : null}
 
       {props.builtInExtensionsDisabled ? (
-        <div className="rounded-xl border border-amber-6 bg-amber-2 px-4 py-3 text-xs text-amber-11">
+        <div className="rounded-lg border border-amber-6 bg-amber-2 px-4 py-3 text-xs text-amber-11">
           Built-in Matterhorn Work extensions are disabled by your organization. Use Show hidden to review blocked built-ins.
         </div>
       ) : null}
@@ -1688,8 +1688,8 @@ function MatterhornMcpProductSection(props: {
           <div className="mt-3 min-w-0 border-l border-dls-border/30 pl-3">
             <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">Install command</div>
             <code className={props.compact
-              ? "mt-2 block max-w-full break-words rounded-xl bg-dls-surface/45 px-3 py-2 font-mono text-[10px] leading-4 text-dls-text"
-              : "mt-2 block max-w-full break-words rounded-xl bg-dls-surface/45 px-3 py-2 font-mono text-[11px] leading-5 text-dls-text"
+              ? "mt-2 block max-w-full break-words rounded-lg bg-dls-surface/45 px-3 py-2 font-mono text-[10px] leading-4 text-dls-text"
+              : "mt-2 block max-w-full break-words rounded-lg bg-dls-surface/45 px-3 py-2 font-mono text-[11px] leading-5 text-dls-text"
             }>
               {selectedInstallCommand}
             </code>
@@ -2006,7 +2006,7 @@ function McpConfiguredServersSection(props: {
           ))}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-dls-border px-5 py-10 text-center">
+        <div className="rounded-lg border border-dashed border-dls-border px-5 py-10 text-center">
           <Unplug size={24} className="mx-auto mb-3 text-dls-secondary/30" />
           <div className="text-sm font-medium text-dls-secondary">{t("mcp.no_apps_yet")}</div>
           <div className="mt-1 text-xs text-dls-secondary/60">{t("mcp.no_apps_hint")}</div>
@@ -2041,7 +2041,7 @@ function McpConfiguredServerRow(props: {
 }) {
   const Icon = serviceIcon(props.entry.name);
   return (
-    <div className={`rounded-xl border transition-all ${props.selected ? "border-blue-7 bg-blue-2 shadow-sm" : "border-dls-border bg-dls-surface hover:bg-dls-hover"}`}>
+    <div className={`rounded-lg border transition-all ${props.selected ? "border-blue-7 bg-blue-2 shadow-sm" : "border-dls-border bg-dls-surface hover:bg-dls-hover"}`}>
       <button type="button" className="w-full px-4 py-3.5 text-left" onClick={() => props.onSelect(props.selected ? null : props.entry.name)}>
         <div className="flex items-center gap-3">
           <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg border ${props.status === "connected" ? "border-green-6 bg-green-3" : serviceIconBg(props.entry.name)}`}>
@@ -2173,7 +2173,7 @@ function McpAdvancedConfigSection(props: {
   onReveal: () => Promise<void>;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-dls-border bg-dls-surface">
+    <div className="overflow-hidden rounded-lg border border-dls-border bg-dls-surface">
       <button type="button" className="flex w-full items-center justify-between px-5 py-4 transition-colors hover:bg-dls-hover" onClick={props.onToggle}>
         <div className="flex items-center gap-3">
           <Settings2 size={16} className="text-dls-secondary" />

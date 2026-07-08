@@ -713,11 +713,11 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
 
         <div className="flex min-h-0 flex-1 flex-col gap-4">
           {errorMessage ? (
-            <div className="rounded-xl border border-red-7/30 bg-red-1/40 px-3 py-2 text-xs text-red-11">
+            <div className="rounded-lg border border-red-7/30 bg-red-1/40 px-3 py-2 text-xs text-red-11">
               {errorMessage}
             </div>
           ) : props.loading ? (
-            <div className="rounded-xl border border-gray-6 bg-gray-1/60 px-4 py-3 text-sm text-gray-10 animate-pulse">
+            <div className="rounded-lg border border-gray-6 bg-gray-1/60 px-4 py-3 text-sm text-gray-10 animate-pulse">
               Loading providers…
             </div>
           ) : null}
@@ -741,7 +741,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                       autoCapitalize="off"
                       spellCheck={false}
                       disabled={actionDisabled}
-                      className="w-full rounded-xl bg-gray-2 px-9 py-2.5 text-[13px] text-gray-12 placeholder:text-gray-9 border border-gray-6/60 focus:border-gray-8 focus:bg-gray-1 focus:outline-none transition-colors shadow-sm"
+                      className="w-full rounded-lg bg-gray-2 px-9 py-2.5 text-[13px] text-gray-12 placeholder:text-gray-9 border border-gray-6/60 focus:border-gray-8 focus:bg-gray-1 focus:outline-none transition-colors shadow-sm"
                     />
                   </div>
 
@@ -750,7 +750,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                       <button
                         key={entry.id}
                         type="button"
-                        className={`w-full group flex items-start gap-3.5 rounded-xl px-3.5 py-3 text-left transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
+                        className={`w-full group flex items-start gap-3.5 rounded-lg px-3.5 py-3 text-left transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
                           index === activeEntryIndex ? "bg-gray-3/60" : "hover:bg-gray-3/30"
                         }`}
                         disabled={actionDisabled}
@@ -816,7 +816,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
               ) : null}
 
               {resolvedView === "method" && selectedEntry ? (
-                <div className="rounded-xl border border-gray-6/40 bg-gray-2/50 shadow-sm p-5 space-y-4">
+                <div className="rounded-lg border border-gray-6/40 bg-gray-2/50 shadow-sm p-5 space-y-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <div className="text-sm font-medium text-gray-12">{selectedEntry.name}</div>
@@ -831,7 +831,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                       <button
                         key={`${selectedEntry.id}-${method.type}-${method.methodIndex ?? method.cloudProviderId ?? method.label}`}
                         type="button"
-                        className={`w-full rounded-xl border px-4 py-3.5 text-left transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
+                        className={`w-full rounded-lg border px-4 py-3.5 text-left transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
                           method.type === "oauth"
                             ? "border-indigo-5/40 bg-indigo-3/20 hover:bg-indigo-4/30 shadow-sm"
                             : "border-gray-5/50 bg-gray-2 hover:bg-gray-3/50 shadow-sm"
@@ -848,7 +848,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
               ) : null}
 
               {resolvedView === "api" && selectedEntry ? (
-                <div className="rounded-xl border border-gray-6/40 bg-gray-2/50 shadow-sm p-5 space-y-4">
+                <div className="rounded-lg border border-gray-6/40 bg-gray-2/50 shadow-sm p-5 space-y-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <div className="text-sm font-medium text-gray-12">{selectedEntry.name}</div>
@@ -908,7 +908,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
               ) : null}
 
               {resolvedView === "cloud" && selectedEntry && selectedCloudMethod ? (
-                <div className="rounded-xl border border-gray-6/40 bg-gray-2/50 shadow-sm p-5 space-y-4">
+                <div className="rounded-lg border border-gray-6/40 bg-gray-2/50 shadow-sm p-5 space-y-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <div className="text-sm font-medium text-gray-12">{selectedEntry.name}</div>
@@ -943,7 +943,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
               ) : null}
 
               {resolvedView === "matterhorn-subscribe" && selectedEntry ? (
-                <div className="rounded-xl border border-blue-6/50 bg-blue-2/25 shadow-sm p-5 space-y-4">
+                <div className="rounded-lg border border-blue-6/50 bg-blue-2/25 shadow-sm p-5 space-y-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <div className="text-sm font-medium text-gray-12">Matterhorn Models</div>
@@ -964,7 +964,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
               ) : null}
 
               {resolvedView === "oauth-code" && selectedEntry && oauthSession ? (
-                <div className="rounded-xl border border-gray-6/40 bg-gray-2/50 shadow-sm p-5 space-y-4">
+                <div className="rounded-lg border border-gray-6/40 bg-gray-2/50 shadow-sm p-5 space-y-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <div className="text-sm font-medium text-gray-12">{selectedEntry.name}</div>
@@ -1021,7 +1021,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
               ) : null}
 
               {resolvedView === "oauth-auto" && selectedEntry && oauthSession ? (
-                <div className="rounded-xl border border-gray-6/40 bg-gray-2/50 shadow-sm p-5 space-y-4">
+                <div className="rounded-lg border border-gray-6/40 bg-gray-2/50 shadow-sm p-5 space-y-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <div className="text-sm font-medium text-gray-12">{selectedEntry.name}</div>
@@ -1044,7 +1044,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                     </div>
                   )}
                   {oauthDisplayCode ? (
-                    <div className="rounded-xl border border-gray-6/70 bg-gray-2/40 p-3 flex items-center gap-3">
+                    <div className="rounded-lg border border-gray-6/70 bg-gray-2/40 p-3 flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="text-[10px] uppercase tracking-wide text-gray-8">Confirmation code</div>
                         <div className="text-sm text-gray-12 font-mono break-all">{oauthDisplayCode}</div>

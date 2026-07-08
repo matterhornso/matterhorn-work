@@ -38,7 +38,7 @@ export function ConfigEngineReloadSection(props: {
         <div className="text-sm font-medium text-gray-12">{t("config.engine_reload_title")}</div>
         <div className="text-xs text-gray-10">{t("config.engine_reload_desc")}</div>
       </div>
-      <div className="flex items-center justify-between bg-gray-1 p-3 rounded-xl border border-gray-6 gap-3">
+      <div className="flex items-center justify-between bg-gray-1 p-3 rounded-lg border border-gray-6 gap-3">
         <div className="min-w-0 space-y-1">
           <div className="text-sm text-gray-12">{t("config.reload_now_title")}</div>
           <div className="text-xs text-gray-7">{t("config.reload_now_desc")}</div>
@@ -72,7 +72,7 @@ export function ConfigDiagnosticsSection(props: {
           {props.copyingField === "debug-bundle" ? t("config.copied") : t("config.copy")}
         </Button>
       </div>
-      <pre className="text-xs text-gray-12 whitespace-pre-wrap break-words max-h-64 overflow-auto bg-gray-1/20 border border-gray-6 rounded-xl p-3">
+      <pre className="text-xs text-gray-12 whitespace-pre-wrap break-words max-h-64 overflow-auto bg-gray-1/20 border border-gray-6 rounded-lg p-3">
         {props.diagnosticsBundleJson}
       </pre>
     </div>
@@ -90,7 +90,7 @@ function TokenRow(props: {
   onCopy: (value: string, field: string) => void | Promise<void>;
 }) {
   return (
-    <div className="flex items-center justify-between bg-gray-1 p-3 rounded-xl border border-gray-6 gap-3">
+    <div className="flex items-center justify-between bg-gray-1 p-3 rounded-lg border border-gray-6 gap-3">
       <div className="min-w-0">
         <div className="text-xs font-medium text-gray-11">{props.label}</div>
         <div className="text-xs text-gray-7 font-mono truncate">
@@ -137,7 +137,7 @@ export function ConfigServerSharingSection(props: {
         <div className={`text-xs px-2 py-1 rounded-full border ${props.hostStatusStyle}`}>{props.hostStatusLabel}</div>
       </div>
       <div className="grid gap-3">
-        <div className="flex items-center justify-between bg-gray-1 p-3 rounded-xl border border-gray-6 gap-3">
+        <div className="flex items-center justify-between bg-gray-1 p-3 rounded-lg border border-gray-6 gap-3">
           <div className="min-w-0">
             <div className="text-xs font-medium text-gray-11">{t("config.server_url_label")}</div>
             <div className="text-xs text-gray-7 font-mono truncate">{props.hostConnectUrl || t("config.starting_server")}</div>
@@ -189,7 +189,7 @@ export function ConfigServerConnectionSection(props: {
         <label className="block">
           <div className="mb-1 text-xs font-medium text-gray-11">{t("config.token_label")}</div>
           <div className="flex items-center gap-2">
-            <input type={props.tokenVisible ? "text" : "password"} value={props.matterhornToken} onChange={(event) => props.onTokenChange(event.currentTarget.value)} placeholder={t("config.token_placeholder")} disabled={props.busy} className="w-full rounded-xl bg-gray-2/60 px-3 py-2 text-sm text-gray-12 placeholder:text-gray-10 shadow-[0_0_0_1px_rgba(255,255,255,0.08)] focus:outline-none focus:ring-2 focus:ring-gray-6/20" />
+            <input type={props.tokenVisible ? "text" : "password"} value={props.matterhornToken} onChange={(event) => props.onTokenChange(event.currentTarget.value)} placeholder={t("config.token_placeholder")} disabled={props.busy} className="w-full rounded-lg bg-gray-2/60 px-3 py-2 text-sm text-gray-12 placeholder:text-gray-10 shadow-[0_0_0_1px_rgba(255,255,255,0.08)] focus:outline-none focus:ring-2 focus:ring-gray-6/20" />
             <Button variant="outline" className="shrink-0" onClick={props.onToggleToken} disabled={props.busy}>
               {props.tokenVisible ? t("common.hide") : t("common.show")}
             </Button>

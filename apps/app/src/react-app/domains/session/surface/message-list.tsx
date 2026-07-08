@@ -522,7 +522,7 @@ function PastedTextChip(props: { label: string; text: string }) {
         <span>Pasted · {lineCount} line{lineCount === 1 ? "" : "s"}</span>
       </button>
       {expanded ? (
-        <div className="mt-1.5 mb-1.5 rounded-xl border border-amber-6/20 bg-amber-3/10 px-4 py-3 text-xs leading-5 text-foreground">
+        <div className="mt-1.5 mb-1.5 rounded-lg border border-amber-6/20 bg-amber-3/10 px-4 py-3 text-xs leading-5 text-foreground">
           <pre className="whitespace-pre-wrap break-words font-mono">{props.text}</pre>
         </div>
       ) : null}
@@ -604,13 +604,13 @@ function FileCard(props: {
       )}
     >
       {isImage && props.part.url ? (
-        <div className="size-11 shrink-0 overflow-hidden rounded-xl border border-dls-border/60 bg-dls-surface">
+        <div className="size-11 shrink-0 overflow-hidden rounded-lg border border-dls-border/60 bg-dls-surface">
           <img src={props.part.url} alt={title} loading="lazy" decoding="async" className="size-full object-cover" />
         </div>
       ) : (
         <div
           className={cn(
-            "flex size-11 shrink-0 items-center justify-center rounded-xl",
+            "flex size-11 shrink-0 items-center justify-center rounded-lg",
             props.tone === "user" ? "bg-gray-3/60 text-foreground" : "bg-gray-2/60 text-muted-foreground",
           )}
         >
@@ -630,7 +630,7 @@ function FileCard(props: {
         <div className="relative">
           <button
             type="button"
-            className="flex size-8 items-center justify-center rounded-xl text-muted-foreground opacity-0 transition-all hover:bg-gray-3/60 hover:text-foreground group-hover:opacity-100"
+            className="flex size-8 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-all hover:bg-gray-3/60 hover:text-foreground group-hover:opacity-100"
             onClick={() => setMenuOpen((value) => !value)}
             title="File actions"
           >
@@ -642,7 +642,7 @@ function FileCard(props: {
               <div className="absolute right-0 top-full z-40 mt-1 w-48 rounded-lg border border-dls-border bg-dls-surface p-1.5 shadow-lg">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-gray-3/60"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-gray-3/60"
                   onClick={() => {
                     void openFileWithOS(props.part.url);
                     setMenuOpen(false);
@@ -652,7 +652,7 @@ function FileCard(props: {
                 </button>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-gray-3/60"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-gray-3/60"
                   onClick={() => {
                     void revealFileInFinder(props.part.url);
                     setMenuOpen(false);
@@ -662,7 +662,7 @@ function FileCard(props: {
                 </button>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-gray-3/60"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-gray-3/60"
                   onClick={() => {
                     void navigator.clipboard.writeText(props.part.url);
                     setMenuOpen(false);

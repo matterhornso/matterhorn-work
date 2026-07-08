@@ -157,7 +157,7 @@ function SettingsCard(props: {
     <button
       type="button"
       onClick={props.onClick}
-      className="group flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-dls-hover/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.34)]"
+      className="group flex min-w-0 items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-dls-hover/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.34)]"
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text transition-colors group-hover:bg-[rgba(var(--dls-accent-rgb),0.18)]">
         <props.icon size={16} />
@@ -199,7 +199,7 @@ function ProjectSurfaceRow(props: {
     <button
       type="button"
       onClick={props.onClick}
-      className="group flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-dls-hover/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.34)]"
+      className="group flex min-w-0 items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-dls-hover/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.34)]"
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-dls-hover/55 text-dls-text transition-colors group-hover:bg-dls-hover">
         <props.icon size={16} />
@@ -262,7 +262,7 @@ function TaskLogsSection(props: {
   );
 
   return (
-    <section className="rounded-xl bg-dls-surface/70 p-4 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+    <section className="rounded-lg bg-dls-surface/70 p-4 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text">
@@ -322,7 +322,7 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
   return (
     <div className="w-full max-w-4xl space-y-6">
       {/* Workspace settings */}
-      <section className="rounded-xl bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+      <section className="rounded-lg bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
         <div className="px-2 pb-2 text-sm font-semibold text-dls-text">Workspace</div>
         <div className="grid gap-1 md:grid-cols-2">
           {workspaceCards
@@ -344,7 +344,7 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
       </section>
 
       {/* Global settings */}
-      <section className="rounded-xl bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+      <section className="rounded-lg bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
         <div className="px-2 pb-2 text-sm font-semibold text-dls-text">Global</div>
         <div className="grid gap-1 md:grid-cols-2">
           {globalCards
@@ -366,7 +366,7 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
       </section>
 
       {/* Project surfaces */}
-      <section className="rounded-xl bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+      <section className="rounded-lg bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
         <div className="px-2 pb-1 text-sm font-semibold text-dls-text">Project surfaces</div>
         <p className="px-2 pb-2 text-[12px] leading-5 text-dls-secondary">
           Open the workspace evidence surfaces with live backend status.
@@ -392,7 +392,7 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
       />
 
       {/* Feedback */}
-      <section className="rounded-xl bg-dls-surface/70 p-4 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+      <section className="rounded-lg bg-dls-surface/70 p-4 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
         <div className="space-y-3">
           <div>
             <div className="flex items-center gap-2">

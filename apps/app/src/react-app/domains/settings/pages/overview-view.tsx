@@ -1511,7 +1511,7 @@ export function SettingsOverviewView(props: {
         </p>
       </header>
 
-      <div className="rounded-xl bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+      <div className="rounded-lg bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
         <div className="divide-y divide-dls-border/45">
         {/* 1. Profile */}
         <SettingsCard

@@ -1465,7 +1465,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                 <ChevronDown size={13} />
               </button>
               {agentMenuOpen ? (
-                <div className="absolute bottom-full left-0 z-40 mb-2 w-64 overflow-hidden rounded-xl border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
+                <div className="absolute bottom-full left-0 z-40 mb-2 w-64 overflow-hidden rounded-lg border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
                   <div className="border-b border-dls-border px-3 py-2 text-[12px] font-semibold text-gray-11">
                     {t("composer.agent_label")}
                   </div>

@@ -499,11 +499,12 @@ export function ProjectHistoryPage({
       style={{ scrollbarGutter: "stable" }}
     >
       <div className="mx-auto w-full max-w-5xl space-y-5">
-        <header className="flex flex-col gap-3 border-b border-dls-border/15 pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <header className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <h2 className="text-xl font-semibold tracking-[-0.01em] text-dls-text">Project history</h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
-              Actual local events from this workspace: runs, outputs, notes, memory reviews, wallet receipts, feedback, access, and audit records.
+              Actual local events from this workspace: runs, outputs, notes, memory reviews, wallet receipts,
+              billing, feedback, access, and audit records.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -527,7 +528,7 @@ export function ProjectHistoryPage({
         </header>
 
         <section aria-label="Project history filters" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-2">
+          <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
             {PROJECT_HISTORY_FILTERS.map((filter) => {
               const selected = filter.id === activeFilter;
               const count = filterCounts[filter.id] ?? 0;
@@ -536,9 +537,9 @@ export function ProjectHistoryPage({
                   key={filter.id}
                   type="button"
                   className={cn(
-                    "inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border",
+                    "inline-flex h-8 shrink-0 items-center gap-2 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border",
                     selected
-                      ? "bg-dls-hover text-dls-text"
+                      ? "bg-dls-hover/45 text-dls-text"
                       : "bg-transparent text-dls-secondary hover:bg-dls-surface-muted/20 hover:text-dls-text",
                   )}
                   onClick={() => setHistoryFilter(filter.id)}
@@ -593,9 +594,9 @@ export function ProjectHistoryPage({
             No {activeFilterConfig.label.toLowerCase()} recorded yet.
           </div>
         ) : (
-          <div className="rounded-md bg-dls-surface-muted/8 px-2 py-2">
+          <div>
             {latest ? (
-              <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-dls-secondary">
+              <div className="flex items-center justify-between gap-3 px-3 py-1.5 text-xs text-dls-secondary">
                 <span>{rows.length} actual event{rows.length === 1 ? "" : "s"} shown</span>
                 <span>Latest {formatActivityTimestamp(latest.timestamp)}</span>
               </div>

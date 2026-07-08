@@ -614,7 +614,7 @@ export function McpAuthModal(props: McpAuthModalProps) {
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto">
           {isBusy ? (
-            <div className="space-y-4 rounded-xl border border-gray-6/60 bg-gray-1/40 px-5 py-6 text-center">
+            <div className="space-y-4 rounded-lg border border-gray-6/60 bg-gray-1/40 px-5 py-6 text-center">
               <div className="flex items-center justify-center">
                 <Loader2 size={32} className="animate-spin text-gray-11" />
               </div>
@@ -633,7 +633,7 @@ export function McpAuthModal(props: McpAuthModalProps) {
           ) : null}
 
           {!isBusy && isPreparingReload ? (
-            <div className="space-y-4 rounded-xl border border-amber-6/60 bg-amber-2/40 px-5 py-6 text-center">
+            <div className="space-y-4 rounded-lg border border-amber-6/60 bg-amber-2/40 px-5 py-6 text-center">
               <div className="flex items-center justify-center">
                 <Loader2 size={32} className="animate-spin text-amber-11" />
               </div>
@@ -677,7 +677,7 @@ export function McpAuthModal(props: McpAuthModalProps) {
           ) : null}
 
           {!isBusy && alreadyConnected ? (
-            <div className="space-y-4 rounded-xl border border-green-7/20 bg-green-7/10 p-5">
+            <div className="space-y-4 rounded-lg border border-green-7/20 bg-green-7/10 p-5">
               <div className="flex items-center gap-3">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-green-7/20">
                   <CheckCircle2 size={24} className="text-green-11" />
@@ -694,7 +694,7 @@ export function McpAuthModal(props: McpAuthModalProps) {
           ) : null}
 
           {reloadNotice ? (
-            <div className="space-y-3 rounded-xl border border-gray-6/70 bg-gray-1/50 p-4">
+            <div className="space-y-3 rounded-lg border border-gray-6/70 bg-gray-1/50 p-4">
               <p className="text-sm text-gray-11">{reloadNotice}</p>
 
               <div className="flex flex-wrap gap-2 pt-1">
@@ -716,7 +716,7 @@ export function McpAuthModal(props: McpAuthModalProps) {
           ) : null}
 
           {error ? (
-            <div className="space-y-3 rounded-xl border border-red-7/20 bg-red-7/10 p-4">
+            <div className="space-y-3 rounded-lg border border-red-7/20 bg-red-7/10 p-4">
               <p className="whitespace-pre-wrap text-sm text-red-11">{error}</p>
 
               {needsReload ? (
@@ -769,10 +769,10 @@ export function McpAuthModal(props: McpAuthModalProps) {
           ) : null}
 
           {!isBusy && authorizationUrl && props.isRemoteWorkspace && !alreadyConnected ? (
-            <div className="space-y-3 rounded-xl border border-gray-6/60 bg-gray-1/40 p-4">
+            <div className="space-y-3 rounded-lg border border-gray-6/60 bg-gray-1/40 p-4">
               <div className="text-xs font-medium text-gray-12">{t("mcp.auth.manual_finish_title")}</div>
               <div className="text-xs text-gray-10">{t("mcp.auth.manual_finish_hint")}</div>
-              <div className="flex items-center gap-3 rounded-xl border border-gray-6/70 bg-gray-2/40 px-3 py-2">
+              <div className="flex items-center gap-3 rounded-lg border border-gray-6/70 bg-gray-2/40 px-3 py-2">
                 <div className="min-w-0 flex-1">
                   <div className="text-[10px] uppercase tracking-wide text-gray-8">
                     {t("mcp.auth.authorization_link")}
@@ -838,7 +838,7 @@ export function McpAuthModal(props: McpAuthModalProps) {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-gray-6/60 bg-gray-1/40 p-4 text-sm text-gray-11">
+              <div className="rounded-lg border border-gray-6/60 bg-gray-1/40 p-4 text-sm text-gray-11">
                 <div className="space-y-3">
                   <p>{t("mcp.auth.waiting_authorization")}</p>
                   <p className="text-xs text-gray-10">{t("mcp.auth.follow_browser_steps")}</p>

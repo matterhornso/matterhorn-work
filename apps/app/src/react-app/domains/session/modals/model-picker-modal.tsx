@@ -263,7 +263,7 @@ export function ModelPickerModal(props: ModelPickerModalProps) {
             <input
               ref={searchInputRef}
               type="text"
-              className="h-10 w-full rounded-xl border border-dls-border bg-dls-surface pl-9 pr-3 text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.2)]"
+              className="h-10 w-full rounded-lg border border-dls-border bg-dls-surface pl-9 pr-3 text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.2)]"
               placeholder="Search providers and models..."
               value={props.query}
               onChange={(e) => props.setQuery(e.target.value)}
@@ -341,7 +341,7 @@ function ProviderAccordion({
       <div className="flex items-center gap-1">
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-dls-hover"
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-dls-hover"
           onClick={onToggleExpand}
         >
           <Chevron size={14} className="shrink-0 text-dls-secondary" />
