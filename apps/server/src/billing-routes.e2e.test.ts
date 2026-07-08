@@ -322,6 +322,8 @@ describe("Billing routes", () => {
     expect(checkout.response.status).toBe(200);
     expect(checkout.payload.mode).toBe("stripe_test");
     expect(checkout.payload.providerSessionId).toBe("cs_test_matterhorn");
+    expect(stripe.calls[0].params["metadata[workspace_id]"]).toBe(WORKSPACE_ID);
+    expect(stripe.calls[0].params["subscription_data[metadata][workspace_id]"]).toBe(WORKSPACE_ID);
 
     const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
     expect(status.response.status).toBe(200);
@@ -339,6 +341,182 @@ describe("Billing routes", () => {
     expect(portal.response.status).toBe(400);
     expect(portal.payload.code).toBe("billing_provider_unavailable");
     expect(portal.payload.message).toContain("Stripe Customer Portal requires");
+  });
+
+  test("POST /api/billing/webhook/stripe syncs a verified Checkout session into workspace billing", async () => {
+    const stripe = await startFakeStripe();
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_STRIPE_SECRET_KEY = "sk_test_billing";
+    process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET = "whsec_checkout";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS = "price_plus_test";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_MAX = "price_max_test";
+    process.env.MATTERHORN_STRIPE_API_BASE_URL = stripe.baseUrl;
+
+    const { base } = await boot();
+    const rawBody = JSON.stringify({
+      id: "evt_checkout_completed",
+      type: "checkout.session.completed",
+      livemode: false,
+      data: {
+        object: {
+          id: "cs_test_matterhorn",
+          object: "checkout.session",
+          customer: "cus_test_workspace",
+          subscription: "sub_test_workspace",
+          metadata: {
+            workspace_id: WORKSPACE_ID,
+            plan_id: "max",
+          },
+        },
+      },
+    });
+    const webhook = await jsonFetch(
+      base,
+      "/api/billing/webhook/stripe",
+      {
+        method: "POST",
+        body: rawBody,
+        headers: { "stripe-signature": stripeSignatureHeader("whsec_checkout", rawBody) },
+      },
+      undefined,
+    );
+    expect(webhook.response.status).toBe(200);
+    expect(webhook.payload).toMatchObject({
+      verified: true,
+      handled: true,
+      workspaceSynced: true,
+      workspaceId: WORKSPACE_ID,
+      planId: "max",
+      providerCustomerId: "cus_test_workspace",
+      providerSubscriptionId: "sub_test_workspace",
+    });
+
+    const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(status.response.status).toBe(200);
+    expect(status.payload.status.subscription).toMatchObject({
+      planId: "max",
+      status: "active",
+      providerCustomerId: "cus_test_workspace",
+      providerSubscriptionId: "sub_test_workspace",
+    });
+    expect(status.payload.status.usage.generatedImages.limit).toBe(null);
+
+    const portal = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/portal`, {
+      method: "POST",
+      body: JSON.stringify({ returnUrl: "https://matterhorn.work/settings/billing" }),
+    });
+    expect(portal.response.status).toBe(200);
+    expect(portal.payload.portalUrl).toBe("https://billing.stripe.com/p/session/test_matterhorn");
+    const portalCall = stripe.calls.find((call) => call.path === "/v1/billing_portal/sessions");
+    expect(portalCall?.params.customer).toBe("cus_test_workspace");
+
+    const ledger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=billing&limit=10`);
+    expect(ledger.response.status).toBe(200);
+    expect(ledger.payload.items.some((item: { title: string }) => item.title === "Billing provider synced")).toBe(true);
+  });
+
+  test("POST /api/billing/webhook/stripe syncs subscription update and cancellation events", async () => {
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET = "whsec_subscription";
+
+    const { base } = await boot();
+    const activeBody = JSON.stringify({
+      id: "evt_subscription_updated",
+      type: "customer.subscription.updated",
+      livemode: false,
+      data: {
+        object: {
+          id: "sub_test_workspace",
+          object: "subscription",
+          customer: "cus_test_workspace",
+          status: "active",
+          current_period_start: 1783517000,
+          current_period_end: 1786109000,
+          cancel_at_period_end: true,
+          metadata: {
+            workspace_id: WORKSPACE_ID,
+            plan_id: "plus",
+          },
+        },
+      },
+    });
+    const active = await jsonFetch(
+      base,
+      "/api/billing/webhook/stripe",
+      {
+        method: "POST",
+        body: activeBody,
+        headers: { "stripe-signature": stripeSignatureHeader("whsec_subscription", activeBody) },
+      },
+      undefined,
+    );
+    expect(active.response.status).toBe(200);
+    expect(active.payload).toMatchObject({
+      verified: true,
+      handled: true,
+      workspaceSynced: true,
+      planId: "plus",
+      subscriptionStatus: "active",
+      cancelAtPeriodEnd: true,
+    });
+
+    const activeStatus = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(activeStatus.payload.status.subscription).toMatchObject({
+      planId: "plus",
+      status: "active",
+      providerCustomerId: "cus_test_workspace",
+      providerSubscriptionId: "sub_test_workspace",
+      cancelAtPeriodEnd: true,
+      currentPeriodStart: "2026-07-08T13:23:20.000Z",
+      currentPeriodEnd: "2026-08-07T13:23:20.000Z",
+    });
+
+    const deletedBody = JSON.stringify({
+      id: "evt_subscription_deleted",
+      type: "customer.subscription.deleted",
+      livemode: false,
+      data: {
+        object: {
+          id: "sub_test_workspace",
+          object: "subscription",
+          customer: "cus_test_workspace",
+          status: "canceled",
+          metadata: {
+            workspace_id: WORKSPACE_ID,
+            plan_id: "plus",
+          },
+        },
+      },
+    });
+    const deleted = await jsonFetch(
+      base,
+      "/api/billing/webhook/stripe",
+      {
+        method: "POST",
+        body: deletedBody,
+        headers: { "stripe-signature": stripeSignatureHeader("whsec_subscription", deletedBody) },
+      },
+      undefined,
+    );
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload).toMatchObject({
+      verified: true,
+      handled: true,
+      workspaceSynced: true,
+      planId: "free",
+      subscriptionStatus: "canceled",
+    });
+
+    const canceledStatus = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(canceledStatus.payload.status.subscription).toMatchObject({
+      planId: "free",
+      status: "canceled",
+      providerCustomerId: "cus_test_workspace",
+      providerSubscriptionId: "sub_test_workspace",
+    });
+    expect(canceledStatus.payload.status.usage.generatedImages.limit).toBe(10);
   });
 
   test("POST /api/billing/portal creates a Stripe test Customer Portal session when a test customer is configured", async () => {
@@ -565,7 +743,7 @@ describe("Billing routes", () => {
     expect(portal.payload.code).toBe("forbidden");
   });
 
-  test("POST /api/billing/webhook/stripe accepts test webhook without live processing", async () => {
+  test("POST /api/billing/webhook/stripe verifies unsupported test webhooks without local sync", async () => {
     process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
     process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
     process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET = "whsec_test";
@@ -585,7 +763,8 @@ describe("Billing routes", () => {
     expect(result.payload.received).toBe(true);
     expect(result.payload.livemode).toBe(false);
     expect(result.payload.verified).toBe(true);
-    expect(result.payload.handled).toBe(true);
+    expect(result.payload.handled).toBe(false);
+    expect(result.payload.workspaceSynced).toBe(false);
   });
 
   test("POST /api/billing/webhook/stripe rejects mutated or invalid test signatures", async () => {
