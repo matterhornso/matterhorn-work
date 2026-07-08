@@ -65,6 +65,7 @@ export type GeneratedMediaSettingsViewProps = {
   onOpenWorkspaceChat: () => void;
   onOpenRunHistory: () => void;
   onOpenImageProviderSetup?: () => void;
+  onOpenBilling?: () => void;
 };
 
 function statusToneClass(status: MatterhornCapabilityStatus | "unavailable" | "local") {
@@ -813,6 +814,23 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
                 >
                   <ImageIcon className="size-3.5" />
                   Open image provider setup
+                </Button>
+              </SettingsNotice>
+            ) : null}
+            {props.onOpenBilling ? (
+              <SettingsNotice className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  Plan limits apply to image generation and public NFT publishing. Local drafts remain available.
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-fit gap-1.5 text-xs"
+                  onClick={props.onOpenBilling}
+                >
+                  <Store className="size-3.5" />
+                  Open billing
                 </Button>
               </SettingsNotice>
             ) : null}

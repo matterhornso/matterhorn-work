@@ -68,6 +68,12 @@ function billingModeLabel(status?: MatterhornBillingStatus | null): string {
   return "Test mode";
 }
 
+function billingPlanDisplayName(planId: MatterhornBillingPlanId): string {
+  if (planId === "plus") return "Matterhorn Plus";
+  if (planId === "max") return "Matterhorn Max";
+  return "Free";
+}
+
 function usagePercent(used: number, limit: number | null): number | null {
   if (limit === null || limit <= 0) return null;
   return Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
@@ -182,6 +188,67 @@ function UsageRow(props: {
         />
       )}
     </div>
+  );
+}
+
+function PolicyRow(props: {
+  label: string;
+  detail: string;
+  state: string;
+}) {
+  return (
+    <div className="grid gap-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-4">
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-dls-text">{props.label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{props.detail}</div>
+      </div>
+      <div className="text-xs leading-5 text-dls-secondary sm:text-right">{props.state}</div>
+    </div>
+  );
+}
+
+function PlanPolicySection(props: { status?: MatterhornBillingStatus | null }) {
+  const generatedImageUsage = props.status
+    ? formatEntitlementUsage(props.status.usage.generatedImages.used, props.status.usage.generatedImages.limit)
+    : "Free 10 / Plus 100 / Max unlimited";
+  const nftUsage = props.status
+    ? formatEntitlementUsage(props.status.usage.nftDrafts.used, props.status.usage.nftDrafts.limit)
+    : "Plus / Max";
+  const teamUsage = props.status
+    ? formatEntitlementUsage(props.status.usage.teamMembers.used, props.status.usage.teamMembers.limit)
+    : "1 on Free and Plus / 10 on Max";
+
+  return (
+    <SettingsSection>
+      <div>
+        <h3 className="text-sm font-medium text-dls-text">What billing changes</h3>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          Paid plans unlock metered creation and publishing. Local workspace control stays available.
+        </p>
+      </div>
+      <div className="divide-y divide-dls-border/25 rounded-lg bg-dls-surface-muted/10 px-3 py-3">
+        <PolicyRow
+          label="Always available"
+          detail="Chat, local notes, memory review, protocol reads, exports, and settings are not blocked by billing."
+          state="Never gated"
+        />
+        <PolicyRow
+          label="Generated images"
+          detail="Image generation can call paid providers, so usage is counted per billing period."
+          state={generatedImageUsage}
+        />
+        <PolicyRow
+          label="NFT publishing"
+          detail="NFT drafts stay local. Mint previews require Plus or Max; Walrus upload and marketplace listing require Max."
+          state={nftUsage}
+        />
+        <PolicyRow
+          label="Team access"
+          detail="Team member limits apply to shared workspace access only, not local notes or memory."
+          state={teamUsage}
+        />
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -321,7 +388,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
             <div className="flex flex-col gap-0.5">
               <span className="text-xs text-muted-foreground">Current plan</span>
               <span className="text-lg font-semibold tracking-tight text-dls-text">
-                {plans.find((p) => p.id === currentPlanId)?.name ?? currentPlanId}
+                {plans.find((p) => p.id === currentPlanId)?.name ?? billingPlanDisplayName(currentPlanId)}
               </span>
               <span className="text-xs leading-5 text-muted-foreground">
                 {billingModeLabel(status)}. No raw card data is handled by Matterhorn.
@@ -330,7 +397,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
             {status?.pendingCheckout ? (
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs leading-5 text-amber-200">
                 <span>
-                  Checkout pending for {pendingPlan?.name ?? status.pendingCheckout.planId}. The plan changes after the
+                  Checkout pending for {pendingPlan?.name ?? billingPlanDisplayName(status.pendingCheckout.planId)}. The plan changes after the
                   Stripe test webhook confirms it.
                 </span>
                 {workspaceId ? (
@@ -403,6 +470,8 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
           ) : null}
         </div>
       </SettingsSection>
+
+      <PlanPolicySection status={status} />
 
       <SettingsSection>
         <h3 className="text-sm font-medium text-dls-text">Usage</h3>
