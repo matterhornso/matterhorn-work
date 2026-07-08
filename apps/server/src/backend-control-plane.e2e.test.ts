@@ -918,6 +918,8 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain(HOST_TOKEN);
     expect(serialized).not.toContain("Basic ");
     expect(serialized).not.toContain("Authorization");
+    expect(serialized).not.toContain("OPENAI_API_KEY");
+    expect(serialized).not.toContain("MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN");
     expect(serialized).not.toContain("owt_should_not_leak");
   });
 
@@ -987,6 +989,8 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain("sk-test-support-report-generated-media");
     expect(serialized).not.toContain("secret-support-report-walrus-token");
     expect(serialized).not.toContain("Authorization");
+    expect(serialized).not.toContain("OPENAI_API_KEY");
+    expect(serialized).not.toContain("MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN");
   });
 
   test("backend support report includes sanitized model provider samples", async () => {

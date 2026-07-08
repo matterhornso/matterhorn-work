@@ -6,8 +6,64 @@ import type { WorkspaceInfo } from "./types.js";
 import { buildGeneratedMediaDiagnostics } from "./generated-media-diagnostics.js";
 import { buildProjectDataLedgerExport } from "./project-data-ledger.js";
 
+const SUPPORT_REPORT_FORBIDDEN_MARKERS = [
+  "OPENAI_API_KEY",
+  "MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN",
+  "Authorization",
+  "X-Matterhorn-Host-Token",
+] as const;
+
 function safeExportFilePart(value: string): string {
   return value.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "workspace";
+}
+
+function redactSupportReportText(value: string): string {
+  return SUPPORT_REPORT_FORBIDDEN_MARKERS.reduce(
+    (text, marker) => text.split(marker).join("a configured secret"),
+    value,
+  );
+}
+
+function isSupportReportSecretMarker(value: string | undefined): boolean {
+  return Boolean(value && SUPPORT_REPORT_FORBIDDEN_MARKERS.includes(value as typeof SUPPORT_REPORT_FORBIDDEN_MARKERS[number]));
+}
+
+function redactSetupRequirementsForSupportReport<T extends { envVar?: string; description?: string }>(
+  requirements: T[] | undefined,
+): T[] | undefined {
+  if (!requirements) return undefined;
+  return requirements.map((requirement) => {
+    const { envVar, description, ...rest } = requirement;
+    return {
+      ...rest,
+      ...(envVar && !isSupportReportSecretMarker(envVar) ? { envVar } : {}),
+      ...(description ? { description: redactSupportReportText(description) } : {}),
+    } as T;
+  });
+}
+
+function redactGeneratedMediaDiagnosticsForSupportReport(
+  diagnostics: Awaited<ReturnType<typeof buildGeneratedMediaDiagnostics>>,
+): Awaited<ReturnType<typeof buildGeneratedMediaDiagnostics>> {
+  return {
+    ...diagnostics,
+    summary: redactSupportReportText(diagnostics.summary),
+    checks: diagnostics.checks.map((check) => ({
+      ...check,
+      summary: redactSupportReportText(check.summary),
+      setupRequirements: redactSetupRequirementsForSupportReport(check.setupRequirements),
+    })),
+    productionSmokePlan: {
+      ...diagnostics.productionSmokePlan,
+      summary: redactSupportReportText(diagnostics.productionSmokePlan.summary),
+      blockers: redactSetupRequirementsForSupportReport(diagnostics.productionSmokePlan.blockers) ?? [],
+      stages: diagnostics.productionSmokePlan.stages.map((stage) => ({
+        ...stage,
+        summary: redactSupportReportText(stage.summary),
+        setupRequirements: redactSetupRequirementsForSupportReport(stage.setupRequirements),
+      })),
+    },
+  };
 }
 
 export function backendControlPlaneExportSnapshot(
@@ -108,7 +164,7 @@ export async function buildBackendSupportReport(options: {
       },
     },
     generatedMedia: {
-      diagnostics: generatedMediaDiagnostics,
+      diagnostics: redactGeneratedMediaDiagnosticsForSupportReport(generatedMediaDiagnostics),
     },
     privacy: {
       trainingUse: controlPlaneSnapshot.privacy.trainingUse,
