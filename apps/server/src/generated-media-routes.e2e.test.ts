@@ -98,6 +98,33 @@ function bootWalrusPublisher(payload: unknown) {
   return { url: `http://127.0.0.1:${server.port}`, calls };
 }
 
+function bootWalrusDiagnosticEndpoint() {
+  const calls: Array<{
+    method: string;
+    url: string;
+    byteLength: number;
+    authorization: string | null;
+  }> = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const bytes = new Uint8Array(await request.arrayBuffer());
+      calls.push({
+        method: request.method,
+        url: request.url,
+        byteLength: bytes.byteLength,
+        authorization: request.headers.get("authorization"),
+      });
+      if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+      if (request.method === "HEAD") return new Response(null, { status: 404 });
+      return Response.json({ ok: true });
+    },
+  });
+  stops.push(() => server.stop());
+  return { url: `http://127.0.0.1:${server.port}`, calls };
+}
+
 beforeEach(() => {
   priorEnv = {
     MATTERHORN_IMAGE_PROVIDER: process.env.MATTERHORN_IMAGE_PROVIDER,
@@ -147,6 +174,75 @@ afterEach(async () => {
 });
 
 describe("Generated media routes", () => {
+  test("GET /workspace/:id/generated-media/diagnostics reports safe setup warnings without writing", async () => {
+    const { base } = await boot();
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/generated-media/diagnostics`);
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.status).toBe("warning");
+    expect(result.payload.safety).toMatchObject({
+      custody: false,
+      canSubmit: false,
+      publicWritesDuringDiagnostics: false,
+      storesSecrets: false,
+    });
+    expect(result.payload.checks.map((check: { id: string }) => check.id)).toEqual([
+      "image_provider",
+      "walrus_storage",
+      "sui_nft_minting",
+      "sui_marketplace_listing",
+      "non_custody_safety",
+    ]);
+    expect(result.payload.checks.find((check: { id: string }) => check.id === "image_provider")?.status).toBe("pass");
+    expect(result.payload.checks.find((check: { id: string }) => check.id === "walrus_storage")?.status).toBe("warning");
+  });
+
+  test("GET /workspace/:id/generated-media/diagnostics checks fake Walrus and Sui config without upload", async () => {
+    const walrus = bootWalrusDiagnosticEndpoint();
+    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = walrus.url;
+    process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN = "secret-smoke-token";
+    process.env.MATTERHORN_WALRUS_RELAY_URL = walrus.url;
+    process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS = "3";
+    process.env.MATTERHORN_SUI_NETWORK = "sui-testnet";
+    process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = `0x${"1".repeat(64)}`;
+    process.env.MATTERHORN_SUI_NFT_MODULE_NAME = "matterhorn_nft";
+    process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = `0x${"2".repeat(64)}`;
+    process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = `0x${"3".repeat(64)}`;
+
+    const { base } = await boot();
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/generated-media/diagnostics`);
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.status).toBe("pass");
+    const checksById = Object.fromEntries(result.payload.checks.map((check: { id: string; status: string }) => [check.id, check.status]));
+    expect(checksById).toMatchObject({
+      image_provider: "pass",
+      walrus_storage: "pass",
+      sui_nft_minting: "pass",
+      sui_marketplace_listing: "pass",
+      non_custody_safety: "pass",
+    });
+    expect(walrus.calls.map((call) => call.method).sort()).toEqual(["HEAD", "OPTIONS"]);
+    expect(walrus.calls.some((call) => call.method === "PUT")).toBe(false);
+    expect(walrus.calls.every((call) => call.byteLength === 0)).toBe(true);
+    expect(walrus.calls.find((call) => call.method === "OPTIONS")?.authorization).toBe("Bearer secret-smoke-token");
+  });
+
+  test("GET /workspace/:id/generated-media/diagnostics fails invalid configured Sui ids", async () => {
+    process.env.MATTERHORN_SUI_NETWORK = "sui-testnet";
+    process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = "not-a-sui-object";
+
+    const { base } = await boot();
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/generated-media/diagnostics`);
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.status).toBe("fail");
+    const mintCheck = result.payload.checks.find((check: { id: string }) => check.id === "sui_nft_minting");
+    expect(mintCheck.status).toBe("fail");
+    expect(mintCheck.summary).toContain("valid Sui object id");
+  });
+
   test("POST /workspace/:id/images/generate creates a mock image", async () => {
     const { base } = await boot();
     const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {

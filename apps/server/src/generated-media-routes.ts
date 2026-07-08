@@ -34,6 +34,7 @@ import {
   detectSecretShapedInput,
   resolveImageGenerationProviderFromEnv,
 } from "./image-generation-provider.js";
+import { buildGeneratedMediaDiagnostics } from "./generated-media-diagnostics.js";
 import { MatterhornGeneratedImageStore, imageFilePath } from "./generated-image-store.js";
 import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
 import { resolveNftEnvironmentConfig, type NftEnvironmentConfig } from "./image-nft-capabilities.js";
@@ -68,6 +69,12 @@ export function addGeneratedMediaRoutes(
   config: ServerConfig,
   resolveWorkspace: WorkspaceResolver,
 ): void {
+
+  addRoute("GET", "/workspace/:id/generated-media/diagnostics", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const response = await buildGeneratedMediaDiagnostics({ workspaceId: workspace.id });
+    return jsonResponse(response);
+  });
 
   addRoute("GET", "/workspace/:id/images", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
