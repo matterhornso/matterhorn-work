@@ -71,9 +71,11 @@ describe("Shared primitives UI contract", () => {
     const composerSource = readAppSource("domains/session/surface/composer/composer.tsx");
     const editorSource = readAppSource("domains/session/surface/composer/editor.tsx");
 
-    expect(composerSource).toContain("bg-dls-surface-muted/[0.08]");
+    expect(composerSource).toContain("bg-dls-surface-muted/[0.075]");
     expect(composerSource).toContain("inline-flex h-9 max-h-9 w-9 items-center justify-center rounded-lg");
     expect(editorSource).toContain("min-h-[72px]");
+    expect(composerSource).toContain("border border-transparent");
+    expect(composerSource).not.toContain("border-b border-dls-border/25");
     expect(composerSource).not.toContain("border-[rgba(var(--matterhorn-blue-rgb),0.24)]");
     expect(composerSource).not.toContain("rounded-full bg-gray-2/45");
     expect(composerSource).not.toContain("h-11 max-h-11");
@@ -84,6 +86,8 @@ describe("Shared primitives UI contract", () => {
     const sourceByPath = new Map([
       ["domains/memory/memory-panel.tsx", readAppSource("domains/memory/memory-panel.tsx")],
       ["domains/session/chat/session-page.tsx", readAppSource("domains/session/chat/session-page.tsx")],
+      ["domains/session/surface/composer/composer.tsx", readAppSource("domains/session/surface/composer/composer.tsx")],
+      ["domains/session/surface/session-surface.tsx", readAppSource("domains/session/surface/session-surface.tsx")],
       ["domains/session/workflows/workflow-stage-card.tsx", readAppSource("domains/session/workflows/workflow-stage-card.tsx")],
       ["domains/recent-activity/recent-activity-section.tsx", readAppSource("domains/recent-activity/recent-activity-section.tsx")],
       ["domains/recent-activity/project-history-page.tsx", readAppSource("domains/recent-activity/project-history-page.tsx")],
@@ -93,6 +97,7 @@ describe("Shared primitives UI contract", () => {
       ["domains/settings/pages/ai-view.tsx", readAppSource("domains/settings/pages/ai-view.tsx")],
       ["domains/settings/pages/wallet-view.tsx", readAppSource("domains/settings/pages/wallet-view.tsx")],
       ["domains/settings/pages/cloud-account-view.tsx", readAppSource("domains/settings/pages/cloud-account-view.tsx")],
+      ["domains/session/media/session-image-generation-panel.tsx", readAppSource("domains/session/media/session-image-generation-panel.tsx")],
       ["domains/session/media/nft-draft-panel.tsx", readAppSource("domains/session/media/nft-draft-panel.tsx")],
       ["domains/session/media/nft-publishing-readiness.tsx", readAppSource("domains/session/media/nft-publishing-readiness.tsx")],
     ]);
@@ -111,6 +116,8 @@ describe("Shared primitives UI contract", () => {
 
     expect(sourceByPath.get("domains/memory/memory-panel.tsx")).toContain("Add memory manually");
     expect(sourceByPath.get("domains/memory/memory-panel.tsx")).toContain("bg-dls-surface-muted/[0.08]");
+    expect(sourceByPath.get("domains/session/surface/session-surface.tsx")).not.toContain("border-y border-[rgba(var(--matterhorn-desk-rgb),0.24)]");
+    expect(sourceByPath.get("domains/session/media/session-image-generation-panel.tsx")).toContain("bg-dls-surface-muted/[0.045]");
     expect(sourceByPath.get("domains/session/workflows/workflow-stage-card.tsx")).toContain("bg-dls-surface-muted/[0.075]");
   });
 });

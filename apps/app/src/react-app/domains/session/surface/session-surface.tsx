@@ -287,9 +287,9 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint];
   const agent = getMatterhornDeskAgent(mode);
   return (
-    <div style={deskToneStyle(iconHint)} className="mb-2 border-y border-[rgba(var(--matterhorn-desk-rgb),0.24)] bg-[rgba(var(--matterhorn-desk-rgb),0.045)] px-3 py-2.5">
+    <div style={deskToneStyle(iconHint)} className="mb-1 rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.05)] px-3 py-2.5">
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)] ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.22)]">
+        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
           {copy.id === "bittensor" || copy.id === "hyperliquid" || copy.id === "polymarket" ? (
             <ProtocolLogo iconHint={copy.id} size={22} />
           ) : (
@@ -2263,7 +2263,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
           compactTopSpacing={hasComposerTopAccessory}
           topAccessory={
             hasComposerTopAccessory ? (
-              <div>
+              <div className="space-y-2">
                 {props.activeQuestion ? (
                   <QuestionPanel
                     questions={props.activeQuestion.questions}
@@ -2319,14 +2319,12 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   />
                 ) : null}
                 {showImageGenerationPanel ? (
-                  <div className="border-t border-dls-border/25 pt-3 first:border-t-0 first:pt-0">
-                    <SessionImageGenerationPanel
-                      client={props.client}
-                      workspaceId={props.workspaceId}
-                      sessionId={props.sessionId}
-                      onNotice={setNotice}
-                    />
-                  </div>
+                  <SessionImageGenerationPanel
+                    client={props.client}
+                    workspaceId={props.workspaceId}
+                    sessionId={props.sessionId}
+                    onNotice={setNotice}
+                  />
                 ) : null}
               </div>
             ) : null

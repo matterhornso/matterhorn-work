@@ -1029,9 +1029,9 @@ export function ReactSessionComposer(props: ComposerProps) {
         {/* Main composer panel */}
         <div
           data-testid="session-composer-shell"
-          className={`relative overflow-visible rounded-lg border border-dls-border/25 bg-dls-surface-muted/[0.08] shadow-none transition-colors focus-within:border-dls-border/45 focus-within:bg-dls-surface-muted/[0.12] ${panelRoundedClass}`}
+          className={`relative overflow-visible rounded-xl border border-transparent bg-dls-surface-muted/[0.075] shadow-none transition-colors focus-within:border-dls-border/25 focus-within:bg-dls-surface-muted/[0.11] ${panelRoundedClass}`}
         >
-          {props.topAccessory ? <div className="relative z-10 border-b border-dls-border/25 px-4 py-3 sm:px-5">{props.topAccessory}</div> : null}
+          {props.topAccessory ? <div className="relative z-10 px-3 pt-3 sm:px-4">{props.topAccessory}</div> : null}
           <ReactComposerNotice notice={props.notice} />
 
           {renderMentionMenu()}

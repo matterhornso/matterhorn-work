@@ -482,18 +482,18 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
   const nftCapabilities = nftDraftPublishingCapabilitiesFromBackend(capabilities);
 
   return (
-    <div className="space-y-2" data-testid="session-image-generation-panel">
+    <div className="space-y-2 rounded-lg bg-dls-surface-muted/[0.045] px-3 py-2" data-testid="session-image-generation-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-md px-2 py-1 text-[12px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--matterhorn-blue-rgb),0.32)]"
+          className="inline-flex items-center gap-2 rounded-md px-1.5 py-1 text-[12px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover/45 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--matterhorn-blue-rgb),0.28)]"
           onClick={() => setOpen((current) => !current)}
           aria-expanded={open}
         >
-          <Image className="size-3.5" />
+          <Image className="size-3" />
           <span>Generate image</span>
         </button>
-        <span className="text-[11px] text-dls-muted">{capabilityLabel}</span>
+        <span className="text-[11px] text-dls-secondary">{capabilityLabel}</span>
       </div>
 
       {open ? (
