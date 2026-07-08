@@ -8,6 +8,7 @@ import type {
 import type { MatterhornProjectDataLedgerExportControlPlaneSnapshot } from "@matterhorn-work/types/project-data-ledger";
 import type { WorkspaceInfo } from "./types.js";
 import {
+  activeMatterhornBillingPendingCheckout,
   billingUsagePeriodForSubscription,
   buildBillingStatusResponseForSubscription,
   buildBillingStatusResponseWithUsage,
@@ -122,6 +123,7 @@ async function buildBillingSupportReportSection(options: {
   });
   const account = await accountStore.get();
   const subscription = account?.subscription ?? buildMatterhornBillingSubscription(billingConfig.currentPlanId);
+  const activePendingCheckout = activeMatterhornBillingPendingCheckout(account?.pendingCheckout);
   const usagePeriod = billingUsagePeriodForSubscription(subscription);
   const [images, nftDrafts] = await Promise.all([
     new MatterhornGeneratedImageStore({
@@ -147,7 +149,7 @@ async function buildBillingSupportReportSection(options: {
           billingConfig,
           subscription,
           usage,
-          account.pendingCheckout ?? null,
+          activePendingCheckout,
           account.source,
           account.updatedAt,
         )

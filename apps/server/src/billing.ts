@@ -163,6 +163,17 @@ function validDate(value: string | null | undefined): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+export function activeMatterhornBillingPendingCheckout(
+  pendingCheckout?: MatterhornBillingPendingCheckout | null,
+  now = new Date(),
+): MatterhornBillingPendingCheckout | null {
+  if (!pendingCheckout) return null;
+  if (!pendingCheckout.expiresAt) return pendingCheckout;
+  const expiresAt = validDate(pendingCheckout.expiresAt);
+  if (!expiresAt) return pendingCheckout;
+  return expiresAt.getTime() > now.getTime() ? pendingCheckout : null;
+}
+
 export function currentCalendarBillingPeriod(now = new Date()): BillingUsagePeriod {
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));

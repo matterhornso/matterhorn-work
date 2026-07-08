@@ -220,6 +220,9 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("Plan status:");
     expect(billingViewSource).toContain("Renews");
     expect(billingViewSource).toContain("Ends");
+    expect(billingViewSource).toContain("pendingCheckoutExpiryCopy");
+    expect(billingViewSource).toContain("status?.pendingCheckout?.expiresAt");
+    expect(billingViewSource).toContain("or expires");
     expect(billingViewSource).toContain("Test checkout ready");
     expect(billingViewSource).toContain("client?.billingStatus()");
     expect(billingViewSource).toContain("client?.workspaceBillingCheckout(workspaceId");

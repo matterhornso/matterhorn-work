@@ -5,6 +5,8 @@ import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { MatterhornBillingAccountStore } from "./billing-account-store.js";
+import { buildMatterhornBillingSubscription } from "./billing.js";
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
 
@@ -1060,6 +1062,47 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain("MATTERHORN_STRIPE_PRICE_ID_MAX");
     expect(serialized).not.toContain("MATTERHORN_STRIPE_TEST_CUSTOMER_ID");
     expect(serialized).not.toContain("Authorization");
+  });
+
+  test("backend support report treats expired Stripe test checkouts as no longer pending", async () => {
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_STRIPE_SECRET_KEY = "sk_test_expired_checkout_support_report";
+    process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET = "whsec_expired_checkout_support_report";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS = "price_plus_expired_checkout";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_MAX = "price_max_expired_checkout";
+    const { base, dir } = await boot();
+
+    await new MatterhornBillingAccountStore({
+      workspaceRoot: dir,
+      workspaceId: "ws_backend",
+    }).save({
+      version: "matterhorn.billing.account.v1",
+      workspaceId: "ws_backend",
+      subscription: buildMatterhornBillingSubscription("free"),
+      pendingCheckout: {
+        planId: "plus",
+        interval: "month",
+        provider: "stripe",
+        mode: "stripe_test",
+        providerSessionId: "cs_expired_should_not_surface",
+        createdAt: "2026-07-01T00:00:00.000Z",
+        expiresAt: "2026-07-01T00:30:00.000Z",
+      },
+      updatedAt: "2026-07-01T00:00:00.000Z",
+      source: "stripe_test_checkout",
+    });
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/support-report");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.billing.status.status.pendingCheckout ?? null).toBeNull();
+    expect(result.payload.billing.status.status.accountLinkage).toMatchObject({
+      source: "stripe_test_checkout",
+      label: "Stripe test checkout expired",
+      pendingCheckout: false,
+    });
+    expect(result.payload.billing.diagnostics.pendingCheckout).toBeNull();
+    expect(JSON.stringify(result.payload)).not.toContain("cs_expired_should_not_surface");
   });
 
   test("backend support report includes generated-media production readiness without public writes or secrets", async () => {
