@@ -226,6 +226,14 @@ describe("Billing routes", () => {
     expect(result.payload.success).toBe(true);
     expect(result.payload.status.subscription.planId).toBe("free");
     expect(result.payload.status.isLivePaymentsEnabled).toBe(false);
+    expect(result.payload.status.accountLinkage).toMatchObject({
+      source: "env_default",
+      label: "Default local plan",
+      status: "preview",
+      hasProviderCustomer: false,
+      hasProviderSubscription: false,
+      pendingCheckout: false,
+    });
     expect(result.payload.status.setup).toMatchObject({
       mode: "phase0_mock",
       provider: "mock",
@@ -349,6 +357,14 @@ describe("Billing routes", () => {
       mode: "stripe_test",
       providerSessionId: "cs_test_matterhorn",
     });
+    expect(status.payload.status.accountLinkage).toMatchObject({
+      source: "stripe_test_checkout",
+      label: "Stripe test checkout pending",
+      status: "preview",
+      hasProviderCustomer: false,
+      hasProviderSubscription: false,
+      pendingCheckout: true,
+    });
     expect(status.payload.status.pendingCheckout.createdAt).toEqual(expect.any(String));
     expect(status.payload.status.usage.generatedImages.limit).toBe(10);
 
@@ -465,6 +481,14 @@ describe("Billing routes", () => {
       status: "active",
       providerCustomerId: "cus_test_workspace",
       providerSubscriptionId: "sub_test_workspace",
+    });
+    expect(status.payload.status.accountLinkage).toMatchObject({
+      source: "stripe_test_webhook",
+      label: "Stripe test account linked",
+      status: "working",
+      hasProviderCustomer: true,
+      hasProviderSubscription: true,
+      pendingCheckout: false,
     });
     expect(status.payload.status.pendingCheckout ?? null).toBeNull();
     expect(status.payload.status.usage.generatedImages.limit).toBe(null);
@@ -666,6 +690,14 @@ describe("Billing routes", () => {
       cancelAtPeriodEnd: false,
       providerCustomerId: `mock_cus_${WORKSPACE_ID}`,
       providerSubscriptionId: `mock_sub_${WORKSPACE_ID}_plus`,
+    });
+    expect(status.payload.status.accountLinkage).toMatchObject({
+      source: "mock_checkout",
+      label: "Local test subscription",
+      status: "preview",
+      hasProviderCustomer: true,
+      hasProviderSubscription: true,
+      pendingCheckout: false,
     });
     expect(typeof status.payload.status.subscription.currentPeriodStart).toBe("string");
     expect(typeof status.payload.status.subscription.currentPeriodEnd).toBe("string");

@@ -6,6 +6,11 @@ export type MatterhornBillingPlanId = "free" | "plus" | "max";
 export type MatterhornBillingInterval = "month" | "year";
 export type MatterhornBillingProvider = "mock" | "stripe";
 export type MatterhornBillingMode = "phase0_mock" | "phase1_stripe_test" | "live";
+export type MatterhornBillingAccountSource =
+  | "env_default"
+  | "mock_checkout"
+  | "stripe_test_checkout"
+  | "stripe_test_webhook";
 
 export type MatterhornEntitlementKey =
   | "image_generation"
@@ -71,6 +76,17 @@ export interface MatterhornBillingUsageSnapshot {
   cloudStorageBytes: { used: number; limit: number | null };
 }
 
+export interface MatterhornBillingAccountLinkage {
+  source: MatterhornBillingAccountSource;
+  label: string;
+  status: MatterhornCapabilityStatus;
+  description: string;
+  hasProviderCustomer: boolean;
+  hasProviderSubscription: boolean;
+  pendingCheckout: boolean;
+  updatedAt?: string | null;
+}
+
 export type MatterhornBillingSetupCheckId =
   | "mock_mode"
   | "stripe_secret_key"
@@ -102,6 +118,7 @@ export interface MatterhornBillingStatus {
   subscription: MatterhornBillingSubscription;
   pendingCheckout?: MatterhornBillingPendingCheckout | null;
   usage: MatterhornBillingUsageSnapshot;
+  accountLinkage: MatterhornBillingAccountLinkage;
   setup: MatterhornBillingSetup;
   isLivePaymentsEnabled: false;
 }

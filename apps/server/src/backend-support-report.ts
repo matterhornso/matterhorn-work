@@ -148,6 +148,8 @@ async function buildBillingSupportReportSection(options: {
           subscription,
           usage,
           account.pendingCheckout ?? null,
+          account.source,
+          account.updatedAt,
         )
       : buildBillingStatusResponseWithUsage(billingConfig, usage),
   );

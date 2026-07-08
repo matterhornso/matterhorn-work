@@ -355,6 +355,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
     Boolean(status?.subscription.providerCustomerId?.trim()) ||
     setupChecks.some((check) => check.id === "stripe_test_customer" && check.status === "working");
   const portalDisabled = !client || portalMutation.isPending || status?.mode === "live" || !portalReady;
+  const accountLinkage = status?.accountLinkage;
 
   const usageItems = useMemo(() => {
     if (!status) return [];
@@ -393,6 +394,11 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               <span className="text-xs leading-5 text-muted-foreground">
                 {billingModeLabel(status)}. No raw card data is handled by Matterhorn.
               </span>
+              {accountLinkage ? (
+                <span className="text-xs leading-5 text-muted-foreground">
+                  {accountLinkage.label}. {accountLinkage.description}
+                </span>
+              ) : null}
             </div>
             {status?.pendingCheckout ? (
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs leading-5 text-amber-200">
