@@ -67,6 +67,7 @@ export type MatterhornBillingSetupCheckId =
   | "stripe_webhook_secret"
   | "stripe_plus_price"
   | "stripe_max_price"
+  | "stripe_test_customer"
   | "live_payments_disabled";
 
 export interface MatterhornBillingSetupCheck {
@@ -133,21 +134,25 @@ export interface MatterhornBillingCheckoutResponse {
   success: true;
   checkoutUrl: string;
   mode: "mock" | "stripe_test";
+  providerSessionId?: string | null;
 }
 
 export interface MatterhornBillingPortalRequest {
   returnUrl?: string;
+  providerCustomerId?: string;
 }
 
 export interface MatterhornBillingPortalResponse {
   success: true;
   portalUrl: string;
   mode: "mock" | "stripe_test";
+  providerSessionId?: string | null;
 }
 
 export interface MatterhornBillingWebhookStripeRequest {
   signature?: string;
   payload: unknown;
+  rawPayload?: string;
 }
 
 export interface MatterhornBillingWebhookStripeResponse {

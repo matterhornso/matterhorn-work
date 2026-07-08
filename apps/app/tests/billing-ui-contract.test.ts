@@ -180,6 +180,9 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("client?.workspaceBillingCheckout(workspaceId");
     expect(billingViewSource).toContain("client?.workspaceBillingPortal(workspaceId");
     expect(billingViewSource).toContain("statusQuery.refetch()");
+    expect(billingViewSource).toContain("checkoutReady");
+    expect(billingViewSource).toContain("Portal needs setup");
+    expect(billingViewSource).toContain("stripe_test_customer");
     expect(settingsRouteSource).toContain("<BillingSettingsView matterhornServerClient={matterhornClient} runtimeWorkspaceId={runtimeWorkspaceId} />");
   });
 });

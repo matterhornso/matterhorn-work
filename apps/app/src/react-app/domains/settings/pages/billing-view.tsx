@@ -50,10 +50,12 @@ function PlanCard(props: {
   plan: MatterhornBillingPlan;
   current: boolean;
   mode: MatterhornBillingStatus["mode"];
+  checkoutReady: boolean;
   onSelect: (planId: MatterhornBillingPlanId) => void;
   busy: boolean;
 }) {
   const isLive = props.mode === "live";
+  const disabled = props.current || props.busy || isLive || !props.checkoutReady;
   return (
     <div
       className={cn(
@@ -99,11 +101,11 @@ function PlanCard(props: {
         variant={props.current ? "outline" : "default"}
         size="sm"
         className="mt-auto h-8 text-xs"
-        disabled={props.current || props.busy || isLive}
+        disabled={disabled}
         onClick={() => props.onSelect(props.plan.id)}
       >
         {props.busy ? <Loader2 size={12} className="animate-spin" /> : null}
-        {props.current ? "Current plan" : isLive ? "Unavailable" : props.plan.ctaLabel}
+        {props.current ? "Current plan" : isLive ? "Unavailable" : !props.checkoutReady ? "Needs setup" : props.plan.ctaLabel}
       </Button>
     </div>
   );
@@ -155,6 +157,12 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
   const status = statusQuery.data?.status;
   const currentPlanId = status?.subscription.planId ?? plansQuery.data?.currentPlanId ?? "free";
   const setupChecks = status?.setup.checks ?? [];
+  const checkoutReady = status?.mode === "phase0_mock" || status?.setup.readyForTestCheckout === true;
+  const portalReady =
+    status?.mode === "phase0_mock" ||
+    Boolean(status?.subscription.providerCustomerId?.trim()) ||
+    setupChecks.some((check) => check.id === "stripe_test_customer" && check.status === "working");
+  const portalDisabled = !client || portalMutation.isPending || status?.mode === "live" || !portalReady;
 
   const usageItems = useMemo(() => {
     if (!status) return [];
@@ -199,14 +207,21 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
                 variant="outline"
                 size="sm"
                 className="h-7 gap-1 text-xs"
-                disabled={!client || portalMutation.isPending || status?.mode === "live"}
+                disabled={portalDisabled}
                 onClick={() => portalMutation.mutate()}
               >
                 {portalMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <ExternalLink size={12} />}
-                Manage billing
+                {portalReady ? "Manage billing" : "Portal needs setup"}
               </Button>
             </div>
           </div>
+          {checkoutMutation.error || portalMutation.error ? (
+            <p className="text-xs leading-5 text-red-300">
+              {(checkoutMutation.error ?? portalMutation.error) instanceof Error
+                ? (checkoutMutation.error ?? portalMutation.error)?.message
+                : "Billing action failed."}
+            </p>
+          ) : null}
         </div>
       </SettingsInset>
 
@@ -219,6 +234,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               plan={plan}
               current={plan.id === currentPlanId}
               mode={status?.mode ?? "phase0_mock"}
+              checkoutReady={checkoutReady}
               onSelect={(id) => checkoutMutation.mutate(id)}
               busy={checkoutMutation.isPending}
             />
