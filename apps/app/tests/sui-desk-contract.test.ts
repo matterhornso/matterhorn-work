@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 import {
   CUSTOMER_DESK_ORDER,
@@ -38,6 +39,17 @@ describe("Sui desk integration contract", () => {
       darkAssetPath: "/assets/desks/sui/logo-dark.svg",
       fallbackInitials: "SUI",
     });
+  });
+
+  test("uses the circular Sui logo asset for compact desk surfaces", () => {
+    const lightLogo = readFileSync("apps/app/public/assets/desks/sui/logo-light.svg", "utf8");
+    const darkLogo = readFileSync("apps/app/public/assets/desks/sui/logo-dark.svg", "utf8");
+
+    for (const svg of [lightLogo, darkLogo]) {
+      expect(svg).toContain('viewBox="0 0 300 300"');
+      expect(svg).toContain('<circle cx="150" cy="150" r="150" fill="#4DA2FF"');
+      expect(svg).toContain('fill="#FFFFFF"');
+    }
   });
 
   test("registers Sui agent and action manifests without custody or live submit", () => {
