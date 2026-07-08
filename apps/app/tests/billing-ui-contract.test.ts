@@ -155,6 +155,9 @@ describe("Billing settings view", () => {
     expect(html).toContain("Billing plans could not load");
     expect(html).toContain("Test mode");
     expect(html).toContain("Plans");
+    expect(html).toContain("What billing changes");
+    expect(html).toContain("Always available");
+    expect(html).toContain("Never gated");
     expect(html).toContain("Usage");
   });
 
@@ -209,6 +212,10 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("Checkout opened");
     expect(billingViewSource).toContain("Billing portal unavailable");
     expect(billingViewSource).toContain("Billing readiness");
+    expect(billingViewSource).toContain("What billing changes");
+    expect(billingViewSource).toContain("Local workspace control stays available");
+    expect(billingViewSource).toContain("Chat, local notes, memory review, protocol reads, exports, and settings are not blocked by billing.");
+    expect(billingViewSource).toContain("Mint previews require Plus or Max; Walrus upload and marketplace listing require Max.");
     expect(settingsRouteSource).toContain("<BillingSettingsView matterhornServerClient={matterhornClient} runtimeWorkspaceId={runtimeWorkspaceId} />");
     expect(readFileSync(
       join(import.meta.dir, "../src/react-app/domains/settings/shell/settings-page.tsx"),

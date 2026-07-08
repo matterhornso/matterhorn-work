@@ -2510,6 +2510,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             onOpenWorkspaceChat={openWorkspaceChat}
             onOpenRunHistory={openWorkspaceOutputs}
             onOpenImageProviderSetup={() => openExtensionDetail("openai-image-gen")}
+            onOpenBilling={() => navigateSettingsPath("billing")}
           />
         );
       case "marketplace":

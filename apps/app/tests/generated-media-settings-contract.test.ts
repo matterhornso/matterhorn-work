@@ -34,6 +34,7 @@ describe("Generated media settings surface", () => {
     expect(route).toContain("onOpenWorkspaceChat={openWorkspaceChat}");
     expect(route).toContain("onOpenRunHistory={openWorkspaceOutputs}");
     expect(route).toContain('onOpenImageProviderSetup={() => openExtensionDetail("openai-image-gen")}');
+    expect(route).toContain('onOpenBilling={() => navigateSettingsPath("billing")}');
     expect(route).toContain('navigateSettingsPath("extensions/mcp")');
     expect(route).toContain("detailEntryRequest={extensionDetailRequest}");
     expect(route).toContain("onDetailEntryRequestHandled");
@@ -62,6 +63,10 @@ describe("Generated media settings surface", () => {
     expect(source).toContain("productionSmokePlan");
     expect(source).toContain("onOpenImageProviderSetup");
     expect(source).toContain("Open image provider setup");
+    expect(source).toContain("onOpenBilling");
+    expect(source).toContain("Open billing");
+    expect(source).toContain("Plan limits apply to image generation and public NFT publishing");
+    expect(source).toContain("Local drafts remain available");
     expect(source).toContain("OPENAI_API_KEY");
     expect(source).toContain("MATTERHORN_IMAGE_PROVIDER");
     expect(source).toContain("Delete local generated image");
@@ -138,11 +143,14 @@ describe("Generated media settings surface", () => {
             onOpenWorkspaceChat: () => {},
             onOpenRunHistory: () => {},
             onOpenImageProviderSetup: () => {},
+            onOpenBilling: () => {},
           }),
         ),
       ),
     );
     expect(html).toContain("Add an OpenAI image provider to generate real images from chat.");
     expect(html).toContain("Open image provider setup");
+    expect(html).toContain("Plan limits apply to image generation and public NFT publishing");
+    expect(html).toContain("Open billing");
   });
 });
