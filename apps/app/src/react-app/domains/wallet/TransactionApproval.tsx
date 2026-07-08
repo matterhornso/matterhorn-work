@@ -155,7 +155,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
           {/* Header */}
           <div className="mb-5 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="flex size-9 items-center justify-center rounded-xl bg-violet-500/10">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-violet-500/10">
                 <TrendingUp className="size-5 text-violet-500" />
               </div>
               <div>
@@ -177,7 +177,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
           </div>
 
           {/* Perpetual trade warning */}
-          <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5">
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-400" />
             <p className="text-xs text-red-300">
               ⚠️ This is a PERPETUAL TRADE on Hyperliquid. Losses can exceed your deposit.
@@ -186,43 +186,43 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
 
           {/* Order details */}
           <div className="space-y-2.5 mb-6">
-            <div className="rounded-xl bg-dls-surface p-3">
+            <div className="rounded-lg bg-dls-surface p-3">
               <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Asset</div>
               <div className="font-mono text-sm text-dls-text">{pending.asset}</div>
             </div>
 
-            <div className="rounded-xl bg-dls-surface p-3">
+            <div className="rounded-lg bg-dls-surface p-3">
               <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Side</div>
               <div className={cn("font-mono text-sm font-semibold", pending.isBuy ? "text-green-400" : "text-red-400")}>
                 {side}
               </div>
             </div>
 
-            <div className="rounded-xl bg-dls-surface p-3">
+            <div className="rounded-lg bg-dls-surface p-3">
               <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Size</div>
               <div className="font-mono text-sm text-dls-text">{pending.sz}</div>
             </div>
 
             {pending.limitPx !== undefined && (
-              <div className="rounded-xl bg-dls-surface p-3">
+              <div className="rounded-lg bg-dls-surface p-3">
                 <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Limit Price</div>
                 <div className="font-mono text-sm text-dls-text">{pending.limitPx}</div>
               </div>
             )}
 
-            <div className="rounded-xl bg-dls-surface p-3">
+            <div className="rounded-lg bg-dls-surface p-3">
               <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Summary</div>
               <div className="font-mono text-sm text-dls-text">{pending.summary}</div>
             </div>
 
             {pending.reduceOnly && (
-              <div className="rounded-xl bg-dls-surface p-3">
+              <div className="rounded-lg bg-dls-surface p-3">
                 <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Reduce Only</div>
                 <div className="font-mono text-sm text-amber-400">Yes</div>
               </div>
             )}
 
-            <div className="rounded-xl bg-dls-surface p-3">
+            <div className="rounded-lg bg-dls-surface p-3">
               <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Type</div>
               <div className="font-mono text-sm text-dls-text">{type}</div>
             </div>
@@ -312,7 +312,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
         {/* Header */}
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-violet-500/10">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-violet-500/10">
               <Shield className="size-5 text-violet-500" />
             </div>
             <div>
@@ -335,7 +335,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
 
         {/* FORCE_TESTNET block */}
         {FORCE_TESTNET && isMainnet && (
-          <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5">
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-400" />
             <p className="text-xs text-red-300">
               Mainnet is disabled. Switch to a testnet in Settings &gt; Wallet.
@@ -345,7 +345,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
 
         {/* Mainnet warning */}
         {isMainnet && (
-          <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5">
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-400" />
             <p className="text-xs text-red-300">
               You are on Base Mainnet — this will spend real money.
@@ -355,7 +355,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
 
         {/* Spend limit warning */}
         {state.pendingApproval?.type === "tx" && state.maxPerTransactionUSD > 0 && computeTxValueUSD(state.pendingApproval.value) > state.maxPerTransactionUSD && (
-          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
             <p className="text-xs text-amber-300">
               This transaction exceeds your per-transaction limit of ${state.maxPerTransactionUSD}. Go to Settings &gt; Wallet to increase.
@@ -365,7 +365,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
 
         {/* Daily limit warning */}
         {state.pendingApproval?.type === "tx" && state.maxDailySpendUSD > 0 && (state.dailySpendUSD + computeTxValueUSD(state.pendingApproval.value)) > state.maxDailySpendUSD && (
-          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
             <p className="text-xs text-amber-300">
               This transaction exceeds your daily limit of ${state.maxDailySpendUSD}. Go to Settings &gt; Wallet to increase.
@@ -375,7 +375,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
 
         {/* Whitelist warning */}
         {!isWhitelisted && (
-          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
             <p className="text-xs text-amber-300">
               This contract is not on the known protocol whitelist. Only proceed if you trust this address.
@@ -385,7 +385,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
 
         {/* Warning for contract interactions */}
         {isContractInteraction && (
-          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
             <p className="text-xs text-amber-300">
               This is a contract interaction. Make sure you trust the contract.
@@ -395,7 +395,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
 
         {/* Details */}
         <div className="space-y-2.5 mb-6">
-          <div className="rounded-xl bg-dls-surface p-3">
+          <div className="rounded-lg bg-dls-surface p-3">
             <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">To</div>
             <div className="font-mono text-sm text-dls-text break-all" title={pending.to}>
               {ensName ?? truncateAddress(pending.to)}
@@ -405,13 +405,13 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
             )}
           </div>
 
-          <div className="rounded-xl bg-dls-surface p-3">
+          <div className="rounded-lg bg-dls-surface p-3">
             <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Value</div>
             <div className="font-mono text-sm text-dls-text">{pending.value} ETH</div>
           </div>
 
           {isContractInteraction && (
-            <div className="rounded-xl bg-dls-surface p-3">
+            <div className="rounded-lg bg-dls-surface p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <FileCode className="size-3 text-dls-secondary" />
                 <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Calldata</div>
@@ -429,7 +429,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
           )}
 
           {gasEstimate && (
-            <div className="rounded-xl bg-dls-surface p-3">
+            <div className="rounded-lg bg-dls-surface p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <Fuel className="size-3 text-dls-secondary" />
                 <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Estimated Gas</div>
@@ -450,7 +450,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
             </div>
           )}
 
-          <div className="rounded-xl bg-dls-surface p-3">
+          <div className="rounded-lg bg-dls-surface p-3">
             <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Network</div>
             <div className="flex items-center gap-2 text-sm text-dls-text">
               <span className={cn("size-2 rounded-full", isMainnet ? "bg-red-500" : "bg-yellow-500")} />
@@ -458,20 +458,20 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
             </div>
           </div>
 
-          <div className="rounded-xl bg-dls-surface p-3">
+          <div className="rounded-lg bg-dls-surface p-3">
             <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Proposed By</div>
             <div className="font-mono text-sm text-dls-text">{pending.proposedBy}</div>
           </div>
 
           {state.maxSlippageBps > 0 && (
-            <div className="rounded-xl bg-dls-surface p-3">
+            <div className="rounded-lg bg-dls-surface p-3">
               <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Max Slippage</div>
               <div className="font-mono text-sm text-dls-text">{(state.maxSlippageBps / 100).toFixed(2)}%</div>
             </div>
           )}
 
           {pending.type === "tx" && pending.contractWarning && (
-            <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
               <p className="text-xs text-amber-300">{pending.contractWarning}</p>
             </div>

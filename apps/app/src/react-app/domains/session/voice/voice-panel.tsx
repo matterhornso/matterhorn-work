@@ -216,7 +216,6 @@ function VoiceOrb(props: { status: VoiceStatus; muted: boolean }) {
           style={{ width: "100%", height: "100%", borderRadius: "9999px" }}
         />
       </div>
-      <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_20%,rgba(255,255,255,0.55),transparent_26%)]" />
       <div className={cn(
         "absolute -bottom-2 rounded-full border border-border bg-background px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm",
         active && "text-foreground",
@@ -258,7 +257,7 @@ function VoiceTimelineRow(props: {
     <button
       type="button"
       className={cn(
-        "group flex w-full items-start gap-2 rounded-xl border bg-muted/40 px-2.5 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted",
+        "group flex w-full items-start gap-2 rounded-lg border bg-muted/40 px-2.5 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted",
         entry.error && "border-destructive/35 bg-destructive/10 text-destructive hover:bg-destructive/15",
       )}
       onClick={canExpand ? props.onToggle : undefined}

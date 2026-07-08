@@ -37,8 +37,8 @@ export type DenSignInSurfaceProps = {
   onSubmitManualAuth: () => void;
 };
 
-const settingsPanelClass = "ow-soft-card rounded-xl p-5 md:p-6";
-const settingsPanelSoftClass = "ow-soft-card-quiet rounded-xl p-4";
+const settingsPanelClass = "ow-soft-card rounded-lg p-5 md:p-6";
+const settingsPanelSoftClass = "ow-soft-card-quiet rounded-lg p-4";
 const headerBadgeClass =
   "inline-flex min-h-8 items-center gap-2 rounded-lg border border-dls-border bg-dls-hover px-3 text-[13px] font-medium text-dls-text";
 const softNoticeClass =
@@ -78,13 +78,13 @@ function ShowcasePanel() {
           </h2>
         </div>
         <img
-          className="size-12 shrink-0 rounded-xl border border-dls-border bg-[var(--matterhorn-blue)] p-1"
+          className="size-12 shrink-0 rounded-lg border border-dls-border bg-[var(--matterhorn-blue)] p-1"
           src="/matterhorn-logo-square.svg"
           alt="Matterhorn Work"
         />
       </div>
 
-      <div className="rounded-xl border border-dls-border bg-dls-background p-5">
+      <div className="rounded-lg border border-dls-border bg-dls-background p-5">
         <div className="text-[18px] font-semibold leading-7 text-dls-text">
           Matterhorn is building the workspace where people can trust AI to help
           with serious work.
@@ -101,7 +101,7 @@ function ShowcasePanel() {
         </p>
       </div>
 
-      <div className="rounded-xl border border-dls-border bg-dls-background p-5">
+      <div className="rounded-lg border border-dls-border bg-dls-background p-5">
         <div className="text-[13px] font-semibold text-dls-text">
           What that means for people
         </div>
@@ -464,7 +464,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
           </div>
 
           <div className="hidden lg:flex lg:items-center lg:justify-center">
-            <div className="relative w-full max-w-xl overflow-hidden rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.45)] bg-[var(--matterhorn-blue)] p-2">
+            <div className="relative w-full max-w-xl overflow-hidden rounded-lg border border-[rgba(var(--matterhorn-blue-rgb),0.45)] bg-[var(--matterhorn-blue)] p-2">
               <div className="pointer-events-none absolute inset-0 opacity-[0.08]">
                 <img
                   src="/matterhorn-mark.svg"

@@ -289,7 +289,7 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
   return (
     <div style={deskToneStyle(iconHint)} className="mb-2 border-y border-[rgba(var(--matterhorn-desk-rgb),0.24)] bg-[rgba(var(--matterhorn-desk-rgb),0.045)] px-3 py-2.5">
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)] ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.22)]">
+        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)] ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.22)]">
           {copy.id === "bittensor" || copy.id === "hyperliquid" || copy.id === "polymarket" ? (
             <ProtocolLogo iconHint={copy.id} size={22} />
           ) : (
@@ -362,10 +362,10 @@ function MatterhornDeskFocusedEmptyState({
       style={deskToneStyle(iconHint)}
     >
       <section className="w-full space-y-3">
-        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
+        <div className="matterhorn-desk-session-hero overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
                 {visual ? <ProtocolLogo iconHint={iconHint} size={34} /> : <Icon className="size-5" />}
               </span>
               <div className="min-w-0">
@@ -389,7 +389,7 @@ function MatterhornDeskFocusedEmptyState({
           </div>
         </div>
 
-        <div className="matterhorn-desk-session-prompts overflow-hidden rounded-xl bg-dls-surface/44" aria-label="Chat starters">
+        <div className="matterhorn-desk-session-prompts overflow-hidden rounded-lg bg-dls-surface/44" aria-label="Chat starters">
           {prompts.map((item) => (
             <button
               key={item.title}
@@ -457,10 +457,10 @@ function LongevityDeskEmptyState({
   return (
     <div className="min-w-0 w-full px-2 py-3 sm:px-3 sm:py-4" style={deskToneStyle("wellness")}>
       <section className="w-full space-y-3">
-        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
+        <div className="matterhorn-desk-session-hero overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
                 {visual ? <ProtocolLogo iconHint="wellness" size={34} /> : <Icon className="size-5" />}
               </span>
               <div className="min-w-0">
@@ -505,7 +505,7 @@ function LongevityDeskEmptyState({
         </div>
 
         <div
-          className="matterhorn-desk-session-prompts overflow-hidden rounded-xl bg-dls-surface/44"
+          className="matterhorn-desk-session-prompts overflow-hidden rounded-lg bg-dls-surface/44"
           aria-label="Longevity workflow stages"
         >
           {stagePrompts.map((item) => (
@@ -2039,7 +2039,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
           <div ref={contentRef} className="mx-auto w-full max-w-[720px]">
             {showDelayedLoading && pendingSessionLoad ? (
                 <div className="px-6 py-16">
-                <div className="mx-auto max-w-sm rounded-xl bg-dls-hover/60 px-8 py-10 text-center">
+                <div className="mx-auto max-w-sm rounded-lg bg-dls-hover/60 px-8 py-10 text-center">
                   <div className="text-sm text-dls-secondary">Opening session…</div>
                 </div>
               </div>
@@ -2053,7 +2053,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     onOpenModelPicker={props.onModelClick}
                   />
                 ) : (
-                  <div className="mx-auto max-w-xl rounded-xl bg-red-3/20 px-6 py-5 text-sm text-red-11 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.22)]">
+                  <div className="mx-auto max-w-xl rounded-lg bg-red-3/20 px-6 py-5 text-sm text-red-11 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.22)]">
                     {snapshotQuery.error instanceof Error ? snapshotQuery.error.message : "Failed to load session."}
                   </div>
                 )}
@@ -2207,7 +2207,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         ) : null}
       </div>
 
-      <div ref={composerShellRef} className="shrink-0 bg-[linear-gradient(180deg,transparent,var(--dls-surface)_32%)] px-0 pb-3 pt-3">
+      <div ref={composerShellRef} className="shrink-0 bg-dls-surface px-0 pb-3 pt-3">
         <DevProfiler id="SessionComposer">
         <ReactSessionComposer
           draft={draft}

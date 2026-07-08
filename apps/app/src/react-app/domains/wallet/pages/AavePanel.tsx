@@ -157,7 +157,7 @@ export default function AavePanel({ store }: { store: WalletStore }) {
             key={t.symbol}
             onClick={() => setSelectedToken(t.symbol)}
             className={cn(
-              "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all border",
+              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all border",
               selectedToken === t.symbol
                 ? "bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/20"
                 : "bg-dls-surface text-dls-text border-dls-border hover:border-amber-500/30"
@@ -202,11 +202,11 @@ export default function AavePanel({ store }: { store: WalletStore }) {
 
         {/* Stats row */}
         <div className="flex gap-2">
-          <div className="flex-1 rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-0.5">
+          <div className="flex-1 rounded-lg bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-0.5">
             <div className="text-[10px] text-dls-secondary uppercase tracking-wider">APY</div>
             <div className="ow-apy-tag">{selectedApy ? `▲ ${selectedApy}%` : "—"}</div>
           </div>
-          <div className="flex-1 rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-0.5">
+          <div className="flex-1 rounded-lg bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-0.5">
             <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Positions</div>
             <div className="text-sm font-mono font-semibold text-dls-text">{positions ? "Active" : "—"}</div>
           </div>
@@ -214,7 +214,7 @@ export default function AavePanel({ store }: { store: WalletStore }) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 rounded-xl bg-dls-surface p-1 border border-dls-border">
+      <div className="flex gap-1 rounded-lg bg-dls-surface p-1 border border-dls-border">
         {(["deposit", "borrow", "repay", "positions"] as Tab[]).map((t) => (
           <button
             key={t}
@@ -237,7 +237,7 @@ export default function AavePanel({ store }: { store: WalletStore }) {
         <div className="ow-soft-card p-4 space-y-4">
           <TokenSelector />
           <AmountInput />
-          <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5">
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5">
             <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10">
               <TrendingUp className="size-4 text-emerald-400" />
             </div>
@@ -263,7 +263,7 @@ export default function AavePanel({ store }: { store: WalletStore }) {
       {/* Borrow Tab */}
       {tab === "borrow" && (
         <div className="ow-soft-card p-4 space-y-4">
-          <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2.5">
+          <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5">
             <div className="flex size-7 items-center justify-center rounded-lg bg-red-500/10">
               <Shield className="size-4 text-red-400" />
             </div>
@@ -285,7 +285,7 @@ export default function AavePanel({ store }: { store: WalletStore }) {
       {/* Repay Tab */}
       {tab === "repay" && (
         <div className="ow-soft-card p-4 space-y-4">
-          <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5">
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5">
             <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10">
               <RotateCcw className="size-4 text-emerald-400" />
             </div>
@@ -310,21 +310,21 @@ export default function AavePanel({ store }: { store: WalletStore }) {
           {positions ? (
             <>
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-3 space-y-1">
+                <div className="rounded-lg bg-dls-surface-muted/50 border border-dls-border px-3 py-3 space-y-1">
                   <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Health Factor</div>
                   <div className={cn("text-lg font-mono font-bold", Number(positions.healthFactor) < 1.1 ? "text-red-400" : "text-emerald-400")}>
                     {positions.healthFactor}
                   </div>
                 </div>
-                <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-3 space-y-1">
+                <div className="rounded-lg bg-dls-surface-muted/50 border border-dls-border px-3 py-3 space-y-1">
                   <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Collateral</div>
                   <div className="text-lg font-mono font-bold text-dls-text">${positions.totalCollateral}</div>
                 </div>
-                <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-3 space-y-1">
+                <div className="rounded-lg bg-dls-surface-muted/50 border border-dls-border px-3 py-3 space-y-1">
                   <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Debt</div>
                   <div className="text-lg font-mono font-bold text-red-400">${positions.totalDebt}</div>
                 </div>
-                <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-3 space-y-1">
+                <div className="rounded-lg bg-dls-surface-muted/50 border border-dls-border px-3 py-3 space-y-1">
                   <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Available</div>
                   <div className="text-lg font-mono font-bold text-dls-text">${positions.availableBorrows}</div>
                 </div>
@@ -363,7 +363,7 @@ export default function AavePanel({ store }: { store: WalletStore }) {
                 </div>
               )}
 
-              <div className="flex items-center gap-2 rounded-xl border border-dls-border bg-dls-surface-muted/30 px-3 py-2">
+              <div className="flex items-center gap-2 rounded-lg border border-dls-border bg-dls-surface-muted/30 px-3 py-2">
                 <Activity className="size-3.5 text-dls-secondary" />
                 <span className="text-xs text-dls-secondary">Positions update on-chain</span>
               </div>

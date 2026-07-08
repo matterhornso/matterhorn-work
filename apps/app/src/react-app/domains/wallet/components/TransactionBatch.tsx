@@ -126,7 +126,7 @@ export function TransactionBatch({
       {/* Header */}
       <div className="mb-5 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-violet-500/10">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-violet-500/10">
             <ArrowRightLeft className="size-5 text-violet-500" />
           </div>
           <div>
@@ -148,7 +148,7 @@ export function TransactionBatch({
       </div>
 
       {/* Summary bar */}
-      <div className="mb-5 flex items-center gap-3 rounded-xl bg-dls-surface px-3 py-2.5">
+      <div className="mb-5 flex items-center gap-3 rounded-lg bg-dls-surface px-3 py-2.5">
         <div className="flex-1">
           <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">
             Total Steps
@@ -261,7 +261,7 @@ function BatchStepCard({
   return (
     <div
       className={cn(
-        "rounded-xl border p-3 transition-colors",
+        "rounded-lg border p-3 transition-colors",
         isActive
           ? "border-violet-500/40 bg-violet-500/5"
           : "border-transparent bg-dls-surface",

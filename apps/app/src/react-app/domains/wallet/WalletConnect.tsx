@@ -55,7 +55,7 @@ export function WalletConnect({ store }: WalletConnectProps) {
           {state.isConnecting ? "Connecting..." : "Connect Wallet"}
         </Button>
         {open && (
-          <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-dls-border bg-dls-sidebar p-2 shadow-[var(--dls-shell-shadow)] animate-in fade-in zoom-in-95 duration-150">
+          <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-lg border border-dls-border bg-dls-sidebar p-2 shadow-[var(--dls-shell-shadow)] animate-in fade-in zoom-in-95 duration-150">
             {connectors.map((connector) => (
               <button
                 key={connector.id}
@@ -80,7 +80,7 @@ export function WalletConnect({ store }: WalletConnectProps) {
       <button
         type="button"
         className={cn(
-          "flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors",
+          "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
           "border border-dls-border bg-dls-sidebar text-dls-text hover:bg-dls-hover",
         )}
         onClick={() => setOpen(!open)}
@@ -94,7 +94,7 @@ export function WalletConnect({ store }: WalletConnectProps) {
         <span className="font-mono">{state.address ? truncateAddress(state.address) : ""}</span>
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl border border-dls-border bg-dls-sidebar p-2 shadow-[var(--dls-shell-shadow)] animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-lg border border-dls-border bg-dls-sidebar p-2 shadow-[var(--dls-shell-shadow)] animate-in fade-in zoom-in-95 duration-150">
           <div className="border-b border-dls-border px-3 py-2">
             <div className="text-xs text-dls-secondary">Connected with {state.connector}</div>
             <div className="font-mono text-sm text-dls-text">{state.address ? truncateAddress(state.address) : ""}</div>

@@ -104,11 +104,22 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
       });
       return;
     }
-    const note = await create({ title: "", body: "" });
+    const note = await create({ title: t("notes.untitled"), body: "" });
     if (note) {
       setSelectedNoteId(note.id);
+      showToast({
+        title: "Note created",
+        description: "Start typing to rename or add details.",
+        tone: "success",
+      });
+    } else {
+      showToast({
+        title: "Could not create note",
+        description: error ?? "Check the workspace connection and try again.",
+        tone: "error",
+      });
     }
-  }, [workspaceId, create, showToast]);
+  }, [workspaceId, create, showToast, error]);
 
   const handleUpdateSelected = useCallback(
     (patch: NoteUpdateInput) => {
@@ -149,7 +160,7 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="flex shrink-0 flex-col gap-3 bg-dls-surface/35 px-4 py-4 sm:px-6">
+      <header className="flex shrink-0 flex-col gap-3 px-4 py-4 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold text-dls-text">
@@ -265,7 +276,7 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
         <div className="hidden min-w-0 flex-1 flex-col md:flex">
           {selectedNote ? (
             <>
-              <div className="flex shrink-0 items-center justify-between gap-2 bg-dls-surface/25 px-4 py-3">
+              <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
                 <div className="flex min-w-0 items-center gap-2">
                   {selectedAttachment ? (
                     <NoteAttachmentChip

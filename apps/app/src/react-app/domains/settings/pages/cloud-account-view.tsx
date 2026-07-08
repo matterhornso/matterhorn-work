@@ -202,7 +202,7 @@ function ProfileReadinessSupportSection({
 }) {
   const { docsUrl, feedbackUrl, issueUrl, accountUrl } = readiness.supportLinks;
   return (
-    <section className="flex flex-col gap-2 rounded-xl bg-dls-surface-muted/20 px-3 py-3 text-xs leading-5 text-dls-secondary">
+    <section className="flex flex-col gap-2 rounded-lg bg-dls-surface-muted/20 px-3 py-3 text-xs leading-5 text-dls-secondary">
       <h4 className="font-semibold text-dls-text">{readiness.stateCopy.headline}</h4>
       <p>{readiness.stateCopy.body}</p>
       <div className="flex flex-wrap gap-2">
@@ -291,7 +291,7 @@ function ProfileTaskLogSection({
   const { logs, error } = useWorkflowTaskLog(workspaceId, matterhornServerClient ?? undefined);
 
   return (
-    <section className="flex flex-col gap-3 rounded-xl bg-dls-surface-muted/20 px-3 py-3 text-xs leading-5 text-dls-secondary">
+    <section className="flex flex-col gap-3 rounded-lg bg-dls-surface-muted/20 px-3 py-3 text-xs leading-5 text-dls-secondary">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2">
           <ListChecks className="mt-0.5 size-4 shrink-0 text-dls-text" />
@@ -401,7 +401,7 @@ export function CloudAccountView({
           isLoading={backendProfileQuery.isLoading}
         />
 
-        <section className="flex flex-col gap-3 rounded-xl bg-dls-surface-muted/35 px-3 py-3">
+        <section className="flex flex-col gap-3 rounded-lg bg-dls-surface-muted/35 px-3 py-3">
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-dls-secondary">Profile readiness</h4>
             <p className="mt-1 text-xs leading-5 text-dls-secondary">

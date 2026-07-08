@@ -180,7 +180,7 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
           <div className="flex size-6 items-center justify-center rounded-md bg-emerald-500/10">
             <Shield className="size-3.5 text-emerald-400" />
           </div>
@@ -189,7 +189,7 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
       </div>
 
       {/* Mode toggle */}
-      <div className="flex gap-1 rounded-xl bg-dls-surface p-1 border border-dls-border">
+      <div className="flex gap-1 rounded-lg bg-dls-surface p-1 border border-dls-border">
         <button
           type="button"
           className={cn(
@@ -223,7 +223,7 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
           <div className="ow-section-heading">Sell</div>
           <div className="flex gap-2">
             <select
-              className="h-11 rounded-xl bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-emerald-500/30 transition-colors shrink-0 w-28"
+              className="h-11 rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-emerald-500/30 transition-colors shrink-0 w-28"
               value={selectedSell}
               onChange={(e) => setSelectedSell(e.target.value)}
             >
@@ -268,20 +268,20 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
           <div className="ow-section-heading">Buy</div>
           <div className="flex gap-2">
             <select
-              className="h-11 rounded-xl bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-emerald-500/30 transition-colors shrink-0 w-28"
+              className="h-11 rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-emerald-500/30 transition-colors shrink-0 w-28"
               value={selectedBuy}
               onChange={(e) => setSelectedBuy(e.target.value)}
             >
               {tokens.map((t) => <option key={t.symbol} value={t.symbol}>{t.symbol}</option>)}
             </select>
-            <div className="flex-1 h-11 flex items-center rounded-xl bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-mono">
+            <div className="flex-1 h-11 flex items-center rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-mono">
               {quote ? (Number(quote.buyAmount) / 10 ** buyDecimals).toFixed(6) : "—"}
             </div>
           </div>
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-xs text-red-300">
+          <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-xs text-red-300">
             <div className="flex size-5 items-center justify-center rounded-md bg-red-500/10">
               <span className="text-red-400 font-bold">!</span>
             </div>
@@ -306,19 +306,19 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
               </span>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
+              <div className="rounded-lg bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
                 <div className="text-[10px] text-dls-secondary uppercase tracking-wider">You Sell</div>
                 <div className="font-mono font-semibold text-dls-text">{(Number(quote.sellAmount) / 10 ** sellDecimals).toFixed(4)} {selectedSell}</div>
               </div>
-              <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
+              <div className="rounded-lg bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
                 <div className="text-[10px] text-dls-secondary uppercase tracking-wider">You Receive</div>
                 <div className="font-mono font-semibold text-emerald-400">{(Number(quote.buyAmount) / 10 ** buyDecimals).toFixed(6)} {selectedBuy}</div>
               </div>
-              <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
+              <div className="rounded-lg bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
                 <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Fee</div>
                 <div className="font-mono font-semibold text-dls-text">{(Number(quote.feeAmount) / 10 ** sellDecimals).toFixed(4)}</div>
               </div>
-              <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
+              <div className="rounded-lg bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
                 <div className="text-[10px] text-dls-secondary uppercase tracking-wider">
                   {mode === "limit" ? "Expires" : "Valid Until"}
                 </div>
@@ -332,7 +332,7 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
       <div className="flex gap-2">
         <Button
           variant="outline"
-          className="flex-1 h-12 rounded-xl border-dls-border hover:bg-dls-hover"
+          className="flex-1 h-12 rounded-lg border-dls-border hover:bg-dls-hover"
           onClick={handleGetQuote}
           disabled={loading || !sellAmount || (mode === "limit" && (!limitPrice || Number(limitPrice) <= 0))}
         >
@@ -341,7 +341,7 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
         </Button>
         <Button
           className={cn(
-            "flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-500/20",
+            "flex-1 h-12 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-500/20",
             !quote && "opacity-50 cursor-not-allowed"
           )}
           onClick={handleSubmit}

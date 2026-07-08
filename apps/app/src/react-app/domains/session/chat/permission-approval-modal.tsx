@@ -308,7 +308,7 @@ export function PermissionApprovalModal(props: PermissionApprovalModalProps) {
                   <div key={row.label}>
                     <div className="text-[12px] font-medium text-dls-secondary">{row.label}</div>
                     <div
-                      className={`mt-1 rounded-xl border border-dls-border bg-dls-hover/55 px-3 py-2 font-mono text-[12px] leading-5 text-dls-text ${
+                      className={`mt-1 rounded-lg border border-dls-border bg-dls-hover/55 px-3 py-2 font-mono text-[12px] leading-5 text-dls-text ${
                         row.multiline ? "max-h-44 overflow-auto whitespace-pre-wrap" : "break-all"
                       }`}
                     >
@@ -326,7 +326,7 @@ export function PermissionApprovalModal(props: PermissionApprovalModalProps) {
                 <span>{t("session.details_label")}</span>
                 <ChevronRight size={15} className="text-dls-secondary transition-transform group-open:rotate-90" />
               </summary>
-              <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-dls-border bg-dls-hover/45 px-3 py-2.5 text-[12px] leading-5 text-dls-secondary">
+              <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-dls-border bg-dls-hover/45 px-3 py-2.5 text-[12px] leading-5 text-dls-secondary">
                 {stringifyMetadata(metadata, props.safeStringify)}
               </pre>
             </details>
@@ -382,7 +382,7 @@ export function PermissionApprovalPanel(props: PermissionApprovalModalProps) {
     <div className="overflow-hidden border-b border-dls-border bg-transparent">
         <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl border border-dls-border bg-dls-hover text-dls-secondary">
+            <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-dls-border bg-dls-hover text-dls-secondary">
               <Icon size={16} strokeWidth={1.9} />
             </div>
             <div className="min-w-0">
@@ -449,7 +449,7 @@ export function PermissionApprovalPanel(props: PermissionApprovalModalProps) {
           </div>
 
           {hasMetadata ? (
-            <details className="group mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-2">
+            <details className="group mt-3 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[12px] font-medium text-dls-text">
                 <span>{t("session.details_label")}</span>
                 <ChevronRight size={14} className="text-dls-secondary transition-transform group-open:rotate-90" />

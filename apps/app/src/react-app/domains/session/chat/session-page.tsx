@@ -99,6 +99,7 @@ import {
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
 import { ProjectHistoryPage } from "../../recent-activity/project-history-page";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
+import { useStatusToasts } from "../../shell-feedback/status-toasts";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
@@ -1040,6 +1041,7 @@ export function SessionPage(props: SessionPageProps) {
   useJobCron(wallet.store);
   const currentWalletRuntime = useMemo(() => homeWalletRuntime(), []);
   const [commandOpen, setCommandOpen] = useState(false);
+  const { showToast } = useStatusToasts();
 
   // Cmd+K / Ctrl+K command palette
   useEffect(() => {
@@ -1321,12 +1323,22 @@ export function SessionPage(props: SessionPageProps) {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
       await navigator.clipboard.writeText(value);
       setHomePathCopyLabel(label);
+      showToast({
+        title: `${label} copied`,
+        description: "The path is ready to paste.",
+        tone: "success",
+      });
       window.setTimeout(() => setHomePathCopyLabel((current) => current === label ? null : current), 1600);
     } catch {
       setHomePathCopyLabel("Copy failed");
+      showToast({
+        title: "Could not copy path",
+        description: "Use Open folder if clipboard access is blocked.",
+        tone: "error",
+      });
       window.setTimeout(() => setHomePathCopyLabel((current) => current === "Copy failed" ? null : current), 2200);
     }
-  }, []);
+  }, [showToast]);
 
   const setCurrentSidePanel = useCallback((panel: SidePanelItem | null) => {
     setSidePanelState(GLOBAL_VOICE_SIDE_PANEL_KEY, panel === "voice" ? "voice" : null);
@@ -1938,7 +1950,7 @@ export function SessionPage(props: SessionPageProps) {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top,rgba(var(--matterhorn-blue-rgb),0.08),transparent_38%),var(--app-bg,#0b1020)] text-dls-text mac:bg-transparent">
+    <div className="flex h-full min-h-0 flex-col bg-dls-background text-dls-text mac:bg-transparent">
       <SidebarProvider
         open={sidebarOpen}
         onOpenChange={setSidebarOpen}
@@ -2082,7 +2094,7 @@ export function SessionPage(props: SessionPageProps) {
           </header>
 
           <div className="flex min-h-0 flex-1 overflow-hidden">
-            <div className="relative min-w-0 flex-1 overflow-hidden bg-[linear-gradient(180deg,var(--dls-surface)_0%,var(--dls-background)_100%)] mac:bg-dls-surface/85 mac:backdrop-blur-2xl mac:backdrop-saturate-150">
+            <div className="relative min-w-0 flex-1 overflow-hidden bg-dls-background mac:bg-dls-surface/85 mac:backdrop-blur-2xl mac:backdrop-saturate-150">
               {showStartupSkeleton ? (
                 <div className="px-6 py-14" role="status" aria-live="polite">
                   <div className="mx-auto max-w-2xl space-y-6">
@@ -2167,7 +2179,7 @@ export function SessionPage(props: SessionPageProps) {
                     </div>
                   ) : showWorkspaceSetupEmptyState ? (
                     <div className="space-y-6 px-6 text-center">
-                      <div className="mx-auto flex size-16 items-center justify-center rounded-xl bg-dls-hover text-dls-secondary">
+                      <div className="mx-auto flex size-16 items-center justify-center rounded-lg bg-dls-hover text-dls-secondary">
                         <Zap className="text-dls-secondary" />
                       </div>
                       <div className="space-y-2">
@@ -2293,9 +2305,10 @@ export function SessionPage(props: SessionPageProps) {
                               </p>
                             </div>
                             <div className="flex flex-wrap gap-2 md:justify-end">
-                              <button
+                              <Button
                                 type="button"
-                                className="inline-flex items-center rounded-md bg-[var(--matterhorn-blue)] px-3 py-1.5 text-sm font-semibold text-[var(--matterhorn-ink)] transition-colors hover:bg-[#e7f8ff] disabled:cursor-not-allowed disabled:opacity-60"
+                                size="sm"
+                                className="h-8 px-3"
                                 disabled={props.sidebar.newTaskDisabled}
                                 onClick={() => {
                                   if (blankWorkflowLauncher && props.sidebar.onCreateTaskWithPrompt) {
@@ -2309,27 +2322,31 @@ export function SessionPage(props: SessionPageProps) {
                                 }}
                               >
                                 New chat
-                              </button>
-                              <button
+                              </Button>
+                              <Button
                                 type="button"
-                                className="inline-flex items-center rounded-md bg-dls-surface-muted/45 px-3 py-1.5 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                                variant="secondary"
+                                size="sm"
+                                className="h-8 px-3"
                                 onClick={props.sidebar.onOpenCreateWorkspace}
                               >
                                 New project
-                              </button>
-                              <button
+                              </Button>
+                              <Button
                                 type="button"
-                                className="inline-flex items-center rounded-md bg-transparent px-3 py-1.5 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 bg-transparent px-3"
                                 onClick={() => openQuickJot()}
                               >
                                 Jot note
-                              </button>
+                              </Button>
                             </div>
                           </div>
                           <div className="flex min-w-0 flex-col gap-2 text-xs text-dls-secondary sm:flex-row sm:items-center sm:justify-between">
                             <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                               <span className="inline-flex min-w-0 items-baseline gap-2">
-                                <span className="font-medium text-dls-text">Project</span>
+                                <span className="font-medium text-dls-text">Folder</span>
                                 <span
                                   className="min-w-0 max-w-[18rem] truncate font-mono text-[11px] leading-4 text-dls-secondary"
                                   title={homeProjectPath || "No local project folder selected"}
@@ -2406,7 +2423,7 @@ export function SessionPage(props: SessionPageProps) {
                             runtimeWorkspaceId={props.runtimeWorkspaceId}
                             limit={8}
                             title="Project Activity"
-                            description="Recent notes, outputs, memory reviews, and desk runs."
+                            description="Latest event. Open history for the full run log."
                             defaultExpanded={false}
                             onOpenOutputPath={openOutputPathFromActivity}
                             onOpenHistory={openRunHistory}
@@ -2466,12 +2483,11 @@ export function SessionPage(props: SessionPageProps) {
                                         });
                                       }}
                                     >
-                                      <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
                                       <span className="pointer-events-none absolute -right-4 -top-4 opacity-[0.07]" aria-hidden="true">
                                         {demo.panel ? <ProtocolLogo venue={demo.panel} size={92} /> : <Icon className="size-24 text-[var(--matterhorn-desk-color)]" />}
                                       </span>
                                       <span className="relative flex w-full items-start gap-3">
-                                        <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.16)] text-[var(--matterhorn-desk-color)]">
+                                        <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.16)] text-[var(--matterhorn-desk-color)]">
                                           {demo.panel ? <ProtocolLogo venue={demo.panel} size={25} /> : <Icon className="size-4" />}
                                         </span>
                                         <span className="min-w-0 flex-1">
@@ -2525,9 +2541,8 @@ export function SessionPage(props: SessionPageProps) {
                                         });
                                       }}
                                     >
-                                      <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity hover:opacity-100" aria-hidden="true" />
                                       <span className="flex items-start gap-3">
-                                        <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--matterhorn-desk-color)] text-white shadow-sm">
+                                        <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--matterhorn-desk-color)] text-white shadow-sm">
                                           <Icon className="size-4" />
                                         </span>
                                         <span className="min-w-0">
@@ -2574,7 +2589,7 @@ export function SessionPage(props: SessionPageProps) {
                           {blankWorkflowLauncher ? (
                             <button
                               type="button"
-                              className="flex min-h-[92px] w-full items-start gap-3 rounded-xl bg-dls-surface-muted/70 p-3.5 text-left transition-colors hover:bg-dls-hover"
+                              className="flex min-h-[92px] w-full items-start gap-3 rounded-lg bg-dls-surface-muted/70 p-3.5 text-left transition-colors hover:bg-dls-hover"
                               onClick={() => {
                                 props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, {
                                   title: blankWorkflowLauncher.title,

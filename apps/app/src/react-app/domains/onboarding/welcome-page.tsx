@@ -33,13 +33,13 @@ function ShowcasePanel() {
           </p>
         </div>
         <img
-          className="size-12 rounded-xl border border-border bg-[var(--matterhorn-blue)] p-1"
-          src="/matterhorn-logo-square.svg"
+          className="size-12 rounded-md border border-border bg-[var(--matterhorn-blue)]"
+          src="/matterhorn-logo.png"
           alt="Matterhorn Work"
         />
       </div>
 
-      <div className="rounded-lg border border-border bg-background p-5">
+      <div className="border-t border-border/60 pt-5">
         <div className="text-[17px] font-semibold leading-7 text-foreground">
           Matterhorn turns chat into an operating layer for projects, protocols,
           workflows, and real-world decisions.
@@ -51,7 +51,7 @@ function ShowcasePanel() {
         </p>
       </div>
 
-      <div className="rounded-lg border border-border bg-background p-5">
+      <div className="border-t border-border/60 pt-5">
         <div className="text-sm font-semibold text-foreground">
           How it helps people
         </div>
@@ -139,12 +139,10 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
           </div>
         </div>
 
-        {/* ---- Right: Matterhorn capability card ---- */}
+        {/* ---- Right: Matterhorn capability panel ---- */}
         <div className="hidden lg:flex lg:w-[55%] lg:items-center lg:justify-center lg:p-6">
-          <div className="relative w-full max-w-xl overflow-hidden rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.35)] bg-[var(--matterhorn-blue)] p-2">
-            <div className="relative z-10 rounded-lg border border-border bg-background p-7">
-              <ShowcasePanel />
-            </div>
+          <div className="w-full max-w-xl border-l border-border/60 pl-10">
+            <ShowcasePanel />
           </div>
         </div>
         </div>

@@ -799,7 +799,7 @@ export function SkillsView(props: SkillsViewProps) {
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.currentTarget.value)}
               placeholder={t("skills.catalog_search_placeholder")}
-              className="w-full rounded-xl border border-dls-border bg-dls-surface py-3 pl-11 pr-4 text-[14px] text-dls-text focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.12)]"
+              className="w-full rounded-lg border border-dls-border bg-dls-surface py-3 pl-11 pr-4 text-[14px] text-dls-text focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.12)]"
             />
           </div>
 
@@ -878,7 +878,7 @@ export function SkillsView(props: SkillsViewProps) {
                     onKeyDown={(event) => handleSkillCardKeyDown(event, skill)}
                   >
                     <div className="flex min-w-0 gap-4">
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-dls-border bg-dls-hover">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-dls-border bg-dls-hover">
                         <Package size={20} className="text-dls-secondary" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -1012,7 +1012,7 @@ export function SkillsView(props: SkillsViewProps) {
                       return (
                         <div key={skill.id} className={`${panelCardClass} flex flex-col gap-4 text-left`}>
                           <div className="flex min-w-0 gap-4">
-                            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-dls-border bg-dls-hover">
+                            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-dls-border bg-dls-hover">
                               <Cloud size={20} className="text-dls-secondary" />
                             </div>
                             <div className="min-w-0 flex-1">
@@ -1158,7 +1158,7 @@ export function SkillsView(props: SkillsViewProps) {
                 {filteredHubSkills.map((skill) => (
                   <div key={`${skill.source.owner}/${skill.source.repo}/${skill.name}`} className={`${panelCardClass} flex flex-col gap-4 text-left`}>
                     <div className="flex min-w-0 gap-4">
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-dls-border bg-dls-hover">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-dls-border bg-dls-hover">
                         <Package size={20} className="text-dls-secondary" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -1231,7 +1231,7 @@ export function SkillsView(props: SkillsViewProps) {
             </DialogHeader>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
-              {selectedError ? <div className="mb-3 rounded-xl border border-red-7/20 bg-red-1/40 px-4 py-3 text-xs text-red-12">{selectedError}</div> : null}
+              {selectedError ? <div className="mb-3 rounded-lg border border-red-7/20 bg-red-1/40 px-4 py-3 text-xs text-red-12">{selectedError}</div> : null}
               {selectedLoading ? (
                 <div className="text-xs text-dls-secondary">{t("skills.loading")}</div>
               ) : (
@@ -1241,7 +1241,7 @@ export function SkillsView(props: SkillsViewProps) {
                     setSelectedContent(event.currentTarget.value);
                     setSelectedDirty(true);
                   }}
-                  className="min-h-[420px] w-full rounded-xl border border-dls-border bg-dls-hover px-4 py-3 text-xs font-mono text-dls-text focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.25)]"
+                  className="min-h-[420px] w-full rounded-lg border border-dls-border bg-dls-hover px-4 py-3 text-xs font-mono text-dls-text focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.25)]"
                   spellCheck={false}
                 />
               )}
@@ -1395,7 +1395,7 @@ export function SkillsView(props: SkillsViewProps) {
                 />
               </label>
 
-              {customRepoError ? <div className="rounded-xl border border-red-7/20 bg-red-1/40 px-4 py-3 text-xs text-red-12">{customRepoError}</div> : null}
+              {customRepoError ? <div className="rounded-lg border border-red-7/20 bg-red-1/40 px-4 py-3 text-xs text-red-12">{customRepoError}</div> : null}
             </div>
             <DialogFooter>
               <DialogClose

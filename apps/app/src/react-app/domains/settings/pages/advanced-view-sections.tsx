@@ -44,7 +44,7 @@ function RuntimeStatusCard(props: RuntimeStatusCardProps) {
   return (
     <SettingsInset className="space-y-3">
       <div className="flex items-start gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-gray-6/60 bg-gray-1/70 text-gray-12">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-gray-6/60 bg-gray-1/70 text-gray-12">
           {props.icon}
         </div>
         <div>

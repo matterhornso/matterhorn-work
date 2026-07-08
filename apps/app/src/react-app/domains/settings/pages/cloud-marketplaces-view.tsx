@@ -337,7 +337,7 @@ export function CloudMarketplacesView({
             <summary className="flex h-7 cursor-pointer list-none items-center rounded-md border border-dls-border px-2.5 text-xs font-medium text-dls-secondary transition-colors hover:bg-dls-hover hover:text-dls-text">
               Filters
             </summary>
-            <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-dls-border bg-dls-surface p-3 shadow-[var(--dls-shell-shadow)]">
+            <div className="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-dls-border bg-dls-surface p-3 shadow-[var(--dls-shell-shadow)]">
               <label className="grid gap-1.5 text-xs text-dls-secondary">
                 Marketplace
                 <select
@@ -472,7 +472,7 @@ function MarketplacePackageDetailModal(props: {
             <SettingsPill>{row.marketplaceName}</SettingsPill>
             {row.counts.map((label) => <SettingsPill key={label}>{label}</SettingsPill>)}
           </div>
-          <div className="rounded-xl border border-dls-border bg-dls-hover px-3 py-3">
+          <div className="rounded-lg border border-dls-border bg-dls-hover px-3 py-3">
             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Composition</div>
             <div className="mt-2 grid gap-2">
               {row.composition.map((entry) => (
@@ -498,7 +498,7 @@ function MarketplacePackageDetailModal(props: {
                 if (!object) return null;
                 const preview = version?.rawSourceText?.trim().slice(0, 600) ?? "";
                 return (
-                  <details key={membership.id} className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2">
+                  <details key={membership.id} className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
                     <summary className="cursor-pointer text-sm font-medium text-card-foreground">
                       <span className="uppercase text-[10px] tracking-[0.12em] text-muted-foreground">{object.objectType}</span> {object.title}
                     </summary>
@@ -519,7 +519,7 @@ function MarketplacePackageDetailModal(props: {
             </div>
           ) : null}
           {row.imported?.files.length ? (
-            <div className="rounded-xl border border-dls-border bg-dls-hover px-3 py-2 text-xs text-muted-foreground">
+            <div className="rounded-lg border border-dls-border bg-dls-hover px-3 py-2 text-xs text-muted-foreground">
               Installed files: {row.imported.files.map((file) => `${file.title} (${file.objectType})`).join(", ")}
             </div>
           ) : null}

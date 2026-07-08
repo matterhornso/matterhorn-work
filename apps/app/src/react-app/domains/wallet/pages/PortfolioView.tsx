@@ -85,7 +85,7 @@ export default function PortfolioView({
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-violet-500/10">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-violet-500/10">
             <Wallet className="size-5 text-violet-500" />
           </div>
           <div>
@@ -177,14 +177,14 @@ function HoldingsTab({ data, store }: { data: PortfolioData; store?: WalletStore
     <div className="space-y-2">
       {/* Allocation chart */}
       {pieData.length > 0 && (
-        <div className="mb-3 rounded-xl border border-dls-border bg-dls-surface p-4">
+        <div className="mb-3 rounded-lg border border-dls-border bg-dls-surface p-4">
           <AllocationPieChart data={pieData} size={160} />
         </div>
       )}
 
       {/* Savings summary card */}
       {savings.positions.length > 0 && (
-        <div className="mb-3 rounded-xl border border-dls-border bg-dls-surface p-4">
+        <div className="mb-3 rounded-lg border border-dls-border bg-dls-surface p-4">
           <div className="flex items-center gap-2 mb-2">
             <Sprout className="size-4 text-emerald-400" />
             <span className="text-sm font-medium text-dls-text">Yield Opportunities</span>
@@ -268,7 +268,7 @@ function TokenCard({
   const hasDeposit = position && Number(position.depositAmount) > 0;
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-dls-border bg-dls-surface p-3">
+    <div className="flex items-center gap-3 rounded-lg border border-dls-border bg-dls-surface p-3">
       <div
         className={cn(
           "flex size-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold",
@@ -331,7 +331,7 @@ function PerpsTab({
       {positions.map((pos) => (
         <div
           key={pos.coin}
-          className="rounded-xl border border-dls-border bg-dls-surface p-3"
+          className="rounded-lg border border-dls-border bg-dls-surface p-3"
         >
           <div className="mb-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -382,7 +382,7 @@ function YieldsTab({ yields }: { yields: YieldPool[] }) {
       {yields.map((y, i) => (
         <div
           key={`${y.pool}-${i}`}
-          className="rounded-xl border border-dls-border bg-dls-surface p-3"
+          className="rounded-lg border border-dls-border bg-dls-surface p-3"
         >
           <div className="mb-1 flex items-center justify-between">
             <span className="text-sm font-medium text-dls-text">

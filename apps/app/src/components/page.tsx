@@ -15,13 +15,9 @@ function Page({ className, ...props }: ComponentProps<"div">) {
 function PageBackground({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
-      className={cn("pointer-events-none fixed inset-0 z-0 overflow-hidden", className)}
+      className={cn("pointer-events-none fixed inset-0 z-0 bg-background", className)}
       {...props}
-    >
-      <div className="absolute -left-[20%] -top-[30%] h-[70%] w-[60%] rounded-full bg-[radial-gradient(ellipse,rgba(14,51,217,0.06),transparent_70%)] blur-3xl" />
-      <div className="absolute -bottom-[20%] -right-[10%] h-[50%] w-[50%] rounded-full bg-[radial-gradient(ellipse,rgba(255,126,46,0.05),transparent_70%)] blur-3xl" />
-      <div className="absolute left-[30%] top-[60%] h-[40%] w-[40%] rounded-full bg-[radial-gradient(ellipse,rgba(255,227,64,0.04),transparent_70%)] blur-3xl" />
-    </div>
+    />
   );
 }
 

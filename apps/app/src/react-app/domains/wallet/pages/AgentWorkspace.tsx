@@ -112,7 +112,7 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/5 px-3 py-2">
+        <div className="flex items-center gap-2 rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2">
           <div className="flex size-6 items-center justify-center rounded-md bg-violet-500/10">
             <Wand2 className="size-3.5 text-violet-400" />
           </div>

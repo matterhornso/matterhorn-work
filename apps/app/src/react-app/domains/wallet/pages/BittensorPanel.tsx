@@ -730,7 +730,7 @@ function ProtocolMark({ venue, compact = false }: { venue: CryptoVenue; compact?
     <span
       aria-label={`${title} mark`}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-xl bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
+        "inline-flex shrink-0 items-center justify-center rounded-lg bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
         compact ? "size-5" : "size-9",
       )}
     >
@@ -1356,7 +1356,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       className="flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain max-h-full bg-dls-canvas text-[15px] animate-fade-in [scrollbar-gutter:stable]"
       style={venueToneStyle(venue)}
     >
-      <div className="bg-[radial-gradient(circle_at_18%_0%,rgba(var(--protocol-desk-rgb),0.18),transparent_42%),linear-gradient(180deg,var(--dls-sidebar),var(--dls-surface))] p-4 shadow-[0_1px_0_rgba(var(--protocol-desk-rgb),0.14)] sm:p-5">
+      <div className="bg-dls-surface p-4 shadow-[0_1px_0_rgba(var(--protocol-desk-rgb),0.12)] sm:p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <ProtocolMark venue={venue} />
@@ -1379,7 +1379,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <RefreshCw className={cn("size-3.5", (loading || marketExecutionReadinessLoading || marketExecutionChainLoading || marketSdkValidationLoading) && "animate-spin")} />
           </Button>
         </div>
-        <div className="mb-3 grid grid-cols-1 gap-1 rounded-xl bg-dls-surface-muted/35 p-1 sm:grid-cols-3">
+        <div className="mb-3 grid grid-cols-1 gap-1 rounded-lg bg-dls-surface-muted/35 p-1 sm:grid-cols-3">
           {(["bittensor", "hyperliquid", "polymarket"] as const).map((item) => (
             <button
               key={item}
@@ -1430,7 +1430,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           }}
         />
         {venue === "bittensor" ? (
-          <div className="mt-3 grid grid-cols-1 gap-1 rounded-xl bg-dls-surface-muted/35 p-1 sm:grid-cols-5">
+          <div className="mt-3 grid grid-cols-1 gap-1 rounded-lg bg-dls-surface-muted/35 p-1 sm:grid-cols-5">
             {[
               { key: "overview" as const, label: "Overview" },
               { key: "demo" as const, label: "Demo" },
@@ -1465,7 +1465,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           <div className="space-y-4">
             <Section title={activeVenue.workspaceTitle} icon={venue === "hyperliquid" ? <BarChart3 className="size-4" /> : <Shield className="size-4" />}>
               <div className="space-y-3">
-                <div className="rounded-xl bg-[var(--protocol-desk-soft)] p-3">
+                <div className="rounded-lg bg-[var(--protocol-desk-soft)] p-3">
                   <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--protocol-desk-accent)]">{activeVenue.eyebrow}</div>
                   <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
                   <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
@@ -1491,7 +1491,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <button
                     key={item.label}
                     type="button"
-                    className="rounded-xl bg-dls-surface-muted/40 px-3 py-2.5 text-left transition-colors hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--protocol-desk-rgb),0.30)]"
+                    className="rounded-lg bg-dls-surface-muted/40 px-3 py-2.5 text-left transition-colors hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--protocol-desk-rgb),0.30)]"
                     onClick={() => void askAgentForVenuePrompt(item.prompt, { source: `${venue}-standard-action` })}
                   >
                     <span className="block text-xs font-semibold text-dls-text">{item.label}</span>
@@ -1506,7 +1506,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
             <Section title={venue === "hyperliquid" ? "Exchange preview controls" : "Market preview controls"} icon={<Shield className="size-4" />}>
               <div className="space-y-3">
-                <div className="rounded-xl bg-[var(--protocol-desk-soft)] px-3 py-2.5">
+                <div className="rounded-lg bg-[var(--protocol-desk-soft)] px-3 py-2.5">
                   <p className="text-xs font-semibold text-dls-text">Read-only market context</p>
                   <p className="mt-1 text-[11px] leading-5 text-dls-secondary">
                     Preview boundary: show the user what can be read, what context is missing, and why no market action can submit from Matterhorn.
@@ -1544,7 +1544,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           <div className="space-y-4">
             <Section title="Bittensor workspace" icon={<BrainCircuit className="size-4" />}>
               <div className="space-y-3">
-                <div className="rounded-xl bg-[var(--protocol-desk-soft)] p-3">
+                <div className="rounded-lg bg-[var(--protocol-desk-soft)] p-3">
                   <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--protocol-desk-accent)]">{activeVenue.eyebrow}</div>
                   <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
                   <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
@@ -1667,7 +1667,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 {MONDAY_BETA_DEMO_SCENARIOS.map((scenario) => {
                   const copied = copiedCustomerCommand === `monday-beta:${scenario.id}`;
                   return (
-                    <div key={scenario.id} className="rounded-xl bg-dls-surface-muted/40 px-3 py-2.5">
+                    <div key={scenario.id} className="rounded-lg bg-dls-surface-muted/40 px-3 py-2.5">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="text-xs font-semibold text-dls-text">{scenario.displayName}</p>
@@ -1705,7 +1705,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 {MONDAY_BETA_LAUNCH_CHECKLIST.map((item) => {
                   const copied = copiedCustomerCommand === item.commandKey;
                   return (
-                    <div key={item.id} className="rounded-xl bg-dls-surface-muted/40 px-3 py-2.5">
+                    <div key={item.id} className="rounded-lg bg-dls-surface-muted/40 px-3 py-2.5">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="text-xs font-semibold text-dls-text">{item.title}</p>
@@ -1734,19 +1734,19 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
             <Section title="Safety status" icon={<Shield className="size-4" />}>
               <div className="grid grid-cols-1 gap-2">
-                <div className="min-w-0 rounded-xl bg-dls-surface-muted/40 px-3 py-2">
+                <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                   <p className="text-xs font-semibold text-dls-text">Bittensor</p>
                   <p className="mt-1 break-words text-[11px] leading-5 text-dls-secondary">
                     Most complete beta flow. External signer required for actions; Matterhorn never holds keys.
                   </p>
                 </div>
-                <div className="min-w-0 rounded-xl bg-dls-surface-muted/40 px-3 py-2">
+                <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                   <p className="text-xs font-semibold text-dls-text">Hyperliquid</p>
                   <p className="mt-1 break-words text-[11px] leading-5 text-dls-secondary">
                     Preview only, live submission off. Can submit: No.
                   </p>
                 </div>
-                <div className="min-w-0 rounded-xl bg-dls-surface-muted/40 px-3 py-2">
+                <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                   <p className="text-xs font-semibold text-dls-text">Polymarket</p>
                   <p className="mt-1 break-words text-[11px] leading-5 text-dls-secondary">
                     Preview only, compliance checks required. Can submit: No.
@@ -1760,15 +1760,15 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
             <Section title="Evidence / QA" icon={<Database className="size-4" />}>
               <div className="grid grid-cols-1 gap-2">
-                <div className="min-w-0 rounded-xl bg-dls-surface-muted/40 px-3 py-2">
+                <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                   <p className="text-xs font-semibold text-dls-text">Customer readiness smoke</p>
                   <code className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">pnpm smoke:customer-ready-crypto</code>
                 </div>
-                <div className="min-w-0 rounded-xl bg-dls-surface-muted/40 px-3 py-2">
+                <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                   <p className="text-xs font-semibold text-dls-text">Bittensor beta packet</p>
                   <code className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">pnpm beta:bittensor:packet</code>
                 </div>
-                <div className="min-w-0 rounded-xl bg-dls-surface-muted/40 px-3 py-2">
+                <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                   <p className="text-xs font-semibold text-dls-text">Market SDK validation evidence</p>
                   <code className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">matterhorn-work crypto sdk-validate-public --mode fixture</code>
                 </div>
@@ -1830,15 +1830,15 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   First-run tester path: build an unsigned local DMG/ZIP, run the desktop beta doctor, then capture install, launch, readiness, and safety evidence before a customer session.
                 </p>
                 <div className="grid grid-cols-1 gap-2">
-                  <div className="rounded-xl bg-dls-surface-muted/40 px-3 py-2">
+                  <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                     <p className="text-xs font-semibold text-dls-text">Bittensor: Beta-ready</p>
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Read, preview, watches, receipts, and external-signer handoff.</p>
                   </div>
-                  <div className="rounded-xl bg-dls-surface-muted/40 px-3 py-2">
+                  <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                     <p className="text-xs font-semibold text-dls-text">Hyperliquid/Polymarket: Preview only</p>
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Can submit: No. Live submission: Off. No market submit.</p>
                   </div>
-                  <div className="rounded-xl bg-dls-surface-muted/40 px-3 py-2">
+                  <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                     <p className="text-xs font-semibold text-dls-text">Longevity workflow: Standalone</p>
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Client-safe plans and packets. Not Web3, not medical advice, and no live payments or email.</p>
                   </div>
@@ -1909,7 +1909,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     ["Validate artifact", "Accept public/redacted metadata; reject raw signatures, signed payloads, secrets, and hash mismatches."],
                     ["Receipt import", "Attach public status or transaction evidence without private execution material."],
                   ].map(([label, description]) => (
-                    <div key={label} className="rounded-xl bg-dls-surface-muted/40 px-3 py-2">
+                    <div key={label} className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                       <p className="text-xs font-semibold text-dls-text">{label}</p>
                       <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{description}</p>
                     </div>
@@ -1978,7 +1978,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <button
                     key={item.id}
                     type="button"
-                    className="rounded-xl bg-dls-surface-muted/40 px-3 py-2.5 text-left transition-colors hover:bg-dls-hover"
+                    className="rounded-lg bg-dls-surface-muted/40 px-3 py-2.5 text-left transition-colors hover:bg-dls-hover"
                     onClick={() => void askAgentForCustomerDemo(item)}
                   >
                     <span className="block text-xs font-semibold text-dls-text">{item.label}</span>
@@ -1996,7 +1996,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   Hyperliquid and Polymarket watches are read-only alert plans. They check public market/account context, surface watch_alert cards, and never sign, submit, custody, broadcast, or auto-execute orders.
                 </p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div className="rounded-xl bg-dls-surface-muted/40 px-3 py-2">
+                  <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                     <p className="text-xs font-semibold text-dls-text">Hyperliquid watches</p>
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">
                       Funding, price/orderbook, position margin, open orders, and market availability. Alert actions are review-only alert actions.
@@ -2016,7 +2016,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                       </Button>
                     </div>
                   </div>
-                  <div className="rounded-xl bg-dls-surface-muted/40 px-3 py-2">
+                  <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                     <p className="text-xs font-semibold text-dls-text">Polymarket watches</p>
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">
                       Market status, odds/liquidity movement, compliance block state, and public receipt/status changes. Alert actions are review-only alert actions.
@@ -2125,7 +2125,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
                 </Button>
               </div>
-              <label className="mt-3 flex items-center gap-2 rounded-xl bg-dls-surface-muted/40 px-3 py-2">
+              <label className="mt-3 flex items-center gap-2 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                 <Search className="size-4 text-dls-secondary" />
                 <span className="sr-only">Search Bittensor subnets</span>
                 <input
@@ -2146,7 +2146,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   Clear the search or try a category like image, data, inference, validator, or compute.
                 </Notice>
               ) : (
-                <div className="mt-3 divide-y divide-dls-border/70 overflow-hidden rounded-xl bg-dls-surface-muted/30">
+                <div className="mt-3 divide-y divide-dls-border/70 overflow-hidden rounded-lg bg-dls-surface-muted/30">
                   {filteredSubnets.map((subnet) => (
                     <SubnetRow
                       key={subnet.netuid}
@@ -2180,7 +2180,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     setWalletError(null);
                   }}
                   placeholder="SS58 coldkey public address"
-                  className="h-11 w-full rounded-xl bg-dls-surface-muted/40 px-3 font-mono text-sm text-dls-text outline-none placeholder:text-dls-secondary focus:ring-2 focus:ring-[rgba(var(--protocol-desk-rgb),0.32)]"
+                  className="h-11 w-full rounded-lg bg-dls-surface-muted/40 px-3 font-mono text-sm text-dls-text outline-none placeholder:text-dls-secondary focus:ring-2 focus:ring-[rgba(var(--protocol-desk-rgb),0.32)]"
                 />
                 <Button className="w-full gap-1.5 bg-sky-500 text-white hover:bg-sky-600" onClick={loadWallet} disabled={walletLoading}>
                   {walletLoading ? <Loader2 className="size-4 animate-spin" /> : <Wallet className="size-4" />}
@@ -2208,7 +2208,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   )}
                   <div className="space-y-2">
                     {wallet.stakePositions.map((position) => (
-                      <div key={`${position.netuid}:${position.validatorHotkey}`} className="rounded-xl bg-dls-surface-muted/40 p-3">
+                      <div key={`${position.netuid}:${position.validatorHotkey}`} className="rounded-lg bg-dls-surface-muted/40 p-3">
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <div className="text-sm font-medium text-dls-text">{position.subnetName}</div>
@@ -2346,7 +2346,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
 function Section({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="rounded-lg bg-[linear-gradient(145deg,rgba(var(--protocol-desk-rgb),0.06),rgba(var(--protocol-desk-rgb),0.015)),var(--dls-card)] p-4 sm:p-5">
+    <div className="rounded-lg bg-dls-card p-4 sm:p-5">
       <div className="mb-4 flex items-center gap-2.5 text-base font-semibold tracking-[-0.01em] text-dls-text">
         <span className="flex size-8 items-center justify-center rounded-lg bg-[rgba(var(--protocol-desk-rgb),0.16)] text-[var(--protocol-desk-accent)]">{icon}</span>
         {title}
@@ -2417,7 +2417,7 @@ function UnifiedWalletPanel({
     ? (watchAddress.trim() ? shortAddress(watchAddress.trim()) : "Not connected")
     : "Preview-only beta";
   return (
-    <div className="rounded-xl bg-dls-surface-muted/35 px-3 py-2.5">
+    <div className="rounded-lg bg-dls-surface-muted/35 px-3 py-2.5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-semibold text-dls-text">
@@ -2444,7 +2444,7 @@ function UnifiedWalletPanel({
 
 function Metric({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className={cn("min-w-0 rounded-xl bg-dls-surface-muted/40 p-3.5", compact && "p-3")}>
+    <div className={cn("min-w-0 rounded-lg bg-dls-surface-muted/40 p-3.5", compact && "p-3")}>
       <div className="text-[11px] font-semibold uppercase tracking-wider text-dls-secondary">{label}</div>
       <div className={cn("mt-1.5 break-words font-mono font-semibold leading-snug text-dls-text", compact ? "text-sm" : "text-xl")}>{value}</div>
     </div>
@@ -2456,7 +2456,7 @@ function Notice({ tone, icon, title, children }: { tone: "info" | "warning"; ico
     ? "bg-amber-500/10 text-amber-200"
     : "bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]";
   return (
-    <div className={cn("mb-4 flex items-start gap-2 rounded-xl px-3 py-2.5", classes)}>
+    <div className={cn("mb-4 flex items-start gap-2 rounded-lg px-3 py-2.5", classes)}>
       <span className="mt-0.5 shrink-0">{icon}</span>
       <div>
         <div className="text-xs font-semibold">{title}</div>
@@ -2535,7 +2535,7 @@ function SubnetDetailCard({
   if (loading) return <LoadingLabel label="Loading subnet detail" />;
   if (!detail) {
     return (
-      <div className="rounded-xl bg-dls-surface-muted/35 p-4 text-sm text-dls-secondary">
+      <div className="rounded-lg bg-dls-surface-muted/35 p-4 text-sm text-dls-secondary">
         Select a subnet to inspect.
       </div>
     );

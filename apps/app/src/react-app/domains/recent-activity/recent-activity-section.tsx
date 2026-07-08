@@ -245,7 +245,7 @@ function LatestActivityPreview(props: {
   const countLabel = `${props.count} recent ${props.count === 1 ? "event" : "events"}`;
 
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/10 px-3 py-2">
+    <div className="flex min-w-0 items-center gap-3 py-1.5">
       <button
         type="button"
         className="group flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
@@ -265,7 +265,7 @@ function LatestActivityPreview(props: {
         className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover/35 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
         onClick={props.onOpenHistory}
       >
-        Project history
+        History
         <ArrowRight className="size-3" aria-hidden="true" />
       </button>
     </div>
@@ -556,7 +556,7 @@ export function RecentActivitySection({
           <LatestActivitySummary item={latestItem} />
         </button>
       ) : (
-        <div className="overflow-hidden rounded-md bg-dls-surface-muted/10">
+        <div className="overflow-hidden">
           {items.map((item) => (
             <ActivityRow key={item.id} item={item} onSelect={() => setSelectedItemId(item.id)} />
           ))}

@@ -236,7 +236,7 @@ export function ComputerUseConfig(props: ComputerUseConfigProps) {
 
 function SetupRow(props: { title: string; description: string; complete: boolean; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-3">
+    <div className="rounded-lg border border-border bg-card p-3">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
         <div className="flex min-w-0 flex-1 gap-3">
           <StatusIcon complete={props.complete} />

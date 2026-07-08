@@ -43,7 +43,7 @@ export function TokenIcon({
   return (
     <div
       className={cn(
-        "flex items-center justify-center rounded-xl font-bold",
+        "flex items-center justify-center rounded-lg font-bold",
         sizeMap[size],
         bgMap[symbol] ?? "bg-slate-500/10 text-slate-400",
         className

@@ -555,7 +555,7 @@ export function AppSidebar(props: AppSidebarProps) {
             layoutScroll
             data-slot="sidebar-content"
             data-sidebar="content"
-            className="no-scrollbar flex min-h-0 flex-1 flex-col gap-px overflow-auto [--radius:var(--radius-xl)] group-data-[collapsible=icon]:overflow-hidden"
+            className="no-scrollbar flex min-h-0 flex-1 flex-col gap-px overflow-auto [--radius:var(--radius-lg)] group-data-[collapsible=icon]:overflow-hidden"
           >
             <Reorder.Group
               as="div"

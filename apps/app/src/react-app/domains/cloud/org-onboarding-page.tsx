@@ -389,7 +389,7 @@ export function ResourceSelectionPage() {
             </ScrollArea>
             {/* Selected default indicator */}
             {selectedDefault ? (
-              <div className="rounded-xl border border-green-6/30 bg-green-2/30 px-4 py-3 text-center text-sm text-green-11">
+              <div className="rounded-lg border border-green-6/30 bg-green-2/30 px-4 py-3 text-center text-sm text-green-11">
                 <Check size={14} className="mr-1 inline" />
                 {selectedDefault.label} will be set as your default model.
               </div>
@@ -426,7 +426,7 @@ interface MarketplaceCardProps {
 
 function MarketplaceCard({ marketplace }: MarketplaceCardProps) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border px-3 py-3 -mx-2">
+    <div className="flex items-center gap-3 rounded-lg border border-border px-3 py-3 -mx-2">
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium text-foreground">{marketplace.name}</div>
         {marketplace.description ? (
@@ -448,7 +448,7 @@ interface WorkerCardProps {
 
 function WorkerCard({ worker }: WorkerCardProps) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border px-3 py-3 -mx-2">
+    <div className="flex items-center gap-3 rounded-lg border border-border px-3 py-3 -mx-2">
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium text-foreground">{worker.workerName}</div>
         <div className="mt-0.5 text-xs text-muted-foreground">
@@ -530,7 +530,7 @@ function ProviderCard({ provider, selectedDefault, onSelectDefault }: ProviderCa
   return (
     <div
       className={cn(
-        "rounded-xl border px-3 py-3 transition-colors -mx-2",
+        "rounded-lg border px-3 py-3 transition-colors -mx-2",
         isSelected ? "border-green-6" : "border-border",
       )}
     >
