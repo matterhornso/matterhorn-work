@@ -35,6 +35,7 @@ import {
 } from "./nft-draft-wallet-bridge";
 import type { NftDraftPublishingCapabilities } from "./nft-draft-panel";
 import { buildNftPublishingSetupRequirements, type NftPublishingReadinessCapabilities } from "./nft-publishing-readiness";
+import { formatEntitlementReset } from "../../billing/entitlements";
 
 type NftCapabilityStatus = "working" | "needs_setup" | "preview";
 type GeneratedMediaErrorCopy = { title: string; description?: string };
@@ -96,6 +97,7 @@ function generatedMediaErrorCopy(error: unknown): GeneratedMediaErrorCopy {
         used?: unknown;
         limit?: unknown;
         reason?: unknown;
+        resetsAt?: unknown;
       }
       : {};
     const label = typeof details.entitlementLabel === "string" ? details.entitlementLabel : "This action";
@@ -106,12 +108,14 @@ function generatedMediaErrorCopy(error: unknown): GeneratedMediaErrorCopy {
     const requiredPlans = formatPlanList(requiredPlanIds);
     const used = typeof details.used === "number" ? details.used : null;
     const limit = typeof details.limit === "number" ? details.limit : null;
+    const resetLabel = typeof details.resetsAt === "string" ? formatEntitlementReset(details.resetsAt) : null;
 
     if (details.reason === "limit_reached") {
       const usage = used !== null && limit !== null ? ` You have used ${used} of ${limit}.` : "";
+      const resetCopy = resetLabel ? ` ${resetLabel}.` : "";
       return {
         title: `${label} limit reached`,
-        description: `${currentPlan} has reached its allowance.${usage} Upgrade to ${requiredPlans} to continue.`,
+        description: `${currentPlan} has reached its allowance.${usage}${resetCopy} Upgrade to ${requiredPlans} to continue.`,
       };
     }
 

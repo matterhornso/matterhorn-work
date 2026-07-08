@@ -331,6 +331,7 @@ describe("Session image generation panel", () => {
 
     expect(source).toContain("billing_entitlement_required");
     expect(source).toContain("billing_entitlement_limit_reached");
+    expect(source).toContain("formatEntitlementReset(details.resetsAt)");
     expect(source).toContain("requires an upgrade");
     expect(source).toContain("limit reached");
   });
