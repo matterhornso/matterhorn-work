@@ -216,6 +216,10 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("status?.accountLinkage");
     expect(billingViewSource).toContain("accountLinkage.label");
     expect(billingViewSource).toContain("accountLinkage.description");
+    expect(billingViewSource).toContain("subscriptionPeriodCopy(status?.subscription)");
+    expect(billingViewSource).toContain("Plan status:");
+    expect(billingViewSource).toContain("Renews");
+    expect(billingViewSource).toContain("Ends");
     expect(billingViewSource).toContain("Test checkout ready");
     expect(billingViewSource).toContain("client?.billingStatus()");
     expect(billingViewSource).toContain("client?.workspaceBillingCheckout(workspaceId");
@@ -229,6 +233,8 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("status.usage.generatedImages.resetsAt");
     expect(billingViewSource).toContain("status.usage.nftDrafts.resetsAt");
     expect(billingViewSource).toContain("formatEntitlementReset(props.resetsAt)");
+    expect(billingViewSource).toContain("valueLabel = formatEntitlementUsage(props.used, props.limit)");
+    expect(billingViewSource).toContain("`${props.limit} included`");
     expect(billingViewSource).toContain("NFT mint previews");
     expect(billingViewSource).toContain("entitlementUsageStatus(props.used, props.limit)");
     expect(billingViewSource).toContain("useStatusToasts");

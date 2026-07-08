@@ -14,6 +14,7 @@ import type {
   MatterhornBillingPlanId,
   MatterhornBillingSetupCheck,
   MatterhornBillingStatus,
+  MatterhornBillingSubscription,
 } from "@matterhorn-work/types/billing";
 import {
   SettingsInset,
@@ -72,6 +73,35 @@ function billingPlanDisplayName(planId: MatterhornBillingPlanId): string {
   if (planId === "plus") return "Matterhorn Plus";
   if (planId === "max") return "Matterhorn Max";
   return "Free";
+}
+
+function formatBillingDate(value?: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function subscriptionStatusLabel(status: MatterhornBillingSubscription["status"]): string {
+  if (status === "active") return "Active";
+  if (status === "trialing") return "Trial";
+  if (status === "past_due") return "Past due";
+  if (status === "canceled") return "Canceled";
+  if (status === "paused") return "Paused";
+  return "No subscription";
+}
+
+function subscriptionPeriodCopy(subscription?: MatterhornBillingSubscription | null): string | null {
+  if (!subscription || subscription.status === "none") return null;
+  const periodEnd = formatBillingDate(subscription.currentPeriodEnd);
+  if (periodEnd) {
+    if (subscription.cancelAtPeriodEnd || subscription.status === "canceled") {
+      return `Ends ${periodEnd}`;
+    }
+    return `Renews ${periodEnd}`;
+  }
+  const periodStart = formatBillingDate(subscription.currentPeriodStart);
+  return periodStart ? `Active since ${periodStart}` : null;
 }
 
 function usagePercent(used: number, limit: number | null): number | null {
@@ -162,12 +192,14 @@ function UsageRow(props: {
   const resetLabel = formatEntitlementReset(props.resetsAt);
   const status = entitlementUsageStatus(props.used, props.limit);
   const percent = usagePercent(props.used, props.limit);
+  const valueLabel = formatEntitlementUsage(props.used, props.limit);
+  const limitLabel = props.limit === null ? "Unlimited" : props.limit === 0 ? "Not included" : `${props.limit} included`;
   return (
     <div className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(160px,220px)] sm:items-center">
       <div className="min-w-0">
         <div className="text-sm font-medium text-dls-text">{props.label}</div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span>{formatEntitlementUsage(props.used, props.limit)}</span>
+          <span>{limitLabel}</span>
           {resetLabel ? <span>{resetLabel}</span> : null}
           {status ? (
             <span className={status.tone === "error" ? "text-red-300" : "text-amber-300"}>
@@ -177,15 +209,16 @@ function UsageRow(props: {
         </div>
       </div>
       {percent === null ? (
-        <div className="text-right text-xs text-muted-foreground">
-          {props.limit === null ? "Unlimited" : "Not included"}
-        </div>
+        <div className="text-right text-xs font-medium tabular-nums text-dls-secondary">{valueLabel}</div>
       ) : (
-        <Progress
-          aria-label={`${props.label} usage`}
-          value={percent}
-          className="gap-0 [&_[data-slot=progress-indicator]]:bg-dls-text [&_[data-slot=progress-track]]:h-1.5 [&_[data-slot=progress-track]]:bg-dls-hover/55"
-        />
+        <div className="grid gap-1.5">
+          <div className="text-right text-xs font-medium tabular-nums text-dls-secondary">{valueLabel}</div>
+          <Progress
+            aria-label={`${props.label} usage`}
+            value={percent}
+            className="gap-0 [&_[data-slot=progress-indicator]]:bg-dls-text [&_[data-slot=progress-track]]:h-1.5 [&_[data-slot=progress-track]]:bg-dls-hover/55"
+          />
+        </div>
       )}
     </div>
   );
@@ -356,6 +389,8 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
     setupChecks.some((check) => check.id === "stripe_test_customer" && check.status === "working");
   const portalDisabled = !client || portalMutation.isPending || status?.mode === "live" || !portalReady;
   const accountLinkage = status?.accountLinkage;
+  const subscriptionCopy = subscriptionPeriodCopy(status?.subscription);
+  const subscriptionLabel = status ? subscriptionStatusLabel(status.subscription.status) : null;
 
   const usageItems = useMemo(() => {
     if (!status) return [];
@@ -397,6 +432,11 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               {accountLinkage ? (
                 <span className="text-xs leading-5 text-muted-foreground">
                   {accountLinkage.label}. {accountLinkage.description}
+                </span>
+              ) : null}
+              {subscriptionLabel ? (
+                <span className="text-xs leading-5 text-muted-foreground">
+                  Plan status: {subscriptionLabel}{subscriptionCopy ? `. ${subscriptionCopy}.` : "."}
                 </span>
               ) : null}
             </div>
