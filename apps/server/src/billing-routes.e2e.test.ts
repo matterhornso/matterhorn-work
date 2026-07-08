@@ -173,6 +173,32 @@ describe("Billing routes", () => {
     expect(result.payload.status.usage.teamMembers).toMatchObject({ used: 1, limit: 1 });
   });
 
+  test("POST /workspace/:id/billing/checkout persists a non-live workspace subscription", async () => {
+    const { base } = await boot();
+    const checkout = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/checkout`, {
+      method: "POST",
+      body: JSON.stringify({ planId: "plus", interval: "month" }),
+    });
+
+    expect(checkout.response.status).toBe(200);
+    expect(checkout.payload.success).toBe(true);
+    expect(checkout.payload.checkoutUrl).toContain("mock-checkout.matterhorn.work");
+
+    const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(status.response.status).toBe(200);
+    expect(status.payload.status.subscription).toMatchObject({
+      planId: "plus",
+      status: "active",
+      interval: "month",
+      cancelAtPeriodEnd: false,
+      providerCustomerId: `mock_cus_${WORKSPACE_ID}`,
+      providerSubscriptionId: `mock_sub_${WORKSPACE_ID}_plus`,
+    });
+    expect(typeof status.payload.status.subscription.currentPeriodStart).toBe("string");
+    expect(typeof status.payload.status.subscription.currentPeriodEnd).toBe("string");
+    expect(status.payload.status.usage.generatedImages.limit).toBe(100);
+  });
+
   test("POST /api/billing/checkout returns mock checkout URL", async () => {
     const { base } = await boot();
     const result = await jsonFetch(base, "/api/billing/checkout", {
@@ -221,6 +247,18 @@ describe("Billing routes", () => {
     );
     expect(checkout.response.status).toBe(403);
     expect(checkout.payload.code).toBe("forbidden");
+
+    const workspaceCheckout = await jsonFetch(
+      base,
+      `/workspace/${WORKSPACE_ID}/billing/checkout`,
+      {
+        method: "POST",
+        body: JSON.stringify({ planId: "plus" }),
+      },
+      viewerToken,
+    );
+    expect(workspaceCheckout.response.status).toBe(403);
+    expect(workspaceCheckout.payload.code).toBe("forbidden");
 
     const portal = await jsonFetch(
       base,

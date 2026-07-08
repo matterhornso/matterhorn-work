@@ -39,6 +39,13 @@ export interface BillingProvider {
   handleStripeWebhook(input: MatterhornBillingWebhookStripeRequest): Promise<MatterhornBillingWebhookStripeResponse>;
 }
 
+export type BillingUsageCounts = Partial<{
+  generatedImages: number;
+  nftDrafts: number;
+  teamMembers: number;
+  cloudStorageBytes: number;
+}>;
+
 export type BillingEntitlementCheck =
   | {
       allowed: true;
@@ -197,12 +204,7 @@ export function buildMatterhornBillingUsageSnapshot(): MatterhornBillingUsageSna
 
 export function buildMatterhornBillingUsageSnapshotForPlan(
   planId: MatterhornBillingPlanId,
-  usage?: Partial<{
-    generatedImages: number;
-    nftDrafts: number;
-    teamMembers: number;
-    cloudStorageBytes: number;
-  }>,
+  usage?: BillingUsageCounts,
 ): MatterhornBillingUsageSnapshot {
   return {
     generatedImages: {
@@ -265,11 +267,25 @@ export function buildMatterhornBillingStatus(planId: MatterhornBillingPlanId, co
 export function buildMatterhornBillingStatusWithUsage(
   planId: MatterhornBillingPlanId,
   config: BillingProviderConfig,
-  usage?: Parameters<typeof buildMatterhornBillingUsageSnapshotForPlan>[1],
+  usage?: BillingUsageCounts,
 ): MatterhornBillingStatus {
   return {
     ...buildMatterhornBillingStatus(planId, config),
     usage: buildMatterhornBillingUsageSnapshotForPlan(planId, usage),
+  };
+}
+
+export function buildMatterhornBillingStatusForSubscription(
+  subscription: MatterhornBillingSubscription,
+  config: BillingProviderConfig,
+  usage?: BillingUsageCounts,
+): MatterhornBillingStatus {
+  return {
+    mode: config.mode,
+    provider: config.provider,
+    subscription,
+    usage: buildMatterhornBillingUsageSnapshotForPlan(subscription.planId, usage),
+    isLivePaymentsEnabled: false,
   };
 }
 
@@ -404,12 +420,25 @@ export function buildBillingStatusResponse(config: BillingProviderConfig): Matte
 
 export function buildBillingStatusResponseWithUsage(
   config: BillingProviderConfig,
-  usage?: Parameters<typeof buildMatterhornBillingUsageSnapshotForPlan>[1],
+  usage?: BillingUsageCounts,
 ): MatterhornBillingStatusResponse {
   return {
     success: true,
     version: "matterhorn.billing.v1",
     generatedAt: new Date().toISOString(),
     status: buildMatterhornBillingStatusWithUsage(config.currentPlanId, config, usage),
+  };
+}
+
+export function buildBillingStatusResponseForSubscription(
+  config: BillingProviderConfig,
+  subscription: MatterhornBillingSubscription,
+  usage?: BillingUsageCounts,
+): MatterhornBillingStatusResponse {
+  return {
+    success: true,
+    version: "matterhorn.billing.v1",
+    generatedAt: new Date().toISOString(),
+    status: buildMatterhornBillingStatusForSubscription(subscription, config, usage),
   };
 }
