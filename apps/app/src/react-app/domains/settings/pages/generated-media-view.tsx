@@ -272,6 +272,26 @@ function actionStatus(action: MatterhornDataControlAction) {
   return `${label} · ${backendCapabilityLabel(action.status)}`;
 }
 
+function DataControlActionChips(props: { label: string; actions: MatterhornDataControlAction[]; destructive?: boolean }) {
+  if (!props.actions.length) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] font-medium text-dls-muted">{props.label}</span>
+      {props.actions.slice(0, 4).map((action) => (
+        <span
+          key={action.id}
+          className={cn(
+            "rounded-md bg-dls-hover/50 px-2 py-1 text-[11px] text-dls-secondary",
+            props.destructive && "bg-red-500/10 text-red-300",
+          )}
+        >
+          {action.label} · {actionStatus(action)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function DataControlRows(props: { stores: MatterhornDataControlStore[]; loading: boolean }) {
   if (props.loading) {
     return <SettingsInset className="text-sm text-dls-secondary">Loading data controls...</SettingsInset>;
@@ -282,7 +302,8 @@ function DataControlRows(props: { stores: MatterhornDataControlStore[]; loading:
   return (
     <div className="divide-y divide-dls-border/40">
       {props.stores.map((store) => {
-        const actions = [...store.export.actions, ...store.deletion.actions].slice(0, 3);
+        const exportActions = store.export.actions;
+        const deleteActions = store.deletion.actions;
         return (
           <div key={store.storeId} className="grid gap-2 py-3 first:pt-0 last:pb-0">
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -294,18 +315,17 @@ function DataControlRows(props: { stores: MatterhornDataControlStore[]; loading:
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">
                   {storageLocationLabel(store.store)} · {store.retention.label}
                 </p>
+                <p className="mt-1 text-xs leading-5 text-dls-muted">
+                  {store.export.label}: {store.export.summary}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-dls-muted">
+                  {store.deletion.label}: {store.deletion.summary}
+                </p>
               </div>
               <StatusText status={store.store.status} />
             </div>
-            {actions.length ? (
-              <div className="flex flex-wrap gap-1.5">
-                {actions.map((action) => (
-                  <span key={action.id} className="rounded-md bg-dls-hover/50 px-2 py-1 text-[11px] text-dls-secondary">
-                    {actionStatus(action)}
-                  </span>
-                ))}
-              </div>
-            ) : null}
+            <DataControlActionChips label="Export" actions={exportActions} />
+            <DataControlActionChips label="Delete" actions={deleteActions} destructive />
           </div>
         );
       })}

@@ -42,6 +42,7 @@ for (const stageId of [
   "record_mint_receipt",
   "preview_listing",
   "record_listing_receipt",
+  "settings_generated_media",
 ]) {
   assert.ok(script.includes(stageId), `generated-media browser smoke should report stage ${stageId}`);
 }
@@ -68,9 +69,29 @@ for (const visibleText of [
   "Listing receipt recorded",
   "Generated media history",
   "Listed",
+  "Production readiness",
+  "Recent media",
+  "NFT drafts",
+  "Data controls",
+  "Local generated media delete",
+  "Delete generated image",
+  "Delete NFT draft",
 ]) {
   assert.ok(script.includes(visibleText), `generated-media browser smoke should exercise ${visibleText}`);
 }
+assert.ok(
+  script.includes("generatedMediaSettingsUrl") &&
+    script.includes("/settings/generated-media") &&
+    script.includes("publicStateRetained"),
+  "generated-media browser smoke should navigate to the Generated media settings page and verify retained public NFT state",
+);
+assert.ok(
+  script.includes("isOptionalDevWorkspace404") &&
+    script.includes("opencode") &&
+    script.includes("mcp") &&
+    script.includes(".opencode/agents/opencode-router.md"),
+  "generated-media browser smoke should keep optional dev-stack workspace probes as non-fatal warnings",
+);
 assert.ok(
   script.includes("records public mint receipt metadata") &&
     script.includes("records public listing receipt metadata") &&

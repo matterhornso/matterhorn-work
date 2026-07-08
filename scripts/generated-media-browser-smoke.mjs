@@ -164,6 +164,22 @@ function isWorkspaceOrApiRequest(url) {
   }
 }
 
+function isOptionalDevWorkspace404(url) {
+  try {
+    const parsed = new URL(url);
+    if (/^\/workspace\/[^/]+\/opencode\/mcp$/.test(parsed.pathname)) return true;
+    if (
+      /^\/workspace\/[^/]+\/files\/content$/.test(parsed.pathname) &&
+      parsed.searchParams.get("path") === ".opencode/agents/opencode-router.md"
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function networkFailureMessage(failure) {
   return `${failure.method} ${failure.url} -> ${failure.status}`;
 }
@@ -171,11 +187,25 @@ function networkFailureMessage(failure) {
 function shouldFailOnNetworkResponse(failure) {
   if (failure.status < 400) return false;
   if (failure.status === 404 && isStaticMissingResource(failure.url)) return false;
+  if (failure.status === 404 && isOptionalDevWorkspace404(failure.url)) return false;
   return isWorkspaceOrApiRequest(failure.url) || failure.status >= 500;
 }
 
 function nftDialog(page) {
   return page.locator('[role="dialog"]').filter({ hasText: "Make NFT" }).first();
+}
+
+function generatedMediaSettingsUrl(appUrl) {
+  const url = new URL(appUrl);
+  const workspaceMatch = url.pathname.match(/^\/workspace\/([^/]+)/);
+  if (workspaceMatch) {
+    url.pathname = `/workspace/${workspaceMatch[1]}/settings/generated-media`;
+  } else {
+    url.pathname = "/settings/generated-media";
+  }
+  url.search = "";
+  url.hash = "";
+  return url.toString();
 }
 
 async function ensureChatSession(page) {
@@ -367,6 +397,30 @@ async function runSmoke(config) {
       report.artifacts.listingReceipt = {
         recorded: true,
         objectId: SMOKE_NFT_OBJECT_ID,
+      };
+    });
+
+    await stage(report, "settings_generated_media", "Check Generated media settings readiness", async () => {
+      await page.goto(generatedMediaSettingsUrl(config.url), { waitUntil: "load", timeout: 30_000 });
+      await page.getByText("Production readiness", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Recent media", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("NFT drafts", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Data controls", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Publishing readiness", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText(config.prompt, { exact: false }).first().waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("listed", { exact: true }).first().waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Data controls", { exact: true }).scrollIntoViewIfNeeded();
+      await page.getByText("Local generated media delete", { exact: false }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Delete generated image", { exact: false }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Delete NFT draft", { exact: false }).waitFor({ state: "visible", timeout: 20_000 });
+
+      const deleteButtons = page.getByRole("button", { name: /^Delete$/ });
+      if ((await deleteButtons.count()) > 0) {
+        throw new Error("Generated media settings exposed row delete actions for public NFT state.");
+      }
+      report.artifacts.generatedMediaSettings = {
+        url: page.url(),
+        publicStateRetained: true,
       };
     });
 
