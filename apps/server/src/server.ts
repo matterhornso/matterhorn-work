@@ -1567,10 +1567,10 @@ function parseProjectDataLedgerSource(value: string | null): MatterhornProjectDa
 
 function parseProjectDataLedgerKind(value: string | null): MatterhornProjectDataLedgerKind | undefined {
   if (!value) return undefined;
-  if (value === "note" || value === "memory_suggestion" || value === "team_access" || value === "wallet" || value === "chat" || value === "task" || value === "output" || value === "image" || value === "nft" || value === "audit" || value === "feedback") {
+  if (value === "note" || value === "memory_suggestion" || value === "team_access" || value === "wallet" || value === "chat" || value === "task" || value === "output" || value === "image" || value === "nft" || value === "billing" || value === "audit" || value === "feedback") {
     return value;
   }
-  throw new ApiError(400, "invalid_project_data_ledger_kind", "kind must be note, memory_suggestion, team_access, wallet, chat, task, output, image, nft, audit, or feedback");
+  throw new ApiError(400, "invalid_project_data_ledger_kind", "kind must be note, memory_suggestion, team_access, wallet, chat, task, output, image, nft, billing, audit, or feedback");
 }
 
 function parseProjectDataLedgerTimestamp(value: string | null, name: "from" | "to"): string | undefined {

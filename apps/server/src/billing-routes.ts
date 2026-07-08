@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import type {
   MatterhornBillingCheckoutRequest,
   MatterhornBillingPortalRequest,
   MatterhornBillingWebhookStripeRequest,
 } from "@matterhorn-work/types/billing";
+import { recordAudit } from "./audit.js";
 import {
   buildBillingPlansResponse,
   buildBillingStatusResponse,
@@ -16,7 +18,7 @@ import {
 import { MatterhornBillingAccountStore } from "./billing-account-store.js";
 import { MatterhornGeneratedImageStore } from "./generated-image-store.js";
 import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
-import type { ServerConfig, TokenScope, WorkspaceInfo } from "./types.js";
+import type { Actor, ServerConfig, WorkspaceInfo } from "./types.js";
 
 export type RouteAdder = (method: string, path: string, auth: "none" | "client" | "host" | "host-token", handler: RouteHandler) => void;
 export type RouteHandler = (ctx: {
@@ -24,7 +26,7 @@ export type RouteHandler = (ctx: {
   url: URL;
   params: Record<string, string>;
   config: ServerConfig;
-  actor?: { scope?: TokenScope };
+  actor?: Actor;
 }) => Promise<Response>;
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -46,7 +48,7 @@ function jsonBody<T>(request: Request): Promise<T> {
   return request.json() as Promise<T>;
 }
 
-function billingWriteBlocker(ctx: { config: ServerConfig; actor?: { scope?: TokenScope } }, action: string): Response | null {
+function billingWriteBlocker(ctx: { config: ServerConfig; actor?: Pick<Actor, "scope"> }, action: string): Response | null {
   if (ctx.config.readOnly) {
     return forbidden("read_only", `Billing ${action} is unavailable in read-only mode.`);
   }
@@ -63,6 +65,36 @@ function nextBillingPeriod(now = new Date()): { currentPeriodStart: string; curr
     currentPeriodStart: now.toISOString(),
     currentPeriodEnd: end.toISOString(),
   };
+}
+
+async function recordBillingAudit(input: {
+  workspace: WorkspaceInfo;
+  actor?: Actor;
+  action: "workspace.billing.checkout" | "workspace.billing.subscription.clear";
+  summary: string;
+  planId?: "free" | "plus" | "max";
+  interval?: "month" | "year";
+  mode: string;
+  provider: string;
+  deleted?: boolean;
+}): Promise<void> {
+  await recordAudit(input.workspace.path, {
+    id: randomUUID(),
+    workspaceId: input.workspace.id,
+    actor: input.actor ?? { type: "remote" },
+    action: input.action,
+    target: `billing:${input.workspace.id}`,
+    summary: input.summary,
+    timestamp: Date.now(),
+    metadata: {
+      planId: input.planId ?? null,
+      interval: input.interval ?? null,
+      mode: input.mode,
+      provider: input.provider,
+      deleted: input.deleted ?? null,
+      livePaymentsEnabled: false,
+    },
+  });
 }
 
 export interface BillingRouteContext {
@@ -128,9 +160,10 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       return badRequest("invalid_plan", "A valid planId is required.");
     }
     const workspace = await ctx.resolveWorkspace(ctx.config, routeCtx.params.id);
+    const interval = input.interval === "year" ? "year" : "month";
     const result = await provider.buildCheckout({
       planId: input.planId,
-      interval: input.interval === "year" ? "year" : "month",
+      interval,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
     });
@@ -140,7 +173,7 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       workspaceId: workspace.id,
       subscription: {
         ...buildMatterhornBillingSubscription(input.planId),
-        interval: input.interval === "year" ? "year" : "month",
+        interval,
         currentPeriodStart: period.currentPeriodStart,
         currentPeriodEnd: period.currentPeriodEnd,
         providerCustomerId: `mock_cus_${workspace.id}`,
@@ -148,6 +181,16 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       },
       updatedAt: period.currentPeriodStart,
       source: provider.config.mode === "phase1_stripe_test" ? "stripe_test_checkout" : "mock_checkout",
+    });
+    await recordBillingAudit({
+      workspace,
+      actor: routeCtx.actor,
+      action: "workspace.billing.checkout",
+      summary: `Updated workspace billing plan to ${input.planId}.`,
+      planId: input.planId,
+      interval,
+      mode: provider.config.mode,
+      provider: provider.config.provider,
     });
     return jsonResponse(result);
   });
@@ -200,6 +243,17 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       workspaceRoot: workspace.path,
       workspaceId: workspace.id,
     }).delete();
+    await recordBillingAudit({
+      workspace,
+      actor: routeCtx.actor,
+      action: "workspace.billing.subscription.clear",
+      summary: deleted
+        ? "Cleared the workspace billing subscription override."
+        : "Workspace billing subscription override was already clear.",
+      mode: provider.config.mode,
+      provider: provider.config.provider,
+      deleted,
+    });
     return jsonResponse({
       success: true,
       deleted,

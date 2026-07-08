@@ -185,6 +185,12 @@ function modelSelectionAuditTitle(action: string): string | null {
   return null;
 }
 
+function billingAuditTitle(action: string): string | null {
+  if (action === "workspace.billing.checkout") return "Billing plan updated";
+  if (action === "workspace.billing.subscription.clear") return "Billing subscription cleared";
+  return null;
+}
+
 function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry {
   const memoryTitle = memoryAuditTitle(entry.action);
   const teamAccessTitle = teamAccessAuditTitle(entry.action);
@@ -192,7 +198,8 @@ function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry
   const outputTitle = outputAuditTitle(entry.action);
   const chatTitle = chatAuditTitle(entry.action);
   const modelSelectionTitle = modelSelectionAuditTitle(entry.action);
-  const title = scrubString(memoryTitle ?? teamAccessTitle ?? walletTitle ?? outputTitle ?? chatTitle ?? modelSelectionTitle ?? entry.action);
+  const billingTitle = billingAuditTitle(entry.action);
+  const title = scrubString(memoryTitle ?? teamAccessTitle ?? walletTitle ?? outputTitle ?? chatTitle ?? modelSelectionTitle ?? billingTitle ?? entry.action);
   const summary = scrubString(entry.summary);
   const target = scrubString(entry.target);
   const isMemoryAudit = Boolean(memoryTitle);
@@ -201,8 +208,9 @@ function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry
   const isOutputAudit = Boolean(outputTitle);
   const isChatAudit = Boolean(chatTitle);
   const isModelSelectionAudit = Boolean(modelSelectionTitle);
+  const isBillingAudit = Boolean(billingTitle);
   const auditMetadata = scrubAuditMetadata(entry.metadata);
-  const canonicalMetadata = isMemoryAudit || isTeamAccessAudit || isWalletAudit || isOutputAudit || isChatAudit || isModelSelectionAudit
+  const canonicalMetadata = isMemoryAudit || isTeamAccessAudit || isWalletAudit || isOutputAudit || isChatAudit || isModelSelectionAudit || isBillingAudit
     ? {
       auditAction: entry.action,
       target: target.value ?? null,
@@ -228,7 +236,9 @@ function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry
             ? "output"
             : isChatAudit
               ? "chat"
-              : "audit",
+              : isBillingAudit
+                ? "billing"
+                : "audit",
     timestamp: new Date(entry.timestamp).toISOString(),
     title: title.value ?? "Audit event",
     summary: summary.value,
@@ -240,9 +250,11 @@ function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry
           ? `/workspace/${encodeURIComponent(entry.workspaceId)}/settings/wallet`
           : isOutputAudit
             ? `/workspace/${encodeURIComponent(entry.workspaceId)}/session?panel=outputs`
-          : isChatAudit && target.value
-            ? `/workspace/${encodeURIComponent(entry.workspaceId)}/session/${encodeURIComponent(target.value)}`
-          : undefined,
+            : isChatAudit && target.value
+              ? `/workspace/${encodeURIComponent(entry.workspaceId)}/session/${encodeURIComponent(target.value)}`
+              : isBillingAudit
+                ? `/workspace/${encodeURIComponent(entry.workspaceId)}/settings/billing`
+                : undefined,
     outputPath: isOutputAudit ? target.value : undefined,
     sessionId: isChatAudit ? target.value : undefined,
     actor: actorFromAudit(entry),
@@ -394,6 +406,7 @@ function summarize(items: MatterhornProjectDataLedgerEntry[]): MatterhornProject
     outputs: activeOutputCount(items),
     images: items.filter((item) => item.kind === "image").length,
     nfts: items.filter((item) => item.kind === "nft").length,
+    billing: items.filter((item) => item.kind === "billing").length,
     audits: items.filter((item) => item.kind === "audit").length,
     feedback: items.filter((item) => item.kind === "feedback").length,
     redacted: items.filter((item) => item.redactionApplied).length,
