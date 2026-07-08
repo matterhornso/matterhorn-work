@@ -1064,6 +1064,55 @@ describe("Generated media Sui NFT setup previews", () => {
     );
   });
 
+  test("listing preview rejects invalid public Sui object ids, type strings, and prices", async () => {
+    process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = "0x4567";
+    process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = "0x8910";
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const badObject = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/preview`, {
+      method: "POST",
+      body: JSON.stringify({
+        objectId: "not-a-sui-object",
+        nftType: "0x1234::matterhorn_media::MatterhornNFT",
+        kioskId: "0x4568",
+        kioskOwnerCapId: "0x4569",
+        transferPolicyId: "0x8911",
+        priceMist: "1000",
+      }),
+    });
+    expect(badObject.response.status).toBe(400);
+    expect(badObject.payload.code).toBe("nft_sui_public_id_invalid");
+
+    const badType = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/preview`, {
+      method: "POST",
+      body: JSON.stringify({
+        objectId: "0xabc",
+        nftType: "not-a-full-type",
+        kioskId: "0x4568",
+        kioskOwnerCapId: "0x4569",
+        transferPolicyId: "0x8911",
+        priceMist: "1000",
+      }),
+    });
+    expect(badType.response.status).toBe(400);
+    expect(badType.payload.code).toBe("nft_sui_move_type_invalid");
+
+    const badPrice = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/preview`, {
+      method: "POST",
+      body: JSON.stringify({
+        objectId: "0xabc",
+        nftType: "0x1234::matterhorn_media::MatterhornNFT",
+        kioskId: "0x4568",
+        kioskOwnerCapId: "0x4569",
+        transferPolicyId: "0x8911",
+        priceMist: "0",
+      }),
+    });
+    expect(badPrice.response.status).toBe(400);
+    expect(badPrice.payload.code).toBe("nft_listing_price_invalid");
+  });
+
   test("listing preview returns a Sui Kiosk transaction plan when config and user inputs exist", async () => {
     process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = "0x4567";
     process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = "0x8910";
@@ -1073,8 +1122,8 @@ describe("Generated media Sui NFT setup previews", () => {
     await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
       method: "POST",
       body: JSON.stringify({
-        transactionDigest: "0xdigest",
-        objectId: "0xnftobject",
+        transactionDigest: "abcdefabcdefabcdefabcdefabcdefabcdef",
+        objectId: "0xabc",
         network: "sui-testnet",
         packageId: "0x1234",
       }),
@@ -1084,11 +1133,11 @@ describe("Generated media Sui NFT setup previews", () => {
       method: "POST",
       body: JSON.stringify({
         nftType: "0x1234::matterhorn_media::MatterhornNFT",
-        kioskId: "0xuserkiosk",
-        kioskOwnerCapId: "0xownercap",
-        transferPolicyId: "0xtransferpolicy",
+        kioskId: "0x4568",
+        kioskOwnerCapId: "0x4569",
+        transferPolicyId: "0x8911",
         priceMist: "1000",
-        sender: "0xsender",
+        sender: "0x9999",
       }),
     });
 
@@ -1099,19 +1148,19 @@ describe("Generated media Sui NFT setup previews", () => {
     expect(result.payload.handoff.kioskPackageId).toBe("0x4567");
     expect(result.payload.handoff.transferPolicyPackageId).toBe("0x8910");
     expect(result.payload.handoff.priceMist).toBe("1000");
-    expect(result.payload.handoff.objectId).toBe("0xnftobject");
+    expect(result.payload.handoff.objectId).toBe("0xabc");
     expect(result.payload.handoff.steps.length).toBeGreaterThan(0);
     expect(result.payload.transactionPlan.kind).toBe("sui_kiosk_listing");
     expect(result.payload.transactionPlan.marketplace).toBe("sui_kiosk");
-    expect(result.payload.transactionPlan.nftObjectId).toBe("0xnftobject");
+    expect(result.payload.transactionPlan.nftObjectId).toBe("0xabc");
     expect(result.payload.transactionPlan.nftType).toBe("0x1234::matterhorn_media::MatterhornNFT");
-    expect(result.payload.transactionPlan.kioskId).toBe("0xuserkiosk");
-    expect(result.payload.transactionPlan.kioskOwnerCapId).toBe("0xownercap");
-    expect(result.payload.transactionPlan.transferPolicyId).toBe("0xtransferpolicy");
+    expect(result.payload.transactionPlan.kioskId).toBe("0x4568");
+    expect(result.payload.transactionPlan.kioskOwnerCapId).toBe("0x4569");
+    expect(result.payload.transactionPlan.transferPolicyId).toBe("0x8911");
     expect(result.payload.transactionPlan.sdkHints.packageName).toBe("@mysten/kiosk");
-    expect(result.payload.draft.listing.kioskId).toBe("0xuserkiosk");
-    expect(result.payload.draft.listing.kioskOwnerCapId).toBe("0xownercap");
-    expect(result.payload.draft.listing.transferPolicyId).toBe("0xtransferpolicy");
+    expect(result.payload.draft.listing.kioskId).toBe("0x4568");
+    expect(result.payload.draft.listing.kioskOwnerCapId).toBe("0x4569");
+    expect(result.payload.draft.listing.transferPolicyId).toBe("0x8911");
     expect(result.payload.draft.listing.itemType).toBe("0x1234::matterhorn_media::MatterhornNFT");
 
     const previewFile = JSON.parse(readFileSync(join(dir, listingPreviewPath), "utf8"));
@@ -1127,9 +1176,9 @@ describe("Generated media Sui NFT setup previews", () => {
       transactionPlan: {
         kind: "sui_kiosk_listing",
         marketplace: "sui_kiosk",
-        nftObjectId: "0xnftobject",
-        kioskId: "0xuserkiosk",
-        transferPolicyId: "0xtransferpolicy",
+        nftObjectId: "0xabc",
+        kioskId: "0x4568",
+        transferPolicyId: "0x8911",
       },
     });
     expect(JSON.stringify(previewFile)).not.toContain("rawSignature");
@@ -1148,9 +1197,9 @@ describe("Generated media Sui NFT setup previews", () => {
       metadata: expect.objectContaining({
         nftOutputKind: "listing_preview",
         nftNetwork: "sui-testnet",
-        nftObjectId: "0xnftobject",
-        nftKioskId: "0xuserkiosk",
-        nftTransferPolicyId: "0xtransferpolicy",
+        nftObjectId: "0xabc",
+        nftKioskId: "0x4568",
+        nftTransferPolicyId: "0x8911",
         custody: false,
         containsSignatureMaterial: false,
       }),
@@ -1164,7 +1213,7 @@ describe("Generated media Sui NFT setup previews", () => {
       outputPath: listingPreviewPath,
       metadata: expect.objectContaining({
         nftOutputKind: "listing_preview",
-        nftObjectId: "0xnftobject",
+        nftObjectId: "0xabc",
         containsSignatureMaterial: false,
       }),
     }));
@@ -1179,8 +1228,8 @@ describe("Generated media Sui NFT setup previews", () => {
     const mintReceipt = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
       method: "POST",
       body: JSON.stringify({
-        transactionDigest: "0xmintdigest",
-        objectId: "0xmintedobject",
+        transactionDigest: "abcdefabcdefabcdefabcdefabcdefabcdef",
+        objectId: "0xabcd",
         network: "sui-testnet",
         packageId: "0x1234",
       }),
@@ -1190,11 +1239,11 @@ describe("Generated media Sui NFT setup previews", () => {
     const listingReceipt = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/receipt`, {
       method: "POST",
       body: JSON.stringify({
-        transactionDigest: "0xlistingdigest",
-        objectId: "0xmintedobject",
+        transactionDigest: "bcdefabcdefabcdefabcdefabcdefabcdefa",
+        objectId: "0xabcd",
         network: "sui-testnet",
-        kioskId: "0xuserkiosk",
-        transferPolicyId: "0xtransferpolicy",
+        kioskId: "0x4568",
+        transferPolicyId: "0x8911",
       }),
     });
     expect(listingReceipt.response.status).toBe(200);
@@ -1206,8 +1255,8 @@ describe("Generated media Sui NFT setup previews", () => {
       draftId: draft.id,
       imageId: draft.imageId,
       network: "sui-testnet",
-      transactionDigest: "0xmintdigest",
-      objectId: "0xmintedobject",
+      transactionDigest: "abcdefabcdefabcdefabcdefabcdefabcdef",
+      objectId: "0xabcd",
       packageId: "0x1234",
       custody: false,
       containsSignatureMaterial: false,
@@ -1218,10 +1267,10 @@ describe("Generated media Sui NFT setup previews", () => {
       kind: "listing",
       draftId: draft.id,
       network: "sui-testnet",
-      transactionDigest: "0xlistingdigest",
-      objectId: "0xmintedobject",
-      kioskId: "0xuserkiosk",
-      transferPolicyId: "0xtransferpolicy",
+      transactionDigest: "bcdefabcdefabcdefabcdefabcdefabcdefa",
+      objectId: "0xabcd",
+      kioskId: "0x4568",
+      transferPolicyId: "0x8911",
       custody: false,
       containsSignatureMaterial: false,
     });
@@ -1241,8 +1290,8 @@ describe("Generated media Sui NFT setup previews", () => {
       metadata: expect.objectContaining({
         nftReceiptKind: "mint",
         nftNetwork: "sui-testnet",
-        nftTransactionDigest: "0xmintdigest",
-        nftObjectId: "0xmintedobject",
+        nftTransactionDigest: "abcdefabcdefabcdefabcdefabcdefabcdef",
+        nftObjectId: "0xabcd",
         nftPackageId: "0x1234",
         containsSignatureMaterial: false,
       }),
@@ -1258,10 +1307,10 @@ describe("Generated media Sui NFT setup previews", () => {
       metadata: expect.objectContaining({
         nftReceiptKind: "listing",
         nftNetwork: "sui-testnet",
-        nftTransactionDigest: "0xlistingdigest",
-        nftObjectId: "0xmintedobject",
-        nftKioskId: "0xuserkiosk",
-        nftTransferPolicyId: "0xtransferpolicy",
+        nftTransactionDigest: "bcdefabcdefabcdefabcdefabcdefabcdefa",
+        nftObjectId: "0xabcd",
+        nftKioskId: "0x4568",
+        nftTransferPolicyId: "0x8911",
         containsSignatureMaterial: false,
       }),
     }));
@@ -1277,8 +1326,8 @@ describe("Generated media Sui NFT setup previews", () => {
       eventType: "nft.minted",
       outputPath: mintReceiptPath,
       metadata: expect.objectContaining({
-        nftTransactionDigest: "0xmintdigest",
-        nftObjectId: "0xmintedobject",
+        nftTransactionDigest: "abcdefabcdefabcdefabcdefabcdefabcdef",
+        nftObjectId: "0xabcd",
         containsSignatureMaterial: false,
       }),
     }));
@@ -1286,10 +1335,10 @@ describe("Generated media Sui NFT setup previews", () => {
       eventType: "nft.listed",
       outputPath: listingReceiptPath,
       metadata: expect.objectContaining({
-        nftTransactionDigest: "0xlistingdigest",
-        nftObjectId: "0xmintedobject",
-        nftKioskId: "0xuserkiosk",
-        nftTransferPolicyId: "0xtransferpolicy",
+        nftTransactionDigest: "bcdefabcdefabcdefabcdefabcdefabcdefa",
+        nftObjectId: "0xabcd",
+        nftKioskId: "0x4568",
+        nftTransferPolicyId: "0x8911",
         containsSignatureMaterial: false,
       }),
     }));
@@ -1316,8 +1365,8 @@ describe("Generated media Sui NFT setup previews", () => {
     const wrongNetwork = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
       method: "POST",
       body: JSON.stringify({
-        transactionDigest: "0xwrongnetwork",
-        objectId: "0xmintedobject",
+        transactionDigest: "cdefabcdefabcdefabcdefabcdefabcdefab",
+        objectId: "0xabcd",
         network: "sui-mainnet",
       }),
     });
@@ -1327,8 +1376,8 @@ describe("Generated media Sui NFT setup previews", () => {
     const mintReceipt = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
       method: "POST",
       body: JSON.stringify({
-        transactionDigest: "0xmintdigest",
-        objectId: "0xmintedobject",
+        transactionDigest: "abcdefabcdefabcdefabcdefabcdefabcdef",
+        objectId: "0xabcd",
         network: "sui-testnet",
       }),
     });
@@ -1337,13 +1386,40 @@ describe("Generated media Sui NFT setup previews", () => {
     const wrongObject = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/receipt`, {
       method: "POST",
       body: JSON.stringify({
-        transactionDigest: "0xwrongobject",
-        objectId: "0xotherobject",
+        transactionDigest: "defabcdefabcdefabcdefabcdefabcdefabc",
+        objectId: "0xabce",
         network: "sui-testnet",
       }),
     });
     expect(wrongObject.response.status).toBe(400);
     expect(wrongObject.payload.code).toBe("nft_receipt_object_mismatch");
+  });
+
+  test("NFT receipts reject invalid transaction digests and public object ids", async () => {
+    const { base } = await boot();
+    const draft = await createDraft(base);
+
+    const badDigest = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "not-a-sui-digest",
+        objectId: "0xabcd",
+        network: "sui-testnet",
+      }),
+    });
+    expect(badDigest.response.status).toBe(400);
+    expect(badDigest.payload.code).toBe("nft_receipt_digest_invalid");
+
+    const badObject = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/receipt`, {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "abcdefabcdefabcdefabcdefabcdefabcdef",
+        objectId: "not-a-sui-object",
+        network: "sui-testnet",
+      }),
+    });
+    expect(badObject.response.status).toBe(400);
+    expect(badObject.payload.code).toBe("nft_sui_public_id_invalid");
   });
 });
 
