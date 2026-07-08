@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { GeneratedMediaSettingsView } from "../src/react-app/domains/settings/pages/generated-media-view";
+import { backendCapabilitiesWorkingFixture } from "../src/react-app/domains/settings/backend-capabilities/backend-capability-fixtures";
 
 function readAppSource(path: string) {
   return readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
@@ -31,6 +32,10 @@ describe("Generated media settings surface", () => {
     expect(route).toContain("GeneratedMediaSettingsView");
     expect(route).toContain("onOpenWorkspaceChat={openWorkspaceChat}");
     expect(route).toContain("onOpenRunHistory={openWorkspaceOutputs}");
+    expect(route).toContain('onOpenImageProviderSetup={() => openExtensionDetail("openai-image-gen")}');
+    expect(route).toContain('navigateSettingsPath("extensions/mcp")');
+    expect(route).toContain("detailEntryRequest={extensionDetailRequest}");
+    expect(route).toContain("onDetailEntryRequestHandled");
   });
 
   test("generated media settings page reads live backend contracts", () => {
@@ -50,6 +55,10 @@ describe("Generated media settings surface", () => {
     expect(source).toContain("Production smoke plan");
     expect(source).toContain("Public writes require user action");
     expect(source).toContain("productionSmokePlan");
+    expect(source).toContain("onOpenImageProviderSetup");
+    expect(source).toContain("Open image provider setup");
+    expect(source).toContain("OPENAI_API_KEY");
+    expect(source).toContain("MATTERHORN_IMAGE_PROVIDER");
     expect(source).toContain("Delete local generated image");
     expect(source).toContain("Delete local NFT draft");
     expect(client).toContain("generatedMediaDiagnostics");
@@ -68,6 +77,14 @@ describe("Generated media settings surface", () => {
     expect(server).not.toContain('"/settings/nft"');
   });
 
+  test("MCPs and tools can open an extension detail from a settings action", () => {
+    const mcpView = readAppSource("react-app/domains/settings/pages/mcp-view.tsx");
+    expect(mcpView).toContain("detailEntryRequest?: { id: string; requestId: number } | null");
+    expect(mcpView).toContain("onDetailEntryRequestHandled?: (requestId: number) => void");
+    expect(mcpView).toContain("handledDetailRequestRef");
+    expect(mcpView).toContain("setDetailEntry(match)");
+  });
+
   test("empty/offline render explains the workspace requirement", () => {
     const queryClient = new QueryClient();
     const html = renderToStaticMarkup(
@@ -84,5 +101,38 @@ describe("Generated media settings surface", () => {
     expect(html).toContain("Open a connected workspace");
     expect(html).toContain("Recent media");
     expect(html).toContain("Data controls");
+  });
+
+  test("missing production image provider renders a direct setup action", () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["settings-generated-media-capabilities"], {
+      ...backendCapabilitiesWorkingFixture,
+      imageGeneration: {
+        ...backendCapabilitiesWorkingFixture.imageGeneration,
+        status: "needs_setup",
+        label: "OpenAI image provider",
+        description: "Set OPENAI_API_KEY to enable OpenAI image generation.",
+        setupRequirements: [{
+          key: "openai_api_key",
+          label: "OpenAI image provider",
+          status: "missing",
+          envVar: "OPENAI_API_KEY",
+          description: "Set OPENAI_API_KEY to enable OpenAI image generation.",
+        }],
+      },
+    });
+    const html = renderToStaticMarkup(
+      React.createElement(QueryClientProvider, { client: queryClient },
+        React.createElement(GeneratedMediaSettingsView, {
+          matterhornServerClient: {} as any,
+          runtimeWorkspaceId: "ws_test",
+          onOpenWorkspaceChat: () => {},
+          onOpenRunHistory: () => {},
+          onOpenImageProviderSetup: () => {},
+        }),
+      ),
+    );
+    expect(html).toContain("Add an OpenAI image provider to generate real images from chat.");
+    expect(html).toContain("Open image provider setup");
   });
 });

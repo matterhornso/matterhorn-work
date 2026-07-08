@@ -120,6 +120,8 @@ export type McpViewProps = {
   enablementContext?: import("../../../../app/enablement").EnablementContext;
   /** Organization policy restriction for Matterhorn Work-provided built-in extensions. */
   builtInExtensionsDisabled?: boolean;
+  detailEntryRequest?: { id: string; requestId: number } | null;
+  onDetailEntryRequestHandled?: (requestId: number) => void;
   /** Rendered inside the session right rail instead of the full Settings page. */
   compact?: boolean;
 };
@@ -934,6 +936,7 @@ export function McpView(props: McpViewProps) {
   const configRequestId = useRef(0);
 
   const quickConnectList = props.quickConnect;
+  const handledDetailRequestRef = useRef<number | null>(null);
 
   useEffect(() => {
     const refresh = () => setExtensionStateVersion((value) => value + 1);
@@ -944,6 +947,28 @@ export function McpView(props: McpViewProps) {
       window.removeEventListener("storage", refresh);
     };
   }, []);
+
+  useEffect(() => {
+    const request = props.detailEntryRequest;
+    if (!request || handledDetailRequestRef.current === request.requestId) return;
+    const requestedId = request.id.trim();
+    if (!requestedId) return;
+
+    const match = quickConnectList.find((candidate) => {
+      const identity = getMcpIdentityKey(candidate);
+      return (
+        candidate.id === requestedId ||
+        candidate.serverName === requestedId ||
+        identity === requestedId ||
+        normalizeMcpSlug(candidate.name) === requestedId
+      );
+    });
+    if (!match) return;
+
+    handledDetailRequestRef.current = request.requestId;
+    setDetailEntry(match);
+    props.onDetailEntryRequestHandled?.(request.requestId);
+  }, [props.detailEntryRequest, props.onDetailEntryRequestHandled, quickConnectList]);
 
   useEffect(() => {
     if (!isDesktopRuntime()) return;

@@ -61,6 +61,7 @@ export type GeneratedMediaSettingsViewProps = {
   runtimeWorkspaceId?: string | null;
   onOpenWorkspaceChat: () => void;
   onOpenRunHistory: () => void;
+  onOpenImageProviderSetup?: () => void;
 };
 
 function statusToneClass(status: MatterhornCapabilityStatus | "unavailable" | "local") {
@@ -628,6 +629,9 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
     nftMinting: capabilities.nftMinting,
     nftMarketplaceListing: capabilities.nftMarketplaceListing,
   }) : [], [capabilities]);
+  const imageProviderSetupRequired = publishingSetupRequirements.some((requirement) =>
+    requirement.envVar === "OPENAI_API_KEY" || requirement.envVar === "MATTERHORN_IMAGE_PROVIDER"
+  );
   const dataControlStores = useMemo(() => controlStores(dataControlsQuery.data?.stores), [dataControlsQuery.data?.stores]);
   const counts = historyQuery.data?.counts ?? { images: 0, drafts: 0, minted: 0, listed: 0 };
   const isRefreshing =
@@ -686,6 +690,23 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
               requirements={publishingSetupRequirements}
               description="Configure these local backend values before public storage, mint previews, or listing previews are available."
             />
+            {imageProviderSetupRequired && props.onOpenImageProviderSetup ? (
+              <SettingsNotice className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  Add an OpenAI image provider to generate real images from chat.
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit gap-1.5 text-xs"
+                  onClick={props.onOpenImageProviderSetup}
+                >
+                  <ImageIcon className="size-3.5" />
+                  Open image provider setup
+                </Button>
+              </SettingsNotice>
+            ) : null}
           </>
         ) : (
           <SettingsInset className="text-sm text-dls-secondary">
