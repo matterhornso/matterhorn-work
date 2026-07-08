@@ -98,11 +98,10 @@ export function ErrorState({
 
   // If the caller already provided a title, use COPY.detail unless the
   // error message itself already reads like a user-facing sentence.
-  const showDetail = Boolean(
-    title
-      ? detail ?? (typeof error === "string" && error.length >= 40 ? null : copy.detail)
-      : detail ?? copy.detail,
-  );
+  const effectiveDetail = title
+    ? detail ?? (typeof error === "string" && error.length >= 40 ? null : copy.detail)
+    : detail ?? copy.detail;
+  const showDetail = Boolean(effectiveDetail);
 
   // When a title override is given and the error is classified as
   // connection, prefer the more specific title from COPY so the user
@@ -121,7 +120,7 @@ export function ErrorState({
       <div className="min-w-0 flex-1">
         <p className={cn("font-medium", textClass)}>{effectiveTitle}</p>
         {showDetail ? (
-          <p className={cn("mt-0.5 break-words", detailClass)}>{showDetail}</p>
+          <p className={cn("mt-0.5 break-words", detailClass)}>{effectiveDetail}</p>
         ) : null}
       </div>
       {onRetry ? (
