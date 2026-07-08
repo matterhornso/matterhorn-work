@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import type { CSSProperties } from "react";
+import type { CSSProperties, FormEvent } from "react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -52,6 +52,7 @@ import type {
 } from "../../../../app/types";
 import type { ShareWorkspaceModalProps } from "../../workspace/types";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -125,6 +126,12 @@ import {
 import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
 import { WorkflowStageCard } from "../workflows/workflow-stage-card";
+import {
+  buildDeskTaskPromptWithInput,
+  getDeskTaskInputRequirement,
+  validateDeskTaskInput,
+  type DeskTaskInputRequirement,
+} from "../workflows/desk-task-inputs";
 import {
   stageWorkflowRun,
   startWorkflowRun,
@@ -720,6 +727,14 @@ function ProtocolDeskEmptyState({
   const prompts = PROTOCOL_DESK_SUGGESTED_PROMPTS[panel];
   const draftConfig = getChatDraftConfig(panel);
   const [launchingTaskTitle, setLaunchingTaskTitle] = useState<string | null>(null);
+  const [pendingInput, setPendingInput] = useState<{
+    key: string;
+    title: string;
+    prompt: string;
+    requirement: DeskTaskInputRequirement;
+  } | null>(null);
+  const [taskInputValue, setTaskInputValue] = useState("");
+  const [taskInputError, setTaskInputError] = useState<string | null>(null);
   const readinessWorkspaceId = runtimeWorkspaceId?.trim() ?? "";
   const readinessQuery = useQuery({
     queryKey: ["protocol-desk-readiness", readinessWorkspaceId],
@@ -752,6 +767,44 @@ function ProtocolDeskEmptyState({
       : panel === "sui"
         ? "Runs public Sui account reads and transfer previews. Web signing happens in your connected Sui wallet; desktop signing stays external."
         : "Runs read-only market/account checks and prepares external-client handoffs. Matterhorn never submits orders inside the app.";
+
+  const startTask = useCallback((prompt: string, title: string) => {
+    setLaunchingTaskTitle(title);
+    setPendingInput(null);
+    setTaskInputValue("");
+    setTaskInputError(null);
+    onUsePrompt(prompt, title);
+  }, [onUsePrompt]);
+
+  const handleTaskAction = useCallback((item: { title: string; prompt: string }) => {
+    const requirement = getDeskTaskInputRequirement(item.prompt);
+    if (!requirement) {
+      startTask(item.prompt, item.title);
+      return;
+    }
+    setPendingInput({
+      key: `${panel}:${item.title}`,
+      title: item.title,
+      prompt: item.prompt,
+      requirement,
+    });
+    setTaskInputValue("");
+    setTaskInputError(null);
+  }, [panel, startTask]);
+
+  const handleTaskInputSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!pendingInput) return;
+    const validationError = validateDeskTaskInput(pendingInput.requirement, taskInputValue);
+    if (validationError) {
+      setTaskInputError(validationError);
+      return;
+    }
+    startTask(
+      buildDeskTaskPromptWithInput(pendingInput.prompt, pendingInput.requirement, taskInputValue),
+      pendingInput.title,
+    );
+  }, [pendingInput, startTask, taskInputValue]);
 
   return (
     <section
@@ -825,6 +878,10 @@ function ProtocolDeskEmptyState({
       <div className="matterhorn-focused-desk-prompt-list space-y-2" aria-label="Agent tasks">
         {prompts.map((item) => {
           const isLaunching = launchingTaskTitle === item.title;
+          const inputRequirement = getDeskTaskInputRequirement(item.prompt);
+          const pendingInputKey = `${panel}:${item.title}`;
+          const inputOpen = pendingInput?.key === pendingInputKey;
+          const inputId = `desk-task-input-${panel}-${item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
           const evidenceHint = panel === "bittensor"
             ? "reads: public SS58 and subnet context"
             : panel === "hyperliquid"
@@ -835,20 +892,68 @@ function ProtocolDeskEmptyState({
                   ? "reads: public Sui account and receipt context"
                   : "reads: public context";
           return (
-            <WorkflowStageCard
-              key={item.title}
-              title={item.title}
-              objective={item.detail}
-              status="idle"
-              evidenceHints={[evidenceHint]}
-              actionLabel={isLaunching ? "Starting..." : startTaskBlocked ? "Needs setup" : draftConfig?.confirmCtaLabel ?? "Start task"}
-              actionDisabled={startTaskBlocked || Boolean(launchingTaskTitle)}
-              actionTitle={startTaskBlocker ?? undefined}
-              onAction={() => {
-                setLaunchingTaskTitle(item.title);
-                onUsePrompt(item.prompt, item.title);
-              }}
-            />
+            <div key={item.title} className="space-y-2">
+              <WorkflowStageCard
+                title={item.title}
+                objective={item.detail}
+                status="idle"
+                evidenceHints={[evidenceHint]}
+                actionLabel={isLaunching ? "Starting..." : startTaskBlocked ? "Needs setup" : inputRequirement?.actionLabel ?? draftConfig?.confirmCtaLabel ?? "Start task"}
+                actionDisabled={startTaskBlocked || Boolean(launchingTaskTitle)}
+                actionTitle={startTaskBlocker ?? inputRequirement?.helpText ?? undefined}
+                onAction={() => handleTaskAction(item)}
+              />
+              {inputOpen ? (
+                <form
+                  className="ml-0 rounded-lg bg-dls-surface-muted/35 px-3 py-3 sm:ml-8"
+                  onSubmit={handleTaskInputSubmit}
+                >
+                  <label htmlFor={inputId} className="text-[12px] font-semibold leading-5 text-dls-text">
+                    {pendingInput.requirement.label}
+                  </label>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+                    <Input
+                      id={inputId}
+                      value={taskInputValue}
+                      onChange={(event) => {
+                        setTaskInputValue(event.currentTarget.value);
+                        if (taskInputError) setTaskInputError(null);
+                      }}
+                      aria-invalid={Boolean(taskInputError)}
+                      aria-describedby={`${inputId}-hint`}
+                      placeholder={pendingInput.requirement.inputPlaceholder}
+                      className="h-8 border-dls-border/70 bg-background/35 text-[13px]"
+                    />
+                    <Button type="submit" size="sm" className="h-8">
+                      Start task
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-dls-secondary"
+                      onClick={() => {
+                        setPendingInput(null);
+                        setTaskInputValue("");
+                        setTaskInputError(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                  <p
+                    id={`${inputId}-hint`}
+                    className={cn(
+                      "mt-2 text-[11px] leading-4",
+                      taskInputError ? "text-red-300" : "text-dls-secondary",
+                    )}
+                    role={taskInputError ? "alert" : undefined}
+                  >
+                    {taskInputError ?? pendingInput.requirement.helpText}
+                  </p>
+                </form>
+              ) : null}
+            </div>
           );
         })}
       </div>
