@@ -14,6 +14,7 @@ import {
   FolderOpen,
   Globe,
   Home,
+  Info,
   Mic2,
   PanelRightClose,
   PencilLine,
@@ -498,6 +499,8 @@ function HomeCapabilityOverview({
 }: {
   onOpenCapability?: (id: CustomerWorkflowIconHint) => void;
 }) {
+  const openDeskDetails = "Desks keep protocol-specific context, safety boundaries, and output handling available without crowding the launcher.";
+
   return (
     <section
       className="matterhorn-capability-overview space-y-3"
@@ -512,54 +515,73 @@ function HomeCapabilityOverview({
               <button
                 type="button"
                 aria-label="Open a desk details"
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-dls-border text-[11px] font-semibold leading-none text-dls-secondary transition-colors hover:border-dls-text/45 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/30"
+                title={openDeskDetails}
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-dls-hover/70 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
               >
-                i
+                <Info className="size-3.5" aria-hidden="true" />
               </button>
             }
           />
           <PopoverContent
             side="right"
             align="start"
-            className="w-60 gap-1 rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-left text-[11px] leading-5 text-dls-text shadow-none"
+            className="w-64 rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-left text-[12px] leading-5 text-dls-text shadow-none"
           >
-            <span>Dedicated desk agents</span>
-            <span>Review before action</span>
-            <span>Outputs stay with the project</span>
+            <p>{openDeskDetails}</p>
+            <p className="mt-1 text-dls-secondary">Use each desk's info icon for setup and boundary details.</p>
           </PopoverContent>
         </Popover>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {homeCapabilityStatusItems().map((item) => {
           return (
-            <button
-              type="button"
+            <article
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="matterhorn-capability-card group grid min-w-0 gap-3 rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.075)] p-3.5 text-left shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--matterhorn-desk-color)]"
-              aria-label={`Open ${item.title}`}
-              onClick={() => onOpenCapability?.(item.id)}
+              className="matterhorn-capability-card group min-w-0 rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.055)] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.055)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.095)]"
             >
-              <div className="grid min-w-0 grid-cols-[34px_minmax(0,1fr)] gap-3">
-                <span className="flex size-8 items-center justify-center rounded-lg bg-dls-surface/55 text-[var(--matterhorn-desk-color)] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-dls-surface/45 text-[var(--matterhorn-desk-color)] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.055)]">
                   <DeskBrandMark id={item.id} size={24} />
                 </span>
-                <div className="min-w-0">
-                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-1.5">
                     <span className="text-[13px] font-semibold text-dls-text">{item.title}</span>
-                    <span className="text-[11px] font-medium text-[var(--matterhorn-desk-color)]">
-                      {item.statusLabel}
-                    </span>
+                    <Popover>
+                      <PopoverTrigger
+                        render={
+                          <button
+                            type="button"
+                            aria-label={`${item.title} details`}
+                            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-dls-hover/70 hover:text-[var(--matterhorn-desk-color)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+                          >
+                            <Info className="size-3.5" aria-hidden="true" />
+                          </button>
+                        }
+                      />
+                      <PopoverContent
+                        style={deskToneStyle(item.id)}
+                        side="top"
+                        align="start"
+                        className="w-72 rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-left text-[12px] leading-5 text-dls-text shadow-none"
+                      >
+                        <p className="font-medium text-[var(--matterhorn-desk-color)]">{item.statusLabel}</p>
+                        <p className="mt-1 text-dls-secondary">{item.proof}</p>
+                      </PopoverContent>
+                    </Popover>
                   </div>
-                  <p className="mt-1 text-[12px] leading-5 text-dls-secondary">{item.summary}</p>
-                  <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-dls-secondary/90">{item.proof}</p>
-                  <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                  <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-dls-secondary">{item.summary}</p>
+                  <button
+                    type="button"
+                    className="mt-2 inline-flex h-6 items-center gap-1 rounded-md px-0 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] transition-colors hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+                    onClick={() => onOpenCapability?.(item.id)}
+                  >
                     {item.id === "wellness" ? "Start workflow" : "Open desk"}
                     <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
-                  </span>
+                  </button>
                 </div>
               </div>
-            </button>
+            </article>
           );
         })}
       </div>
