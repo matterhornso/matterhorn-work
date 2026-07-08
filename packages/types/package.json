@@ -112,6 +112,11 @@
       "types": "./src/generated-media.ts",
       "development": "./src/generated-media.ts",
       "default": "./src/generated-media.ts"
+    },
+    "./billing": {
+      "types": "./src/billing.ts",
+      "development": "./src/billing.ts",
+      "default": "./src/billing.ts"
     }
   },
   "files": [

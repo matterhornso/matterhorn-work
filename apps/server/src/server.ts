@@ -227,6 +227,14 @@ import {
 } from "./image-nft-capabilities.js";
 import { addGeneratedMediaRoutes } from "./generated-media-routes.js";
 import {
+  addBillingRoutes,
+  createBillingRouteContext,
+} from "./billing-routes.js";
+import {
+  buildMatterhornBillingCapability,
+  resolveBillingProviderConfigFromEnv,
+} from "./billing.js";
+import {
   hasForbiddenMatterhornMemorySuggestionInput,
   planMatterhornMemorySuggestions,
   type MatterhornMemorySuggestionPlanInput,
@@ -267,6 +275,7 @@ import type {
 } from "@matterhorn-work/types/project-data-ledger";
 import type {
   MatterhornBackendCapabilitiesResponse,
+  MatterhornBillingCapability,
   MatterhornCapability,
   MatterhornCapabilityStatus,
   MatterhornDataStoreDescriptor,
@@ -2273,6 +2282,7 @@ function backendSettingsSections(input: {
   securityStatus: MatterhornCapabilityStatus;
   imageStatus: MatterhornCapabilityStatus;
   nftStatus: MatterhornCapabilityStatus;
+  billingStatus: MatterhornCapabilityStatus;
 }): MatterhornSettingsSectionCapability[] {
   const metadata: Record<MatterhornSettingsSectionCapability["section"], Omit<MatterhornSettingsSectionCapability, keyof MatterhornCapability | "section">> = {
     overview: {
@@ -2371,6 +2381,13 @@ function backendSettingsSections(input: {
       backendDependencies: ["/workspace/:id/nft-drafts", "/workspace/:id/backend/capabilities"],
       primaryAction: { id: "settings.nft.open", label: "Open generated media", kind: "route", href: "/settings/generated-media" },
     },
+    billing: {
+      route: "/settings/billing",
+      workspaceScoped: false,
+      desktopOnly: false,
+      backendDependencies: ["/api/billing/plans", "/api/billing/status"],
+      primaryAction: { id: "settings.billing.open", label: "Open billing", kind: "route", href: "/settings/billing" },
+    },
   };
   const base = (section: MatterhornSettingsSectionCapability["section"], item: MatterhornCapability): MatterhornSettingsSectionCapability => ({
     section,
@@ -2392,6 +2409,7 @@ function backendSettingsSections(input: {
     base("mcp", capability(input.readOnly ? "preview" : "working", "MCPs", input.readOnly ? "MCPs can be inspected in read-only mode." : "MCP configuration can be inspected and updated.")),
     base("image-generation", capability(input.imageStatus, "Image generation", input.imageStatus === "working" ? "Generate images from chat and save them as workspace outputs." : "Image generation needs setup or is disabled. Set OPENAI_API_KEY or use the mock provider for tests.")),
     base("nft", capability(input.nftStatus, "NFT drafts", input.nftStatus === "preview" ? "Create Sui NFT drafts from generated images. Minting and listing are signed by your wallet." : "NFT drafts are created locally. Set MATTERHORN_SUI_NFT_PACKAGE_ID to enable mint previews.")),
+    base("billing", capability(input.billingStatus, "Billing", input.billingStatus === "working" ? "Manage your Matterhorn plan and usage." : "Billing is in preview/mock mode. No real charges are processed.")),
   ];
 }
 
@@ -2613,6 +2631,8 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
   const imageProvider = createImageGenerationProvider(imageProviderConfig);
   const imageProviderStatus = await imageProvider.status();
   const nftEnvConfig = resolveNftEnvironmentConfig(process.env);
+  const billingConfig = resolveBillingProviderConfigFromEnv(process.env);
+  const billingCapability = buildMatterhornBillingCapability(billingConfig);
 
   return {
     success: true,
@@ -2729,6 +2749,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     walrusStorage: buildWalrusStorageCapability(nftEnvConfig),
     nftMinting: buildNftMintingCapability(nftEnvConfig),
     nftMarketplaceListing: buildNftMarketplaceListingCapability(nftEnvConfig),
+    billing: billingCapability,
     settings: backendSettingsSections({
       readOnly: !writeEnabled,
       modelStatus,
@@ -2740,6 +2761,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       securityStatus,
       imageStatus: imageProviderStatus.status,
       nftStatus: buildNftMintingCapability(nftEnvConfig).status,
+      billingStatus: billingCapability.status,
     }),
   };
 }
@@ -4713,6 +4735,7 @@ function createRoutes(
   onWorkspacesChanged: () => void,
 ): Route[] {
   const routes: Route[] = [];
+  const billingRouteContext = createBillingRouteContext(config);
   const fileSessions = new FileSessionStore();
   const googleWorkspaceConnectFlows = createGoogleWorkspaceConnectFlowManager(config);
   const memoryVault = createMatterhornMemoryVault(resolveMatterhornMemoryRoot());
@@ -10461,6 +10484,11 @@ function createRoutes(
     (method, path, authMode, handler) => addRoute(routes, method, path, authMode, handler),
     config,
     resolveWorkspace,
+  );
+
+  addBillingRoutes(
+    (method, path, authMode, handler) => addRoute(routes, method, path, authMode, handler),
+    billingRouteContext,
   );
 
   return routes;

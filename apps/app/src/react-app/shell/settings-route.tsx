@@ -70,6 +70,7 @@ import { MessagingView } from "../domains/settings/pages/messaging-view";
 import { SkillsView } from "../domains/settings/pages/skills-view";
 import { WalletSettingsView } from "../domains/settings/pages/wallet-view";
 import { GeneratedMediaSettingsView } from "../domains/settings/pages/generated-media-view";
+import { BillingSettingsView } from "../domains/settings/pages/billing-view";
 import { useWallet } from "../domains/wallet/WalletProvider";
 import { UpdatesView } from "../domains/settings/pages/updates-view";
 import { useDebugViewModel } from "../domains/settings/state/debug-view-model";
@@ -385,6 +386,7 @@ function parseSettingsPath(pathname: string): {
       return { tab: head, redirectPath: null };
     case "wallet":
     case "generated-media":
+    case "billing":
       return { tab: head, redirectPath: null };
     case "marketplace":
       return { tab: head, redirectPath: null };
@@ -2512,6 +2514,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         );
       case "marketplace":
         return <MarketplaceView />;
+      case "billing":
+        return <BillingSettingsView matterhornServerClient={matterhornClient} />;
       default:
         return null;
     }
