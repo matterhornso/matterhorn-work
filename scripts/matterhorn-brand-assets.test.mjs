@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import assert from "node:assert/strict";
 import { inflateSync } from "node:zlib";
@@ -12,13 +13,16 @@ function assertPng(path, width, height) {
   assert.equal(bytes.readUInt32BE(20), height, `${path} height`);
 }
 
+function sha256(path) {
+  return createHash("sha256").update(readBuffer(path)).digest("hex");
+}
+
 function assertSvgUsesMatterhornLogo(path) {
   const svg = read(path);
   assert.match(svg, /<title>Matterhorn Work<\/title>/, `${path} should identify Matterhorn Work`);
-  assert.match(svg, /id="matterhorn-mark"/, `${path} should contain the Matterhorn mark path`);
-  assert.match(svg, /#D1F2FF/, `${path} should use Matterhorn blue`);
-  assert.match(svg, /#0C0C0C/, `${path} should use Matterhorn ink`);
-  assert.doesNotMatch(svg, /data:image\/png;base64,/, `${path} should stay vector-backed, not a bitmap screenshot`);
+  assert.match(svg, /viewBox="0 0 120 126"/, `${path} should keep the original Matterhorn logo aspect ratio`);
+  assert.match(svg, /data:image\/png;base64,/, `${path} should embed the original Matterhorn logo PNG`);
+  assert.doesNotMatch(svg, /id="matterhorn-mark"/, `${path} should not use the rounded redraw path`);
   assert.doesNotMatch(svg, /#7c3aed|#257CE9|font-family="monospace"|>MATTERHORN</i, `${path} should not use the old OpenWork-style logo treatment`);
 }
 
@@ -82,6 +86,13 @@ assert.match(css, /--matterhorn-blue:\s*#D1F2FF;/, "CSS should define Matterhorn
 assert.match(css, /--matterhorn-ink:\s*#0C0C0C;/, "CSS should define Matterhorn ink");
 assert.doesNotMatch(css, /--dls-accent:\s*#7c3aed/i, "CSS should not keep the old purple accent token");
 
+assertPng("scripts/assets/matterhorn-logo-original.png", 120, 126);
+assert.equal(
+  sha256("scripts/assets/matterhorn-logo-original.png"),
+  "6ff20ea1fe18cf7bb75bbebacbe56624cd2b2403139fb97a0d3e394f9d1164d2",
+  "the canonical Matterhorn logo source should stay the attached original asset",
+);
+
 for (const path of [
   "apps/app/public/matterhorn-logo.svg",
   "apps/app/public/matterhorn-mark.svg",
@@ -98,10 +109,10 @@ assertPng("apps/app/public/favicon-32x32.png", 32, 32);
 assertPng("apps/app/public/apple-touch-icon.png", 180, 180);
 assertPng("apps/desktop/resources/icons/icon.png", 512, 512);
 assertPng("apps/desktop/resources/icons/dev/icon.png", 512, 512);
-assert.deepEqual(
-  decodedRgbaPixel("apps/desktop/resources/icons/icon.png", 60, 60),
-  [209, 242, 255, 255],
-  "desktop icon should not have the old heavy black frame near its edge",
+const desktopFramePixel = decodedRgbaPixel("apps/desktop/resources/icons/icon.png", 4, 4);
+assert.ok(
+  desktopFramePixel[0] <= 20 && desktopFramePixel[1] <= 20 && desktopFramePixel[2] <= 20 && desktopFramePixel[3] === 255,
+  "desktop icon should keep the original Matterhorn logo black frame near its edge",
 );
 
 const ico = readBuffer("apps/app/public/favicon.ico");
