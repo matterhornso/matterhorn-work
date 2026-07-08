@@ -5,6 +5,7 @@ import type {
   MatterhornBillingCheckoutResponse,
   MatterhornBillingInterval,
   MatterhornBillingMode,
+  MatterhornBillingPendingCheckout,
   MatterhornBillingPlan,
   MatterhornBillingPlanId,
   MatterhornBillingPlansResponse,
@@ -398,11 +399,16 @@ export function checkMatterhornBillingEntitlement(
   return { allowed: true, key, label, planId, used, limit, allowedPlanIds };
 }
 
-export function buildMatterhornBillingStatus(planId: MatterhornBillingPlanId, config: BillingProviderConfig): MatterhornBillingStatus {
+export function buildMatterhornBillingStatus(
+  planId: MatterhornBillingPlanId,
+  config: BillingProviderConfig,
+  pendingCheckout: MatterhornBillingPendingCheckout | null = null,
+): MatterhornBillingStatus {
   return {
     mode: config.mode,
     provider: config.provider,
     subscription: buildMatterhornBillingSubscription(planId),
+    pendingCheckout,
     usage: buildMatterhornBillingUsageSnapshotForPlan(planId),
     setup: buildMatterhornBillingSetup(config),
     isLivePaymentsEnabled: false,
@@ -413,9 +419,10 @@ export function buildMatterhornBillingStatusWithUsage(
   planId: MatterhornBillingPlanId,
   config: BillingProviderConfig,
   usage?: BillingUsageCounts,
+  pendingCheckout: MatterhornBillingPendingCheckout | null = null,
 ): MatterhornBillingStatus {
   return {
-    ...buildMatterhornBillingStatus(planId, config),
+    ...buildMatterhornBillingStatus(planId, config, pendingCheckout),
     usage: buildMatterhornBillingUsageSnapshotForPlan(planId, usage),
   };
 }
@@ -424,11 +431,13 @@ export function buildMatterhornBillingStatusForSubscription(
   subscription: MatterhornBillingSubscription,
   config: BillingProviderConfig,
   usage?: BillingUsageCounts,
+  pendingCheckout: MatterhornBillingPendingCheckout | null = null,
 ): MatterhornBillingStatus {
   return {
     mode: config.mode,
     provider: config.provider,
     subscription,
+    pendingCheckout,
     usage: buildMatterhornBillingUsageSnapshotForPlan(subscription.planId, usage),
     setup: buildMatterhornBillingSetup(config),
     isLivePaymentsEnabled: false,
@@ -838,12 +847,13 @@ export function buildBillingStatusResponse(config: BillingProviderConfig): Matte
 export function buildBillingStatusResponseWithUsage(
   config: BillingProviderConfig,
   usage?: BillingUsageCounts,
+  pendingCheckout: MatterhornBillingPendingCheckout | null = null,
 ): MatterhornBillingStatusResponse {
   return {
     success: true,
     version: "matterhorn.billing.v1",
     generatedAt: new Date().toISOString(),
-    status: buildMatterhornBillingStatusWithUsage(config.currentPlanId, config, usage),
+    status: buildMatterhornBillingStatusWithUsage(config.currentPlanId, config, usage, pendingCheckout),
   };
 }
 
@@ -851,11 +861,12 @@ export function buildBillingStatusResponseForSubscription(
   config: BillingProviderConfig,
   subscription: MatterhornBillingSubscription,
   usage?: BillingUsageCounts,
+  pendingCheckout: MatterhornBillingPendingCheckout | null = null,
 ): MatterhornBillingStatusResponse {
   return {
     success: true,
     version: "matterhorn.billing.v1",
     generatedAt: new Date().toISOString(),
-    status: buildMatterhornBillingStatusForSubscription(subscription, config, usage),
+    status: buildMatterhornBillingStatusForSubscription(subscription, config, usage, pendingCheckout),
   };
 }

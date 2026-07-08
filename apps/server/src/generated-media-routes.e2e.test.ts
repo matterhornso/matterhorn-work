@@ -114,6 +114,40 @@ function bootWalrusPublisher(payload: unknown, options?: { status?: number; dela
   return { url: `http://127.0.0.1:${server.port}`, calls };
 }
 
+function bootStripeCheckoutEndpoint() {
+  const calls: Array<{
+    method: string;
+    path: string;
+    authorization: string | null;
+    params: Record<string, string>;
+  }> = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const url = new URL(request.url);
+      const body = await request.text();
+      const params = Object.fromEntries(new URLSearchParams(body));
+      calls.push({
+        method: request.method,
+        path: url.pathname,
+        authorization: request.headers.get("authorization"),
+        params,
+      });
+      if (url.pathname === "/v1/checkout/sessions") {
+        return Response.json({
+          id: "cs_test_generated_media_pending",
+          object: "checkout.session",
+          url: "https://checkout.stripe.test/generated-media-pending",
+        });
+      }
+      return Response.json({ error: { message: "Unexpected Stripe test endpoint." } }, { status: 404 });
+    },
+  });
+  stops.push(() => server.stop());
+  return { baseUrl: `http://127.0.0.1:${server.port}`, calls };
+}
+
 function previousPeriodIso(): string {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1, 0, 0, 0, 0)).toISOString();
@@ -188,6 +222,10 @@ beforeEach(() => {
     MATTERHORN_BILLING_MODE: process.env.MATTERHORN_BILLING_MODE,
     MATTERHORN_BILLING_PROVIDER: process.env.MATTERHORN_BILLING_PROVIDER,
     MATTERHORN_BILLING_CURRENT_PLAN: process.env.MATTERHORN_BILLING_CURRENT_PLAN,
+    MATTERHORN_STRIPE_SECRET_KEY: process.env.MATTERHORN_STRIPE_SECRET_KEY,
+    MATTERHORN_STRIPE_PRICE_ID_PLUS: process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS,
+    MATTERHORN_STRIPE_PRICE_ID_MAX: process.env.MATTERHORN_STRIPE_PRICE_ID_MAX,
+    MATTERHORN_STRIPE_API_BASE_URL: process.env.MATTERHORN_STRIPE_API_BASE_URL,
     OPENWORK_DATA_DIR: process.env.OPENWORK_DATA_DIR,
   };
   process.env.MATTERHORN_IMAGE_PROVIDER = "mock";
@@ -208,6 +246,10 @@ beforeEach(() => {
   delete process.env.MATTERHORN_BILLING_MODE;
   delete process.env.MATTERHORN_BILLING_PROVIDER;
   delete process.env.MATTERHORN_BILLING_CURRENT_PLAN;
+  delete process.env.MATTERHORN_STRIPE_SECRET_KEY;
+  delete process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS;
+  delete process.env.MATTERHORN_STRIPE_PRICE_ID_MAX;
+  delete process.env.MATTERHORN_STRIPE_API_BASE_URL;
   delete process.env.OPENWORK_DATA_DIR;
 });
 
@@ -778,6 +820,52 @@ describe("Generated media billing entitlements", () => {
     });
     expect(generated.response.status).toBe(200);
     expect(generated.payload.success).toBe(true);
+  });
+
+  test("Stripe checkout stays pending and does not raise image allowance before webhook sync", async () => {
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_STRIPE_SECRET_KEY = "sk_test_image_pending";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS = "price_plus_image_pending";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_MAX = "price_max_image_pending";
+    const stripe = bootStripeCheckoutEndpoint();
+    process.env.MATTERHORN_STRIPE_API_BASE_URL = stripe.baseUrl;
+    const { base } = await boot();
+
+    for (let index = 0; index < 10; index += 1) {
+      const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+        method: "POST",
+        body: JSON.stringify({ prompt: `free image before pending stripe checkout ${index}` }),
+      });
+      expect(generated.response.status).toBe(200);
+    }
+
+    const checkout = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/checkout`, {
+      method: "POST",
+      body: JSON.stringify({ planId: "plus" }),
+    });
+    expect(checkout.response.status).toBe(200);
+    expect(checkout.payload.mode).toBe("stripe_test");
+    expect(stripe.calls[0].params["metadata[workspace_id]"]).toBe(WORKSPACE_ID);
+
+    const blocked = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "should still be blocked before stripe webhook" }),
+    });
+    expect(blocked.response.status).toBe(429);
+    expect(blocked.payload.details).toMatchObject({
+      currentPlanId: "free",
+      limit: 10,
+      reason: "limit_reached",
+    });
+
+    const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(status.response.status).toBe(200);
+    expect(status.payload.status.subscription.planId).toBe("free");
+    expect(status.payload.status.pendingCheckout).toMatchObject({
+      planId: "plus",
+      mode: "stripe_test",
+    });
   });
 
   test("Free plan keeps local NFT drafts but blocks public NFT and Walrus preparation", async () => {

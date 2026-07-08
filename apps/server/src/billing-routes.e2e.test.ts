@@ -337,11 +337,20 @@ describe("Billing routes", () => {
     const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
     expect(status.response.status).toBe(200);
     expect(status.payload.status.subscription).toMatchObject({
-      planId: "max",
-      status: "active",
-      providerCustomerId: null,
-      providerSubscriptionId: "cs_test_matterhorn",
+      planId: "free",
+      status: "none",
     });
+    expect(status.payload.status.subscription.providerCustomerId ?? null).toBeNull();
+    expect(status.payload.status.subscription.providerSubscriptionId ?? null).toBeNull();
+    expect(status.payload.status.pendingCheckout).toMatchObject({
+      planId: "max",
+      interval: "month",
+      provider: "stripe",
+      mode: "stripe_test",
+      providerSessionId: "cs_test_matterhorn",
+    });
+    expect(status.payload.status.pendingCheckout.createdAt).toEqual(expect.any(String));
+    expect(status.payload.status.usage.generatedImages.limit).toBe(10);
 
     const portal = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/portal`, {
       method: "POST",
@@ -409,6 +418,7 @@ describe("Billing routes", () => {
       providerCustomerId: "cus_test_workspace",
       providerSubscriptionId: "sub_test_workspace",
     });
+    expect(status.payload.status.pendingCheckout ?? null).toBeNull();
     expect(status.payload.status.usage.generatedImages.limit).toBe(null);
 
     const portal = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/portal`, {
