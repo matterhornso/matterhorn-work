@@ -293,6 +293,32 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                   </div>
                 ) : null}
               </div>
+              {modelReadiness.catalogRows.length ? (
+                <div className="mt-3 border-t border-dls-border/45 pt-3">
+                  <div className="mb-1.5 text-xs font-medium text-dls-text">Model catalog</div>
+                  <div className="divide-y divide-dls-border/35">
+                    {modelReadiness.catalogRows.map((row) => (
+                      <div
+                        key={row.providerId}
+                        className="grid gap-1 py-2 text-xs @md/settings:grid-cols-[minmax(10rem,14rem)_1fr] @md/settings:gap-4"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-dls-text">{row.providerName}</div>
+                          <div className="truncate text-muted-foreground">
+                            {row.providerId} · {row.sourceLabel} · {row.connectedLabel}
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-dls-secondary">
+                            {row.modelCountLabel} · Default {row.defaultModel}
+                          </div>
+                          <div className="mt-0.5 truncate text-muted-foreground">{row.sampleModels}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </CollapsibleContent>
           </Collapsible>
 

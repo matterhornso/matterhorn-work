@@ -13,6 +13,16 @@ export type ModelReadinessDetail = {
   detail?: string;
 };
 
+export type ModelCatalogRow = {
+  providerId: string;
+  providerName: string;
+  sourceLabel: string;
+  connectedLabel: string;
+  modelCountLabel: string;
+  defaultModel: string;
+  sampleModels: string;
+};
+
 export type ModelReadinessSummary = {
   statusLabel: string;
   statusTone: ModelReadinessTone;
@@ -25,6 +35,7 @@ export type ModelReadinessSummary = {
   selectionPolicy: ModelReadinessDetail;
   trainingPolicy: string;
   details: ModelReadinessDetail[];
+  catalogRows: ModelCatalogRow[];
 };
 
 type BuildModelReadinessSummaryInput = {
@@ -80,6 +91,44 @@ function statusForCatalog(
   if (catalog?.status === "needs_setup") return { label: "Needs setup", tone: "warning" };
   if (catalog?.status === "preview") return { label: "Preview", tone: "neutral" };
   return { label: "Unknown", tone: "neutral" };
+}
+
+function sourceLabel(source: string | undefined): string {
+  if (source === "api") return "API key";
+  if (source === "env") return "Environment";
+  if (source === "config") return "Config";
+  if (source === "custom") return "Custom";
+  return "Unknown source";
+}
+
+function formatModelCount(count: number): string {
+  return count === 1 ? "1 model" : `${count} models`;
+}
+
+function sampleModelList(modelIds: string[], modelCount: number): string {
+  if (!modelIds.length) return "No models reported";
+  const shown = modelIds.slice(0, 4);
+  const remaining = Math.max(0, modelCount - shown.length);
+  return remaining > 0 ? `${shown.join(", ")} +${remaining} more` : shown.join(", ");
+}
+
+export function buildModelCatalogRows(
+  catalog: MatterhornBackendModelCatalogSnapshot | undefined,
+): ModelCatalogRow[] {
+  if (!catalog?.providers.length) return [];
+
+  return catalog.providers.map((provider) => {
+    const samples = provider.sampleModels.length ? provider.sampleModels : provider.modelIds;
+    return {
+      providerId: provider.id,
+      providerName: provider.name || provider.id,
+      sourceLabel: sourceLabel(provider.source),
+      connectedLabel: provider.connected ? "Connected" : "Available",
+      modelCountLabel: formatModelCount(provider.modelCount),
+      defaultModel: catalog.defaultModels[provider.id] ?? "Not set",
+      sampleModels: sampleModelList(samples, provider.modelCount),
+    };
+  });
 }
 
 export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInput): ModelReadinessSummary {
@@ -161,6 +210,7 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
       backendModels?.privacy.trainingUse === "none_by_default"
         ? "No model training by default. Feedback is kept only for eval, routing, and product quality review."
         : "Training policy is unavailable.",
+    catalogRows: buildModelCatalogRows(catalog),
     details: [
       {
         label: "Request field",
