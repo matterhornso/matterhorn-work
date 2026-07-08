@@ -2,6 +2,9 @@ import type {
   MatterhornGeneratedMediaDiagnosticCheck,
   MatterhornGeneratedMediaDiagnosticStatus,
   MatterhornGeneratedMediaDiagnosticsResponse,
+  MatterhornGeneratedMediaProductionSmokePlan,
+  MatterhornGeneratedMediaProductionSmokeStage,
+  MatterhornImageSetupRequirement,
   MatterhornNftSetupRequirement,
 } from "@matterhorn-work/types/generated-media";
 import {
@@ -61,6 +64,7 @@ export async function buildGeneratedMediaDiagnostics(
     status,
     summary: diagnosticSummary(status),
     checks,
+    productionSmokePlan: buildProductionSmokePlan(checks),
     safety: {
       custody: false,
       canSubmit: false,
@@ -342,4 +346,157 @@ function diagnosticSummary(status: MatterhornGeneratedMediaDiagnosticStatus): st
   if (status === "pass") return "Generated media setup passed all safe diagnostics.";
   if (status === "warning") return "Generated media is partially ready; review setup warnings before production use.";
   return "Generated media setup has blocking issues.";
+}
+
+function buildProductionSmokePlan(
+  checks: MatterhornGeneratedMediaDiagnosticCheck[],
+): MatterhornGeneratedMediaProductionSmokePlan {
+  const imageProvider = requiredCheck(checks, "image_provider");
+  const walrusStorage = requiredCheck(checks, "walrus_storage");
+  const suiMinting = requiredCheck(checks, "sui_nft_minting");
+  const suiListing = requiredCheck(checks, "sui_marketplace_listing");
+  const safety = requiredCheck(checks, "non_custody_safety");
+  const imageProviderName = stringDetail(imageProvider, "provider");
+  const isProductionImageProvider = imageProvider.status === "pass" && imageProviderName === "openai";
+  const productionImageRequirement = isProductionImageProvider ? [] : [openAiProductionRequirement(imageProviderName)];
+
+  const stages: MatterhornGeneratedMediaProductionSmokeStage[] = [
+    {
+      id: "safe_diagnostics",
+      label: "Run safe diagnostics",
+      status: safety.status === "pass" ? "ready" : "blocked",
+      writeScope: "none",
+      requiresWallet: false,
+      requiresPublicWrite: false,
+      summary: "Checks provider setup, endpoint reachability, Sui config shape, and non-custody guarantees without writing public data.",
+      setupRequirements: unresolvedRequirements(safety.setupRequirements),
+    },
+    {
+      id: "chat_image_generation",
+      label: "Generate an image in chat",
+      status: imageProvider.status === "pass" ? "ready" : "blocked",
+      writeScope: "workspace_output",
+      requiresWallet: false,
+      requiresPublicWrite: false,
+      summary: isProductionImageProvider
+        ? "OpenAI image generation is configured; a production smoke can create a workspace output."
+        : "Only local/mock image generation is ready. Configure OpenAI before treating this as production evidence.",
+      setupRequirements: [
+        ...unresolvedRequirements(imageProvider.setupRequirements),
+        ...productionImageRequirement,
+      ],
+    },
+    {
+      id: "walrus_public_upload",
+      label: "Upload media to Walrus",
+      status: walrusStorage.status === "pass" ? "manual" : "blocked",
+      writeScope: "public_storage",
+      requiresWallet: false,
+      requiresPublicWrite: true,
+      summary: walrusStorage.status === "pass"
+        ? "Walrus endpoints responded. Uploading image bytes is a public storage action and still requires explicit user confirmation."
+        : "Walrus upload is blocked until publisher and relay setup pass diagnostics.",
+      setupRequirements: unresolvedRequirements(walrusStorage.setupRequirements),
+    },
+    {
+      id: "sui_wallet_mint",
+      label: "Sign Sui mint transaction",
+      status: suiMinting.status === "pass" ? "manual" : "blocked",
+      writeScope: "wallet_signed_transaction",
+      requiresWallet: true,
+      requiresPublicWrite: true,
+      summary: suiMinting.status === "pass"
+        ? "Mint preview can be prepared; the user must review and sign with a Sui wallet."
+        : "Minting is blocked until the Sui NFT package setup passes diagnostics.",
+      setupRequirements: unresolvedRequirements(suiMinting.setupRequirements),
+    },
+    {
+      id: "sui_kiosk_listing",
+      label: "Sign marketplace listing transaction",
+      status: suiListing.status === "pass" ? "manual" : "blocked",
+      writeScope: "wallet_signed_transaction",
+      requiresWallet: true,
+      requiresPublicWrite: true,
+      summary: suiListing.status === "pass"
+        ? "Kiosk listing preview can be prepared; the user must review and sign with a Sui wallet."
+        : "Marketplace listing is blocked until Kiosk and TransferPolicy setup passes diagnostics.",
+      setupRequirements: unresolvedRequirements(suiListing.setupRequirements),
+    },
+  ];
+
+  const blockers = dedupeRequirements(stages.flatMap((stage) => stage.setupRequirements ?? []));
+  const endToEndStagesReady = stages.every((stage) => stage.status !== "blocked");
+  const mode = !endToEndStagesReady
+    ? "needs_setup"
+    : isProductionImageProvider
+      ? "production_candidate"
+      : "local_test";
+
+  return {
+    mode,
+    summary: productionSmokeSummary(mode, blockers.length),
+    canRunEndToEnd: mode === "production_candidate" && endToEndStagesReady,
+    publicWritesOnlyAfterUserAction: true,
+    stages,
+    blockers,
+  };
+}
+
+function requiredCheck(
+  checks: MatterhornGeneratedMediaDiagnosticCheck[],
+  id: MatterhornGeneratedMediaDiagnosticCheck["id"],
+): MatterhornGeneratedMediaDiagnosticCheck {
+  const check = checks.find((candidate) => candidate.id === id);
+  if (check) return check;
+  return {
+    id,
+    label: id,
+    status: "fail",
+    summary: "Diagnostic check did not run.",
+  };
+}
+
+function stringDetail(check: MatterhornGeneratedMediaDiagnosticCheck, key: string): string | null {
+  const value = check.details?.[key];
+  return typeof value === "string" ? value : null;
+}
+
+function openAiProductionRequirement(provider: string | null): MatterhornImageSetupRequirement {
+  return {
+    key: provider === "mock" ? "openai_api_key" : "image_provider",
+    label: "Production image provider",
+    status: "missing",
+    envVar: provider === "mock" ? "OPENAI_API_KEY" : "MATTERHORN_IMAGE_PROVIDER",
+    description: provider === "mock"
+      ? "Local mock image generation is ready, but production smoke requires MATTERHORN_IMAGE_PROVIDER=openai and OPENAI_API_KEY."
+      : "Production smoke requires a configured OpenAI image provider.",
+  };
+}
+
+function unresolvedRequirements(
+  requirements: MatterhornGeneratedMediaDiagnosticCheck["setupRequirements"] | undefined,
+): Array<MatterhornImageSetupRequirement | MatterhornNftSetupRequirement> {
+  return (requirements ?? []).filter((requirement) => requirement.status !== "configured");
+}
+
+function dedupeRequirements(
+  requirements: Array<MatterhornImageSetupRequirement | MatterhornNftSetupRequirement>,
+): Array<MatterhornImageSetupRequirement | MatterhornNftSetupRequirement> {
+  const seen = new Set<string>();
+  return requirements.filter((requirement) => {
+    const key = `${requirement.envVar ?? ""}:${requirement.key}:${requirement.label}:${requirement.status}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function productionSmokeSummary(mode: MatterhornGeneratedMediaProductionSmokePlan["mode"], blockerCount: number): string {
+  if (mode === "production_candidate") {
+    return "Production smoke can run end-to-end after explicit user actions for public upload and wallet signing.";
+  }
+  if (mode === "local_test") {
+    return "Local generated-media smoke can run, but production image generation still needs OpenAI setup.";
+  }
+  return `Production smoke is blocked by ${blockerCount} setup ${blockerCount === 1 ? "item" : "items"}.`;
 }

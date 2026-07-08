@@ -47,6 +47,9 @@ describe("Generated media settings surface", () => {
     expect(source).toContain("NftPublishingSetupRows");
     expect(source).toContain("Run diagnostics");
     expect(source).toContain("without generating images, uploading media, signing, or submitting transactions");
+    expect(source).toContain("Production smoke plan");
+    expect(source).toContain("Public writes require user action");
+    expect(source).toContain("productionSmokePlan");
     expect(source).toContain("Delete local generated image");
     expect(source).toContain("Delete local NFT draft");
     expect(client).toContain("generatedMediaDiagnostics");

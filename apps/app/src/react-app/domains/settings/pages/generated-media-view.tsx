@@ -22,6 +22,8 @@ import type { MatterhornCapabilityStatus } from "@matterhorn-work/types/backend-
 import type {
   MatterhornGeneratedMediaDiagnosticCheck,
   MatterhornGeneratedMediaDiagnosticsResponse,
+  MatterhornGeneratedMediaProductionSmokePlan,
+  MatterhornGeneratedMediaProductionSmokeStage,
   MatterhornGeneratedMediaHistoryItem,
   MatterhornImageNftDraft,
 } from "@matterhorn-work/types/generated-media";
@@ -98,6 +100,31 @@ function DiagnosticStatusText(props: { status: MatterhornGeneratedMediaDiagnosti
       {label}
     </span>
   );
+}
+
+function productionModeLabel(mode: MatterhornGeneratedMediaProductionSmokePlan["mode"]) {
+  if (mode === "production_candidate") return "Production candidate";
+  if (mode === "local_test") return "Local test";
+  return "Needs setup";
+}
+
+function productionStageLabel(status: MatterhornGeneratedMediaProductionSmokeStage["status"]) {
+  if (status === "ready") return "Ready";
+  if (status === "manual") return "User action";
+  return "Blocked";
+}
+
+function productionStageToneClass(status: MatterhornGeneratedMediaProductionSmokeStage["status"]) {
+  if (status === "ready") return "bg-emerald-500/10 text-emerald-300";
+  if (status === "manual") return "bg-amber-500/10 text-amber-300";
+  return "bg-red-500/10 text-red-300";
+}
+
+function writeScopeLabel(scope: MatterhornGeneratedMediaProductionSmokeStage["writeScope"]) {
+  if (scope === "workspace_output") return "Workspace output";
+  if (scope === "public_storage") return "Public storage";
+  if (scope === "wallet_signed_transaction") return "Wallet transaction";
+  return "No write";
 }
 
 function CountStrip(props: {
@@ -264,6 +291,60 @@ function DiagnosticsRows(props: {
           </div>
         </div>
       ))}
+      <ProductionSmokePlanRows plan={props.diagnostics.productionSmokePlan} />
+    </div>
+  );
+}
+
+function ProductionSmokePlanRows(props: { plan: MatterhornGeneratedMediaProductionSmokePlan }) {
+  const blockers = props.plan.blockers.filter((requirement) => requirement.status !== "configured");
+  return (
+    <div className="grid gap-3 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium text-dls-text">Production smoke plan</p>
+            <span className="rounded-md bg-dls-hover/70 px-2 py-0.5 text-[11px] font-medium text-dls-secondary">
+              {productionModeLabel(props.plan.mode)}
+            </span>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-dls-secondary">{props.plan.summary}</p>
+        </div>
+        <span className="text-[11px] text-dls-muted">
+          {props.plan.publicWritesOnlyAfterUserAction ? "Public writes require user action" : "Review writes"}
+        </span>
+      </div>
+
+      <div className="grid gap-2">
+        {props.plan.stages.map((stage) => (
+          <div key={stage.id} className="grid gap-2 rounded-md bg-dls-surface-muted/25 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-xs font-medium text-dls-text">{stage.label}</span>
+                <span className="text-[11px] text-dls-secondary">{writeScopeLabel(stage.writeScope)}</span>
+                {stage.requiresWallet ? <span className="text-[11px] text-dls-secondary">Wallet required</span> : null}
+              </div>
+              <p className="mt-1 text-[11px] leading-4 text-dls-secondary">{stage.summary}</p>
+            </div>
+            <span className={cn("inline-flex w-fit rounded-md px-2 py-0.5 text-[11px] font-medium", productionStageToneClass(stage.status))}>
+              {productionStageLabel(stage.status)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {blockers.length ? (
+        <div className="grid gap-1.5">
+          <p className="text-xs font-medium text-dls-text">Production blockers</p>
+          <div className="flex flex-wrap gap-1.5">
+            {blockers.map((requirement) => (
+              <code key={`${requirement.key}:${requirement.envVar ?? requirement.label}`} className="rounded-sm bg-dls-surface px-1.5 py-0.5 font-mono text-[10px] text-dls-secondary">
+                {requirement.envVar ?? requirement.label}
+              </code>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

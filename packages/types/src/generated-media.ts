@@ -406,6 +406,49 @@ export interface MatterhornGeneratedMediaDiagnosticCheck {
   setupRequirements?: Array<MatterhornImageSetupRequirement | MatterhornNftSetupRequirement>;
 }
 
+export type MatterhornGeneratedMediaProductionMode =
+  | "local_test"
+  | "production_candidate"
+  | "needs_setup";
+
+export type MatterhornGeneratedMediaProductionSmokeStageId =
+  | "safe_diagnostics"
+  | "chat_image_generation"
+  | "walrus_public_upload"
+  | "sui_wallet_mint"
+  | "sui_kiosk_listing";
+
+export type MatterhornGeneratedMediaProductionSmokeStageStatus =
+  | "ready"
+  | "blocked"
+  | "manual";
+
+export type MatterhornGeneratedMediaProductionSmokeWriteScope =
+  | "none"
+  | "workspace_output"
+  | "public_storage"
+  | "wallet_signed_transaction";
+
+export interface MatterhornGeneratedMediaProductionSmokeStage {
+  id: MatterhornGeneratedMediaProductionSmokeStageId;
+  label: string;
+  status: MatterhornGeneratedMediaProductionSmokeStageStatus;
+  writeScope: MatterhornGeneratedMediaProductionSmokeWriteScope;
+  summary: string;
+  requiresWallet: boolean;
+  requiresPublicWrite: boolean;
+  setupRequirements?: Array<MatterhornImageSetupRequirement | MatterhornNftSetupRequirement>;
+}
+
+export interface MatterhornGeneratedMediaProductionSmokePlan {
+  mode: MatterhornGeneratedMediaProductionMode;
+  summary: string;
+  canRunEndToEnd: boolean;
+  publicWritesOnlyAfterUserAction: true;
+  stages: MatterhornGeneratedMediaProductionSmokeStage[];
+  blockers: Array<MatterhornImageSetupRequirement | MatterhornNftSetupRequirement>;
+}
+
 export interface MatterhornGeneratedMediaDiagnosticsResponse {
   success: true;
   workspaceId: string;
@@ -413,6 +456,7 @@ export interface MatterhornGeneratedMediaDiagnosticsResponse {
   status: MatterhornGeneratedMediaDiagnosticStatus;
   summary: string;
   checks: MatterhornGeneratedMediaDiagnosticCheck[];
+  productionSmokePlan: MatterhornGeneratedMediaProductionSmokePlan;
   safety: {
     custody: false;
     canSubmit: false;
