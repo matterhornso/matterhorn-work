@@ -43,6 +43,7 @@ for (const stageId of [
   "preview_listing",
   "record_listing_receipt",
   "settings_generated_media",
+  "settings_generated_media_diagnostics",
 ]) {
   assert.ok(script.includes(stageId), `generated-media browser smoke should report stage ${stageId}`);
 }
@@ -70,6 +71,9 @@ for (const visibleText of [
   "Generated media history",
   "Listed",
   "Production readiness",
+  "Setup diagnostics",
+  "Run diagnostics",
+  "Generated media setup passed all safe diagnostics.",
   "Recent media",
   "NFT drafts",
   "Data controls",
@@ -82,8 +86,9 @@ for (const visibleText of [
 assert.ok(
   script.includes("generatedMediaSettingsUrl") &&
     script.includes("/settings/generated-media") &&
-    script.includes("publicStateRetained"),
-  "generated-media browser smoke should navigate to the Generated media settings page and verify retained public NFT state",
+    script.includes("publicStateRetained") &&
+    script.includes("publicWritesDuringDiagnostics"),
+  "generated-media browser smoke should navigate to the Generated media settings page, verify retained public NFT state, and run safe diagnostics",
 );
 assert.ok(
   script.includes("isOptionalDevWorkspace404") &&

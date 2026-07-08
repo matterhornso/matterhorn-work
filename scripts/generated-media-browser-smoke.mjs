@@ -403,6 +403,7 @@ async function runSmoke(config) {
     await stage(report, "settings_generated_media", "Check Generated media settings readiness", async () => {
       await page.goto(generatedMediaSettingsUrl(config.url), { waitUntil: "load", timeout: 30_000 });
       await page.getByText("Production readiness", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Setup diagnostics", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText("Recent media", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText("NFT drafts", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText("Data controls", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
@@ -421,6 +422,26 @@ async function runSmoke(config) {
       report.artifacts.generatedMediaSettings = {
         url: page.url(),
         publicStateRetained: true,
+      };
+    });
+
+    await stage(report, "settings_generated_media_diagnostics", "Run generated media setup diagnostics", async () => {
+      await page.getByRole("button", { name: "Run diagnostics", exact: true }).click();
+      await page.getByText("Generated media setup passed all safe diagnostics.", { exact: true }).waitFor({
+        state: "visible",
+        timeout: 20_000,
+      });
+      await page.getByText("Walrus publisher and relay endpoints responded to safe diagnostics probes.", { exact: true }).waitFor({
+        state: "visible",
+        timeout: 20_000,
+      });
+      await page.getByText("Diagnostics do not upload user media, do not sign, and do not submit transactions.", { exact: false }).waitFor({
+        state: "visible",
+        timeout: 20_000,
+      });
+      report.artifacts.generatedMediaDiagnostics = {
+        status: "pass",
+        publicWritesDuringDiagnostics: false,
       };
     });
 

@@ -384,6 +384,44 @@ export interface MatterhornGeneratedMediaHistoryResponse {
   };
 }
 
+export type MatterhornGeneratedMediaDiagnosticStatus =
+  | "pass"
+  | "warning"
+  | "fail";
+
+export type MatterhornGeneratedMediaDiagnosticCheckId =
+  | "image_provider"
+  | "walrus_storage"
+  | "sui_nft_minting"
+  | "sui_marketplace_listing"
+  | "non_custody_safety";
+
+export interface MatterhornGeneratedMediaDiagnosticCheck {
+  id: MatterhornGeneratedMediaDiagnosticCheckId;
+  label: string;
+  status: MatterhornGeneratedMediaDiagnosticStatus;
+  summary: string;
+  durationMs?: number;
+  details?: Record<string, string | number | boolean | null>;
+  setupRequirements?: Array<MatterhornImageSetupRequirement | MatterhornNftSetupRequirement>;
+}
+
+export interface MatterhornGeneratedMediaDiagnosticsResponse {
+  success: true;
+  workspaceId: string;
+  checkedAt: string;
+  status: MatterhornGeneratedMediaDiagnosticStatus;
+  summary: string;
+  checks: MatterhornGeneratedMediaDiagnosticCheck[];
+  safety: {
+    custody: false;
+    canSubmit: false;
+    walletSigning: "client_wallet";
+    publicWritesDuringDiagnostics: false;
+    storesSecrets: false;
+  };
+}
+
 export interface MatterhornImageResponse {
   success: true;
   image: MatterhornGeneratedImage;

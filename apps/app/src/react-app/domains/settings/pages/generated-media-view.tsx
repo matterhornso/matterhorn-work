@@ -9,6 +9,7 @@ import {
   FileText,
   Image as ImageIcon,
   RefreshCw,
+  ShieldCheck,
   Store,
   Trash2,
 } from "lucide-react";
@@ -19,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { MatterhornCapabilityStatus } from "@matterhorn-work/types/backend-capabilities";
 import type {
+  MatterhornGeneratedMediaDiagnosticCheck,
+  MatterhornGeneratedMediaDiagnosticsResponse,
   MatterhornGeneratedMediaHistoryItem,
   MatterhornImageNftDraft,
 } from "@matterhorn-work/types/generated-media";
@@ -77,6 +80,21 @@ function StatusText(props: { status: MatterhornCapabilityStatus | "unavailable" 
         : backendCapabilityLabel(props.status));
   return (
     <span className={cn("inline-flex w-fit items-center rounded-md px-2 py-0.5 text-[11px] font-medium", statusToneClass(props.status))}>
+      {label}
+    </span>
+  );
+}
+
+function diagnosticToneClass(status: MatterhornGeneratedMediaDiagnosticCheck["status"]) {
+  if (status === "pass") return "bg-emerald-500/10 text-emerald-300";
+  if (status === "warning") return "bg-amber-500/10 text-amber-300";
+  return "bg-red-500/10 text-red-300";
+}
+
+function DiagnosticStatusText(props: { status: MatterhornGeneratedMediaDiagnosticCheck["status"] }) {
+  const label = props.status === "pass" ? "Passed" : props.status === "warning" ? "Review" : "Failed";
+  return (
+    <span className={cn("inline-flex w-fit items-center rounded-md px-2 py-0.5 text-[11px] font-medium", diagnosticToneClass(props.status))}>
       {label}
     </span>
   );
@@ -201,6 +219,51 @@ function RecentMediaRow(props: { item: MatterhornGeneratedMediaHistoryItem; dele
           </Button>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function DiagnosticsRows(props: {
+  diagnostics?: MatterhornGeneratedMediaDiagnosticsResponse;
+  loading: boolean;
+  error?: string | null;
+}) {
+  if (props.loading) {
+    return <SettingsInset className="text-sm text-dls-secondary">Running generated media diagnostics...</SettingsInset>;
+  }
+  if (props.error) {
+    return <SettingsNotice tone="error">{props.error}</SettingsNotice>;
+  }
+  if (!props.diagnostics) {
+    return (
+      <SettingsInset className="text-sm leading-6 text-dls-secondary">
+        Run diagnostics to safely check provider setup, Walrus reachability, Sui publishing config, and non-custody guarantees.
+      </SettingsInset>
+    );
+  }
+  return (
+    <div className="divide-y divide-dls-border/40">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
+        <p className="text-sm text-dls-secondary">{props.diagnostics.summary}</p>
+        <DiagnosticStatusText status={props.diagnostics.status} />
+      </div>
+      {props.diagnostics.checks.map((check) => (
+        <div key={check.id} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-dls-text">
+              <ShieldCheck className="size-4 shrink-0 text-dls-secondary" />
+              <span>{check.label}</span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-dls-secondary">{check.summary}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {typeof check.durationMs === "number" ? (
+              <span className="text-[11px] tabular-nums text-dls-muted">{check.durationMs} ms</span>
+            ) : null}
+            <DiagnosticStatusText status={check.status} />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -336,6 +399,7 @@ function DataControlRows(props: { stores: MatterhornDataControlStore[]; loading:
 export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProps) {
   const queryClient = useQueryClient();
   const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
   const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
   const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
   const workspaceId = props.runtimeWorkspaceId?.trim() ?? "";
@@ -422,6 +486,18 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
       setDeleteStatus(deleteError instanceof Error ? deleteError.message : "NFT draft could not be deleted.");
     },
     onSettled: () => setDeletingDraftId(null),
+  });
+
+  const diagnosticsMutation = useMutation({
+    mutationFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client || !workspaceId) throw new Error("Open a workspace to run generated media diagnostics.");
+      return client.generatedMediaDiagnostics(workspaceId);
+    },
+    onMutate: () => setDiagnosticsError(null),
+    onError: (diagnosticError) => {
+      setDiagnosticsError(diagnosticError instanceof Error ? diagnosticError.message : "Generated media diagnostics could not run.");
+    },
   });
 
   const deleteImage = (item: MatterhornGeneratedMediaHistoryItem) => {
@@ -535,6 +611,34 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
             Loading publishing readiness...
           </SettingsInset>
         )}
+      </SettingsSection>
+
+      <SettingsSection>
+        <SettingsSectionHeader>
+          <SettingsSectionHeaderContent>
+            <SettingsSectionHeaderTitle>Setup diagnostics</SettingsSectionHeaderTitle>
+            <SettingsSectionHeaderDescription>
+              Run safe checks without generating images, uploading media, signing, or submitting transactions.
+            </SettingsSectionHeaderDescription>
+          </SettingsSectionHeaderContent>
+          <SettingsSectionHeaderActions>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => diagnosticsMutation.mutate()}
+              disabled={!enabled || diagnosticsMutation.isPending}
+            >
+              <ShieldCheck className="size-3.5" />
+              {diagnosticsMutation.isPending ? "Checking" : "Run diagnostics"}
+            </Button>
+          </SettingsSectionHeaderActions>
+        </SettingsSectionHeader>
+        <DiagnosticsRows
+          diagnostics={diagnosticsMutation.data}
+          loading={diagnosticsMutation.isPending}
+          error={diagnosticsError}
+        />
       </SettingsSection>
 
       <SettingsSection>
