@@ -1,14 +1,34 @@
 import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
 import type { MatterhornBackendSupportReportResponse } from "@matterhorn-work/types/backend-support-report";
 import type { MatterhornBackendTeamAccessSummaryResponse } from "@matterhorn-work/types/backend-team-access";
+import type {
+  MatterhornBillingSetupCheck,
+  MatterhornBillingStatusResponse,
+} from "@matterhorn-work/types/billing";
 import type { MatterhornProjectDataLedgerExportControlPlaneSnapshot } from "@matterhorn-work/types/project-data-ledger";
 import type { WorkspaceInfo } from "./types.js";
+import {
+  billingUsagePeriodForSubscription,
+  buildBillingStatusResponseForSubscription,
+  buildBillingStatusResponseWithUsage,
+  buildMatterhornBillingSubscription,
+  isBillingUsageTimestampInPeriod,
+  resolveBillingProviderConfigFromEnv,
+} from "./billing.js";
+import { MatterhornBillingAccountStore } from "./billing-account-store.js";
+import { MatterhornGeneratedImageStore } from "./generated-image-store.js";
 import { buildGeneratedMediaDiagnostics } from "./generated-media-diagnostics.js";
+import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
 import { buildProjectDataLedgerExport } from "./project-data-ledger.js";
 
 const SUPPORT_REPORT_FORBIDDEN_MARKERS = [
   "OPENAI_API_KEY",
   "MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN",
+  "MATTERHORN_STRIPE_SECRET_KEY",
+  "MATTERHORN_STRIPE_WEBHOOK_SECRET",
+  "MATTERHORN_STRIPE_PRICE_ID_PLUS",
+  "MATTERHORN_STRIPE_PRICE_ID_MAX",
+  "MATTERHORN_STRIPE_TEST_CUSTOMER_ID",
   "Authorization",
   "X-Matterhorn-Host-Token",
 ] as const;
@@ -66,6 +86,125 @@ function redactGeneratedMediaDiagnosticsForSupportReport(
   };
 }
 
+function redactBillingSetupChecksForSupportReport(
+  checks: MatterhornBillingSetupCheck[],
+): MatterhornBillingSetupCheck[] {
+  return checks.map((check) => ({
+    ...check,
+    description: redactSupportReportText(check.description),
+  }));
+}
+
+function redactBillingStatusForSupportReport(
+  response: MatterhornBillingStatusResponse,
+): MatterhornBillingStatusResponse {
+  return {
+    ...response,
+    status: {
+      ...response.status,
+      setup: {
+        ...response.status.setup,
+        checks: redactBillingSetupChecksForSupportReport(response.status.setup.checks),
+      },
+    },
+  };
+}
+
+async function buildBillingSupportReportSection(options: {
+  workspace: WorkspaceInfo;
+  controlPlane: MatterhornBackendControlPlaneResponse;
+  teamAccess: MatterhornBackendTeamAccessSummaryResponse;
+}): Promise<MatterhornBackendSupportReportResponse["billing"]> {
+  const billingConfig = resolveBillingProviderConfigFromEnv(process.env);
+  const accountStore = new MatterhornBillingAccountStore({
+    workspaceRoot: options.workspace.path,
+    workspaceId: options.workspace.id,
+  });
+  const account = await accountStore.get();
+  const subscription = account?.subscription ?? buildMatterhornBillingSubscription(billingConfig.currentPlanId);
+  const usagePeriod = billingUsagePeriodForSubscription(subscription);
+  const [images, nftDrafts] = await Promise.all([
+    new MatterhornGeneratedImageStore({
+      workspaceRoot: options.workspace.path,
+      workspaceId: options.workspace.id,
+    }).list(),
+    new MatterhornImageNftDraftStore({
+      workspaceRoot: options.workspace.path,
+      workspaceId: options.workspace.id,
+    }).list(),
+  ]);
+  const usage = {
+    generatedImages: images.filter((image) => isBillingUsageTimestampInPeriod(image.createdAt, usagePeriod)).length,
+    generatedImagesResetsAt: usagePeriod.resetsAt,
+    nftDrafts: nftDrafts.filter((draft) => isBillingUsageTimestampInPeriod(draft.createdAt, usagePeriod)).length,
+    nftDraftsResetsAt: usagePeriod.resetsAt,
+    teamMembers: Math.max(1, options.teamAccess.localAccess.tokenCount),
+    cloudStorageBytes: 0,
+  };
+  const status = redactBillingStatusForSupportReport(
+    account
+      ? buildBillingStatusResponseForSubscription(
+          billingConfig,
+          subscription,
+          usage,
+          account.pendingCheckout ?? null,
+        )
+      : buildBillingStatusResponseWithUsage(billingConfig, usage),
+  );
+  const capability = {
+    ...options.controlPlane.capabilities.billing,
+    setup: {
+      ...options.controlPlane.capabilities.billing.setup,
+      checks: redactBillingSetupChecksForSupportReport(options.controlPlane.capabilities.billing.setup.checks),
+    },
+  };
+  const pendingCheckout = status.status.pendingCheckout
+    ? {
+        planId: status.status.pendingCheckout.planId,
+        interval: status.status.pendingCheckout.interval,
+        provider: status.status.pendingCheckout.provider,
+        mode: status.status.pendingCheckout.mode,
+        createdAt: status.status.pendingCheckout.createdAt,
+        expiresAt: status.status.pendingCheckout.expiresAt ?? null,
+        providerSessionIdPresent: Boolean(status.status.pendingCheckout.providerSessionId),
+      }
+    : null;
+  const setupChecks = status.status.setup.checks;
+  const recommendedActions = setupChecks
+    .filter((check) => check.status === "needs_setup" || check.status === "error")
+    .map((check) => ({
+      id: check.id,
+      label: check.label,
+      status: check.status,
+    }));
+
+  return {
+    capability,
+    status,
+    diagnostics: {
+      mode: status.status.mode,
+      provider: status.status.provider,
+      currentPlanId: billingConfig.currentPlanId,
+      workspacePlanId: status.status.subscription.planId,
+      livePaymentsEnabled: false,
+      checkoutSupported: capability.checkoutSupported,
+      portalSupported: capability.portalSupported,
+      readyForTestCheckout: status.status.setup.readyForTestCheckout,
+      readyForWebhooks: status.status.setup.readyForWebhooks,
+      pendingCheckout,
+      usage: status.status.usage,
+      checks: setupChecks,
+      safety: {
+        liveCharges: false,
+        rawCardDataHandled: false,
+        secretsReturned: false,
+        providerWritesDuringDiagnostics: false,
+      },
+      recommendedActions,
+    },
+  };
+}
+
 export function backendControlPlaneExportSnapshot(
   controlPlane: MatterhornBackendControlPlaneResponse,
 ): MatterhornProjectDataLedgerExportControlPlaneSnapshot {
@@ -90,6 +229,7 @@ export async function buildBackendSupportReport(options: {
     workspaceId: options.workspace.id,
     timeoutMs: 1_000,
   });
+  const billing = await buildBillingSupportReportSection(options);
   const ledgerExport = await buildProjectDataLedgerExport({
     workspace: options.workspace,
     limit: 300,
@@ -166,6 +306,7 @@ export async function buildBackendSupportReport(options: {
     generatedMedia: {
       diagnostics: redactGeneratedMediaDiagnosticsForSupportReport(generatedMediaDiagnostics),
     },
+    billing,
     privacy: {
       trainingUse: controlPlaneSnapshot.privacy.trainingUse,
       feedbackUse: controlPlaneSnapshot.privacy.feedbackUse,
@@ -175,6 +316,7 @@ export async function buildBackendSupportReport(options: {
     warnings: [
       "Support reports include backend status, readiness, sanitized storage locations, local access counts, and data-policy summaries.",
       "Support reports do not include raw chat transcripts, provider credentials, bearer tokens, host tokens, or full model provider payloads.",
+      "Support reports include billing readiness and usage only; they do not create checkout sessions, open portals, process cards, or contact payment providers.",
       "Open the project data ledger export separately when row-level redacted evidence is needed.",
     ],
   };

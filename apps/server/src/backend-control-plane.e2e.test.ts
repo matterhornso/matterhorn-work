@@ -38,6 +38,14 @@ const priorEnv = {
   suiKioskOwnerCapId: process.env.MATTERHORN_SUI_KIOSK_OWNER_CAP_ID,
   suiTransferPolicyId: process.env.MATTERHORN_SUI_TRANSFER_POLICY_ID,
   suiTransferPolicyPackageId: process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID,
+  billingMode: process.env.MATTERHORN_BILLING_MODE,
+  billingProvider: process.env.MATTERHORN_BILLING_PROVIDER,
+  billingCurrentPlan: process.env.MATTERHORN_BILLING_CURRENT_PLAN,
+  stripeSecretKey: process.env.MATTERHORN_STRIPE_SECRET_KEY,
+  stripeWebhookSecret: process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET,
+  stripePriceIdPlus: process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS,
+  stripePriceIdMax: process.env.MATTERHORN_STRIPE_PRICE_ID_MAX,
+  stripeTestCustomerId: process.env.MATTERHORN_STRIPE_TEST_CUSTOMER_ID,
 };
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
@@ -256,6 +264,14 @@ afterEach(async () => {
   restoreEnv("suiKioskOwnerCapId", "MATTERHORN_SUI_KIOSK_OWNER_CAP_ID");
   restoreEnv("suiTransferPolicyId", "MATTERHORN_SUI_TRANSFER_POLICY_ID");
   restoreEnv("suiTransferPolicyPackageId", "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID");
+  restoreEnv("billingMode", "MATTERHORN_BILLING_MODE");
+  restoreEnv("billingProvider", "MATTERHORN_BILLING_PROVIDER");
+  restoreEnv("billingCurrentPlan", "MATTERHORN_BILLING_CURRENT_PLAN");
+  restoreEnv("stripeSecretKey", "MATTERHORN_STRIPE_SECRET_KEY");
+  restoreEnv("stripeWebhookSecret", "MATTERHORN_STRIPE_WEBHOOK_SECRET");
+  restoreEnv("stripePriceIdPlus", "MATTERHORN_STRIPE_PRICE_ID_PLUS");
+  restoreEnv("stripePriceIdMax", "MATTERHORN_STRIPE_PRICE_ID_MAX");
+  restoreEnv("stripeTestCustomerId", "MATTERHORN_STRIPE_TEST_CUSTOMER_ID");
 });
 
 describe("backend control plane routes", () => {
@@ -905,6 +921,44 @@ describe("backend control plane routes", () => {
       },
     });
     expect(result.payload.generatedMedia.diagnostics.productionSmokePlan.publicWritesOnlyAfterUserAction).toBe(true);
+    expect(result.payload.billing).toMatchObject({
+      capability: {
+        status: "preview",
+        isLivePaymentsEnabled: false,
+      },
+      status: {
+        success: true,
+        status: {
+          mode: "phase0_mock",
+          provider: "mock",
+          isLivePaymentsEnabled: false,
+          subscription: {
+            planId: "free",
+          },
+        },
+      },
+      diagnostics: {
+        mode: "phase0_mock",
+        provider: "mock",
+        currentPlanId: "free",
+        workspacePlanId: "free",
+        livePaymentsEnabled: false,
+        readyForTestCheckout: true,
+        readyForWebhooks: false,
+        pendingCheckout: null,
+        safety: {
+          liveCharges: false,
+          rawCardDataHandled: false,
+          secretsReturned: false,
+          providerWritesDuringDiagnostics: false,
+        },
+      },
+    });
+    expect(result.payload.billing.diagnostics.usage.generatedImages.limit).toBe(10);
+    expect(result.payload.billing.diagnostics.checks.map((check: { id: string }) => check.id)).toEqual([
+      "mock_mode",
+      "live_payments_disabled",
+    ]);
     expect(result.payload.privacy).toEqual({
       trainingUse: "none_by_default",
       feedbackUse: "eval_routing_product_quality_only",
@@ -920,7 +974,92 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain("Authorization");
     expect(serialized).not.toContain("OPENAI_API_KEY");
     expect(serialized).not.toContain("MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN");
+    expect(serialized).not.toContain("MATTERHORN_STRIPE_SECRET_KEY");
+    expect(serialized).not.toContain("MATTERHORN_STRIPE_WEBHOOK_SECRET");
+    expect(serialized).not.toContain("MATTERHORN_STRIPE_PRICE_ID_PLUS");
+    expect(serialized).not.toContain("MATTERHORN_STRIPE_PRICE_ID_MAX");
+    expect(serialized).not.toContain("MATTERHORN_STRIPE_TEST_CUSTOMER_ID");
     expect(serialized).not.toContain("owt_should_not_leak");
+  });
+
+  test("backend support report includes Stripe test billing readiness without provider writes or secrets", async () => {
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_BILLING_CURRENT_PLAN = "plus";
+    process.env.MATTERHORN_STRIPE_SECRET_KEY = "sk_test_support_report_billing";
+    process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET = "whsec_support_report_billing";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS = "price_plus_support_report";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_MAX = "price_max_support_report";
+    process.env.MATTERHORN_STRIPE_TEST_CUSTOMER_ID = "cus_support_report_billing";
+    const { base } = await boot();
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/support-report");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.billing).toMatchObject({
+      capability: {
+        status: "working",
+        provider: "stripe",
+        mode: "phase1_stripe_test",
+        isLivePaymentsEnabled: false,
+        checkoutSupported: true,
+        portalSupported: true,
+      },
+      status: {
+        success: true,
+        status: {
+          mode: "phase1_stripe_test",
+          provider: "stripe",
+          isLivePaymentsEnabled: false,
+          subscription: {
+            planId: "plus",
+          },
+          setup: {
+            readyForTestCheckout: true,
+            readyForWebhooks: true,
+          },
+        },
+      },
+      diagnostics: {
+        mode: "phase1_stripe_test",
+        provider: "stripe",
+        currentPlanId: "plus",
+        workspacePlanId: "plus",
+        livePaymentsEnabled: false,
+        checkoutSupported: true,
+        portalSupported: true,
+        readyForTestCheckout: true,
+        readyForWebhooks: true,
+        pendingCheckout: null,
+        safety: {
+          liveCharges: false,
+          rawCardDataHandled: false,
+          secretsReturned: false,
+          providerWritesDuringDiagnostics: false,
+        },
+      },
+    });
+    expect(result.payload.billing.diagnostics.recommendedActions).toEqual([]);
+    expect(result.payload.billing.diagnostics.checks.map((check: { id: string; status: string }) => `${check.id}:${check.status}`)).toEqual([
+      "stripe_secret_key:working",
+      "stripe_webhook_secret:working",
+      "stripe_plus_price:working",
+      "stripe_max_price:working",
+      "stripe_test_customer:working",
+      "live_payments_disabled:working",
+    ]);
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain("sk_test_support_report_billing");
+    expect(serialized).not.toContain("whsec_support_report_billing");
+    expect(serialized).not.toContain("price_plus_support_report");
+    expect(serialized).not.toContain("price_max_support_report");
+    expect(serialized).not.toContain("cus_support_report_billing");
+    expect(serialized).not.toContain("MATTERHORN_STRIPE_SECRET_KEY");
+    expect(serialized).not.toContain("MATTERHORN_STRIPE_WEBHOOK_SECRET");
+    expect(serialized).not.toContain("MATTERHORN_STRIPE_PRICE_ID_PLUS");
+    expect(serialized).not.toContain("MATTERHORN_STRIPE_PRICE_ID_MAX");
+    expect(serialized).not.toContain("MATTERHORN_STRIPE_TEST_CUSTOMER_ID");
+    expect(serialized).not.toContain("Authorization");
   });
 
   test("backend support report includes generated-media production readiness without public writes or secrets", async () => {
