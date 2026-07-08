@@ -543,6 +543,20 @@ describe("Sui NFT transaction plan helpers", () => {
     ]);
   });
 
+  test("rejects unsafe or mismatched mint transaction plans before wallet signing", () => {
+    const submitCapablePlan = structuredClone(mockMintPreview.transactionPlan) as typeof mockMintPreview.transactionPlan;
+    (submitCapablePlan as unknown as { canSubmit: boolean }).canSubmit = true;
+    expect(() => buildMintTransactionFromPlan(submitCapablePlan, suiSender)).toThrow("must not allow Matterhorn submission");
+
+    const mismatchedTargetPlan = structuredClone(mockMintPreview.transactionPlan) as typeof mockMintPreview.transactionPlan;
+    mismatchedTargetPlan.moveCalls[0]!.target = `${suiPackageId}::other_module::mint`;
+    expect(() => buildMintTransactionFromPlan(mismatchedTargetPlan, suiSender)).toThrow("target does not match");
+
+    const missingInputPlan = structuredClone(mockMintPreview.transactionPlan) as typeof mockMintPreview.transactionPlan;
+    missingInputPlan.missingInputs = ["public_image_uri"];
+    expect(() => buildMintTransactionFromPlan(missingInputPlan, suiSender)).toThrow("missing inputs");
+  });
+
   test("builds a wallet transaction from the backend Kiosk listing plan", () => {
     const transaction = buildKioskListingTransactionFromPlan(mockListingPreview.transactionPlan, suiSender);
     const data = transaction.getData();
@@ -580,6 +594,20 @@ describe("Sui NFT transaction plan helpers", () => {
       { Input: 2, type: "object", $kind: "Input" },
       { Input: 3, type: "pure", $kind: "Input" },
     ]);
+  });
+
+  test("rejects unsafe or incomplete listing transaction plans before wallet signing", () => {
+    const custodialPlan = structuredClone(mockListingPreview.transactionPlan) as typeof mockListingPreview.transactionPlan;
+    (custodialPlan as unknown as { custody: boolean }).custody = true;
+    expect(() => buildKioskListingTransactionFromPlan(custodialPlan, suiSender)).toThrow("must be non-custodial");
+
+    const missingKioskPlan = structuredClone(mockListingPreview.transactionPlan) as typeof mockListingPreview.transactionPlan;
+    missingKioskPlan.kioskOwnerCapId = "";
+    expect(() => buildKioskListingTransactionFromPlan(missingKioskPlan, suiSender)).toThrow("missing Kiosk owner cap");
+
+    const noWalletStandardPlan = structuredClone(mockListingPreview.transactionPlan) as typeof mockListingPreview.transactionPlan;
+    (noWalletStandardPlan as unknown as { requiresWalletStandard: boolean }).requiresWalletStandard = false;
+    expect(() => buildKioskListingTransactionFromPlan(noWalletStandardPlan, suiSender)).toThrow("wallet-standard signer");
   });
 
   test("extracts digest and minted object id from wallet results", () => {

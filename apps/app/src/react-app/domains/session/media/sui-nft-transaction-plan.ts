@@ -24,9 +24,16 @@ export function buildMintTransactionFromPlan(
   plan: MatterhornNftMintTransactionPlan,
   sender: string,
 ): Transaction {
+  assertCommonPlanSafety(plan, "sui_move_call");
+  if (plan.moveCalls.length < 1) {
+    throw new Error("Mint transaction plan is missing a Move call.");
+  }
   const tx = new Transaction();
   tx.setSender(plan.sender || sender);
   for (const moveCall of plan.moveCalls) {
+    if (moveCall.target !== `${moveCall.packageId}::${moveCall.moduleName}::${moveCall.functionName}`) {
+      throw new Error("Mint transaction plan target does not match package, module, and function fields.");
+    }
     tx.moveCall({
       target: moveCall.target,
       typeArguments: moveCall.typeArguments,
@@ -40,6 +47,17 @@ export function buildKioskListingTransactionFromPlan(
   plan: MatterhornNftKioskListingTransactionPlan,
   sender: string,
 ): Transaction {
+  assertCommonPlanSafety(plan, "sui_kiosk_listing");
+  for (const [label, value] of [
+    ["NFT object id", plan.nftObjectId],
+    ["NFT type", plan.nftType],
+    ["Kiosk id", plan.kioskId],
+    ["Kiosk owner cap", plan.kioskOwnerCapId],
+    ["TransferPolicy id", plan.transferPolicyId],
+    ["Price", plan.priceMist],
+  ] as const) {
+    if (!value) throw new Error(`Listing transaction plan is missing ${label}.`);
+  }
   const network = suiNetworkFromNftPlan(plan);
   const tx = new Transaction();
   tx.setSender(plan.sender || sender);
@@ -68,6 +86,30 @@ export function buildKioskListingTransactionFromPlan(
     .finalize();
 
   return tx;
+}
+
+function assertCommonPlanSafety(plan: MatterhornNftTransactionPlan, expectedKind: MatterhornNftTransactionPlan["kind"]) {
+  if (plan.version !== "matterhorn.sui.transaction-plan.v1") {
+    throw new Error("Unsupported Sui transaction plan version.");
+  }
+  if (plan.kind !== expectedKind) {
+    throw new Error(`Expected ${expectedKind} transaction plan.`);
+  }
+  if (plan.custody !== false) {
+    throw new Error("Sui transaction plan must be non-custodial.");
+  }
+  if (plan.canSubmit !== false) {
+    throw new Error("Sui transaction plan must not allow Matterhorn submission.");
+  }
+  if (plan.requiresWalletStandard !== true) {
+    throw new Error("Sui transaction plan must require a wallet-standard signer.");
+  }
+  if (plan.network !== "sui-testnet" && plan.network !== "sui-mainnet") {
+    throw new Error("Sui transaction plan network is unsupported.");
+  }
+  if (plan.missingInputs.length > 0) {
+    throw new Error(`Sui transaction plan has missing inputs: ${plan.missingInputs.join(", ")}`);
+  }
 }
 
 export function receiptFromSuiWalletResult(result: unknown): MatterhornSuiWalletExecutionReceipt {
