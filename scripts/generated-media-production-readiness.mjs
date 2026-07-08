@@ -16,6 +16,114 @@ const forbiddenLeakKeys = [
   "walletExport",
 ];
 
+const PRODUCTION_ENV_CHECKLIST = [
+  {
+    envVar: "MATTERHORN_IMAGE_PROVIDER",
+    example: "openai",
+    required: true,
+    secret: false,
+    description: "Selects the production image provider.",
+  },
+  {
+    envVar: "OPENAI_API_KEY",
+    example: "<openai-api-key>",
+    required: true,
+    secret: true,
+    description: "Enables OpenAI image generation. Store the real value only in Matterhorn environment settings.",
+  },
+  {
+    envVar: "MATTERHORN_WALRUS_PUBLISHER_URL",
+    example: "https://publisher.example",
+    required: true,
+    secret: false,
+    description: "Walrus publisher endpoint used after explicit public upload confirmation.",
+  },
+  {
+    envVar: "MATTERHORN_WALRUS_RELAY_URL",
+    example: "https://aggregator.example",
+    required: true,
+    secret: false,
+    description: "Public Walrus relay or aggregator base URL for generated media.",
+  },
+  {
+    envVar: "MATTERHORN_WALRUS_STORAGE_EPOCHS",
+    example: "3",
+    required: true,
+    secret: false,
+    description: "Positive storage duration for Walrus uploads.",
+  },
+  {
+    envVar: "MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN",
+    example: "<publisher-bearer-token>",
+    required: false,
+    secret: true,
+    description: "Optional publisher auth token, never emitted in diagnostics or reports.",
+  },
+  {
+    envVar: "MATTERHORN_SUI_NETWORK",
+    example: "sui-testnet",
+    required: true,
+    secret: false,
+    description: "Sui network for mint and listing previews. Use sui-testnet or sui-mainnet.",
+  },
+  {
+    envVar: "MATTERHORN_SUI_NFT_PACKAGE_ID",
+    example: "0x...",
+    required: true,
+    secret: false,
+    description: "Move package that exposes the Matterhorn NFT mint function.",
+  },
+  {
+    envVar: "MATTERHORN_SUI_NFT_MODULE_NAME",
+    example: "matterhorn_media",
+    required: true,
+    secret: false,
+    description: "Move module name for NFT mint transaction plans.",
+  },
+  {
+    envVar: "MATTERHORN_SUI_NFT_TYPE",
+    example: "0x...::matterhorn_media::MatterhornNFT",
+    required: false,
+    secret: false,
+    description: "Optional full NFT type override used by listing plans.",
+  },
+  {
+    envVar: "MATTERHORN_SUI_KIOSK_PACKAGE_ID",
+    example: "0x...",
+    required: true,
+    secret: false,
+    description: "Sui Kiosk package id used to build listing transaction plans.",
+  },
+  {
+    envVar: "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID",
+    example: "0x...",
+    required: true,
+    secret: false,
+    description: "TransferPolicy package id used for marketplace-compatible listing plans.",
+  },
+  {
+    envVar: "MATTERHORN_SUI_KIOSK_ID",
+    example: "0x...",
+    required: false,
+    secret: false,
+    description: "Optional default kiosk object id for automated smoke runs; users can still provide it in the UI.",
+  },
+  {
+    envVar: "MATTERHORN_SUI_KIOSK_OWNER_CAP_ID",
+    example: "0x...",
+    required: false,
+    secret: false,
+    description: "Optional kiosk owner cap id for automated smoke runs.",
+  },
+  {
+    envVar: "MATTERHORN_SUI_TRANSFER_POLICY_ID",
+    example: "0x...",
+    required: false,
+    secret: false,
+    description: "Optional transfer policy object id for automated smoke runs.",
+  },
+];
+
 function parseArgs(argv) {
   const config = {
     serverUrl: process.env.MATTERHORN_GENERATED_MEDIA_READINESS_SERVER_URL ||
@@ -176,6 +284,26 @@ function summarizeCheck(check) {
   };
 }
 
+function buildEnvChecklist(blockers) {
+  const blockersByEnv = new Map();
+  for (const blocker of blockers) {
+    if (blocker.envVar && !blockersByEnv.has(blocker.envVar)) {
+      blockersByEnv.set(blocker.envVar, blocker);
+    }
+  }
+  return PRODUCTION_ENV_CHECKLIST.map((entry) => {
+    const blocker = blockersByEnv.get(entry.envVar);
+    return {
+      envVar: entry.envVar,
+      example: entry.secret ? "<secret>" : entry.example,
+      required: entry.required,
+      secret: entry.secret,
+      status: blocker?.status ?? "not_reported",
+      description: blocker?.description ?? entry.description,
+    };
+  });
+}
+
 function assertNoLeaks(payload, config, label) {
   const serialized = JSON.stringify(payload);
   if (config.token && serialized.includes(config.token)) {
@@ -229,6 +357,7 @@ async function runGeneratedMediaProductionReadiness(config) {
     checks: [],
     stages: [],
     blockers: [],
+    envChecklist: buildEnvChecklist([]),
     safetyFailures: [],
   };
 
@@ -254,6 +383,7 @@ async function runGeneratedMediaProductionReadiness(config) {
     report.checks = Array.isArray(diagnostics.checks) ? diagnostics.checks.map(summarizeCheck) : [];
     report.stages = Array.isArray(plan.stages) ? plan.stages.map(summarizeStage) : [];
     report.blockers = Array.isArray(plan.blockers) ? plan.blockers.map(summarizeRequirement) : [];
+    report.envChecklist = buildEnvChecklist(report.blockers);
     report.safetyFailures = validateDiagnosticsSafety(diagnostics);
     report.ok = report.safetyFailures.length === 0;
     report.ready = report.ok &&
@@ -300,6 +430,17 @@ function emitReport(report, config) {
     for (const blocker of report.blockers) {
       const env = blocker.envVar ? ` (${blocker.envVar})` : "";
       process.stdout.write(`- ${blocker.label}${env}: ${blocker.description || blocker.status}\n`);
+    }
+  }
+  if (report.envChecklist.length > 0) {
+    process.stdout.write("\nProduction env checklist:\n");
+    for (const item of report.envChecklist) {
+      const flags = [
+        item.required ? "required" : "optional",
+        item.secret ? "secret" : "public",
+        item.status !== "not_reported" ? item.status : "not reported as blocker",
+      ].join(", ");
+      process.stdout.write(`- ${item.envVar}=${item.example} [${flags}]: ${item.description}\n`);
     }
   }
   if (report.stages.length > 0) {
