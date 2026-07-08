@@ -7,6 +7,7 @@ import {
   Cog,
   FileText,
   FolderLock,
+  Image as ImageIcon,
   LifeBuoy,
   ListChecks,
   MessageCircle,
@@ -72,6 +73,7 @@ type ProjectSurfaceCard = {
 const workspaceCards: SettingsHubCard[] = [
   { tab: "preferences", icon: Cog, title: "Preferences", desc: "Model and reasoning controls.", status: "Working" },
   { tab: "permissions", icon: FolderLock, title: "Permissions", desc: "Folders the agent can use.", status: "Working" },
+  { tab: "generated-media", icon: ImageIcon, title: "Generated media", desc: "Image and NFT publishing readiness.", status: "Needs setup" },
   { tab: "extensions", icon: Puzzle, title: "MCPs & Tools", desc: "MCP servers and connectors.", status: "Working" },
   { tab: "advanced", icon: Wrench, title: "Advanced", desc: "Runtime and developer options.", status: "Developer", developerOnly: true },
 ];

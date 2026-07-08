@@ -12,6 +12,7 @@ import {
   Paintbrush,
   Puzzle,
   Bot,
+  Image as ImageIcon,
   RefreshCcw,
   ShieldCheck,
   SlidersHorizontal,
@@ -99,6 +100,8 @@ export function getSettingsTabIcon(tab: SettingsTab) {
       return Bug;
     case "wallet":
       return Wallet;
+    case "generated-media":
+      return ImageIcon;
     case "marketplace":
       return Bot;
     default:
@@ -144,6 +147,8 @@ export function getSettingsTabLabel(tab: SettingsTab) {
       return t("settings.tab_debug");
     case "wallet":
       return "Wallet";
+    case "generated-media":
+      return "Generated media";
     case "marketplace":
       return "Agent Templates";
     case "general":
@@ -191,6 +196,8 @@ export function getSettingsTabDescription(tab: SettingsTab) {
       return t("settings.tab_description_debug");
     case "wallet":
       return "Connect wallets for safe handoffs.";
+    case "generated-media":
+      return "Image generation, public storage, and Sui NFT publishing readiness.";
     case "marketplace":
       return "Future agent templates. Not live.";
     case "general":
@@ -217,6 +224,7 @@ const TAB_CAPABILITY_SECTIONS: Partial<Record<SettingsTab, MatterhornSettingsSec
   "cloud-providers": ["providers"],
   extensions: ["mcp"],
   wallet: ["wallet"],
+  "generated-media": ["image-generation", "nft"],
 };
 
 function capabilityStatusRank(status: MatterhornCapabilityStatus) {
@@ -264,6 +272,7 @@ export function getSettingsTabStatus(
     case "extensions":
       return "Working";
     case "wallet":
+    case "generated-media":
     case "ai":
     case "cloud-account":
       return "Needs setup";
@@ -286,7 +295,7 @@ export function getSettingsTabStatus(
 }
 
 export function getWorkspaceSettingsTabs(developerMode = false): SettingsTab[] {
-  const tabs: SettingsTab[] = ["preferences", "permissions", "wallet", "extensions"];
+  const tabs: SettingsTab[] = ["preferences", "permissions", "wallet", "generated-media", "extensions"];
   if (developerMode) tabs.push("marketplace", "advanced");
   return tabs;
 }

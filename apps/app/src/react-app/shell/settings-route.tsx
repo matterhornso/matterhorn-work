@@ -69,6 +69,7 @@ import { RecoveryView } from "../domains/settings/pages/recovery-view";
 import { MessagingView } from "../domains/settings/pages/messaging-view";
 import { SkillsView } from "../domains/settings/pages/skills-view";
 import { WalletSettingsView } from "../domains/settings/pages/wallet-view";
+import { GeneratedMediaSettingsView } from "../domains/settings/pages/generated-media-view";
 import { useWallet } from "../domains/wallet/WalletProvider";
 import { UpdatesView } from "../domains/settings/pages/updates-view";
 import { useDebugViewModel } from "../domains/settings/state/debug-view-model";
@@ -383,6 +384,7 @@ function parseSettingsPath(pathname: string): {
     case "debug":
       return { tab: head, redirectPath: null };
     case "wallet":
+    case "generated-media":
       return { tab: head, redirectPath: null };
     case "marketplace":
       return { tab: head, redirectPath: null };
@@ -2054,6 +2056,11 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     navigateSettingsPath("overview");
   };
 
+  const openWorkspaceChat = () => {
+    const workspaceId = runtimeWorkspaceId?.trim() || selectedWorkspaceId?.trim();
+    navigate(workspaceId ? workspaceSessionRoute(workspaceId) : "/session");
+  };
+
   const settingsView = (() => {
     switch (route.tab) {
       case "overview":
@@ -2476,6 +2483,15 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             runtimeWorkspaceId={runtimeWorkspaceId}
             onTxApprove={() => {}}
             onTxReject={() => {}}
+          />
+        );
+      case "generated-media":
+        return (
+          <GeneratedMediaSettingsView
+            matterhornServerClient={matterhornClient}
+            runtimeWorkspaceId={runtimeWorkspaceId}
+            onOpenWorkspaceChat={openWorkspaceChat}
+            onOpenRunHistory={openWorkspaceOutputs}
           />
         );
       case "marketplace":
