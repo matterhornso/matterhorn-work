@@ -6,11 +6,14 @@ import type {
 import {
   buildBillingPlansResponse,
   buildBillingStatusResponse,
+  buildBillingStatusResponseForSubscription,
   buildBillingStatusResponseWithUsage,
+  buildMatterhornBillingSubscription,
   createBillingProvider,
   resolveBillingProviderConfigFromEnv,
   type BillingProvider,
 } from "./billing.js";
+import { MatterhornBillingAccountStore } from "./billing-account-store.js";
 import { MatterhornGeneratedImageStore } from "./generated-image-store.js";
 import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
 import type { ServerConfig, TokenScope, WorkspaceInfo } from "./types.js";
@@ -53,6 +56,15 @@ function billingWriteBlocker(ctx: { config: ServerConfig; actor?: { scope?: Toke
   return null;
 }
 
+function nextBillingPeriod(now = new Date()): { currentPeriodStart: string; currentPeriodEnd: string } {
+  const end = new Date(now);
+  end.setUTCMonth(end.getUTCMonth() + 1);
+  return {
+    currentPeriodStart: now.toISOString(),
+    currentPeriodEnd: end.toISOString(),
+  };
+}
+
 export interface BillingRouteContext {
   provider: BillingProvider;
   config: ServerConfig;
@@ -81,16 +93,63 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       return jsonResponse(buildBillingStatusResponse(provider.config));
     }
     const workspace = await ctx.resolveWorkspace(ctx.config, routeCtx.params.id);
+    const accountStore = new MatterhornBillingAccountStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+    const account = await accountStore.get();
     const [images, drafts] = await Promise.all([
       new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id }).list(),
       new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id }).list(),
     ]);
-    return jsonResponse(buildBillingStatusResponseWithUsage(provider.config, {
+    const usage = {
       generatedImages: images.length,
       nftDrafts: drafts.length,
       teamMembers: 1,
       cloudStorageBytes: 0,
-    }));
+    };
+    if (account) {
+      return jsonResponse(buildBillingStatusResponseForSubscription(provider.config, account.subscription, usage));
+    }
+    return jsonResponse(buildBillingStatusResponseWithUsage(provider.config, usage));
+  });
+
+  addRoute("POST", "/workspace/:id/billing/checkout", "client", async (routeCtx) => {
+    const blocker = billingWriteBlocker(routeCtx, "start checkout");
+    if (blocker) return blocker;
+    if (!ctx.resolveWorkspace) {
+      return badRequest("workspace_unavailable", "Workspace billing is unavailable for this server.");
+    }
+    if (provider.config.mode === "live") {
+      return badRequest("live_payments_disabled", "Live payments are not enabled.");
+    }
+    if (provider.config.livePaymentsEnabled) {
+      return badRequest("live_payments_disabled", "Live payments are not enabled.");
+    }
+    const input = await jsonBody<Partial<MatterhornBillingCheckoutRequest>>(routeCtx.request);
+    if (!input.planId || (input.planId !== "free" && input.planId !== "plus" && input.planId !== "max")) {
+      return badRequest("invalid_plan", "A valid planId is required.");
+    }
+    const workspace = await ctx.resolveWorkspace(ctx.config, routeCtx.params.id);
+    const result = await provider.buildCheckout({
+      planId: input.planId,
+      interval: input.interval === "year" ? "year" : "month",
+      successUrl: input.successUrl,
+      cancelUrl: input.cancelUrl,
+    });
+    const period = nextBillingPeriod();
+    await new MatterhornBillingAccountStore({ workspaceRoot: workspace.path, workspaceId: workspace.id }).save({
+      version: "matterhorn.billing.account.v1",
+      workspaceId: workspace.id,
+      subscription: {
+        ...buildMatterhornBillingSubscription(input.planId),
+        interval: input.interval === "year" ? "year" : "month",
+        currentPeriodStart: period.currentPeriodStart,
+        currentPeriodEnd: period.currentPeriodEnd,
+        providerCustomerId: `mock_cus_${workspace.id}`,
+        providerSubscriptionId: `mock_sub_${workspace.id}_${input.planId}`,
+      },
+      updatedAt: period.currentPeriodStart,
+      source: provider.config.mode === "phase1_stripe_test" ? "stripe_test_checkout" : "mock_checkout",
+    });
+    return jsonResponse(result);
   });
 
   addRoute("POST", "/api/billing/checkout", "client", async (routeCtx) => {
@@ -112,6 +171,21 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
     });
+    return jsonResponse(result);
+  });
+
+  addRoute("POST", "/workspace/:id/billing/portal", "client", async (routeCtx) => {
+    const blocker = billingWriteBlocker(routeCtx, "open the billing portal");
+    if (blocker) return blocker;
+    if (!ctx.resolveWorkspace) {
+      return badRequest("workspace_unavailable", "Workspace billing is unavailable for this server.");
+    }
+    if (provider.config.mode === "live") {
+      return badRequest("live_payments_disabled", "Live payments are not enabled.");
+    }
+    await ctx.resolveWorkspace(ctx.config, routeCtx.params.id);
+    const input = await jsonBody<Partial<MatterhornBillingPortalRequest>>(routeCtx.request).catch(() => ({}));
+    const result = await provider.buildPortal(input);
     return jsonResponse(result);
   });
 

@@ -119,16 +119,23 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
 
   const checkoutMutation = useMutation({
     mutationFn: (planId: MatterhornBillingPlanId) =>
-      client?.billingCheckout({ planId, interval: "month" }) ?? Promise.reject(new Error("No client")),
+      workspaceId
+        ? client?.workspaceBillingCheckout(workspaceId, { planId, interval: "month" }) ??
+          Promise.reject(new Error("No client"))
+        : client?.billingCheckout({ planId, interval: "month" }) ?? Promise.reject(new Error("No client")),
     onSuccess: (data) => {
       if (data?.checkoutUrl) {
         window.open(data.checkoutUrl, "_blank", "noopener,noreferrer");
       }
+      void statusQuery.refetch();
     },
   });
 
   const portalMutation = useMutation({
-    mutationFn: () => client?.billingPortal() ?? Promise.reject(new Error("No client")),
+    mutationFn: () =>
+      workspaceId
+        ? client?.workspaceBillingPortal(workspaceId) ?? Promise.reject(new Error("No client"))
+        : client?.billingPortal() ?? Promise.reject(new Error("No client")),
     onSuccess: (data) => {
       if (data?.portalUrl) {
         window.open(data.portalUrl, "_blank", "noopener,noreferrer");

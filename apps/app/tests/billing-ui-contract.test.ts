@@ -92,6 +92,8 @@ const mockClient: MatterhornServerClient = {
         isLivePaymentsEnabled: false,
       },
     }),
+  workspaceBillingCheckout: () => Promise.reject(new Error("Not called in static render")),
+  workspaceBillingPortal: () => Promise.reject(new Error("Not called in static render")),
   billingCheckout: () => Promise.reject(new Error("Not called in static render")),
   billingPortal: () => Promise.reject(new Error("Not called in static render")),
 } as unknown as MatterhornServerClient;
@@ -135,10 +137,17 @@ describe("Billing settings view", () => {
     );
 
     expect(clientSource).toContain("workspaceBillingStatus");
+    expect(clientSource).toContain("workspaceBillingCheckout");
+    expect(clientSource).toContain("workspaceBillingPortal");
     expect(clientSource).toContain("/billing/status");
+    expect(clientSource).toContain("/billing/checkout");
+    expect(clientSource).toContain("/billing/portal");
     expect(billingViewSource).toContain("runtimeWorkspaceId");
     expect(billingViewSource).toContain("client?.workspaceBillingStatus(workspaceId)");
     expect(billingViewSource).toContain("client?.billingStatus()");
+    expect(billingViewSource).toContain("client?.workspaceBillingCheckout(workspaceId");
+    expect(billingViewSource).toContain("client?.workspaceBillingPortal(workspaceId");
+    expect(billingViewSource).toContain("statusQuery.refetch()");
     expect(settingsRouteSource).toContain("<BillingSettingsView matterhornServerClient={matterhornClient} runtimeWorkspaceId={runtimeWorkspaceId} />");
   });
 });

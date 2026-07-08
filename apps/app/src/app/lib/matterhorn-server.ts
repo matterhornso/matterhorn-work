@@ -2635,6 +2635,18 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         body: input,
         timeoutMs: timeouts.config,
       }),
+    workspaceBillingCheckout: (workspaceId: string, input: MatterhornBillingCheckoutRequest) =>
+      requestJson<MatterhornBillingCheckoutResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/billing/checkout`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: input,
+          timeoutMs: timeouts.config,
+        },
+      ),
     billingPortal: (input?: MatterhornBillingPortalRequest) =>
       requestJson<MatterhornBillingPortalResponse>(baseUrl, "/api/billing/portal", {
         token,
@@ -2643,6 +2655,18 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         body: input ?? {},
         timeoutMs: timeouts.config,
       }),
+    workspaceBillingPortal: (workspaceId: string, input?: MatterhornBillingPortalRequest) =>
+      requestJson<MatterhornBillingPortalResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/billing/portal`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: input ?? {},
+          timeoutMs: timeouts.config,
+        },
+      ),
 
     createVoiceRealtimeSession: (payload?: { model?: string }) =>
       requestJson<{
