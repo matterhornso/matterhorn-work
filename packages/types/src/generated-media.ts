@@ -389,6 +389,11 @@ export interface MatterhornImageResponse {
   image: MatterhornGeneratedImage;
 }
 
+export interface MatterhornImageDeleteResponse {
+  success: true;
+  deleted: MatterhornGeneratedImage;
+}
+
 export interface MatterhornImageNftDraftListResponse {
   success: true;
   drafts: MatterhornImageNftDraft[];
@@ -397,6 +402,11 @@ export interface MatterhornImageNftDraftListResponse {
 export interface MatterhornImageNftDraftResponse {
   success: true;
   draft: MatterhornImageNftDraft;
+}
+
+export interface MatterhornImageNftDraftDeleteResponse {
+  success: true;
+  deleted: MatterhornImageNftDraft;
 }
 
 export interface MatterhornNftMintPreviewResponse {
