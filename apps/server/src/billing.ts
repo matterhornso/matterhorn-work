@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type {
   MatterhornBillingCapability,
   MatterhornBillingCheckoutRequest,
@@ -28,6 +29,8 @@ export interface BillingProviderConfig {
   currentPlanId: MatterhornBillingPlanId;
   stripeWebhookSecret?: string;
   stripeSecretKey?: string;
+  stripeApiBaseUrl?: string;
+  stripeTestCustomerId?: string;
   stripePriceIds?: Partial<Record<MatterhornBillingPlanId, string>>;
   livePaymentsEnabled: false;
 }
@@ -176,7 +179,9 @@ export function buildMatterhornBillingSetup(config: BillingProviderConfig): Matt
   const hasWebhookSecret = Boolean(config.stripeWebhookSecret?.trim());
   const hasPlusPrice = Boolean(config.stripePriceIds?.plus?.trim());
   const hasMaxPrice = Boolean(config.stripePriceIds?.max?.trim());
-  const readyForTestCheckout = config.mode === "phase1_stripe_test" && hasSecretKey && hasPlusPrice && hasMaxPrice;
+  const secretKeyIsTest = Boolean(config.stripeSecretKey?.trim().startsWith("sk_test_"));
+  const readyForTestCheckout = config.mode === "phase1_stripe_test" && hasSecretKey && secretKeyIsTest && hasPlusPrice && hasMaxPrice;
+  const hasTestCustomer = Boolean(config.stripeTestCustomerId?.trim());
 
   return {
     mode: config.mode,
@@ -188,8 +193,12 @@ export function buildMatterhornBillingSetup(config: BillingProviderConfig): Matt
       setupCheck({
         id: "stripe_secret_key",
         label: "Stripe secret key",
-        status: hasSecretKey ? "working" : "needs_setup",
-        description: hasSecretKey ? "Configured for test-mode billing calls." : "Set MATTERHORN_STRIPE_SECRET_KEY for Stripe test checkout.",
+        status: hasSecretKey && secretKeyIsTest ? "working" : "needs_setup",
+        description: hasSecretKey
+          ? secretKeyIsTest
+            ? "Configured for test-mode billing calls."
+            : "Use a Stripe test secret key. Live keys are not accepted in this build."
+          : "Set MATTERHORN_STRIPE_SECRET_KEY for Stripe test checkout.",
       }),
       setupCheck({
         id: "stripe_webhook_secret",
@@ -208,6 +217,14 @@ export function buildMatterhornBillingSetup(config: BillingProviderConfig): Matt
         label: "Max price",
         status: hasMaxPrice ? "working" : "needs_setup",
         description: hasMaxPrice ? "Stripe test price is configured for Matterhorn Max." : "Set MATTERHORN_STRIPE_PRICE_ID_MAX.",
+      }),
+      setupCheck({
+        id: "stripe_test_customer",
+        label: "Customer portal test customer",
+        status: hasTestCustomer ? "working" : "needs_setup",
+        description: hasTestCustomer
+          ? "Stripe test customer is configured for Customer Portal sessions."
+          : "Set MATTERHORN_STRIPE_TEST_CUSTOMER_ID to open Customer Portal sessions in test mode.",
       }),
       setupCheck({
         id: "live_payments_disabled",
@@ -423,6 +440,8 @@ export function resolveBillingProviderConfigFromEnv(env: NodeJS.ProcessEnv): Bil
       currentPlanId,
       stripeWebhookSecret: env.MATTERHORN_STRIPE_WEBHOOK_SECRET,
       stripeSecretKey: env.MATTERHORN_STRIPE_SECRET_KEY,
+      stripeApiBaseUrl: env.MATTERHORN_STRIPE_API_BASE_URL,
+      stripeTestCustomerId: env.MATTERHORN_STRIPE_TEST_CUSTOMER_ID,
       stripePriceIds: {
         plus: env.MATTERHORN_STRIPE_PRICE_ID_PLUS,
         max: env.MATTERHORN_STRIPE_PRICE_ID_MAX,
@@ -452,6 +471,7 @@ export function createMockBillingProvider(config: BillingProviderConfig): Billin
         success: true,
         checkoutUrl: `https://mock-checkout.matterhorn.work/session/mock_${plan.id}_${Date.now()}`,
         mode: config.mode === "phase1_stripe_test" ? "stripe_test" : "mock",
+        providerSessionId: null,
       };
     },
     buildPortal: async () => {
@@ -459,6 +479,7 @@ export function createMockBillingProvider(config: BillingProviderConfig): Billin
         success: true,
         portalUrl: `https://mock-portal.matterhorn.work/session/mock_${Date.now()}`,
         mode: config.mode === "phase1_stripe_test" ? "stripe_test" : "mock",
+        providerSessionId: null,
       };
     },
     handleStripeWebhook: async (input: MatterhornBillingWebhookStripeRequest) => {
@@ -477,7 +498,166 @@ export function createMockBillingProvider(config: BillingProviderConfig): Billin
   };
 }
 
+type StripePortalInput = MatterhornBillingPortalRequest & {
+  providerCustomerId?: string;
+};
+
+function stripeApiBaseUrl(config: BillingProviderConfig): string {
+  return (config.stripeApiBaseUrl?.trim() || "https://api.stripe.com").replace(/\/+$/, "");
+}
+
+function requireStripeTestReady(config: BillingProviderConfig): string {
+  const secret = config.stripeSecretKey?.trim();
+  if (!secret || !secret.startsWith("sk_test_")) {
+    throw new Error("Stripe test checkout requires MATTERHORN_STRIPE_SECRET_KEY with an sk_test_ key.");
+  }
+  return secret;
+}
+
+function stripePriceId(config: BillingProviderConfig, planId: MatterhornBillingPlanId): string {
+  if (planId === "free") {
+    throw new Error("Free plan changes do not require Stripe checkout.");
+  }
+  const priceId = config.stripePriceIds?.[planId]?.trim();
+  if (!priceId) {
+    throw new Error(`Stripe test checkout requires a configured ${planId} price id.`);
+  }
+  return priceId;
+}
+
+function safeStripeReturnUrl(value: string | undefined, fallbackPath: string): string {
+  const trimmed = value?.trim();
+  if (trimmed && /^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://matterhorn.work${fallbackPath}`;
+}
+
+function appendStripeParam(params: URLSearchParams, key: string, value: string | number | boolean | undefined | null) {
+  if (value === undefined || value === null) return;
+  params.set(key, String(value));
+}
+
+async function postStripeForm(config: BillingProviderConfig, path: string, params: URLSearchParams): Promise<Record<string, unknown>> {
+  const secret = requireStripeTestReady(config);
+  const response = await fetch(`${stripeApiBaseUrl(config)}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${secret}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: params,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message =
+      typeof payload?.error?.message === "string"
+        ? payload.error.message
+        : typeof payload?.message === "string"
+          ? payload.message
+          : "Stripe test request failed.";
+    throw new Error(message);
+  }
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    throw new Error("Stripe returned an invalid response.");
+  }
+  return payload as Record<string, unknown>;
+}
+
+function verifyStripeSignature(input: MatterhornBillingWebhookStripeRequest, secret: string): boolean {
+  const raw = input.rawPayload;
+  const signature = input.signature;
+  if (!raw || !signature || !secret) return false;
+  const parts = signature.split(",").map((part) => part.trim()).filter(Boolean);
+  const timestamp = parts.find((part) => part.startsWith("t="))?.slice(2);
+  const signatures = parts.filter((part) => part.startsWith("v1=")).map((part) => part.slice(3));
+  if (!timestamp || signatures.length === 0) return false;
+  const expected = createHmac("sha256", secret).update(`${timestamp}.${raw}`).digest("hex");
+  const expectedBuffer = Buffer.from(expected, "hex");
+  return signatures.some((candidate) => {
+    if (!/^[0-9a-f]+$/i.test(candidate)) return false;
+    const candidateBuffer = Buffer.from(candidate, "hex");
+    if (candidateBuffer.length !== expectedBuffer.length) return false;
+    return timingSafeEqual(candidateBuffer, expectedBuffer);
+  });
+}
+
+export function createStripeTestBillingProvider(config: BillingProviderConfig): BillingProvider {
+  const plans = buildMatterhornBillingPlans();
+  return {
+    config,
+    plans: () => plans,
+    status: () => buildMatterhornBillingStatus(config.currentPlanId, config),
+    buildCheckout: async (input: MatterhornBillingCheckoutRequest) => {
+      const priceId = stripePriceId(config, input.planId);
+      const params = new URLSearchParams();
+      appendStripeParam(params, "mode", "subscription");
+      appendStripeParam(params, "line_items[0][price]", priceId);
+      appendStripeParam(params, "line_items[0][quantity]", 1);
+      appendStripeParam(params, "success_url", safeStripeReturnUrl(input.successUrl, "/billing/success?session_id={CHECKOUT_SESSION_ID}"));
+      appendStripeParam(params, "cancel_url", safeStripeReturnUrl(input.cancelUrl, "/billing/canceled"));
+      appendStripeParam(params, "client_reference_id", `matterhorn_${input.planId}`);
+      appendStripeParam(params, "metadata[product]", "matterhorn-work");
+      appendStripeParam(params, "metadata[plan_id]", input.planId);
+      appendStripeParam(params, "subscription_data[metadata][product]", "matterhorn-work");
+      appendStripeParam(params, "subscription_data[metadata][plan_id]", input.planId);
+      const payload = await postStripeForm(config, "/v1/checkout/sessions", params);
+      const checkoutUrl = typeof payload.url === "string" ? payload.url : "";
+      if (!checkoutUrl) {
+        throw new Error("Stripe did not return a Checkout URL.");
+      }
+      return {
+        success: true,
+        checkoutUrl,
+        mode: "stripe_test",
+        providerSessionId: typeof payload.id === "string" ? payload.id : null,
+      };
+    },
+    buildPortal: async (input?: StripePortalInput) => {
+      const customer = input?.providerCustomerId?.trim() || config.stripeTestCustomerId?.trim();
+      if (!customer) {
+        throw new Error("Stripe Customer Portal requires MATTERHORN_STRIPE_TEST_CUSTOMER_ID or a stored Stripe customer id.");
+      }
+      const params = new URLSearchParams();
+      appendStripeParam(params, "customer", customer);
+      appendStripeParam(params, "return_url", safeStripeReturnUrl(input?.returnUrl, "/settings/billing"));
+      const payload = await postStripeForm(config, "/v1/billing_portal/sessions", params);
+      const portalUrl = typeof payload.url === "string" ? payload.url : "";
+      if (!portalUrl) {
+        throw new Error("Stripe did not return a Customer Portal URL.");
+      }
+      return {
+        success: true,
+        portalUrl,
+        mode: "stripe_test",
+        providerSessionId: typeof payload.id === "string" ? payload.id : null,
+      };
+    },
+    handleStripeWebhook: async (input: MatterhornBillingWebhookStripeRequest) => {
+      if (config.provider !== "stripe" || config.mode !== "phase1_stripe_test") {
+        return { success: true, received: true, verified: false, livemode: false, handled: false };
+      }
+      const secret = config.stripeWebhookSecret?.trim();
+      const verified = Boolean(secret && verifyStripeSignature(input, secret));
+      const payload = verified
+        ? typeof input.payload === "object" && input.payload !== null
+          ? input.payload as Record<string, unknown>
+          : {}
+        : {};
+      const eventIsLive = payload.livemode === true;
+      return {
+        success: true,
+        received: true,
+        verified,
+        livemode: false,
+        handled: verified && !eventIsLive,
+      };
+    },
+  };
+}
+
 export function createBillingProvider(config: BillingProviderConfig): BillingProvider {
+  if (config.provider === "stripe" && config.mode === "phase1_stripe_test") {
+    return createStripeTestBillingProvider(config);
+  }
   return createMockBillingProvider(config);
 }
 

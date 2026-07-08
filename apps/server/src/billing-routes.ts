@@ -48,6 +48,13 @@ function jsonBody<T>(request: Request): Promise<T> {
   return request.json() as Promise<T>;
 }
 
+function providerError(error: unknown): Response {
+  return badRequest(
+    "billing_provider_unavailable",
+    error instanceof Error ? error.message : "Billing provider is unavailable.",
+  );
+}
+
 function billingWriteBlocker(ctx: { config: ServerConfig; actor?: Pick<Actor, "scope"> }, action: string): Response | null {
   if (ctx.config.readOnly) {
     return forbidden("read_only", `Billing ${action} is unavailable in read-only mode.`);
@@ -168,8 +175,15 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       interval,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
-    });
+    }).catch((error) => error);
+    if (result instanceof Error) return providerError(result);
     const period = nextBillingPeriod();
+    const providerCustomerId = provider.config.provider === "stripe"
+      ? null
+      : `mock_cus_${workspace.id}`;
+    const providerSubscriptionId = provider.config.provider === "stripe"
+      ? result.providerSessionId ?? `stripe_test_checkout_${workspace.id}_${input.planId}`
+      : `mock_sub_${workspace.id}_${input.planId}`;
     await new MatterhornBillingAccountStore({ workspaceRoot: workspace.path, workspaceId: workspace.id }).save({
       version: "matterhorn.billing.account.v1",
       workspaceId: workspace.id,
@@ -178,8 +192,8 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
         interval,
         currentPeriodStart: period.currentPeriodStart,
         currentPeriodEnd: period.currentPeriodEnd,
-        providerCustomerId: `mock_cus_${workspace.id}`,
-        providerSubscriptionId: `mock_sub_${workspace.id}_${input.planId}`,
+        providerCustomerId,
+        providerSubscriptionId,
       },
       updatedAt: period.currentPeriodStart,
       source: provider.config.mode === "phase1_stripe_test" ? "stripe_test_checkout" : "mock_checkout",
@@ -215,7 +229,8 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       interval: input.interval === "year" ? "year" : "month",
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
-    });
+    }).catch((error) => error);
+    if (result instanceof Error) return providerError(result);
     return jsonResponse(result);
   });
 
@@ -228,9 +243,18 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
     if (provider.config.mode === "live") {
       return badRequest("live_payments_disabled", "Live payments are not enabled.");
     }
-    await ctx.resolveWorkspace(ctx.config, routeCtx.params.id);
-    const input = await jsonBody<Partial<MatterhornBillingPortalRequest>>(routeCtx.request).catch(() => ({}));
-    const result = await provider.buildPortal(input);
+    const workspace = await ctx.resolveWorkspace(ctx.config, routeCtx.params.id);
+    const account = await new MatterhornBillingAccountStore({
+      workspaceRoot: workspace.path,
+      workspaceId: workspace.id,
+    }).get();
+    const input = await jsonBody<Partial<MatterhornBillingPortalRequest>>(routeCtx.request)
+      .catch((): Partial<MatterhornBillingPortalRequest> => ({}));
+    const result = await provider.buildPortal({
+      ...input,
+      providerCustomerId: input.providerCustomerId ?? account?.subscription.providerCustomerId ?? undefined,
+    }).catch((error) => error);
+    if (result instanceof Error) return providerError(result);
     return jsonResponse(result);
   });
 
@@ -270,8 +294,10 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
     if (provider.config.mode === "live") {
       return badRequest("live_payments_disabled", "Live payments are not enabled.");
     }
-    const input = await jsonBody<Partial<MatterhornBillingPortalRequest>>(routeCtx.request).catch(() => ({}));
-    const result = await provider.buildPortal(input);
+    const input = await jsonBody<Partial<MatterhornBillingPortalRequest>>(routeCtx.request)
+      .catch((): Partial<MatterhornBillingPortalRequest> => ({}));
+    const result = await provider.buildPortal(input).catch((error) => error);
+    if (result instanceof Error) return providerError(result);
     return jsonResponse(result);
   });
 
@@ -280,8 +306,14 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       return jsonResponse({ success: true, received: true, verified: false, livemode: false, handled: false });
     }
     const signature = routeCtx.request.headers.get("stripe-signature") ?? undefined;
-    const payload = await routeCtx.request.json().catch(() => ({}));
-    const input: MatterhornBillingWebhookStripeRequest = { signature, payload };
+    const rawPayload = await routeCtx.request.text().catch(() => "");
+    let payload: unknown = {};
+    try {
+      payload = rawPayload ? JSON.parse(rawPayload) : {};
+    } catch {
+      payload = {};
+    }
+    const input: MatterhornBillingWebhookStripeRequest = { signature, payload, rawPayload };
     const result = await provider.handleStripeWebhook(input);
     return jsonResponse(result);
   });
