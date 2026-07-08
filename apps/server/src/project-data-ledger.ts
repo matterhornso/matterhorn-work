@@ -197,6 +197,14 @@ function billingAuditTitle(entry: AuditEntry): string | null {
   if (entry.action === "workspace.billing.pending_checkout.clear") return "Billing pending checkout cleared";
   if (entry.action === "workspace.billing.subscription.clear") return "Billing subscription cleared";
   if (entry.action === "workspace.billing.webhook") return "Billing provider synced";
+  if (entry.action === "workspace.billing.entitlement.denied") {
+    const metadata = entry.metadata && typeof entry.metadata === "object" && !Array.isArray(entry.metadata)
+      ? entry.metadata as Record<string, unknown>
+      : {};
+    return metadata.reason === "limit_reached"
+      ? "Billing limit reached"
+      : "Billing upgrade required";
+  }
   return null;
 }
 
