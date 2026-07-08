@@ -196,7 +196,7 @@ function ActivityRow(props: { item: RecentActivityItem; onSelect: () => void }) 
   return (
     <button
       type="button"
-      className="group grid w-full grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-dls-hover/45 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+      className="group grid w-full grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-dls-hover/30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border/70"
       onClick={onSelect}
       aria-label={`${title}, ${context}, ${relativeTime}`}
     >
@@ -245,10 +245,10 @@ function LatestActivityPreview(props: {
   const countLabel = `${props.count} recent ${props.count === 1 ? "event" : "events"}`;
 
   return (
-    <div className="flex min-w-0 items-center gap-3 py-1.5">
+    <div className="flex min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-2">
       <button
         type="button"
-        className="group flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+        className="group flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border/70"
         onClick={props.onSelect}
         aria-label={`${activityDisplayTitle(props.item)}, ${formatActivityTimestamp(props.item.timestamp)}`}
       >
@@ -262,7 +262,7 @@ function LatestActivityPreview(props: {
       </span>
       <button
         type="button"
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover/35 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover/25 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border/70"
         onClick={props.onOpenHistory}
       >
         History
@@ -542,7 +542,7 @@ export function RecentActivitySection({
       ) : !historyOpen && latestItem ? (
         <button
           type="button"
-          className="flex w-full min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/10 px-3 py-2 text-left transition-colors hover:bg-dls-hover/35 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+          className="flex w-full min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-2 text-left transition-colors hover:bg-dls-hover/25 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border/70"
           aria-expanded={historyOpen}
           onClick={() => {
             if (onOpenHistory) {
@@ -556,7 +556,7 @@ export function RecentActivitySection({
           <LatestActivitySummary item={latestItem} />
         </button>
       ) : (
-        <div className="overflow-hidden">
+        <div className="grid gap-1">
           {items.map((item) => (
             <ActivityRow key={item.id} item={item} onSelect={() => setSelectedItemId(item.id)} />
           ))}

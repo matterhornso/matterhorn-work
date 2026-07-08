@@ -1097,7 +1097,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                   <Badge variant="outline" className={cn("text-[10px]", MEMORY_MUTED_BADGE_CLASS)}>Export {policyDecision.canExport ? "allowed" : "blocked"}</Badge>
                 </div>
                 {policyDecision.blockedReasons.length || policyDecision.warnings.length ? (
-                  <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100">
+                  <div className="mt-3 rounded-md bg-amber-500/[0.08] px-3 py-2 text-xs leading-5 text-amber-100">
                     <div className="font-semibold">Desk policy</div>
                     {[...policyDecision.blockedReasons, ...policyDecision.warnings].slice(0, 4).join(" ")}
                   </div>
@@ -1138,7 +1138,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
         </section>
 
         <details
-          className="group border-t border-dls-border/25 pt-2"
+          className="group rounded-md bg-dls-surface-muted/[0.08] px-3.5 py-1 transition-colors open:bg-dls-surface-muted/[0.12]"
           open={manualCaptureOpen}
           onToggle={(event) => setManualCaptureOpen(event.currentTarget.open)}
         >
@@ -1151,7 +1151,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             </div>
             <ChevronDown className="size-4 shrink-0 text-dls-secondary transition-transform group-open:rotate-180" />
           </summary>
-          <div className="grid gap-2 pb-4 pt-1">
+          <div className="grid gap-2 pb-3 pt-1">
             <div className="rounded-md bg-dls-background/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
               Tags set desk defaults. Use <span className="font-medium text-dls-text">bittensor</span>, <span className="font-medium text-dls-text">hyperliquid</span>, <span className="font-medium text-dls-text">polymarket</span>, or <span className="font-medium text-dls-text">longevity</span>.
             </div>
@@ -1214,7 +1214,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
               </span>
             </label>
             {captureError ? (
-              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">{captureError}</div>
+              <div className="rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-100">{captureError}</div>
             ) : null}
             <Button className="rounded-md" onClick={() => void handleCapture()} disabled={captureBusy || !props.client}>
               {captureBusy ? "Saving..." : "Save memory"}
@@ -1222,7 +1222,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
           </div>
         </details>
 
-        <section className="border-t border-dls-border/25 pt-4">
+        <section className="rounded-md bg-dls-surface-muted/[0.08] px-3.5 py-3">
           <div className="flex flex-col gap-3">
             <div>
               <div className="text-sm font-semibold">Export memory</div>

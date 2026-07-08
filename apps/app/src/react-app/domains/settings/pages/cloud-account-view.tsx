@@ -304,13 +304,13 @@ function ProfileTaskLogSection({
       </div>
 
       {error ? (
-        <div className="rounded-lg border border-dls-border/45 px-3 py-3 text-center text-dls-secondary">
+        <div className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-3 text-center text-dls-secondary">
           {error}
         </div>
       ) : logs.length ? (
-        <div className="divide-y divide-dls-border/35">
+        <div className="grid gap-1">
           {logs.map((log) => (
-            <div key={log.id} className="grid gap-1 py-2">
+            <div key={log.id} className="grid gap-1 rounded-md px-2.5 py-2">
               <div className="flex items-center justify-between gap-3">
                 <span className="truncate font-medium text-dls-text">
                   {taskLogTitle(log)}
@@ -408,12 +408,12 @@ export function CloudAccountView({
               {profileReadiness.stateCopy.body}
             </p>
           </div>
-          <div className="divide-y divide-dls-border/35 text-xs leading-5">
-            <div className="flex items-center justify-between gap-3 py-2">
+          <div className="grid gap-1 text-xs leading-5">
+            <div className="flex items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.08] px-2.5 py-2">
               <span className="text-dls-secondary">Local workspace</span>
               <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-300">Ready</span>
             </div>
-            <div className="flex items-center justify-between gap-3 py-2">
+            <div className="flex items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.08] px-2.5 py-2">
               <span className="text-dls-secondary">Matterhorn Cloud</span>
               <span className="rounded-md bg-sky-500/10 px-2 py-0.5 font-medium text-sky-300">
                 {isSignedIn ? "Connected" : "Needs sign in"}

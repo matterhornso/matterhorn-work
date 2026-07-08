@@ -208,14 +208,14 @@ function SettingsCard(props: {
         </div>
         {props.status ? <div className="ml-auto shrink-0">{props.status}</div> : null}
       </div>
-      {props.children ? <div className="flex flex-col divide-y divide-dls-border/45 pl-12">{props.children}</div> : null}
+      {props.children ? <div className="flex flex-col gap-1 pl-12">{props.children}</div> : null}
     </section>
   );
 }
 
 function Row(props: { label: string; value: ReactNode; hint?: string }) {
   return (
-    <div className="flex flex-col gap-1 px-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+    <div className="flex flex-col gap-1 rounded-md px-2.5 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <div className="min-w-0">
         <p className="text-sm font-medium text-dls-text">{props.label}</p>
         {props.hint ? <p className="mt-0.5 break-words text-xs leading-5 text-dls-secondary">{props.hint}</p> : null}
@@ -506,12 +506,12 @@ function TaskHistorySection(props: {
           Tasks you run from desks will appear here.
         </div>
       ) : (
-        <div className="divide-y divide-dls-border/45">
+        <div className="grid gap-1">
           {runs.map((run) => {
             const meta = taskStatusMeta(run.status);
             const StatusIcon = meta.icon;
             return (
-              <div key={run.taskId} className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">
+              <div key={run.taskId} className="flex items-start gap-3 rounded-md px-2.5 py-2.5">
                 <div className={cn("mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px]", meta.bg, meta.border, meta.text)}>
                   <StatusIcon className="size-3" />
                 </div>
@@ -585,7 +585,7 @@ function DataPolicySection(props: {
         <StatusBadge tone="ready">{workspaceDataPolicySummary(props.dataMap)}</StatusBadge>
       </div>
       {quickActions.length ? (
-        <div className="mb-4 border-y border-dls-border/45 py-3">
+        <div className="mb-4 rounded-md bg-dls-surface-muted/[0.08] px-3 py-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-medium text-dls-text">Manage data</p>
@@ -613,7 +613,7 @@ function DataPolicySection(props: {
         </div>
       ) : null}
       <div className="mb-4 grid gap-2 lg:grid-cols-3">
-        <div className="border-t border-dls-border/45 pt-2.5">
+        <div className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium text-dls-text">Model training</p>
             <StatusBadge>Off</StatusBadge>
@@ -622,7 +622,7 @@ function DataPolicySection(props: {
             Workspace data is not used for RL or model training.
           </p>
         </div>
-        <div className="border-t border-dls-border/45 pt-2.5">
+        <div className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-medium text-dls-text">Feedback collection</p>
@@ -646,7 +646,7 @@ function DataPolicySection(props: {
             <p className="mt-2 text-[11px] leading-4 text-dls-secondary">Saving...</p>
           ) : null}
         </div>
-        <div className="border-t border-dls-border/45 pt-2.5">
+        <div className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium text-dls-text">Export and delete</p>
             <StatusBadge>{exportableCount}/{stores.length} exportable</StatusBadge>
@@ -657,7 +657,7 @@ function DataPolicySection(props: {
         </div>
       </div>
 
-      <div className="mb-3 border-y border-dls-border/45 py-2.5">
+      <div className="mb-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-medium text-dls-text">Retention</p>
@@ -1592,7 +1592,7 @@ export function SettingsOverviewView(props: {
       </header>
 
       <div className="rounded-lg bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
-        <div className="divide-y divide-dls-border/45">
+        <div className="space-y-1">
         {/* 1. Profile */}
         <SettingsCard
           icon={<CircleUser size={18} />}
@@ -2073,14 +2073,14 @@ export function SettingsOverviewView(props: {
           <p className="text-sm leading-6 text-dls-secondary">
             Matterhorn Work is <span className="font-medium text-dls-text">non-custodial</span>. It never holds your keys, signs silently, or moves funds on your behalf. You stay in control of every on-chain action.
           </p>
-          <ul className="flex list-none flex-col divide-y divide-dls-border/45 text-sm leading-6 text-dls-secondary">
-            <li className="px-1 py-3">
+          <ul className="flex list-none flex-col gap-1 text-sm leading-6 text-dls-secondary">
+            <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
               <span className="font-medium text-dls-text">Bittensor:</span> actions are prepared as previews. Anything on-chain is signed in your own external Bittensor-compatible signer — Matterhorn Work cannot sign or broadcast.
             </li>
-            <li className="px-1 py-3">
+            <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
               <span className="font-medium text-dls-text">Hyperliquid &amp; Polymarket:</span> reads and external handoffs only. Live submission is off; your own eligible client executes trades.
             </li>
-            <li className="px-1 py-3">
+            <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
               <span className="font-medium text-dls-text">No secret storage:</span> Matterhorn Work never asks for or stores seed phrases, private keys, or API secrets.
             </li>
           </ul>
@@ -2202,11 +2202,11 @@ export function SettingsOverviewView(props: {
               <p className="text-sm leading-6 text-dls-secondary">
                 Your chats, generated artifacts, and on-chain receipts are stored <span className="font-medium text-dls-text">locally on your machine</span> by default.
               </p>
-              <ul className="flex list-none flex-col divide-y divide-dls-border/45 text-sm leading-6 text-dls-secondary">
-                <li className="px-1 py-3">
+              <ul className="flex list-none flex-col gap-1 text-sm leading-6 text-dls-secondary">
+                <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
                   <span className="font-medium text-dls-text">Stored locally:</span> chat history, artifacts, and public on-chain receipts/links.
                 </li>
-                <li className="px-1 py-3">
+                <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
                   <span className="font-medium text-dls-text">Never stored:</span> seed phrases, private keys, API secrets, raw signatures, or wallet exports.
                 </li>
               </ul>

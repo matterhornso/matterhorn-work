@@ -259,7 +259,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             </LayoutSectionItemHeaderActions>
           </LayoutSectionItemHeader>
 
-          <div className="divide-y divide-dls-border/35">
+          <div className="grid gap-1">
             {[modelReadiness.workspaceDefault, modelReadiness.effectiveModel, modelReadiness.answerPath, modelReadiness.providerList].map((item) => (
               <ModelRoutingRow key={item.label} item={item} />
             ))}
@@ -294,13 +294,13 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 ) : null}
               </div>
               {modelReadiness.catalogRows.length ? (
-                <div className="mt-3 border-t border-dls-border/45 pt-3">
+                <div className="mt-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-3">
                   <div className="mb-1.5 text-xs font-medium text-dls-text">Model catalog</div>
-                  <div className="divide-y divide-dls-border/35">
+                  <div className="grid gap-1">
                     {modelReadiness.catalogRows.map((row) => (
                       <div
                         key={row.providerId}
-                        className="grid gap-1 py-2 text-xs @md/settings:grid-cols-[minmax(10rem,14rem)_1fr] @md/settings:gap-4"
+                        className="grid gap-1 rounded-md py-2 text-xs @md/settings:grid-cols-[minmax(10rem,14rem)_1fr] @md/settings:gap-4"
                       >
                         <div className="min-w-0">
                           <div className="truncate text-dls-text">{row.providerName}</div>

@@ -296,7 +296,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
           />
 
           {!draft ? (
-            <div className="grid gap-3 border-t border-dls-border/45 pt-4">
+            <div className="grid gap-3 rounded-md bg-dls-surface-muted/[0.08] p-3">
               <div className="grid gap-1.5">
                 <Label htmlFor="nft-title" className="text-xs">Title</Label>
                 <Input id="nft-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Untitled NFT" className="h-8 text-sm" />
@@ -551,7 +551,7 @@ function NftSection(props: {
   const completed = ["uploaded", "confirmed", "listed"].includes(props.status);
   const ready = ["ready_to_upload", "preview_ready"].includes(props.status);
   return (
-    <section className="grid gap-3 border-t border-dls-border/25 pt-4">
+    <section className="grid gap-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-sm font-medium text-dls-text">

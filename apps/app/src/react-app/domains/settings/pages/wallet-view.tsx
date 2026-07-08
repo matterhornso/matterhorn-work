@@ -105,9 +105,9 @@ function WalletBoundaryList({ safetyCopy }: {
   ];
 
   return (
-    <div className="divide-y divide-dls-border/45 text-xs leading-5 text-dls-secondary">
+    <div className="grid gap-1 text-xs leading-5 text-dls-secondary">
       {items.map((item) => (
-        <p key={item.label} className="py-2">
+        <p key={item.label} className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2">
           <span className="font-medium text-dls-text">{item.label}:</span> {item.body}
         </p>
       ))}
@@ -440,7 +440,7 @@ function SuiWalletPreviewSection(props: {
           ))}
         </div>
       ) : (
-        <div className="border-t border-dls-border/35 pt-3 text-xs leading-5 text-dls-secondary">
+        <div className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-3 text-xs leading-5 text-dls-secondary">
           <p className="font-medium text-dls-text">No Sui wallet detected</p>
           <p className="mt-1">
             Install or enable a Sui wallet that supports Wallet Standard, then return here to connect. Public previews can still be prepared without custody.

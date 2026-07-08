@@ -187,7 +187,7 @@ const RAIL_DESK_BUTTON_CLASS =
 const RAIL_LABEL_CLASS = "max-w-full truncate text-[11px] font-medium leading-4 text-current";
 const RAIL_OPTIONAL_LABEL_CLASS = `hidden ${RAIL_LABEL_CLASS} 2xl:inline`;
 const RAIL_SECTION_LABEL_CLASS =
-  "mt-1 w-full border-t border-dls-border/25 pt-2 text-center text-[10px] font-medium tracking-normal text-dls-secondary";
+  "mt-2 w-full pt-1 text-center text-[10px] font-medium tracking-normal text-dls-secondary";
 
 function isVenueSidePanel(panel: SidePanelItem | null): panel is VenueSidePanel {
   return panel === "bittensor" || panel === "hyperliquid" || panel === "polymarket" || panel === "sui";
@@ -491,7 +491,7 @@ function HomeWalletRuntimeStatus({
                   Start the Matterhorn Work engine to read wallet-family status.
                 </p>
               )}
-              <div className="border-t border-dls-border/35 pt-2">
+              <div className="mt-2 rounded-md bg-dls-surface-muted/[0.08] px-2.5 py-2">
                 <p className="text-xs leading-5 text-dls-secondary">
                   Sui signing stays in your wallet; desktop uses external handoff.
                 </p>
@@ -2541,7 +2541,6 @@ export function SessionPage(props: SessionPageProps) {
                                   {homeFolderLabel}
                                 </span>
                               </span>
-                              <span className="hidden h-3 w-px bg-dls-border/30 sm:block" aria-hidden="true" />
                               <span className="inline-flex min-w-0 items-baseline gap-2">
                                 <span className="font-mono text-[11px] leading-4 text-dls-secondary" title={homeOutputsPath}>outputs/</span>
                               </span>
@@ -2851,7 +2850,7 @@ export function SessionPage(props: SessionPageProps) {
               </>
             ) : null}
           </ResizablePanelGroup>
-          <aside className="hidden w-[var(--nav-rail-width-compact)] shrink-0 flex-col items-center gap-1 border-l border-white/[0.06] bg-dls-sidebar/80 px-2 py-2 text-dls-text mac:titlebar-no-drag lg:flex 2xl:w-[var(--nav-rail-width)]">
+          <aside className="hidden w-[var(--nav-rail-width-compact)] shrink-0 flex-col items-center gap-1 bg-dls-sidebar/80 px-2 py-2 text-dls-text mac:titlebar-no-drag lg:flex 2xl:w-[var(--nav-rail-width)]">
             {sidePanelOpen ? (
               <Button
                 variant="ghost"
@@ -2865,7 +2864,7 @@ export function SessionPage(props: SessionPageProps) {
                 <span className={RAIL_LABEL_CLASS}>Chat</span>
               </Button>
             ) : null}
-            <div className="flex w-full flex-col items-center gap-1 border-b border-white/[0.06] pb-2">
+            <div className="flex w-full flex-col items-center gap-1 pb-2">
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -3087,7 +3086,7 @@ export function SessionPage(props: SessionPageProps) {
           {mobileSidePanelOpen ? (
             <div className="fixed inset-0 z-40 flex bg-background lg:hidden">
               <div className="flex h-full min-h-0 w-full flex-col bg-background">
-                <div className="flex h-11 shrink-0 items-center justify-between border-b border-dls-border/35 px-3">
+                <div className="flex h-11 shrink-0 items-center justify-between bg-dls-surface-muted/[0.08] px-3">
                   <span className="min-w-0 truncate text-sm font-semibold text-dls-text">
                     {sidePanelTitle}
                   </span>

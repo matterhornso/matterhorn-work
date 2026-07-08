@@ -52,7 +52,7 @@ function SectionCard(props: {
         </div>
         {props.status ? <div className="ml-auto shrink-0">{props.status}</div> : null}
       </div>
-      {props.children ? <div className="flex flex-col divide-y divide-dls-border/45 pl-12">{props.children}</div> : null}
+      {props.children ? <div className="flex flex-col gap-1 pl-12">{props.children}</div> : null}
     </section>
   );
 }
@@ -123,7 +123,7 @@ export function BackendCapabilitiesSection(props: BackendCapabilitiesSectionProp
   const publishingStatus = rollUpNftPublishingReadinessStatus(publishingReadiness);
 
   return (
-    <div className="divide-y divide-dls-border/45">
+    <div className="space-y-1">
       {/* Profile */}
       <SectionCard
         icon={<CircleUser size={18} />}

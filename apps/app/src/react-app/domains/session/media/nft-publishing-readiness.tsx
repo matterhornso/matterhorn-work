@@ -210,9 +210,9 @@ export function NftPublishingSetupRows(props: {
           </span>
         </div>
       </summary>
-      <div className="mt-2 divide-y divide-dls-border/35">
+      <div className="mt-2 grid gap-1">
         {unresolved.map((requirement) => (
-          <div key={`${requirement.key}:${requirement.envVar ?? requirement.label}`} className="grid gap-1 py-2 first:pt-0 last:pb-0">
+          <div key={`${requirement.key}:${requirement.envVar ?? requirement.label}`} className="grid gap-1 rounded-md px-2 py-2">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="text-xs font-medium text-dls-text">{requirement.label}</span>
               <span className="text-[11px] text-dls-secondary">{setupStatusLabels[requirement.status]}</span>

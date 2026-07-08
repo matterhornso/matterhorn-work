@@ -309,7 +309,7 @@ function ProjectHistoryDetailSheet({
         side="right"
         className="w-[min(100vw,430px)] border-dls-border bg-dls-background sm:max-w-[430px]"
       >
-        <SheetHeader className="border-b border-dls-border/60 px-5 py-4">
+        <SheetHeader className="bg-dls-surface-muted/[0.08] px-5 py-4">
           <SheetTitle className="text-sm font-semibold text-dls-text">{title}</SheetTitle>
           <SheetDescription className="text-xs leading-5 text-dls-secondary">
             {summary}

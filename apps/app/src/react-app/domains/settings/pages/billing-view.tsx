@@ -230,7 +230,7 @@ function PolicyRow(props: {
   state: string;
 }) {
   return (
-    <div className="grid gap-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-4">
+    <div className="grid gap-2 rounded-md px-2.5 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-4">
       <div className="min-w-0">
         <div className="text-sm font-medium text-dls-text">{props.label}</div>
         <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{props.detail}</div>
@@ -259,7 +259,7 @@ function PlanPolicySection(props: { status?: MatterhornBillingStatus | null }) {
           Paid plans unlock metered creation and publishing. Local workspace control stays available.
         </p>
       </div>
-      <div className="divide-y divide-dls-border/25 rounded-lg bg-dls-surface-muted/10 px-3 py-3">
+      <div className="grid gap-1 rounded-lg bg-dls-surface-muted/[0.08] p-2">
         <PolicyRow
           label="Always available"
           detail="Chat, local notes, memory review, protocol reads, exports, and settings are not blocked by billing."
@@ -522,7 +522,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
 
       <SettingsSection>
         <h3 className="text-sm font-medium text-dls-text">Usage</h3>
-        <div className="divide-y divide-dls-border/25">
+        <div className="grid gap-1">
           {usageItems.map((item) => (
             <UsageRow
               key={item.label}
@@ -561,9 +561,9 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               />
             </div>
             <CollapsibleContent>
-              <div className="mt-3 divide-y divide-dls-border/25">
+              <div className="mt-3 grid gap-1">
                 {setupChecks.map((check) => (
-                  <div key={check.id} className="flex items-start justify-between gap-3 py-2.5">
+                  <div key={check.id} className="flex items-start justify-between gap-3 rounded-md px-2.5 py-2.5">
                     <div className="min-w-0">
                       <div className="text-xs font-medium text-dls-text">{check.label}</div>
                       <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{check.description}</div>

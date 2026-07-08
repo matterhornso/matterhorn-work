@@ -116,9 +116,9 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
   return (
     <div
       className={cn(
-        "rounded-md bg-dls-surface-muted/10 px-3.5 py-3 transition-colors hover:bg-dls-surface-muted/15",
+        "rounded-md bg-dls-surface-muted/[0.075] px-3.5 py-3 transition-colors hover:bg-dls-surface-muted/[0.13]",
         isCurrent
-          ? "bg-[rgba(var(--matterhorn-desk-rgb),0.075)]"
+          ? "bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"
           : null,
       )}
     >
@@ -161,7 +161,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
             Details
             <span className="transition-transform group-open:rotate-90" aria-hidden="true">{">"}</span>
           </summary>
-          <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+          <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5 rounded-md bg-dls-background/20 px-2.5 py-2">
             {hasOutputs ? (
               <li className="inline-flex min-w-0 items-center gap-1.5">
                 <FileOutput className="size-3 shrink-0 text-dls-muted" />

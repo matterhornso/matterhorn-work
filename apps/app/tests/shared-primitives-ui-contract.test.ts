@@ -66,4 +66,38 @@ describe("Shared primitives UI contract", () => {
     expect(source).not.toContain("uppercase");
     expect(source).not.toContain("tracking-[0.18em]");
   });
+
+  test("main Matterhorn surfaces avoid harsh divider-line scaffolding", () => {
+    const sourceByPath = new Map([
+      ["domains/memory/memory-panel.tsx", readAppSource("domains/memory/memory-panel.tsx")],
+      ["domains/session/chat/session-page.tsx", readAppSource("domains/session/chat/session-page.tsx")],
+      ["domains/session/workflows/workflow-stage-card.tsx", readAppSource("domains/session/workflows/workflow-stage-card.tsx")],
+      ["domains/recent-activity/recent-activity-section.tsx", readAppSource("domains/recent-activity/recent-activity-section.tsx")],
+      ["domains/recent-activity/project-history-page.tsx", readAppSource("domains/recent-activity/project-history-page.tsx")],
+      ["domains/settings/backend-capabilities/backend-capability-section.tsx", readAppSource("domains/settings/backend-capabilities/backend-capability-section.tsx")],
+      ["domains/settings/pages/billing-view.tsx", readAppSource("domains/settings/pages/billing-view.tsx")],
+      ["domains/settings/pages/general-view.tsx", readAppSource("domains/settings/pages/general-view.tsx")],
+      ["domains/settings/pages/ai-view.tsx", readAppSource("domains/settings/pages/ai-view.tsx")],
+      ["domains/settings/pages/wallet-view.tsx", readAppSource("domains/settings/pages/wallet-view.tsx")],
+      ["domains/settings/pages/cloud-account-view.tsx", readAppSource("domains/settings/pages/cloud-account-view.tsx")],
+      ["domains/session/media/nft-draft-panel.tsx", readAppSource("domains/session/media/nft-draft-panel.tsx")],
+      ["domains/session/media/nft-publishing-readiness.tsx", readAppSource("domains/session/media/nft-publishing-readiness.tsx")],
+    ]);
+
+    for (const [path, source] of sourceByPath) {
+      expect(source, path).not.toContain("border-t border-dls-border/25");
+      expect(source, path).not.toContain("border-t border-dls-border/35");
+      expect(source, path).not.toContain("border-t border-dls-border/45");
+      expect(source, path).not.toContain("divide-y divide-dls-border/25");
+      expect(source, path).not.toContain("divide-y divide-dls-border/35");
+      expect(source, path).not.toContain("divide-y divide-dls-border/45");
+      expect(source, path).not.toContain("border-l border-white");
+      expect(source, path).not.toContain("border-b border-white");
+      expect(source, path).not.toContain("w-px bg-dls-border/30");
+    }
+
+    expect(sourceByPath.get("domains/memory/memory-panel.tsx")).toContain("Add memory manually");
+    expect(sourceByPath.get("domains/memory/memory-panel.tsx")).toContain("bg-dls-surface-muted/[0.08]");
+    expect(sourceByPath.get("domains/session/workflows/workflow-stage-card.tsx")).toContain("bg-dls-surface-muted/[0.075]");
+  });
 });

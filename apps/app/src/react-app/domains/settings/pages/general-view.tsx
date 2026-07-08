@@ -278,14 +278,14 @@ function TaskLogsSection(props: {
         </span>
       </div>
 
-      <div className="mt-3 divide-y divide-dls-border/45">
+      <div className="mt-3 grid gap-1">
         {isLoading ? (
           <div className="py-3 text-[12px] leading-5 text-dls-secondary">Loading task logs...</div>
         ) : error ? (
           <div className="py-3 text-[12px] leading-5 text-dls-secondary">{error}</div>
         ) : logs.length ? (
           logs.slice(0, 5).map((log) => (
-            <div key={log.id} className="grid gap-1 py-3 first:pt-0 last:pb-0">
+            <div key={log.id} className="grid gap-1 rounded-md px-2.5 py-2.5">
               <div className="flex min-w-0 items-center justify-between gap-3">
                 <span className="truncate text-[13px] font-medium text-dls-text">{taskTitle(log)}</span>
                 <span className="shrink-0 text-[11px] text-dls-secondary">{formatTaskTime(log.updatedAt)}</span>

@@ -63,7 +63,7 @@ export interface BackendCapabilityStatusRowProps {
 
 export function BackendCapabilityStatusRow(props: BackendCapabilityStatusRowProps) {
   return (
-    <div className="flex flex-col gap-1 px-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+    <div className="flex flex-col gap-1 rounded-md px-2.5 py-2.5 transition-colors sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <div className="min-w-0">
         <p className="text-sm font-medium text-dls-text">{props.label}</p>
         {props.hint ? <p className="mt-0.5 break-words text-xs leading-5 text-dls-secondary">{props.hint}</p> : null}
