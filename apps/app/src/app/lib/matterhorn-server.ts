@@ -33,7 +33,9 @@ import type {
   MatterhornImageGenerationInput,
   MatterhornImageGenerationResponse,
   MatterhornGeneratedMediaHistoryResponse,
+  MatterhornImageDeleteResponse,
   MatterhornImageListResponse,
+  MatterhornImageNftDraftDeleteResponse,
   MatterhornImageNftDraftInput,
   MatterhornImageNftDraftListResponse,
   MatterhornImageNftDraftResponse,
@@ -1819,6 +1821,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         `/workspace/${encodeURIComponent(workspaceId)}/images/${encodeURIComponent(imageId)}/file`,
         { token, hostToken, timeoutMs: timeouts.capabilities },
       ),
+    deleteGeneratedImage: (workspaceId: string, imageId: string) =>
+      requestJson<MatterhornImageDeleteResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/images/${encodeURIComponent(imageId)}`,
+        { token, hostToken, method: "DELETE", timeoutMs: timeouts.config },
+      ),
     createImageNftDraft: (workspaceId: string, imageId: string, input?: MatterhornImageNftDraftInput) =>
       requestJson<MatterhornImageNftDraftResponse>(
         baseUrl,
@@ -1842,6 +1850,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/nft-drafts/${encodeURIComponent(draftId)}`,
         { token, hostToken, method: "PATCH", body: input, timeoutMs: timeouts.config },
+      ),
+    deleteImageNftDraft: (workspaceId: string, draftId: string) =>
+      requestJson<MatterhornImageNftDraftDeleteResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/nft-drafts/${encodeURIComponent(draftId)}`,
+        { token, hostToken, method: "DELETE", timeoutMs: timeouts.config },
       ),
     prepareNftStorage: (workspaceId: string, draftId: string) =>
       requestJson<MatterhornImageNftDraftResponse>(

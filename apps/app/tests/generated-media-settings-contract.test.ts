@@ -35,12 +35,19 @@ describe("Generated media settings surface", () => {
 
   test("generated media settings page reads live backend contracts", () => {
     const source = readAppSource("react-app/domains/settings/pages/generated-media-view.tsx");
+    const client = readAppSource("app/lib/matterhorn-server.ts");
     expect(source).toContain("backendCapabilities");
     expect(source).toContain("listGeneratedMediaHistory");
     expect(source).toContain("listImageNftDrafts");
     expect(source).toContain("workspaceDataControls");
+    expect(source).toContain("deleteGeneratedImage");
+    expect(source).toContain("deleteImageNftDraft");
     expect(source).toContain("buildNftPublishingReadinessItems");
     expect(source).toContain("NftPublishingSetupRows");
+    expect(source).toContain("Delete local generated image");
+    expect(source).toContain("Delete local NFT draft");
+    expect(client).toContain("deleteGeneratedImage");
+    expect(client).toContain("deleteImageNftDraft");
   });
 
   test("backend image and NFT settings actions route to the real generated-media page", () => {

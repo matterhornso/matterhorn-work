@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   Clock3,
@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   RefreshCw,
   Store,
+  Trash2,
 } from "lucide-react";
 
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
@@ -118,7 +119,28 @@ function compact(value: string | undefined | null) {
   return `${value.slice(0, 18)}...${value.slice(-10)}`;
 }
 
-function RecentMediaRows(props: { items: MatterhornGeneratedMediaHistoryItem[]; loading: boolean }) {
+function isPublicDraft(draft: MatterhornImageNftDraft) {
+  return draft.storage.status === "uploaded"
+    || Boolean(draft.storage.blobId || draft.storage.objectId || draft.storage.transactionDigest || draft.storage.url)
+    || draft.mint.status === "confirmed"
+    || Boolean(draft.mint.transactionDigest || draft.mint.objectId)
+    || draft.listing.status === "listed";
+}
+
+function canDeleteImage(item: MatterhornGeneratedMediaHistoryItem) {
+  return item.drafts.length === 0;
+}
+
+function canDeleteDraft(draft: MatterhornImageNftDraft) {
+  return !isPublicDraft(draft);
+}
+
+function RecentMediaRows(props: {
+  items: MatterhornGeneratedMediaHistoryItem[];
+  loading: boolean;
+  deletingImageId?: string | null;
+  onDeleteImage: (item: MatterhornGeneratedMediaHistoryItem) => void;
+}) {
   if (props.loading) {
     return <SettingsInset className="text-sm text-dls-secondary">Loading generated media...</SettingsInset>;
   }
@@ -133,15 +155,21 @@ function RecentMediaRows(props: { items: MatterhornGeneratedMediaHistoryItem[]; 
   return (
     <div className="divide-y divide-dls-border/40">
       {props.items.slice(0, 6).map((item) => (
-        <RecentMediaRow key={item.id} item={item} />
+        <RecentMediaRow
+          key={item.id}
+          item={item}
+          deleting={props.deletingImageId === item.image.id}
+          onDelete={() => props.onDeleteImage(item)}
+        />
       ))}
     </div>
   );
 }
 
-function RecentMediaRow(props: { item: MatterhornGeneratedMediaHistoryItem }) {
+function RecentMediaRow(props: { item: MatterhornGeneratedMediaHistoryItem; deleting: boolean; onDelete: () => void }) {
   const image = props.item.image;
   const size = formatBytes(image.byteLength);
+  const showDelete = canDeleteImage(props.item);
   return (
     <div className="grid gap-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
       <div className="min-w-0">
@@ -157,12 +185,32 @@ function RecentMediaRow(props: { item: MatterhornGeneratedMediaHistoryItem }) {
           <span>{formatRelativeTime(Date.parse(props.item.updatedAt))}</span>
         </div>
       </div>
-      <StatusText status="local" label={compact(image.fileName) ?? "Output"} />
+      <div className="flex items-center gap-1.5">
+        <StatusText status="local" label={compact(image.fileName) ?? "Output"} />
+        {showDelete ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-[11px] text-red-300 hover:text-red-200"
+            onClick={props.onDelete}
+            disabled={props.deleting}
+          >
+            <Trash2 className="size-3" />
+            {props.deleting ? "Deleting" : "Delete"}
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-function DraftRows(props: { drafts: MatterhornImageNftDraft[]; loading: boolean }) {
+function DraftRows(props: {
+  drafts: MatterhornImageNftDraft[];
+  loading: boolean;
+  deletingDraftId?: string | null;
+  onDeleteDraft: (draft: MatterhornImageNftDraft) => void;
+}) {
   if (props.loading) {
     return <SettingsInset className="text-sm text-dls-secondary">Loading NFT drafts...</SettingsInset>;
   }
@@ -172,23 +220,42 @@ function DraftRows(props: { drafts: MatterhornImageNftDraft[]; loading: boolean 
 
   return (
     <div className="divide-y divide-dls-border/40">
-      {props.drafts.slice(0, 5).map((draft) => (
-        <div key={draft.id} className="grid gap-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-dls-text">
-              <Store className="size-4 shrink-0 text-dls-secondary" />
-              <span className="truncate">{draft.title}</span>
+      {props.drafts.slice(0, 5).map((draft) => {
+        const showDelete = canDeleteDraft(draft);
+        const deleting = props.deletingDraftId === draft.id;
+        return (
+          <div key={draft.id} className="grid gap-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-dls-text">
+                <Store className="size-4 shrink-0 text-dls-secondary" />
+                <span className="truncate">{draft.title}</span>
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-5 text-dls-secondary">
+                <span>{draft.network}</span>
+                <span>Storage {draft.storage.status.replace(/_/g, " ")}</span>
+                <span>Mint {draft.mint.status.replace(/_/g, " ")}</span>
+                <span>Listing {draft.listing.status.replace(/_/g, " ")}</span>
+              </div>
             </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-5 text-dls-secondary">
-              <span>{draft.network}</span>
-              <span>Storage {draft.storage.status.replace(/_/g, " ")}</span>
-              <span>Mint {draft.mint.status.replace(/_/g, " ")}</span>
-              <span>Listing {draft.listing.status.replace(/_/g, " ")}</span>
+            <div className="flex items-center gap-1.5">
+              <StatusText status="local" label={draft.status.replace(/_/g, " ")} />
+              {showDelete ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-[11px] text-red-300 hover:text-red-200"
+                  onClick={() => props.onDeleteDraft(draft)}
+                  disabled={deleting}
+                >
+                  <Trash2 className="size-3" />
+                  {deleting ? "Deleting" : "Delete"}
+                </Button>
+              ) : null}
             </div>
           </div>
-          <StatusText status="local" label={draft.status.replace(/_/g, " ")} />
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -247,6 +314,10 @@ function DataControlRows(props: { stores: MatterhornDataControlStore[]; loading:
 }
 
 export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProps) {
+  const queryClient = useQueryClient();
+  const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
+  const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
+  const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
   const workspaceId = props.runtimeWorkspaceId?.trim() ?? "";
   const enabled = Boolean(props.matterhornServerClient && workspaceId);
 
@@ -290,6 +361,79 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
       return client.workspaceDataControls(workspaceId);
     },
   });
+
+  const refreshGeneratedMediaData = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["settings-generated-media-history", workspaceId] }),
+      queryClient.invalidateQueries({ queryKey: ["settings-generated-media-drafts", workspaceId] }),
+      queryClient.invalidateQueries({ queryKey: ["settings-generated-media-data-controls", workspaceId] }),
+    ]);
+  };
+
+  const deleteImageMutation = useMutation({
+    mutationFn: async (imageId: string) => {
+      const client = props.matterhornServerClient;
+      if (!client || !workspaceId) throw new Error("Open a workspace to delete generated media.");
+      setDeletingImageId(imageId);
+      return client.deleteGeneratedImage(workspaceId, imageId);
+    },
+    onSuccess: async () => {
+      setDeleteStatus("Local generated image deleted.");
+      await refreshGeneratedMediaData();
+    },
+    onError: (deleteError) => {
+      setDeleteStatus(deleteError instanceof Error ? deleteError.message : "Generated image could not be deleted.");
+    },
+    onSettled: () => setDeletingImageId(null),
+  });
+
+  const deleteDraftMutation = useMutation({
+    mutationFn: async (draftId: string) => {
+      const client = props.matterhornServerClient;
+      if (!client || !workspaceId) throw new Error("Open a workspace to delete NFT drafts.");
+      setDeletingDraftId(draftId);
+      return client.deleteImageNftDraft(workspaceId, draftId);
+    },
+    onSuccess: async () => {
+      setDeleteStatus("Local NFT draft deleted.");
+      await refreshGeneratedMediaData();
+    },
+    onError: (deleteError) => {
+      setDeleteStatus(deleteError instanceof Error ? deleteError.message : "NFT draft could not be deleted.");
+    },
+    onSettled: () => setDeletingDraftId(null),
+  });
+
+  const deleteImage = (item: MatterhornGeneratedMediaHistoryItem) => {
+    if (!canDeleteImage(item)) {
+      setDeleteStatus("Delete local NFT drafts before deleting this image.");
+      return;
+    }
+    const label = compact(item.image.fileName) ?? item.image.id;
+    if (
+      typeof window !== "undefined"
+      && !window.confirm(`Delete local generated image ${label}? This removes the workspace output file and metadata.`)
+    ) {
+      return;
+    }
+    setDeleteStatus(null);
+    deleteImageMutation.mutate(item.image.id);
+  };
+
+  const deleteDraft = (draft: MatterhornImageNftDraft) => {
+    if (!canDeleteDraft(draft)) {
+      setDeleteStatus("Public storage, mint, or listing state is retained for accountability.");
+      return;
+    }
+    if (
+      typeof window !== "undefined"
+      && !window.confirm(`Delete local NFT draft ${draft.title}? Public NFT state is never deleted from here.`)
+    ) {
+      return;
+    }
+    setDeleteStatus(null);
+    deleteDraftMutation.mutate(draft.id);
+  };
 
   const capabilities = capabilitiesQuery.data;
   const publishingReadiness = useMemo(() => capabilities ? buildNftPublishingReadinessItems({
@@ -394,10 +538,16 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
         </SettingsSectionHeader>
 
         <CountStrip images={counts.images} drafts={counts.drafts} minted={counts.minted} listed={counts.listed} />
+        {deleteStatus ? <SettingsNotice>{deleteStatus}</SettingsNotice> : null}
         {historyQuery.isError ? (
           <SettingsNotice tone="error">Generated media history could not load.</SettingsNotice>
         ) : null}
-        <RecentMediaRows items={historyQuery.data?.items ?? []} loading={historyQuery.isLoading} />
+        <RecentMediaRows
+          items={historyQuery.data?.items ?? []}
+          loading={historyQuery.isLoading}
+          deletingImageId={deletingImageId}
+          onDeleteImage={deleteImage}
+        />
       </SettingsSection>
 
       <SettingsSection>
@@ -410,7 +560,12 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
           </SettingsSectionHeaderContent>
         </SettingsSectionHeader>
         {draftsQuery.isError ? <SettingsNotice tone="error">NFT drafts could not load.</SettingsNotice> : null}
-        <DraftRows drafts={draftsQuery.data?.drafts ?? []} loading={draftsQuery.isLoading} />
+        <DraftRows
+          drafts={draftsQuery.data?.drafts ?? []}
+          loading={draftsQuery.isLoading}
+          deletingDraftId={deletingDraftId}
+          onDeleteDraft={deleteDraft}
+        />
       </SettingsSection>
 
       <SettingsSection>
