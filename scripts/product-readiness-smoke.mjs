@@ -123,6 +123,7 @@ function help() {
 function buildPlannedStages(config) {
   const stages = [
     ["workspace.resolve", "Resolve active workspace"],
+    ["production.cors_readiness", "Check production CORS readiness"],
     ["backend.capabilities", "Read backend capabilities"],
     ["workspace.readiness", "Read workspace readiness"],
     ["backend.control_plane", "Read workspace control plane"],
@@ -247,6 +248,40 @@ function runGeneratedMediaFlow(config) {
   });
 }
 
+function runProductionCorsReadiness(config) {
+  return new Promise((resolve) => {
+    const args = [
+      "scripts/production-cors-readiness.mjs",
+      "--require-production",
+      "--json",
+    ];
+    const child = spawn("node", args, { stdio: ["ignore", "pipe", "pipe"], env: process.env });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => child.kill("SIGTERM"), config.timeoutMs);
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      let payload = null;
+      try {
+        payload = JSON.parse(stdout);
+      } catch {
+        // Keep payload null; stderr/stdout are reported below.
+      }
+      resolve({
+        code,
+        signal,
+        payload,
+        stdout: stdout.slice(-4000),
+        stderr: stderr.slice(-4000),
+      });
+    });
+  });
+}
+
 async function runProductReadinessSmoke(config) {
   const report = {
     ready: false,
@@ -278,6 +313,8 @@ async function runProductReadinessSmoke(config) {
       status: "planned",
       command: stage.id === "generated_media.flow"
         ? ["node", "scripts/generated-media-flow-smoke.mjs", "--strict"]
+        : stage.id === "production.cors_readiness"
+          ? ["node", "scripts/production-cors-readiness.mjs", "--require-production"]
         : ["GET", "<server>", stage.id],
     }));
     return report;
@@ -310,6 +347,19 @@ async function runProductReadinessSmoke(config) {
     const workspaceId = await stage("workspace.resolve", "Resolve active workspace", () => resolveWorkspaceId(config));
     if (!workspaceId) return report;
     report.metadata.workspaceId = workspaceId;
+
+    await stage("production.cors_readiness", "Check production CORS readiness", async () => {
+      const result = await runProductionCorsReadiness(config);
+      assert(result.code === 0, result.stderr || result.stdout || "production CORS readiness failed");
+      assert(result.payload?.version === "matterhorn.production-cors-readiness.v1", "production CORS readiness version mismatch");
+      assert(result.payload?.ready === true, "production CORS readiness did not report ready");
+      report.artifacts.productionCors = {
+        defaultCors: result.payload.policy?.defaultCors,
+        productionWildcardAllowed: result.payload.policy?.productionWildcardAllowed,
+        checks: result.payload.checks?.map((check) => ({ id: check.id, status: check.status })) ?? [],
+      };
+      return result.payload;
+    });
 
     const capabilities = await stage("backend.capabilities", "Read backend capabilities", async () => {
       const payload = unwrap(await fetchJson(config, "/api/backend/capabilities"));

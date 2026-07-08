@@ -36,6 +36,7 @@ assert.match(report.metadata.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
 const stageIds = report.stages.map((stage) => stage.id);
 for (const id of [
   "workspace.resolve",
+  "production.cors_readiness",
   "backend.capabilities",
   "workspace.readiness",
   "backend.control_plane",
@@ -53,6 +54,8 @@ for (const id of [
 
 const generatedMediaStage = report.stages.find((stage) => stage.id === "generated_media.flow");
 assert.deepEqual(generatedMediaStage.command, ["node", "scripts/generated-media-flow-smoke.mjs", "--strict"]);
+const corsStage = report.stages.find((stage) => stage.id === "production.cors_readiness");
+assert.deepEqual(corsStage.command, ["node", "scripts/production-cors-readiness.mjs", "--require-production"]);
 
 const outputDir = mkdtempSync(join(tmpdir(), "matterhorn-product-readiness-smoke-"));
 try {
@@ -79,6 +82,7 @@ for (const endpoint of [
   "/data-ledger?limit=20",
   "/data-ledger/export?limit=20",
   "/generated-media/history?limit=20",
+  "scripts/production-cors-readiness.mjs",
 ]) {
   assert.ok(source.includes(endpoint), `product readiness smoke missing endpoint ${endpoint}`);
 }
@@ -93,9 +97,11 @@ for (const required of [
   "matterhorn.backend.team-access.v1",
   "matterhorn.project-data-ledger.v1",
   "matterhorn.project-data-ledger-export.v1",
+  "matterhorn.production-cors-readiness.v1",
   "none_by_default",
   "imageOutputs",
   "scripts/generated-media-flow-smoke.mjs",
+  "production.cors_readiness",
   "--include-generated-media-flow",
 ]) {
   assert.ok(source.includes(required), `product readiness smoke missing contract ${required}`);
