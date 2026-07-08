@@ -25,6 +25,7 @@ export type MatterhornProjectDataLedgerKind =
   | "output"
   | "image"
   | "nft"
+  | "billing"
   | "audit"
   | "feedback";
 
@@ -93,6 +94,7 @@ export interface MatterhornProjectDataLedgerSummary {
   outputs: number;
   images: number;
   nfts: number;
+  billing: number;
   audits: number;
   feedback: number;
   redacted: number;

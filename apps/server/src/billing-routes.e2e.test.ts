@@ -197,6 +197,24 @@ describe("Billing routes", () => {
     expect(typeof status.payload.status.subscription.currentPeriodStart).toBe("string");
     expect(typeof status.payload.status.subscription.currentPeriodEnd).toBe("string");
     expect(status.payload.status.usage.generatedImages.limit).toBe(100);
+
+    const audit = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/audit?limit=5`);
+    expect(audit.response.status).toBe(200);
+    const checkoutEntry = audit.payload.items.find((item: { action: string }) => item.action === "workspace.billing.checkout");
+    expect(checkoutEntry).toMatchObject({
+      workspaceId: WORKSPACE_ID,
+      action: "workspace.billing.checkout",
+      target: `billing:${WORKSPACE_ID}`,
+      metadata: {
+        planId: "plus",
+        interval: "month",
+        mode: "phase0_mock",
+        provider: "mock",
+        livePaymentsEnabled: false,
+      },
+    });
+    expect(JSON.stringify(audit.payload)).not.toContain("mock_sub_");
+    expect(JSON.stringify(audit.payload)).not.toContain("mock_cus_");
   });
 
   test("DELETE /workspace/:id/billing/subscription clears the local workspace billing override", async () => {
@@ -217,6 +235,27 @@ describe("Billing routes", () => {
     const after = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
     expect(after.payload.status.subscription.planId).toBe("free");
     expect(after.payload.status.usage.generatedImages.limit).toBe(10);
+
+    const audit = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/audit?limit=10`);
+    const actions = audit.payload.items.map((item: { action: string }) => item.action);
+    expect(actions).toContain("workspace.billing.checkout");
+    expect(actions).toContain("workspace.billing.subscription.clear");
+
+    const ledger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=billing&limit=10`);
+    expect(ledger.response.status).toBe(200);
+    expect(ledger.payload.summary.billing).toBeGreaterThanOrEqual(2);
+    expect(ledger.payload.items.slice(0, 2).map((item: { title: string }) => item.title)).toEqual([
+      "Billing subscription cleared",
+      "Billing plan updated",
+    ]);
+    expect(ledger.payload.items[0]).toMatchObject({
+      kind: "billing",
+      href: `/workspace/${WORKSPACE_ID}/settings/billing`,
+      metadata: expect.objectContaining({
+        auditAction: "workspace.billing.subscription.clear",
+        deleted: true,
+      }),
+    });
   });
 
   test("POST /api/billing/checkout returns mock checkout URL", async () => {
