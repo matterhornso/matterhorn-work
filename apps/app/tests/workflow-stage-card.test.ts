@@ -241,7 +241,9 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("features.start_desk_task");
     expect(src).toContain(': startTaskBlocked ? "Needs setup"');
     expect(src).toContain("actionDisabled={startTaskBlocked || Boolean(launchingTaskTitle)}");
-    expect(src).toContain("actionTitle={startTaskBlocker ?? undefined}");
+    expect(src).toContain("actionTitle={startTaskBlocker ?? inputRequirement?.helpText ?? undefined}");
+    expect(src).toContain("getDeskTaskInputRequirement(item.prompt)");
+    expect(src).toContain("buildDeskTaskPromptWithInput(pendingInput.prompt, pendingInput.requirement, taskInputValue)");
   });
 
   test("route-level task launcher reports setup failures instead of silently returning", () => {
