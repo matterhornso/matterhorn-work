@@ -42,6 +42,7 @@ import { recordAudit } from "./audit.js";
 import { recordTaskEvent } from "./task-events.js";
 import { shortId } from "./utils.js";
 import { uploadBlobToWalrus, WalrusUploadError } from "./walrus-storage.js";
+import { normalizeMatterhornSuiAddress } from "./tools/sui.js";
 
 type NftReceiptKind = "mint" | "listing";
 type NftPreviewKind = "mint_preview" | "listing_preview";
@@ -1660,13 +1661,13 @@ function validateNftListingPreviewInput(body: unknown): MatterhornNftListingPrev
   if (!body || typeof body !== "object") return {};
   const b = body as Record<string, unknown>;
   return {
-    objectId: typeof b.objectId === "string" ? b.objectId.trim() : undefined,
-    nftType: typeof b.nftType === "string" ? b.nftType.trim() : undefined,
-    kioskId: typeof b.kioskId === "string" ? b.kioskId.trim() : undefined,
-    kioskOwnerCapId: typeof b.kioskOwnerCapId === "string" ? b.kioskOwnerCapId.trim() : undefined,
-    transferPolicyId: typeof b.transferPolicyId === "string" ? b.transferPolicyId.trim() : undefined,
-    priceMist: typeof b.priceMist === "string" ? b.priceMist.trim() : undefined,
-    sender: typeof b.sender === "string" ? b.sender.trim() : undefined,
+    objectId: optionalSuiObjectId(b.objectId, "objectId"),
+    nftType: optionalSuiMoveType(b.nftType, "nftType"),
+    kioskId: optionalSuiObjectId(b.kioskId, "kioskId"),
+    kioskOwnerCapId: optionalSuiObjectId(b.kioskOwnerCapId, "kioskOwnerCapId"),
+    transferPolicyId: optionalSuiObjectId(b.transferPolicyId, "transferPolicyId"),
+    priceMist: optionalMistAmount(b.priceMist, "priceMist"),
+    sender: optionalSuiObjectId(b.sender, "sender"),
   };
 }
 
@@ -1684,14 +1685,68 @@ function validateNftReceiptRequest(body: unknown): MatterhornNftReceiptRequest {
   if (b.network !== "sui-testnet" && b.network !== "sui-mainnet") {
     throw new ApiError(400, "nft_receipt_network_invalid", "network must be sui-testnet or sui-mainnet.");
   }
+  validateSuiTransactionDigest(b.transactionDigest.trim(), "transactionDigest");
   return {
     transactionDigest: b.transactionDigest.trim(),
-    objectId: b.objectId.trim(),
+    objectId: requiredSuiObjectId(b.objectId, "objectId"),
     network: b.network,
-    packageId: typeof b.packageId === "string" ? b.packageId.trim() : undefined,
-    kioskId: typeof b.kioskId === "string" ? b.kioskId.trim() : undefined,
-    transferPolicyId: typeof b.transferPolicyId === "string" ? b.transferPolicyId.trim() : undefined,
+    packageId: optionalSuiObjectId(b.packageId, "packageId"),
+    kioskId: optionalSuiObjectId(b.kioskId, "kioskId"),
+    transferPolicyId: optionalSuiObjectId(b.transferPolicyId, "transferPolicyId"),
   };
+}
+
+function optionalSuiObjectId(value: unknown, field: string): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return requiredSuiObjectId(trimmed, field);
+}
+
+function requiredSuiObjectId(value: string, field: string): string {
+  const trimmed = value.trim();
+  try {
+    normalizeMatterhornSuiAddress(trimmed);
+  } catch {
+    throw new ApiError(400, "nft_sui_public_id_invalid", `${field} must be a valid public Sui object id.`);
+  }
+  return trimmed;
+}
+
+function optionalSuiMoveType(value: unknown, field: string): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parts = trimmed.split("::");
+  if (parts.length < 3) {
+    throw new ApiError(400, "nft_sui_move_type_invalid", `${field} must be a full Move type like 0x...::module::Type.`);
+  }
+  requiredSuiObjectId(parts[0]!, field);
+  const [, moduleName, ...typeParts] = parts;
+  if (!isSuiMoveIdentifier(moduleName) || typeParts.some((part) => !isSuiMoveIdentifier(part))) {
+    throw new ApiError(400, "nft_sui_move_type_invalid", `${field} module and type names must be Move identifiers.`);
+  }
+  return trimmed;
+}
+
+function isSuiMoveIdentifier(value: string | undefined): boolean {
+  return Boolean(value && /^[A-Za-z_][A-Za-z0-9_]*$/.test(value));
+}
+
+function optionalMistAmount(value: unknown, field: string): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (!/^[0-9]+$/.test(trimmed) || BigInt(trimmed) <= 0n) {
+    throw new ApiError(400, "nft_listing_price_invalid", `${field} must be a positive integer MIST amount.`);
+  }
+  return trimmed;
+}
+
+function validateSuiTransactionDigest(value: string, field: string): void {
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,128}$/.test(value)) {
+    throw new ApiError(400, "nft_receipt_digest_invalid", `${field} must be a public Sui transaction digest.`);
+  }
 }
 
 function ensureReceiptMatchesDraft(receipt: MatterhornNftReceiptRequest, draft: MatterhornImageNftDraft): void {
