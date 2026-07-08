@@ -397,6 +397,18 @@ function buildMatterhornBillingAccountLinkage(input: {
     };
   }
   if (input.source === "stripe_test_checkout") {
+    if (!pendingCheckout) {
+      return {
+        source: input.source,
+        label: "Stripe test checkout expired",
+        status: "preview",
+        description: "The prior Stripe test checkout is no longer pending. Start checkout again to change plans.",
+        hasProviderCustomer,
+        hasProviderSubscription,
+        pendingCheckout,
+        updatedAt: input.updatedAt ?? null,
+      };
+    }
     return {
       source: input.source,
       label: "Stripe test checkout pending",
@@ -786,6 +798,7 @@ export function createStripeTestBillingProvider(config: BillingProviderConfig): 
         checkoutUrl,
         mode: "stripe_test",
         providerSessionId: typeof payload.id === "string" ? payload.id : null,
+        expiresAt: isoFromStripeSeconds(payload.expires_at),
       };
     },
     buildPortal: async (input?: StripePortalInput) => {

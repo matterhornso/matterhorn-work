@@ -164,6 +164,7 @@ export interface MatterhornBillingCheckoutResponse {
   checkoutUrl: string;
   mode: "mock" | "stripe_test";
   providerSessionId?: string | null;
+  expiresAt?: string | null;
 }
 
 export interface MatterhornBillingPortalRequest {

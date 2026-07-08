@@ -65,7 +65,7 @@ async function boot() {
   return { base: `http://127.0.0.1:${port}`, dir };
 }
 
-async function startFakeStripe() {
+async function startFakeStripe(options: { checkoutExpiresAtSeconds?: number } = {}) {
   const calls: Array<{
     path: string;
     authorization: string | null;
@@ -90,6 +90,7 @@ async function startFakeStripe() {
           object: "checkout.session",
           livemode: false,
           url: "https://checkout.stripe.com/c/pay/cs_test_matterhorn",
+          expires_at: options.checkoutExpiresAtSeconds ?? Math.floor(Date.now() / 1000) + 1800,
         });
       }
       if (url.pathname === "/v1/billing_portal/sessions") {
@@ -339,6 +340,7 @@ describe("Billing routes", () => {
     expect(checkout.response.status).toBe(200);
     expect(checkout.payload.mode).toBe("stripe_test");
     expect(checkout.payload.providerSessionId).toBe("cs_test_matterhorn");
+    expect(checkout.payload.expiresAt).toEqual(expect.any(String));
     expect(stripe.calls[0].params["metadata[workspace_id]"]).toBe(WORKSPACE_ID);
     expect(stripe.calls[0].params["subscription_data[metadata][workspace_id]"]).toBe(WORKSPACE_ID);
 
@@ -366,6 +368,7 @@ describe("Billing routes", () => {
       pendingCheckout: true,
     });
     expect(status.payload.status.pendingCheckout.createdAt).toEqual(expect.any(String));
+    expect(status.payload.status.pendingCheckout.expiresAt).toEqual(checkout.payload.expiresAt);
     expect(status.payload.status.usage.generatedImages.limit).toBe(10);
 
     const portal = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/portal`, {
@@ -422,6 +425,37 @@ describe("Billing routes", () => {
         deleted: true,
         planId: "max",
       }),
+    });
+  });
+
+  test("GET /workspace/:id/billing/status reports expired Stripe test checkout as no longer pending", async () => {
+    const stripe = await startFakeStripe({ checkoutExpiresAtSeconds: Math.floor(Date.now() / 1000) - 60 });
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_STRIPE_SECRET_KEY = "sk_test_workspace_checkout_expired";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS = "price_plus_workspace";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_MAX = "price_max_workspace";
+    process.env.MATTERHORN_STRIPE_API_BASE_URL = stripe.baseUrl;
+
+    const { base } = await boot();
+    const checkout = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/checkout`, {
+      method: "POST",
+      body: JSON.stringify({ planId: "plus" }),
+    });
+    expect(checkout.response.status).toBe(200);
+    expect(checkout.payload.expiresAt).toEqual(expect.any(String));
+
+    const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(status.response.status).toBe(200);
+    expect(status.payload.status.pendingCheckout ?? null).toBeNull();
+    expect(status.payload.status.subscription).toMatchObject({
+      planId: "free",
+      status: "none",
+    });
+    expect(status.payload.status.accountLinkage).toMatchObject({
+      source: "stripe_test_checkout",
+      label: "Stripe test checkout expired",
+      pendingCheckout: false,
     });
   });
 

@@ -79,6 +79,17 @@ function nextBillingPeriod(now = new Date()): { currentPeriodStart: string; curr
   };
 }
 
+function activePendingCheckout(
+  pendingCheckout?: MatterhornBillingPendingCheckout | null,
+  now = new Date(),
+): MatterhornBillingPendingCheckout | null {
+  if (!pendingCheckout) return null;
+  if (!pendingCheckout.expiresAt) return pendingCheckout;
+  const expiresAt = new Date(pendingCheckout.expiresAt);
+  if (Number.isNaN(expiresAt.getTime())) return pendingCheckout;
+  return expiresAt.getTime() > now.getTime() ? pendingCheckout : null;
+}
+
 async function recordBillingAudit(input: {
   workspace: WorkspaceInfo;
   actor?: Actor;
@@ -208,11 +219,12 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       cloudStorageBytes: 0,
     };
     if (account) {
+      const pendingCheckout = activePendingCheckout(account.pendingCheckout);
       return jsonResponse(buildBillingStatusResponseForSubscription(
         provider.config,
         subscription,
         usage,
-        account.pendingCheckout ?? null,
+        pendingCheckout,
         account.source,
         account.updatedAt,
       ));
@@ -258,7 +270,7 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
           mode: "stripe_test",
           providerSessionId: result.providerSessionId ?? null,
           createdAt: period.currentPeriodStart,
-          expiresAt: null,
+          expiresAt: result.expiresAt ?? null,
         }
       : null;
     const subscription: MatterhornBillingSubscription = isStripeTestCheckout
