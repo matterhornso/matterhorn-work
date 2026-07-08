@@ -23,13 +23,20 @@ const priorEnv = {
   memoryScope: process.env.MATTERHORN_WORK_MEMORY_SCOPE,
   opencodeDb: process.env.OPENCODE_DB,
   imageProvider: process.env.MATTERHORN_IMAGE_PROVIDER,
+  openAiApiKey: process.env.OPENAI_API_KEY,
   imageSize: process.env.MATTERHORN_IMAGE_SIZE,
   walrusPublisherUrl: process.env.MATTERHORN_WALRUS_PUBLISHER_URL,
+  walrusPublisherBearerToken: process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN,
   walrusRelayUrl: process.env.MATTERHORN_WALRUS_RELAY_URL,
   walrusStorageEpochs: process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS,
   suiNetwork: process.env.MATTERHORN_SUI_NETWORK,
   suiNftPackageId: process.env.MATTERHORN_SUI_NFT_PACKAGE_ID,
+  suiNftModuleName: process.env.MATTERHORN_SUI_NFT_MODULE_NAME,
+  suiNftType: process.env.MATTERHORN_SUI_NFT_TYPE,
   suiKioskPackageId: process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID,
+  suiKioskId: process.env.MATTERHORN_SUI_KIOSK_ID,
+  suiKioskOwnerCapId: process.env.MATTERHORN_SUI_KIOSK_OWNER_CAP_ID,
+  suiTransferPolicyId: process.env.MATTERHORN_SUI_TRANSFER_POLICY_ID,
   suiTransferPolicyPackageId: process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID,
 };
 const stops: Array<() => void | Promise<void>> = [];
@@ -98,6 +105,49 @@ async function startProviderCatalogServer(payload: unknown): Promise<string> {
   });
   stops.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
   return `http://127.0.0.1:${port}`;
+}
+
+async function startWalrusDiagnosticServer() {
+  const calls: Array<{
+    method: string;
+    url: string;
+    byteLength: number;
+    authorization: string | null;
+  }> = [];
+  const server = createHttpServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      const byteLength = Buffer.concat(chunks).byteLength;
+      calls.push({
+        method: request.method ?? "GET",
+        url: request.url ?? "/",
+        byteLength,
+        authorization: request.headers.authorization ?? null,
+      });
+      if (request.method === "OPTIONS") {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      if (request.method === "HEAD") {
+        response.writeHead(404);
+        response.end();
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ ok: true }));
+    });
+  });
+  const port = await new Promise<number>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address() as AddressInfo;
+      resolve(address.port);
+    });
+  });
+  stops.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  return { url: `http://127.0.0.1:${port}`, calls };
 }
 
 async function boot(options: { readOnly?: boolean; opencodeBaseUrl?: string; workspaceMemoryScope?: string } = {}) {
@@ -191,13 +241,20 @@ afterEach(async () => {
   restoreEnv("memoryScope", "MATTERHORN_WORK_MEMORY_SCOPE");
   restoreEnv("opencodeDb", "OPENCODE_DB");
   restoreEnv("imageProvider", "MATTERHORN_IMAGE_PROVIDER");
+  restoreEnv("openAiApiKey", "OPENAI_API_KEY");
   restoreEnv("imageSize", "MATTERHORN_IMAGE_SIZE");
   restoreEnv("walrusPublisherUrl", "MATTERHORN_WALRUS_PUBLISHER_URL");
+  restoreEnv("walrusPublisherBearerToken", "MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN");
   restoreEnv("walrusRelayUrl", "MATTERHORN_WALRUS_RELAY_URL");
   restoreEnv("walrusStorageEpochs", "MATTERHORN_WALRUS_STORAGE_EPOCHS");
   restoreEnv("suiNetwork", "MATTERHORN_SUI_NETWORK");
   restoreEnv("suiNftPackageId", "MATTERHORN_SUI_NFT_PACKAGE_ID");
+  restoreEnv("suiNftModuleName", "MATTERHORN_SUI_NFT_MODULE_NAME");
+  restoreEnv("suiNftType", "MATTERHORN_SUI_NFT_TYPE");
   restoreEnv("suiKioskPackageId", "MATTERHORN_SUI_KIOSK_PACKAGE_ID");
+  restoreEnv("suiKioskId", "MATTERHORN_SUI_KIOSK_ID");
+  restoreEnv("suiKioskOwnerCapId", "MATTERHORN_SUI_KIOSK_OWNER_CAP_ID");
+  restoreEnv("suiTransferPolicyId", "MATTERHORN_SUI_TRANSFER_POLICY_ID");
   restoreEnv("suiTransferPolicyPackageId", "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID");
 });
 
@@ -836,6 +893,18 @@ describe("backend control plane routes", () => {
     expect(result.payload.dataLedger.summary.feedback).toBeGreaterThanOrEqual(1);
     expect(result.payload.dataLedger.export.href).toBe("/workspace/ws_backend/data-ledger/export");
     expect(result.payload.dataLedger.export.manifest.backendContext.included).toBe(true);
+    expect(result.payload.generatedMedia.diagnostics).toMatchObject({
+      success: true,
+      workspaceId: "ws_backend",
+      safety: {
+        custody: false,
+        canSubmit: false,
+        walletSigning: "client_wallet",
+        publicWritesDuringDiagnostics: false,
+        storesSecrets: false,
+      },
+    });
+    expect(result.payload.generatedMedia.diagnostics.productionSmokePlan.publicWritesOnlyAfterUserAction).toBe(true);
     expect(result.payload.privacy).toEqual({
       trainingUse: "none_by_default",
       feedbackUse: "eval_routing_product_quality_only",
@@ -850,6 +919,74 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain("Basic ");
     expect(serialized).not.toContain("Authorization");
     expect(serialized).not.toContain("owt_should_not_leak");
+  });
+
+  test("backend support report includes generated-media production readiness without public writes or secrets", async () => {
+    const walrus = await startWalrusDiagnosticServer();
+    process.env.MATTERHORN_IMAGE_PROVIDER = "openai";
+    process.env.OPENAI_API_KEY = "sk-test-support-report-generated-media";
+    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = walrus.url;
+    process.env.MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN = "secret-support-report-walrus-token";
+    process.env.MATTERHORN_WALRUS_RELAY_URL = walrus.url;
+    process.env.MATTERHORN_WALRUS_STORAGE_EPOCHS = "3";
+    process.env.MATTERHORN_SUI_NETWORK = "sui-testnet";
+    process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = `0x${"1".repeat(64)}`;
+    process.env.MATTERHORN_SUI_NFT_MODULE_NAME = "matterhorn_nft";
+    process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = `0x${"2".repeat(64)}`;
+    process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = `0x${"3".repeat(64)}`;
+    const { base } = await boot();
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/support-report");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.generatedMedia.diagnostics.status).toBe("pass");
+    expect(result.payload.generatedMedia.diagnostics.checks.map((check: { id: string }) => check.id)).toEqual([
+      "image_provider",
+      "walrus_storage",
+      "sui_nft_minting",
+      "sui_marketplace_listing",
+      "non_custody_safety",
+    ]);
+    expect(result.payload.generatedMedia.diagnostics.productionSmokePlan).toMatchObject({
+      mode: "production_candidate",
+      canRunEndToEnd: true,
+      publicWritesOnlyAfterUserAction: true,
+      blockers: [],
+    });
+    expect(result.payload.generatedMedia.diagnostics.productionSmokePlan.stages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "safe_diagnostics",
+        status: "ready",
+        writeScope: "none",
+        requiresPublicWrite: false,
+      }),
+      expect.objectContaining({
+        id: "walrus_public_upload",
+        status: "manual",
+        writeScope: "public_storage",
+        requiresPublicWrite: true,
+      }),
+      expect.objectContaining({
+        id: "sui_wallet_mint",
+        status: "manual",
+        writeScope: "wallet_signed_transaction",
+        requiresWallet: true,
+      }),
+      expect.objectContaining({
+        id: "sui_kiosk_listing",
+        status: "manual",
+        writeScope: "wallet_signed_transaction",
+        requiresWallet: true,
+      }),
+    ]));
+    expect(walrus.calls.map((call) => call.method).sort()).toEqual(["HEAD", "OPTIONS"]);
+    expect(walrus.calls.some((call) => call.method === "PUT" || call.method === "POST")).toBe(false);
+    expect(walrus.calls.every((call) => call.byteLength === 0)).toBe(true);
+    expect(walrus.calls.find((call) => call.method === "OPTIONS")?.authorization).toBe("Bearer secret-support-report-walrus-token");
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain("sk-test-support-report-generated-media");
+    expect(serialized).not.toContain("secret-support-report-walrus-token");
+    expect(serialized).not.toContain("Authorization");
   });
 
   test("backend support report includes sanitized model provider samples", async () => {

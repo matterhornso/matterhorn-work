@@ -3,6 +3,7 @@ import type { MatterhornBackendSupportReportResponse } from "@matterhorn-work/ty
 import type { MatterhornBackendTeamAccessSummaryResponse } from "@matterhorn-work/types/backend-team-access";
 import type { MatterhornProjectDataLedgerExportControlPlaneSnapshot } from "@matterhorn-work/types/project-data-ledger";
 import type { WorkspaceInfo } from "./types.js";
+import { buildGeneratedMediaDiagnostics } from "./generated-media-diagnostics.js";
 import { buildProjectDataLedgerExport } from "./project-data-ledger.js";
 
 function safeExportFilePart(value: string): string {
@@ -29,6 +30,10 @@ export async function buildBackendSupportReport(options: {
 }): Promise<MatterhornBackendSupportReportResponse> {
   const generatedAt = new Date().toISOString();
   const controlPlaneSnapshot = backendControlPlaneExportSnapshot(options.controlPlane);
+  const generatedMediaDiagnostics = await buildGeneratedMediaDiagnostics({
+    workspaceId: options.workspace.id,
+    timeoutMs: 1_000,
+  });
   const ledgerExport = await buildProjectDataLedgerExport({
     workspace: options.workspace,
     limit: 300,
@@ -101,6 +106,9 @@ export async function buildBackendSupportReport(options: {
         manifest: ledgerExport.manifest,
         warnings: ledgerExport.warnings,
       },
+    },
+    generatedMedia: {
+      diagnostics: generatedMediaDiagnostics,
     },
     privacy: {
       trainingUse: controlPlaneSnapshot.privacy.trainingUse,
