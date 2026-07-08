@@ -10488,7 +10488,7 @@ function createRoutes(
 
   addBillingRoutes(
     (method, path, authMode, handler) => addRoute(routes, method, path, authMode, handler),
-    billingRouteContext,
+    { ...billingRouteContext, resolveWorkspace },
   );
 
   return routes;

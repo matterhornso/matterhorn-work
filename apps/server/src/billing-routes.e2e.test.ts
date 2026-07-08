@@ -2,6 +2,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type { MatterhornGeneratedImage } from "@matterhorn-work/types/generated-media";
+import { MatterhornGeneratedImageStore } from "./generated-image-store.js";
+import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
 
@@ -95,6 +98,28 @@ beforeEach(() => {
   delete process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET;
 });
 
+function testImage(workspaceId: string, id: string, createdAt: string): MatterhornGeneratedImage {
+  return {
+    id,
+    workspaceId,
+    outputId: `out_${id}`,
+    provider: "mock",
+    model: "mock-image",
+    prompt: `test image ${id}`,
+    size: "1024x1024",
+    quality: "auto",
+    format: "png",
+    fileName: `${id}.png`,
+    relativePath: `.matterhorn-work/outputs/images/${id}.png`,
+    contentType: "image/png",
+    byteLength: 12,
+    sha256: "0".repeat(64),
+    createdAt,
+    status: "generated",
+    safety: { secretsRejected: false },
+  };
+}
+
 afterEach(async () => {
   for (const stop of stops.reverse()) await stop();
   stops.length = 0;
@@ -125,6 +150,27 @@ describe("Billing routes", () => {
     expect(result.payload.success).toBe(true);
     expect(result.payload.status.subscription.planId).toBe("free");
     expect(result.payload.status.isLivePaymentsEnabled).toBe(false);
+  });
+
+  test("GET /workspace/:id/billing/status returns workspace generated-media usage", async () => {
+    process.env.MATTERHORN_BILLING_CURRENT_PLAN = "plus";
+    const { base, dir } = await boot();
+    const imageStore = new MatterhornGeneratedImageStore({ workspaceRoot: dir, workspaceId: WORKSPACE_ID });
+    const draftStore = new MatterhornImageNftDraftStore({ workspaceRoot: dir, workspaceId: WORKSPACE_ID });
+    const imageA = testImage(WORKSPACE_ID, "img_billing_a", "2026-07-08T00:00:00.000Z");
+    const imageB = testImage(WORKSPACE_ID, "img_billing_b", "2026-07-08T00:01:00.000Z");
+    await imageStore.save(imageA);
+    await imageStore.save(imageB);
+    await draftStore.create(imageA, { title: "Billing usage NFT draft" });
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.status.subscription.planId).toBe("plus");
+    expect(result.payload.status.usage.generatedImages).toMatchObject({ used: 2, limit: 100 });
+    expect(result.payload.status.usage.nftDrafts).toMatchObject({ used: 1, limit: 20 });
+    expect(result.payload.status.usage.teamMembers).toMatchObject({ used: 1, limit: 1 });
   });
 
   test("POST /api/billing/checkout returns mock checkout URL", async () => {

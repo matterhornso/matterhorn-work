@@ -29,6 +29,7 @@ import {
 
 export type BillingSettingsViewProps = {
   matterhornServerClient?: MatterhornServerClient | null;
+  runtimeWorkspaceId?: string | null;
 };
 
 function formatPrice(amountCents: number, currency: string, interval: string): string {
@@ -102,14 +103,17 @@ function PlanCard(props: {
 
 export function BillingSettingsView(props: BillingSettingsViewProps) {
   const client = props.matterhornServerClient;
+  const workspaceId = props.runtimeWorkspaceId?.trim() ?? "";
   const plansQuery = useQuery({
     queryKey: ["billing", "plans"],
     queryFn: () => client?.billingPlans(),
     enabled: Boolean(client),
   });
   const statusQuery = useQuery({
-    queryKey: ["billing", "status"],
-    queryFn: () => client?.billingStatus(),
+    queryKey: ["billing", "status", workspaceId || "global"],
+    queryFn: () => workspaceId
+      ? client?.workspaceBillingStatus(workspaceId)
+      : client?.billingStatus(),
     enabled: Boolean(client),
   });
 
@@ -156,7 +160,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               Billing
             </SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Manage your Matterhorn plan. Live payments are disabled in this build.
+              Manage your Matterhorn plan and workspace usage. Live payments are disabled in this build.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeaderContent>
         </SettingsSectionHeader>

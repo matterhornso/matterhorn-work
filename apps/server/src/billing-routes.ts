@@ -6,11 +6,14 @@ import type {
 import {
   buildBillingPlansResponse,
   buildBillingStatusResponse,
+  buildBillingStatusResponseWithUsage,
   createBillingProvider,
   resolveBillingProviderConfigFromEnv,
   type BillingProvider,
 } from "./billing.js";
-import type { ServerConfig, TokenScope } from "./types.js";
+import { MatterhornGeneratedImageStore } from "./generated-image-store.js";
+import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
+import type { ServerConfig, TokenScope, WorkspaceInfo } from "./types.js";
 
 export type RouteAdder = (method: string, path: string, auth: "none" | "client" | "host" | "host-token", handler: RouteHandler) => void;
 export type RouteHandler = (ctx: {
@@ -53,6 +56,7 @@ function billingWriteBlocker(ctx: { config: ServerConfig; actor?: { scope?: Toke
 export interface BillingRouteContext {
   provider: BillingProvider;
   config: ServerConfig;
+  resolveWorkspace?: (config: ServerConfig, id: string) => Promise<WorkspaceInfo>;
 }
 
 export function createBillingRouteContext(config: ServerConfig): BillingRouteContext {
@@ -70,6 +74,23 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
 
   addRoute("GET", "/api/billing/status", "client", async () => {
     return jsonResponse(buildBillingStatusResponse(provider.config));
+  });
+
+  addRoute("GET", "/workspace/:id/billing/status", "client", async (routeCtx) => {
+    if (!ctx.resolveWorkspace) {
+      return jsonResponse(buildBillingStatusResponse(provider.config));
+    }
+    const workspace = await ctx.resolveWorkspace(ctx.config, routeCtx.params.id);
+    const [images, drafts] = await Promise.all([
+      new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id }).list(),
+      new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id }).list(),
+    ]);
+    return jsonResponse(buildBillingStatusResponseWithUsage(provider.config, {
+      generatedImages: images.length,
+      nftDrafts: drafts.length,
+      teamMembers: 1,
+      cloudStorageBytes: 0,
+    }));
   });
 
   addRoute("POST", "/api/billing/checkout", "client", async (routeCtx) => {

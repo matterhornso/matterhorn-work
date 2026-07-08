@@ -188,10 +188,41 @@ export function buildMatterhornBillingSubscription(planId: MatterhornBillingPlan
 
 export function buildMatterhornBillingUsageSnapshot(): MatterhornBillingUsageSnapshot {
   return {
-    generatedImages: { used: 0, limit: null, resetsAt: null },
-    nftDrafts: { used: 0, limit: null, resetsAt: null },
-    teamMembers: { used: 1, limit: null },
+    generatedImages: { used: 0, limit: planLimit("free", "image_generation"), resetsAt: null },
+    nftDrafts: { used: 0, limit: planLimit("free", "nft_mint_preview"), resetsAt: null },
+    teamMembers: { used: 1, limit: planLimit("free", "team_members") },
     cloudStorageBytes: { used: 0, limit: null },
+  };
+}
+
+export function buildMatterhornBillingUsageSnapshotForPlan(
+  planId: MatterhornBillingPlanId,
+  usage?: Partial<{
+    generatedImages: number;
+    nftDrafts: number;
+    teamMembers: number;
+    cloudStorageBytes: number;
+  }>,
+): MatterhornBillingUsageSnapshot {
+  return {
+    generatedImages: {
+      used: usage?.generatedImages ?? 0,
+      limit: planLimit(planId, "image_generation"),
+      resetsAt: null,
+    },
+    nftDrafts: {
+      used: usage?.nftDrafts ?? 0,
+      limit: planLimit(planId, "nft_mint_preview"),
+      resetsAt: null,
+    },
+    teamMembers: {
+      used: usage?.teamMembers ?? 1,
+      limit: planLimit(planId, "team_members"),
+    },
+    cloudStorageBytes: {
+      used: usage?.cloudStorageBytes ?? 0,
+      limit: null,
+    },
   };
 }
 
@@ -226,8 +257,19 @@ export function buildMatterhornBillingStatus(planId: MatterhornBillingPlanId, co
     mode: config.mode,
     provider: config.provider,
     subscription: buildMatterhornBillingSubscription(planId),
-    usage: buildMatterhornBillingUsageSnapshot(),
+    usage: buildMatterhornBillingUsageSnapshotForPlan(planId),
     isLivePaymentsEnabled: false,
+  };
+}
+
+export function buildMatterhornBillingStatusWithUsage(
+  planId: MatterhornBillingPlanId,
+  config: BillingProviderConfig,
+  usage?: Parameters<typeof buildMatterhornBillingUsageSnapshotForPlan>[1],
+): MatterhornBillingStatus {
+  return {
+    ...buildMatterhornBillingStatus(planId, config),
+    usage: buildMatterhornBillingUsageSnapshotForPlan(planId, usage),
   };
 }
 
@@ -357,5 +399,17 @@ export function buildBillingStatusResponse(config: BillingProviderConfig): Matte
     version: "matterhorn.billing.v1",
     generatedAt: new Date().toISOString(),
     status: buildMatterhornBillingStatus(config.currentPlanId, config),
+  };
+}
+
+export function buildBillingStatusResponseWithUsage(
+  config: BillingProviderConfig,
+  usage?: Parameters<typeof buildMatterhornBillingUsageSnapshotForPlan>[1],
+): MatterhornBillingStatusResponse {
+  return {
+    success: true,
+    version: "matterhorn.billing.v1",
+    generatedAt: new Date().toISOString(),
+    status: buildMatterhornBillingStatusWithUsage(config.currentPlanId, config, usage),
   };
 }
