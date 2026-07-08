@@ -405,6 +405,23 @@ function startFakeOpencode() {
         return;
       }
 
+      if (!action && request.method === "PATCH") {
+        const body = await readJsonBody(request);
+        const title = typeof body?.title === "string" && body.title.trim()
+          ? body.title.trim()
+          : session.title;
+        const now = Math.floor(Date.now() / 1000);
+        const updatedSession = {
+          ...session,
+          title,
+          slug: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || session.slug,
+          time: { ...session.time, updated: now },
+        };
+        sessions.set(sessionId, updatedSession);
+        json(response, 200, updatedSession);
+        return;
+      }
+
       if (action === "message" && request.method === "GET") {
         json(response, 200, messages.get(sessionId) || []);
         return;

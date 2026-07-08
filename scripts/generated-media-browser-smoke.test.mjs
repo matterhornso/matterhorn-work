@@ -80,10 +80,13 @@ assert.ok(
 );
 assert.ok(
   script.includes("page.on(\"console\"") &&
+    script.includes("page.on(\"response\"") &&
     script.includes("page.on(\"pageerror\"") &&
     script.includes("resourceWarnings") &&
+    script.includes("networkFailures") &&
+    script.includes("shouldFailOnNetworkResponse") &&
     script.includes("report.errors.length === 0"),
-  "generated-media browser smoke should fail strict runs on browser errors while reporting stale resource warnings",
+  "generated-media browser smoke should fail strict runs on browser and API network errors while reporting stale resource warnings",
 );
 assert.ok(
   script.includes('[role="dialog"]') &&
