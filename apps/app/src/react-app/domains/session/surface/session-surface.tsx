@@ -2123,9 +2123,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
                             <span className="grid min-w-0 gap-0.5">
                               <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                 <span className="min-w-0 truncate text-[13px] font-semibold leading-tight text-dls-text">{item.title}</span>
-                                <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
-                                  {item.statusLabel}
-                                </span>
+                                {item.statusLabel ? (
+                                  <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                                    {item.statusLabel}
+                                  </span>
+                                ) : null}
                               </span>
                               <span className="line-clamp-1 text-[12px] leading-5 text-dls-secondary">{item.description}</span>
                               <span className="hidden truncate text-[11px] leading-4 text-dls-muted sm:block">{capabilitySummary}</span>

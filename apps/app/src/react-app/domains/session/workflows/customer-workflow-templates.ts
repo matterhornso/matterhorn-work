@@ -181,6 +181,9 @@ function statusLabel(status: CustomerWorkflowTemplate["status"] | undefined): st
 }
 
 function starterStatusLabel(template: CustomerWorkflowTemplate): string {
+  if (template.status === "blank") {
+    return "";
+  }
   if (template.routing.chatMode === "services" && template.status === "planned_not_live") {
     return "Coming soon";
   }

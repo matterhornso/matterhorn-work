@@ -28,6 +28,14 @@ describe("customer workflow template launch cards", () => {
     expect(titles).toContain("Longevity");
   });
 
+  test("blank chat starter does not repeat its title as a status badge", () => {
+    const cards = buildCustomerWorkflowStarterCards(FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES);
+    const blankChat = cards.find((card) => card.id === "blank_chat_workflow");
+
+    expect(blankChat?.title).toBe("Start blank chat");
+    expect(blankChat?.statusLabel).toBe("");
+  });
+
   test("protocol prompts carry non-custodial safety language", () => {
     const cards = buildCustomerWorkflowStarterCards(FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES);
     const bittensor = cards.find((card) => card.id === "bittensor_operator");
