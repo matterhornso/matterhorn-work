@@ -1,7 +1,11 @@
 import { mkdtempSync, rmSync } from "node:fs";
+import { createHmac } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type { MatterhornGeneratedImage } from "@matterhorn-work/types/generated-media";
+import { MatterhornGeneratedImageStore } from "./generated-image-store.js";
+import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
 
@@ -12,6 +16,7 @@ const WORKSPACE_ID = "ws_billing";
 let priorEnv: Record<string, string | undefined> = {};
 const stops: Array<() => Promise<void> | void> = [];
 const dirs: string[] = [];
+const stripeServers: Array<ReturnType<typeof Bun.serve>> = [];
 
 function baseConfig(port: number, root: string): ServerConfig {
   return {
@@ -49,13 +54,62 @@ function getFreePort(): Promise<number> {
   });
 }
 
-async function boot(envOverrides?: Record<string, string>) {
+async function boot() {
   const dir = mkdtempSync(join(tmpdir(), "matterhorn-billing-"));
   dirs.push(dir);
+  process.env.OPENWORK_DATA_DIR = join(dir, "openwork-data");
+  process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
   const port = await getFreePort();
   const server = await startServer(baseConfig(port, dir));
   stops.push(() => server.stop());
   return { base: `http://127.0.0.1:${port}`, dir };
+}
+
+async function startFakeStripe() {
+  const calls: Array<{
+    path: string;
+    authorization: string | null;
+    params: Record<string, string>;
+  }> = [];
+  const port = await getFreePort();
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port,
+    async fetch(request) {
+      const url = new URL(request.url);
+      const body = await request.text();
+      const params = Object.fromEntries(new URLSearchParams(body).entries());
+      calls.push({
+        path: url.pathname,
+        authorization: request.headers.get("authorization"),
+        params,
+      });
+      if (url.pathname === "/v1/checkout/sessions") {
+        return Response.json({
+          id: "cs_test_matterhorn",
+          object: "checkout.session",
+          livemode: false,
+          url: "https://checkout.stripe.com/c/pay/cs_test_matterhorn",
+        });
+      }
+      if (url.pathname === "/v1/billing_portal/sessions") {
+        return Response.json({
+          id: "bps_test_matterhorn",
+          object: "billing_portal.session",
+          livemode: false,
+          url: "https://billing.stripe.com/p/session/test_matterhorn",
+        });
+      }
+      return Response.json({ error: { message: "Unexpected fake Stripe path" } }, { status: 404 });
+    },
+  });
+  stripeServers.push(server);
+  return { baseUrl: `http://127.0.0.1:${port}`, calls };
+}
+
+function stripeSignatureHeader(secret: string, rawBody: string, timestamp = Math.floor(Date.now() / 1000)) {
+  const signature = createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
+  return `t=${timestamp},v1=${signature}`;
 }
 
 async function jsonFetch(base: string, path: string, init?: RequestInit, token?: string) {
@@ -88,16 +142,54 @@ beforeEach(() => {
     MATTERHORN_BILLING_PROVIDER: process.env.MATTERHORN_BILLING_PROVIDER,
     MATTERHORN_BILLING_CURRENT_PLAN: process.env.MATTERHORN_BILLING_CURRENT_PLAN,
     MATTERHORN_STRIPE_WEBHOOK_SECRET: process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET,
+    MATTERHORN_STRIPE_SECRET_KEY: process.env.MATTERHORN_STRIPE_SECRET_KEY,
+    MATTERHORN_STRIPE_PRICE_ID_PLUS: process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS,
+    MATTERHORN_STRIPE_PRICE_ID_MAX: process.env.MATTERHORN_STRIPE_PRICE_ID_MAX,
+    MATTERHORN_STRIPE_TEST_CUSTOMER_ID: process.env.MATTERHORN_STRIPE_TEST_CUSTOMER_ID,
+    MATTERHORN_STRIPE_API_BASE_URL: process.env.MATTERHORN_STRIPE_API_BASE_URL,
+    OPENWORK_DATA_DIR: process.env.OPENWORK_DATA_DIR,
+    OPENWORK_TOKEN_STORE: process.env.OPENWORK_TOKEN_STORE,
   };
   delete process.env.MATTERHORN_BILLING_MODE;
   delete process.env.MATTERHORN_BILLING_PROVIDER;
   delete process.env.MATTERHORN_BILLING_CURRENT_PLAN;
   delete process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET;
+  delete process.env.MATTERHORN_STRIPE_SECRET_KEY;
+  delete process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS;
+  delete process.env.MATTERHORN_STRIPE_PRICE_ID_MAX;
+  delete process.env.MATTERHORN_STRIPE_TEST_CUSTOMER_ID;
+  delete process.env.MATTERHORN_STRIPE_API_BASE_URL;
+  delete process.env.OPENWORK_DATA_DIR;
+  delete process.env.OPENWORK_TOKEN_STORE;
 });
+
+function testImage(workspaceId: string, id: string, createdAt: string): MatterhornGeneratedImage {
+  return {
+    id,
+    workspaceId,
+    outputId: `out_${id}`,
+    provider: "mock",
+    model: "mock-image",
+    prompt: `test image ${id}`,
+    size: "1024x1024",
+    quality: "auto",
+    format: "png",
+    fileName: `${id}.png`,
+    relativePath: `.matterhorn-work/outputs/images/${id}.png`,
+    contentType: "image/png",
+    byteLength: 12,
+    sha256: "0".repeat(64),
+    createdAt,
+    status: "generated",
+    safety: { secretsRejected: false },
+  };
+}
 
 afterEach(async () => {
   for (const stop of stops.reverse()) await stop();
   stops.length = 0;
+  for (const server of stripeServers.reverse()) server.stop();
+  stripeServers.length = 0;
   for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
   dirs.length = 0;
   for (const [key, value] of Object.entries(priorEnv)) {
@@ -125,6 +217,269 @@ describe("Billing routes", () => {
     expect(result.payload.success).toBe(true);
     expect(result.payload.status.subscription.planId).toBe("free");
     expect(result.payload.status.isLivePaymentsEnabled).toBe(false);
+    expect(result.payload.status.setup).toMatchObject({
+      mode: "phase0_mock",
+      provider: "mock",
+      readyForTestCheckout: true,
+      readyForWebhooks: false,
+      livePaymentsEnabled: false,
+    });
+    expect(result.payload.status.setup.checks.map((check: { id: string }) => check.id)).toContain("mock_mode");
+  });
+
+  test("GET /api/billing/status reports sanitized Stripe test setup readiness", async () => {
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_STRIPE_SECRET_KEY = "sk_test_should_not_leak";
+    process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET = "whsec_should_not_leak";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS = "price_plus_should_not_leak";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_MAX = "price_max_should_not_leak";
+
+    const { base } = await boot();
+    const result = await jsonFetch(base, "/api/billing/status");
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.status.setup).toMatchObject({
+      mode: "phase1_stripe_test",
+      provider: "stripe",
+      readyForTestCheckout: true,
+      readyForWebhooks: true,
+      livePaymentsEnabled: false,
+    });
+    expect(result.payload.status.setup.checks).toContainEqual(expect.objectContaining({
+      id: "stripe_secret_key",
+      status: "working",
+    }));
+    expect(result.payload.status.setup.checks).toContainEqual(expect.objectContaining({
+      id: "stripe_test_customer",
+      status: "needs_setup",
+    }));
+    expect(JSON.stringify(result.payload)).not.toContain("sk_test_should_not_leak");
+    expect(JSON.stringify(result.payload)).not.toContain("whsec_should_not_leak");
+    expect(JSON.stringify(result.payload)).not.toContain("price_plus_should_not_leak");
+  });
+
+  test("POST /api/billing/checkout creates a Stripe test Checkout session when configured", async () => {
+    const stripe = await startFakeStripe();
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_STRIPE_SECRET_KEY = "sk_test_fake_checkout";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS = "price_plus_test";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_MAX = "price_max_test";
+    process.env.MATTERHORN_STRIPE_API_BASE_URL = stripe.baseUrl;
+
+    const { base } = await boot();
+    const result = await jsonFetch(base, "/api/billing/checkout", {
+      method: "POST",
+      body: JSON.stringify({
+        planId: "plus",
+        successUrl: "https://matterhorn.work/billing/complete",
+        cancelUrl: "https://matterhorn.work/billing/cancel",
+      }),
+    });
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload).toMatchObject({
+      success: true,
+      mode: "stripe_test",
+      checkoutUrl: "https://checkout.stripe.com/c/pay/cs_test_matterhorn",
+      providerSessionId: "cs_test_matterhorn",
+    });
+    expect(stripe.calls.length).toBe(1);
+    expect(stripe.calls[0]).toMatchObject({
+      path: "/v1/checkout/sessions",
+      authorization: "Bearer sk_test_fake_checkout",
+    });
+    expect(stripe.calls[0].params).toMatchObject({
+      mode: "subscription",
+      "line_items[0][price]": "price_plus_test",
+      "line_items[0][quantity]": "1",
+      success_url: "https://matterhorn.work/billing/complete",
+      cancel_url: "https://matterhorn.work/billing/cancel",
+      client_reference_id: "matterhorn_plus",
+      "metadata[product]": "matterhorn-work",
+      "metadata[plan_id]": "plus",
+      "subscription_data[metadata][plan_id]": "plus",
+    });
+    expect(JSON.stringify(result.payload)).not.toContain("sk_test_fake_checkout");
+    expect(JSON.stringify(result.payload)).not.toContain("price_plus_test");
+  });
+
+  test("POST /workspace/:id/billing/checkout uses Stripe test checkout and keeps customer portal unresolved until webhook/customer setup", async () => {
+    const stripe = await startFakeStripe();
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_STRIPE_SECRET_KEY = "sk_test_workspace_checkout";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS = "price_plus_workspace";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_MAX = "price_max_workspace";
+    process.env.MATTERHORN_STRIPE_API_BASE_URL = stripe.baseUrl;
+
+    const { base } = await boot();
+    const checkout = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/checkout`, {
+      method: "POST",
+      body: JSON.stringify({ planId: "max" }),
+    });
+    expect(checkout.response.status).toBe(200);
+    expect(checkout.payload.mode).toBe("stripe_test");
+    expect(checkout.payload.providerSessionId).toBe("cs_test_matterhorn");
+
+    const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(status.response.status).toBe(200);
+    expect(status.payload.status.subscription).toMatchObject({
+      planId: "max",
+      status: "active",
+      providerCustomerId: null,
+      providerSubscriptionId: "cs_test_matterhorn",
+    });
+
+    const portal = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/portal`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    expect(portal.response.status).toBe(400);
+    expect(portal.payload.code).toBe("billing_provider_unavailable");
+    expect(portal.payload.message).toContain("Stripe Customer Portal requires");
+  });
+
+  test("POST /api/billing/portal creates a Stripe test Customer Portal session when a test customer is configured", async () => {
+    const stripe = await startFakeStripe();
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_STRIPE_SECRET_KEY = "sk_test_fake_portal";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS = "price_plus_test";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_MAX = "price_max_test";
+    process.env.MATTERHORN_STRIPE_TEST_CUSTOMER_ID = "cus_test_matterhorn";
+    process.env.MATTERHORN_STRIPE_API_BASE_URL = stripe.baseUrl;
+
+    const { base } = await boot();
+    const result = await jsonFetch(base, "/api/billing/portal", {
+      method: "POST",
+      body: JSON.stringify({ returnUrl: "https://matterhorn.work/settings/billing" }),
+    });
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload).toMatchObject({
+      success: true,
+      mode: "stripe_test",
+      portalUrl: "https://billing.stripe.com/p/session/test_matterhorn",
+      providerSessionId: "bps_test_matterhorn",
+    });
+    expect(stripe.calls.length).toBe(1);
+    expect(stripe.calls[0]).toMatchObject({
+      path: "/v1/billing_portal/sessions",
+      authorization: "Bearer sk_test_fake_portal",
+    });
+    expect(stripe.calls[0].params).toMatchObject({
+      customer: "cus_test_matterhorn",
+      return_url: "https://matterhorn.work/settings/billing",
+    });
+    expect(JSON.stringify(result.payload)).not.toContain("sk_test_fake_portal");
+  });
+
+  test("GET /workspace/:id/billing/status returns workspace generated-media usage", async () => {
+    process.env.MATTERHORN_BILLING_CURRENT_PLAN = "plus";
+    const { base, dir } = await boot();
+    const imageStore = new MatterhornGeneratedImageStore({ workspaceRoot: dir, workspaceId: WORKSPACE_ID });
+    const draftStore = new MatterhornImageNftDraftStore({ workspaceRoot: dir, workspaceId: WORKSPACE_ID });
+    const imageA = testImage(WORKSPACE_ID, "img_billing_a", "2026-07-08T00:00:00.000Z");
+    const imageB = testImage(WORKSPACE_ID, "img_billing_b", "2026-07-08T00:01:00.000Z");
+    await imageStore.save(imageA);
+    await imageStore.save(imageB);
+    await draftStore.create(imageA, { title: "Billing usage NFT draft" });
+
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.status.subscription.planId).toBe("plus");
+    expect(result.payload.status.usage.generatedImages).toMatchObject({ used: 2, limit: 100 });
+    expect(result.payload.status.usage.nftDrafts).toMatchObject({ used: 1, limit: 20 });
+    expect(result.payload.status.usage.teamMembers).toMatchObject({ used: 1, limit: 1 });
+  });
+
+  test("POST /workspace/:id/billing/checkout persists a non-live workspace subscription", async () => {
+    const { base } = await boot();
+    const checkout = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/checkout`, {
+      method: "POST",
+      body: JSON.stringify({ planId: "plus", interval: "month" }),
+    });
+
+    expect(checkout.response.status).toBe(200);
+    expect(checkout.payload.success).toBe(true);
+    expect(checkout.payload.checkoutUrl).toContain("mock-checkout.matterhorn.work");
+
+    const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(status.response.status).toBe(200);
+    expect(status.payload.status.subscription).toMatchObject({
+      planId: "plus",
+      status: "active",
+      interval: "month",
+      cancelAtPeriodEnd: false,
+      providerCustomerId: `mock_cus_${WORKSPACE_ID}`,
+      providerSubscriptionId: `mock_sub_${WORKSPACE_ID}_plus`,
+    });
+    expect(typeof status.payload.status.subscription.currentPeriodStart).toBe("string");
+    expect(typeof status.payload.status.subscription.currentPeriodEnd).toBe("string");
+    expect(status.payload.status.usage.generatedImages.limit).toBe(100);
+
+    const audit = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/audit?limit=5`);
+    expect(audit.response.status).toBe(200);
+    const checkoutEntry = audit.payload.items.find((item: { action: string }) => item.action === "workspace.billing.checkout");
+    expect(checkoutEntry).toMatchObject({
+      workspaceId: WORKSPACE_ID,
+      action: "workspace.billing.checkout",
+      target: `billing:${WORKSPACE_ID}`,
+      metadata: {
+        planId: "plus",
+        interval: "month",
+        mode: "phase0_mock",
+        provider: "mock",
+        livePaymentsEnabled: false,
+      },
+    });
+    expect(JSON.stringify(audit.payload)).not.toContain("mock_sub_");
+    expect(JSON.stringify(audit.payload)).not.toContain("mock_cus_");
+  });
+
+  test("DELETE /workspace/:id/billing/subscription clears the local workspace billing override", async () => {
+    const { base } = await boot();
+    await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/checkout`, {
+      method: "POST",
+      body: JSON.stringify({ planId: "plus" }),
+    });
+    const before = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(before.payload.status.subscription.planId).toBe("plus");
+
+    const cleared = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/subscription`, { method: "DELETE" });
+    expect(cleared.response.status).toBe(200);
+    expect(cleared.payload.success).toBe(true);
+    expect(cleared.payload.deleted).toBe(true);
+    expect(cleared.payload.status.subscription.planId).toBe("free");
+
+    const after = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(after.payload.status.subscription.planId).toBe("free");
+    expect(after.payload.status.usage.generatedImages.limit).toBe(10);
+
+    const audit = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/audit?limit=10`);
+    const actions = audit.payload.items.map((item: { action: string }) => item.action);
+    expect(actions).toContain("workspace.billing.checkout");
+    expect(actions).toContain("workspace.billing.subscription.clear");
+
+    const ledger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=billing&limit=10`);
+    expect(ledger.response.status).toBe(200);
+    expect(ledger.payload.summary.billing).toBeGreaterThanOrEqual(2);
+    expect(ledger.payload.items.slice(0, 2).map((item: { title: string }) => item.title)).toEqual([
+      "Billing subscription cleared",
+      "Billing plan updated",
+    ]);
+    expect(ledger.payload.items[0]).toMatchObject({
+      kind: "billing",
+      href: `/workspace/${WORKSPACE_ID}/settings/billing`,
+      metadata: expect.objectContaining({
+        auditAction: "workspace.billing.subscription.clear",
+        deleted: true,
+      }),
+    });
   });
 
   test("POST /api/billing/checkout returns mock checkout URL", async () => {
@@ -176,6 +531,27 @@ describe("Billing routes", () => {
     expect(checkout.response.status).toBe(403);
     expect(checkout.payload.code).toBe("forbidden");
 
+    const workspaceCheckout = await jsonFetch(
+      base,
+      `/workspace/${WORKSPACE_ID}/billing/checkout`,
+      {
+        method: "POST",
+        body: JSON.stringify({ planId: "plus" }),
+      },
+      viewerToken,
+    );
+    expect(workspaceCheckout.response.status).toBe(403);
+    expect(workspaceCheckout.payload.code).toBe("forbidden");
+
+    const workspaceClear = await jsonFetch(
+      base,
+      `/workspace/${WORKSPACE_ID}/billing/subscription`,
+      { method: "DELETE" },
+      viewerToken,
+    );
+    expect(workspaceClear.response.status).toBe(403);
+    expect(workspaceClear.payload.code).toBe("forbidden");
+
     const portal = await jsonFetch(
       base,
       "/api/billing/portal",
@@ -194,13 +570,14 @@ describe("Billing routes", () => {
     process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
     process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET = "whsec_test";
     const { base } = await boot();
+    const rawBody = JSON.stringify({ id: "evt_test", type: "invoice.payment_succeeded", livemode: false });
     const result = await jsonFetch(
       base,
       "/api/billing/webhook/stripe",
       {
         method: "POST",
-        body: JSON.stringify({ type: "invoice.payment_succeeded" }),
-        headers: { "stripe-signature": "v1=test" },
+        body: rawBody,
+        headers: { "stripe-signature": stripeSignatureHeader("whsec_test", rawBody) },
       },
       undefined,
     );
@@ -209,6 +586,28 @@ describe("Billing routes", () => {
     expect(result.payload.livemode).toBe(false);
     expect(result.payload.verified).toBe(true);
     expect(result.payload.handled).toBe(true);
+  });
+
+  test("POST /api/billing/webhook/stripe rejects mutated or invalid test signatures", async () => {
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET = "whsec_test_invalid";
+    const { base } = await boot();
+    const rawBody = JSON.stringify({ id: "evt_test", type: "checkout.session.completed", livemode: false });
+    const result = await jsonFetch(
+      base,
+      "/api/billing/webhook/stripe",
+      {
+        method: "POST",
+        body: rawBody,
+        headers: { "stripe-signature": stripeSignatureHeader("wrong_secret", rawBody) },
+      },
+      undefined,
+    );
+    expect(result.response.status).toBe(200);
+    expect(result.payload.received).toBe(true);
+    expect(result.payload.verified).toBe(false);
+    expect(result.payload.handled).toBe(false);
   });
 
   test("checkout rejects invalid planId", async () => {
@@ -241,6 +640,7 @@ describe("Billing capability", () => {
     expect(result.payload.billing).toBeDefined();
     expect(result.payload.billing.currentPlanId).toBe("free");
     expect(result.payload.billing.isLivePaymentsEnabled).toBe(false);
+    expect(result.payload.billing.setup.readyForTestCheckout).toBe(true);
     expect(result.payload.settings.some((s: { section: string }) => s.section === "billing")).toBe(true);
   });
 });

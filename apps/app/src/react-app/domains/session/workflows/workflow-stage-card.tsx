@@ -116,9 +116,9 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
   return (
     <div
       className={cn(
-        "rounded-md bg-dls-surface/35 px-3.5 py-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.045)] transition-colors hover:bg-dls-surface/50",
+        "rounded-md bg-dls-surface-muted/10 px-3.5 py-3 transition-colors hover:bg-dls-surface-muted/15",
         isCurrent
-          ? "bg-[rgba(var(--matterhorn-desk-rgb),0.075)] shadow-[inset_0_0_0_1px_rgba(var(--matterhorn-desk-rgb),0.24)]"
+          ? "bg-[rgba(var(--matterhorn-desk-rgb),0.075)]"
           : null,
       )}
     >
@@ -155,76 +155,81 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
         </div>
       </div>
 
-      {/* Details section - outputs, hints, action, safety */}
       {showDetails ? (
-        <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
-          {hasOutputs ? (
-            <li className="inline-flex min-w-0 items-center gap-1.5">
-              <FileOutput className="size-3 shrink-0 text-dls-muted" />
-              <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
-                <span className="font-medium text-dls-text">Outputs:</span>{" "}
-                {outputs!.map((out, i) => (
-                  <span key={out.name}>
-                    {onOutputClick ? (
-                      <button
-                        type="button"
-                        className="underline underline-offset-2 hover:text-dls-text"
-                        onClick={() => onOutputClick(out.name)}
-                      >
-                        {out.name}
-                      </button>
-                    ) : (
-                      <span className="text-dls-text">{out.name}</span>
-                    )}
-                    {out.description ? <span className="ml-1 text-dls-muted">- {out.description}</span> : null}
-                    {i < outputs!.length - 1 ? ", " : ""}
-                  </span>
-                ))}
-              </span>
-            </li>
-          ) : null}
-          {hasHints ? (
-            <li className="inline-flex min-w-0 items-center gap-1.5">
-              <Lightbulb className="size-3 shrink-0 text-dls-muted" />
-              <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
-                <span className="font-medium text-dls-text">Evidence:</span>{" "}
-                {evidenceHints!.join(" / ")}
-              </span>
-            </li>
-          ) : null}
-          {hasActionHint ? (
-            <li className="inline-flex min-w-0 items-center gap-1.5">
-              <ArrowRight className="size-3 shrink-0 text-dls-muted" />
-              <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
-                <span className="font-medium text-dls-text">You:</span> {userActionHint}
-              </span>
-            </li>
-          ) : null}
-          {requiresExternalSigner ? (
-            <li className="inline-flex min-w-0 items-center gap-1.5">
-              <Lock className="size-3 shrink-0 text-dls-muted" />
-              <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
-                <span className="font-medium text-dls-text">External signer required</span> - unsigned handoff only
-              </span>
-            </li>
-          ) : null}
-          {requiresCustomerConfirmation ? (
-            <li className="inline-flex min-w-0 items-center gap-1.5">
-              <AlertCircle className="size-3 shrink-0 text-dls-muted" />
-              <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
-                <span className="font-medium text-dls-text">Confirmation required</span> before continuing
-              </span>
-            </li>
-          ) : null}
-          {hasSafety ? (
-            <li className="inline-flex min-w-0 items-center gap-1.5">
-              <Shield className="size-3 shrink-0 text-dls-muted" />
-              <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
-                {safetyBoundary}
-              </span>
-            </li>
-          ) : null}
-        </ul>
+        <details className="group mt-2">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[11px] font-medium leading-4 text-dls-secondary transition-colors hover:text-dls-text marker:hidden">
+            Details
+            <span className="transition-transform group-open:rotate-90" aria-hidden="true">{">"}</span>
+          </summary>
+          <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+            {hasOutputs ? (
+              <li className="inline-flex min-w-0 items-center gap-1.5">
+                <FileOutput className="size-3 shrink-0 text-dls-muted" />
+                <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
+                  <span className="font-medium text-dls-text">Outputs:</span>{" "}
+                  {outputs!.map((out, i) => (
+                    <span key={out.name}>
+                      {onOutputClick ? (
+                        <button
+                          type="button"
+                          className="underline underline-offset-2 hover:text-dls-text"
+                          onClick={() => onOutputClick(out.name)}
+                        >
+                          {out.name}
+                        </button>
+                      ) : (
+                        <span className="text-dls-text">{out.name}</span>
+                      )}
+                      {out.description ? <span className="ml-1 text-dls-muted">- {out.description}</span> : null}
+                      {i < outputs!.length - 1 ? ", " : ""}
+                    </span>
+                  ))}
+                </span>
+              </li>
+            ) : null}
+            {hasHints ? (
+              <li className="inline-flex min-w-0 items-center gap-1.5">
+                <Lightbulb className="size-3 shrink-0 text-dls-muted" />
+                <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
+                  <span className="font-medium text-dls-text">Evidence:</span>{" "}
+                  {evidenceHints!.join(" / ")}
+                </span>
+              </li>
+            ) : null}
+            {hasActionHint ? (
+              <li className="inline-flex min-w-0 items-center gap-1.5">
+                <ArrowRight className="size-3 shrink-0 text-dls-muted" />
+                <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
+                  <span className="font-medium text-dls-text">You:</span> {userActionHint}
+                </span>
+              </li>
+            ) : null}
+            {requiresExternalSigner ? (
+              <li className="inline-flex min-w-0 items-center gap-1.5">
+                <Lock className="size-3 shrink-0 text-dls-muted" />
+                <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
+                  <span className="font-medium text-dls-text">External signer required</span> - unsigned handoff only
+                </span>
+              </li>
+            ) : null}
+            {requiresCustomerConfirmation ? (
+              <li className="inline-flex min-w-0 items-center gap-1.5">
+                <AlertCircle className="size-3 shrink-0 text-dls-muted" />
+                <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
+                  <span className="font-medium text-dls-text">Confirmation required</span> before continuing
+                </span>
+              </li>
+            ) : null}
+            {hasSafety ? (
+              <li className="inline-flex min-w-0 items-center gap-1.5">
+                <Shield className="size-3 shrink-0 text-dls-muted" />
+                <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
+                  {safetyBoundary}
+                </span>
+              </li>
+            ) : null}
+          </ul>
+        </details>
       ) : null}
     </div>
   );

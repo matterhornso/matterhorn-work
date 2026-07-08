@@ -1178,6 +1178,25 @@ describe("backend control plane routes", () => {
     expect(invalidOwner.response.status).toBe(400);
     expect(invalidOwner.payload.code).toBe("invalid_scope");
 
+    const blockedOnFree = await hostFetch(base, "/workspace/ws_backend/backend/team-access/tokens", {
+      method: "POST",
+      body: JSON.stringify({ scope: "viewer", label: "Read-only reviewer" }),
+    });
+    expect(blockedOnFree.response.status).toBe(429);
+    expect(blockedOnFree.payload.code).toBe("billing_entitlement_limit_reached");
+    expect(blockedOnFree.payload.details).toMatchObject({
+      entitlementKey: "team_members",
+      currentPlanId: "free",
+      used: 1,
+      limit: 1,
+    });
+
+    const upgraded = await jsonFetch(base, "/workspace/ws_backend/billing/checkout", {
+      method: "POST",
+      body: JSON.stringify({ planId: "max" }),
+    });
+    expect(upgraded.response.status).toBe(200);
+
     const created = await hostFetch(base, "/workspace/ws_backend/backend/team-access/tokens", {
       method: "POST",
       body: JSON.stringify({ scope: "viewer", label: "Read-only reviewer" }),
@@ -1215,6 +1234,11 @@ describe("backend control plane routes", () => {
       }),
     );
     expect(JSON.stringify(statusAfterCreate.payload)).not.toContain(created.payload.token.token);
+
+    const billingStatus = await jsonFetch(base, "/workspace/ws_backend/billing/status");
+    expect(billingStatus.response.status).toBe(200);
+    expect(billingStatus.payload.status.subscription.planId).toBe("max");
+    expect(billingStatus.payload.status.usage.teamMembers).toMatchObject({ used: 2, limit: 10 });
 
     const revoke = await hostFetch(base, `/workspace/ws_backend/backend/team-access/tokens/${created.payload.token.id}`, {
       method: "DELETE",
@@ -1435,6 +1459,12 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.modelPreferences.scope).toBe("workspace");
     expect(result.payload.stores.modelPreferences.path).toBe(join(dir, ".matterhorn-work", "models", "selection.json"));
     expect(result.payload.stores.modelPreferences.containsSecrets).toBe("never");
+    expect(result.payload.stores.billing.scope).toBe("workspace");
+    expect(result.payload.stores.billing.path).toBe(join(dir, ".matterhorn-work", "billing", "subscription.json"));
+    expect(result.payload.stores.billing.containsSecrets).toBe("never");
+    expect(result.payload.stores.billing.retention).toBe("user_controlled");
+    expect(result.payload.stores.billing.details.statusRoute).toBe("/workspace/ws_backend/billing/status");
+    expect(result.payload.stores.billing.details.livePaymentsEnabled).toBe(false);
     expect(result.payload.stores.dataPolicy.scope).toBe("workspace");
     expect(result.payload.stores.dataPolicy.path).toBe(join(dir, ".matterhorn-work", "privacy", "data-policy.json"));
     expect(result.payload.stores.dataPolicy.containsSecrets).toBe("never");
@@ -1584,6 +1614,23 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.modelPreferences.deletion.actions[0]).toMatchObject({
       id: "model-preference.clear",
       method: "DELETE",
+      destructive: true,
+    });
+    expect(result.payload.stores.billing.export.actions).toContainEqual(expect.objectContaining({
+      id: "billing.open-settings",
+      kind: "app_route",
+      href: "/workspace/ws_backend/settings/billing",
+    }));
+    expect(result.payload.stores.billing.export.actions).toContainEqual(expect.objectContaining({
+      id: "billing.status",
+      method: "GET",
+      href: "/workspace/ws_backend/billing/status",
+    }));
+    expect(result.payload.stores.billing.deletion.status).toBe("working");
+    expect(result.payload.stores.billing.deletion.actions[0]).toMatchObject({
+      id: "billing.clear-subscription",
+      method: "DELETE",
+      href: "/workspace/ws_backend/billing/subscription",
       destructive: true,
     });
     expect(result.payload.stores.dataPolicy.export.actions).toContainEqual(expect.objectContaining({

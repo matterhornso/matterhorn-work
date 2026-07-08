@@ -232,8 +232,10 @@ import {
 } from "./billing-routes.js";
 import {
   buildMatterhornBillingCapability,
+  checkMatterhornBillingEntitlement,
   resolveBillingProviderConfigFromEnv,
 } from "./billing.js";
+import { MatterhornBillingAccountStore, matterhornBillingAccountPath } from "./billing-account-store.js";
 import {
   hasForbiddenMatterhornMemorySuggestionInput,
   planMatterhornMemorySuggestions,
@@ -1566,10 +1568,10 @@ function parseProjectDataLedgerSource(value: string | null): MatterhornProjectDa
 
 function parseProjectDataLedgerKind(value: string | null): MatterhornProjectDataLedgerKind | undefined {
   if (!value) return undefined;
-  if (value === "note" || value === "memory_suggestion" || value === "team_access" || value === "wallet" || value === "chat" || value === "task" || value === "output" || value === "image" || value === "nft" || value === "audit" || value === "feedback") {
+  if (value === "note" || value === "memory_suggestion" || value === "team_access" || value === "wallet" || value === "chat" || value === "task" || value === "output" || value === "image" || value === "nft" || value === "billing" || value === "audit" || value === "feedback") {
     return value;
   }
-  throw new ApiError(400, "invalid_project_data_ledger_kind", "kind must be note, memory_suggestion, team_access, wallet, chat, task, output, image, nft, audit, or feedback");
+  throw new ApiError(400, "invalid_project_data_ledger_kind", "kind must be note, memory_suggestion, team_access, wallet, chat, task, output, image, nft, billing, audit, or feedback");
 }
 
 function parseProjectDataLedgerTimestamp(value: string | null, name: "from" | "to"): string | undefined {
@@ -2774,6 +2776,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   const imageOutputsPath = join(workspace.path, ".matterhorn-work", "outputs", "images");
   const walletEvidencePath = join(outputsPath, "sui");
   const modelPreferencePath = workspaceModelSelectionPath(workspace);
+  const billingSubscriptionPath = matterhornBillingAccountPath(workspace.path);
   const dataPolicyPath = workspaceDataPolicyPath(workspace);
   const dataPolicy = readWorkspaceDataPolicySync(workspace);
   const appendOnlyRetention = buildAppendOnlyRetentionPolicy(workspace.id);
@@ -2790,6 +2793,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
     workflowRunsPath,
     walletEvidencePath,
     modelPreferencePath,
+    billingSubscriptionPath,
     dataPolicyPath,
     outputsPath,
     imageOutputsPath,
@@ -2863,6 +2867,29 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         ),
         scope: "workspace",
         path: dataPolicyPath,
+        format: "json",
+        containsUserContent: false,
+        containsSecrets: "never",
+        retention: "user_controlled",
+        exportable: true,
+        deletable: true,
+      }),
+      billing: dataStore({
+        id: "billing",
+        ...capability(
+          existsSync(billingSubscriptionPath) ? "working" : "preview",
+          "Billing subscription",
+          "Workspace billing state stores only plan, period, and provider reference identifiers. Live payments are disabled in this build.",
+          {
+            statusRoute: `/workspace/${workspace.id}/billing/status`,
+            checkoutRoute: `/workspace/${workspace.id}/billing/checkout`,
+            portalRoute: `/workspace/${workspace.id}/billing/portal`,
+            resetRoute: `/workspace/${workspace.id}/billing/subscription`,
+            livePaymentsEnabled: false,
+          },
+        ),
+        scope: "workspace",
+        path: billingSubscriptionPath,
         format: "json",
         containsUserContent: false,
         containsSecrets: "never",
@@ -3107,6 +3134,7 @@ function buildDataControlStore(
     feedback: `${workspaceAppRoute}/settings/overview#feedback`,
     models: `${workspaceAppRoute}/settings/ai`,
     wallet: `${workspaceAppRoute}/settings/wallet`,
+    billing: `${workspaceAppRoute}/settings/billing`,
   };
 
   let exportCapability: MatterhornDataControlCapability = dataControlCapability({
@@ -3225,6 +3253,57 @@ function buildDataControlStore(
           status: "working",
           method: "DELETE",
           href: modelSelectionRoute,
+          destructive: true,
+          requirements: ["collaborator", "writable_server"],
+        }),
+      ],
+    });
+  } else if (storeId === "billing") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Billing status API",
+      summary: "Workspace billing state can be reviewed from Settings and read through the workspace billing status endpoint.",
+      actions: [
+        appRouteDataControlAction({
+          id: "billing.open-settings",
+          label: "Open billing",
+          description: "Opens Settings > Billing for plan and usage review.",
+          href: appRoutes.billing,
+        }),
+        dataControlAction({
+          id: "billing.status",
+          label: "Read billing status",
+          description: "Returns workspace plan, usage, and non-live billing mode.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/billing/status`,
+        }),
+        dataControlAction({
+          id: "billing.portal",
+          label: "Open billing portal",
+          description: "Creates a mock or Stripe-test billing portal session. Live charges are disabled.",
+          kind: "api_route",
+          status: "preview",
+          method: "POST",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/billing/portal`,
+          requirements: ["collaborator", "writable_server"],
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Clear workspace billing state",
+      summary: "Collaborators can clear the local workspace billing override and fall back to the server default plan.",
+      actions: [
+        dataControlAction({
+          id: "billing.clear-subscription",
+          label: "Clear billing override",
+          description: "Deletes the local workspace billing subscription snapshot. Live payment records are not touched because live payments are disabled.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/billing/subscription`,
           destructive: true,
           requirements: ["collaborator", "writable_server"],
         }),
@@ -5102,6 +5181,38 @@ function createRoutes(
       throw new ApiError(400, "invalid_scope", "Team access tokens can be collaborator or viewer tokens.");
     }
     const label = typeof body.label === "string" ? body.label.trim().slice(0, 80) : undefined;
+    const existingTokens = await tokens.list();
+    const billingConfig = resolveBillingProviderConfigFromEnv(process.env);
+    const account = await new MatterhornBillingAccountStore({
+      workspaceRoot: workspace.path,
+      workspaceId: workspace.id,
+    }).get();
+    const effectiveBillingConfig = account
+      ? { ...billingConfig, currentPlanId: account.subscription.planId }
+      : billingConfig;
+    const currentTeamMembers = 1 + existingTokens.filter((token) => token.scope !== "owner").length;
+    const entitlement = checkMatterhornBillingEntitlement(effectiveBillingConfig, "team_members", currentTeamMembers);
+    if (!entitlement.allowed) {
+      throw new ApiError(
+        entitlement.reason === "limit_reached" ? 429 : 402,
+        entitlement.reason === "limit_reached" ? "billing_entitlement_limit_reached" : "billing_entitlement_required",
+        entitlement.reason === "limit_reached"
+          ? `${entitlement.label} limit reached on ${entitlement.planId}. Upgrade to Max to add another teammate.`
+          : `${entitlement.label} is not included on ${entitlement.planId}. Upgrade to Max to add teammates.`,
+        {
+          entitlementKey: entitlement.key,
+          entitlementLabel: entitlement.label,
+          currentPlanId: entitlement.planId,
+          requiredPlanIds: ["max"],
+          used: entitlement.used,
+          limit: entitlement.limit,
+          reason: entitlement.reason,
+          billingMode: effectiveBillingConfig.mode,
+          provider: effectiveBillingConfig.provider,
+          livePaymentsEnabled: effectiveBillingConfig.livePaymentsEnabled,
+        },
+      );
+    }
     const issued = await tokens.create(scope, { label });
 
     await recordAudit(workspace.path, {
@@ -10488,7 +10599,11 @@ function createRoutes(
 
   addBillingRoutes(
     (method, path, authMode, handler) => addRoute(routes, method, path, authMode, handler),
-    billingRouteContext,
+    {
+      ...billingRouteContext,
+      resolveWorkspace,
+      countTeamMembers: async () => 1 + (await tokens.list()).filter((token) => token.scope !== "owner").length,
+    },
   );
 
   return routes;

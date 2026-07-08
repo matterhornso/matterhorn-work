@@ -30,7 +30,7 @@ export function GeneratedImageCard(props: GeneratedImageCardProps) {
   }, [props.onGenerateVariant]);
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg bg-dls-surface-muted/40 p-3">
+    <div className="flex flex-col gap-3 rounded-lg bg-dls-surface-muted/20 p-3">
       <div className="flex items-center gap-2 text-xs text-dls-secondary">
         <Image size={14} />
         <span className="font-medium text-dls-text">Image saved to outputs</span>
@@ -40,7 +40,7 @@ export function GeneratedImageCard(props: GeneratedImageCardProps) {
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row">
-        <div className="relative flex aspect-square size-40 shrink-0 items-center justify-center overflow-hidden rounded-md bg-dls-surface-muted">
+        <div className="relative flex aspect-square size-40 shrink-0 items-center justify-center overflow-hidden rounded-md bg-dls-surface-muted/40">
           {imageError || !imageUrl ? (
             <div className="flex flex-col items-center gap-1 p-2 text-center text-xs text-muted-foreground">
               <Image size={20} />
@@ -111,22 +111,25 @@ export function GeneratedImageCard(props: GeneratedImageCardProps) {
 
 export function GeneratedImageLoadingCard() {
   return (
-    <div className="flex items-center gap-3 rounded-lg bg-dls-surface-muted/40 p-3 text-sm text-dls-secondary">
+    <div className="flex items-center gap-3 rounded-lg bg-dls-surface-muted/20 p-3 text-sm text-dls-secondary">
       <Loader2 size={16} className="animate-spin" />
       Generating image...
     </div>
   );
 }
 
-export function GeneratedImageErrorCard(props: { message: string; onRetry?: () => void }) {
+export function GeneratedImageErrorCard(props: { message: string; description?: string; onRetry?: () => void }) {
   return (
     <div className="flex flex-col gap-2 rounded-lg bg-red-3/15 p-3">
       <div className="flex items-center gap-2 text-sm text-red-300">
         <AlertCircle size={16} />
         {props.message}
       </div>
+      {props.description ? (
+        <p className="text-xs leading-5 text-dls-secondary">{props.description}</p>
+      ) : null}
       {props.onRetry ? (
-        <Button variant="outline" size="sm" className="h-7 w-fit gap-1 text-xs" onClick={props.onRetry}>
+        <Button variant="ghost" size="sm" className="h-7 w-fit gap-1 bg-transparent text-xs hover:bg-dls-hover/35" onClick={props.onRetry}>
           <RefreshCw size={12} />
           Retry
         </Button>

@@ -61,11 +61,37 @@ export interface MatterhornBillingUsageSnapshot {
   cloudStorageBytes: { used: number; limit: number | null };
 }
 
+export type MatterhornBillingSetupCheckId =
+  | "mock_mode"
+  | "stripe_secret_key"
+  | "stripe_webhook_secret"
+  | "stripe_plus_price"
+  | "stripe_max_price"
+  | "stripe_test_customer"
+  | "live_payments_disabled";
+
+export interface MatterhornBillingSetupCheck {
+  id: MatterhornBillingSetupCheckId;
+  label: string;
+  status: MatterhornCapabilityStatus;
+  description: string;
+}
+
+export interface MatterhornBillingSetup {
+  mode: MatterhornBillingMode;
+  provider: MatterhornBillingProvider;
+  readyForTestCheckout: boolean;
+  readyForWebhooks: boolean;
+  livePaymentsEnabled: false;
+  checks: MatterhornBillingSetupCheck[];
+}
+
 export interface MatterhornBillingStatus {
   mode: MatterhornBillingMode;
   provider: MatterhornBillingProvider;
   subscription: MatterhornBillingSubscription;
   usage: MatterhornBillingUsageSnapshot;
+  setup: MatterhornBillingSetup;
   isLivePaymentsEnabled: false;
 }
 
@@ -76,6 +102,7 @@ export interface MatterhornBillingCapability extends MatterhornCapability {
   isLivePaymentsEnabled: false;
   checkoutSupported: boolean;
   portalSupported: boolean;
+  setup: MatterhornBillingSetup;
 }
 
 export interface MatterhornBillingPlansResponse {
@@ -107,21 +134,25 @@ export interface MatterhornBillingCheckoutResponse {
   success: true;
   checkoutUrl: string;
   mode: "mock" | "stripe_test";
+  providerSessionId?: string | null;
 }
 
 export interface MatterhornBillingPortalRequest {
   returnUrl?: string;
+  providerCustomerId?: string;
 }
 
 export interface MatterhornBillingPortalResponse {
   success: true;
   portalUrl: string;
   mode: "mock" | "stripe_test";
+  providerSessionId?: string | null;
 }
 
 export interface MatterhornBillingWebhookStripeRequest {
   signature?: string;
   payload: unknown;
+  rawPayload?: string;
 }
 
 export interface MatterhornBillingWebhookStripeResponse {

@@ -262,7 +262,7 @@ function LatestActivityPreview(props: {
       </span>
       <button
         type="button"
-        className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-dls-text transition-colors hover:text-dls-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1 py-1 text-xs font-medium text-dls-text transition-colors hover:text-dls-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
         onClick={props.onOpenHistory}
       >
         Project history
@@ -309,9 +309,9 @@ function ActivityDetailSheet(props: {
     <Sheet open={Boolean(item)} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-[min(100vw,420px)] border-dls-border bg-dls-background sm:max-w-[420px]"
+        className="w-[min(100vw,420px)] border-dls-border/55 bg-dls-background sm:max-w-[420px]"
       >
-        <SheetHeader className="border-b border-dls-border/70 px-5 py-4">
+        <SheetHeader className="bg-dls-surface/25 px-5 py-4">
           <SheetTitle className="text-sm font-semibold text-dls-text">{title}</SheetTitle>
           <SheetDescription className="text-xs leading-5 text-dls-secondary">
             {statusLine}

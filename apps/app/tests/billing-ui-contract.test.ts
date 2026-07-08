@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -69,9 +71,59 @@ const mockClient: MatterhornServerClient = {
           teamMembers: { used: 1, limit: 1 },
           cloudStorageBytes: { used: 0, limit: null },
         },
+        setup: {
+          mode: "phase0_mock",
+          provider: "mock",
+          readyForTestCheckout: true,
+          readyForWebhooks: false,
+          livePaymentsEnabled: false,
+          checks: [
+            {
+              id: "mock_mode",
+              label: "Mock checkout",
+              status: "preview",
+              description: "Plan changes are local test state only. No payment provider is contacted.",
+            },
+          ],
+        },
         isLivePaymentsEnabled: false,
       },
     }),
+  workspaceBillingStatus: () =>
+    Promise.resolve({
+      success: true,
+      version: "matterhorn.billing.v1",
+      generatedAt: new Date().toISOString(),
+      status: {
+        mode: "phase0_mock",
+        provider: "mock",
+        subscription: { planId: "free", status: "none", interval: "month", cancelAtPeriodEnd: false },
+        usage: {
+          generatedImages: { used: 7, limit: 10 },
+          nftDrafts: { used: 2, limit: 0 },
+          teamMembers: { used: 1, limit: 1 },
+          cloudStorageBytes: { used: 0, limit: null },
+        },
+        setup: {
+          mode: "phase0_mock",
+          provider: "mock",
+          readyForTestCheckout: true,
+          readyForWebhooks: false,
+          livePaymentsEnabled: false,
+          checks: [
+            {
+              id: "mock_mode",
+              label: "Mock checkout",
+              status: "preview",
+              description: "Plan changes are local test state only. No payment provider is contacted.",
+            },
+          ],
+        },
+        isLivePaymentsEnabled: false,
+      },
+    }),
+  workspaceBillingCheckout: () => Promise.reject(new Error("Not called in static render")),
+  workspaceBillingPortal: () => Promise.reject(new Error("Not called in static render")),
   billingCheckout: () => Promise.reject(new Error("Not called in static render")),
   billingPortal: () => Promise.reject(new Error("Not called in static render")),
 } as unknown as MatterhornServerClient;
@@ -98,6 +150,40 @@ describe("Billing settings view", () => {
     expect(backendCapabilitiesWorkingFixture.billing.currentPlanId).toBe("free");
     expect(backendCapabilitiesWorkingFixture.billing.isLivePaymentsEnabled).toBe(false);
     expect(backendCapabilitiesWorkingFixture.settings.some((s) => s.section === "billing")).toBe(true);
+  });
+
+  test("uses workspace billing status when a workspace id is available", () => {
+    const billingViewSource = readFileSync(
+      join(import.meta.dir, "../src/react-app/domains/settings/pages/billing-view.tsx"),
+      "utf8",
+    );
+    const settingsRouteSource = readFileSync(
+      join(import.meta.dir, "../src/react-app/shell/settings-route.tsx"),
+      "utf8",
+    );
+    const clientSource = readFileSync(
+      join(import.meta.dir, "../src/app/lib/matterhorn-server.ts"),
+      "utf8",
+    );
+
+    expect(clientSource).toContain("workspaceBillingStatus");
+    expect(clientSource).toContain("workspaceBillingCheckout");
+    expect(clientSource).toContain("workspaceBillingPortal");
+    expect(clientSource).toContain("/billing/status");
+    expect(clientSource).toContain("/billing/checkout");
+    expect(clientSource).toContain("/billing/portal");
+    expect(billingViewSource).toContain("runtimeWorkspaceId");
+    expect(billingViewSource).toContain("client?.workspaceBillingStatus(workspaceId)");
+    expect(billingViewSource).toContain("status?.setup.checks");
+    expect(billingViewSource).toContain("Test checkout ready");
+    expect(billingViewSource).toContain("client?.billingStatus()");
+    expect(billingViewSource).toContain("client?.workspaceBillingCheckout(workspaceId");
+    expect(billingViewSource).toContain("client?.workspaceBillingPortal(workspaceId");
+    expect(billingViewSource).toContain("statusQuery.refetch()");
+    expect(billingViewSource).toContain("checkoutReady");
+    expect(billingViewSource).toContain("Portal needs setup");
+    expect(billingViewSource).toContain("stripe_test_customer");
+    expect(settingsRouteSource).toContain("<BillingSettingsView matterhornServerClient={matterhornClient} runtimeWorkspaceId={runtimeWorkspaceId} />");
   });
 });
 

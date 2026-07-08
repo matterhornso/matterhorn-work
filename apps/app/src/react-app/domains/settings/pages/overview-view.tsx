@@ -51,6 +51,7 @@ import type {
   MatterhornBackendTeamAccessSummaryResponse,
   MatterhornTeamShareableTokenScope,
 } from "@matterhorn-work/types/backend-team-access";
+import type { MatterhornBillingStatusResponse } from "@matterhorn-work/types/billing";
 import {
   MATTERHORN_PROJECT_FEEDBACK_KINDS,
   type MatterhornProjectDataLedgerEntry,
@@ -266,6 +267,7 @@ function CopyButton(props: { text: string; label: string }) {
 const DATA_POLICY_STORE_ORDER: Array<keyof MatterhornWorkspaceDataMapResponse["stores"]> = [
   "chat",
   "modelPreferences",
+  "billing",
   "dataPolicy",
   "notes",
   "memory",
@@ -331,6 +333,7 @@ function controlQuickActions(
     "memory",
     "feedback",
     "modelPreferences",
+    "billing",
     "walletEvidence",
     "audit",
     "dataPolicy",
@@ -870,19 +873,49 @@ function teamAccessInviteText(input: {
   ].filter((line): line is string => line !== null).join("\n");
 }
 
+function planDisplayName(planId?: string | null) {
+  switch (planId) {
+    case "plus":
+      return "Matterhorn Plus";
+    case "max":
+      return "Matterhorn Max";
+    default:
+      return "Free";
+  }
+}
+
+function teamSeatUsageText(status?: MatterhornBillingStatusResponse["status"]) {
+  const usage = status?.usage.teamMembers;
+  if (!usage) return null;
+  const limit = usage.limit == null ? "unlimited" : String(usage.limit);
+  return `${usage.used}/${limit} seats used on ${planDisplayName(status.subscription.planId)}.`;
+}
+
+function isTeamSeatBillingError(error: unknown) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "billing_entitlement_limit_reached",
+  );
+}
+
 function TeamAccessControls(props: {
   client?: MatterhornServerClient | null;
   workspaceId: string;
   summary?: MatterhornBackendTeamAccessSummaryResponse;
   data?: MatterhornBackendTeamAccessResponse;
+  billingStatus?: MatterhornBillingStatusResponse["status"];
   error: unknown;
   isError: boolean;
   isLoading: boolean;
   isOpen: boolean;
   onOpen: () => void;
+  onOpenBilling: () => void;
   refetch: () => Promise<unknown>;
+  refetchBilling?: () => Promise<unknown>;
 }) {
-  const { client, workspaceId, refetch } = props;
+  const { client, workspaceId, refetch, refetchBilling } = props;
   const [scope, setScope] = useState<MatterhornTeamShareableTokenScope>("viewer");
   const [label, setLabel] = useState("");
   const [createdToken, setCreatedToken] = useState<{
@@ -898,11 +931,18 @@ function TeamAccessControls(props: {
   const tokenCount = props.summary?.localAccess.tokenCount ?? props.data?.localAccess.tokenCount ?? 0;
   const sharedCount = props.data ? sharedTokens.length : Math.max(0, tokenCount - 1);
   const connection = props.summary?.connection ?? props.data?.connection;
-  const canUseTokenControls = Boolean(client && workspaceId && !props.isLoading && props.data);
+  const teamUsage = props.billingStatus?.usage.teamMembers ?? null;
+  const teamLimitReached = Boolean(teamUsage && teamUsage.limit != null && teamUsage.used >= teamUsage.limit);
+  const teamSeatLine = teamSeatUsageText(props.billingStatus);
+  const canUseTokenControls = Boolean(client && workspaceId && !props.isLoading && props.data && !teamLimitReached);
 
   const createToken = useCallback(async () => {
     if (!client || !workspaceId) {
       setStatus("Open a connected workspace to create a local access token.");
+      return;
+    }
+    if (teamLimitReached) {
+      setStatus("Team seats are full on this plan. Open Billing to upgrade before creating teammate tokens.");
       return;
     }
     setBusyTokenId("create");
@@ -922,12 +962,17 @@ function TeamAccessControls(props: {
       setLabel("");
       setStatus("Local access token created. Copy it now; it will not be shown again.");
       await refetch();
+      await refetchBilling?.();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not create a local access token.");
+      setStatus(
+        isTeamSeatBillingError(error)
+          ? "Team seats are full on this plan. Open Billing to upgrade before creating teammate tokens."
+          : error instanceof Error ? error.message : "Could not create a local access token.",
+      );
     } finally {
       setBusyTokenId(null);
     }
-  }, [client, label, refetch, scope, workspaceId]);
+  }, [client, label, refetch, refetchBilling, scope, teamLimitReached, workspaceId]);
 
   const revokeToken = useCallback(async (tokenId: string, tokenLabel?: string) => {
     if (!client || !workspaceId) {
@@ -941,12 +986,13 @@ function TeamAccessControls(props: {
       if (createdToken?.id === tokenId) setCreatedToken(null);
       setStatus(`Revoked ${tokenLabel || "local access token"}.`);
       await refetch();
+      await refetchBilling?.();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not revoke the local access token.");
     } finally {
       setBusyTokenId(null);
     }
-  }, [client, createdToken?.id, refetch, workspaceId]);
+  }, [client, createdToken?.id, refetch, refetchBilling, workspaceId]);
 
   if (!props.isOpen) {
     return (
@@ -956,6 +1002,7 @@ function TeamAccessControls(props: {
           {connection?.reachableFromOtherDevices === false
             ? "Teammates can connect only after this server is reachable from their device."
             : "Teammates use Connect custom remote in the same Matterhorn interface."}
+          {teamSeatLine ? ` ${teamSeatLine}` : ""}
         </span>
         <Button variant="ghost" size="sm" className="w-fit px-2 text-xs" onClick={props.onOpen}>
           Manage tokens
@@ -996,6 +1043,30 @@ function TeamAccessControls(props: {
           {sharedTokens.length || sharedCount} shared
         </span>
       </div>
+
+      {teamSeatLine ? (
+        <div className={cn(
+          "mt-3 flex flex-col gap-2 rounded-md px-2.5 py-2 text-xs leading-5 sm:flex-row sm:items-center sm:justify-between",
+          teamLimitReached ? "bg-amber-500/10 text-amber-200" : "bg-dls-surface/45 text-dls-secondary",
+        )}>
+          <span>
+            {teamLimitReached
+              ? `${teamSeatLine} Upgrade to Matterhorn Max to create teammate tokens.`
+              : teamSeatLine}
+          </span>
+          {teamLimitReached ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 w-fit px-1.5 text-xs text-amber-100 hover:text-dls-text"
+              onClick={props.onOpenBilling}
+            >
+              Open Billing
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {connection ? (
         <div className="mt-3 grid gap-2 rounded-md bg-dls-surface/55 px-2.5 py-2 text-xs leading-5 text-dls-secondary">
@@ -1182,6 +1253,17 @@ export function SettingsOverviewView(props: {
       const client = props.matterhornServerClient;
       if (!client || !backendWorkspaceId) throw new Error("Open a workspace to check backend status.");
       return client.workspaceBackendControlPlane(backendWorkspaceId);
+    },
+    staleTime: 30_000,
+  });
+  const workspaceBillingStatusQuery = useQuery({
+    queryKey: ["settings-workspace-billing-status", props.runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to see billing status.");
+      return client.workspaceBillingStatus(workspaceId);
     },
     staleTime: 30_000,
   });
@@ -1619,12 +1701,15 @@ export function SettingsOverviewView(props: {
                 workspaceId={backendWorkspaceId}
                 summary={teamAccessSummaryQuery.data}
                 data={teamAccessQuery.data}
+                billingStatus={workspaceBillingStatusQuery.data?.status}
                 error={teamAccessQuery.error}
                 isError={teamAccessQuery.isError}
                 isLoading={teamAccessQuery.isLoading}
                 isOpen={teamTokenManagementOpen}
                 onOpen={() => setTeamTokenManagementOpen(true)}
+                onOpenBilling={() => onSelectTab("billing")}
                 refetch={teamAccessQuery.refetch}
+                refetchBilling={workspaceBillingStatusQuery.refetch}
               />
               <Row
                 label="Write guards"

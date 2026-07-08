@@ -6,6 +6,7 @@ import {
   BrainCircuit,
   CalendarClock,
   Clock3,
+  CreditCard,
   Download,
   Files,
   FileText,
@@ -55,6 +56,7 @@ export const PROJECT_HISTORY_FILTERS: Array<{
   { id: "memory_suggestion", label: "Memory", kind: "memory_suggestion" },
   { id: "team_access", label: "Access", kind: "team_access" },
   { id: "wallet", label: "Wallet", kind: "wallet" },
+  { id: "billing", label: "Billing", kind: "billing" },
   { id: "chat", label: "Chats", kind: "chat" },
   { id: "feedback", label: "Feedback", kind: "feedback" },
   { id: "audit", label: "Audit", kind: "audit" },
@@ -71,6 +73,7 @@ const KIND_META: Record<MatterhornProjectDataLedgerKind, { icon: ElementType; to
   output: { icon: Save, tone: "text-emerald-300" },
   image: { icon: Image, tone: "text-pink-300" },
   nft: { icon: WalletCards, tone: "text-cyan-300" },
+  billing: { icon: CreditCard, tone: "text-emerald-300" },
   audit: { icon: ShieldCheck, tone: "text-dls-secondary" },
   feedback: { icon: MessageSquareText, tone: "text-sky-300" },
 };

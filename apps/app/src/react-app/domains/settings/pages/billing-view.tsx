@@ -9,6 +9,7 @@ import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-serv
 import type {
   MatterhornBillingPlan,
   MatterhornBillingPlanId,
+  MatterhornBillingSetupCheck,
   MatterhornBillingStatus,
 } from "@matterhorn-work/types/billing";
 import {
@@ -20,8 +21,9 @@ import {
   SettingsSectionHeaderDescription,
   SettingsSectionHeaderTitle,
   SettingsStack,
+  SettingsStatusBadge,
 } from "../settings-section";
-import { backendCapabilityTone } from "../backend-capability-status";
+import { backendCapabilityLabel, backendCapabilityTone } from "../backend-capability-status";
 import {
   formatEntitlementLimit,
   formatEntitlementUsage,
@@ -29,6 +31,7 @@ import {
 
 export type BillingSettingsViewProps = {
   matterhornServerClient?: MatterhornServerClient | null;
+  runtimeWorkspaceId?: string | null;
 };
 
 function formatPrice(amountCents: number, currency: string, interval: string): string {
@@ -37,26 +40,34 @@ function formatPrice(amountCents: number, currency: string, interval: string): s
   return `$${amount} ${currency.toUpperCase()}/${interval}`;
 }
 
+function setupBadgeTone(status: MatterhornBillingSetupCheck["status"]): "ready" | "warning" | "neutral" | "error" {
+  const tone = backendCapabilityTone(status);
+  if (tone === "setup" || tone === "preview") return "warning";
+  return tone;
+}
+
 function PlanCard(props: {
   plan: MatterhornBillingPlan;
   current: boolean;
   mode: MatterhornBillingStatus["mode"];
+  checkoutReady: boolean;
   onSelect: (planId: MatterhornBillingPlanId) => void;
   busy: boolean;
 }) {
   const isLive = props.mode === "live";
+  const disabled = props.current || props.busy || isLive || !props.checkoutReady;
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-4 rounded-lg border p-4",
+        "relative flex flex-col gap-4 rounded-lg p-4",
         props.current
-          ? "border-dls-border/80 bg-dls-surface"
-          : "border-dls-border/40 bg-dls-surface/50",
-        props.plan.popular && !props.current && "border-amber-500/30",
+          ? "bg-dls-hover/35 ring-1 ring-dls-border/35"
+          : "bg-dls-surface-muted/15",
+        props.plan.popular && !props.current && "ring-1 ring-amber-500/20",
       )}
     >
       {props.plan.popular ? (
-        <span className="absolute -top-2 right-3 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+        <span className="absolute right-3 top-3 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
           Popular
         </span>
       ) : null}
@@ -90,11 +101,11 @@ function PlanCard(props: {
         variant={props.current ? "outline" : "default"}
         size="sm"
         className="mt-auto h-8 text-xs"
-        disabled={props.current || props.busy || isLive}
+        disabled={disabled}
         onClick={() => props.onSelect(props.plan.id)}
       >
         {props.busy ? <Loader2 size={12} className="animate-spin" /> : null}
-        {props.current ? "Current plan" : isLive ? "Unavailable" : props.plan.ctaLabel}
+        {props.current ? "Current plan" : isLive ? "Unavailable" : !props.checkoutReady ? "Needs setup" : props.plan.ctaLabel}
       </Button>
     </div>
   );
@@ -102,29 +113,39 @@ function PlanCard(props: {
 
 export function BillingSettingsView(props: BillingSettingsViewProps) {
   const client = props.matterhornServerClient;
+  const workspaceId = props.runtimeWorkspaceId?.trim() ?? "";
   const plansQuery = useQuery({
     queryKey: ["billing", "plans"],
     queryFn: () => client?.billingPlans(),
     enabled: Boolean(client),
   });
   const statusQuery = useQuery({
-    queryKey: ["billing", "status"],
-    queryFn: () => client?.billingStatus(),
+    queryKey: ["billing", "status", workspaceId || "global"],
+    queryFn: () => workspaceId
+      ? client?.workspaceBillingStatus(workspaceId)
+      : client?.billingStatus(),
     enabled: Boolean(client),
   });
 
   const checkoutMutation = useMutation({
     mutationFn: (planId: MatterhornBillingPlanId) =>
-      client?.billingCheckout({ planId, interval: "month" }) ?? Promise.reject(new Error("No client")),
+      workspaceId
+        ? client?.workspaceBillingCheckout(workspaceId, { planId, interval: "month" }) ??
+          Promise.reject(new Error("No client"))
+        : client?.billingCheckout({ planId, interval: "month" }) ?? Promise.reject(new Error("No client")),
     onSuccess: (data) => {
       if (data?.checkoutUrl) {
         window.open(data.checkoutUrl, "_blank", "noopener,noreferrer");
       }
+      void statusQuery.refetch();
     },
   });
 
   const portalMutation = useMutation({
-    mutationFn: () => client?.billingPortal() ?? Promise.reject(new Error("No client")),
+    mutationFn: () =>
+      workspaceId
+        ? client?.workspaceBillingPortal(workspaceId) ?? Promise.reject(new Error("No client"))
+        : client?.billingPortal() ?? Promise.reject(new Error("No client")),
     onSuccess: (data) => {
       if (data?.portalUrl) {
         window.open(data.portalUrl, "_blank", "noopener,noreferrer");
@@ -135,7 +156,13 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
   const plans = plansQuery.data?.plans ?? [];
   const status = statusQuery.data?.status;
   const currentPlanId = status?.subscription.planId ?? plansQuery.data?.currentPlanId ?? "free";
-  const billingTone = status ? backendCapabilityTone(status.mode === "phase1_stripe_test" ? "working" : "preview") : "neutral";
+  const setupChecks = status?.setup.checks ?? [];
+  const checkoutReady = status?.mode === "phase0_mock" || status?.setup.readyForTestCheckout === true;
+  const portalReady =
+    status?.mode === "phase0_mock" ||
+    Boolean(status?.subscription.providerCustomerId?.trim()) ||
+    setupChecks.some((check) => check.id === "stripe_test_customer" && check.status === "working");
+  const portalDisabled = !client || portalMutation.isPending || status?.mode === "live" || !portalReady;
 
   const usageItems = useMemo(() => {
     if (!status) return [];
@@ -156,7 +183,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               Billing
             </SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Manage your Matterhorn plan. Live payments are disabled in this build.
+              Manage your Matterhorn plan and workspace usage. Live payments are disabled in this build.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeaderContent>
         </SettingsSectionHeader>
@@ -180,14 +207,21 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
                 variant="outline"
                 size="sm"
                 className="h-7 gap-1 text-xs"
-                disabled={!client || portalMutation.isPending || status?.mode === "live"}
+                disabled={portalDisabled}
                 onClick={() => portalMutation.mutate()}
               >
                 {portalMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <ExternalLink size={12} />}
-                Manage billing
+                {portalReady ? "Manage billing" : "Portal needs setup"}
               </Button>
             </div>
           </div>
+          {checkoutMutation.error || portalMutation.error ? (
+            <p className="text-xs leading-5 text-red-300">
+              {(checkoutMutation.error ?? portalMutation.error) instanceof Error
+                ? (checkoutMutation.error ?? portalMutation.error)?.message
+                : "Billing action failed."}
+            </p>
+          ) : null}
         </div>
       </SettingsInset>
 
@@ -200,6 +234,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               plan={plan}
               current={plan.id === currentPlanId}
               mode={status?.mode ?? "phase0_mock"}
+              checkoutReady={checkoutReady}
               onSelect={(id) => checkoutMutation.mutate(id)}
               busy={checkoutMutation.isPending}
             />
@@ -211,7 +246,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
         <h3 className="text-sm font-medium text-dls-text">Usage</h3>
         <div className="flex flex-col gap-2">
           {usageItems.map((item) => (
-            <div key={item.label} className="flex items-center justify-between rounded-md border border-dls-border/40 p-3">
+            <div key={item.label} className="flex items-center justify-between rounded-md bg-dls-surface-muted/15 px-3 py-2.5">
               <span className="text-xs text-dls-secondary">{item.label}</span>
               <span className="text-xs font-medium text-dls-text">
                 {formatEntitlementUsage(item.used, item.limit)}
@@ -223,6 +258,33 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
           ) : null}
         </div>
       </SettingsSection>
+
+      {setupChecks.length ? (
+        <SettingsSection>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-medium text-dls-text">Setup</h3>
+            <SettingsPill>
+              <ShieldCheck size={12} />
+              {status?.setup.readyForTestCheckout ? "Test checkout ready" : "Needs setup"}
+            </SettingsPill>
+          </div>
+          <div className="flex flex-col gap-2">
+            {setupChecks.map((check) => (
+              <div key={check.id} className="flex items-start justify-between gap-3 rounded-md bg-dls-surface-muted/15 px-3 py-2.5">
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-dls-text">{check.label}</div>
+                  <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{check.description}</div>
+                </div>
+                <SettingsStatusBadge
+                  className="min-h-6 px-1.5"
+                  label={backendCapabilityLabel(check.status)}
+                  tone={setupBadgeTone(check.status)}
+                />
+              </div>
+            ))}
+          </div>
+        </SettingsSection>
+      ) : null}
 
       {status?.mode !== "live" ? (
         <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">

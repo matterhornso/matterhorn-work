@@ -14,6 +14,7 @@ import {
   FolderOpen,
   Globe,
   Home,
+  Info,
   Mic2,
   PanelRightClose,
   PencilLine,
@@ -512,9 +513,9 @@ function HomeCapabilityOverview({
               <button
                 type="button"
                 aria-label="Open a desk details"
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-dls-border text-[11px] font-semibold leading-none text-dls-secondary transition-colors hover:border-dls-text/45 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/30"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-dls-hover/35 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/30"
               >
-                i
+                <Info className="size-3.5" aria-hidden="true" />
               </button>
             }
           />
@@ -532,34 +533,51 @@ function HomeCapabilityOverview({
       <div className="grid gap-2 sm:grid-cols-2">
         {homeCapabilityStatusItems().map((item) => {
           return (
-            <button
-              type="button"
+            <article
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="matterhorn-capability-card group grid min-w-0 gap-3 rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.075)] p-3.5 text-left shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--matterhorn-desk-color)]"
-              aria-label={`Open ${item.title}`}
-              onClick={() => onOpenCapability?.(item.id)}
+              className="matterhorn-capability-card group grid min-w-0 gap-3 relative rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.055)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.10)]"
             >
-              <div className="grid min-w-0 grid-cols-[34px_minmax(0,1fr)] gap-3">
-                <span className="flex size-8 items-center justify-center rounded-lg bg-dls-surface/55 text-[var(--matterhorn-desk-color)] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
+              <button
+                type="button"
+                className="grid w-full min-w-0 grid-cols-[34px_minmax(0,1fr)] gap-3 rounded-lg p-3.5 pr-10 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--matterhorn-desk-color)]"
+                aria-label={`Open ${item.title}`}
+                onClick={() => onOpenCapability?.(item.id)}
+              >
+                <span className="flex size-8 items-center justify-center rounded-md bg-dls-surface/45 text-[var(--matterhorn-desk-color)]">
                   <DeskBrandMark id={item.id} size={24} />
                 </span>
                 <div className="min-w-0">
-                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-[13px] font-semibold text-dls-text">{item.title}</span>
-                    <span className="text-[11px] font-medium text-[var(--matterhorn-desk-color)]">
-                      {item.statusLabel}
-                    </span>
-                  </div>
+                  <span className="text-[13px] font-semibold text-dls-text">{item.title}</span>
                   <p className="mt-1 text-[12px] leading-5 text-dls-secondary">{item.summary}</p>
-                  <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-dls-secondary/90">{item.proof}</p>
                   <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
                     {item.id === "wellness" ? "Start workflow" : "Open desk"}
                     <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
                   </span>
                 </div>
-              </div>
-            </button>
+              </button>
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={`${item.title} details`}
+                      className="absolute right-2 top-2 inline-flex size-6 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                    >
+                      <Info className="size-3.5" aria-hidden="true" />
+                    </button>
+                  }
+                />
+                <PopoverContent
+                  side="right"
+                  align="start"
+                  className="w-72 rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-left text-xs leading-5 text-dls-secondary shadow-none"
+                >
+                  <p className="font-medium text-dls-text">{item.statusLabel}</p>
+                  <p className="mt-1">{item.proof}</p>
+                </PopoverContent>
+              </Popover>
+            </article>
           );
         })}
       </div>
@@ -625,29 +643,28 @@ function WorkflowDeskHomeSurface({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
-            className="inline-flex w-fit items-center gap-2 rounded-lg bg-dls-surface/70 px-3 py-2 text-xs font-semibold text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+            className="inline-flex w-fit items-center gap-2 rounded-lg bg-transparent px-1 py-1.5 text-xs font-semibold text-dls-secondary transition-colors hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
             onClick={onBackHome}
             aria-label="Back to Home"
           >
             <span aria-hidden="true">←</span>
             Back to Home
           </button>
-          <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-3 py-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
-            Engine-free workflow
-          </span>
         </div>
 
-        <section className="rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-4 py-4">
+        <section className="rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.06)] px-4 py-4">
           <div className="flex min-w-0 items-start gap-3">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
               <ProtocolBrandLogo id={deskId} visual={visual ?? undefined} size={34} />
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg font-semibold text-dls-text">{visual?.agentName ?? "Longevity Agent"}</h2>
-                <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
-                  {taskStatus === "failed" ? "Needs attention" : taskStatus === "idle" ? "Ready" : "Started"}
-                </span>
+                {taskStatus === "failed" ? (
+                  <span className="text-[11px] font-semibold text-rose-300">Needs attention</span>
+                ) : taskStatus === "idle" ? null : (
+                  <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">Started</span>
+                )}
               </div>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
                 {visual?.agentDescription ?? "Run a standardized workflow with visible stages, outputs, and safety boundaries."}
@@ -785,7 +802,6 @@ function ProtocolDeskEmptyState({
               </div>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
                 {visual?.shortDescription ?? "Focused protocol workspace."} Choose a task to start this desk agent.
-                Matterhorn keeps signing and live submission outside the app.
               </p>
             </div>
           </div>

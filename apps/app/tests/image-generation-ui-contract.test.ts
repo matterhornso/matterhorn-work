@@ -221,8 +221,13 @@ describe("Generated image card", () => {
   });
 
   test("error card shows message and retry", () => {
-    const html = renderToStaticMarkup(React.createElement(GeneratedImageErrorCard, { message: "Provider offline", onRetry: () => {} }));
+    const html = renderToStaticMarkup(React.createElement(GeneratedImageErrorCard, {
+      message: "Provider offline",
+      description: "Check the image provider before retrying.",
+      onRetry: () => {},
+    }));
     expect(html).toContain("Provider offline");
+    expect(html).toContain("Check the image provider before retrying.");
     expect(html).toContain("Retry");
   });
 });
@@ -319,6 +324,15 @@ describe("Session image generation panel", () => {
     expect(html).toContain("Generate image");
     expect(html).toContain("Describe an image to generate");
     expect(html).toContain("Ready");
+  });
+
+  test("formats billing entitlement errors for image and NFT actions", () => {
+    const source = readFileSync("apps/app/src/react-app/domains/session/media/session-image-generation-panel.tsx", "utf8");
+
+    expect(source).toContain("billing_entitlement_required");
+    expect(source).toContain("billing_entitlement_limit_reached");
+    expect(source).toContain("requires an upgrade");
+    expect(source).toContain("limit reached");
   });
 });
 

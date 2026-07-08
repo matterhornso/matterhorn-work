@@ -2515,7 +2515,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "marketplace":
         return <MarketplaceView />;
       case "billing":
-        return <BillingSettingsView matterhornServerClient={matterhornClient} />;
+        return <BillingSettingsView matterhornServerClient={matterhornClient} runtimeWorkspaceId={runtimeWorkspaceId} />;
       default:
         return null;
     }

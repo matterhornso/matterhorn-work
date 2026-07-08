@@ -516,10 +516,10 @@ function ActionButton({
   primary?: boolean;
 }) {
   const accentMap = {
-    violet: { bg: "bg-violet-500/10", text: "text-violet-400", border: "border-violet-500/20", glow: "hover:shadow-violet-500/10" },
-    emerald: { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-emerald-500/20", glow: "hover:shadow-emerald-500/10" },
-    amber: { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-amber-500/20", glow: "hover:shadow-amber-500/10" },
-    blue: { bg: "bg-blue-500/10", text: "text-blue-400", border: "border-blue-500/20", glow: "hover:shadow-blue-500/10" },
+    violet: { bg: "bg-violet-500/10", text: "text-violet-400", border: "border-violet-500/15" },
+    emerald: { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-emerald-500/15" },
+    amber: { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-amber-500/15" },
+    blue: { bg: "bg-blue-500/10", text: "text-blue-400", border: "border-blue-500/15" },
   };
   const a = accentMap[accent];
 
@@ -528,16 +528,16 @@ function ActionButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex flex-col items-center gap-2 rounded-xl border px-3 py-3 transition-all duration-200",
+        "flex flex-col items-center gap-2 rounded-lg px-3 py-3 transition-colors duration-150",
         primary
-          ? "bg-violet-500 text-white border-violet-500 shadow-lg shadow-violet-500/20 hover:bg-violet-600 hover:shadow-violet-500/30"
-          : `bg-dls-surface ${a.border} ${a.glow} hover:bg-dls-hover hover:shadow-lg`
+          ? "bg-dls-text text-dls-background hover:bg-dls-text/90"
+          : `bg-dls-surface-muted/20 ${a.border} hover:bg-dls-hover/45`
       )}
     >
-      <div className={cn("flex size-9 items-center justify-center rounded-xl", primary ? "bg-white/10" : a.bg)}>
-        <span className={primary ? "text-white" : a.text}>{icon}</span>
+      <div className={cn("flex size-9 items-center justify-center rounded-lg", primary ? "bg-dls-background/10" : a.bg)}>
+        <span className={primary ? "text-dls-background" : a.text}>{icon}</span>
       </div>
-      <span className={cn("text-[11px] font-medium", primary ? "text-white" : "text-dls-text")}>{label}</span>
+      <span className={cn("text-[11px] font-medium", primary ? "text-dls-background" : "text-dls-text")}>{label}</span>
     </button>
   );
 }
