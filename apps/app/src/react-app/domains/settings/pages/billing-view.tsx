@@ -9,6 +9,7 @@ import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-serv
 import type {
   MatterhornBillingPlan,
   MatterhornBillingPlanId,
+  MatterhornBillingSetupCheck,
   MatterhornBillingStatus,
 } from "@matterhorn-work/types/billing";
 import {
@@ -20,8 +21,9 @@ import {
   SettingsSectionHeaderDescription,
   SettingsSectionHeaderTitle,
   SettingsStack,
+  SettingsStatusBadge,
 } from "../settings-section";
-import { backendCapabilityTone } from "../backend-capability-status";
+import { backendCapabilityLabel, backendCapabilityTone } from "../backend-capability-status";
 import {
   formatEntitlementLimit,
   formatEntitlementUsage,
@@ -36,6 +38,12 @@ function formatPrice(amountCents: number, currency: string, interval: string): s
   if (amountCents === 0) return "Free";
   const amount = (amountCents / 100).toFixed(amountCents % 100 === 0 ? 0 : 2);
   return `$${amount} ${currency.toUpperCase()}/${interval}`;
+}
+
+function setupBadgeTone(status: MatterhornBillingSetupCheck["status"]): "ready" | "warning" | "neutral" | "error" {
+  const tone = backendCapabilityTone(status);
+  if (tone === "setup" || tone === "preview") return "warning";
+  return tone;
 }
 
 function PlanCard(props: {
@@ -146,7 +154,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
   const plans = plansQuery.data?.plans ?? [];
   const status = statusQuery.data?.status;
   const currentPlanId = status?.subscription.planId ?? plansQuery.data?.currentPlanId ?? "free";
-  const billingTone = status ? backendCapabilityTone(status.mode === "phase1_stripe_test" ? "working" : "preview") : "neutral";
+  const setupChecks = status?.setup.checks ?? [];
 
   const usageItems = useMemo(() => {
     if (!status) return [];
@@ -234,6 +242,33 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
           ) : null}
         </div>
       </SettingsSection>
+
+      {setupChecks.length ? (
+        <SettingsSection>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-medium text-dls-text">Setup</h3>
+            <SettingsPill>
+              <ShieldCheck size={12} />
+              {status?.setup.readyForTestCheckout ? "Test checkout ready" : "Needs setup"}
+            </SettingsPill>
+          </div>
+          <div className="flex flex-col gap-2">
+            {setupChecks.map((check) => (
+              <div key={check.id} className="flex items-start justify-between gap-3 rounded-md bg-dls-surface-muted/15 px-3 py-2.5">
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-dls-text">{check.label}</div>
+                  <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{check.description}</div>
+                </div>
+                <SettingsStatusBadge
+                  className="min-h-6 px-1.5"
+                  label={backendCapabilityLabel(check.status)}
+                  tone={setupBadgeTone(check.status)}
+                />
+              </div>
+            ))}
+          </div>
+        </SettingsSection>
+      ) : null}
 
       {status?.mode !== "live" ? (
         <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">

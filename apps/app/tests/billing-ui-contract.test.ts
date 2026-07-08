@@ -71,6 +71,21 @@ const mockClient: MatterhornServerClient = {
           teamMembers: { used: 1, limit: 1 },
           cloudStorageBytes: { used: 0, limit: null },
         },
+        setup: {
+          mode: "phase0_mock",
+          provider: "mock",
+          readyForTestCheckout: true,
+          readyForWebhooks: false,
+          livePaymentsEnabled: false,
+          checks: [
+            {
+              id: "mock_mode",
+              label: "Mock checkout",
+              status: "preview",
+              description: "Plan changes are local test state only. No payment provider is contacted.",
+            },
+          ],
+        },
         isLivePaymentsEnabled: false,
       },
     }),
@@ -88,6 +103,21 @@ const mockClient: MatterhornServerClient = {
           nftDrafts: { used: 2, limit: 0 },
           teamMembers: { used: 1, limit: 1 },
           cloudStorageBytes: { used: 0, limit: null },
+        },
+        setup: {
+          mode: "phase0_mock",
+          provider: "mock",
+          readyForTestCheckout: true,
+          readyForWebhooks: false,
+          livePaymentsEnabled: false,
+          checks: [
+            {
+              id: "mock_mode",
+              label: "Mock checkout",
+              status: "preview",
+              description: "Plan changes are local test state only. No payment provider is contacted.",
+            },
+          ],
         },
         isLivePaymentsEnabled: false,
       },
@@ -144,6 +174,8 @@ describe("Billing settings view", () => {
     expect(clientSource).toContain("/billing/portal");
     expect(billingViewSource).toContain("runtimeWorkspaceId");
     expect(billingViewSource).toContain("client?.workspaceBillingStatus(workspaceId)");
+    expect(billingViewSource).toContain("status?.setup.checks");
+    expect(billingViewSource).toContain("Test checkout ready");
     expect(billingViewSource).toContain("client?.billingStatus()");
     expect(billingViewSource).toContain("client?.workspaceBillingCheckout(workspaceId");
     expect(billingViewSource).toContain("client?.workspaceBillingPortal(workspaceId");

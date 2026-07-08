@@ -281,8 +281,29 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
     provider: "mock",
     currentPlanId: "free",
     isLivePaymentsEnabled: false,
-    checkoutSupported: false,
-    portalSupported: false,
+    checkoutSupported: true,
+    portalSupported: true,
+    setup: {
+      mode: "phase0_mock",
+      provider: "mock",
+      readyForTestCheckout: true,
+      readyForWebhooks: false,
+      livePaymentsEnabled: false,
+      checks: [
+        {
+          id: "mock_mode",
+          label: "Mock checkout",
+          status: "preview",
+          description: "Plan changes are local test state only. No payment provider is contacted.",
+        },
+        {
+          id: "live_payments_disabled",
+          label: "Live payments",
+          status: "working",
+          description: "Live payments are disabled in this build.",
+        },
+      ],
+    },
   },
   settings: [
     settingsCap("overview", "working", "Overview"),

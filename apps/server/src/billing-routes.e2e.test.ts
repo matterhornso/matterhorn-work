@@ -91,11 +91,17 @@ beforeEach(() => {
     MATTERHORN_BILLING_PROVIDER: process.env.MATTERHORN_BILLING_PROVIDER,
     MATTERHORN_BILLING_CURRENT_PLAN: process.env.MATTERHORN_BILLING_CURRENT_PLAN,
     MATTERHORN_STRIPE_WEBHOOK_SECRET: process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET,
+    MATTERHORN_STRIPE_SECRET_KEY: process.env.MATTERHORN_STRIPE_SECRET_KEY,
+    MATTERHORN_STRIPE_PRICE_ID_PLUS: process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS,
+    MATTERHORN_STRIPE_PRICE_ID_MAX: process.env.MATTERHORN_STRIPE_PRICE_ID_MAX,
   };
   delete process.env.MATTERHORN_BILLING_MODE;
   delete process.env.MATTERHORN_BILLING_PROVIDER;
   delete process.env.MATTERHORN_BILLING_CURRENT_PLAN;
   delete process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET;
+  delete process.env.MATTERHORN_STRIPE_SECRET_KEY;
+  delete process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS;
+  delete process.env.MATTERHORN_STRIPE_PRICE_ID_MAX;
 });
 
 function testImage(workspaceId: string, id: string, createdAt: string): MatterhornGeneratedImage {
@@ -150,6 +156,42 @@ describe("Billing routes", () => {
     expect(result.payload.success).toBe(true);
     expect(result.payload.status.subscription.planId).toBe("free");
     expect(result.payload.status.isLivePaymentsEnabled).toBe(false);
+    expect(result.payload.status.setup).toMatchObject({
+      mode: "phase0_mock",
+      provider: "mock",
+      readyForTestCheckout: true,
+      readyForWebhooks: false,
+      livePaymentsEnabled: false,
+    });
+    expect(result.payload.status.setup.checks.map((check: { id: string }) => check.id)).toContain("mock_mode");
+  });
+
+  test("GET /api/billing/status reports sanitized Stripe test setup readiness", async () => {
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_STRIPE_SECRET_KEY = "sk_test_should_not_leak";
+    process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET = "whsec_should_not_leak";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS = "price_plus_should_not_leak";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_MAX = "price_max_should_not_leak";
+
+    const { base } = await boot();
+    const result = await jsonFetch(base, "/api/billing/status");
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.status.setup).toMatchObject({
+      mode: "phase1_stripe_test",
+      provider: "stripe",
+      readyForTestCheckout: true,
+      readyForWebhooks: true,
+      livePaymentsEnabled: false,
+    });
+    expect(result.payload.status.setup.checks).toContainEqual(expect.objectContaining({
+      id: "stripe_secret_key",
+      status: "working",
+    }));
+    expect(JSON.stringify(result.payload)).not.toContain("sk_test_should_not_leak");
+    expect(JSON.stringify(result.payload)).not.toContain("whsec_should_not_leak");
+    expect(JSON.stringify(result.payload)).not.toContain("price_plus_should_not_leak");
   });
 
   test("GET /workspace/:id/billing/status returns workspace generated-media usage", async () => {
@@ -393,6 +435,7 @@ describe("Billing capability", () => {
     expect(result.payload.billing).toBeDefined();
     expect(result.payload.billing.currentPlanId).toBe("free");
     expect(result.payload.billing.isLivePaymentsEnabled).toBe(false);
+    expect(result.payload.billing.setup.readyForTestCheckout).toBe(true);
     expect(result.payload.settings.some((s: { section: string }) => s.section === "billing")).toBe(true);
   });
 });
