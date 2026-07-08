@@ -66,6 +66,7 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("DataPolicySection");
     expect(source).toContain("DATA_POLICY_STORE_ORDER");
     expect(source).toContain('"modelPreferences"');
+    expect(source).toContain('"billing"');
     expect(source).toContain('"dataPolicy"');
     expect(source).toContain('"walletEvidence"');
     expect(source).toContain("Object.values(props.dataMap.stores)");

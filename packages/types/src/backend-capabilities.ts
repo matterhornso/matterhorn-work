@@ -213,6 +213,7 @@ export interface MatterhornWorkspaceDataMapResponse {
     | "dataPolicy"
     | "notes"
     | "modelPreferences"
+    | "billing"
     | "memory"
     | "outputs"
     | "imageOutputs"

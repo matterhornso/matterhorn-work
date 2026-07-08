@@ -189,6 +189,25 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
     return jsonResponse(result);
   });
 
+  addRoute("DELETE", "/workspace/:id/billing/subscription", "client", async (routeCtx) => {
+    const blocker = billingWriteBlocker(routeCtx, "clear workspace billing state");
+    if (blocker) return blocker;
+    if (!ctx.resolveWorkspace) {
+      return badRequest("workspace_unavailable", "Workspace billing is unavailable for this server.");
+    }
+    const workspace = await ctx.resolveWorkspace(ctx.config, routeCtx.params.id);
+    const deleted = await new MatterhornBillingAccountStore({
+      workspaceRoot: workspace.path,
+      workspaceId: workspace.id,
+    }).delete();
+    return jsonResponse({
+      success: true,
+      deleted,
+      workspaceId: workspace.id,
+      status: buildBillingStatusResponse(provider.config).status,
+    });
+  });
+
   addRoute("POST", "/api/billing/portal", "client", async (routeCtx) => {
     const blocker = billingWriteBlocker(routeCtx, "open the billing portal");
     if (blocker) return blocker;

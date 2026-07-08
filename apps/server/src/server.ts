@@ -234,6 +234,7 @@ import {
   buildMatterhornBillingCapability,
   resolveBillingProviderConfigFromEnv,
 } from "./billing.js";
+import { matterhornBillingAccountPath } from "./billing-account-store.js";
 import {
   hasForbiddenMatterhornMemorySuggestionInput,
   planMatterhornMemorySuggestions,
@@ -2774,6 +2775,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   const imageOutputsPath = join(workspace.path, ".matterhorn-work", "outputs", "images");
   const walletEvidencePath = join(outputsPath, "sui");
   const modelPreferencePath = workspaceModelSelectionPath(workspace);
+  const billingSubscriptionPath = matterhornBillingAccountPath(workspace.path);
   const dataPolicyPath = workspaceDataPolicyPath(workspace);
   const dataPolicy = readWorkspaceDataPolicySync(workspace);
   const appendOnlyRetention = buildAppendOnlyRetentionPolicy(workspace.id);
@@ -2790,6 +2792,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
     workflowRunsPath,
     walletEvidencePath,
     modelPreferencePath,
+    billingSubscriptionPath,
     dataPolicyPath,
     outputsPath,
     imageOutputsPath,
@@ -2863,6 +2866,29 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         ),
         scope: "workspace",
         path: dataPolicyPath,
+        format: "json",
+        containsUserContent: false,
+        containsSecrets: "never",
+        retention: "user_controlled",
+        exportable: true,
+        deletable: true,
+      }),
+      billing: dataStore({
+        id: "billing",
+        ...capability(
+          existsSync(billingSubscriptionPath) ? "working" : "preview",
+          "Billing subscription",
+          "Workspace billing state stores only plan, period, and provider reference identifiers. Live payments are disabled in this build.",
+          {
+            statusRoute: `/workspace/${workspace.id}/billing/status`,
+            checkoutRoute: `/workspace/${workspace.id}/billing/checkout`,
+            portalRoute: `/workspace/${workspace.id}/billing/portal`,
+            resetRoute: `/workspace/${workspace.id}/billing/subscription`,
+            livePaymentsEnabled: false,
+          },
+        ),
+        scope: "workspace",
+        path: billingSubscriptionPath,
         format: "json",
         containsUserContent: false,
         containsSecrets: "never",
@@ -3107,6 +3133,7 @@ function buildDataControlStore(
     feedback: `${workspaceAppRoute}/settings/overview#feedback`,
     models: `${workspaceAppRoute}/settings/ai`,
     wallet: `${workspaceAppRoute}/settings/wallet`,
+    billing: `${workspaceAppRoute}/settings/billing`,
   };
 
   let exportCapability: MatterhornDataControlCapability = dataControlCapability({
@@ -3225,6 +3252,57 @@ function buildDataControlStore(
           status: "working",
           method: "DELETE",
           href: modelSelectionRoute,
+          destructive: true,
+          requirements: ["collaborator", "writable_server"],
+        }),
+      ],
+    });
+  } else if (storeId === "billing") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Billing status API",
+      summary: "Workspace billing state can be reviewed from Settings and read through the workspace billing status endpoint.",
+      actions: [
+        appRouteDataControlAction({
+          id: "billing.open-settings",
+          label: "Open billing",
+          description: "Opens Settings > Billing for plan and usage review.",
+          href: appRoutes.billing,
+        }),
+        dataControlAction({
+          id: "billing.status",
+          label: "Read billing status",
+          description: "Returns workspace plan, usage, and non-live billing mode.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/billing/status`,
+        }),
+        dataControlAction({
+          id: "billing.portal",
+          label: "Open billing portal",
+          description: "Creates a mock or Stripe-test billing portal session. Live charges are disabled.",
+          kind: "api_route",
+          status: "preview",
+          method: "POST",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/billing/portal`,
+          requirements: ["collaborator", "writable_server"],
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Clear workspace billing state",
+      summary: "Collaborators can clear the local workspace billing override and fall back to the server default plan.",
+      actions: [
+        dataControlAction({
+          id: "billing.clear-subscription",
+          label: "Clear billing override",
+          description: "Deletes the local workspace billing subscription snapshot. Live payment records are not touched because live payments are disabled.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/billing/subscription`,
           destructive: true,
           requirements: ["collaborator", "writable_server"],
         }),
