@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export interface WalrusUploadResult {
   blobId: string;
   objectId?: string;
@@ -17,6 +19,9 @@ export interface WalrusUploadOptions {
   bearerToken?: string;
   fetchImpl?: typeof fetch;
   now?: () => Date;
+  timeoutMs?: number;
+  maxBytes?: number;
+  expectedSha256?: string;
 }
 
 export class WalrusUploadError extends Error {
@@ -31,22 +36,44 @@ export class WalrusUploadError extends Error {
   }
 }
 
+const DEFAULT_WALRUS_UPLOAD_TIMEOUT_MS = 30_000;
+const DEFAULT_WALRUS_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
+const WALRUS_ALLOWED_CONTENT_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const MAX_WALRUS_ERROR_BODY_CHARS = 4096;
+
 export async function uploadBlobToWalrus(options: WalrusUploadOptions): Promise<WalrusUploadResult> {
+  validateWalrusUploadOptions(options);
   const fetchImpl = options.fetchImpl ?? fetch;
   const uploadUrl = buildWalrusBlobUploadUrl(options.publisherUrl, options.epochs);
   const body = new ArrayBuffer(options.bytes.byteLength);
   new Uint8Array(body).set(options.bytes);
-  const response = await fetchImpl(uploadUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": options.contentType,
-      ...(options.bearerToken ? { Authorization: `Bearer ${options.bearerToken}` } : {}),
-    },
-    body,
-  });
+  const controller = new AbortController();
+  const timeoutMs = Math.max(1, Math.floor(options.timeoutMs ?? DEFAULT_WALRUS_UPLOAD_TIMEOUT_MS));
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  const text = await response.text();
-  const payload = parseWalrusJson(text);
+  let response: Response;
+  let text: string;
+  try {
+    response = await fetchImpl(uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": options.contentType,
+        ...(options.bearerToken ? { Authorization: `Bearer ${options.bearerToken}` } : {}),
+      },
+      body,
+      signal: controller.signal,
+    });
+    text = await response.text();
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new WalrusUploadError("walrus_upload_timeout", "Walrus upload timed out.", 504);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const payload = parseWalrusJson(response.ok ? text : text.slice(0, MAX_WALRUS_ERROR_BODY_CHARS));
   if (!response.ok) {
     throw new WalrusUploadError(
       "walrus_upload_failed",
@@ -61,6 +88,26 @@ export async function uploadBlobToWalrus(options: WalrusUploadOptions): Promise<
     url: options.aggregatorUrl ? buildWalrusBlobReadUrl(options.aggregatorUrl, parsed.blobId) : undefined,
     uploadedAt: (options.now?.() ?? new Date()).toISOString(),
   };
+}
+
+function validateWalrusUploadOptions(options: WalrusUploadOptions): void {
+  if (!options.bytes.byteLength) {
+    throw new WalrusUploadError("walrus_empty_blob", "Walrus upload requires non-empty image bytes.", 400);
+  }
+  const maxBytes = Math.max(1, Math.floor(options.maxBytes ?? DEFAULT_WALRUS_UPLOAD_MAX_BYTES));
+  if (options.bytes.byteLength > maxBytes) {
+    throw new WalrusUploadError("walrus_blob_too_large", `Walrus upload is limited to ${maxBytes} bytes.`, 413);
+  }
+  if (!WALRUS_ALLOWED_CONTENT_TYPES.has(options.contentType)) {
+    throw new WalrusUploadError("walrus_unsupported_content_type", "Walrus NFT media upload supports PNG, JPEG, and WebP images.", 415);
+  }
+  const expectedSha256 = options.expectedSha256?.trim();
+  if (expectedSha256) {
+    const actual = sha256Hex(options.bytes);
+    if (actual !== expectedSha256.toLowerCase()) {
+      throw new WalrusUploadError("walrus_blob_integrity_mismatch", "Walrus upload image bytes do not match the generated image checksum.", 409);
+    }
+  }
 }
 
 export function buildWalrusBlobUploadUrl(publisherUrl: string, epochs = 1): string {
@@ -94,6 +141,15 @@ function parseWalrusJson(text: string): unknown {
   } catch {
     throw new WalrusUploadError("walrus_invalid_response", "Walrus publisher returned invalid JSON.");
   }
+}
+
+function sha256Hex(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError"
+    || error instanceof Error && error.name === "AbortError";
 }
 
 function parseWalrusStoreResponse(payload: unknown): Omit<WalrusUploadResult, "url" | "uploadedAt"> {

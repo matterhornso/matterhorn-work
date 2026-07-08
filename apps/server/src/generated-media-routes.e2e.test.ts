@@ -71,7 +71,7 @@ async function jsonFetch(base: string, path: string, init?: RequestInit, token?:
   return { response, payload: await response.json().catch(() => ({})) };
 }
 
-function bootWalrusPublisher(payload: unknown) {
+function bootWalrusPublisher(payload: unknown, options?: { status?: number; delayMs?: number }) {
   const calls: Array<{
     method: string;
     url: string;
@@ -91,7 +91,10 @@ function bootWalrusPublisher(payload: unknown) {
         authorization: request.headers.get("authorization"),
         byteLength: bytes.byteLength,
       });
-      return Response.json(payload);
+      if (options?.delayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+      }
+      return Response.json(payload, { status: options?.status ?? 200 });
     },
   });
   stops.push(() => server.stop());
@@ -732,8 +735,9 @@ describe("Generated media Sui NFT setup previews", () => {
     expect(result.payload.draft.metadata.imageUrl).toBe("https://relay.example.test/base/v1/blobs/blob_test_123");
   });
 
-  test("storage upload stores a failed state when the Walrus publisher rejects the blob", async () => {
-    const publisher = bootWalrusPublisher({ message: "publisher rejected blob" });
+  test("storage upload stores redacted failed state and project evidence when the Walrus publisher rejects the blob", async () => {
+    const secret = "sk-proj-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const publisher = bootWalrusPublisher({ message: `publisher rejected ${secret}` }, { status: 500 });
     process.env.MATTERHORN_WALRUS_PUBLISHER_URL = publisher.url;
     process.env.MATTERHORN_WALRUS_RELAY_URL = "https://relay.example.test";
     const { base } = await boot();
@@ -743,11 +747,31 @@ describe("Generated media Sui NFT setup previews", () => {
       method: "POST",
     });
 
-    expect(result.response.status).toBe(502);
-    expect(result.payload.code).toBe("walrus_invalid_response");
+    expect(result.response.status).toBe(500);
+    expect(result.payload.code).toBe("walrus_upload_failed");
+    expect(JSON.stringify(result.payload)).not.toContain(secret);
     const refreshed = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}`);
     expect(refreshed.payload.draft.storage.status).toBe("failed");
-    expect(refreshed.payload.draft.storage.error).toContain("stored blob");
+    expect(refreshed.payload.draft.storage.error).toBe("[redacted: secret-shaped input detected]");
+
+    const evidence = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/evidence?source=task_events&limit=20`);
+    expect(evidence.response.status).toBe(200);
+    expect(evidence.payload.items).toContainEqual(expect.objectContaining({
+      type: "task.failed",
+      title: "NFT media upload failed",
+      desk: "nft",
+      sessionSlug: draft.id,
+      taskId: `nft_storage_${draft.id}`,
+      metadata: expect.objectContaining({
+        nftOutputKind: "walrus_upload_failed",
+        nftNetwork: "sui-testnet",
+        walrusErrorCode: "walrus_upload_failed",
+        walrusStatus: 500,
+        custody: false,
+        containsSignatureMaterial: false,
+      }),
+    }));
+    expect(JSON.stringify(evidence.payload)).not.toContain(secret);
   });
 
   test("mint preview reports missing Sui NFT package setup", async () => {
