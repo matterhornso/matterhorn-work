@@ -143,6 +143,7 @@ function parseArgs(argv) {
     requireProduction: false,
     json: false,
     jsonOutput: "",
+    markdownOutput: "",
     timeoutMs: 30_000,
     help: false,
   };
@@ -178,6 +179,9 @@ function parseArgs(argv) {
       case "--json-output":
         config.jsonOutput = next();
         break;
+      case "--markdown-output":
+        config.markdownOutput = next();
+        break;
       case "--help":
       case "-h":
         config.help = true;
@@ -205,6 +209,7 @@ function help() {
     "  pnpm smoke:generated-media-production-readiness",
     "  node scripts/generated-media-production-readiness.mjs --server-url <url> --token <token> --require-production",
     "  node scripts/generated-media-production-readiness.mjs --workspace-id <id> --json-output readiness.json",
+    "  node scripts/generated-media-production-readiness.mjs --workspace-id <id> --markdown-output readiness.md",
     "",
     "Exit behavior:",
     "  Default: exits nonzero only when diagnostics cannot be read or the safety contract is unsafe.",
@@ -408,9 +413,106 @@ function modeLabel(report) {
   return String(report.mode || "UNKNOWN").toUpperCase();
 }
 
+function markdownEscape(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .replace(/\n+/g, " ")
+    .trim();
+}
+
+function markdownListLine(value, fallback = "None") {
+  const text = String(value ?? "").trim();
+  return text ? markdownEscape(text) : fallback;
+}
+
+function buildMarkdownReport(report) {
+  const lines = [
+    "# Matterhorn Generated Media Readiness",
+    "",
+    `Generated: ${markdownEscape(report.metadata.generatedAt)}`,
+    `Workspace: ${markdownEscape(report.metadata.workspaceId || "unknown")}`,
+    `Server: ${markdownEscape(report.metadata.serverUrl || "unknown")}`,
+    `Mode: ${markdownEscape(modeLabel(report))}`,
+    `Status: ${markdownEscape(report.status || "unknown")}`,
+    `End-to-end production flow: ${report.ready ? "ready" : "not ready"}`,
+    "No public writes were performed.",
+    "",
+  ];
+
+  if (report.summary) {
+    lines.push("## Summary", "", markdownEscape(report.summary), "");
+  }
+
+  lines.push("## Safety", "");
+  lines.push(`- Non-custodial: ${report.safety.custody === false ? "yes" : "no"}`);
+  lines.push(`- Can submit transactions: ${report.safety.canSubmit === true ? "yes" : "no"}`);
+  lines.push(`- Wallet signing: ${markdownEscape(report.safety.walletSigning || "client_wallet")}`);
+  lines.push(`- Public writes during diagnostics: ${report.safety.publicWritesDuringDiagnostics === true ? "yes" : "no"}`);
+  lines.push(`- Stores secrets: ${report.safety.storesSecrets === true ? "yes" : "no"}`);
+  lines.push(`- Public writes only after user action: ${report.publicWritesOnlyAfterUserAction ? "yes" : "no"}`);
+  lines.push("");
+
+  lines.push("## Checks", "");
+  lines.push("| Check | Status | Summary |");
+  lines.push("| --- | --- | --- |");
+  if (report.checks.length === 0) {
+    lines.push("| None | unknown | No checks returned. |");
+  } else {
+    for (const check of report.checks) {
+      lines.push(`| ${markdownEscape(check.label || check.id)} | ${markdownEscape(check.status)} | ${markdownEscape(check.summary)} |`);
+    }
+  }
+  lines.push("");
+
+  lines.push("## Production Stages", "");
+  lines.push("| Stage | Status | Write scope | Wallet | Public write | Summary |");
+  lines.push("| --- | --- | --- | --- | --- | --- |");
+  if (report.stages.length === 0) {
+    lines.push("| None | unknown | none | no | no | No stages returned. |");
+  } else {
+    for (const stage of report.stages) {
+      lines.push(`| ${markdownEscape(stage.label || stage.id)} | ${markdownEscape(stage.status)} | ${markdownEscape(stage.writeScope)} | ${stage.requiresWallet ? "yes" : "no"} | ${stage.requiresPublicWrite ? "yes" : "no"} | ${markdownEscape(stage.summary)} |`);
+    }
+  }
+  lines.push("");
+
+  lines.push("## Blockers", "");
+  if (report.blockers.length === 0) {
+    lines.push("- None");
+  } else {
+    for (const blocker of report.blockers) {
+      const env = blocker.envVar ? ` (${blocker.envVar})` : "";
+      lines.push(`- ${markdownListLine(blocker.label)}${env}: ${markdownListLine(blocker.description || blocker.status)}`);
+    }
+  }
+  lines.push("");
+
+  lines.push("## Production Env Checklist", "");
+  lines.push("| Variable | Required | Secret | Status | Example | Description |");
+  lines.push("| --- | --- | --- | --- | --- | --- |");
+  for (const item of report.envChecklist) {
+    lines.push(`| ${markdownEscape(item.envVar)} | ${item.required ? "yes" : "no"} | ${item.secret ? "yes" : "no"} | ${markdownEscape(item.status)} | ${markdownEscape(item.example)} | ${markdownEscape(item.description)} |`);
+  }
+  lines.push("");
+
+  if (report.safetyFailures.length > 0) {
+    lines.push("## Safety Failures", "");
+    for (const failure of report.safetyFailures) lines.push(`- ${markdownListLine(failure)}`);
+    lines.push("");
+  }
+
+  if (report.error) {
+    lines.push("## Error", "", markdownEscape(report.error), "");
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
 function emitReport(report, config) {
   const serialized = JSON.stringify(report, null, 2);
   if (config.jsonOutput) writeFileSync(config.jsonOutput, `${serialized}\n`);
+  if (config.markdownOutput) writeFileSync(config.markdownOutput, buildMarkdownReport(report));
   if (config.json) {
     process.stdout.write(`${serialized}\n`);
     return;
@@ -452,6 +554,7 @@ function emitReport(report, config) {
   }
   if (report.error) process.stdout.write(`\nError: ${report.error}\n`);
   if (config.jsonOutput) process.stdout.write(`JSON report: ${config.jsonOutput}\n`);
+  if (config.markdownOutput) process.stdout.write(`Markdown report: ${config.markdownOutput}\n`);
 }
 
 async function main() {
