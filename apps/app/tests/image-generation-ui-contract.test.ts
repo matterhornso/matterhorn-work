@@ -225,10 +225,14 @@ describe("Generated image card", () => {
       message: "Provider offline",
       description: "Check the image provider before retrying.",
       onRetry: () => {},
+      actionHref: "/workspace/ws_test/settings/billing",
+      actionLabel: "Open Billing",
     }));
     expect(html).toContain("Provider offline");
     expect(html).toContain("Check the image provider before retrying.");
     expect(html).toContain("Retry");
+    expect(html).toContain("Open Billing");
+    expect(html).toContain("/workspace/ws_test/settings/billing");
   });
 });
 
@@ -332,6 +336,8 @@ describe("Session image generation panel", () => {
     expect(source).toContain("billing_entitlement_required");
     expect(source).toContain("billing_entitlement_limit_reached");
     expect(source).toContain("formatEntitlementReset(details.resetsAt)");
+    expect(source).toContain('action: "billing"');
+    expect(source).toContain("/settings/billing");
     expect(source).toContain("requires an upgrade");
     expect(source).toContain("limit reached");
   });

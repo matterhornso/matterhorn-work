@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useState } from "react";
-import { AlertCircle, Image, Loader2, Palette, RefreshCw, Save, Shapes } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AlertCircle, CreditCard, Image, Loader2, Palette, RefreshCw, Save, Shapes } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { MatterhornGeneratedImage } from "@matterhorn-work/types/generated-media";
 
@@ -118,7 +118,14 @@ export function GeneratedImageLoadingCard() {
   );
 }
 
-export function GeneratedImageErrorCard(props: { message: string; description?: string; onRetry?: () => void }) {
+export function GeneratedImageErrorCard(props: {
+  message: string;
+  description?: string;
+  onRetry?: () => void;
+  actionHref?: string;
+  actionLabel?: string;
+}) {
+  const hasActions = Boolean(props.onRetry || props.actionHref);
   return (
     <div className="flex flex-col gap-2 rounded-lg bg-red-3/15 p-3">
       <div className="flex items-center gap-2 text-sm text-red-300">
@@ -128,11 +135,27 @@ export function GeneratedImageErrorCard(props: { message: string; description?: 
       {props.description ? (
         <p className="text-xs leading-5 text-dls-secondary">{props.description}</p>
       ) : null}
-      {props.onRetry ? (
-        <Button variant="ghost" size="sm" className="h-7 w-fit gap-1 bg-transparent text-xs hover:bg-dls-hover/35" onClick={props.onRetry}>
-          <RefreshCw size={12} />
-          Retry
-        </Button>
+      {hasActions ? (
+        <div className="flex flex-wrap gap-2">
+          {props.onRetry ? (
+            <Button variant="ghost" size="sm" className="h-7 w-fit gap-1 bg-transparent text-xs hover:bg-dls-hover/35" onClick={props.onRetry}>
+              <RefreshCw size={12} />
+              Retry
+            </Button>
+          ) : null}
+          {props.actionHref ? (
+            <a
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "h-7 w-fit gap-1 bg-transparent text-xs hover:bg-dls-hover/35",
+              )}
+              href={props.actionHref}
+            >
+              <CreditCard size={12} />
+              {props.actionLabel ?? "Open Billing"}
+            </a>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

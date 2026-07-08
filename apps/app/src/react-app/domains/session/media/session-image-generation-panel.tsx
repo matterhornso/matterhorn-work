@@ -38,7 +38,7 @@ import { buildNftPublishingSetupRequirements, type NftPublishingReadinessCapabil
 import { formatEntitlementReset } from "../../billing/entitlements";
 
 type NftCapabilityStatus = "working" | "needs_setup" | "preview";
-type GeneratedMediaErrorCopy = { title: string; description?: string };
+type GeneratedMediaErrorCopy = { title: string; description?: string; action?: "billing" };
 
 export interface SessionImageGenerationPanelProps {
   client: MatterhornServerClient;
@@ -116,12 +116,14 @@ function generatedMediaErrorCopy(error: unknown): GeneratedMediaErrorCopy {
       return {
         title: `${label} limit reached`,
         description: `${currentPlan} has reached its allowance.${usage}${resetCopy} Upgrade to ${requiredPlans} to continue.`,
+        action: "billing",
       };
     }
 
     return {
       title: `${label} requires an upgrade`,
       description: `${currentPlan} does not include this action. Upgrade to ${requiredPlans} to continue.`,
+      action: "billing",
     };
   }
 
@@ -513,6 +515,10 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
               message={error.title}
               description={error.description}
               onRetry={latestImage ? () => void generateImage({ prompt: latestImage.prompt }) : undefined}
+              actionHref={error.action === "billing"
+                ? `/workspace/${encodeURIComponent(props.workspaceId)}/settings/billing`
+                : undefined}
+              actionLabel={error.action === "billing" ? "Open Billing" : undefined}
             />
           ) : null}
           {latestImage && !generating ? (
