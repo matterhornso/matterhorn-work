@@ -1,6 +1,8 @@
 /** @jsxImportSource react */
 import { AlertTriangle, CheckCircle2, CircleAlert, Info, X } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+
 export type StatusToastProps = {
   open: boolean;
   title: string;
@@ -18,12 +20,14 @@ export function StatusToast(props: StatusToastProps) {
 
   const tileClass =
     tone === "success"
-      ? "border-emerald-6/40 bg-emerald-4/80 text-emerald-11"
+      ? "text-emerald-300"
       : tone === "warning"
-        ? "border-amber-6/40 bg-amber-4/80 text-amber-11"
+        ? "text-amber-300"
         : tone === "error"
-          ? "border-red-6/40 bg-red-4/80 text-red-11"
-          : "border-sky-6/40 bg-sky-4/80 text-sky-11";
+          ? "text-red-300"
+          : "text-sky-300";
+
+  const semanticRole = tone === "error" || tone === "warning" ? "alert" : "status";
 
   const Icon =
     tone === "success"
@@ -31,26 +35,27 @@ export function StatusToast(props: StatusToastProps) {
       : tone === "warning"
         ? AlertTriangle
         : tone === "error"
-          ? CircleAlert
-          : Info;
+        ? CircleAlert
+        : Info;
 
   return (
-    <div className="w-full max-w-[24rem] overflow-hidden rounded-[1.4rem] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)] backdrop-blur-xl animate-in fade-in slide-in-from-top-4 duration-300">
-      <div className="flex items-start gap-3 p-4">
-        <div
-          className={`mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg border ${tileClass}`.trim()}
-        >
-          <Icon size={18} />
-        </div>
+    <div
+      role={semanticRole}
+      aria-live={semanticRole === "alert" ? "assertive" : "polite"}
+      aria-atomic="true"
+      className="w-full max-w-[23rem] overflow-hidden rounded-lg border border-dls-border/70 bg-dls-surface px-3 py-3 shadow-sm animate-in fade-in slide-in-from-top-3 duration-200"
+    >
+      <div className="flex items-start gap-2.5">
+        <Icon className={`mt-0.5 size-4 shrink-0 ${tileClass}`.trim()} aria-hidden="true" />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-gray-12">
+              <div className="text-sm font-medium leading-5 text-dls-text">
                 {props.title}
               </div>
               {props.description?.trim() ? (
-                <p className="mt-1 text-sm leading-relaxed text-gray-10">
+                <p className="mt-0.5 text-xs leading-5 text-dls-secondary">
                   {props.description}
                 </p>
               ) : null}
@@ -59,29 +64,31 @@ export function StatusToast(props: StatusToastProps) {
             <button
               type="button"
               onClick={props.onDismiss}
-              className="rounded-full p-1 text-gray-9 transition hover:bg-gray-3 hover:text-gray-12"
+              className="rounded-md p-1 text-dls-secondary transition hover:bg-dls-hover hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
               aria-label={props.dismissLabel ?? "Dismiss"}
             >
-              <X size={16} />
+              <X className="size-3.5" aria-hidden="true" />
             </button>
           </div>
 
           {props.actionLabel && props.onAction ? (
             <div className="mt-3 flex items-center gap-2">
-              <button
+              <Button
                 type="button"
-                className="inline-flex items-center justify-center rounded-full bg-[var(--dls-accent)] px-3 py-1.5 text-xs font-medium text-[var(--dls-accent-fg)] transition-colors hover:bg-[var(--dls-accent-hover)]"
+                variant="default"
+                size="xs"
                 onClick={() => props.onAction?.()}
               >
                 {props.actionLabel}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="inline-flex items-center justify-center rounded-full border border-transparent bg-transparent px-3 py-1.5 text-xs font-medium text-dls-text transition-colors hover:bg-[var(--dls-hover)]"
+                variant="ghost"
+                size="xs"
                 onClick={props.onDismiss}
               >
                 {props.dismissLabel ?? "Dismiss"}
-              </button>
+              </Button>
             </div>
           ) : null}
         </div>

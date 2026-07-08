@@ -245,10 +245,10 @@ function LatestActivityPreview(props: {
   const countLabel = `${props.count} recent ${props.count === 1 ? "event" : "events"}`;
 
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-lg bg-dls-surface-muted/10 px-3 py-2.5">
+    <div className="flex min-w-0 items-center gap-3 py-2">
       <button
         type="button"
-        className="group flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+        className="group flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
         onClick={props.onSelect}
         aria-label={`${activityDisplayTitle(props.item)}, ${formatActivityTimestamp(props.item.timestamp)}`}
       >
@@ -262,7 +262,7 @@ function LatestActivityPreview(props: {
       </span>
       <button
         type="button"
-        className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-dls-text transition-colors hover:text-dls-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-md text-xs font-medium text-dls-text transition-colors hover:text-dls-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
         onClick={props.onOpenHistory}
       >
         Project history
@@ -515,7 +515,7 @@ export function RecentActivitySection({
         </div>
       ) : null}
       {isLoading ? (
-        <div className="flex items-center gap-2 rounded-lg bg-dls-surface-muted/15 px-3 py-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
           <Clock3 className="size-3.5 animate-pulse" />
           Loading project activity…
         </div>
@@ -525,10 +525,10 @@ export function RecentActivitySection({
           title="Project activity could not load"
           detail={error instanceof Error ? error.message : "Check the workspace connection and try again."}
           onRetry={() => void refetch()}
-          className="rounded-lg bg-destructive/10 px-3 py-2.5"
+          className="py-2"
         />
       ) : items.length === 0 ? (
-        <div className="flex items-center gap-2 rounded-lg bg-dls-surface-muted/15 px-3 py-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
           <ListTodo className="size-3.5 shrink-0" />
           Notes, tasks, and outputs will appear here as you work.
         </div>
@@ -542,7 +542,7 @@ export function RecentActivitySection({
       ) : !historyOpen && latestItem ? (
         <button
           type="button"
-          className="flex w-full min-w-0 items-center gap-3 rounded-lg bg-dls-surface-muted/10 px-3 py-2.5 text-left transition-colors hover:bg-dls-hover/35 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
+          className="flex w-full min-w-0 items-center gap-3 rounded-md py-2 text-left transition-colors hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
           aria-expanded={historyOpen}
           onClick={() => {
             if (onOpenHistory) {
@@ -556,7 +556,7 @@ export function RecentActivitySection({
           <LatestActivitySummary item={latestItem} />
         </button>
       ) : (
-        <div className="overflow-hidden rounded-lg bg-dls-surface-muted/10">
+        <div className="space-y-1">
           {items.map((item) => (
             <ActivityRow key={item.id} item={item} onSelect={() => setSelectedItemId(item.id)} />
           ))}

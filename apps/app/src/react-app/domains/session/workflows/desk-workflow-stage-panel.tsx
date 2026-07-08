@@ -37,6 +37,10 @@ const STATUS_TONE: Record<string, string> = {
   cancelled: "text-dls-secondary",
 };
 
+function shouldShowPanelStatus(status: NonNullable<DeskWorkflowStagePanelProps["taskStatus"]>) {
+  return status !== "idle";
+}
+
 function cardStatus(
   index: number,
   currentStageIndex: number,
@@ -152,22 +156,21 @@ export function DeskWorkflowStagePanel({
                 <p>{visual.sessionBoundary}</p>
               </PopoverContent>
             </Popover>
-            <span className={`text-[11px] font-semibold ${STATUS_TONE[taskStatus] ?? STATUS_TONE.idle}`}>
-              {STATUS_LABELS[taskStatus] ?? taskStatus}
-            </span>
+            {shouldShowPanelStatus(taskStatus) ? (
+              <span className={`text-[11px] font-semibold ${STATUS_TONE[taskStatus] ?? STATUS_TONE.idle}`}>
+                {STATUS_LABELS[taskStatus] ?? taskStatus}
+              </span>
+            ) : null}
           </div>
           <p className="mt-1 text-[12px] leading-5 text-dls-secondary">{visual.agentDescription}</p>
           <p className="mt-1 text-[11px] leading-4 text-dls-muted">
-            Workflow: {manifest.name} · {manifest.steps.length} stages · {visual.statusLabel}
+            {manifest.steps.length} stages · {visual.statusLabel}
           </p>
         </div>
       </div>
 
       {/* Workflow stages */}
       <section className="matterhorn-desk-workflow-stages space-y-2" aria-label={`${visual.displayName} workflow stages`}>
-        <p className="px-1 text-[11px] text-[var(--matterhorn-desk-color)]">
-          {manifest.steps.length} stages
-        </p>
         <div className="space-y-2">
           {manifest.steps.map((step, index) => {
             const isCurrent = currentStageId === step.id || (currentStageId === undefined && index === 0 && taskStatus === "idle");
@@ -193,60 +196,68 @@ export function DeskWorkflowStagePanel({
         </div>
       </section>
 
-      {/* Inputs */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        {requiredInputs.length ? (
-          <div className="rounded-lg bg-dls-surface-muted/30 px-3 py-3">
-            <p className="mb-1.5 text-[11px] font-semibold text-dls-text">Required inputs</p>
-            <ul className="space-y-1.5">
-              {requiredInputs.map((input) => (
-                <li key={input.id} className="text-[11px] leading-4 text-dls-secondary">
-                  <span className="font-medium text-dls-text">{input.label}</span>
-                  {input.helpText ? <span className="block text-dls-muted">{input.helpText}</span> : null}
+      <details className="group border-t border-dls-border/25 px-1 py-2.5">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-semibold text-dls-text">
+          <span>Workflow details</span>
+          <span className="text-[10px] font-medium text-dls-secondary group-open:hidden">
+            Inputs and outputs
+          </span>
+          <span className="hidden text-[10px] font-medium text-dls-secondary group-open:inline">
+            Hide
+          </span>
+        </summary>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          {requiredInputs.length ? (
+            <section>
+              <p className="mb-1.5 text-[11px] font-semibold text-dls-text">Required inputs</p>
+              <ul className="space-y-1.5">
+                {requiredInputs.map((input) => (
+                  <li key={input.id} className="text-[11px] leading-4 text-dls-secondary">
+                    <span className="font-medium text-dls-text">{input.label}</span>
+                    {input.helpText ? <span className="block text-dls-muted">{input.helpText}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {optionalInputs.length ? (
+            <section>
+              <p className="mb-1.5 text-[11px] font-semibold text-dls-text">Optional context</p>
+              <ul className="space-y-1.5">
+                {optionalInputs.map((input) => (
+                  <li key={input.id} className="text-[11px] leading-4 text-dls-secondary">
+                    <span className="font-medium text-dls-text">{input.label}</span>
+                    {input.helpText ? <span className="block text-dls-muted">{input.helpText}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          <section className="sm:col-span-2">
+            <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-dls-text">
+              <FileOutput className="size-3.5" />
+              Expected outputs
+            </p>
+            <ul className="grid gap-1 sm:grid-cols-2">
+              {manifest.generatedArtifacts.map((artifact) => (
+                <li key={artifact.id} className="flex items-start gap-1.5 text-[11px] leading-4 text-dls-secondary">
+                  <FileText className="mt-0.5 size-3 shrink-0 text-dls-muted" />
+                  <span>
+                    <span className="font-medium text-dls-text">{artifact.name}</span>
+                    {artifact.description ? <span className="block text-dls-muted">{artifact.description}</span> : null}
+                  </span>
                 </li>
               ))}
             </ul>
-          </div>
-        ) : null}
-        {optionalInputs.length ? (
-          <div className="rounded-lg bg-dls-surface-muted/30 px-3 py-3">
-            <p className="mb-1.5 text-[11px] font-semibold text-dls-text">Optional context</p>
-            <ul className="space-y-1.5">
-              {optionalInputs.map((input) => (
-                <li key={input.id} className="text-[11px] leading-4 text-dls-secondary">
-                  <span className="font-medium text-dls-text">{input.label}</span>
-                  {input.helpText ? <span className="block text-dls-muted">{input.helpText}</span> : null}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </div>
-
-      {/* Expected outputs */}
-      <div className="rounded-lg bg-dls-surface-muted/30 px-3 py-3">
-        <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-dls-text">
-          <FileOutput className="size-3.5" />
-          Expected outputs
-        </p>
-        <ul className="grid gap-1 sm:grid-cols-2">
-          {manifest.generatedArtifacts.map((artifact) => (
-            <li key={artifact.id} className="flex items-start gap-1.5 text-[11px] leading-4 text-dls-secondary">
-              <FileText className="mt-0.5 size-3 shrink-0 text-dls-muted" />
-              <span>
-                <span className="font-medium text-dls-text">{artifact.name}</span>
-                {artifact.description ? <span className="block text-dls-muted">{artifact.description}</span> : null}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-2 text-[11px] leading-4 text-dls-muted">
-          Outputs save under <span className="font-medium text-dls-text">outputs/{visual.outputDeskId}/&lt;session-slug&gt;/</span>.
-        </p>
-      </div>
+            <p className="mt-2 text-[11px] leading-4 text-dls-muted">
+              Outputs save under <span className="font-medium text-dls-text">outputs/{visual.outputDeskId}/&lt;session-slug&gt;/</span>.
+            </p>
+          </section>
+        </div>
+      </details>
 
       {/* Next action */}
-      <div className="flex items-center justify-between rounded-lg border border-dls-border/45 bg-dls-surface/50 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3 px-1 py-1.5">
         <span className="text-[11px] text-dls-secondary">
           {taskStatus === "completed"
             ? "Workflow complete. Start a new task or refine the outputs."

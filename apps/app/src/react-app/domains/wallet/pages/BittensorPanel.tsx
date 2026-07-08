@@ -1356,7 +1356,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       className="flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain max-h-full bg-dls-canvas text-[15px] animate-fade-in [scrollbar-gutter:stable]"
       style={venueToneStyle(venue)}
     >
-      <div className="bg-[radial-gradient(circle_at_18%_0%,rgba(var(--protocol-desk-rgb),0.18),transparent_42%),linear-gradient(180deg,var(--dls-sidebar),var(--dls-surface))] p-4 shadow-[0_1px_0_rgba(var(--protocol-desk-rgb),0.14)] sm:p-5">
+      <div className="bg-dls-sidebar p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <ProtocolMark venue={venue} />
@@ -1400,14 +1400,13 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             </button>
           ))}
         </div>
-        <div className="mb-3 rounded-lg bg-dls-surface-muted/20 p-3.5">
-          <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold text-[var(--protocol-desk-accent)]">
-            <span>Boundary</span>
-            <span>Protocol manifest</span>
-            <span className="rounded-md bg-dls-surface/55 px-2 py-0.5 text-[9px] text-dls-secondary">
+        <details className="mb-3 rounded-lg bg-dls-surface-muted/20 p-3.5">
+          <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-[11px] font-semibold text-dls-text">
+            <span>Safety info</span>
+            <span className="rounded-md bg-dls-surface/55 px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
               {activeSafetyBadge}
             </span>
-          </div>
+          </summary>
           <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-1.5">
             <Metric label="Can submit" value={activeManifestCanSubmit} compact />
             <Metric label="Live submission" value={activeManifestLiveSubmission} compact />
@@ -1419,7 +1418,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           <p className="mt-2 break-words text-[11px] leading-5 text-dls-secondary">
             Status: {activeManifestStatus}. Allowed intents: {activeManifest.allowedIntents.join(", ")}. Panel route: {activeManifest.primaryPanelRouteId}.
           </p>
-        </div>
+        </details>
         <UnifiedWalletPanel
           venue={venue}
           watchAddress={watchAddress}
@@ -1466,7 +1465,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <Section title={activeVenue.workspaceTitle} icon={venue === "hyperliquid" ? <BarChart3 className="size-4" /> : <Shield className="size-4" />}>
               <div className="space-y-3">
                 <div className="rounded-xl bg-[var(--protocol-desk-soft)] p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--protocol-desk-accent)]">{activeVenue.eyebrow}</div>
+                  <div className="text-[11px] font-semibold tracking-normal text-[var(--protocol-desk-accent)]">{activeVenue.eyebrow}</div>
                   <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
                   <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
                 </div>
@@ -1545,7 +1544,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <Section title="Bittensor workspace" icon={<BrainCircuit className="size-4" />}>
               <div className="space-y-3">
                 <div className="rounded-xl bg-[var(--protocol-desk-soft)] p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--protocol-desk-accent)]">{activeVenue.eyebrow}</div>
+                  <div className="text-[11px] font-semibold tracking-normal text-[var(--protocol-desk-accent)]">{activeVenue.eyebrow}</div>
                   <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
                   <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
                 </div>
@@ -1673,7 +1672,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                           <p className="text-xs font-semibold text-dls-text">{scenario.displayName}</p>
                           <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{scenario.targetCustomerPersona}</p>
                         </div>
-                        <span className="rounded-md bg-dls-card px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                        <span className="rounded-md bg-dls-card px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
                           {scenario.status === "demo_ready" ? "Demo-ready" : scenario.status === "preview_only" ? "Preview only" : "Planned, not live"}
                         </span>
                       </div>
@@ -1711,7 +1710,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                           <p className="text-xs font-semibold text-dls-text">{item.title}</p>
                           <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{item.proof}</p>
                         </div>
-                        <span className="rounded-md bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-sky-200">
+                        <span className="rounded-md bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-2 py-0.5 text-[10px] font-medium text-sky-200">
                           {item.owner}
                         </span>
                       </div>
@@ -2214,7 +2213,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                             <div className="text-sm font-medium text-dls-text">{position.subnetName}</div>
                             <div className="text-xs text-dls-secondary">Subnet {position.netuid}</div>
                           </div>
-                          <span className="rounded-md bg-sky-500/10 px-2 py-1 text-[10px] font-semibold uppercase text-sky-300">
+                          <span className="rounded-md bg-sky-500/10 px-2 py-1 text-[10px] font-medium text-sky-300">
                             {position.slippageRisk}
                           </span>
                         </div>
@@ -2445,7 +2444,7 @@ function UnifiedWalletPanel({
 function Metric({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
     <div className={cn("min-w-0 rounded-xl bg-dls-surface-muted/40 p-3.5", compact && "p-3")}>
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-dls-secondary">{label}</div>
+      <div className="text-[11px] font-semibold tracking-normal text-dls-secondary">{label}</div>
       <div className={cn("mt-1.5 break-words font-mono font-semibold leading-snug text-dls-text", compact ? "text-sm" : "text-xl")}>{value}</div>
     </div>
   );
@@ -2456,7 +2455,7 @@ function Notice({ tone, icon, title, children }: { tone: "info" | "warning"; ico
     ? "bg-amber-500/10 text-amber-200"
     : "bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]";
   return (
-    <div className={cn("mb-4 flex items-start gap-2 rounded-xl px-3 py-2.5", classes)}>
+    <div className={cn("mb-4 flex items-start gap-2 rounded-lg px-3 py-2.5", classes)}>
       <span className="mt-0.5 shrink-0">{icon}</span>
       <div>
         <div className="text-xs font-semibold">{title}</div>
@@ -2563,7 +2562,7 @@ function SubnetDetailCard({
       </div>
 
       <div>
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-dls-secondary">Use cases</div>
+        <div className="mb-2 text-xs font-semibold tracking-normal text-dls-secondary">Use cases</div>
         <div className="space-y-1.5">
           {detail.knownUseCases.map((item) => (
             <div key={item} className="rounded-lg bg-dls-surface-muted/40 px-3 py-2 text-xs text-dls-text">{item}</div>
@@ -2572,7 +2571,7 @@ function SubnetDetailCard({
       </div>
 
       <div>
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-dls-secondary">Top validators</div>
+        <div className="mb-2 text-xs font-semibold tracking-normal text-dls-secondary">Top validators</div>
         {detail.topValidators.length ? (
           <div className="space-y-1.5">
             {detail.topValidators.slice(0, 4).map((validator, index) => (
@@ -2591,7 +2590,7 @@ function SubnetDetailCard({
       </div>
 
       <div>
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-dls-secondary">Risks</div>
+        <div className="mb-2 text-xs font-semibold tracking-normal text-dls-secondary">Risks</div>
         <div className="space-y-1.5">
           {detail.risks.map((risk) => (
             <div key={risk} className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-200">

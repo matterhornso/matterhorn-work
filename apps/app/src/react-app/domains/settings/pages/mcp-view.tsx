@@ -252,10 +252,10 @@ function availabilityLabelForEntry(entry: McpDirectoryInfo, configured: boolean,
   if (isBuiltInMatterhornExtension(entry)) return entry.preview ? "Built-in preview" : "Built-in";
   if (entry.oauth) return configured ? "Connected" : "Connect account";
   if (entry.kind === "mcp" || entry.kind === "ui-control" || entry.command?.length || entry.url) {
-    return configured ? "Configured" : "Requires setup";
+    return configured ? "Configured" : "Set up";
   }
   if (!hasRunnableConnectorTarget(entry)) return configured ? "Configured" : "Catalog only";
-  return configured ? "Installed" : "Requires setup";
+  return configured ? "Installed" : "Set up";
 }
 
 function actionLabelForEntry(entry: McpDirectoryInfo, configured: boolean, disabledReason: string | null) {
@@ -1501,8 +1501,8 @@ function McpViewHeader(props: { connectedCount: number }) {
       <h2 className="text-3xl font-semibold text-dls-text">{t("mcp.apps_title")}</h2>
       <p className="mt-1.5 text-sm text-dls-secondary">{t("mcp.apps_subtitle")}</p>
       {props.connectedCount > 0 ? (
-        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-green-3 px-3 py-1">
-          <div className="size-2 rounded-full bg-green-9" />
+        <div className="mt-3 inline-flex items-center gap-2 rounded-md bg-green-3/80 px-2.5 py-1">
+          <div className="size-1.5 rounded-full bg-green-9" />
           <span className="text-xs font-medium text-green-11">
             {props.connectedCount} {props.connectedCount === 1 ? t("mcp.app_connected") : t("mcp.apps_connected")}
           </span>
@@ -1514,9 +1514,9 @@ function McpViewHeader(props: { connectedCount: number }) {
 
 function MatterhornMcpReadinessFacts(props: { card: MatterhornMcpProductCard; compact?: boolean }) {
   const facts = [
-    "Command ready",
+    "Command",
     props.card.backendBacked === false ? "Preview" : "Server tools",
-    "Install in agent",
+    "Set up",
   ];
 
   return (
@@ -1525,8 +1525,8 @@ function MatterhornMcpReadinessFacts(props: { card: MatterhornMcpProductCard; co
         <span
           key={fact}
           className={props.compact
-            ? "rounded-full bg-dls-hover/45 px-2 py-0.5 text-[10px] text-dls-secondary"
-            : "rounded-full bg-dls-hover/45 px-2.5 py-1 text-[11px] text-dls-secondary"
+            ? "rounded-md bg-dls-hover/25 px-2 py-0.5 text-[10px] text-dls-secondary"
+            : "rounded-md bg-dls-hover/25 px-2.5 py-1 text-[11px] text-dls-secondary"
           }
         >
           {fact}
@@ -1615,7 +1615,7 @@ function MatterhornMcpProductSection(props: {
           </p>
         </div>
         <div className="space-y-2">
-          <span className={props.compact ? "text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary" : "text-[11px] font-medium uppercase tracking-[0.14em] text-dls-secondary"}>
+          <span className={props.compact ? "text-[10px] font-medium tracking-normal text-dls-secondary" : "text-[11px] font-medium tracking-normal text-dls-secondary"}>
             Client
           </span>
           <div
@@ -1655,7 +1655,7 @@ function MatterhornMcpProductSection(props: {
       >
         <div className="flex flex-col gap-3 @md/matterhorn-mcps:flex-row @md/matterhorn-mcps:items-start @md/matterhorn-mcps:justify-between">
           <div className="min-w-0">
-            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">Selected client</p>
+            <p className="text-[10px] font-medium tracking-normal text-dls-secondary">Selected client</p>
             <h3 className={props.compact ? "mt-1 text-sm font-semibold text-dls-text" : "mt-1 text-base font-semibold text-dls-text"}>
               {selectedClient.label}
             </h3>
@@ -1664,14 +1664,14 @@ function MatterhornMcpProductSection(props: {
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <span className={props.compact ? "w-fit rounded-full bg-dls-hover/45 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-dls-secondary" : "w-fit rounded-full bg-dls-hover/45 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-dls-secondary"}>
+            <span className={props.compact ? "w-fit rounded-md bg-dls-hover/35 px-2 py-0.5 text-[10px] text-dls-secondary" : "w-fit rounded-md bg-dls-hover/35 px-2.5 py-1 text-[10px] text-dls-secondary"}>
               {selectedClient.configSurface}
             </span>
             <button
               type="button"
               className={props.compact
-                ? "inline-flex w-fit items-center gap-1 rounded-full bg-dls-hover/55 px-2.5 py-1 text-[11px] text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
-                : "inline-flex h-8 w-fit max-w-full items-center gap-1.5 rounded-full bg-dls-hover/55 px-3 text-xs text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                ? "inline-flex w-fit items-center gap-1 rounded-md bg-dls-hover/45 px-2.5 py-1 text-[11px] text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                : "inline-flex h-8 w-fit max-w-full items-center gap-1.5 rounded-md bg-dls-hover/45 px-3 text-xs text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
               }
               onClick={() => props.onCopyCommand(selectedInstallCommand)}
             >
@@ -1686,10 +1686,10 @@ function MatterhornMcpProductSection(props: {
             Setup and verify
           </summary>
           <div className="mt-3 min-w-0 border-l border-dls-border/30 pl-3">
-            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">Install command</div>
+            <div className="text-[10px] font-medium tracking-normal text-dls-secondary">Install command</div>
             <code className={props.compact
-              ? "mt-2 block max-w-full break-words rounded-xl bg-dls-surface/45 px-3 py-2 font-mono text-[10px] leading-4 text-dls-text"
-              : "mt-2 block max-w-full break-words rounded-xl bg-dls-surface/45 px-3 py-2 font-mono text-[11px] leading-5 text-dls-text"
+              ? "mt-2 block max-w-full break-words rounded-md bg-dls-surface/45 px-3 py-2 font-mono text-[10px] leading-4 text-dls-text"
+              : "mt-2 block max-w-full break-words rounded-md bg-dls-surface/45 px-3 py-2 font-mono text-[11px] leading-5 text-dls-text"
             }>
               {selectedInstallCommand}
             </code>
@@ -1697,7 +1697,7 @@ function MatterhornMcpProductSection(props: {
 
           <div className={props.compact ? "mt-3 space-y-3" : "mt-3 grid gap-4 @lg/matterhorn-mcps:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]"}>
             <div className="min-w-0">
-              <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">Setup</p>
+              <p className="text-[10px] font-medium tracking-normal text-dls-secondary">Setup</p>
               <ol className="mt-2 space-y-1.5 text-xs leading-5 text-dls-secondary">
                 {selectedClient.steps.map((step, index) => (
                   <li key={step} className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2">
@@ -1708,7 +1708,7 @@ function MatterhornMcpProductSection(props: {
               </ol>
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">Verify</p>
+              <p className="text-[10px] font-medium tracking-normal text-dls-secondary">Verify</p>
               <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
                 {selectedClient.verifyTools.map((tool) => (
                   <code key={tool} className={props.compact ? "max-w-full break-words rounded-md bg-dls-hover/45 px-1.5 py-0.5 font-mono text-[10px] text-dls-text" : "max-w-full break-words rounded-md bg-dls-hover/45 px-2 py-1 font-mono text-[10px] text-dls-text"}>
@@ -1747,7 +1747,7 @@ function MatterhornMcpProductSection(props: {
                     <h4 className={props.compact ? "truncate text-sm font-semibold text-dls-text" : "text-sm font-semibold text-dls-text"}>{card.name}</h4>
                     <p className={props.compact ? "mt-0.5 text-[11px] leading-4 text-dls-secondary" : "mt-1 max-w-2xl text-xs leading-5 text-dls-secondary"}>{card.description}</p>
                   </div>
-                  <span className={props.compact ? "shrink-0 rounded-full bg-dls-hover/45 px-2 py-0.5 text-[9px] uppercase tracking-[0.12em] text-dls-secondary" : "shrink-0 rounded-full bg-dls-hover/45 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-dls-secondary"}>
+                  <span className={props.compact ? "shrink-0 rounded-md bg-dls-hover/35 px-2 py-0.5 text-[9px] text-dls-secondary" : "shrink-0 rounded-md bg-dls-hover/35 px-2.5 py-1 text-[10px] text-dls-secondary"}>
                     {card.statusLabel ?? (card.backendBacked === false ? "Preview" : isProtocol ? "Protocol MCP" : "Server-backed")}
                   </span>
                 </div>
@@ -1755,7 +1755,7 @@ function MatterhornMcpProductSection(props: {
 
                 <div className={props.compact ? "mt-3 space-y-2" : "mt-4 grid gap-3 @lg/matterhorn-mcps:grid-cols-[minmax(0,1fr)_auto]"}>
                   <div className={props.compact ? "min-w-0 border-l border-dls-border/30 pl-3" : "min-w-0 border-l border-dls-border/30 pl-3"}>
-                    <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">Install command</div>
+                    <div className="text-[10px] font-medium tracking-normal text-dls-secondary">Install command</div>
                     <code className={props.compact
                       ? "mt-1 block max-w-full break-words font-mono text-[10px] leading-4 text-dls-text"
                       : "mt-1 block max-w-full break-words font-mono text-[11px] leading-5 text-dls-text"
@@ -1766,8 +1766,8 @@ function MatterhornMcpProductSection(props: {
                   <button
                     type="button"
                     className={props.compact
-                      ? "inline-flex w-fit items-center gap-1 rounded-full bg-dls-hover/55 px-2.5 py-1 text-[11px] text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
-                      : "inline-flex h-8 w-fit max-w-full items-center gap-1.5 self-start rounded-full bg-dls-hover/55 px-3 text-xs text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                      ? "inline-flex w-fit items-center gap-1 rounded-md bg-dls-hover/45 px-2.5 py-1 text-[11px] text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                      : "inline-flex h-8 w-fit max-w-full items-center gap-1.5 self-start rounded-md bg-dls-hover/45 px-3 text-xs text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
                     }
                     onClick={() => props.onCopyCommand(selectedInstallCommand)}
                   >
@@ -1971,7 +1971,7 @@ function McpConfiguredServersSection(props: {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-widest text-dls-secondary">
+        <h3 className="text-[11px] font-semibold tracking-normal text-dls-secondary">
           {t("mcp.your_apps")}
         </h3>
         {props.lastUpdatedAt ? (
