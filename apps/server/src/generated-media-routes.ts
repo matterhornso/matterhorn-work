@@ -42,6 +42,7 @@ import {
 } from "./generated-media-diagnostics.js";
 import { MatterhornGeneratedImageStore, imageFilePath } from "./generated-image-store.js";
 import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
+import { MatterhornBillingAccountStore } from "./billing-account-store.js";
 import { resolveNftEnvironmentConfig, type NftEnvironmentConfig } from "./image-nft-capabilities.js";
 import { recordAudit } from "./audit.js";
 import { recordTaskEvent } from "./task-events.js";
@@ -163,7 +164,7 @@ export function addGeneratedMediaRoutes(
     rejectSensitiveGeneratedMediaInput(body, { skipKeys: IMAGE_GENERATION_SECRET_SCAN_SKIP_KEYS });
     const input = validateImageGenerationInput(body);
     const store = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
-    requireGeneratedMediaEntitlement("image_generation", (await store.list()).length);
+    await requireGeneratedMediaEntitlement(workspace, "image_generation", (await store.list()).length);
 
     if (detectSecretShapedInput(input.prompt)) {
       throw new ApiError(400, "image_prompt_secret_rejected", "Prompt contains secret-shaped input.");
@@ -382,7 +383,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
-    requireGeneratedMediaEntitlement("walrus_storage", await countWalrusStorageUsage(store, draft.id));
+    await requireGeneratedMediaEntitlement(workspace, "walrus_storage", await countWalrusStorageUsage(store, draft.id));
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const publisherConfigured = Boolean(nftEnv.walrusPublisherUrl?.trim());
@@ -418,7 +419,7 @@ export function addGeneratedMediaRoutes(
     const imageStore = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const image = await imageStore.get(draft.imageId);
     if (!image) throw new ApiError(404, "image_not_found", "Generated image not found for this NFT draft.");
-    requireGeneratedMediaEntitlement("walrus_storage", await countWalrusStorageUsage(store, draft.id));
+    await requireGeneratedMediaEntitlement(workspace, "walrus_storage", await countWalrusStorageUsage(store, draft.id));
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const publisherConfigured = Boolean(nftEnv.walrusPublisherUrl?.trim());
@@ -521,7 +522,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
-    requireGeneratedMediaEntitlement("nft_mint_preview", await countMintPreviewUsage(store, draft.id));
+    await requireGeneratedMediaEntitlement(workspace, "nft_mint_preview", await countMintPreviewUsage(store, draft.id));
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const setupRequirements = buildMintSetupRequirements(nftEnv);
@@ -689,7 +690,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
-    requireGeneratedMediaEntitlement("nft_marketplace_listing", await countMarketplaceListingUsage(store, draft.id));
+    await requireGeneratedMediaEntitlement(workspace, "nft_marketplace_listing", await countMarketplaceListingUsage(store, draft.id));
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const setupRequirements = buildListingSetupRequirements(nftEnv);
@@ -888,9 +889,16 @@ function requireClientScope(ctx: RequestContext, required: TokenScope): void {
   }
 }
 
-function requireGeneratedMediaEntitlement(key: MatterhornEntitlementKey, used: number): void {
+async function requireGeneratedMediaEntitlement(workspace: WorkspaceInfo, key: MatterhornEntitlementKey, used: number): Promise<void> {
   const billingConfig = resolveBillingProviderConfigFromEnv(process.env);
-  const check = checkMatterhornBillingEntitlement(billingConfig, key, used);
+  const account = await new MatterhornBillingAccountStore({
+    workspaceRoot: workspace.path,
+    workspaceId: workspace.id,
+  }).get();
+  const effectiveBillingConfig = account
+    ? { ...billingConfig, currentPlanId: account.subscription.planId }
+    : billingConfig;
+  const check = checkMatterhornBillingEntitlement(effectiveBillingConfig, key, used);
   if (check.allowed) return;
 
   const status = check.reason === "limit_reached" ? 429 : 402;
@@ -911,9 +919,9 @@ function requireGeneratedMediaEntitlement(key: MatterhornEntitlementKey, used: n
     used: check.used,
     limit: check.limit,
     reason: check.reason,
-    billingMode: billingConfig.mode,
-    provider: billingConfig.provider,
-    livePaymentsEnabled: billingConfig.livePaymentsEnabled,
+    billingMode: effectiveBillingConfig.mode,
+    provider: effectiveBillingConfig.provider,
+    livePaymentsEnabled: effectiveBillingConfig.livePaymentsEnabled,
   });
 }
 
