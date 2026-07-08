@@ -61,11 +61,36 @@ export interface MatterhornBillingUsageSnapshot {
   cloudStorageBytes: { used: number; limit: number | null };
 }
 
+export type MatterhornBillingSetupCheckId =
+  | "mock_mode"
+  | "stripe_secret_key"
+  | "stripe_webhook_secret"
+  | "stripe_plus_price"
+  | "stripe_max_price"
+  | "live_payments_disabled";
+
+export interface MatterhornBillingSetupCheck {
+  id: MatterhornBillingSetupCheckId;
+  label: string;
+  status: MatterhornCapabilityStatus;
+  description: string;
+}
+
+export interface MatterhornBillingSetup {
+  mode: MatterhornBillingMode;
+  provider: MatterhornBillingProvider;
+  readyForTestCheckout: boolean;
+  readyForWebhooks: boolean;
+  livePaymentsEnabled: false;
+  checks: MatterhornBillingSetupCheck[];
+}
+
 export interface MatterhornBillingStatus {
   mode: MatterhornBillingMode;
   provider: MatterhornBillingProvider;
   subscription: MatterhornBillingSubscription;
   usage: MatterhornBillingUsageSnapshot;
+  setup: MatterhornBillingSetup;
   isLivePaymentsEnabled: false;
 }
 
@@ -76,6 +101,7 @@ export interface MatterhornBillingCapability extends MatterhornCapability {
   isLivePaymentsEnabled: false;
   checkoutSupported: boolean;
   portalSupported: boolean;
+  setup: MatterhornBillingSetup;
 }
 
 export interface MatterhornBillingPlansResponse {

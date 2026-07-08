@@ -10,6 +10,8 @@ import type {
   MatterhornBillingPortalRequest,
   MatterhornBillingPortalResponse,
   MatterhornBillingProvider,
+  MatterhornBillingSetup,
+  MatterhornBillingSetupCheck,
   MatterhornBillingStatus,
   MatterhornBillingStatusResponse,
   MatterhornBillingSubscription,
@@ -141,6 +143,82 @@ function planLimit(planId: MatterhornBillingPlanId, key: MatterhornEntitlementKe
   return value === undefined ? 0 : value;
 }
 
+function setupCheck(input: MatterhornBillingSetupCheck): MatterhornBillingSetupCheck {
+  return input;
+}
+
+export function buildMatterhornBillingSetup(config: BillingProviderConfig): MatterhornBillingSetup {
+  if (config.mode === "phase0_mock" || config.provider === "mock") {
+    return {
+      mode: config.mode,
+      provider: config.provider,
+      readyForTestCheckout: true,
+      readyForWebhooks: false,
+      livePaymentsEnabled: false,
+      checks: [
+        setupCheck({
+          id: "mock_mode",
+          label: "Mock checkout",
+          status: "preview",
+          description: "Plan changes are local test state only. No payment provider is contacted.",
+        }),
+        setupCheck({
+          id: "live_payments_disabled",
+          label: "Live payments",
+          status: "working",
+          description: "Live payments are disabled in this build.",
+        }),
+      ],
+    };
+  }
+
+  const hasSecretKey = Boolean(config.stripeSecretKey?.trim());
+  const hasWebhookSecret = Boolean(config.stripeWebhookSecret?.trim());
+  const hasPlusPrice = Boolean(config.stripePriceIds?.plus?.trim());
+  const hasMaxPrice = Boolean(config.stripePriceIds?.max?.trim());
+  const readyForTestCheckout = config.mode === "phase1_stripe_test" && hasSecretKey && hasPlusPrice && hasMaxPrice;
+
+  return {
+    mode: config.mode,
+    provider: config.provider,
+    readyForTestCheckout,
+    readyForWebhooks: config.mode === "phase1_stripe_test" && hasWebhookSecret,
+    livePaymentsEnabled: false,
+    checks: [
+      setupCheck({
+        id: "stripe_secret_key",
+        label: "Stripe secret key",
+        status: hasSecretKey ? "working" : "needs_setup",
+        description: hasSecretKey ? "Configured for test-mode billing calls." : "Set MATTERHORN_STRIPE_SECRET_KEY for Stripe test checkout.",
+      }),
+      setupCheck({
+        id: "stripe_webhook_secret",
+        label: "Stripe webhook secret",
+        status: hasWebhookSecret ? "working" : "needs_setup",
+        description: hasWebhookSecret ? "Configured for test webhook verification." : "Set MATTERHORN_STRIPE_WEBHOOK_SECRET before syncing subscription webhooks.",
+      }),
+      setupCheck({
+        id: "stripe_plus_price",
+        label: "Plus price",
+        status: hasPlusPrice ? "working" : "needs_setup",
+        description: hasPlusPrice ? "Stripe test price is configured for Matterhorn Plus." : "Set MATTERHORN_STRIPE_PRICE_ID_PLUS.",
+      }),
+      setupCheck({
+        id: "stripe_max_price",
+        label: "Max price",
+        status: hasMaxPrice ? "working" : "needs_setup",
+        description: hasMaxPrice ? "Stripe test price is configured for Matterhorn Max." : "Set MATTERHORN_STRIPE_PRICE_ID_MAX.",
+      }),
+      setupCheck({
+        id: "live_payments_disabled",
+        label: "Live payments",
+        status: "working",
+        description: "Live payments are disabled even when Stripe test configuration is present.",
+      }),
+    ],
+  };
+}
+
 export function buildPlanEntitlements(planId: MatterhornBillingPlanId): MatterhornEntitlement[] {
   return ENTITLEMENT_ORDER.map((key) => {
     const limit = planLimit(planId, key);
@@ -260,6 +338,7 @@ export function buildMatterhornBillingStatus(planId: MatterhornBillingPlanId, co
     provider: config.provider,
     subscription: buildMatterhornBillingSubscription(planId),
     usage: buildMatterhornBillingUsageSnapshotForPlan(planId),
+    setup: buildMatterhornBillingSetup(config),
     isLivePaymentsEnabled: false,
   };
 }
@@ -285,28 +364,34 @@ export function buildMatterhornBillingStatusForSubscription(
     provider: config.provider,
     subscription,
     usage: buildMatterhornBillingUsageSnapshotForPlan(subscription.planId, usage),
+    setup: buildMatterhornBillingSetup(config),
     isLivePaymentsEnabled: false,
   };
 }
 
 export function buildMatterhornBillingCapability(config: BillingProviderConfig): MatterhornBillingCapability {
-  const checkoutSupported = config.mode !== "live" && config.provider !== "mock";
+  const setup = buildMatterhornBillingSetup(config);
+  const checkoutSupported = config.mode === "phase0_mock" || setup.readyForTestCheckout;
   const portalSupported = checkoutSupported;
+  const stripeSetupNeedsWork = config.provider === "stripe" && !setup.readyForTestCheckout;
   return {
-    status: config.mode === "phase0_mock" ? "preview" : config.mode === "phase1_stripe_test" ? "working" : "needs_setup",
+    status: config.mode === "phase0_mock" ? "preview" : stripeSetupNeedsWork ? "needs_setup" : config.mode === "phase1_stripe_test" ? "working" : "needs_setup",
     label: "Billing",
     description:
       config.mode === "phase0_mock"
         ? "Billing is in mock mode. No real charges are processed."
-        : config.mode === "phase1_stripe_test"
+        : config.mode === "phase1_stripe_test" && !stripeSetupNeedsWork
           ? "Billing is in Stripe test mode. No live charges are processed."
-          : "Live payments are not enabled.",
+          : config.mode === "phase1_stripe_test"
+            ? "Stripe test billing needs setup. No live charges are processed."
+        : "Live payments are not enabled.",
     mode: config.mode,
     provider: config.provider,
     currentPlanId: config.currentPlanId,
     isLivePaymentsEnabled: false,
     checkoutSupported,
     portalSupported,
+    setup,
     details: {
       livePaymentsEnabled: false,
       plansAvailable: ["free", "plus", "max"],
