@@ -109,13 +109,17 @@ export interface BittensorActionQuote {
 
 export interface BittensorSubtensorSidecarStatus {
   configured: boolean;
-  status: "healthy" | "unreachable" | "disabled";
+  status: "healthy" | "unreachable" | "unconfigured" | "disabled";
   message?: string;
   source?: string;
   network?: string;
   endpoint?: string;
   block?: number | null;
   freshness?: string | null;
+  canRead?: boolean;
+  canPrepare?: boolean;
+  canSubmit?: boolean;
+  reachable?: boolean;
 }
 
 export interface BittensorSubtensorSidecarHealth extends BittensorSubtensorSidecarStatus {

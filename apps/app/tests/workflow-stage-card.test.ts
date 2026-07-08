@@ -5,6 +5,10 @@ function readAppSource(path: string) {
   return readFileSync(new URL(`../src/react-app/${path}`, import.meta.url), "utf8");
 }
 
+function readAppLibSource(path: string) {
+  return readFileSync(new URL(`../src/app/${path}`, import.meta.url), "utf8");
+}
+
 function readShellSource(path: string) {
   return readFileSync(new URL(`../src/react-app/shell/${path}`, import.meta.url), "utf8");
 }
@@ -244,6 +248,22 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("actionTitle={startTaskBlocker ?? inputRequirement?.helpText ?? undefined}");
     expect(src).toContain("getDeskTaskInputRequirement(item.prompt)");
     expect(src).toContain("buildDeskTaskPromptWithInput(pendingInput.prompt, pendingInput.requirement, taskInputValue)");
+  });
+
+  test("Bittensor desk reports live provider readiness without blocking fallback task launch", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+    const clientSrc = readAppLibSource("lib/matterhorn-server.ts");
+
+    expect(clientSrc).toContain("bittensorSidecarHealth");
+    expect(clientSrc).toContain("/api/bittensor/sidecar/health");
+    expect(src).toContain("bittensor-sidecar-health");
+    expect(src).toContain("matterhornServerClient.bittensorSidecarHealth()");
+    expect(src).toContain("bittensorSidecarNotice");
+    expect(src).toContain("Bittensor live provider unreachable");
+    expect(src).toContain("Tasks still start; live TAO reads may fail until it returns.");
+    expect(src).toContain("Tasks still start with public and fallback data.");
+    expect(src).toContain("providerNotice");
+    expect(src).not.toContain("blockingCheckIds.includes(\"bittensor");
   });
 
   test("route-level task launcher reports setup failures instead of silently returning", () => {

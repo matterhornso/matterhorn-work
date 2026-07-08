@@ -32,11 +32,12 @@ import { getDisplaySessionTitle } from "../../../../app/lib/session-title";
 import type { BootPhase } from "../../../../app/lib/startup-boot";
 import type { WorkspaceInfo } from "../../../../app/lib/desktop";
 import type {
+  BittensorSubtensorSidecarHealth,
   MatterhornBackendCapabilitiesResponse,
   MatterhornCapabilityStatus,
   MatterhornWalletRuntime,
   MatterhornWalletRuntimeSupport,
-} from "@matterhorn-work/types/backend-capabilities";
+} from "@matterhorn-work/types";
 import {
   backendCapabilityLabel,
   walletFamilySummary,
@@ -710,6 +711,35 @@ function WorkflowDeskHomeSurface({
   );
 }
 
+function bittensorSidecarNotice(
+  health: BittensorSubtensorSidecarHealth | null | undefined,
+  failed: boolean,
+) {
+  if (failed) {
+    return {
+      label: "Bittensor provider check unavailable",
+      detail: "Tasks still start, but live TAO reads may fall back.",
+      tone: "warning" as const,
+    };
+  }
+  if (!health || health.status === "healthy") return null;
+  if (health.status === "unreachable") {
+    return {
+      label: "Bittensor live provider unreachable",
+      detail: "Tasks still start; live TAO reads may fail until it returns.",
+      tone: "warning" as const,
+    };
+  }
+  if (health.status === "unconfigured" || health.status === "disabled") {
+    return {
+      label: "Bittensor live provider not configured",
+      detail: "Tasks still start with public and fallback data.",
+      tone: "info" as const,
+    };
+  }
+  return null;
+}
+
 function ProtocolDeskEmptyState({
   panel,
   matterhornServerClient,
@@ -745,6 +775,16 @@ function ProtocolDeskEmptyState({
       return matterhornServerClient.workspaceReadiness(readinessWorkspaceId);
     },
   });
+  const bittensorSidecarQuery = useQuery({
+    queryKey: ["bittensor-sidecar-health"],
+    enabled: panel === "bittensor" && Boolean(matterhornServerClient),
+    staleTime: 30_000,
+    retry: false,
+    queryFn: async () => {
+      if (!matterhornServerClient) throw new Error("Matterhorn Work engine is offline.");
+      return matterhornServerClient.bittensorSidecarHealth();
+    },
+  });
   const startTaskFeature = readinessQuery.data?.features.start_desk_task;
   const startTaskBlocked = Boolean(
     !matterhornServerClient ||
@@ -767,6 +807,9 @@ function ProtocolDeskEmptyState({
       : panel === "sui"
         ? "Runs public Sui account reads and transfer previews. Web signing happens in your connected Sui wallet; desktop signing stays external."
         : "Runs read-only market/account checks and prepares external-client handoffs. Matterhorn never submits orders inside the app.";
+  const providerNotice = panel === "bittensor"
+    ? bittensorSidecarNotice(bittensorSidecarQuery.data?.health, bittensorSidecarQuery.isError)
+    : null;
 
   const startTask = useCallback((prompt: string, title: string) => {
     setLaunchingTaskTitle(title);
@@ -867,6 +910,25 @@ function ProtocolDeskEmptyState({
         <div className="mx-1 flex items-start gap-2 rounded-md bg-dls-surface-muted/35 px-3 py-2 text-xs leading-5 text-dls-secondary">
           <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" />
           <span>{startTaskBlocker}</span>
+        </div>
+      ) : null}
+      {providerNotice ? (
+        <div
+          className={cn(
+            "mx-1 flex items-center gap-2 rounded-md px-3 py-2 text-xs leading-5",
+            providerNotice.tone === "warning"
+              ? "bg-amber-500/[0.08] text-amber-100"
+              : "bg-dls-surface-muted/35 text-dls-secondary",
+          )}
+          role="status"
+        >
+          {providerNotice.tone === "warning" ? (
+            <AlertCircle className="size-3.5 shrink-0 text-amber-200" aria-hidden="true" />
+          ) : (
+            <ShieldCheck className="size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" aria-hidden="true" />
+          )}
+          <span className="font-semibold text-dls-text">{providerNotice.label}</span>
+          <span className="min-w-0 truncate text-dls-secondary">{providerNotice.detail}</span>
         </div>
       ) : null}
       {launchingTaskTitle ? (

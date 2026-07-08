@@ -11,6 +11,7 @@ import type {
   MatterhornNoteListOptions,
   MatterhornNoteMemorySuggestionRequest,
   MatterhornNoteUpdateRequest,
+  BittensorSubtensorSidecarHealth,
 } from "@matterhorn-work/types";
 import type {
   MatterhornProjectEvidenceListOptions,
@@ -1408,6 +1409,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       requestJson<MatterhornBackendSupportReportResponse>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/backend/support-report`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      ),
+    bittensorSidecarHealth: () =>
+      requestJson<{ success: boolean; health: BittensorSubtensorSidecarHealth }>(
+        baseUrl,
+        "/api/bittensor/sidecar/health",
         { token, hostToken, timeoutMs: timeouts.status },
       ),
     googleWorkspaceStatus: () => requestJson<GoogleWorkspaceAuthStatus>(baseUrl, "/experimental/google-workspace/status", { token, hostToken, timeoutMs: timeouts.status }),
