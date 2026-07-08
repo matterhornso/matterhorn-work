@@ -149,7 +149,7 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="flex shrink-0 flex-col gap-3 border-b border-dls-border/45 px-4 py-4 sm:px-6">
+      <header className="flex shrink-0 flex-col gap-3 bg-dls-surface/35 px-4 py-4 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold text-dls-text">
@@ -183,9 +183,12 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
               <Button
                 key={filter.id}
                 type="button"
-                variant={filterId === filter.id ? "default" : "outline"}
+                variant="ghost"
                 size="sm"
-                className="h-8 px-2.5 text-xs"
+                className={cn(
+                  "h-8 bg-transparent px-2.5 text-xs hover:bg-dls-hover/35",
+                  filterId === filter.id && "bg-dls-hover/55 text-dls-text hover:bg-dls-hover/55",
+                )}
                 onClick={() => setFilterId(filter.id)}
               >
                 {t(filter.label)}
@@ -208,7 +211,7 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
       </header>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="flex w-full min-w-0 flex-col border-r border-dls-border/45 md:w-72 lg:w-80">
+        <div className="flex w-full min-w-0 flex-col bg-dls-surface/20 md:w-72 lg:w-80">
           <ScrollArea>
             {filteredNotes.length === 0 ? (
               <NotesEmptyState
@@ -229,7 +232,7 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
                     className={cn(
                       "flex flex-col gap-1 rounded-md px-3 py-2.5 text-left transition-colors",
                       selectedNoteId === note.id
-                        ? "bg-primary/10 ring-1 ring-primary/25"
+                        ? "bg-dls-hover/55"
                         : "bg-transparent hover:bg-dls-hover/45",
                     )}
                   >
@@ -262,7 +265,7 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
         <div className="hidden min-w-0 flex-1 flex-col md:flex">
           {selectedNote ? (
             <>
-              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-dls-border/45 px-4 py-3">
+              <div className="flex shrink-0 items-center justify-between gap-2 bg-dls-surface/25 px-4 py-3">
                 <div className="flex min-w-0 items-center gap-2">
                   {selectedAttachment ? (
                     <NoteAttachmentChip

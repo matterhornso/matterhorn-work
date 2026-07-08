@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import type { ReactNode } from "react";
+import { CheckCircle2 } from "lucide-react";
 
 import { t } from "../../../i18n";
 import {
@@ -74,16 +75,15 @@ type WelcomePageProps = {
 };
 
 type OnboardingStepProps = {
-  number: string;
   title: string;
   children: ReactNode;
 };
 
-function OnboardingStep({ number, title, children }: OnboardingStepProps) {
+function OnboardingStep({ title, children }: OnboardingStepProps) {
   return (
     <div className="flex items-start gap-4">
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground/5 text-sm font-medium text-foreground">
-        {number}
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-foreground/5 text-foreground">
+        <CheckCircle2 className="size-4" aria-hidden="true" />
       </div>
       <div className="flex flex-col gap-0.5 pt-1">
         <div className="text-base font-medium text-foreground">{title}</div>
@@ -118,13 +118,13 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
                   Get started
                 </h2>
               </div>
-              <OnboardingStep number="1" title="Create your workspace">
+              <OnboardingStep title="Create your workspace">
                 Pick a folder where Matterhorn saves chats, artifacts, receipts, QA evidence, and workflow files.
               </OnboardingStep>
-              <OnboardingStep number="2" title="Choose a product lane">
+              <OnboardingStep title="Choose a product lane">
                 Open Bittensor, Hyperliquid, Polymarket, longevity workflows, or a blank chat.
               </OnboardingStep>
-              <OnboardingStep number="3" title="Review before action">
+              <OnboardingStep title="Review before action">
                 Inspect evidence and external-signer handoffs before anything sensitive happens. Matterhorn never holds your keys.
               </OnboardingStep>
             </div>

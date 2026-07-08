@@ -146,7 +146,7 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
           <Button
             onClick={handleParse}
             disabled={loading || !intent.trim()}
-            className="bg-violet-500 hover:bg-violet-600 text-white shrink-0 h-11 px-4 shadow-lg shadow-violet-500/20"
+            className="h-11 shrink-0 px-4"
           >
             {loading ? (
               <div className="flex items-center gap-1.5">
@@ -159,7 +159,7 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
           </Button>
         </div>
         {parseError && (
-          <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-xs text-red-300">
+          <div className="flex items-center gap-2 rounded-lg bg-red-500/5 px-3 py-2.5 text-xs text-red-300">
             <div className="flex size-5 items-center justify-center rounded-md bg-red-500/10">
               <span className="text-red-400 font-bold">!</span>
             </div>
@@ -170,7 +170,7 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
 
       {/* Preview card */}
       {preview && (
-        <div className="ow-soft-card border-violet-500/30 p-4 space-y-3 animate-slide-up">
+        <div className="ow-soft-card p-4 space-y-3 animate-slide-up">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="flex size-7 items-center justify-center rounded-lg bg-violet-500/10">
@@ -179,8 +179,8 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
               <span className="text-sm font-semibold text-dls-text">{preview.name}</span>
             </div>
             <span className={cn(
-              "text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider",
-              preview.type === "recurring" ? "bg-violet-500/10 text-violet-400 border border-violet-500/20" : "bg-dls-surface text-dls-secondary border border-dls-border"
+              "rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wider",
+              preview.type === "recurring" ? "bg-violet-500/10 text-violet-300" : "bg-dls-surface-muted/25 text-dls-secondary"
             )}>
               {preview.type}
             </span>
@@ -198,8 +198,8 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
             </div>
           </div>
           <div className="flex gap-2 pt-1">
-            <Button variant="outline" size="sm" onClick={() => setPreview(null)} className="flex-1 rounded-xl">Cancel</Button>
-            <Button size="sm" onClick={handleConfirm} className="flex-1 bg-violet-500 hover:bg-violet-600 text-white rounded-xl shadow-lg shadow-violet-500/20">Add Job</Button>
+            <Button variant="ghost" size="sm" onClick={() => setPreview(null)} className="flex-1 bg-transparent hover:bg-dls-hover/35">Cancel</Button>
+            <Button size="sm" onClick={handleConfirm} className="flex-1">Add Job</Button>
           </div>
         </div>
       )}
@@ -377,4 +377,3 @@ function JobCard({
     </div>
   );
 }
-

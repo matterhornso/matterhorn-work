@@ -125,7 +125,7 @@ export function DeskWorkflowStagePanel({
   return (
     <div className="w-full space-y-3 px-2 py-3 sm:px-3 sm:py-4" style={deskToneStyle(deskId)}>
       {/* Agent header */}
-      <div className="flex min-w-0 items-start gap-3 rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5">
+      <div className="flex min-w-0 items-start gap-3 rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.06)] px-3.5 py-3.5">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
           <ProtocolBrandLogo id={deskId} size={30} />
         </span>
@@ -152,22 +152,21 @@ export function DeskWorkflowStagePanel({
                 <p>{visual.sessionBoundary}</p>
               </PopoverContent>
             </Popover>
-            <span className={`text-[11px] font-semibold ${STATUS_TONE[taskStatus] ?? STATUS_TONE.idle}`}>
-              {STATUS_LABELS[taskStatus] ?? taskStatus}
-            </span>
+            {taskStatus !== "idle" ? (
+              <span className={`text-[11px] font-semibold ${STATUS_TONE[taskStatus] ?? STATUS_TONE.idle}`}>
+                {STATUS_LABELS[taskStatus] ?? taskStatus}
+              </span>
+            ) : null}
           </div>
           <p className="mt-1 text-[12px] leading-5 text-dls-secondary">{visual.agentDescription}</p>
           <p className="mt-1 text-[11px] leading-4 text-dls-muted">
-            Workflow: {manifest.name} · {manifest.steps.length} stages · {visual.statusLabel}
+            {manifest.steps.length} stages
           </p>
         </div>
       </div>
 
       {/* Workflow stages */}
       <section className="matterhorn-desk-workflow-stages space-y-2" aria-label={`${visual.displayName} workflow stages`}>
-        <p className="px-1 text-[11px] text-[var(--matterhorn-desk-color)]">
-          {manifest.steps.length} stages
-        </p>
         <div className="space-y-2">
           {manifest.steps.map((step, index) => {
             const isCurrent = currentStageId === step.id || (currentStageId === undefined && index === 0 && taskStatus === "idle");
@@ -193,43 +192,53 @@ export function DeskWorkflowStagePanel({
         </div>
       </section>
 
-      {/* Inputs */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        {requiredInputs.length ? (
-          <div className="rounded-lg bg-dls-surface-muted/30 px-3 py-3">
-            <p className="mb-1.5 text-[11px] font-semibold text-dls-text">Required inputs</p>
-            <ul className="space-y-1.5">
-              {requiredInputs.map((input) => (
-                <li key={input.id} className="text-[11px] leading-4 text-dls-secondary">
-                  <span className="font-medium text-dls-text">{input.label}</span>
-                  {input.helpText ? <span className="block text-dls-muted">{input.helpText}</span> : null}
-                </li>
-              ))}
-            </ul>
+      {requiredInputs.length || optionalInputs.length ? (
+        <details className="group rounded-md bg-dls-surface-muted/15 px-3 py-2">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-dls-secondary marker:hidden hover:text-dls-text">
+            <span>Inputs and context</span>
+            <span className="transition-transform group-open:rotate-90" aria-hidden="true">{">"}</span>
+          </summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {requiredInputs.length ? (
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold text-dls-text">Required inputs</p>
+                <ul className="space-y-1.5">
+                  {requiredInputs.map((input) => (
+                    <li key={input.id} className="text-[11px] leading-4 text-dls-secondary">
+                      <span className="font-medium text-dls-text">{input.label}</span>
+                      {input.helpText ? <span className="block text-dls-muted">{input.helpText}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {optionalInputs.length ? (
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold text-dls-text">Optional context</p>
+                <ul className="space-y-1.5">
+                  {optionalInputs.map((input) => (
+                    <li key={input.id} className="text-[11px] leading-4 text-dls-secondary">
+                      <span className="font-medium text-dls-text">{input.label}</span>
+                      {input.helpText ? <span className="block text-dls-muted">{input.helpText}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
-        ) : null}
-        {optionalInputs.length ? (
-          <div className="rounded-lg bg-dls-surface-muted/30 px-3 py-3">
-            <p className="mb-1.5 text-[11px] font-semibold text-dls-text">Optional context</p>
-            <ul className="space-y-1.5">
-              {optionalInputs.map((input) => (
-                <li key={input.id} className="text-[11px] leading-4 text-dls-secondary">
-                  <span className="font-medium text-dls-text">{input.label}</span>
-                  {input.helpText ? <span className="block text-dls-muted">{input.helpText}</span> : null}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </div>
+        </details>
+      ) : null}
 
       {/* Expected outputs */}
-      <div className="rounded-lg bg-dls-surface-muted/30 px-3 py-3">
-        <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-dls-text">
+      <details className="group rounded-md bg-dls-surface-muted/15 px-3 py-2.5">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-semibold text-dls-text marker:hidden hover:text-dls-text">
+          <span className="flex items-center gap-1.5">
           <FileOutput className="size-3.5" />
           Expected outputs
-        </p>
-        <ul className="grid gap-1 sm:grid-cols-2">
+          </span>
+          <span className="text-dls-secondary transition-transform group-open:rotate-90" aria-hidden="true">{">"}</span>
+        </summary>
+        <ul className="mt-2 grid gap-1 sm:grid-cols-2">
           {manifest.generatedArtifacts.map((artifact) => (
             <li key={artifact.id} className="flex items-start gap-1.5 text-[11px] leading-4 text-dls-secondary">
               <FileText className="mt-0.5 size-3 shrink-0 text-dls-muted" />
@@ -243,10 +252,10 @@ export function DeskWorkflowStagePanel({
         <p className="mt-2 text-[11px] leading-4 text-dls-muted">
           Outputs save under <span className="font-medium text-dls-text">outputs/{visual.outputDeskId}/&lt;session-slug&gt;/</span>.
         </p>
-      </div>
+      </details>
 
       {/* Next action */}
-      <div className="flex items-center justify-between rounded-lg border border-dls-border/45 bg-dls-surface/50 px-3 py-2.5">
+      <div className="flex items-center justify-between rounded-lg bg-dls-surface-muted/10 px-3 py-2.5">
         <span className="text-[11px] text-dls-secondary">
           {taskStatus === "completed"
             ? "Workflow complete. Start a new task or refine the outputs."

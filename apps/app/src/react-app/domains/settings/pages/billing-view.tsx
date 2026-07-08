@@ -48,15 +48,15 @@ function PlanCard(props: {
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-4 rounded-lg border p-4",
+        "relative flex flex-col gap-4 rounded-lg p-4",
         props.current
-          ? "border-dls-border/80 bg-dls-surface"
-          : "border-dls-border/40 bg-dls-surface/50",
-        props.plan.popular && !props.current && "border-amber-500/30",
+          ? "bg-dls-hover/35 ring-1 ring-dls-border/35"
+          : "bg-dls-surface-muted/15",
+        props.plan.popular && !props.current && "ring-1 ring-amber-500/20",
       )}
     >
       {props.plan.popular ? (
-        <span className="absolute -top-2 right-3 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+        <span className="absolute right-3 top-3 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
           Popular
         </span>
       ) : null}
@@ -211,7 +211,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
         <h3 className="text-sm font-medium text-dls-text">Usage</h3>
         <div className="flex flex-col gap-2">
           {usageItems.map((item) => (
-            <div key={item.label} className="flex items-center justify-between rounded-md border border-dls-border/40 p-3">
+            <div key={item.label} className="flex items-center justify-between rounded-md bg-dls-surface-muted/15 px-3 py-2.5">
               <span className="text-xs text-dls-secondary">{item.label}</span>
               <span className="text-xs font-medium text-dls-text">
                 {formatEntitlementUsage(item.used, item.limit)}
