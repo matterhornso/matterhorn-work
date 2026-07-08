@@ -156,6 +156,9 @@ beforeEach(() => {
     MATTERHORN_SUI_KIOSK_OWNER_CAP_ID: process.env.MATTERHORN_SUI_KIOSK_OWNER_CAP_ID,
     MATTERHORN_SUI_TRANSFER_POLICY_ID: process.env.MATTERHORN_SUI_TRANSFER_POLICY_ID,
     MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID: process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID,
+    MATTERHORN_BILLING_MODE: process.env.MATTERHORN_BILLING_MODE,
+    MATTERHORN_BILLING_PROVIDER: process.env.MATTERHORN_BILLING_PROVIDER,
+    MATTERHORN_BILLING_CURRENT_PLAN: process.env.MATTERHORN_BILLING_CURRENT_PLAN,
     OPENWORK_DATA_DIR: process.env.OPENWORK_DATA_DIR,
   };
   process.env.MATTERHORN_IMAGE_PROVIDER = "mock";
@@ -173,6 +176,9 @@ beforeEach(() => {
   delete process.env.MATTERHORN_SUI_KIOSK_OWNER_CAP_ID;
   delete process.env.MATTERHORN_SUI_TRANSFER_POLICY_ID;
   delete process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID;
+  delete process.env.MATTERHORN_BILLING_MODE;
+  delete process.env.MATTERHORN_BILLING_PROVIDER;
+  delete process.env.MATTERHORN_BILLING_CURRENT_PLAN;
   delete process.env.OPENWORK_DATA_DIR;
 });
 
@@ -485,6 +491,7 @@ describe("Generated media routes", () => {
   });
 
   test("DELETE refuses NFT drafts with public storage state", async () => {
+    process.env.MATTERHORN_BILLING_CURRENT_PLAN = "max";
     const publisher = bootWalrusPublisher({
       newlyCreated: {
         blobObject: {
@@ -654,7 +661,146 @@ describe("Generated media routes", () => {
   });
 });
 
+describe("Generated media billing entitlements", () => {
+  async function createDraft(base: string) {
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "a billing-gated workspace image" }),
+    });
+    const imageId = generated.payload.image.id;
+    const draft = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${imageId}/nft-draft`, {
+      method: "POST",
+      body: JSON.stringify({ title: "Billing gated NFT", listingPriceMist: "1000" }),
+    });
+    return { image: generated.payload.image, draft: draft.payload.draft };
+  }
+
+  test("Free plan allows local image generation until the included allowance is reached", async () => {
+    const { base } = await boot();
+
+    for (let index = 0; index < 10; index += 1) {
+      const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+        method: "POST",
+        body: JSON.stringify({ prompt: `free allowance image ${index}` }),
+      });
+      expect(generated.response.status).toBe(200);
+      expect(generated.payload.success).toBe(true);
+    }
+
+    const blocked = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "one image over the free allowance" }),
+    });
+
+    expect(blocked.response.status).toBe(429);
+    expect(blocked.payload.code).toBe("billing_entitlement_limit_reached");
+    expect(blocked.payload.details).toMatchObject({
+      entitlementKey: "image_generation",
+      currentPlanId: "free",
+      used: 10,
+      limit: 10,
+      reason: "limit_reached",
+    });
+  });
+
+  test("Free plan keeps local NFT drafts but blocks public NFT and Walrus preparation", async () => {
+    const publisher = bootWalrusPublisher({ newlyCreated: { blobObject: { blobId: "should_not_upload" } } });
+    process.env.MATTERHORN_WALRUS_PUBLISHER_URL = publisher.url;
+    process.env.MATTERHORN_WALRUS_RELAY_URL = "https://relay.example.test";
+    process.env.MATTERHORN_SUI_NFT_PACKAGE_ID = "0x1234";
+    process.env.MATTERHORN_SUI_KIOSK_PACKAGE_ID = "0x4567";
+    process.env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID = "0x8910";
+    const { base } = await boot();
+    const { draft } = await createDraft(base);
+
+    const storagePrepare = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/storage/prepare`, {
+      method: "POST",
+    });
+    expect(storagePrepare.response.status).toBe(402);
+    expect(storagePrepare.payload.code).toBe("billing_entitlement_required");
+    expect(storagePrepare.payload.details).toMatchObject({
+      entitlementKey: "walrus_storage",
+      currentPlanId: "free",
+      requiredPlanIds: ["max"],
+      reason: "not_included",
+    });
+
+    const storageUpload = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/storage/upload`, {
+      method: "POST",
+    });
+    expect(storageUpload.response.status).toBe(402);
+    expect(storageUpload.payload.details.entitlementKey).toBe("walrus_storage");
+    expect(publisher.calls).toHaveLength(0);
+
+    const mintPreview = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/preview`, {
+      method: "POST",
+    });
+    expect(mintPreview.response.status).toBe(402);
+    expect(mintPreview.payload.details).toMatchObject({
+      entitlementKey: "nft_mint_preview",
+      currentPlanId: "free",
+      requiredPlanIds: ["plus", "max"],
+      reason: "not_included",
+    });
+
+    const listingPreview = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/preview`, {
+      method: "POST",
+      body: JSON.stringify({
+        objectId: "0xabc",
+        nftType: "0x1234::matterhorn_media::MatterhornNFT",
+        kioskId: "0x4568",
+        kioskOwnerCapId: "0x4569",
+        transferPolicyId: "0x8911",
+        priceMist: "1000",
+      }),
+    });
+    expect(listingPreview.response.status).toBe(402);
+    expect(listingPreview.payload.details).toMatchObject({
+      entitlementKey: "nft_marketplace_listing",
+      currentPlanId: "free",
+      requiredPlanIds: ["max"],
+      reason: "not_included",
+    });
+  });
+
+  test("Plus plan allows mint preview checks but keeps Walrus and marketplace actions on Max", async () => {
+    process.env.MATTERHORN_BILLING_CURRENT_PLAN = "plus";
+    const { base } = await boot();
+    const { draft } = await createDraft(base);
+
+    const mintPreview = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/preview`, {
+      method: "POST",
+    });
+    expect(mintPreview.response.status).toBe(503);
+    expect(mintPreview.payload.code).toBe("sui_nft_package_needs_setup");
+
+    const storagePrepare = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/storage/prepare`, {
+      method: "POST",
+    });
+    expect(storagePrepare.response.status).toBe(402);
+    expect(storagePrepare.payload.details).toMatchObject({
+      entitlementKey: "walrus_storage",
+      currentPlanId: "plus",
+      requiredPlanIds: ["max"],
+    });
+
+    const listingPreview = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/listing/preview`, {
+      method: "POST",
+    });
+    expect(listingPreview.response.status).toBe(402);
+    expect(listingPreview.payload.details).toMatchObject({
+      entitlementKey: "nft_marketplace_listing",
+      currentPlanId: "plus",
+      requiredPlanIds: ["max"],
+    });
+  });
+});
+
 describe("Generated media Sui NFT setup previews", () => {
+  beforeEach(() => {
+    process.env.MATTERHORN_BILLING_CURRENT_PLAN = "max";
+  });
+
   async function createDraft(base: string) {
     const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
       method: "POST",

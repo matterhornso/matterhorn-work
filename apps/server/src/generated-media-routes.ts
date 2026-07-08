@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { MatterhornEntitlementKey } from "@matterhorn-work/types/billing";
 import type {
   MatterhornGeneratedImage,
   MatterhornImageGenerationInput,
@@ -47,6 +48,10 @@ import { recordTaskEvent } from "./task-events.js";
 import { shortId } from "./utils.js";
 import { uploadBlobToWalrus, WalrusUploadError } from "./walrus-storage.js";
 import { normalizeMatterhornSuiAddress } from "./tools/sui.js";
+import {
+  checkMatterhornBillingEntitlement,
+  resolveBillingProviderConfigFromEnv,
+} from "./billing.js";
 
 type NftReceiptKind = "mint" | "listing";
 type NftPreviewKind = "mint_preview" | "listing_preview";
@@ -157,6 +162,8 @@ export function addGeneratedMediaRoutes(
     const body = await readJsonBody(ctx.request);
     rejectSensitiveGeneratedMediaInput(body, { skipKeys: IMAGE_GENERATION_SECRET_SCAN_SKIP_KEYS });
     const input = validateImageGenerationInput(body);
+    const store = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+    requireGeneratedMediaEntitlement("image_generation", (await store.list()).length);
 
     if (detectSecretShapedInput(input.prompt)) {
       throw new ApiError(400, "image_prompt_secret_rejected", "Prompt contains secret-shaped input.");
@@ -180,7 +187,6 @@ export function addGeneratedMediaRoutes(
       );
     }
 
-    const store = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     await store.save(result.image);
 
     await recordAudit(workspace.path, {
@@ -376,6 +382,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
+    requireGeneratedMediaEntitlement("walrus_storage", await countWalrusStorageUsage(store, draft.id));
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const publisherConfigured = Boolean(nftEnv.walrusPublisherUrl?.trim());
@@ -411,6 +418,7 @@ export function addGeneratedMediaRoutes(
     const imageStore = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const image = await imageStore.get(draft.imageId);
     if (!image) throw new ApiError(404, "image_not_found", "Generated image not found for this NFT draft.");
+    requireGeneratedMediaEntitlement("walrus_storage", await countWalrusStorageUsage(store, draft.id));
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const publisherConfigured = Boolean(nftEnv.walrusPublisherUrl?.trim());
@@ -513,6 +521,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
+    requireGeneratedMediaEntitlement("nft_mint_preview", await countMintPreviewUsage(store, draft.id));
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const setupRequirements = buildMintSetupRequirements(nftEnv);
@@ -680,6 +689,7 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.get(ctx.params.draftId);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
+    requireGeneratedMediaEntitlement("nft_marketplace_listing", await countMarketplaceListingUsage(store, draft.id));
 
     const nftEnv = resolveNftEnvironmentConfig(process.env);
     const setupRequirements = buildListingSetupRequirements(nftEnv);
@@ -875,6 +885,82 @@ function requireClientScope(ctx: RequestContext, required: TokenScope): void {
   const requiredRank = scopeRank[required] ?? 0;
   if (currentRank < requiredRank) {
     throw new ApiError(403, "forbidden", `This action requires ${required} scope.`);
+  }
+}
+
+function requireGeneratedMediaEntitlement(key: MatterhornEntitlementKey, used: number): void {
+  const billingConfig = resolveBillingProviderConfigFromEnv(process.env);
+  const check = checkMatterhornBillingEntitlement(billingConfig, key, used);
+  if (check.allowed) return;
+
+  const status = check.reason === "limit_reached" ? 429 : 402;
+  const code = check.reason === "limit_reached"
+    ? "billing_entitlement_limit_reached"
+    : "billing_entitlement_required";
+  const requiredPlans = formatRequiredPlanNames(check.allowedPlanIds);
+  const currentPlan = formatBillingPlanName(check.planId);
+  const message = check.reason === "limit_reached"
+    ? `${check.label} limit reached on ${currentPlan}. Upgrade to ${requiredPlans} or wait for the allowance to reset.`
+    : `${check.label} is not included on ${currentPlan}. Upgrade to ${requiredPlans} to continue.`;
+
+  throw new ApiError(status, code, message, {
+    entitlementKey: check.key,
+    entitlementLabel: check.label,
+    currentPlanId: check.planId,
+    requiredPlanIds: check.allowedPlanIds,
+    used: check.used,
+    limit: check.limit,
+    reason: check.reason,
+    billingMode: billingConfig.mode,
+    provider: billingConfig.provider,
+    livePaymentsEnabled: billingConfig.livePaymentsEnabled,
+  });
+}
+
+async function countWalrusStorageUsage(store: MatterhornImageNftDraftStore, currentDraftId: string): Promise<number> {
+  return (await store.list()).filter((draft) => {
+    if (draft.id === currentDraftId) return false;
+    return draft.storage.status === "ready_to_upload"
+      || draft.storage.status === "uploaded"
+      || Boolean(draft.storage.blobId || draft.storage.objectId || draft.storage.url);
+  }).length;
+}
+
+async function countMintPreviewUsage(store: MatterhornImageNftDraftStore, currentDraftId: string): Promise<number> {
+  return (await store.list()).filter((draft) => {
+    if (draft.id === currentDraftId) return false;
+    return draft.mint.status === "preview_ready"
+      || draft.mint.status === "confirmed"
+      || Boolean(draft.mint.packageId || draft.mint.objectId || draft.mint.transactionDigest);
+  }).length;
+}
+
+async function countMarketplaceListingUsage(store: MatterhornImageNftDraftStore, currentDraftId: string): Promise<number> {
+  return (await store.list()).filter((draft) => {
+    if (draft.id === currentDraftId) return false;
+    return draft.listing.status === "preview_ready"
+      || draft.listing.status === "listed"
+      || Boolean(draft.listing.kioskId || draft.listing.transferPolicyId);
+  }).length;
+}
+
+function formatRequiredPlanNames(planIds: string[]): string {
+  if (!planIds.length) return "a paid plan";
+  const names = planIds.map((planId) => formatBillingPlanName(planId));
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+}
+
+function formatBillingPlanName(planId: string): string {
+  switch (planId) {
+    case "free":
+      return "Free";
+    case "plus":
+      return "Matterhorn Plus";
+    case "max":
+      return "Matterhorn Max";
+    default:
+      return planId;
   }
 }
 
