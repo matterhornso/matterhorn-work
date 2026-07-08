@@ -158,4 +158,68 @@ describe("image/NFT publishing capability config", () => {
       }),
     ]);
   });
+
+  test("invalid configured Sui package ids are setup errors instead of preview-ready", () => {
+    const config = resolveNftEnvironmentConfig({
+      MATTERHORN_SUI_NETWORK: "sui-testnet",
+      MATTERHORN_SUI_NFT_PACKAGE_ID: "not-a-sui-object",
+      MATTERHORN_SUI_NFT_MODULE_NAME: "not-a-module-name",
+      MATTERHORN_SUI_KIOSK_PACKAGE_ID: "not-a-kiosk-package",
+      MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID: "not-a-policy-package",
+      MATTERHORN_SUI_KIOSK_ID: "not-a-kiosk",
+      MATTERHORN_SUI_KIOSK_OWNER_CAP_ID: "not-an-owner-cap",
+      MATTERHORN_SUI_TRANSFER_POLICY_ID: "not-a-transfer-policy",
+      MATTERHORN_SUI_NFT_TYPE: "not-a-full-type",
+    } as typeof process.env);
+
+    const minting = buildNftMintingCapability(config);
+    const listing = buildNftMarketplaceListingCapability(config);
+
+    expect(minting.status).toBe("error");
+    expect(listing.status).toBe("error");
+    expect(minting.setupRequirements).toEqual([
+      expect.objectContaining({
+        key: "sui_nft_package",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_NFT_PACKAGE_ID",
+      }),
+      expect.objectContaining({
+        key: "sui_nft_module",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_NFT_MODULE_NAME",
+      }),
+    ]);
+    expect(listing.setupRequirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: "sui_kiosk_package",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_KIOSK_PACKAGE_ID",
+      }),
+      expect.objectContaining({
+        key: "sui_transfer_policy",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID",
+      }),
+      expect.objectContaining({
+        key: "sui_nft_type",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_NFT_TYPE",
+      }),
+      expect.objectContaining({
+        key: "sui_kiosk_id",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_KIOSK_ID",
+      }),
+      expect.objectContaining({
+        key: "sui_kiosk_owner_cap",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_KIOSK_OWNER_CAP_ID",
+      }),
+      expect.objectContaining({
+        key: "sui_transfer_policy",
+        status: "invalid",
+        envVar: "MATTERHORN_SUI_TRANSFER_POLICY_ID",
+      }),
+    ]));
+  });
 });
