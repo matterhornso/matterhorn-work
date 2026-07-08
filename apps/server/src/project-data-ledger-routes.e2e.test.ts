@@ -657,6 +657,42 @@ describe("project data ledger routes", () => {
     expect(serialized).not.toContain(HOST_TOKEN);
   });
 
+  test("billing plan changes appear as billing ledger rows", async () => {
+    const { base } = await boot();
+
+    const upgraded = await jsonFetch(base, "/workspace/ws_ledger/billing/checkout", {
+      method: "POST",
+      body: JSON.stringify({ planId: "plus" }),
+    });
+    expect(upgraded.response.status).toBe(200);
+
+    const cleared = await jsonFetch(base, "/workspace/ws_ledger/billing/subscription", {
+      method: "DELETE",
+    });
+    expect(cleared.response.status).toBe(200);
+    expect(cleared.payload.deleted).toBe(true);
+
+    const billingLedger = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?kind=billing&limit=20");
+    expect(billingLedger.response.status).toBe(200);
+    expect(billingLedger.payload.summary.billing).toBe(2);
+    expect(billingLedger.payload.items.every((item: { kind: string }) => item.kind === "billing")).toBe(true);
+    expect(billingLedger.payload.items.every((item: { source: string }) => item.source === "audit")).toBe(true);
+    expect(billingLedger.payload.items.every((item: { href?: string }) => item.href === "/workspace/ws_ledger/settings/billing")).toBe(true);
+    expect(billingLedger.payload.items.every((item: { trainingUse: string }) => item.trainingUse === "none")).toBe(true);
+    expect(billingLedger.payload.items.map((item: { title: string }) => item.title)).toEqual(
+      expect.arrayContaining(["Billing plan updated", "Billing subscription cleared"]),
+    );
+    expect(billingLedger.payload.items.map((item: { eventType: string }) => item.eventType)).toEqual(
+      expect.arrayContaining(["workspace.billing.checkout", "workspace.billing.subscription.clear"]),
+    );
+    expect(billingLedger.payload.items.every((item: { metadata: { auditAction: string } }) => item.metadata.auditAction.startsWith("workspace.billing."))).toBe(true);
+
+    const serialized = JSON.stringify(billingLedger.payload);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+    expect(serialized).not.toContain("sk_");
+  });
+
   test("data-ledger can filter run history by desk, session, task, and time window", async () => {
     const { base } = await boot();
     const firstRunAt = Date.parse("2026-07-06T08:00:00.000Z");
