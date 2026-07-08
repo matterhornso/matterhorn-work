@@ -1435,6 +1435,12 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.modelPreferences.scope).toBe("workspace");
     expect(result.payload.stores.modelPreferences.path).toBe(join(dir, ".matterhorn-work", "models", "selection.json"));
     expect(result.payload.stores.modelPreferences.containsSecrets).toBe("never");
+    expect(result.payload.stores.billing.scope).toBe("workspace");
+    expect(result.payload.stores.billing.path).toBe(join(dir, ".matterhorn-work", "billing", "subscription.json"));
+    expect(result.payload.stores.billing.containsSecrets).toBe("never");
+    expect(result.payload.stores.billing.retention).toBe("user_controlled");
+    expect(result.payload.stores.billing.details.statusRoute).toBe("/workspace/ws_backend/billing/status");
+    expect(result.payload.stores.billing.details.livePaymentsEnabled).toBe(false);
     expect(result.payload.stores.dataPolicy.scope).toBe("workspace");
     expect(result.payload.stores.dataPolicy.path).toBe(join(dir, ".matterhorn-work", "privacy", "data-policy.json"));
     expect(result.payload.stores.dataPolicy.containsSecrets).toBe("never");
@@ -1584,6 +1590,23 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.modelPreferences.deletion.actions[0]).toMatchObject({
       id: "model-preference.clear",
       method: "DELETE",
+      destructive: true,
+    });
+    expect(result.payload.stores.billing.export.actions).toContainEqual(expect.objectContaining({
+      id: "billing.open-settings",
+      kind: "app_route",
+      href: "/workspace/ws_backend/settings/billing",
+    }));
+    expect(result.payload.stores.billing.export.actions).toContainEqual(expect.objectContaining({
+      id: "billing.status",
+      method: "GET",
+      href: "/workspace/ws_backend/billing/status",
+    }));
+    expect(result.payload.stores.billing.deletion.status).toBe("working");
+    expect(result.payload.stores.billing.deletion.actions[0]).toMatchObject({
+      id: "billing.clear-subscription",
+      method: "DELETE",
+      href: "/workspace/ws_backend/billing/subscription",
       destructive: true,
     });
     expect(result.payload.stores.dataPolicy.export.actions).toContainEqual(expect.objectContaining({

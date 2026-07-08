@@ -199,6 +199,26 @@ describe("Billing routes", () => {
     expect(status.payload.status.usage.generatedImages.limit).toBe(100);
   });
 
+  test("DELETE /workspace/:id/billing/subscription clears the local workspace billing override", async () => {
+    const { base } = await boot();
+    await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/checkout`, {
+      method: "POST",
+      body: JSON.stringify({ planId: "plus" }),
+    });
+    const before = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(before.payload.status.subscription.planId).toBe("plus");
+
+    const cleared = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/subscription`, { method: "DELETE" });
+    expect(cleared.response.status).toBe(200);
+    expect(cleared.payload.success).toBe(true);
+    expect(cleared.payload.deleted).toBe(true);
+    expect(cleared.payload.status.subscription.planId).toBe("free");
+
+    const after = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(after.payload.status.subscription.planId).toBe("free");
+    expect(after.payload.status.usage.generatedImages.limit).toBe(10);
+  });
+
   test("POST /api/billing/checkout returns mock checkout URL", async () => {
     const { base } = await boot();
     const result = await jsonFetch(base, "/api/billing/checkout", {
@@ -259,6 +279,15 @@ describe("Billing routes", () => {
     );
     expect(workspaceCheckout.response.status).toBe(403);
     expect(workspaceCheckout.payload.code).toBe("forbidden");
+
+    const workspaceClear = await jsonFetch(
+      base,
+      `/workspace/${WORKSPACE_ID}/billing/subscription`,
+      { method: "DELETE" },
+      viewerToken,
+    );
+    expect(workspaceClear.response.status).toBe(403);
+    expect(workspaceClear.payload.code).toBe("forbidden");
 
     const portal = await jsonFetch(
       base,

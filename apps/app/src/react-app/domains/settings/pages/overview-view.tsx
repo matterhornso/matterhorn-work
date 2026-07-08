@@ -266,6 +266,7 @@ function CopyButton(props: { text: string; label: string }) {
 const DATA_POLICY_STORE_ORDER: Array<keyof MatterhornWorkspaceDataMapResponse["stores"]> = [
   "chat",
   "modelPreferences",
+  "billing",
   "dataPolicy",
   "notes",
   "memory",
@@ -331,6 +332,7 @@ function controlQuickActions(
     "memory",
     "feedback",
     "modelPreferences",
+    "billing",
     "walletEvidence",
     "audit",
     "dataPolicy",

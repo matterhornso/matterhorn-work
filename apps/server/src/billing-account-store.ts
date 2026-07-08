@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { MatterhornBillingSubscription } from "@matterhorn-work/types/billing";
 import { exists } from "./utils.js";
@@ -22,6 +22,10 @@ function billingDir(workspaceRoot: string): string {
 
 function billingAccountPath(workspaceRoot: string): string {
   return join(billingDir(workspaceRoot), "subscription.json");
+}
+
+export function matterhornBillingAccountPath(workspaceRoot: string): string {
+  return billingAccountPath(workspaceRoot);
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -64,5 +68,12 @@ export class MatterhornBillingAccountStore {
   async save(snapshot: MatterhornBillingAccountSnapshot): Promise<void> {
     await this.ensureDir();
     await writeFile(billingAccountPath(this.workspaceRoot), JSON.stringify(snapshot, null, 2), "utf8");
+  }
+
+  async delete(): Promise<boolean> {
+    const path = billingAccountPath(this.workspaceRoot);
+    const existed = await exists(path);
+    await rm(path, { force: true });
+    return existed;
   }
 }
