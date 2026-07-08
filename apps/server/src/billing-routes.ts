@@ -213,6 +213,8 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
         subscription,
         usage,
         account.pendingCheckout ?? null,
+        account.source,
+        account.updatedAt,
       ));
     }
     return jsonResponse(buildBillingStatusResponseWithUsage(provider.config, usage));
@@ -408,7 +410,14 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       success: true,
       cleared,
       workspaceId: workspace.id,
-      status: buildBillingStatusResponseForSubscription(provider.config, subscription, undefined, null).status,
+      status: buildBillingStatusResponseForSubscription(
+        provider.config,
+        subscription,
+        undefined,
+        null,
+        account?.source ?? "env_default",
+        account?.updatedAt ?? null,
+      ).status,
     };
     return jsonResponse(response);
   });

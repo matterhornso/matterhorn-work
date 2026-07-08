@@ -77,6 +77,16 @@ const mockClient: MatterhornServerClient = {
           teamMembers: { used: 1, limit: 1 },
           cloudStorageBytes: { used: 0, limit: null },
         },
+        accountLinkage: {
+          source: "env_default",
+          label: "Default local plan",
+          status: "preview",
+          description: "The workspace is using local billing defaults. No payment provider account is linked.",
+          hasProviderCustomer: false,
+          hasProviderSubscription: false,
+          pendingCheckout: false,
+          updatedAt: null,
+        },
         setup: {
           mode: "phase0_mock",
           provider: "mock",
@@ -109,6 +119,16 @@ const mockClient: MatterhornServerClient = {
           nftDrafts: { used: 2, limit: 0, resetsAt: "2026-08-01T12:00:00.000Z" },
           teamMembers: { used: 1, limit: 1 },
           cloudStorageBytes: { used: 0, limit: null },
+        },
+        accountLinkage: {
+          source: "env_default",
+          label: "Default local plan",
+          status: "preview",
+          description: "The workspace is using local billing defaults. No payment provider account is linked.",
+          hasProviderCustomer: false,
+          hasProviderSubscription: false,
+          pendingCheckout: false,
+          updatedAt: null,
         },
         setup: {
           mode: "phase0_mock",
@@ -193,6 +213,9 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("runtimeWorkspaceId");
     expect(billingViewSource).toContain("client?.workspaceBillingStatus(workspaceId)");
     expect(billingViewSource).toContain("status?.setup.checks");
+    expect(billingViewSource).toContain("status?.accountLinkage");
+    expect(billingViewSource).toContain("accountLinkage.label");
+    expect(billingViewSource).toContain("accountLinkage.description");
     expect(billingViewSource).toContain("Test checkout ready");
     expect(billingViewSource).toContain("client?.billingStatus()");
     expect(billingViewSource).toContain("client?.workspaceBillingCheckout(workspaceId");

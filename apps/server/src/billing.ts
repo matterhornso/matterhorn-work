@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type {
   MatterhornBillingCapability,
+  MatterhornBillingAccountLinkage,
+  MatterhornBillingAccountSource,
   MatterhornBillingCheckoutRequest,
   MatterhornBillingCheckoutResponse,
   MatterhornBillingInterval,
@@ -373,6 +375,63 @@ export function buildMatterhornBillingUsageSnapshotForPlan(
   };
 }
 
+function buildMatterhornBillingAccountLinkage(input: {
+  source: MatterhornBillingAccountSource;
+  subscription: MatterhornBillingSubscription;
+  pendingCheckout?: MatterhornBillingPendingCheckout | null;
+  updatedAt?: string | null;
+}): MatterhornBillingAccountLinkage {
+  const pendingCheckout = Boolean(input.pendingCheckout);
+  const hasProviderCustomer = Boolean(input.subscription.providerCustomerId?.trim());
+  const hasProviderSubscription = Boolean(input.subscription.providerSubscriptionId?.trim());
+  if (input.source === "stripe_test_webhook" && (hasProviderCustomer || hasProviderSubscription)) {
+    return {
+      source: input.source,
+      label: "Stripe test account linked",
+      status: "working",
+      description: "The workspace subscription was synced from a verified Stripe test webhook.",
+      hasProviderCustomer,
+      hasProviderSubscription,
+      pendingCheckout,
+      updatedAt: input.updatedAt ?? null,
+    };
+  }
+  if (input.source === "stripe_test_checkout") {
+    return {
+      source: input.source,
+      label: "Stripe test checkout pending",
+      status: "preview",
+      description: "A Stripe test checkout was started. The plan changes after a verified webhook sync.",
+      hasProviderCustomer,
+      hasProviderSubscription,
+      pendingCheckout,
+      updatedAt: input.updatedAt ?? null,
+    };
+  }
+  if (input.source === "mock_checkout") {
+    return {
+      source: input.source,
+      label: "Local test subscription",
+      status: "preview",
+      description: "The workspace plan is local test state. No live payment provider is linked.",
+      hasProviderCustomer,
+      hasProviderSubscription,
+      pendingCheckout,
+      updatedAt: input.updatedAt ?? null,
+    };
+  }
+  return {
+    source: "env_default",
+    label: "Default local plan",
+    status: "preview",
+    description: "The workspace is using local billing defaults. No payment provider account is linked.",
+    hasProviderCustomer,
+    hasProviderSubscription,
+    pendingCheckout,
+    updatedAt: input.updatedAt ?? null,
+  };
+}
+
 export function checkMatterhornBillingEntitlement(
   config: BillingProviderConfig,
   key: MatterhornEntitlementKey,
@@ -404,12 +463,18 @@ export function buildMatterhornBillingStatus(
   config: BillingProviderConfig,
   pendingCheckout: MatterhornBillingPendingCheckout | null = null,
 ): MatterhornBillingStatus {
+  const subscription = buildMatterhornBillingSubscription(planId);
   return {
     mode: config.mode,
     provider: config.provider,
-    subscription: buildMatterhornBillingSubscription(planId),
+    subscription,
     pendingCheckout,
     usage: buildMatterhornBillingUsageSnapshotForPlan(planId),
+    accountLinkage: buildMatterhornBillingAccountLinkage({
+      source: "env_default",
+      subscription,
+      pendingCheckout,
+    }),
     setup: buildMatterhornBillingSetup(config),
     isLivePaymentsEnabled: false,
   };
@@ -432,6 +497,8 @@ export function buildMatterhornBillingStatusForSubscription(
   config: BillingProviderConfig,
   usage?: BillingUsageCounts,
   pendingCheckout: MatterhornBillingPendingCheckout | null = null,
+  accountSource: MatterhornBillingAccountSource = "env_default",
+  accountUpdatedAt?: string | null,
 ): MatterhornBillingStatus {
   return {
     mode: config.mode,
@@ -439,6 +506,12 @@ export function buildMatterhornBillingStatusForSubscription(
     subscription,
     pendingCheckout,
     usage: buildMatterhornBillingUsageSnapshotForPlan(subscription.planId, usage),
+    accountLinkage: buildMatterhornBillingAccountLinkage({
+      source: accountSource,
+      subscription,
+      pendingCheckout,
+      updatedAt: accountUpdatedAt ?? null,
+    }),
     setup: buildMatterhornBillingSetup(config),
     isLivePaymentsEnabled: false,
   };
@@ -862,11 +935,20 @@ export function buildBillingStatusResponseForSubscription(
   subscription: MatterhornBillingSubscription,
   usage?: BillingUsageCounts,
   pendingCheckout: MatterhornBillingPendingCheckout | null = null,
+  accountSource: MatterhornBillingAccountSource = "env_default",
+  accountUpdatedAt?: string | null,
 ): MatterhornBillingStatusResponse {
   return {
     success: true,
     version: "matterhorn.billing.v1",
     generatedAt: new Date().toISOString(),
-    status: buildMatterhornBillingStatusForSubscription(subscription, config, usage, pendingCheckout),
+    status: buildMatterhornBillingStatusForSubscription(
+      subscription,
+      config,
+      usage,
+      pendingCheckout,
+      accountSource,
+      accountUpdatedAt,
+    ),
   };
 }

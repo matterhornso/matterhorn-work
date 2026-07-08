@@ -1,6 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
+  MatterhornBillingAccountSource,
   MatterhornBillingPendingCheckout,
   MatterhornBillingSubscription,
 } from "@matterhorn-work/types/billing";
@@ -12,7 +13,7 @@ export interface MatterhornBillingAccountSnapshot {
   subscription: MatterhornBillingSubscription;
   pendingCheckout?: MatterhornBillingPendingCheckout | null;
   updatedAt: string;
-  source: "mock_checkout" | "stripe_test_checkout" | "stripe_test_webhook";
+  source: Exclude<MatterhornBillingAccountSource, "env_default">;
 }
 
 export interface BillingAccountStoreOptions {
