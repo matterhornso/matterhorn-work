@@ -4984,8 +4984,8 @@ export const SUI_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
   protocol: "sui",
   sourceUrl: "https://sui.io/brand",
   allowedUseNote: "Use only in Matterhorn Work UI surfaces. Do not imply custody, wallet ownership, or official Sui endorsement.",
-  lightAssetPath: "",
-  darkAssetPath: "",
+  lightAssetPath: "/assets/desks/sui/logo-light.svg",
+  darkAssetPath: "/assets/desks/sui/logo-dark.svg",
   fallbackInitials: "SUI",
 };
 
