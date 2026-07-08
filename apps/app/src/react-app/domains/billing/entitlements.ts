@@ -47,3 +47,10 @@ export function formatEntitlementUsage(used: number, limit: number | null): stri
   }
   return `${used} / ${limit} used`;
 }
+
+export function formatEntitlementReset(resetsAt?: string | null): string | null {
+  if (!resetsAt) return null;
+  const date = new Date(resetsAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return `Resets ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+}

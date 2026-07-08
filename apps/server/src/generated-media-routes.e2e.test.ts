@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type { MatterhornGeneratedImage } from "@matterhorn-work/types/generated-media";
+import { MatterhornGeneratedImageStore } from "./generated-image-store.js";
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
 
@@ -110,6 +112,33 @@ function bootWalrusPublisher(payload: unknown, options?: { status?: number; dela
   });
   stops.push(() => server.stop());
   return { url: `http://127.0.0.1:${server.port}`, calls };
+}
+
+function previousPeriodIso(): string {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1, 0, 0, 0, 0)).toISOString();
+}
+
+function testImage(id: string, createdAt: string): MatterhornGeneratedImage {
+  return {
+    id,
+    workspaceId: WORKSPACE_ID,
+    outputId: `out_${id}`,
+    provider: "mock",
+    model: "mock-image",
+    prompt: `test image ${id}`,
+    size: "1024x1024",
+    quality: "auto",
+    format: "png",
+    fileName: `${id}.png`,
+    relativePath: `.matterhorn-work/outputs/images/${id}.png`,
+    contentType: "image/png",
+    byteLength: 12,
+    sha256: "0".repeat(64),
+    createdAt,
+    status: "generated",
+    safety: { secretsRejected: false },
+  };
 }
 
 function bootWalrusDiagnosticEndpoint() {
@@ -701,6 +730,29 @@ describe("Generated media billing entitlements", () => {
       limit: 10,
       reason: "limit_reached",
     });
+  });
+
+  test("Free plan image allowance counts only the current billing period", async () => {
+    const { base, dir } = await boot();
+    const store = new MatterhornGeneratedImageStore({ workspaceRoot: dir, workspaceId: WORKSPACE_ID });
+    for (let index = 0; index < 10; index += 1) {
+      await store.save(testImage(`previous_period_${index}`, previousPeriodIso()));
+    }
+
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "first image in this billing period" }),
+    });
+    expect(generated.response.status).toBe(200);
+    expect(generated.payload.success).toBe(true);
+
+    const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(status.response.status).toBe(200);
+    expect(status.payload.status.usage.generatedImages).toMatchObject({
+      used: 1,
+      limit: 10,
+    });
+    expect(status.payload.status.usage.generatedImages.resetsAt).toEqual(expect.any(String));
   });
 
   test("workspace checkout plan raises image allowance without changing global billing env", async () => {

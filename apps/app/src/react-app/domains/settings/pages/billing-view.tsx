@@ -26,6 +26,7 @@ import {
 import { backendCapabilityLabel, backendCapabilityTone } from "../backend-capability-status";
 import {
   formatEntitlementLimit,
+  formatEntitlementReset,
   formatEntitlementUsage,
 } from "../../billing/entitlements";
 
@@ -167,9 +168,24 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
   const usageItems = useMemo(() => {
     if (!status) return [];
     return [
-      { label: "Generated images", ...status.usage.generatedImages },
-      { label: "NFT drafts", ...status.usage.nftDrafts },
-      { label: "Team members", ...status.usage.teamMembers },
+      {
+        label: "Generated images",
+        used: status.usage.generatedImages.used,
+        limit: status.usage.generatedImages.limit,
+        resetsAt: status.usage.generatedImages.resetsAt ?? null,
+      },
+      {
+        label: "NFT drafts",
+        used: status.usage.nftDrafts.used,
+        limit: status.usage.nftDrafts.limit,
+        resetsAt: status.usage.nftDrafts.resetsAt ?? null,
+      },
+      {
+        label: "Team members",
+        used: status.usage.teamMembers.used,
+        limit: status.usage.teamMembers.limit,
+        resetsAt: null,
+      },
     ];
   }, [status]);
 
@@ -245,14 +261,23 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
       <SettingsSection>
         <h3 className="text-sm font-medium text-dls-text">Usage</h3>
         <div className="flex flex-col gap-2">
-          {usageItems.map((item) => (
-            <div key={item.label} className="flex items-center justify-between rounded-md bg-dls-surface-muted/15 px-3 py-2.5">
-              <span className="text-xs text-dls-secondary">{item.label}</span>
-              <span className="text-xs font-medium text-dls-text">
-                {formatEntitlementUsage(item.used, item.limit)}
-              </span>
-            </div>
-          ))}
+          {usageItems.map((item) => {
+            const resetLabel = formatEntitlementReset(item.resetsAt);
+            return (
+              <div
+                key={item.label}
+                className="flex items-center justify-between gap-4 rounded-md bg-dls-surface-muted/15 px-3 py-2.5"
+              >
+                <span className="text-xs text-dls-secondary">{item.label}</span>
+                <span className="flex flex-col items-end gap-0.5 text-right">
+                  <span className="text-xs font-medium text-dls-text">
+                    {formatEntitlementUsage(item.used, item.limit)}
+                  </span>
+                  {resetLabel ? <span className="text-[11px] text-muted-foreground">{resetLabel}</span> : null}
+                </span>
+              </div>
+            );
+          })}
           {usageItems.length === 0 ? (
             <div className="text-xs text-muted-foreground">Usage data is not available.</div>
           ) : null}

@@ -5,7 +5,11 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BillingSettingsView } from "../src/react-app/domains/settings/pages/billing-view";
-import { checkEntitlement, formatEntitlementUsage } from "../src/react-app/domains/billing/entitlements";
+import {
+  checkEntitlement,
+  formatEntitlementReset,
+  formatEntitlementUsage,
+} from "../src/react-app/domains/billing/entitlements";
 import { backendCapabilitiesWorkingFixture } from "../src/react-app/domains/settings/backend-capabilities/backend-capability-fixtures";
 import type { MatterhornServerClient } from "../src/app/lib/matterhorn-server";
 
@@ -66,8 +70,8 @@ const mockClient: MatterhornServerClient = {
         provider: "mock",
         subscription: { planId: "free", status: "none", interval: "month", cancelAtPeriodEnd: false },
         usage: {
-          generatedImages: { used: 3, limit: 10 },
-          nftDrafts: { used: 0, limit: 0 },
+          generatedImages: { used: 3, limit: 10, resetsAt: "2026-08-01T12:00:00.000Z" },
+          nftDrafts: { used: 0, limit: 0, resetsAt: "2026-08-01T12:00:00.000Z" },
           teamMembers: { used: 1, limit: 1 },
           cloudStorageBytes: { used: 0, limit: null },
         },
@@ -99,8 +103,8 @@ const mockClient: MatterhornServerClient = {
         provider: "mock",
         subscription: { planId: "free", status: "none", interval: "month", cancelAtPeriodEnd: false },
         usage: {
-          generatedImages: { used: 7, limit: 10 },
-          nftDrafts: { used: 2, limit: 0 },
+          generatedImages: { used: 7, limit: 10, resetsAt: "2026-08-01T12:00:00.000Z" },
+          nftDrafts: { used: 2, limit: 0, resetsAt: "2026-08-01T12:00:00.000Z" },
           teamMembers: { used: 1, limit: 1 },
           cloudStorageBytes: { used: 0, limit: null },
         },
@@ -183,6 +187,9 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("checkoutReady");
     expect(billingViewSource).toContain("Portal needs setup");
     expect(billingViewSource).toContain("stripe_test_customer");
+    expect(billingViewSource).toContain("status.usage.generatedImages.resetsAt");
+    expect(billingViewSource).toContain("status.usage.nftDrafts.resetsAt");
+    expect(billingViewSource).toContain("formatEntitlementReset(item.resetsAt)");
     expect(settingsRouteSource).toContain("<BillingSettingsView matterhornServerClient={matterhornClient} runtimeWorkspaceId={runtimeWorkspaceId} />");
   });
 });
@@ -213,5 +220,11 @@ describe("Entitlement helpers", () => {
 
   test("format usage with unlimited limit", () => {
     expect(formatEntitlementUsage(5, null)).toBe("5 used");
+  });
+
+  test("format reset timestamp when available", () => {
+    expect(formatEntitlementReset("2026-08-01T12:00:00.000Z")).toContain("Aug");
+    expect(formatEntitlementReset(null)).toBeNull();
+    expect(formatEntitlementReset("not-a-date")).toBeNull();
   });
 });
