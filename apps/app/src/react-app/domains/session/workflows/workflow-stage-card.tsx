@@ -111,7 +111,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
   const hasActionHint = Boolean(userActionHint);
   const hasSafety = Boolean(safetyBoundary);
 
-  const showDetails = hasOutputs || hasHints || hasActionHint || hasSafety;
+  const showDetails = hasOutputs || hasActionHint || hasSafety || (hasHints && status !== "idle");
 
   return (
     <div

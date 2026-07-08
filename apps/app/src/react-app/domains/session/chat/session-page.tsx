@@ -446,48 +446,68 @@ function HomeWalletRuntimeStatus({
         : "Wallet readiness not reported";
 
   return (
-    <details className="group rounded-lg bg-dls-surface-muted/25 px-3 py-2.5 text-sm">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-left marker:hidden">
+    <div className="rounded-md bg-dls-surface-muted/15 px-3 py-2.5 text-sm">
+      <div className="flex items-center justify-between gap-3 text-left">
         <span className="flex min-w-0 items-center gap-2">
           <WalletIcon className="size-4 shrink-0 text-dls-secondary" />
           <span className="font-medium text-dls-text">Wallet readiness</span>
           <span className="min-w-0 truncate text-xs text-dls-secondary">{headline}</span>
         </span>
-        <span className="shrink-0 text-xs text-dls-secondary transition-colors group-open:text-dls-text">
-          Details
-        </span>
-      </summary>
-      <div className="mt-3 grid gap-2 border-t border-dls-border/35 pt-3">
-        {rows.length ? rows.map((row) => {
-          const runtimeSummary = homeWalletRuntimeSummary(row.runtimeSupport?.[runtime]);
-          return (
-            <div key={row.family} className="grid gap-1 text-xs leading-5 sm:grid-cols-[7rem_minmax(0,1fr)_auto] sm:items-start">
-              <span className="font-medium text-dls-text">{row.family}</span>
-              <span className="min-w-0 text-dls-secondary">{row.family === "Sui" ? suiRuntime.detail : runtimeSummary.detail}</span>
-              <span className={cn("w-fit rounded-md px-2 py-0.5 font-medium", homeWalletTone(row.status))}>
-                {backendCapabilityLabel(row.status)}
-              </span>
-            </div>
-          );
-        }) : (
-          <p className="text-xs leading-5 text-dls-secondary">
-            Start the Matterhorn Work engine to read wallet-family status.
-          </p>
-        )}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-          <span className="text-xs leading-5 text-dls-secondary">
-            Sui signing stays in your wallet; desktop uses external handoff.
-          </span>
-          <button
-            type="button"
-            className="rounded-md px-2 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
-            onClick={onOpenWallet}
+        <Popover>
+          <PopoverTrigger
+            render={
+              <button
+                type="button"
+                aria-label="Wallet readiness details"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-dls-hover/35 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/30"
+              >
+                <Info className="size-3.5" aria-hidden="true" />
+              </button>
+            }
+          />
+          <PopoverContent
+            side="right"
+            align="start"
+            className="w-80 rounded-lg border border-dls-border bg-dls-surface px-3 py-2.5 text-left shadow-none"
           >
-            Open wallet
-          </button>
-        </div>
+            <div className="grid gap-2">
+              {rows.length ? rows.map((row) => {
+                const runtimeSummary = homeWalletRuntimeSummary(row.runtimeSupport?.[runtime]);
+                return (
+                  <div key={row.family} className="grid gap-1 text-xs leading-5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-dls-text">{row.family}</span>
+                      <span className={cn("w-fit rounded-md px-2 py-0.5 font-medium", homeWalletTone(row.status))}>
+                        {backendCapabilityLabel(row.status)}
+                      </span>
+                    </div>
+                    <span className="min-w-0 text-dls-secondary">
+                      {row.family === "Sui" ? suiRuntime.detail : runtimeSummary.detail}
+                    </span>
+                  </div>
+                );
+              }) : (
+                <p className="text-xs leading-5 text-dls-secondary">
+                  Start the Matterhorn Work engine to read wallet-family status.
+                </p>
+              )}
+              <div className="border-t border-dls-border/35 pt-2">
+                <p className="text-xs leading-5 text-dls-secondary">
+                  Sui signing stays in your wallet; desktop uses external handoff.
+                </p>
+                <button
+                  type="button"
+                  className="mt-1 rounded-md px-0 py-1 text-xs font-medium text-dls-text transition-colors hover:text-dls-secondary"
+                  onClick={onOpenWallet}
+                >
+                  Open wallet
+                </button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
-    </details>
+    </div>
   );
 }
 

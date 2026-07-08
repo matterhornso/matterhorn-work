@@ -397,6 +397,7 @@ describe("backend capability UI contract", () => {
     expect(sessionSource).toContain("walletFamilySummary(capabilities)");
     expect(sessionSource).toContain("walletRuntimeSupportSummary(support)");
     expect(sessionSource).toContain("Wallet readiness");
+    expect(sessionSource).toContain("Wallet readiness details");
     expect(sessionSource).toContain("Sui signing stays in your wallet; desktop uses external handoff.");
     expect(sessionSource).toContain('onOpenWallet={() => setCurrentSidePanel("wallet")}');
   });

@@ -61,15 +61,14 @@ function PlanCard(props: {
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-4 rounded-lg p-4",
+        "relative flex flex-col gap-3 rounded-md border border-dls-border/35 px-3.5 py-3.5 transition-colors",
         props.current
-          ? "bg-dls-hover/35 ring-1 ring-dls-border/35"
-          : "bg-dls-surface-muted/15",
-        props.plan.popular && !props.current && "ring-1 ring-amber-500/20",
+          ? "bg-dls-hover/25"
+          : "bg-transparent hover:bg-dls-hover/15",
       )}
     >
       {props.plan.popular ? (
-        <span className="absolute right-3 top-3 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+        <span className="absolute right-3 top-3 text-[10px] font-medium text-amber-300">
           Popular
         </span>
       ) : null}
@@ -82,7 +81,7 @@ function PlanCard(props: {
           </SettingsPill>
         ) : null}
       </div>
-      <p className="text-xs text-muted-foreground">{props.plan.tagline}</p>
+      <p className="text-xs leading-5 text-muted-foreground">{props.plan.tagline}</p>
       <div className="text-lg font-semibold text-dls-text">
         {formatPrice(props.plan.price.amountCents, props.plan.price.currency, props.plan.price.interval)}
       </div>
@@ -107,7 +106,7 @@ function PlanCard(props: {
         onClick={() => props.onSelect(props.plan.id)}
       >
         {props.busy ? <Loader2 size={12} className="animate-spin" /> : null}
-        {props.current ? "Current plan" : isLive ? "Unavailable" : !props.checkoutReady ? "Needs setup" : props.plan.ctaLabel}
+        {props.current ? "Current" : isLive ? "Unavailable" : !props.checkoutReady ? "Needs setup" : props.plan.ctaLabel}
       </Button>
     </div>
   );
@@ -212,7 +211,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               Billing
             </SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Manage your Matterhorn plan and workspace usage. Live payments are disabled in this build.
+              Plans and usage for generated media, NFT previews, and team access.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeaderContent>
         </SettingsSectionHeader>
@@ -230,17 +229,18 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
             <div className="flex items-center gap-2">
               <SettingsPill>
                 <ShieldCheck size={12} />
-                {status?.mode === "phase1_stripe_test" ? "Stripe test" : "Mock mode"}
+                {status?.mode === "phase1_stripe_test" ? "Stripe test" : "Test mode"}
               </SettingsPill>
               <Button
                 variant="outline"
                 size="sm"
                 className="h-7 gap-1 text-xs"
                 disabled={portalDisabled}
+                title={portalReady ? undefined : "Billing portal needs setup before it can open."}
                 onClick={() => portalMutation.mutate()}
               >
                 {portalMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <ExternalLink size={12} />}
-                {portalReady ? "Manage billing" : "Portal needs setup"}
+                {portalReady ? "Manage billing" : "Manage billing"}
               </Button>
             </div>
           </div>
@@ -293,14 +293,14 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
 
       <SettingsSection>
         <h3 className="text-sm font-medium text-dls-text">Usage</h3>
-        <div className="flex flex-col gap-2">
+        <div className="divide-y divide-dls-border/30">
           {usageItems.map((item) => {
             const resetLabel = formatEntitlementReset(item.resetsAt);
             const usageStatus = entitlementUsageStatus(item.used, item.limit);
             return (
               <div
                 key={item.label}
-                className="flex items-center justify-between gap-4 rounded-md bg-dls-surface-muted/15 px-3 py-2.5"
+                className="flex items-center justify-between gap-4 py-2.5"
               >
                 <span className="text-xs text-dls-secondary">{item.label}</span>
                 <span className="flex flex-col items-end gap-0.5 text-right">
@@ -337,9 +337,9 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               {status?.setup.readyForTestCheckout ? "Test checkout ready" : "Needs setup"}
             </SettingsPill>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="divide-y divide-dls-border/30">
             {setupChecks.map((check) => (
-              <div key={check.id} className="flex items-start justify-between gap-3 rounded-md bg-dls-surface-muted/15 px-3 py-2.5">
+              <div key={check.id} className="flex items-start justify-between gap-3 py-2.5">
                 <div className="min-w-0">
                   <div className="text-xs font-medium text-dls-text">{check.label}</div>
                   <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{check.description}</div>
@@ -358,7 +358,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
       {status?.mode !== "live" ? (
         <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">
           <Sparkles size={12} className="mr-1 inline" />
-          Billing is running in {status?.mode === "phase1_stripe_test" ? "Stripe test" : "mock"} mode. No real charges
+          Billing is running in {status?.mode === "phase1_stripe_test" ? "Stripe test" : "test"} mode. No real charges
           will be processed.
         </div>
       ) : null}

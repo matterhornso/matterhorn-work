@@ -7,6 +7,7 @@ import {
   BrainCircuit,
   Database,
   ExternalLink,
+  Info,
   Loader2,
   RefreshCw,
   Search,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { ProtocolBrandLogo } from "../../session/workflows/protocol-brand-logo";
 import type {
@@ -1400,25 +1402,55 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             </button>
           ))}
         </div>
-        <div className="mb-3 rounded-lg bg-dls-surface-muted/20 p-3.5">
-          <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold text-[var(--protocol-desk-accent)]">
-            <span>Boundary</span>
-            <span>Protocol manifest</span>
-            <span className="rounded-md bg-dls-surface/55 px-2 py-0.5 text-[9px] text-dls-secondary">
-              {activeSafetyBadge}
-            </span>
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-md bg-dls-surface-muted/12 px-3 py-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <Shield className="size-4 shrink-0 text-[var(--protocol-desk-accent)]" />
+            <div className="min-w-0">
+              <div className="truncate text-xs font-medium text-dls-text">Safety & signing</div>
+              <div className="truncate text-[11px] leading-5 text-dls-secondary">{activeSafetyBadge}</div>
+            </div>
           </div>
-          <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-1.5">
-            <Metric label="Can submit" value={activeManifestCanSubmit} compact />
-            <Metric label="Live submission" value={activeManifestLiveSubmission} compact />
-            <Metric label="External signer" value={activeManifestSigner} compact />
-          </div>
-          <p className="mt-2 break-words text-[11px] leading-5 text-dls-secondary">
-            {activeSafetyCopy}
-          </p>
-          <p className="mt-2 break-words text-[11px] leading-5 text-dls-secondary">
-            Status: {activeManifestStatus}. Allowed intents: {activeManifest.allowedIntents.join(", ")}. Panel route: {activeManifest.primaryPanelRouteId}.
-          </p>
+          <Popover>
+            <PopoverTrigger
+              render={(
+                <button
+                  type="button"
+                  aria-label={`${activeVenue.label} safety details`}
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-dls-hover/45 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                >
+                  <Info className="size-3.5" aria-hidden="true" />
+                </button>
+              )}
+            />
+            <PopoverContent
+              side="bottom"
+              align="end"
+              className="w-80 rounded-lg border border-dls-border bg-dls-surface p-3 text-left shadow-none"
+            >
+              <div className="space-y-3">
+                <div>
+                  <div className="text-xs font-medium text-dls-text">{activeVenue.label} safety</div>
+                  <p className="mt-1 text-xs leading-5 text-dls-secondary">{activeSafetyCopy}</p>
+                </div>
+                <div className="divide-y divide-dls-border/30 text-xs">
+                  {[
+                    ["Can submit", activeManifestCanSubmit],
+                    ["Live submission", activeManifestLiveSubmission],
+                    ["External signer", activeManifestSigner],
+                    ["Status", activeManifestStatus],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between gap-3 py-1.5">
+                      <span className="text-dls-secondary">{label}</span>
+                      <span className="text-right font-medium text-dls-text">{value}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="break-words text-[11px] leading-5 text-dls-secondary">
+                  Allowed intents: {activeManifest.allowedIntents.join(", ")}.
+                </p>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
         <UnifiedWalletPanel
           venue={venue}

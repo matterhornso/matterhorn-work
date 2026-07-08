@@ -89,6 +89,11 @@ describe("WorkflowStageCard — render contract", () => {
     expect(source).toContain('if (status === "idle") return null;');
   });
 
+  test("keeps idle task launch cards free of repetitive evidence disclosures", () => {
+    const source = readAppSource("domains/session/workflows/workflow-stage-card.tsx");
+    expect(source).toContain('hasHints && status !== "idle"');
+  });
+
   test("in-session desk starters launch real tasks when the shell supports it", () => {
     const surfaceSrc = readAppSource("domains/session/surface/session-surface.tsx");
     const pageSrc = readAppSource("domains/session/chat/session-page.tsx");

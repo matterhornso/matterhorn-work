@@ -143,12 +143,12 @@ function CountStrip(props: {
     ["Listed", props.listed],
   ] as const;
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-y border-dls-border/30 py-2">
       {items.map(([label, value]) => (
-        <div key={label} className="rounded-lg bg-dls-surface-muted/35 px-3 py-2">
-          <div className="text-lg font-semibold tabular-nums text-dls-text">{value}</div>
-          <div className="text-xs text-dls-secondary">{label}</div>
-        </div>
+        <span key={label} className="inline-flex items-baseline gap-1.5 text-xs text-dls-secondary">
+          <span className="font-semibold tabular-nums text-dls-text">{value}</span>
+          {label}
+        </span>
       ))}
     </div>
   );

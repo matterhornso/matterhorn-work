@@ -25,9 +25,10 @@ for (const phrase of [
   "Polymarket desk",
   "MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY",
   "VENUE_PROTOCOL_MANIFESTS",
-  "Protocol manifest",
+  "Safety & signing",
+  "safety details",
+  "PopoverContent",
   "Allowed intents",
-  "primaryPanelRouteId",
   "Start with your TAO, then choose what to do next.",
   "Preview Hyperliquid trades with the Hyperliquid Agent, with execution off.",
   "Analyze prediction markets and preview safely.",
@@ -218,20 +219,30 @@ for (const phrase of [
   "flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain",
   "overflow-y-auto overscroll-y-contain max-h-full",
   "[scrollbar-gutter:stable]",
-  "bg-[radial-gradient(circle_at_18%_0%,rgba(var(--protocol-desk-rgb),0.18),transparent_42%),linear-gradient(180deg,var(--dls-sidebar),var(--dls-surface))]",
-  "min-h-0 p-4 pb-8 sm:p-5",
+  "bg-dls-canvas",
   "style={venueToneStyle(venue)}",
   "--protocol-desk-accent",
   "These are the core Bittensor workflows Matterhorn should make easy.",
   "mb-4 flex flex-wrap items-start justify-between gap-3",
-  "grid-cols-1 gap-1 rounded-xl bg-dls-surface-muted/35 p-1",
-  "grid-cols-[repeat(auto-fit,minmax(132px,1fr))]",
+  "grid-cols-1 gap-1 rounded-lg bg-dls-surface-muted/35 p-1",
+  "Safety & signing",
+  "safety details",
   "break-words font-mono",
   "text-[15px]",
   "text-base font-semibold",
 ]) {
   assert.ok(panel.includes(phrase), `Panel should include resilient protocol layout treatment: ${phrase}`);
 }
+assert.equal(
+  panel.includes("radial-gradient"),
+  false,
+  "Protocol panel should avoid decorative gradient shells.",
+);
+assert.equal(
+  panel.includes(">Boundary<") || panel.includes("Protocol manifest"),
+  false,
+  "Protocol panel safety details should stay behind the info control.",
+);
 
 const sessionPage = readFileSync("apps/app/src/react-app/domains/session/chat/session-page.tsx", "utf8");
 for (const phrase of [

@@ -145,8 +145,8 @@ describe("Billing settings view", () => {
       ),
     );
     expect(html).toContain("Billing");
-    expect(html).toContain("Manage your Matterhorn plan");
-    expect(html).toContain("Mock mode");
+    expect(html).toContain("Plans and usage for generated media");
+    expect(html).toContain("Test mode");
     expect(html).toContain("Available plans");
     expect(html).toContain("Usage");
   });
@@ -191,7 +191,7 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("Clear pending");
     expect(billingViewSource).toContain("statusQuery.refetch()");
     expect(billingViewSource).toContain("checkoutReady");
-    expect(billingViewSource).toContain("Portal needs setup");
+    expect(billingViewSource).toContain("portalDisabled");
     expect(billingViewSource).toContain("stripe_test_customer");
     expect(billingViewSource).toContain("status.usage.generatedImages.resetsAt");
     expect(billingViewSource).toContain("status.usage.nftDrafts.resetsAt");
@@ -199,6 +199,10 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("NFT mint previews");
     expect(billingViewSource).toContain("entitlementUsageStatus(item.used, item.limit)");
     expect(settingsRouteSource).toContain("<BillingSettingsView matterhornServerClient={matterhornClient} runtimeWorkspaceId={runtimeWorkspaceId} />");
+    expect(readFileSync(
+      join(import.meta.dir, "../src/react-app/domains/settings/shell/settings-page.tsx"),
+      "utf8",
+    )).toContain("Plan, checkout, usage, and entitlement status for this workspace.");
   });
 });
 
