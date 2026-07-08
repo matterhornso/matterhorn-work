@@ -264,10 +264,10 @@ function TaskLogsSection(props: {
   );
 
   return (
-    <section className="rounded-lg bg-dls-surface/70 p-4 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+    <section className="rounded-lg bg-dls-surface-muted/[0.08] p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-dls-hover/45 text-dls-secondary">
             <ListChecks size={16} />
           </div>
           <div className="min-w-0">
@@ -275,8 +275,8 @@ function TaskLogsSection(props: {
             <p className="mt-0.5 text-[12px] leading-5 text-dls-text">Recent desk runs, outputs, and wait states.</p>
           </div>
         </div>
-        <span className="shrink-0 rounded-md border border-dls-border/55 px-2 py-0.5 text-[11px] font-medium text-dls-secondary">
-          {logs.length}
+        <span className="shrink-0 pt-0.5 text-[11px] font-medium text-dls-secondary">
+          {logs.length ? `${logs.length} recent` : "No runs yet"}
         </span>
       </div>
 

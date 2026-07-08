@@ -30,6 +30,14 @@ describe("Settings general hub project surfaces", () => {
     expect(source).not.toContain('variant="outline"\n              size="sm"\n              onClick={props.onSendFeedback}');
   });
 
+  test("renders task log counts as plain metadata instead of boxed badges", () => {
+    const source = readReactSource("domains/settings/pages/general-view.tsx");
+
+    expect(source).toContain('logs.length ? `${logs.length} recent` : "No runs yet"');
+    expect(source).toContain("bg-dls-surface-muted/[0.08] p-4");
+    expect(source).not.toContain("rounded-md border border-dls-border/55 px-2 py-0.5 text-[11px] font-medium text-dls-secondary");
+  });
+
   test("routes project surface actions to real workspace surfaces", () => {
     const source = readReactSource("shell/settings-route.tsx");
 
