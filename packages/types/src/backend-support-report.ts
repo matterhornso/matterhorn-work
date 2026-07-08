@@ -3,6 +3,7 @@ import type { MatterhornBackendCapabilitiesResponse } from "./backend-capabiliti
 import type { MatterhornBackendModelProviderSummary, MatterhornBackendModelsResponse } from "./backend-models.js";
 import type { MatterhornBackendTeamAccessSummaryResponse } from "./backend-team-access.js";
 import type { MatterhornWorkspaceDataControlsResponse } from "./backend-data-controls.js";
+import type { MatterhornGeneratedMediaDiagnosticsResponse } from "./generated-media.js";
 import type {
   MatterhornProjectDataLedgerExportControlPlaneSnapshot,
   MatterhornProjectDataLedgerExportResponse,
@@ -75,6 +76,9 @@ export interface MatterhornBackendSupportReportResponse {
       manifest: MatterhornProjectDataLedgerExportResponse["manifest"];
       warnings: string[];
     };
+  };
+  generatedMedia: {
+    diagnostics: MatterhornGeneratedMediaDiagnosticsResponse;
   };
   privacy: {
     trainingUse: MatterhornBackendControlPlaneResponse["privacy"]["trainingUse"];
