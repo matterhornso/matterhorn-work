@@ -33,6 +33,7 @@ function settingsCap(
     mcp: "/settings/extensions/mcp",
     "image-generation": "/settings/generated-media",
     nft: "/settings/generated-media",
+    billing: "/settings/billing",
   };
   return {
     ...cap(status, label, description),
@@ -272,6 +273,17 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
     packageConfigured: false,
     kioskConfigured: false,
   },
+  billing: {
+    status: "preview",
+    label: "Billing",
+    description: "Billing is in mock mode. No real charges are processed.",
+    mode: "phase0_mock",
+    provider: "mock",
+    currentPlanId: "free",
+    isLivePaymentsEnabled: false,
+    checkoutSupported: false,
+    portalSupported: false,
+  },
   settings: [
     settingsCap("overview", "working", "Overview"),
     settingsCap("profile", "working", "Profile"),
@@ -287,6 +299,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
     settingsCap("mcp", "working", "MCP"),
     settingsCap("image-generation", "working", "Image generation", "Generate images from chat and save them as workspace outputs."),
     settingsCap("nft", "needs_setup", "NFT drafts", "NFT drafts are created locally. Set MATTERHORN_SUI_NFT_PACKAGE_ID to enable mint previews."),
+    settingsCap("billing", "preview", "Billing", "Billing is in mock mode. No real charges are processed."),
   ],
 };
 

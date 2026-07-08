@@ -6,6 +6,8 @@ import type {
   MatterhornNftMintingCapability,
   MatterhornWalrusStorageCapability,
 } from "./generated-media.js";
+import type { MatterhornBillingCapability } from "./billing.js";
+export type { MatterhornBillingCapability };
 
 export const MATTERHORN_BACKEND_CAPABILITIES_VERSION = "matterhorn.backend.capabilities.v1" as const;
 export const MATTERHORN_BACKEND_DATA_MAP_VERSION = "matterhorn.backend.data-map.v1" as const;
@@ -136,7 +138,8 @@ export interface MatterhornSettingsSectionCapability extends MatterhornCapabilit
     | "feedback"
     | "mcp"
     | "image-generation"
-    | "nft";
+    | "nft"
+    | "billing";
   route: string;
   workspaceScoped: boolean;
   desktopOnly: boolean;
@@ -170,6 +173,7 @@ export interface MatterhornBackendCapabilitiesResponse {
   walrusStorage: MatterhornWalrusStorageCapability;
   nftMinting: MatterhornNftMintingCapability;
   nftMarketplaceListing: MatterhornNftMarketplaceListingCapability;
+  billing: MatterhornBillingCapability;
   settings: MatterhornSettingsSectionCapability[];
 }
 

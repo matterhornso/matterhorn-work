@@ -193,7 +193,8 @@ export type SettingsTab =
   | "debug"
   | "wallet"
   | "generated-media"
-  | "marketplace";
+  | "marketplace"
+  | "billing";
 
 export type WorkspacePreset = "starter" | "automation" | "minimal";
 

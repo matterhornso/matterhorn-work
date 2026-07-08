@@ -7,6 +7,7 @@ import {
   CloudCog,
   Cog,
   Container,
+  CreditCard,
   FolderLock,
   Layout,
   Paintbrush,
@@ -104,6 +105,8 @@ export function getSettingsTabIcon(tab: SettingsTab) {
       return ImageIcon;
     case "marketplace":
       return Bot;
+    case "billing":
+      return CreditCard;
     default:
       return Cog;
   }
@@ -151,6 +154,8 @@ export function getSettingsTabLabel(tab: SettingsTab) {
       return "Generated media";
     case "marketplace":
       return "Agent Templates";
+    case "billing":
+      return "Billing";
     case "general":
       return "Settings";
     default:
@@ -225,6 +230,7 @@ const TAB_CAPABILITY_SECTIONS: Partial<Record<SettingsTab, MatterhornSettingsSec
   extensions: ["mcp"],
   wallet: ["wallet"],
   "generated-media": ["image-generation", "nft"],
+  billing: ["billing"],
 };
 
 function capabilityStatusRank(status: MatterhornCapabilityStatus) {
@@ -275,6 +281,7 @@ export function getSettingsTabStatus(
     case "generated-media":
     case "ai":
     case "cloud-account":
+    case "billing":
       return "Needs setup";
     case "shell":
     case "marketplace":
@@ -301,7 +308,7 @@ export function getWorkspaceSettingsTabs(developerMode = false): SettingsTab[] {
 }
 
 export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {
-  const tabs: SettingsTab[] = ["overview", "ai", "shell", "appearance", "updates"];
+  const tabs: SettingsTab[] = ["overview", "ai", "shell", "appearance", "updates", "billing"];
   if (developerMode) tabs.push("environment", "recovery", "debug");
   return tabs;
 }

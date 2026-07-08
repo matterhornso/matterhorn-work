@@ -30,6 +30,14 @@ import type {
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
 import type {
+  MatterhornBillingCheckoutRequest,
+  MatterhornBillingCheckoutResponse,
+  MatterhornBillingPlansResponse,
+  MatterhornBillingPortalRequest,
+  MatterhornBillingPortalResponse,
+  MatterhornBillingStatusResponse,
+} from "@matterhorn-work/types/billing";
+import type {
   MatterhornImageGenerationInput,
   MatterhornImageGenerationResponse,
   MatterhornGeneratedMediaDiagnosticsResponse,
@@ -2595,6 +2603,35 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         method: "POST",
         body: outputDir ? { outputDir } : {},
         timeoutMs: timeouts.workspaceExport,
+      }),
+
+    billingPlans: () =>
+      requestJson<MatterhornBillingPlansResponse>(baseUrl, "/api/billing/plans", {
+        token,
+        hostToken,
+        timeoutMs: timeouts.capabilities,
+      }),
+    billingStatus: () =>
+      requestJson<MatterhornBillingStatusResponse>(baseUrl, "/api/billing/status", {
+        token,
+        hostToken,
+        timeoutMs: timeouts.capabilities,
+      }),
+    billingCheckout: (input: MatterhornBillingCheckoutRequest) =>
+      requestJson<MatterhornBillingCheckoutResponse>(baseUrl, "/api/billing/checkout", {
+        token,
+        hostToken,
+        method: "POST",
+        body: input,
+        timeoutMs: timeouts.config,
+      }),
+    billingPortal: (input?: MatterhornBillingPortalRequest) =>
+      requestJson<MatterhornBillingPortalResponse>(baseUrl, "/api/billing/portal", {
+        token,
+        hostToken,
+        method: "POST",
+        body: input ?? {},
+        timeoutMs: timeouts.config,
       }),
 
     createVoiceRealtimeSession: (payload?: { model?: string }) =>
