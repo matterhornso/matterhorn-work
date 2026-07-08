@@ -709,6 +709,46 @@ function planIdValue(value: unknown): MatterhornBillingPlanId | null {
   return planId === "free" || planId === "plus" || planId === "max" ? planId : null;
 }
 
+function stripeClientReference(value: unknown): {
+  workspaceId: string | null;
+  planId: MatterhornBillingPlanId | null;
+} {
+  const reference = stringValue(value);
+  if (!reference?.startsWith("matterhorn_")) return { workspaceId: null, planId: null };
+  const body = reference.slice("matterhorn_".length);
+  for (const planId of ["free", "plus", "max"] as MatterhornBillingPlanId[]) {
+    const suffix = `_${planId}`;
+    if (body.endsWith(suffix)) {
+      const workspaceId = body.slice(0, -suffix.length).trim();
+      return { workspaceId: workspaceId || null, planId };
+    }
+  }
+  return { workspaceId: null, planId: planIdValue(body) };
+}
+
+function planIdFromStripePrice(config: BillingProviderConfig, value: unknown): MatterhornBillingPlanId | null {
+  const priceId = stringValue(value);
+  if (!priceId) return null;
+  for (const planId of ["plus", "max"] as MatterhornBillingPlanId[]) {
+    if (config.stripePriceIds?.[planId]?.trim() === priceId) return planId;
+  }
+  return null;
+}
+
+function planIdFromStripeSubscriptionItems(
+  config: BillingProviderConfig,
+  object: Record<string, unknown>,
+): MatterhornBillingPlanId | null {
+  const items = objectValue(object.items);
+  const data = Array.isArray(items?.data) ? items.data : [];
+  for (const item of data) {
+    const price = objectValue(objectValue(item)?.price);
+    const planId = planIdFromStripePrice(config, price?.id);
+    if (planId) return planId;
+  }
+  return null;
+}
+
 function subscriptionStatusValue(value: unknown): MatterhornBillingSubscription["status"] {
   const status = stringValue(value);
   if (
@@ -859,8 +899,17 @@ export function createStripeTestBillingProvider(config: BillingProviderConfig): 
         return { ...base, handled: false };
       }
       const metadata = stripeMetadata(dataObject);
-      const workspaceId = stringValue(metadata.workspace_id);
-      const metadataPlanId = planIdValue(metadata.plan_id);
+      const subscriptionDetailsMetadata = stripeMetadata(objectValue(dataObject.subscription_details) ?? {});
+      const reference = stripeClientReference(dataObject.client_reference_id);
+      const workspaceId =
+        stringValue(metadata.workspace_id) ??
+        stringValue(subscriptionDetailsMetadata.workspace_id) ??
+        reference.workspaceId;
+      const metadataPlanId =
+        planIdValue(metadata.plan_id) ??
+        planIdValue(subscriptionDetailsMetadata.plan_id) ??
+        reference.planId ??
+        planIdFromStripeSubscriptionItems(config, dataObject);
       const providerCustomerId = stringValue(dataObject.customer);
       const providerSubscriptionId =
         stringValue(dataObject.subscription) ??

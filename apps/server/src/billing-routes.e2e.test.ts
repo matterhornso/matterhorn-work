@@ -644,6 +644,105 @@ describe("Billing routes", () => {
     expect(canceledStatus.payload.status.usage.generatedImages.limit).toBe(10);
   });
 
+  test("POST /api/billing/webhook/stripe uses Checkout client references and subscription price ids as safe fallbacks", async () => {
+    process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
+    process.env.MATTERHORN_BILLING_PROVIDER = "stripe";
+    process.env.MATTERHORN_STRIPE_WEBHOOK_SECRET = "whsec_fallbacks";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_PLUS = "price_plus_fallback";
+    process.env.MATTERHORN_STRIPE_PRICE_ID_MAX = "price_max_fallback";
+
+    const { base } = await boot();
+    const checkoutBody = JSON.stringify({
+      id: "evt_checkout_fallback",
+      type: "checkout.session.completed",
+      livemode: false,
+      data: {
+        object: {
+          id: "cs_test_fallback",
+          object: "checkout.session",
+          customer: "cus_test_fallback",
+          subscription: "sub_test_fallback",
+          client_reference_id: `matterhorn_${WORKSPACE_ID}_plus`,
+          metadata: {},
+        },
+      },
+    });
+    const checkout = await jsonFetch(
+      base,
+      "/api/billing/webhook/stripe",
+      {
+        method: "POST",
+        body: checkoutBody,
+        headers: { "stripe-signature": stripeSignatureHeader("whsec_fallbacks", checkoutBody) },
+      },
+      undefined,
+    );
+    expect(checkout.response.status).toBe(200);
+    expect(checkout.payload).toMatchObject({
+      verified: true,
+      handled: true,
+      workspaceSynced: true,
+      workspaceId: WORKSPACE_ID,
+      planId: "plus",
+    });
+
+    const subscriptionBody = JSON.stringify({
+      id: "evt_subscription_price_fallback",
+      type: "customer.subscription.updated",
+      livemode: false,
+      data: {
+        object: {
+          id: "sub_test_fallback",
+          object: "subscription",
+          customer: "cus_test_fallback",
+          status: "active",
+          current_period_start: 1783517000,
+          current_period_end: 1786109000,
+          metadata: {
+            workspace_id: WORKSPACE_ID,
+          },
+          items: {
+            data: [
+              {
+                price: {
+                  id: "price_max_fallback",
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+    const subscription = await jsonFetch(
+      base,
+      "/api/billing/webhook/stripe",
+      {
+        method: "POST",
+        body: subscriptionBody,
+        headers: { "stripe-signature": stripeSignatureHeader("whsec_fallbacks", subscriptionBody) },
+      },
+      undefined,
+    );
+    expect(subscription.response.status).toBe(200);
+    expect(subscription.payload).toMatchObject({
+      verified: true,
+      handled: true,
+      workspaceSynced: true,
+      workspaceId: WORKSPACE_ID,
+      planId: "max",
+      subscriptionStatus: "active",
+    });
+
+    const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(status.payload.status.subscription).toMatchObject({
+      planId: "max",
+      status: "active",
+      providerCustomerId: "cus_test_fallback",
+      providerSubscriptionId: "sub_test_fallback",
+    });
+    expect(status.payload.status.usage.generatedImages.limit).toBe(null);
+  });
+
   test("POST /api/billing/portal creates a Stripe test Customer Portal session when a test customer is configured", async () => {
     const stripe = await startFakeStripe();
     process.env.MATTERHORN_BILLING_MODE = "phase1_stripe_test";
