@@ -616,6 +616,12 @@ describe("project data ledger routes", () => {
   test("team access token changes appear as redacted access ledger rows", async () => {
     const { base } = await boot();
 
+    const upgraded = await jsonFetch(base, "/workspace/ws_ledger/billing/checkout", {
+      method: "POST",
+      body: JSON.stringify({ planId: "max" }),
+    });
+    expect(upgraded.response.status).toBe(200);
+
     const created = await hostFetch(base, "/workspace/ws_ledger/backend/team-access/tokens", {
       method: "POST",
       body: JSON.stringify({

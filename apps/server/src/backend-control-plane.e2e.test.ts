@@ -1178,6 +1178,25 @@ describe("backend control plane routes", () => {
     expect(invalidOwner.response.status).toBe(400);
     expect(invalidOwner.payload.code).toBe("invalid_scope");
 
+    const blockedOnFree = await hostFetch(base, "/workspace/ws_backend/backend/team-access/tokens", {
+      method: "POST",
+      body: JSON.stringify({ scope: "viewer", label: "Read-only reviewer" }),
+    });
+    expect(blockedOnFree.response.status).toBe(429);
+    expect(blockedOnFree.payload.code).toBe("billing_entitlement_limit_reached");
+    expect(blockedOnFree.payload.details).toMatchObject({
+      entitlementKey: "team_members",
+      currentPlanId: "free",
+      used: 1,
+      limit: 1,
+    });
+
+    const upgraded = await jsonFetch(base, "/workspace/ws_backend/billing/checkout", {
+      method: "POST",
+      body: JSON.stringify({ planId: "max" }),
+    });
+    expect(upgraded.response.status).toBe(200);
+
     const created = await hostFetch(base, "/workspace/ws_backend/backend/team-access/tokens", {
       method: "POST",
       body: JSON.stringify({ scope: "viewer", label: "Read-only reviewer" }),
@@ -1215,6 +1234,11 @@ describe("backend control plane routes", () => {
       }),
     );
     expect(JSON.stringify(statusAfterCreate.payload)).not.toContain(created.payload.token.token);
+
+    const billingStatus = await jsonFetch(base, "/workspace/ws_backend/billing/status");
+    expect(billingStatus.response.status).toBe(200);
+    expect(billingStatus.payload.status.subscription.planId).toBe("max");
+    expect(billingStatus.payload.status.usage.teamMembers).toMatchObject({ used: 2, limit: 10 });
 
     const revoke = await hostFetch(base, `/workspace/ws_backend/backend/team-access/tokens/${created.payload.token.id}`, {
       method: "DELETE",
