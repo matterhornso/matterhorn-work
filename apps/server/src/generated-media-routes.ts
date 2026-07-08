@@ -427,6 +427,7 @@ export function addGeneratedMediaRoutes(
         contentType: image.contentType,
         bytes,
         epochs: nftEnv.walrusStorageEpochs ?? 1,
+        expectedSha256: image.sha256,
       });
       const updated = await store.updateStorageStatus(draft.id, "uploaded", {
         provider: "walrus",
@@ -466,10 +467,21 @@ export function addGeneratedMediaRoutes(
       const response: MatterhornImageNftDraftResponse = { success: true, draft: redactNftDraftForResponse(updated!) };
       return jsonResponse(response);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Walrus upload failed.";
+      const rawMessage = error instanceof Error ? error.message : "Walrus upload failed.";
+      const message = redactResponseString(rawMessage, "Walrus upload failed.");
+      const code = error instanceof WalrusUploadError ? error.code : "walrus_upload_failed";
+      const status = error instanceof WalrusUploadError ? error.status ?? 502 : 502;
       await store.updateStorageStatus(draft.id, "failed", { provider: "walrus", error: message });
+      await recordWalrusUploadFailure({
+        workspace,
+        ctx,
+        draft,
+        image,
+        code,
+        status,
+      });
       if (error instanceof WalrusUploadError) {
-        throw new ApiError(error.status ?? 502, error.code, message);
+        throw new ApiError(status, code, message);
       }
       throw new ApiError(502, "walrus_upload_failed", message);
     }
@@ -886,6 +898,50 @@ function publicNftPreviewMetadata(
     custody: false,
     containsSignatureMaterial: false,
   };
+}
+
+async function recordWalrusUploadFailure(input: {
+  workspace: WorkspaceInfo;
+  ctx: RequestContext;
+  draft: MatterhornImageNftDraft;
+  image: MatterhornGeneratedImage;
+  code: string;
+  status: number;
+}): Promise<void> {
+  const metadata: PublicNftReceiptMetadata = {
+    nftOutputKind: "walrus_upload_failed",
+    nftNetwork: input.draft.network,
+    nftObjectId: null,
+    nftPackageId: null,
+    nftKioskId: null,
+    nftTransferPolicyId: null,
+    walrusErrorCode: input.code,
+    walrusStatus: input.status,
+    custody: false,
+    containsSignatureMaterial: false,
+  };
+  const recordedAtMs = Date.now();
+  await recordAudit(input.workspace.path, {
+    id: shortId(),
+    workspaceId: input.workspace.id,
+    actor: input.ctx.actor ?? { type: "remote" },
+    action: "workspace.nft.storage_upload_failed",
+    target: input.draft.id,
+    summary: `Walrus upload failed for NFT draft ${input.draft.id}`,
+    timestamp: recordedAtMs,
+    metadata,
+  });
+  await recordTaskEvent({
+    id: `task_evt_${shortId()}`,
+    workspaceId: input.workspace.id,
+    taskId: `nft_storage_${input.draft.id}`,
+    type: "failed",
+    timestamp: recordedAtMs,
+    summary: "NFT media upload failed",
+    detail: `nft;${input.draft.id}`,
+    artifactPath: input.image.relativePath,
+    metadata,
+  });
 }
 
 async function writePublicNftReceiptFile(input: {
