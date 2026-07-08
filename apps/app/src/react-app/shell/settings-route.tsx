@@ -555,6 +555,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const [localProviderBusy, setLocalProviderBusy] = useState(false);
   const [localProviderStatus, setLocalProviderStatus] = useState<string | null>(null);
   const [localProviderError, setLocalProviderError] = useState<string | null>(null);
+  const [extensionDetailRequest, setExtensionDetailRequest] = useState<{ id: string; requestId: number } | null>(null);
   const [imageExtensionInstalled, setImageExtensionInstalled] = useState(false);
   const [googleWorkspaceConnected, setGoogleWorkspaceConnected] = useState(false);
   const [imageExtensionBusy, setImageExtensionBusy] = useState(false);
@@ -2061,6 +2062,14 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     navigate(workspaceId ? workspaceSessionRoute(workspaceId) : "/session");
   };
 
+  const openExtensionDetail = useCallback((id: string) => {
+    setExtensionDetailRequest((current) => ({
+      id,
+      requestId: (current?.requestId ?? 0) + 1,
+    }));
+    navigateSettingsPath("extensions/mcp");
+  }, [navigateSettingsPath]);
+
   const settingsView = (() => {
     switch (route.tab) {
       case "overview":
@@ -2223,6 +2232,12 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                 selectedMcp={connectionsSnapshot.selectedMcp}
                 setSelectedMcp={(name) => connectionsStore.setSelectedMcp(name)}
                 quickConnect={connectionsStore.quickConnect}
+                detailEntryRequest={extensionDetailRequest}
+                onDetailEntryRequestHandled={(requestId) => {
+                  setExtensionDetailRequest((current) =>
+                    current?.requestId === requestId ? null : current
+                  );
+                }}
                 enablementContext={enablementContext}
                 builtInExtensionsDisabled={checkDesktopRestriction({ restriction: "allowBuiltInExtensions" })}
                 compact={props.embedded}
@@ -2492,6 +2507,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             runtimeWorkspaceId={runtimeWorkspaceId}
             onOpenWorkspaceChat={openWorkspaceChat}
             onOpenRunHistory={openWorkspaceOutputs}
+            onOpenImageProviderSetup={() => openExtensionDetail("openai-image-gen")}
           />
         );
       case "marketplace":
