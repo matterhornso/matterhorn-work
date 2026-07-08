@@ -180,6 +180,9 @@ for (const required of [
   "--require-production",
   "No public writes were performed.",
   "publicWritesOnlyAfterUserAction",
+  "Production env checklist",
+  "envChecklist",
+  "MATTERHORN_SUI_KIOSK_PACKAGE_ID",
 ]) {
   assert.ok(source.includes(required), `production readiness script missing ${required}`);
 }
@@ -197,6 +200,11 @@ for (const required of [
     assert.equal(report.canRunEndToEnd, true);
     assert.equal(report.publicWritesOnlyAfterUserAction, true);
     assert.equal(report.safety.publicWritesDuringDiagnostics, false);
+    assert.ok(report.envChecklist.some((item) => item.envVar === "OPENAI_API_KEY" && item.secret === true && item.example === "<secret>"));
+    assert.ok(report.envChecklist.some((item) => item.envVar === "MATTERHORN_WALRUS_PUBLISHER_URL" && item.required === true));
+    assert.ok(report.envChecklist.some((item) => item.envVar === "MATTERHORN_SUI_NFT_PACKAGE_ID" && item.required === true));
+    assert.ok(report.envChecklist.some((item) => item.envVar === "MATTERHORN_SUI_TRANSFER_POLICY_ID" && item.required === false));
+    assert.ok(!JSON.stringify(report).includes("test-client-token"));
     assertNoWrites(server.requests);
     assert.ok(server.requests.every((request) => request.authorization === "Bearer test-client-token"));
   } finally {
@@ -227,7 +235,12 @@ for (const required of [
     assert.equal(result.code, 0, result.stderr || result.stdout);
     assert.ok(result.stdout.includes("Matterhorn generated-media production readiness: NEEDS SETUP"));
     assert.ok(result.stdout.includes("No public writes were performed."));
+    assert.ok(result.stdout.includes("Production env checklist"));
     assert.ok(result.stdout.includes("OPENAI_API_KEY"));
+    assert.ok(result.stdout.includes("MATTERHORN_WALRUS_PUBLISHER_URL"));
+    assert.ok(result.stdout.includes("MATTERHORN_SUI_NFT_PACKAGE_ID"));
+    assert.ok(result.stdout.includes("MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID"));
+    assert.ok(result.stdout.includes("OPENAI_API_KEY=<secret>"));
     assertNoWrites(server.requests);
   } finally {
     await server.close();
@@ -260,6 +273,8 @@ for (const required of [
     assert.equal(report.version, "matterhorn.generated-media-production-readiness.v1");
     assert.equal(report.mode, "needs_setup");
     assert.equal(report.ready, false);
+    assert.ok(report.envChecklist.some((item) => item.envVar === "MATTERHORN_IMAGE_PROVIDER" && item.example === "openai"));
+    assert.ok(report.envChecklist.every((item) => !String(item.example).startsWith("sk-")));
     assertNoWrites(server.requests);
   } finally {
     await server.close();
