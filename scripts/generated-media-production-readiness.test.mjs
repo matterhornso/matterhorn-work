@@ -178,7 +178,9 @@ for (const required of [
   "matterhorn.generated-media-production-readiness.v1",
   "/generated-media/diagnostics",
   "--require-production",
+  "--markdown-output",
   "No public writes were performed.",
+  "Markdown report",
   "publicWritesOnlyAfterUserAction",
   "Production env checklist",
   "envChecklist",
@@ -267,14 +269,27 @@ for (const required of [
   const server = await startMatterhornServer({ diagnostics: productionDiagnostics({ mode: "needs_setup" }) });
   try {
     const outputPath = join(outputDir, "readiness.json");
-    const result = await run(["--server-url", server.url, "--workspace-id", "ws_test", "--json-output", outputPath]);
+    const markdownPath = join(outputDir, "readiness.md");
+    const result = await run(["--server-url", server.url, "--workspace-id", "ws_test", "--json-output", outputPath, "--markdown-output", markdownPath]);
     assert.equal(result.code, 0, result.stderr || result.stdout);
+    assert.ok(result.stdout.includes(`JSON report: ${outputPath}`));
+    assert.ok(result.stdout.includes(`Markdown report: ${markdownPath}`));
     const report = JSON.parse(readFileSync(outputPath, "utf8"));
     assert.equal(report.version, "matterhorn.generated-media-production-readiness.v1");
     assert.equal(report.mode, "needs_setup");
     assert.equal(report.ready, false);
     assert.ok(report.envChecklist.some((item) => item.envVar === "MATTERHORN_IMAGE_PROVIDER" && item.example === "openai"));
     assert.ok(report.envChecklist.every((item) => !String(item.example).startsWith("sk-")));
+    const markdown = readFileSync(markdownPath, "utf8");
+    assert.ok(markdown.includes("# Matterhorn Generated Media Readiness"));
+    assert.ok(markdown.includes("No public writes were performed."));
+    assert.ok(markdown.includes("## Production Env Checklist"));
+    assert.ok(markdown.includes("OPENAI_API_KEY"));
+    assert.ok(markdown.includes("<secret>"));
+    assert.ok(markdown.includes("Generated media needs setup."));
+    assert.ok(markdown.includes("Set OPENAI_API_KEY before using real image generation."));
+    assert.ok(!markdown.includes("test-client-token"));
+    assert.ok(!/sk-[A-Za-z0-9_-]{20,}/.test(markdown));
     assertNoWrites(server.requests);
   } finally {
     await server.close();
@@ -289,6 +304,7 @@ for (const required of [
     "Matterhorn generated-media production readiness",
     "pnpm smoke:generated-media-production-readiness",
     "--require-production",
+    "--markdown-output",
     "performs no public writes",
   ]) {
     assert.ok(help.stdout.includes(text), `help missing ${text}`);
