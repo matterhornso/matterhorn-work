@@ -9,6 +9,7 @@ import type {
   MatterhornWalrusStorageCapability,
 } from "@matterhorn-work/types/generated-media";
 import type { ImageGenerationProviderConfig, ImageGenerationProviderStatus } from "./image-generation-provider.js";
+import { normalizeMatterhornSuiAddress } from "./tools/sui.js";
 
 export interface NftEnvironmentConfig {
   suiNetwork?: "sui-testnet" | "sui-mainnet";
@@ -30,6 +31,14 @@ export interface NftEnvironmentConfig {
 export interface NftEnvironmentValidationIssue {
   field:
     | "MATTERHORN_SUI_NETWORK"
+    | "MATTERHORN_SUI_NFT_PACKAGE_ID"
+    | "MATTERHORN_SUI_NFT_MODULE_NAME"
+    | "MATTERHORN_SUI_NFT_TYPE"
+    | "MATTERHORN_SUI_KIOSK_PACKAGE_ID"
+    | "MATTERHORN_SUI_KIOSK_ID"
+    | "MATTERHORN_SUI_KIOSK_OWNER_CAP_ID"
+    | "MATTERHORN_SUI_TRANSFER_POLICY_ID"
+    | "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID"
     | "MATTERHORN_WALRUS_PUBLISHER_URL"
     | "MATTERHORN_WALRUS_RELAY_URL"
     | "MATTERHORN_WALRUS_STORAGE_EPOCHS";
@@ -59,6 +68,14 @@ export function resolveNftEnvironmentConfig(env: typeof process.env): NftEnviron
       message: "MATTERHORN_WALRUS_STORAGE_EPOCHS must be a positive number.",
     });
   }
+  validateOptionalSuiObjectId(env.MATTERHORN_SUI_NFT_PACKAGE_ID, "MATTERHORN_SUI_NFT_PACKAGE_ID", "Sui NFT package", validationIssues);
+  validateOptionalSuiMoveIdentifier(env.MATTERHORN_SUI_NFT_MODULE_NAME, "MATTERHORN_SUI_NFT_MODULE_NAME", "Sui NFT module", validationIssues);
+  validateOptionalSuiMoveType(env.MATTERHORN_SUI_NFT_TYPE, "MATTERHORN_SUI_NFT_TYPE", "Sui NFT type", validationIssues);
+  validateOptionalSuiObjectId(env.MATTERHORN_SUI_KIOSK_PACKAGE_ID, "MATTERHORN_SUI_KIOSK_PACKAGE_ID", "Sui Kiosk package", validationIssues);
+  validateOptionalSuiObjectId(env.MATTERHORN_SUI_KIOSK_ID, "MATTERHORN_SUI_KIOSK_ID", "Sui Kiosk", validationIssues);
+  validateOptionalSuiObjectId(env.MATTERHORN_SUI_KIOSK_OWNER_CAP_ID, "MATTERHORN_SUI_KIOSK_OWNER_CAP_ID", "Sui Kiosk owner cap", validationIssues);
+  validateOptionalSuiObjectId(env.MATTERHORN_SUI_TRANSFER_POLICY_ID, "MATTERHORN_SUI_TRANSFER_POLICY_ID", "Sui TransferPolicy", validationIssues);
+  validateOptionalSuiObjectId(env.MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID, "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID", "Sui TransferPolicy package", validationIssues);
   return {
     suiNetwork,
     suiNftPackageId: env.MATTERHORN_SUI_NFT_PACKAGE_ID?.trim(),
@@ -142,8 +159,13 @@ export function buildWalrusStorageCapability(config: NftEnvironmentConfig): Matt
 }
 
 export function buildNftMintingCapability(config: NftEnvironmentConfig): MatterhornNftMintingCapability {
-  const issues = validationIssuesFor(config, "MATTERHORN_SUI_NETWORK");
-  const packageConfigured = Boolean(config.suiNftPackageId?.trim());
+  const issues = validationIssuesFor(
+    config,
+    "MATTERHORN_SUI_NETWORK",
+    "MATTERHORN_SUI_NFT_PACKAGE_ID",
+    "MATTERHORN_SUI_NFT_MODULE_NAME",
+  );
+  const packageConfigured = Boolean(config.suiNftPackageId?.trim()) && !validationIssueFor(config, "MATTERHORN_SUI_NFT_PACKAGE_ID");
   const status = issues.length ? "error" : packageConfigured ? "preview" : "needs_setup";
   const setupRequirements = buildMintCapabilitySetupRequirements(config);
   return {
@@ -151,7 +173,7 @@ export function buildNftMintingCapability(config: NftEnvironmentConfig): Matterh
       status,
       "Sui NFT minting",
       status === "error"
-        ? "Sui NFT minting has invalid setup. Fix the network value before preparing mint previews."
+        ? "Sui NFT minting has invalid setup. Fix the highlighted environment values before preparing mint previews."
         : status === "preview"
         ? "Sui NFT mint previews can be prepared. Minting is signed by the user's Sui wallet; Matterhorn has no custody."
         : "Sui NFT package is not configured. Set MATTERHORN_SUI_NFT_PACKAGE_ID to enable mint previews.",
@@ -174,8 +196,19 @@ export function buildNftMintingCapability(config: NftEnvironmentConfig): Matterh
 export function buildNftMarketplaceListingCapability(
   config: NftEnvironmentConfig,
 ): MatterhornNftMarketplaceListingCapability {
-  const issues = validationIssuesFor(config, "MATTERHORN_SUI_NETWORK");
-  const packageConfigured = Boolean(config.suiKioskPackageId?.trim() && config.suiTransferPolicyPackageId?.trim());
+  const issues = validationIssuesFor(
+    config,
+    "MATTERHORN_SUI_NETWORK",
+    "MATTERHORN_SUI_NFT_TYPE",
+    "MATTERHORN_SUI_KIOSK_PACKAGE_ID",
+    "MATTERHORN_SUI_KIOSK_ID",
+    "MATTERHORN_SUI_KIOSK_OWNER_CAP_ID",
+    "MATTERHORN_SUI_TRANSFER_POLICY_ID",
+    "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID",
+  );
+  const packageConfigured = Boolean(config.suiKioskPackageId?.trim() && config.suiTransferPolicyPackageId?.trim())
+    && !validationIssueFor(config, "MATTERHORN_SUI_KIOSK_PACKAGE_ID")
+    && !validationIssueFor(config, "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID");
   const status = issues.length ? "error" : packageConfigured ? "preview" : "needs_setup";
   const setupRequirements = buildListingCapabilitySetupRequirements(config);
   return {
@@ -183,7 +216,7 @@ export function buildNftMarketplaceListingCapability(
       status,
       "NFT marketplace listing",
       status === "error"
-        ? "NFT marketplace listing has invalid setup. Fix the network value before preparing listing previews."
+        ? "NFT marketplace listing has invalid setup. Fix the highlighted environment values before preparing listing previews."
         : status === "preview"
         ? "Kiosk/TransferPolicy listing previews can be prepared. Listing transactions are signed by the user's Sui wallet."
         : "Kiosk/TransferPolicy config is not configured. Set MATTERHORN_SUI_KIOSK_PACKAGE_ID and MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID to enable listing previews.",
@@ -259,6 +292,8 @@ function buildWalrusCapabilitySetupRequirements(config: NftEnvironmentConfig): M
 
 function buildMintCapabilitySetupRequirements(config: NftEnvironmentConfig): MatterhornNftSetupRequirement[] {
   const networkIssue = validationIssueFor(config, "MATTERHORN_SUI_NETWORK");
+  const packageIssue = validationIssueFor(config, "MATTERHORN_SUI_NFT_PACKAGE_ID");
+  const moduleIssue = validationIssueFor(config, "MATTERHORN_SUI_NFT_MODULE_NAME");
   return [
     ...(networkIssue ? [nftSetupRequirement({
       key: "sui_network",
@@ -271,22 +306,28 @@ function buildMintCapabilitySetupRequirements(config: NftEnvironmentConfig): Mat
       key: "sui_nft_package",
       label: "Sui NFT package",
       envVar: "MATTERHORN_SUI_NFT_PACKAGE_ID",
-      status: config.suiNftPackageId?.trim() ? "configured" : "missing",
-      description: "Mint previews need the Move package id that defines the NFT mint entrypoint.",
+      status: packageIssue ? "invalid" : config.suiNftPackageId?.trim() ? "configured" : "missing",
+      description: packageIssue?.message ?? "Mint previews need the Move package id that defines the NFT mint entrypoint.",
     }),
     nftSetupRequirement({
       key: "sui_nft_module",
       label: "Sui NFT module",
       envVar: "MATTERHORN_SUI_NFT_MODULE_NAME",
-      status: "configured",
-      description: `Move module name for mint previews. Defaults to ${config.suiNftModuleName || "matterhorn_nft"}.`,
+      status: moduleIssue ? "invalid" : "configured",
+      description: moduleIssue?.message ?? `Move module name for mint previews. Defaults to ${config.suiNftModuleName || "matterhorn_nft"}.`,
     }),
   ];
 }
 
 function buildListingCapabilitySetupRequirements(config: NftEnvironmentConfig): MatterhornNftSetupRequirement[] {
   const networkIssue = validationIssueFor(config, "MATTERHORN_SUI_NETWORK");
-  return [
+  const nftTypeIssue = validationIssueFor(config, "MATTERHORN_SUI_NFT_TYPE");
+  const kioskPackageIssue = validationIssueFor(config, "MATTERHORN_SUI_KIOSK_PACKAGE_ID");
+  const kioskIssue = validationIssueFor(config, "MATTERHORN_SUI_KIOSK_ID");
+  const kioskOwnerCapIssue = validationIssueFor(config, "MATTERHORN_SUI_KIOSK_OWNER_CAP_ID");
+  const transferPolicyIssue = validationIssueFor(config, "MATTERHORN_SUI_TRANSFER_POLICY_ID");
+  const transferPolicyPackageIssue = validationIssueFor(config, "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID");
+  const requirements = [
     ...(networkIssue ? [nftSetupRequirement({
       key: "sui_network",
       label: "Sui network",
@@ -298,17 +339,54 @@ function buildListingCapabilitySetupRequirements(config: NftEnvironmentConfig): 
       key: "sui_kiosk_package",
       label: "Sui Kiosk package",
       envVar: "MATTERHORN_SUI_KIOSK_PACKAGE_ID",
-      status: config.suiKioskPackageId?.trim() ? "configured" : "missing",
-      description: "Marketplace listing previews need the Kiosk package/config id.",
+      status: kioskPackageIssue ? "invalid" : config.suiKioskPackageId?.trim() ? "configured" : "missing",
+      description: kioskPackageIssue?.message ?? "Marketplace listing previews need the Kiosk package/config id.",
     }),
     nftSetupRequirement({
       key: "sui_transfer_policy",
       label: "Sui TransferPolicy",
       envVar: "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID",
-      status: config.suiTransferPolicyPackageId?.trim() ? "configured" : "missing",
-      description: "Listings need the TransferPolicy config that controls marketplace transfer rules.",
+      status: transferPolicyPackageIssue ? "invalid" : config.suiTransferPolicyPackageId?.trim() ? "configured" : "missing",
+      description: transferPolicyPackageIssue?.message ?? "Listings need the TransferPolicy config that controls marketplace transfer rules.",
     }),
   ];
+  if (nftTypeIssue) {
+    requirements.push(nftSetupRequirement({
+      key: "sui_nft_type",
+      label: "Sui NFT type",
+      envVar: "MATTERHORN_SUI_NFT_TYPE",
+      status: "invalid",
+      description: nftTypeIssue.message,
+    }));
+  }
+  if (kioskIssue) {
+    requirements.push(nftSetupRequirement({
+      key: "sui_kiosk_id",
+      label: "User Kiosk id",
+      envVar: "MATTERHORN_SUI_KIOSK_ID",
+      status: "invalid",
+      description: kioskIssue.message,
+    }));
+  }
+  if (kioskOwnerCapIssue) {
+    requirements.push(nftSetupRequirement({
+      key: "sui_kiosk_owner_cap",
+      label: "Kiosk owner cap",
+      envVar: "MATTERHORN_SUI_KIOSK_OWNER_CAP_ID",
+      status: "invalid",
+      description: kioskOwnerCapIssue.message,
+    }));
+  }
+  if (transferPolicyIssue) {
+    requirements.push(nftSetupRequirement({
+      key: "sui_transfer_policy",
+      label: "TransferPolicy object",
+      envVar: "MATTERHORN_SUI_TRANSFER_POLICY_ID",
+      status: "invalid",
+      description: transferPolicyIssue.message,
+    }));
+  }
+  return requirements;
 }
 
 function nftSetupRequirement(input: MatterhornNftSetupRequirement): MatterhornNftSetupRequirement {
@@ -373,6 +451,60 @@ function parsePublicHttpUrl(
     issues.push({ field, message: `${field} must be a valid URL.` });
     return undefined;
   }
+}
+
+function validateOptionalSuiObjectId(
+  value: string | undefined,
+  field: NftEnvironmentValidationIssue["field"],
+  label: string,
+  issues: NftEnvironmentValidationIssue[],
+): void {
+  if (!value?.trim()) return;
+  try {
+    normalizeMatterhornSuiAddress(value);
+  } catch {
+    issues.push({ field, message: `${label} must be a valid Sui object id.` });
+  }
+}
+
+function validateOptionalSuiMoveIdentifier(
+  value: string | undefined,
+  field: NftEnvironmentValidationIssue["field"],
+  label: string,
+  issues: NftEnvironmentValidationIssue[],
+): void {
+  if (!value?.trim()) return;
+  if (!isSuiMoveIdentifier(value.trim())) {
+    issues.push({ field, message: `${label} must be a Move identifier.` });
+  }
+}
+
+function validateOptionalSuiMoveType(
+  value: string | undefined,
+  field: NftEnvironmentValidationIssue["field"],
+  label: string,
+  issues: NftEnvironmentValidationIssue[],
+): void {
+  if (!value?.trim()) return;
+  const parts = value.trim().split("::");
+  if (parts.length < 3) {
+    issues.push({ field, message: `${label} must be a full Move type like 0x...::module::Type.` });
+    return;
+  }
+  const [packageId, moduleName, ...typeParts] = parts;
+  try {
+    normalizeMatterhornSuiAddress(packageId);
+  } catch {
+    issues.push({ field, message: `${label} package id must be a valid Sui object id.` });
+    return;
+  }
+  if (!isSuiMoveIdentifier(moduleName) || typeParts.some((part) => !isSuiMoveIdentifier(part))) {
+    issues.push({ field, message: `${label} module and type names must be Move identifiers.` });
+  }
+}
+
+function isSuiMoveIdentifier(value: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
 }
 
 function validationIssuesFor(
