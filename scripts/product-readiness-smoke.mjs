@@ -37,6 +37,7 @@ function parseArgs(argv) {
     dryRun: false,
     json: false,
     jsonOutput: "",
+    markdownOutput: "",
     timeoutMs: 120_000,
     help: false,
   };
@@ -80,6 +81,9 @@ function parseArgs(argv) {
       case "--json-output":
         config.jsonOutput = next();
         break;
+      case "--markdown-output":
+        config.markdownOutput = next();
+        break;
       case "--help":
       case "-h":
         config.help = true;
@@ -115,6 +119,7 @@ function help() {
     "  pnpm smoke:product-readiness",
     "  node scripts/product-readiness-smoke.mjs --server-url <url> --token <token> --strict",
     "  node scripts/product-readiness-smoke.mjs --dry-run --json",
+    "  node scripts/product-readiness-smoke.mjs --dry-run --markdown-output product-readiness.md",
     "",
     "Add --include-generated-media-flow to also run the full image -> Walrus -> Sui NFT receipt flow.",
   ].join("\n");
@@ -280,6 +285,29 @@ function runProductionCorsReadiness(config) {
       });
     });
   });
+}
+
+function markdownEscape(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .replace(/\n+/g, " ")
+    .replace(/(sk-[A-Za-z0-9_-]{20,}|owt_[A-Za-z0-9._-]{16,})/g, "<redacted>")
+    .trim();
+}
+
+function redactMarkdownText(value) {
+  let text = String(value ?? "");
+  for (const key of forbiddenLeakKeys) {
+    text = text.split(key).join("<redacted>");
+  }
+  return markdownEscape(text);
+}
+
+function summarizeArtifactForMarkdown(value) {
+  if (value == null) return "";
+  const serialized = JSON.stringify(value);
+  return redactMarkdownText(serialized.length > 500 ? `${serialized.slice(0, 500)}...` : serialized);
 }
 
 async function runProductReadinessSmoke(config) {
@@ -535,6 +563,7 @@ async function runProductReadinessSmoke(config) {
 function emitReport(report, config) {
   const serialized = JSON.stringify(report, null, 2);
   if (config.jsonOutput) writeFileSync(config.jsonOutput, `${serialized}\n`);
+  if (config.markdownOutput) writeFileSync(config.markdownOutput, buildMarkdownReport(report));
   if (config.json) {
     process.stdout.write(`${serialized}\n`);
     return;
@@ -547,6 +576,60 @@ function emitReport(report, config) {
     process.stdout.write(`- ${String(stage.status).toUpperCase()} ${stage.id}: ${stage.label}${reason}${error}\n`);
   }
   if (config.jsonOutput) process.stdout.write(`JSON report: ${config.jsonOutput}\n`);
+  if (config.markdownOutput) process.stdout.write(`Markdown report: ${config.markdownOutput}\n`);
+}
+
+function buildMarkdownReport(report) {
+  const lines = [
+    "# Matterhorn Product Readiness",
+    "",
+    `Generated: ${markdownEscape(report.metadata.generatedAt)}`,
+    `Workspace: ${markdownEscape(report.metadata.workspaceId || "unknown")}`,
+    `Server: ${markdownEscape(report.metadata.serverUrl || "unknown")}`,
+    `Mode: ${report.dryRun ? "dry run" : "live"}`,
+    `Overall: ${report.ready ? "pass" : "fail"}`,
+    "",
+    "## Safety",
+    "",
+    `- Non-custodial: ${report.safety.nonCustodial ? "yes" : "no"}`,
+    `- Live submission enabled: ${report.safety.liveSubmissionEnabled ? "yes" : "no"}`,
+    `- Asks for secrets: ${report.safety.asksForSecrets ? "yes" : "no"}`,
+    `- Training use: ${markdownEscape(report.safety.trainingUse || "unknown")}`,
+    "",
+    "## Summary",
+    "",
+    `- Passed: ${Number(report.summary.pass ?? 0)}`,
+    `- Failed: ${Number(report.summary.fail ?? 0)}`,
+    `- Skipped: ${Number(report.summary.skip ?? 0)}`,
+    "",
+    "## Stages",
+    "",
+    "| Stage | Status | Label | Detail |",
+    "| --- | --- | --- | --- |",
+  ];
+
+  for (const stage of report.stages) {
+    const detail = stage.reason || stage.error || (Array.isArray(stage.command) ? stage.command.join(" ") : "");
+    lines.push(`| ${markdownEscape(stage.id)} | ${markdownEscape(stage.status)} | ${markdownEscape(stage.label)} | ${redactMarkdownText(detail)} |`);
+  }
+
+  lines.push("", "## Artifacts", "");
+  const artifactEntries = Object.entries(report.artifacts ?? {});
+  if (artifactEntries.length === 0) {
+    lines.push("- None");
+  } else {
+    lines.push("| Artifact | Summary |");
+    lines.push("| --- | --- |");
+    for (const [key, value] of artifactEntries) {
+      lines.push(`| ${markdownEscape(key)} | ${summarizeArtifactForMarkdown(value)} |`);
+    }
+  }
+
+  if (report.error) {
+    lines.push("", "## Error", "", redactMarkdownText(report.error));
+  }
+
+  return `${lines.join("\n")}\n`;
 }
 
 async function main() {
