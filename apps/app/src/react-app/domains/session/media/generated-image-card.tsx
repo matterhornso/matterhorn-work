@@ -118,13 +118,16 @@ export function GeneratedImageLoadingCard() {
   );
 }
 
-export function GeneratedImageErrorCard(props: { message: string; onRetry?: () => void }) {
+export function GeneratedImageErrorCard(props: { message: string; description?: string; onRetry?: () => void }) {
   return (
     <div className="flex flex-col gap-2 rounded-lg bg-red-3/15 p-3">
       <div className="flex items-center gap-2 text-sm text-red-300">
         <AlertCircle size={16} />
         {props.message}
       </div>
+      {props.description ? (
+        <p className="text-xs leading-5 text-dls-secondary">{props.description}</p>
+      ) : null}
       {props.onRetry ? (
         <Button variant="outline" size="sm" className="h-7 w-fit gap-1 text-xs" onClick={props.onRetry}>
           <RefreshCw size={12} />

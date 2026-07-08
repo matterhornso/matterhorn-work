@@ -37,6 +37,7 @@ import type { NftDraftPublishingCapabilities } from "./nft-draft-panel";
 import { buildNftPublishingSetupRequirements, type NftPublishingReadinessCapabilities } from "./nft-publishing-readiness";
 
 type NftCapabilityStatus = "working" | "needs_setup" | "preview";
+type GeneratedMediaErrorCopy = { title: string; description?: string };
 
 export interface SessionImageGenerationPanelProps {
   client: MatterhornServerClient;
@@ -82,6 +83,61 @@ function generatedImageErrorMessage(error: unknown) {
   return "Image generation failed.";
 }
 
+function generatedMediaErrorCopy(error: unknown): GeneratedMediaErrorCopy {
+  if (error instanceof MatterhornServerError && (
+    error.code === "billing_entitlement_required" ||
+    error.code === "billing_entitlement_limit_reached"
+  )) {
+    const details = error.details && typeof error.details === "object"
+      ? error.details as {
+        entitlementLabel?: unknown;
+        currentPlanId?: unknown;
+        requiredPlanIds?: unknown;
+        used?: unknown;
+        limit?: unknown;
+        reason?: unknown;
+      }
+      : {};
+    const label = typeof details.entitlementLabel === "string" ? details.entitlementLabel : "This action";
+    const currentPlan = typeof details.currentPlanId === "string" ? formatPlanName(details.currentPlanId) : "your current plan";
+    const requiredPlanIds = Array.isArray(details.requiredPlanIds)
+      ? details.requiredPlanIds.filter((planId): planId is string => typeof planId === "string")
+      : [];
+    const requiredPlans = formatPlanList(requiredPlanIds);
+    const used = typeof details.used === "number" ? details.used : null;
+    const limit = typeof details.limit === "number" ? details.limit : null;
+
+    if (details.reason === "limit_reached") {
+      const usage = used !== null && limit !== null ? ` You have used ${used} of ${limit}.` : "";
+      return {
+        title: `${label} limit reached`,
+        description: `${currentPlan} has reached its allowance.${usage} Upgrade to ${requiredPlans} to continue.`,
+      };
+    }
+
+    return {
+      title: `${label} requires an upgrade`,
+      description: `${currentPlan} does not include this action. Upgrade to ${requiredPlans} to continue.`,
+    };
+  }
+
+  return { title: generatedImageErrorMessage(error) };
+}
+
+function formatPlanName(planId: string) {
+  if (planId === "free") return "Free";
+  if (planId === "plus") return "Matterhorn Plus";
+  if (planId === "max") return "Matterhorn Max";
+  return planId;
+}
+
+function formatPlanList(planIds: string[]) {
+  if (!planIds.length) return "a paid plan";
+  const names = planIds.map(formatPlanName);
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+}
+
 function nftSetupRequirementsFromError(error: unknown): MatterhornNftSetupRequirement[] {
   if (!(error instanceof MatterhornServerError)) return [];
   const details = error.details as Partial<MatterhornNftPreviewErrorDetails> | undefined;
@@ -92,7 +148,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(props.defaultOpen ?? false);
   const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<GeneratedMediaErrorCopy | null>(null);
   const [selectedImage, setSelectedImage] = useState<MatterhornGeneratedImage | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [nftPanelOpen, setNftPanelOpen] = useState(false);
@@ -175,7 +231,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
 
   const generateImage = useCallback(async (input: MatterhornImageGenerationInput) => {
     if (!canGenerate) {
-      setError("Image generation needs setup.");
+      setError({ title: "Image generation needs setup." });
       return;
     }
     setOpen(true);
@@ -197,7 +253,13 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
         tone: "success",
       });
     } catch (nextError) {
-      setError(generatedImageErrorMessage(nextError));
+      const copy = generatedMediaErrorCopy(nextError);
+      setError(copy);
+      props.onNotice?.({
+        title: copy.title,
+        description: copy.description,
+        tone: "warning",
+      });
     } finally {
       setGenerating(false);
     }
@@ -246,15 +308,16 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       await queryClient.invalidateQueries({ queryKey: generatedMediaHistoryQueryKey });
     } catch (nextError) {
       const setupRequirements = nftSetupRequirementsFromError(nextError);
+      const copy = generatedMediaErrorCopy(nextError);
       setNftSetupRequirements(setupRequirements);
       props.onNotice?.({
-        title: generatedImageErrorMessage(nextError),
+        title: copy.title,
         description: setupRequirements.length
           ? setupRequirements
             .filter((requirement) => requirement.status !== "configured")
             .map((requirement) => requirement.envVar ?? requirement.label)
             .join(", ")
-          : undefined,
+          : copy.description,
         tone: "warning",
       });
     } finally {
@@ -278,8 +341,10 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
         tone: "success",
       });
     } catch (nextError) {
+      const copy = generatedMediaErrorCopy(nextError);
       props.onNotice?.({
-        title: generatedImageErrorMessage(nextError),
+        title: copy.title,
+        description: copy.description,
         tone: "warning",
       });
     } finally {
@@ -304,16 +369,17 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       });
     } catch (nextError) {
       const setupRequirements = nftSetupRequirementsFromError(nextError);
+      const copy = generatedMediaErrorCopy(nextError);
       setNftSetupRequirements(setupRequirements);
       setNftMintPreview(null);
       props.onNotice?.({
-        title: generatedImageErrorMessage(nextError),
+        title: copy.title,
         description: setupRequirements.length
           ? setupRequirements
             .filter((requirement) => requirement.status !== "configured")
             .map((requirement) => requirement.envVar ?? requirement.label)
             .join(", ")
-          : undefined,
+          : copy.description,
         tone: "warning",
       });
     } finally {
@@ -336,8 +402,10 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
         tone: "success",
       });
     } catch (nextError) {
+      const copy = generatedMediaErrorCopy(nextError);
       props.onNotice?.({
-        title: generatedImageErrorMessage(nextError),
+        title: copy.title,
+        description: copy.description,
         tone: "warning",
       });
     } finally {
@@ -361,16 +429,17 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       });
     } catch (nextError) {
       const setupRequirements = nftSetupRequirementsFromError(nextError);
+      const copy = generatedMediaErrorCopy(nextError);
       setNftSetupRequirements(setupRequirements);
       setNftListingPreview(null);
       props.onNotice?.({
-        title: generatedImageErrorMessage(nextError),
+        title: copy.title,
         description: setupRequirements.length
           ? setupRequirements
             .filter((requirement) => requirement.status !== "configured")
             .map((requirement) => requirement.envVar ?? requirement.label)
             .join(", ")
-          : undefined,
+          : copy.description,
         tone: "warning",
       });
     } finally {
@@ -393,8 +462,10 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
         tone: "success",
       });
     } catch (nextError) {
+      const copy = generatedMediaErrorCopy(nextError);
       props.onNotice?.({
-        title: generatedImageErrorMessage(nextError),
+        title: copy.title,
+        description: copy.description,
         tone: "warning",
       });
     } finally {
@@ -435,7 +506,8 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
           {generating ? <GeneratedImageLoadingCard /> : null}
           {error ? (
             <GeneratedImageErrorCard
-              message={error}
+              message={error.title}
+              description={error.description}
               onRetry={latestImage ? () => void generateImage({ prompt: latestImage.prompt }) : undefined}
             />
           ) : null}
