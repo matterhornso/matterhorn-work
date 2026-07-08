@@ -188,6 +188,7 @@ function modelSelectionAuditTitle(action: string): string | null {
 function billingAuditTitle(action: string): string | null {
   if (action === "workspace.billing.checkout") return "Billing plan updated";
   if (action === "workspace.billing.subscription.clear") return "Billing subscription cleared";
+  if (action === "workspace.billing.webhook") return "Billing provider synced";
   return null;
 }
 

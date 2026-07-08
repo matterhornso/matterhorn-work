@@ -536,6 +536,49 @@ function appendStripeParam(params: URLSearchParams, key: string, value: string |
   params.set(key, String(value));
 }
 
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function booleanValue(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function planIdValue(value: unknown): MatterhornBillingPlanId | null {
+  const planId = stringValue(value);
+  return planId === "free" || planId === "plus" || planId === "max" ? planId : null;
+}
+
+function subscriptionStatusValue(value: unknown): MatterhornBillingSubscription["status"] {
+  const status = stringValue(value);
+  if (
+    status === "active" ||
+    status === "trialing" ||
+    status === "past_due" ||
+    status === "canceled" ||
+    status === "paused" ||
+    status === "none"
+  ) {
+    return status;
+  }
+  return "active";
+}
+
+function isoFromStripeSeconds(value: unknown): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  return new Date(value * 1000).toISOString();
+}
+
+function stripeMetadata(object: Record<string, unknown>): Record<string, unknown> {
+  return objectValue(object.metadata) ?? {};
+}
+
 async function postStripeForm(config: BillingProviderConfig, path: string, params: URLSearchParams): Promise<Record<string, unknown>> {
   const secret = requireStripeTestReady(config);
   const response = await fetch(`${stripeApiBaseUrl(config)}${path}`, {
@@ -594,11 +637,14 @@ export function createStripeTestBillingProvider(config: BillingProviderConfig): 
       appendStripeParam(params, "line_items[0][quantity]", 1);
       appendStripeParam(params, "success_url", safeStripeReturnUrl(input.successUrl, "/billing/success?session_id={CHECKOUT_SESSION_ID}"));
       appendStripeParam(params, "cancel_url", safeStripeReturnUrl(input.cancelUrl, "/billing/canceled"));
-      appendStripeParam(params, "client_reference_id", `matterhorn_${input.planId}`);
+      const workspaceId = input.workspaceId?.trim();
+      appendStripeParam(params, "client_reference_id", workspaceId ? `matterhorn_${workspaceId}_${input.planId}` : `matterhorn_${input.planId}`);
       appendStripeParam(params, "metadata[product]", "matterhorn-work");
       appendStripeParam(params, "metadata[plan_id]", input.planId);
+      appendStripeParam(params, "metadata[workspace_id]", workspaceId);
       appendStripeParam(params, "subscription_data[metadata][product]", "matterhorn-work");
       appendStripeParam(params, "subscription_data[metadata][plan_id]", input.planId);
+      appendStripeParam(params, "subscription_data[metadata][workspace_id]", workspaceId);
       const payload = await postStripeForm(config, "/v1/checkout/sessions", params);
       const checkoutUrl = typeof payload.url === "string" ? payload.url : "";
       if (!checkoutUrl) {
@@ -643,12 +689,69 @@ export function createStripeTestBillingProvider(config: BillingProviderConfig): 
           : {}
         : {};
       const eventIsLive = payload.livemode === true;
-      return {
-        success: true,
-        received: true,
+      const eventId = stringValue(payload.id);
+      const eventType = stringValue(payload.type);
+      const dataObject = objectValue(objectValue(payload.data)?.object);
+      const base = {
+        success: true as const,
+        received: true as const,
         verified,
-        livemode: false,
-        handled: verified && !eventIsLive,
+        livemode: false as const,
+        eventId,
+        eventType,
+      };
+      if (!verified || eventIsLive || !dataObject || !eventType) {
+        return { ...base, handled: false };
+      }
+      const metadata = stripeMetadata(dataObject);
+      const workspaceId = stringValue(metadata.workspace_id);
+      const metadataPlanId = planIdValue(metadata.plan_id);
+      const providerCustomerId = stringValue(dataObject.customer);
+      const providerSubscriptionId =
+        stringValue(dataObject.subscription) ??
+        stringValue(dataObject.id);
+      if (eventType === "checkout.session.completed") {
+        return {
+          ...base,
+          handled: Boolean(workspaceId && metadataPlanId),
+          workspaceId,
+          planId: metadataPlanId,
+          subscriptionStatus: "active",
+          providerCustomerId,
+          providerSubscriptionId,
+          currentPeriodStart: null,
+          currentPeriodEnd: null,
+          cancelAtPeriodEnd: false,
+        };
+      }
+      if (
+        eventType === "customer.subscription.created" ||
+        eventType === "customer.subscription.updated" ||
+        eventType === "customer.subscription.deleted"
+      ) {
+        const subscriptionStatus = eventType === "customer.subscription.deleted"
+          ? "canceled"
+          : subscriptionStatusValue(dataObject.status);
+        const effectivePlanId =
+          subscriptionStatus === "active" || subscriptionStatus === "trialing"
+            ? metadataPlanId
+            : "free";
+        return {
+          ...base,
+          handled: Boolean(workspaceId && effectivePlanId),
+          workspaceId,
+          planId: effectivePlanId,
+          subscriptionStatus,
+          providerCustomerId,
+          providerSubscriptionId,
+          currentPeriodStart: isoFromStripeSeconds(dataObject.current_period_start),
+          currentPeriodEnd: isoFromStripeSeconds(dataObject.current_period_end),
+          cancelAtPeriodEnd: booleanValue(dataObject.cancel_at_period_end) ?? false,
+        };
+      }
+      return {
+        ...base,
+        handled: false,
       };
     },
   };

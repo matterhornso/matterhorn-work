@@ -128,6 +128,7 @@ export interface MatterhornBillingCheckoutRequest {
   interval?: MatterhornBillingInterval;
   successUrl?: string;
   cancelUrl?: string;
+  workspaceId?: string;
 }
 
 export interface MatterhornBillingCheckoutResponse {
@@ -161,6 +162,17 @@ export interface MatterhornBillingWebhookStripeResponse {
   verified: boolean;
   livemode: false;
   handled: boolean;
+  eventId?: string | null;
+  eventType?: string | null;
+  workspaceId?: string | null;
+  planId?: MatterhornBillingPlanId | null;
+  subscriptionStatus?: MatterhornBillingSubscription["status"] | null;
+  providerCustomerId?: string | null;
+  providerSubscriptionId?: string | null;
+  currentPeriodStart?: string | null;
+  currentPeriodEnd?: string | null;
+  cancelAtPeriodEnd?: boolean | null;
+  workspaceSynced?: boolean;
 }
 
 export interface MatterhornBillingCheckoutSession {

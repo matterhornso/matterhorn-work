@@ -77,7 +77,7 @@ function nextBillingPeriod(now = new Date()): { currentPeriodStart: string; curr
 async function recordBillingAudit(input: {
   workspace: WorkspaceInfo;
   actor?: Actor;
-  action: "workspace.billing.checkout" | "workspace.billing.subscription.clear";
+  action: "workspace.billing.checkout" | "workspace.billing.subscription.clear" | "workspace.billing.webhook";
   summary: string;
   planId?: "free" | "plus" | "max";
   interval?: "month" | "year";
@@ -102,6 +102,53 @@ async function recordBillingAudit(input: {
       livePaymentsEnabled: false,
     },
   });
+}
+
+async function persistStripeWebhookBilling(input: {
+  result: Awaited<ReturnType<BillingProvider["handleStripeWebhook"]>>;
+  ctx: BillingRouteContext;
+}): Promise<boolean> {
+  const { result, ctx } = input;
+  if (!result.verified || !result.handled || !result.workspaceId || !result.planId || !ctx.resolveWorkspace) {
+    return false;
+  }
+  let workspace: WorkspaceInfo;
+  try {
+    workspace = await ctx.resolveWorkspace(ctx.config, result.workspaceId);
+  } catch {
+    return false;
+  }
+  const now = new Date().toISOString();
+  const status = result.subscriptionStatus ?? (result.planId === "free" ? "none" : "active");
+  await new MatterhornBillingAccountStore({ workspaceRoot: workspace.path, workspaceId: workspace.id }).save({
+    version: "matterhorn.billing.account.v1",
+    workspaceId: workspace.id,
+    subscription: {
+      ...buildMatterhornBillingSubscription(result.planId),
+      status,
+      currentPeriodStart: result.currentPeriodStart ?? now,
+      currentPeriodEnd: result.currentPeriodEnd ?? null,
+      cancelAtPeriodEnd: result.cancelAtPeriodEnd ?? false,
+      providerCustomerId: result.providerCustomerId ?? null,
+      providerSubscriptionId: result.providerSubscriptionId ?? null,
+    },
+    updatedAt: now,
+    source: "stripe_test_webhook",
+  });
+  await recordBillingAudit({
+    workspace,
+    action: "workspace.billing.webhook",
+    summary: `Synced Stripe test billing event for ${result.planId}.`,
+    planId: result.planId,
+    interval: "month",
+    mode: providerModeForAudit(ctx.provider),
+    provider: ctx.provider.config.provider,
+  });
+  return true;
+}
+
+function providerModeForAudit(provider: BillingProvider): string {
+  return provider.config.mode;
 }
 
 export interface BillingRouteContext {
@@ -175,6 +222,7 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       interval,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
+      workspaceId: workspace.id,
     }).catch((error) => error);
     if (result instanceof Error) return providerError(result);
     const period = nextBillingPeriod();
@@ -315,6 +363,11 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
     }
     const input: MatterhornBillingWebhookStripeRequest = { signature, payload, rawPayload };
     const result = await provider.handleStripeWebhook(input);
-    return jsonResponse(result);
+    const workspaceSynced = await persistStripeWebhookBilling({ result, ctx });
+    return jsonResponse({
+      ...result,
+      handled: result.handled && (workspaceSynced || !result.workspaceId),
+      workspaceSynced,
+    });
   });
 }
