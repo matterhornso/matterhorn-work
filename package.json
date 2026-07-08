@@ -14,6 +14,8 @@
     "test:generated-media-browser-smoke": "node scripts/generated-media-browser-smoke.test.mjs",
     "smoke:generated-media-production-readiness": "node scripts/generated-media-production-readiness.mjs --require-production",
     "test:generated-media-production-readiness": "node scripts/generated-media-production-readiness.test.mjs",
+    "smoke:production-cors-readiness": "node scripts/production-cors-readiness.mjs --require-production",
+    "test:production-cors-readiness": "node scripts/production-cors-readiness.test.mjs",
     "smoke:product-readiness": "node scripts/product-readiness-smoke.mjs --strict --include-generated-media-flow",
     "test:product-readiness-smoke": "node scripts/product-readiness-smoke.test.mjs",
     "dev:electron": "OPENWORK_DEV_MODE=1 pnpm --filter @matterhorn-work/desktop dev:electron",
