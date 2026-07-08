@@ -221,13 +221,15 @@ export function MessagingView(props: MessagingViewProps) {
               <span className="ml-1.5">{t("identities.repair_reconnect")}</span>
             </Button>
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon-sm"
               onClick={() => void props.onRefresh()}
               disabled={!serverReady || props.refreshing}
+              className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
+              aria-label={t("common.refresh")}
+              title={t("common.refresh")}
             >
               <RefreshCcw size={14} className={props.refreshing ? "animate-spin" : ""} />
-              <span className="ml-1.5">{t("common.refresh")}</span>
             </Button>
           </div>
         </div>

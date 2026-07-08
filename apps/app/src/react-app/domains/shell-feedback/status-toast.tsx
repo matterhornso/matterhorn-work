@@ -1,6 +1,8 @@
 /** @jsxImportSource react */
 import { AlertTriangle, CheckCircle2, CircleAlert, Info, X } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+
 export type StatusToastProps = {
   open: boolean;
   title: string;
@@ -35,12 +37,12 @@ export function StatusToast(props: StatusToastProps) {
           : Info;
 
   return (
-    <div className="w-full max-w-[24rem] overflow-hidden rounded-[1.4rem] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)] backdrop-blur-xl animate-in fade-in slide-in-from-top-4 duration-300">
-      <div className="flex items-start gap-3 p-4">
+    <div className="w-full max-w-[24rem] overflow-hidden rounded-lg border border-dls-border/65 bg-dls-surface shadow-[var(--dls-shell-shadow)] animate-in fade-in slide-in-from-top-2 duration-200">
+      <div className="flex items-start gap-3 p-3.5">
         <div
-          className={`mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg border ${tileClass}`.trim()}
+          className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border ${tileClass}`.trim()}
         >
-          <Icon size={18} />
+          <Icon size={16} />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -59,7 +61,7 @@ export function StatusToast(props: StatusToastProps) {
             <button
               type="button"
               onClick={props.onDismiss}
-              className="rounded-full p-1 text-gray-9 transition hover:bg-gray-3 hover:text-gray-12"
+              className="rounded-md p-1 text-gray-9 transition hover:bg-gray-3 hover:text-gray-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
               aria-label={props.dismissLabel ?? "Dismiss"}
             >
               <X size={16} />
@@ -68,20 +70,23 @@ export function StatusToast(props: StatusToastProps) {
 
           {props.actionLabel && props.onAction ? (
             <div className="mt-3 flex items-center gap-2">
-              <button
+              <Button
                 type="button"
-                className="inline-flex items-center justify-center rounded-full bg-[var(--dls-accent)] px-3 py-1.5 text-xs font-medium text-[var(--dls-accent-fg)] transition-colors hover:bg-[var(--dls-accent-hover)]"
+                size="sm"
+                className="h-7 px-3 text-xs"
                 onClick={() => props.onAction?.()}
               >
                 {props.actionLabel}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="inline-flex items-center justify-center rounded-full border border-transparent bg-transparent px-3 py-1.5 text-xs font-medium text-dls-text transition-colors hover:bg-[var(--dls-hover)]"
+                variant="ghost"
+                size="sm"
+                className="h-7 bg-transparent px-3 text-xs hover:bg-dls-hover"
                 onClick={props.onDismiss}
               >
                 {props.dismissLabel ?? "Dismiss"}
-              </button>
+              </Button>
             </div>
           ) : null}
         </div>

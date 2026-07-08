@@ -446,13 +446,14 @@ function TaskHistorySection(props: {
           </div>
           <Button
             type="button"
-            variant="outline"
-            size="sm"
-            className="w-fit gap-1.5 border-0 bg-transparent px-0 text-red-100 shadow-none hover:bg-transparent hover:text-red-50"
+            variant="ghost"
+            size="icon-sm"
+            className="w-fit border-0 bg-transparent text-red-100 shadow-none hover:bg-transparent hover:text-red-50"
             onClick={() => void refetch()}
+            aria-label="Retry task history"
+            title="Retry task history"
           >
             <RefreshCw className="size-3.5" />
-            Retry
           </Button>
         </div>
       ) : runs.length === 0 ? (
@@ -809,8 +810,15 @@ function FeedbackReviewSection(props: {
       ) : isError ? (
         <div className="flex items-center justify-between gap-3 text-sm text-dls-secondary">
           <span>{error instanceof Error ? error.message : "Feedback could not load."}</span>
-          <Button variant="ghost" size="sm" className="text-xs" onClick={() => void refetch()}>
-            Refresh
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
+            onClick={() => void refetch()}
+            aria-label="Refresh feedback"
+            title="Refresh feedback"
+          >
+            <RefreshCw className="size-3.5" />
           </Button>
         </div>
       ) : items.length === 0 ? (
@@ -1023,8 +1031,15 @@ function TeamAccessControls(props: {
             ? props.error.message
             : "Token management requires host access on this local server."}
         </span>
-        <Button variant="ghost" size="sm" className="w-fit px-2 text-xs" onClick={() => void props.refetch()}>
-          Refresh
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="w-fit border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
+          onClick={() => void props.refetch()}
+          aria-label="Refresh local access tokens"
+          title="Refresh local access tokens"
+        >
+          <RefreshCw className="size-3.5" />
         </Button>
       </div>
     );

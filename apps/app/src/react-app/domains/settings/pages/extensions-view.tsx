@@ -67,7 +67,7 @@ export function ExtensionsView(props: ExtensionsViewProps) {
         <div className="flex flex-wrap items-center gap-2">
           {props.mcpConnectedAppsCount > 0 ? (
             <div className={cn(
-              "inline-flex items-center gap-2 rounded-full bg-green-3 px-3 py-1",
+              "inline-flex items-center gap-2 rounded-md bg-green-3 px-3 py-1",
               props.compact && "px-2 py-0.5",
             )}>
               <div className="size-2 rounded-full bg-green-9" />
@@ -90,7 +90,7 @@ export function ExtensionsView(props: ExtensionsViewProps) {
       </div>
 
       <div className={cn(
-        "rounded-lg border border-dls-border bg-dls-surface p-1",
+        "rounded-md bg-dls-surface-muted/15 p-1",
         props.compact ? "grid w-full min-w-0 grid-cols-2 gap-1" : "inline-flex w-fit",
       )}>
         <Button

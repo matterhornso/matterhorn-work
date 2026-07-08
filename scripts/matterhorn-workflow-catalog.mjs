@@ -568,7 +568,7 @@ const CUSTOMER_TEMPLATES = [
   },
   {
     id: "blank_chat_workflow",
-    name: "Blank chat",
+    name: "Chat",
     summary: "Start a free-form session with the default Matterhorn Agent.",
     promise: "Open-ended assistance. You choose the goal.",
     category: "future",
@@ -588,7 +588,7 @@ const CUSTOMER_TEMPLATES = [
     serviceHooks: [],
     chatMode: "free chat",
     launch: {
-      primaryCta: "Start blank chat",
+      primaryCta: "Start chat",
       secondaryCta: "Browse templates",
       defaultPrompt: "What can you do?",
       handoffContextLabel: "Goal",
@@ -598,7 +598,7 @@ const CUSTOMER_TEMPLATES = [
       iconHint: "blank",
       accent: "neutral",
       shortDescription:
-        "Start a free-form chat with the default Matterhorn Agent.",
+        "Start a flexible chat with the default Matterhorn Agent.",
     },
     routing: {
       chatMode: "general",

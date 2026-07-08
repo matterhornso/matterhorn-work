@@ -820,9 +820,15 @@ export function SkillsView(props: SkillsViewProps) {
                       : t("skills.filter_hub")}
               </button>
             ))}
-            <button type="button" onClick={refreshCatalogs} disabled={props.busy} className={pillSecondaryClass}>
+            <button
+              type="button"
+              onClick={refreshCatalogs}
+              disabled={props.busy}
+              className="inline-flex size-8 items-center justify-center rounded-md text-dls-secondary transition-colors hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label={t("common.refresh")}
+              title={t("common.refresh")}
+            >
               <RefreshCw size={14} />
-              {t("common.refresh")}
             </button>
           </div>
         </div>
@@ -960,10 +966,11 @@ export function SkillsView(props: SkillsViewProps) {
                 type="button"
                 onClick={() => void extensions.refreshCloudOrgSkills({ force: true })}
                 disabled={props.busy}
-                className={pillSecondaryClass}
+                className="inline-flex size-8 items-center justify-center rounded-md text-dls-secondary transition-colors hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={t("skills.cloud_refresh")}
+                title={t("skills.cloud_refresh")}
               >
                 <RefreshCw size={14} />
-                {t("skills.cloud_refresh")}
               </button>
             </div>
           </div>
@@ -1087,10 +1094,11 @@ export function SkillsView(props: SkillsViewProps) {
                 type="button"
                 onClick={() => void extensions.refreshHubSkills({ force: true })}
                 disabled={props.busy}
-                className={pillSecondaryClass}
+                className="inline-flex size-8 items-center justify-center rounded-md text-dls-secondary transition-colors hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={t("skills.refresh_hub")}
+                title={t("skills.refresh_hub")}
               >
                 <RefreshCw size={14} />
-                {t("skills.refresh_hub")}
               </button>
             </div>
           </div>

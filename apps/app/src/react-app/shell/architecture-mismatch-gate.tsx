@@ -132,21 +132,21 @@ export function ArchitectureMismatchGate({ children }: ArchitectureMismatchGateP
                 <button
                   type="button"
                   onClick={openDownload}
-                  className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-emerald-100"
+                  className="inline-flex items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-emerald-100"
                 >
                   Download correct version
                 </button>
                 <button
                   type="button"
                   onClick={openRelease}
-                  className="inline-flex items-center justify-center rounded-full border border-white/14 px-5 py-3 text-sm font-semibold text-white/85 transition hover:bg-white/10"
+                  className="inline-flex items-center justify-center rounded-md border border-white/14 px-5 py-3 text-sm font-semibold text-white/85 transition hover:bg-white/10"
                 >
                   Open release page
                 </button>
               </div>
             </div>
 
-            <aside className="border-t border-white/10 bg-gradient-to-br from-emerald-300/12 via-sky-300/8 to-transparent p-8 sm:p-10 lg:border-l lg:border-t-0 lg:p-12">
+            <aside className="border-t border-white/10 bg-white/[0.03] p-8 sm:p-10 lg:border-l lg:border-t-0 lg:p-12">
               <div className="space-y-5 rounded-lg border border-white/10 bg-black/25 p-6 text-sm leading-6 text-white/68">
                 <div className="text-lg font-semibold text-white">Why Matterhorn Work stopped here</div>
                 <p>
