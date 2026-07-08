@@ -228,8 +228,8 @@ export function buildBackendModels(input: {
           "working",
           "User-selected model",
           input.selection
-            ? "This workspace has a server-owned default model preference. The app can still keep a local session override."
-            : "The app stores the selected model in local preferences and sends it with each prompt request until a workspace default is saved.",
+            ? "This workspace has a server-owned default model. Stable workspace prompt routes use it when a request omits a model; explicit app picker overrides still win for that app session."
+            : "Local app picker choices are sent explicitly with prompt requests; stable workspace prompt routes use the engine/server default until a workspace default is saved.",
         ),
         userSelectable: true,
         surface: "model_picker",
@@ -255,8 +255,8 @@ export function buildBackendModels(input: {
     limitations: [
       "The global endpoint reports the routing contract. Use the workspace endpoint to see the server-normalized local provider catalog for a selected workspace.",
       input.selection
-        ? "A workspace default model is saved server-side; individual app sessions may still hold local overrides until the prompt path is fully unified."
-        : "Model preference falls back to this browser/app profile until a workspace default is saved.",
+        ? "A workspace default model is saved server-side. Stable workspace prompt routes use it when a request omits a model; an explicit app picker override still wins for that app session."
+        : "With no workspace default saved, stable workspace prompt routes use the engine/server default unless the app request includes an explicit picker model.",
       "User feedback is stored for eval, routing, and product quality review only. It is not used for RL or model training by default.",
     ],
   };
