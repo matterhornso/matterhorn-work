@@ -59,6 +59,7 @@ for (const visibleText of [
   "Project Activity",
   "Project history",
   "Project history filters",
+  "No runs recorded yet",
   "Notes",
   "New note",
   "All notes",
@@ -101,8 +102,9 @@ assert.ok(
   script.includes("isOptionalDevWorkspace404") &&
     script.includes("opencode") &&
     script.includes("mcp") &&
-    script.includes(".opencode/agents/opencode-router.md"),
-  "product browser smoke should keep optional dev-stack workspace probes as non-fatal warnings",
+    script.includes(".opencode/agents/opencode-router.md") &&
+    script.includes("if (isOptionalDevWorkspace404(location.url)) return"),
+  "product browser smoke should keep optional dev-stack workspace probes out of strict errors and warning noise",
 );
 assert.ok(
   script.includes("page.on(\"console\"") &&
@@ -110,9 +112,10 @@ assert.ok(
     script.includes("page.on(\"pageerror\"") &&
     script.includes("resourceWarnings") &&
     script.includes("networkFailures") &&
+    script.includes("ignoredNetworkResponses") &&
     script.includes("shouldFailOnNetworkResponse") &&
     script.includes("report.errors.length === 0"),
-  "product browser smoke should fail strict runs on browser and API network errors while reporting stale resource warnings",
+  "product browser smoke should fail strict runs on browser and API network errors while reporting actionable resource warnings",
 );
 assert.ok(
   script.includes("matterhorn-product-browser-smoke.png") &&

@@ -224,6 +224,7 @@ async function runSmoke(config) {
       const text = message.text();
       if (/^Failed to load resource: the server responded with a status of 404/i.test(text)) {
         const location = message.location();
+        if (isOptionalDevWorkspace404(location.url)) return;
         const matchingFailure = networkFailures.find((failure) => failure.url === location.url);
         resourceWarnings.push({
           message: text,
@@ -305,7 +306,7 @@ async function runSmoke(config) {
       await waitForAnyVisible(page, [
         page.getByText(/actual event(s)? shown/),
         page.getByText("Run started", { exact: false }),
-        page.getByText("No all recorded yet", { exact: false }),
+        page.getByText("No runs recorded yet", { exact: false }),
       ], "project history rows or empty state", 20_000);
       report.artifacts.projectHistoryUrl = page.url();
     });
@@ -383,20 +384,20 @@ async function runSmoke(config) {
     report.artifacts.screenshot = screenshotPath;
     report.artifacts.finalUrl = page.url();
     report.warnings = resourceWarnings;
-    const networkErrors = networkFailures
-      .filter(shouldFailOnNetworkResponse)
-      .map(networkFailureMessage);
-    report.networkFailures = networkFailures;
+    const actionableNetworkFailures = networkFailures.filter(shouldFailOnNetworkResponse);
+    const networkErrors = actionableNetworkFailures.map(networkFailureMessage);
+    report.networkFailures = actionableNetworkFailures;
+    report.ignoredNetworkResponses = networkFailures.filter((failure) => !shouldFailOnNetworkResponse(failure));
     report.errors = [...consoleErrors, ...pageErrors, ...networkErrors];
     report.ready = report.stages.every((item) => item.status === "pass") && report.errors.length === 0;
   } catch (error) {
     report.ready = false;
     report.error = error instanceof Error ? error.message : String(error);
     report.warnings = resourceWarnings;
-    const networkErrors = networkFailures
-      .filter(shouldFailOnNetworkResponse)
-      .map(networkFailureMessage);
-    report.networkFailures = networkFailures;
+    const actionableNetworkFailures = networkFailures.filter(shouldFailOnNetworkResponse);
+    const networkErrors = actionableNetworkFailures.map(networkFailureMessage);
+    report.networkFailures = actionableNetworkFailures;
+    report.ignoredNetworkResponses = networkFailures.filter((failure) => !shouldFailOnNetworkResponse(failure));
     report.errors = [...consoleErrors, ...pageErrors, ...networkErrors];
     if (page) {
       try {
