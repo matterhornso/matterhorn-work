@@ -185,10 +185,17 @@ function modelSelectionAuditTitle(action: string): string | null {
   return null;
 }
 
-function billingAuditTitle(action: string): string | null {
-  if (action === "workspace.billing.checkout") return "Billing plan updated";
-  if (action === "workspace.billing.subscription.clear") return "Billing subscription cleared";
-  if (action === "workspace.billing.webhook") return "Billing provider synced";
+function billingAuditTitle(entry: AuditEntry): string | null {
+  if (entry.action === "workspace.billing.checkout") {
+    const metadata = entry.metadata && typeof entry.metadata === "object" && !Array.isArray(entry.metadata)
+      ? entry.metadata as Record<string, unknown>
+      : {};
+    return metadata.mode === "phase1_stripe_test" && metadata.provider === "stripe"
+      ? "Billing checkout pending"
+      : "Billing plan updated";
+  }
+  if (entry.action === "workspace.billing.subscription.clear") return "Billing subscription cleared";
+  if (entry.action === "workspace.billing.webhook") return "Billing provider synced";
   return null;
 }
 
@@ -199,7 +206,7 @@ function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry
   const outputTitle = outputAuditTitle(entry.action);
   const chatTitle = chatAuditTitle(entry.action);
   const modelSelectionTitle = modelSelectionAuditTitle(entry.action);
-  const billingTitle = billingAuditTitle(entry.action);
+  const billingTitle = billingAuditTitle(entry);
   const title = scrubString(memoryTitle ?? teamAccessTitle ?? walletTitle ?? outputTitle ?? chatTitle ?? modelSelectionTitle ?? billingTitle ?? entry.action);
   const summary = scrubString(entry.summary);
   const target = scrubString(entry.target);

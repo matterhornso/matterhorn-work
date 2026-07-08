@@ -359,6 +359,21 @@ describe("Billing routes", () => {
     expect(portal.response.status).toBe(400);
     expect(portal.payload.code).toBe("billing_provider_unavailable");
     expect(portal.payload.message).toContain("Stripe Customer Portal requires");
+
+    const ledger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=billing&limit=10`);
+    expect(ledger.response.status).toBe(200);
+    expect(ledger.payload.items[0]).toMatchObject({
+      kind: "billing",
+      title: "Billing checkout pending",
+      eventType: "workspace.billing.checkout",
+      href: `/workspace/${WORKSPACE_ID}/settings/billing`,
+      metadata: expect.objectContaining({
+        auditAction: "workspace.billing.checkout",
+        mode: "phase1_stripe_test",
+        provider: "stripe",
+        planId: "max",
+      }),
+    });
   });
 
   test("POST /api/billing/webhook/stripe syncs a verified Checkout session into workspace billing", async () => {
