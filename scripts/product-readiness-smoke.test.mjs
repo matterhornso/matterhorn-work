@@ -46,6 +46,7 @@ for (const id of [
   "team.access_summary",
   "ledger.project",
   "ledger.export",
+  "generated_media.production_readiness",
   "generated_media.history",
   "generated_media.flow",
 ]) {
@@ -54,6 +55,8 @@ for (const id of [
 
 const generatedMediaStage = report.stages.find((stage) => stage.id === "generated_media.flow");
 assert.deepEqual(generatedMediaStage.command, ["node", "scripts/generated-media-flow-smoke.mjs", "--strict"]);
+const generatedMediaProductionStage = report.stages.find((stage) => stage.id === "generated_media.production_readiness");
+assert.deepEqual(generatedMediaProductionStage.command, ["node", "scripts/generated-media-production-readiness.mjs", "--json"]);
 const corsStage = report.stages.find((stage) => stage.id === "production.cors_readiness");
 assert.deepEqual(corsStage.command, ["node", "scripts/production-cors-readiness.mjs", "--require-production"]);
 
@@ -94,6 +97,7 @@ for (const endpoint of [
   "/data-ledger/export?limit=20",
   "/generated-media/history?limit=20",
   "scripts/production-cors-readiness.mjs",
+  "scripts/generated-media-production-readiness.mjs",
 ]) {
   assert.ok(source.includes(endpoint), `product readiness smoke missing endpoint ${endpoint}`);
 }
@@ -112,6 +116,10 @@ for (const required of [
   "none_by_default",
   "imageOutputs",
   "scripts/generated-media-flow-smoke.mjs",
+  "matterhorn.generated-media-production-readiness.v1",
+  "generated_media.production_readiness",
+  "generatedMediaProductionReadiness",
+  "publicWritesDuringDiagnostics",
   "production.cors_readiness",
   "--include-generated-media-flow",
   "--markdown-output",

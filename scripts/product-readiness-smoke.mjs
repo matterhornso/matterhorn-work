@@ -138,6 +138,7 @@ function buildPlannedStages(config) {
     ["team.access_summary", "Read local team access summary"],
     ["ledger.project", "Read project data ledger"],
     ["ledger.export", "Read redacted data ledger export"],
+    ["generated_media.production_readiness", "Read generated media production readiness"],
     ["generated_media.history", "Read generated media history"],
   ].map(([id, label]) => ({ id, label }));
   if (config.includeGeneratedMediaFlow) {
@@ -223,6 +224,44 @@ function runGeneratedMediaFlow(config) {
       "--token",
       config.token,
       "--strict",
+      "--json",
+    ];
+    if (config.workspaceId) args.push("--workspace-id", config.workspaceId);
+    const child = spawn("node", args, { stdio: ["ignore", "pipe", "pipe"], env: process.env });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => child.kill("SIGTERM"), config.timeoutMs);
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      let payload = null;
+      try {
+        payload = JSON.parse(stdout);
+      } catch {
+        // Keep payload null; stderr/stdout are reported below.
+      }
+      resolve({
+        code,
+        signal,
+        payload,
+        stdout: stdout.slice(-4000),
+        stderr: stderr.slice(-4000),
+      });
+    });
+  });
+}
+
+function runGeneratedMediaProductionReadiness(config) {
+  return new Promise((resolve) => {
+    const args = [
+      "scripts/generated-media-production-readiness.mjs",
+      "--server-url",
+      config.serverUrl,
+      "--token",
+      config.token,
       "--json",
     ];
     if (config.workspaceId) args.push("--workspace-id", config.workspaceId);
@@ -341,6 +380,8 @@ async function runProductReadinessSmoke(config) {
       status: "planned",
       command: stage.id === "generated_media.flow"
         ? ["node", "scripts/generated-media-flow-smoke.mjs", "--strict"]
+        : stage.id === "generated_media.production_readiness"
+          ? ["node", "scripts/generated-media-production-readiness.mjs", "--json"]
         : stage.id === "production.cors_readiness"
           ? ["node", "scripts/production-cors-readiness.mjs", "--require-production"]
         : ["GET", "<server>", stage.id],
@@ -513,6 +554,28 @@ async function runProductReadinessSmoke(config) {
         includes: payload.manifest?.includes ?? [],
       };
       return payload;
+    });
+
+    await stage("generated_media.production_readiness", "Read generated media production readiness", async () => {
+      const result = await runGeneratedMediaProductionReadiness({ ...config, workspaceId });
+      assert(result.code === 0, result.stderr || result.stdout || "generated media production readiness failed");
+      assert(result.payload?.version === "matterhorn.generated-media-production-readiness.v1", "generated media production readiness version mismatch");
+      assert(result.payload?.ok === true, "generated media production readiness safety checks failed");
+      assert(result.payload?.safety?.publicWritesDuringDiagnostics === false, "generated media production readiness performed public writes");
+      assert(result.payload?.publicWritesOnlyAfterUserAction === true, "generated media production readiness lost public-write confirmation boundary");
+      const safeSummary = {
+        mode: result.payload.mode,
+        status: result.payload.status,
+        ready: result.payload.ready,
+        canRunEndToEnd: result.payload.canRunEndToEnd,
+        publicWritesOnlyAfterUserAction: result.payload.publicWritesOnlyAfterUserAction,
+        blockerCount: Array.isArray(result.payload.blockers) ? result.payload.blockers.length : 0,
+        stages: Array.isArray(result.payload.stages)
+          ? result.payload.stages.map((stage) => ({ id: stage.id, status: stage.status, writeScope: stage.writeScope }))
+          : [],
+      };
+      report.artifacts.generatedMediaProductionReadiness = safeSummary;
+      return safeSummary;
     });
 
     await stage("generated_media.history", "Read generated media history", async () => {
