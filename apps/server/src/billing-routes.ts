@@ -3,6 +3,7 @@ import type {
   MatterhornBillingCheckoutRequest,
   MatterhornBillingPortalRequest,
   MatterhornBillingPendingCheckout,
+  MatterhornBillingPendingCheckoutClearResponse,
   MatterhornBillingSubscription,
   MatterhornBillingWebhookStripeRequest,
 } from "@matterhorn-work/types/billing";
@@ -81,7 +82,11 @@ function nextBillingPeriod(now = new Date()): { currentPeriodStart: string; curr
 async function recordBillingAudit(input: {
   workspace: WorkspaceInfo;
   actor?: Actor;
-  action: "workspace.billing.checkout" | "workspace.billing.subscription.clear" | "workspace.billing.webhook";
+  action:
+    | "workspace.billing.checkout"
+    | "workspace.billing.pending_checkout.clear"
+    | "workspace.billing.subscription.clear"
+    | "workspace.billing.webhook";
   summary: string;
   planId?: "free" | "plus" | "max";
   interval?: "month" | "year";
@@ -362,6 +367,50 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       workspaceId: workspace.id,
       status: buildBillingStatusResponse(provider.config).status,
     });
+  });
+
+  addRoute("DELETE", "/workspace/:id/billing/pending-checkout", "client", async (routeCtx) => {
+    const blocker = billingWriteBlocker(routeCtx, "clear pending checkout");
+    if (blocker) return blocker;
+    if (!ctx.resolveWorkspace) {
+      return badRequest("workspace_unavailable", "Workspace billing is unavailable for this server.");
+    }
+    const workspace = await ctx.resolveWorkspace(ctx.config, routeCtx.params.id);
+    const accountStore = new MatterhornBillingAccountStore({
+      workspaceRoot: workspace.path,
+      workspaceId: workspace.id,
+    });
+    const account = await accountStore.get();
+    const pendingCheckout = account?.pendingCheckout ?? null;
+    const cleared = Boolean(account && pendingCheckout);
+    const subscription = account?.subscription ?? buildMatterhornBillingSubscription(provider.config.currentPlanId);
+    if (account && pendingCheckout) {
+      await accountStore.save({
+        ...account,
+        pendingCheckout: null,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    await recordBillingAudit({
+      workspace,
+      actor: routeCtx.actor,
+      action: "workspace.billing.pending_checkout.clear",
+      summary: cleared
+        ? "Cleared the pending Stripe test checkout."
+        : "Pending Stripe test checkout was already clear.",
+      planId: pendingCheckout?.planId ?? undefined,
+      interval: pendingCheckout?.interval ?? undefined,
+      mode: provider.config.mode,
+      provider: provider.config.provider,
+      deleted: cleared,
+    });
+    const response: MatterhornBillingPendingCheckoutClearResponse = {
+      success: true,
+      cleared,
+      workspaceId: workspace.id,
+      status: buildBillingStatusResponseForSubscription(provider.config, subscription, undefined, null).status,
+    };
+    return jsonResponse(response);
   });
 
   addRoute("POST", "/api/billing/portal", "client", async (routeCtx) => {

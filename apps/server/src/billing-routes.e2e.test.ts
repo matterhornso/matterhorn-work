@@ -374,6 +374,39 @@ describe("Billing routes", () => {
         planId: "max",
       }),
     });
+
+    const clearedPending = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/pending-checkout`, {
+      method: "DELETE",
+    });
+    expect(clearedPending.response.status).toBe(200);
+    expect(clearedPending.payload).toMatchObject({
+      success: true,
+      cleared: true,
+      workspaceId: WORKSPACE_ID,
+      status: {
+        subscription: {
+          planId: "free",
+          status: "none",
+        },
+        pendingCheckout: null,
+      },
+    });
+
+    const afterClear = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(afterClear.payload.status.pendingCheckout ?? null).toBeNull();
+    expect(afterClear.payload.status.subscription.planId).toBe("free");
+
+    const clearLedger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=billing&limit=10`);
+    expect(clearLedger.payload.items[0]).toMatchObject({
+      kind: "billing",
+      title: "Billing pending checkout cleared",
+      eventType: "workspace.billing.pending_checkout.clear",
+      metadata: expect.objectContaining({
+        auditAction: "workspace.billing.pending_checkout.clear",
+        deleted: true,
+        planId: "max",
+      }),
+    });
   });
 
   test("POST /api/billing/webhook/stripe syncs a verified Checkout session into workspace billing", async () => {
@@ -758,6 +791,15 @@ describe("Billing routes", () => {
     );
     expect(workspaceCheckout.response.status).toBe(403);
     expect(workspaceCheckout.payload.code).toBe("forbidden");
+
+    const workspacePendingClear = await jsonFetch(
+      base,
+      `/workspace/${WORKSPACE_ID}/billing/pending-checkout`,
+      { method: "DELETE" },
+      viewerToken,
+    );
+    expect(workspacePendingClear.response.status).toBe(403);
+    expect(workspacePendingClear.payload.code).toBe("forbidden");
 
     const workspaceClear = await jsonFetch(
       base,

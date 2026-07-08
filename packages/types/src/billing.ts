@@ -161,6 +161,13 @@ export interface MatterhornBillingPortalResponse {
   providerSessionId?: string | null;
 }
 
+export interface MatterhornBillingPendingCheckoutClearResponse {
+  success: true;
+  cleared: boolean;
+  workspaceId: string;
+  status: MatterhornBillingStatus;
+}
+
 export interface MatterhornBillingWebhookStripeRequest {
   signature?: string;
   payload: unknown;

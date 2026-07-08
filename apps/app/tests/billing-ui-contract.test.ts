@@ -129,6 +129,7 @@ const mockClient: MatterhornServerClient = {
     }),
   workspaceBillingCheckout: () => Promise.reject(new Error("Not called in static render")),
   workspaceBillingPortal: () => Promise.reject(new Error("Not called in static render")),
+  workspaceBillingPendingCheckoutClear: () => Promise.reject(new Error("Not called in static render")),
   billingCheckout: () => Promise.reject(new Error("Not called in static render")),
   billingPortal: () => Promise.reject(new Error("Not called in static render")),
 } as unknown as MatterhornServerClient;
@@ -174,9 +175,11 @@ describe("Billing settings view", () => {
     expect(clientSource).toContain("workspaceBillingStatus");
     expect(clientSource).toContain("workspaceBillingCheckout");
     expect(clientSource).toContain("workspaceBillingPortal");
+    expect(clientSource).toContain("workspaceBillingPendingCheckoutClear");
     expect(clientSource).toContain("/billing/status");
     expect(clientSource).toContain("/billing/checkout");
     expect(clientSource).toContain("/billing/portal");
+    expect(clientSource).toContain("/billing/pending-checkout");
     expect(billingViewSource).toContain("runtimeWorkspaceId");
     expect(billingViewSource).toContain("client?.workspaceBillingStatus(workspaceId)");
     expect(billingViewSource).toContain("status?.setup.checks");
@@ -184,6 +187,8 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("client?.billingStatus()");
     expect(billingViewSource).toContain("client?.workspaceBillingCheckout(workspaceId");
     expect(billingViewSource).toContain("client?.workspaceBillingPortal(workspaceId");
+    expect(billingViewSource).toContain("client.workspaceBillingPendingCheckoutClear(workspaceId)");
+    expect(billingViewSource).toContain("Clear pending");
     expect(billingViewSource).toContain("statusQuery.refetch()");
     expect(billingViewSource).toContain("checkoutReady");
     expect(billingViewSource).toContain("Portal needs setup");
