@@ -2617,6 +2617,16 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         hostToken,
         timeoutMs: timeouts.capabilities,
       }),
+    workspaceBillingStatus: (workspaceId: string) =>
+      requestJson<MatterhornBillingStatusResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/billing/status`,
+        {
+          token,
+          hostToken,
+          timeoutMs: timeouts.capabilities,
+        },
+      ),
     billingCheckout: (input: MatterhornBillingCheckoutRequest) =>
       requestJson<MatterhornBillingCheckoutResponse>(baseUrl, "/api/billing/checkout", {
         token,
