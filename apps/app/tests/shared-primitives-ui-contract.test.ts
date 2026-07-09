@@ -116,9 +116,13 @@ describe("Shared primitives UI contract", () => {
       ["domains/session/media/session-image-generation-panel.tsx", readAppSource("domains/session/media/session-image-generation-panel.tsx")],
       ["domains/session/media/nft-draft-panel.tsx", readAppSource("domains/session/media/nft-draft-panel.tsx")],
       ["domains/session/media/nft-publishing-readiness.tsx", readAppSource("domains/session/media/nft-publishing-readiness.tsx")],
+      ["domains/wallet/sui-workflow-panel.tsx", readAppSource("domains/wallet/sui-workflow-panel.tsx")],
     ]);
 
     for (const [path, source] of sourceByPath) {
+      expect(source, path).not.toContain("border-y border-dls-border/25");
+      expect(source, path).not.toContain("border-y border-dls-border/35");
+      expect(source, path).not.toContain("border-y border-dls-border/45");
       expect(source, path).not.toContain("border-t border-dls-border/25");
       expect(source, path).not.toContain("border-t border-dls-border/35");
       expect(source, path).not.toContain("border-t border-dls-border/45");
@@ -135,5 +139,7 @@ describe("Shared primitives UI contract", () => {
     expect(sourceByPath.get("domains/session/surface/session-surface.tsx")).not.toContain("border-y border-[rgba(var(--matterhorn-desk-rgb),0.24)]");
     expect(sourceByPath.get("domains/session/media/session-image-generation-panel.tsx")).toContain("bg-dls-surface-muted/[0.045]");
     expect(sourceByPath.get("domains/session/workflows/workflow-stage-card.tsx")).toContain("bg-dls-surface-muted/[0.075]");
+    expect(sourceByPath.get("domains/wallet/sui-workflow-panel.tsx")).toContain("SUI_PANEL_SECTION_CLASS");
+    expect(sourceByPath.get("domains/wallet/sui-workflow-panel.tsx")).toContain("bg-dls-surface-muted/[0.055]");
   });
 });

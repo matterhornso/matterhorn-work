@@ -61,6 +61,10 @@ function fieldId(name: string) {
   return `matterhorn-sui-workflow-${name}`;
 }
 
+const SUI_PANEL_SECTION_CLASS = "grid gap-3 rounded-lg bg-dls-surface-muted/[0.055] px-3 py-3";
+const SUI_PANEL_INPUT_CLASS = "h-9 rounded-lg border border-transparent bg-dls-surface-muted/[0.10] px-3 text-sm text-dls-text shadow-none outline-none placeholder:text-dls-muted transition-colors dark:bg-dls-surface-muted/[0.12] focus-visible:border-[rgba(var(--dls-accent-rgb),0.34)] focus-visible:bg-dls-surface-muted/[0.16] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.16)] dark:focus-visible:bg-dls-surface-muted/[0.18]";
+const SUI_PANEL_TEXTAREA_CLASS = "min-h-[5.25rem] rounded-lg border border-transparent bg-dls-surface-muted/[0.10] px-3 py-2.5 text-sm leading-6 text-dls-text shadow-none outline-none placeholder:text-dls-muted transition-colors dark:bg-dls-surface-muted/[0.12] focus-visible:border-[rgba(var(--dls-accent-rgb),0.34)] focus-visible:bg-dls-surface-muted/[0.16] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.16)] dark:focus-visible:bg-dls-surface-muted/[0.18]";
+
 export type SuiWorkflowRuntime = "web" | "desktop" | "electron" | "unknown";
 
 function resolveSuiWorkflowRuntime(runtime?: SuiWorkflowRuntime): SuiWorkflowRuntime {
@@ -82,8 +86,8 @@ function WorkflowField(props: {
   help?: string;
 }) {
   return (
-    <label className="grid gap-1.5 text-xs font-medium text-dls-text" htmlFor={props.htmlFor}>
-      {props.label}
+    <label className="grid min-w-0 gap-1.5 text-[11px] font-medium text-dls-secondary" htmlFor={props.htmlFor}>
+      <span className="text-xs font-medium text-dls-text">{props.label}</span>
       {props.children}
       {props.help ? <span className="text-[11px] font-normal leading-4 text-dls-secondary">{props.help}</span> : null}
     </label>
@@ -93,7 +97,7 @@ function WorkflowField(props: {
 function EvidencePath({ path }: { path?: string }) {
   if (!path) return null;
   return (
-    <div className="rounded-md bg-dls-surface/55 px-2.5 py-2 text-[11px] leading-4 text-dls-secondary">
+    <div className="rounded-lg bg-dls-surface-muted/[0.08] px-2.5 py-2 text-[11px] leading-4 text-dls-secondary">
       <span className="font-medium text-dls-text">Saved evidence:</span>{" "}
       <span className="font-mono">{path}</span>
     </div>
@@ -382,6 +386,15 @@ export function SuiWorkflowPanel(props: {
   const handoffText = useMemo(() => (
     preview ? JSON.stringify(preview.handoff, null, 2) : ""
   ), [preview]);
+  const networkSenderGridClass = props.compact
+    ? "grid gap-3"
+    : "grid gap-3 md:grid-cols-[8rem_minmax(0,1fr)]";
+  const recipientAmountGridClass = props.compact
+    ? "grid gap-3"
+    : "grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem]";
+  const receiptGridClass = props.compact
+    ? "grid gap-3"
+    : "grid gap-3 md:grid-cols-[9rem_minmax(0,1fr)]";
 
   const useConnectedWalletSender = useCallback(() => {
     if (connectedAddress) setSender(connectedAddress);
@@ -407,7 +420,7 @@ export function SuiWorkflowPanel(props: {
         <span className="shrink-0 text-[11px] font-medium text-dls-secondary">No custody</span>
       </div>
 
-      <div className="grid gap-3 border-y border-dls-border/45 py-3">
+      <div className={SUI_PANEL_SECTION_CLASS}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="truncate text-xs font-medium text-dls-text">{connectedWalletLabel}</p>
@@ -423,7 +436,7 @@ export function SuiWorkflowPanel(props: {
             <Button
               variant="ghost"
               size="icon-sm"
-              className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
+              className="size-7 border-0 bg-transparent text-dls-secondary shadow-none hover:bg-dls-surface-muted/[0.10] hover:text-dls-text"
               disabled={!effectiveSender || accountQuery.isFetching}
               onClick={() => void accountQuery.refetch()}
               aria-label="Refresh Sui account"
@@ -435,7 +448,7 @@ export function SuiWorkflowPanel(props: {
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                className="h-7 rounded-lg text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
                 disabled={busyAction === "disconnect"}
                 onClick={disconnectWallet}
               >
@@ -457,7 +470,7 @@ export function SuiWorkflowPanel(props: {
               <Button
                 key={`${availableWallet.name}-${availableWallet.version}`}
                 variant="outline"
-                className="h-auto justify-start gap-2 rounded-md px-3 py-2 text-xs"
+                className="h-auto justify-start gap-2 rounded-lg border-0 bg-dls-surface-muted/[0.08] px-3 py-2 text-xs text-dls-text shadow-none hover:bg-dls-surface-muted/[0.14]"
                 disabled={busyAction === "connect" || connection.isConnecting}
                 onClick={() => connectWallet(availableWallet)}
               >
@@ -473,12 +486,12 @@ export function SuiWorkflowPanel(props: {
         ) : null}
       </div>
 
-      <div className="grid gap-3">
-        <div className="grid gap-3 sm:grid-cols-[8rem_minmax(0,1fr)]">
+      <div className={SUI_PANEL_SECTION_CLASS}>
+        <div className={networkSenderGridClass}>
           <WorkflowField label="Network" htmlFor={fieldId("network")}>
             <select
               id={fieldId("network")}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/35"
+              className={SUI_PANEL_INPUT_CLASS}
               value={network}
               onChange={(event) => setNetwork(event.target.value as MatterhornSuiNetwork)}
             >
@@ -490,6 +503,7 @@ export function SuiWorkflowPanel(props: {
             <div className="flex min-w-0 gap-2">
               <Input
                 id={fieldId("sender")}
+                className={SUI_PANEL_INPUT_CLASS}
                 value={sender}
                 placeholder="0x..."
                 onChange={(event) => setSender(event.target.value)}
@@ -499,7 +513,7 @@ export function SuiWorkflowPanel(props: {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="shrink-0"
+                  className="shrink-0 rounded-lg border-0 bg-dls-surface-muted/[0.10] text-xs text-dls-text shadow-none hover:bg-dls-surface-muted/[0.16]"
                   onClick={useConnectedWalletSender}
                 >
                   Use wallet
@@ -509,10 +523,11 @@ export function SuiWorkflowPanel(props: {
           </WorkflowField>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+        <div className={recipientAmountGridClass}>
           <WorkflowField label="Recipient" htmlFor={fieldId("recipient")}>
             <Input
               id={fieldId("recipient")}
+              className={SUI_PANEL_INPUT_CLASS}
               value={recipient}
               placeholder="0x..."
               onChange={(event) => setRecipient(event.target.value)}
@@ -521,6 +536,7 @@ export function SuiWorkflowPanel(props: {
           <WorkflowField label="Amount" htmlFor={fieldId("amount")} help="SUI">
             <Input
               id={fieldId("amount")}
+              className={SUI_PANEL_INPUT_CLASS}
               inputMode="decimal"
               value={amountSui}
               placeholder="0.1"
@@ -532,6 +548,7 @@ export function SuiWorkflowPanel(props: {
         <WorkflowField label="Memo" htmlFor={fieldId("memo")} help="Optional. Saved with the preview evidence, not signed by Matterhorn.">
           <Textarea
             id={fieldId("memo")}
+            className={SUI_PANEL_TEXTAREA_CLASS}
             rows={2}
             value={memo}
             placeholder="Why this transfer is being prepared"
@@ -541,7 +558,7 @@ export function SuiWorkflowPanel(props: {
 
         <Button
           type="button"
-          className="w-fit"
+          className="w-fit rounded-lg"
           disabled={!canPreview || busyAction === "preview"}
           onClick={preparePreview}
           title={availability.preparePreviewReason ?? "Prepare a non-custodial Sui preview"}
@@ -552,7 +569,7 @@ export function SuiWorkflowPanel(props: {
       </div>
 
       {preview ? (
-        <div className="grid gap-3 border-t border-dls-border/45 pt-3">
+        <div className={SUI_PANEL_SECTION_CLASS}>
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-dls-text">Preview ready</p>
@@ -599,7 +616,7 @@ export function SuiWorkflowPanel(props: {
         </div>
       ) : null}
 
-      <div className="grid gap-3 border-t border-dls-border/45 pt-3">
+      <div className={SUI_PANEL_SECTION_CLASS}>
         <div>
           <p className="text-sm font-semibold text-dls-text">Import receipt</p>
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
@@ -609,16 +626,17 @@ export function SuiWorkflowPanel(props: {
         <WorkflowField label="Transaction digest" htmlFor={fieldId("digest")}>
           <Input
             id={fieldId("digest")}
+            className={SUI_PANEL_INPUT_CLASS}
             value={digest}
             placeholder="Sui transaction digest"
             onChange={(event) => setDigest(event.target.value)}
           />
         </WorkflowField>
-        <div className="grid gap-3 sm:grid-cols-[9rem_minmax(0,1fr)]">
+        <div className={receiptGridClass}>
           <WorkflowField label="Status" htmlFor={fieldId("status")}>
             <select
               id={fieldId("status")}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/35"
+              className={SUI_PANEL_INPUT_CLASS}
               value={receiptStatus}
               onChange={(event) => setReceiptStatus(event.target.value as "success" | "failure" | "unknown")}
             >
@@ -630,6 +648,7 @@ export function SuiWorkflowPanel(props: {
           <WorkflowField label="Explorer URL" htmlFor={fieldId("explorer")} help="Optional public link.">
             <Input
               id={fieldId("explorer")}
+              className={SUI_PANEL_INPUT_CLASS}
               value={explorerUrl}
               placeholder="https://..."
               onChange={(event) => setExplorerUrl(event.target.value)}
@@ -639,7 +658,7 @@ export function SuiWorkflowPanel(props: {
         <Button
           type="button"
           variant="outline"
-          className="w-fit"
+          className="w-fit rounded-lg border-0 bg-dls-surface-muted/[0.10] text-dls-text shadow-none hover:bg-dls-surface-muted/[0.16]"
           disabled={!canImportReceipt || busyAction === "receipt"}
           onClick={importReceipt}
           title={availability.importReceiptReason ?? "Import the public Sui transaction receipt"}
@@ -650,7 +669,7 @@ export function SuiWorkflowPanel(props: {
       </div>
 
       {receipt ? (
-        <div className="grid gap-3 border-t border-dls-border/45 pt-3">
+        <div className={SUI_PANEL_SECTION_CLASS}>
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-dls-text">Receipt imported</p>
@@ -678,7 +697,7 @@ export function SuiWorkflowPanel(props: {
       ) : null}
 
       {error ? (
-        <div className="rounded-md bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-300">
+        <div className="rounded-lg bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-300">
           {error}
         </div>
       ) : null}
