@@ -43,7 +43,7 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
           : 0
       : 0;
 
-  const { resolvedAddress, resolvedName, isResolving, resolve } = useEnsResolution();
+  const { resolvedAddress, resolvedName, resolvedFor, isResolving, resolve } = useEnsResolution();
 
   const [error, setError] = useState<string | null>(null);
 
@@ -55,7 +55,13 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
     return () => clearTimeout(timer);
   }, [to, resolve]);
 
-  const effectiveAddress = resolvedAddress || (to.startsWith("0x") && to.length === 42 ? to : "");
+  const normalizedRecipient = to.trim();
+  const hasFreshResolution = resolvedFor === normalizedRecipient;
+  const effectiveAddress = resolvedFor === normalizedRecipient && resolvedAddress
+    ? resolvedAddress
+    : normalizedRecipient.startsWith("0x") && normalizedRecipient.length === 42
+      ? normalizedRecipient
+      : "";
 
   const handleSend = async () => {
     if (!selectedMeta || !state.address || !state.chainId || !effectiveAddress) return;
@@ -139,18 +145,18 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
               ENS
             </div>
           )}
-          {!isResolving && resolvedName && (
+          {!isResolving && hasFreshResolution && resolvedName && (
             <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-emerald-400 font-medium truncate max-w-[100px]">
               {resolvedName}
             </div>
           )}
-          {!isResolving && to.includes(".") && !resolvedAddress && to.length > 3 && (
+          {!isResolving && hasFreshResolution && to.includes(".") && !resolvedAddress && to.length > 3 && (
             <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-red-400 font-medium">
               Not found
             </div>
           )}
         </div>
-        {resolvedAddress && (
+        {hasFreshResolution && resolvedAddress && (
           <div className="flex items-center gap-2 text-xs text-dls-secondary">
             <div className="flex size-5 items-center justify-center rounded-md bg-emerald-500/10">
               <CheckCircle className="size-3 text-emerald-400" />

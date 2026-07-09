@@ -178,6 +178,15 @@ export function parseTxValueWei(value: string): bigint {
   throw new Error("Transaction value must be hex wei, raw wei, or decimal ETH");
 }
 
+export function formatTxValueEth(value: string): string {
+  const wei = parseTxValueWei(value);
+  const whole = wei / WEI_PER_ETH;
+  const fraction = wei % WEI_PER_ETH;
+  if (fraction === 0n) return whole.toString();
+  const fractionText = fraction.toString().padStart(18, "0").replace(/0+$/, "");
+  return `${whole}.${fractionText}`;
+}
+
 export function computeTxValueUSD(value: string): number {
   try {
     const eth = Number(parseTxValueWei(value)) / Number(WEI_PER_ETH);

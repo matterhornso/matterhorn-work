@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { WalletStore } from "./state/wallet-store";
-import { useWalletStore, computeTxValueUSD } from "./state/wallet-store";
+import { useWalletStore, computeTxValueUSD, formatTxValueEth } from "./state/wallet-store";
 import { CHAIN_NAMES, FORCE_TESTNET } from "../../infra/chains";
 import { isWhitelistedAddress } from "./infra/whitelist";
 import { estimateGasClient, type GasEstimateResult } from "./lib/gas-estimate";
@@ -26,7 +26,7 @@ export type TransactionApprovalProps = {
   onApprove: (tx: TxApprovalRequest) => void;
   onReject: () => void;
   /** Called to execute a single batch step (for multi-hop / batch approvals). */
-  onExecuteBatchStep?: (step: { to: string; data?: string; value?: string }) => Promise<string>;
+  onExecuteBatchStep?: (step: { to: string; data?: string; value?: string; chainId?: number }) => Promise<string>;
 };
 
 export function dispatchTxApprovalRequest(tx: TxApprovalRequest) {
@@ -282,7 +282,7 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
             const step = pending.steps[stepIndex];
             if (!step) throw new Error("Step not found");
             if (onExecuteBatchStep) {
-              const hash = await onExecuteBatchStep({ to: step.to, data: step.data, value: step.value });
+              const hash = await onExecuteBatchStep({ to: step.to, data: step.data, value: step.value, chainId: pending.chainId });
               return hash;
             }
             // Fallback: old behavior for backwards compat
@@ -305,6 +305,8 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
   const isWhitelisted = isWhitelistedAddress(pending.chainId, pending.to);
   const isMainnet = pending.chainId === 8453;
   const chainName = CHAIN_NAMES[pending.chainId] ?? `Chain ${pending.chainId}`;
+  const ethValue = formatTxValueEth(pending.value);
+  const usdValue = computeTxValueUSD(pending.value);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -407,7 +409,10 @@ export function TransactionApproval({ store, onApprove, onReject, onExecuteBatch
 
           <div className="rounded-lg bg-dls-surface p-3">
             <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Value</div>
-            <div className="font-mono text-sm text-dls-text">{pending.value} ETH</div>
+            <div className="font-mono text-sm text-dls-text">{ethValue} ETH</div>
+            {usdValue > 0 ? (
+              <div className="mt-0.5 text-xs text-dls-secondary">~${usdValue.toFixed(2)} USD</div>
+            ) : null}
           </div>
 
           {isContractInteraction && (

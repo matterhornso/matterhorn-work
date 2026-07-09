@@ -17,7 +17,7 @@ import { createHighlighterCore } from "shiki/core";
 import type { LanguageRegistration } from "shiki/core";
 import { createOnigurumaEngine } from "shiki/engine/oniguruma";
 import wasm from "shiki/wasm";
-import githubLight from "shiki/themes/github-light.mjs";
+import githubDark from "shiki/themes/github-dark.mjs";
 import js from "shiki/langs/javascript.mjs";
 import ts from "shiki/langs/typescript.mjs";
 import tsx from "shiki/langs/tsx.mjs";
@@ -112,7 +112,7 @@ async function ensureHighlighter() {
   if (highlighter) return highlighter;
   highlighter = await createHighlighterCore({
     engine: createOnigurumaEngine(wasm),
-    themes: [githubLight],
+    themes: [githubDark],
     langs: Object.values(languageMap),
   });
   return highlighter;
@@ -134,8 +134,8 @@ const baseMarkedOptions = {
   pedantic: false,
   silent: true,
   renderer: {
-    html({ text }) {
-      return text.includes('data-matterhorn-shiki="true"') ? text : "";
+    html() {
+      return "";
     },
     paragraph({ tokens }) {
       return `<p class="my-3 leading-relaxed">${this.parser.parseInline(tokens)}</p>`;
@@ -166,7 +166,7 @@ const baseMarkedOptions = {
       return `<blockquote class="my-4 rounded-r-lg border-l border-dls-border bg-dls-hover/40 pl-4 italic text-muted-foreground">${this.parser.parse(tokens)}</blockquote>`;
     },
     code({ text, lang }) {
-      return `<pre class="my-4 overflow-x-auto rounded-[18px] border border-dls-border/70 bg-gray-1/80 px-4 py-3 text-xs leading-6 text-muted-foreground"><code${codeLanguageClass(lang)}>${escapeHtml(text)}</code></pre>`;
+      return `<pre class="my-4 overflow-x-auto rounded-lg bg-dls-surface-muted/20 px-4 py-3 text-xs leading-6 text-dls-secondary"><code${codeLanguageClass(lang)}>${escapeHtml(text)}</code></pre>`;
     },
     codespan({ text }) {
       return `<code class="rounded-md bg-gray-2/70 px-1.5 py-0.5 font-mono text-sm text-foreground">${escapeHtml(text)}</code>`;
@@ -183,7 +183,7 @@ const baseMarkedOptions = {
     image({ href, title, text }) {
       const safe = escapeAttribute(safeHref(href));
       const titleAttr = title ? ` title="${escapeAttribute(title)}"` : "";
-      return `<img src="${safe}" alt="${escapeAttribute(text)}"${titleAttr} loading="lazy" decoding="async" class="my-4 max-w-full rounded-[18px] border border-dls-border/70">`;
+      return `<img src="${safe}" alt="${escapeAttribute(text)}"${titleAttr} loading="lazy" decoding="async" class="my-4 max-w-full rounded-lg border border-dls-border/70">`;
     },
     table(token) {
       const header = token.header.map((cell) => this.tablecell({ ...cell, header: true })).join("");
@@ -228,7 +228,7 @@ const highlightedMarkdownParser = new Marked<string, string>({
       return highlighter.codeToHtml(code, {
         lang: language,
         meta: { __raw: props.join(" ") },
-        theme: "github-light",
+        theme: "github-dark",
         transformers: [
           transformerNotationDiff({ matchAlgorithm: "v3" }),
           transformerNotationHighlight({ matchAlgorithm: "v3" }),
@@ -240,7 +240,7 @@ const highlightedMarkdownParser = new Marked<string, string>({
         ],
       });
     },
-    container: `<div data-matterhorn-shiki="true" class="my-4 overflow-hidden rounded-[18px] border border-dls-border/70 bg-gray-1/80 p-4 text-xs leading-6">%s</div>`,
+    container: `<div data-matterhorn-shiki="true" class="my-4 overflow-hidden rounded-lg bg-dls-surface-muted/20 p-4 text-xs leading-6">%s</div>`,
   }),
 );
 

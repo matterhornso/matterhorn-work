@@ -22,7 +22,7 @@ const CHAINS: ChainOption[] = [
 export default function BridgePanel({ store }: { store: WalletStore }) {
   const state = useWalletStore(store);
   const { addresses } = useAddressBook();
-  const { resolvedAddress, resolvedName, isResolving, resolve } = useEnsResolution();
+  const { resolvedAddress, resolvedName, resolvedFor, isResolving, resolve } = useEnsResolution();
   const [fromChain, setFromChain] = useState<number>(8453);
   const [toChain, setToChain] = useState<number>(42161);
   const [amount, setAmount] = useState("");
@@ -35,7 +35,13 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
   const registry = state.chainId ? tokensForChain(state.chainId) : undefined;
   const tokens = registry ? Object.entries(registry).map(([symbol, meta]) => ({ symbol, address: meta.address, decimals: meta.decimals })) : [];
 
-  const effectiveRecipient = resolvedAddress || (recipient.startsWith("0x") && recipient.length === 42 ? recipient : "");
+  const normalizedRecipient = recipient.trim();
+  const hasFreshResolution = resolvedFor === normalizedRecipient;
+  const effectiveRecipient = resolvedFor === normalizedRecipient && resolvedAddress
+    ? resolvedAddress
+    : normalizedRecipient.startsWith("0x") && normalizedRecipient.length === 42
+      ? normalizedRecipient
+      : "";
 
   // Debounce ENS resolution
   useEffect(() => {
@@ -179,12 +185,12 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
                 ENS
               </div>
             )}
-            {!isResolving && resolvedName && (
+            {!isResolving && hasFreshResolution && resolvedName && (
               <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-emerald-400 font-medium truncate max-w-[100px]">
                 {resolvedName}
               </div>
             )}
-            {!isResolving && recipient.includes(".") && !resolvedAddress && recipient.length > 3 && (
+            {!isResolving && hasFreshResolution && recipient.includes(".") && !resolvedAddress && recipient.length > 3 && (
               <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-red-400 font-medium">
                 Not found
               </div>

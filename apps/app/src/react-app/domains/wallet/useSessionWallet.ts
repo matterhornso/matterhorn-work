@@ -49,7 +49,14 @@ export function useSessionWallet(store: WalletStore) {
       throw new Error("Mainnet is disabled (FORCE_TESTNET=true)");
     }
 
+    if (chainId && chainId !== approval.chainId) {
+      const expected = CHAIN_NAMES[approval.chainId] ?? `chain ${approval.chainId}`;
+      const actual = CHAIN_NAMES[chainId] ?? `chain ${chainId}`;
+      throw new Error(`Switch your wallet to ${expected}. It is currently on ${actual}.`);
+    }
+
     const hash = await sendTransactionAsync({
+      chainId: approval.chainId,
       to: approval.to as `0x${string}`,
       value: parseTxValueWei(approval.value),
       data: approval.data as `0x${string}` | undefined,
@@ -79,7 +86,7 @@ export function useSessionWallet(store: WalletStore) {
     });
 
     return hash;
-  }, [state.pendingApproval, wagmiAddress, sendTransactionAsync, store]);
+  }, [state.pendingApproval, wagmiAddress, chainId, sendTransactionAsync, store]);
 
   /**
    * Reject a pending TX — clears the approval request.
@@ -124,6 +131,7 @@ export function useSessionWallet(store: WalletStore) {
           riskLevel,
           reason: `Per-transaction limit exceeded ($${state.maxPerTransactionUSD})`,
         });
+        return;
       }
 
       if (state.maxDailySpendUSD > 0 && valueUSD + state.dailySpendUSD > state.maxDailySpendUSD) {
@@ -137,6 +145,7 @@ export function useSessionWallet(store: WalletStore) {
           riskLevel,
           reason: `Daily spend limit exceeded ($${state.maxDailySpendUSD})`,
         });
+        return;
       }
 
       const now = Date.now();
@@ -153,6 +162,8 @@ export function useSessionWallet(store: WalletStore) {
           riskLevel,
           reason: `Swap rate limit reached (${MAX_SWAPS_PER_HOUR}/hour)`,
         });
+        store.setError(`Swap rate limit reached (${MAX_SWAPS_PER_HOUR}/hour). This protects against runaway agent loops.`);
+        return;
       }
 
       // Optional: verify target address has bytecode (is a contract, not EOA)
@@ -173,10 +184,6 @@ export function useSessionWallet(store: WalletStore) {
 
       store.requestApproval(to, value, data, currentChainId, proposedBy, riskLevel, contractWarning ?? undefined);
 
-      if (swapLimitExceeded) {
-        store.setError(`Swap rate limit reached (${MAX_SWAPS_PER_HOUR}/hour). This protects against runaway agent loops.`);
-      }
-
       appendSecurityLog({
         timestamp: Date.now(),
         action: "tx_proposed",
@@ -196,9 +203,16 @@ export function useSessionWallet(store: WalletStore) {
    * Execute a single batch step — send its transaction to the chain.
    */
   const executeBatchStep = useCallback(
-    async (step: { to: string; data?: string; value?: string }): Promise<`0x${string}`> => {
+    async (step: { to: string; data?: string; value?: string; chainId?: number }): Promise<`0x${string}`> => {
       if (!wagmiAddress) throw new Error("Wallet not connected");
+      const targetChainId = step.chainId ?? state.chainId ?? 84532;
+      if (chainId && chainId !== targetChainId) {
+        const expected = CHAIN_NAMES[targetChainId] ?? `chain ${targetChainId}`;
+        const actual = CHAIN_NAMES[chainId] ?? `chain ${chainId}`;
+        throw new Error(`Switch your wallet to ${expected}. It is currently on ${actual}.`);
+      }
       const hash = await sendTransactionAsync({
+        chainId: targetChainId,
         to: step.to as `0x${string}`,
         value: step.value ? parseTxValueWei(step.value) : undefined,
         data: step.data as `0x${string}` | undefined,
@@ -209,7 +223,7 @@ export function useSessionWallet(store: WalletStore) {
         value: step.value ?? "0",
         status: "pending",
         timestamp: Date.now(),
-        chainId: state.chainId ?? 84532,
+        chainId: targetChainId,
         proposedBy: "batch",
         riskLevel: "medium",
       });
@@ -217,7 +231,7 @@ export function useSessionWallet(store: WalletStore) {
       store.incrementDailySpendUSD(txValueUSD);
       return hash;
     },
-    [wagmiAddress, sendTransactionAsync, store, state.chainId],
+    [wagmiAddress, chainId, sendTransactionAsync, store, state.chainId],
   );
 
   /**

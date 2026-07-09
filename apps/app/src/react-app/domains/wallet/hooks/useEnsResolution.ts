@@ -2,53 +2,63 @@
  * Reactive ENS resolution hook.
  * Debounces input and resolves ENS names via mainnet.
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { resolveEnsName, lookupEnsName } from "../lib/ens";
 import type { Address } from "viem";
-
-const ENS_DEBOUNCE_MS = 400;
 
 export function useEnsResolution() {
   const [resolvedAddress, setResolvedAddress] = useState<Address | null>(null);
   const [resolvedName, setResolvedName] = useState<string | null>(null);
+  const [resolvedFor, setResolvedFor] = useState("");
   const [isResolving, setIsResolving] = useState(false);
+  const requestIdRef = useRef(0);
 
   const resolve = useCallback(async (input: string) => {
-    if (!input || input.trim().length < 3) {
+    const query = input.trim();
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    setResolvedAddress(null);
+    setResolvedName(null);
+    setResolvedFor(query);
+
+    if (!query || query.length < 3) {
+      setIsResolving(false);
       setResolvedAddress(null);
       setResolvedName(null);
       return;
     }
 
     // If already an address, try reverse lookup
-    if (input.startsWith("0x") && input.length === 42) {
-      setResolvedAddress(input as Address);
+    if (query.startsWith("0x") && query.length === 42) {
+      setResolvedAddress(query as Address);
       setIsResolving(true);
       try {
-        const name = await lookupEnsName(input as Address);
-        setResolvedName(name);
+        const name = await lookupEnsName(query as Address);
+        if (requestId === requestIdRef.current) setResolvedName(name);
       } finally {
-        setIsResolving(false);
+        if (requestId === requestIdRef.current) setIsResolving(false);
       }
       return;
     }
 
     // If looks like ENS name
-    if (input.includes(".")) {
+    if (query.includes(".")) {
       setIsResolving(true);
       try {
-        const address = await resolveEnsName(input);
+        const address = await resolveEnsName(query);
+        if (requestId !== requestIdRef.current) return;
         setResolvedAddress(address);
-        setResolvedName(address ? input : null);
+        setResolvedName(address ? query : null);
       } finally {
-        setIsResolving(false);
+        if (requestId === requestIdRef.current) setIsResolving(false);
       }
       return;
     }
 
     setResolvedAddress(null);
     setResolvedName(null);
+    setIsResolving(false);
   }, []);
 
-  return { resolvedAddress, resolvedName, isResolving, resolve };
+  return { resolvedAddress, resolvedName, resolvedFor, isResolving, resolve };
 }
