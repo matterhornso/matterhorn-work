@@ -84,7 +84,7 @@ interface SettingsInsetProps {
 
 export function SettingsInset({ children, className }: SettingsInsetProps) {
   return (
-    <div className={cn("rounded-md bg-dls-surface-muted/12 p-4", className)}>
+    <div className={cn("rounded-lg bg-dls-surface-muted/12 p-4", className)}>
       {children}
     </div>
   );
@@ -151,7 +151,7 @@ export function SettingsNotice({
   return (
     <div
       className={cn(
-        "rounded-md bg-dls-hover/35 px-3 py-2 text-xs text-muted-foreground",
+        "rounded-lg bg-dls-hover/35 px-3 py-2 text-xs text-muted-foreground",
         tone === "error" && "bg-red-1/40 text-red-11",
         className,
       )}

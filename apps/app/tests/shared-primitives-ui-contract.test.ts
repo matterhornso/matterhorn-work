@@ -36,6 +36,17 @@ describe("Shared primitives UI contract", () => {
     expect(source).not.toContain("focus-visible:ring-[3px]");
   });
 
+  test("secondary primitives use soft surfaces instead of loud outline boxes", () => {
+    const buttonSource = readUiSource("button.tsx");
+    const badgeSource = readUiSource("badge.tsx");
+
+    expect(buttonSource).toContain("border-transparent bg-dls-surface-muted/[0.10]");
+    expect(buttonSource).toContain("hover:bg-dls-surface-muted/[0.16]");
+    expect(buttonSource).not.toContain("border-border bg-background hover:bg-accent");
+    expect(badgeSource).toContain("border-transparent bg-dls-surface-muted/[0.10]");
+    expect(badgeSource).not.toContain('variant === "outline" && "text-foreground"');
+  });
+
   test("workspace modal styles use modest radii and avoid glass shadows", () => {
     const source = readAppSource("domains/workspace/modal-styles.ts");
     expect(source).not.toContain("rounded-[28px]");
