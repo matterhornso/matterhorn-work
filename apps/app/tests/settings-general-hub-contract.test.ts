@@ -22,6 +22,15 @@ describe("Settings general hub project surfaces", () => {
     expect(source).toContain("props.onSendFeedback");
   });
 
+  test("uses container-safe card grids in the settings drawer", () => {
+    const source = readReactSource("domains/settings/pages/general-view.tsx");
+
+    expect(source).toContain("SETTINGS_HUB_GRID_CLASS");
+    expect(source).toContain("repeat(auto-fit,minmax(min(100%,21rem),1fr))");
+    expect(source).not.toContain("md:grid-cols-2");
+    expect(source).not.toContain('className="min-w-0 truncate text-[13px] font-medium text-dls-text">{props.title}');
+  });
+
   test("renders feedback support actions as lightweight inline controls", () => {
     const source = readReactSource("domains/settings/pages/general-view.tsx");
 

@@ -120,6 +120,8 @@ const projectSurfaceCards: ProjectSurfaceCard[] = [
 
 const FEEDBACK_ACTION_CLASS =
   "matterhorn-feedback-action inline-flex items-center gap-1.5 rounded-md px-0.5 py-1 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--matterhorn-blue-rgb),0.28)]";
+const SETTINGS_HUB_SECTION_CLASS = "rounded-lg bg-dls-surface-muted/[0.06] p-3";
+const SETTINGS_HUB_GRID_CLASS = "grid grid-cols-[repeat(auto-fit,minmax(min(100%,21rem),1fr))] gap-1";
 
 function capabilityStatusToSettingsStatus(status: MatterhornCapabilityStatus): SettingsReadinessStatus {
   if (status === "working") return "Working";
@@ -165,8 +167,8 @@ function SettingsCard(props: {
         <props.icon size={16} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div className="min-w-0 truncate text-[13px] font-medium text-dls-text">{props.title}</div>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <div className="min-w-0 text-[13px] font-medium leading-5 text-dls-text">{props.title}</div>
           <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-medium tracking-normal ${statusClass}`}>
             {props.status}
           </span>
@@ -207,13 +209,13 @@ function ProjectSurfaceRow(props: {
         <props.icon size={16} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="min-w-0 truncate text-[13px] font-medium text-dls-text">{props.title}</div>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <div className="min-w-0 text-[13px] font-medium leading-5 text-dls-text">{props.title}</div>
           <span className={`shrink-0 text-[11px] font-medium ${statusClass}`}>{props.status}</span>
         </div>
         <div className="mt-0.5 text-[12px] leading-5 text-dls-secondary">{props.desc}</div>
       </div>
-      <div className="flex shrink-0 items-center gap-1 text-[12px] font-medium text-dls-accent">
+      <div className="flex shrink-0 items-center gap-1 self-center text-[12px] font-medium text-dls-accent">
         <span>{props.actionLabel}</span>
         <ArrowRight size={13} />
       </div>
@@ -324,9 +326,9 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
   return (
     <div className="w-full max-w-4xl space-y-6">
       {/* Workspace settings */}
-      <section className="rounded-lg bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+      <section className={SETTINGS_HUB_SECTION_CLASS}>
         <div className="px-2 pb-2 text-sm font-semibold text-dls-text">Workspace</div>
-        <div className="grid gap-1 md:grid-cols-2">
+        <div className={SETTINGS_HUB_GRID_CLASS}>
           {workspaceCards
             .filter((card) => props.developerMode || !card.developerOnly)
             .map((card) => {
@@ -346,9 +348,9 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
       </section>
 
       {/* Global settings */}
-      <section className="rounded-lg bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+      <section className={SETTINGS_HUB_SECTION_CLASS}>
         <div className="px-2 pb-2 text-sm font-semibold text-dls-text">Global</div>
-        <div className="grid gap-1 md:grid-cols-2">
+        <div className={SETTINGS_HUB_GRID_CLASS}>
           {globalCards
             .filter((card) => props.developerMode || !card.developerOnly)
             .map((card) => {
@@ -368,12 +370,12 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
       </section>
 
       {/* Project surfaces */}
-      <section className="rounded-lg bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+      <section className={SETTINGS_HUB_SECTION_CLASS}>
         <div className="px-2 pb-1 text-sm font-semibold text-dls-text">Project surfaces</div>
         <p className="px-2 pb-2 text-[12px] leading-5 text-dls-secondary">
           Open the workspace evidence surfaces with live backend status.
         </p>
-        <div className="grid gap-1 md:grid-cols-2">
+        <div className={SETTINGS_HUB_GRID_CLASS}>
           {projectSurfaceCards.map((card) => (
             <ProjectSurfaceRow
               key={card.section}
