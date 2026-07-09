@@ -10,14 +10,23 @@ describe("Notes integration contracts", () => {
     const routeSource = readAppSource("shell/workspace-routes.ts");
     const appRootSource = readAppSource("shell/app-root.tsx");
     const sessionSource = readAppSource("domains/session/chat/session-page.tsx");
+    const commandPaletteSource = readAppSource("shell/command-palette.tsx");
+    const quickJotGlobalSource = readAppSource("domains/notes/quick-jot-global.tsx");
 
     expect(routeSource).toContain('return `${workspaceSessionRoute(workspaceId)}?panel=notes`;');
-    expect(appRootSource).toContain('to={workspaceId ? `${workspaceSessionRoute(workspaceId)}?panel=notes` : "/session?panel=notes"}');
+    expect(appRootSource).toContain('to={workspaceId ? `${workspaceSessionRoute(workspaceId)}?panel=notes` : "/session"}');
+    expect(appRootSource).toContain('element={<Navigate to="/session" replace />}');
     expect(appRootSource).not.toContain("NotesPageRoute");
     expect(sessionSource).toContain("SIDE_PANEL_ITEMS");
     expect(sessionSource).toContain("SIDE_PANEL_ITEMS.includes(requestedPanel as SidePanelItem)");
     expect(sessionSource).toContain("setCurrentSidePanel(requestedPanel as SidePanelItem)");
     expect(sessionSource).toContain('visibleSidePanel === "notes"');
+    expect(sessionSource).toContain('requestedPanel === "notes" && !workspaceNotesAvailable');
+    expect(sessionSource).toContain("Create a workspace before saving notes");
+    expect(sessionSource).toContain("{workspaceNotesAvailable ? (");
+    expect(commandPaletteSource).toContain("notesEnabled?: boolean");
+    expect(commandPaletteSource).toContain("...(props.notesEnabled ? [{");
+    expect(quickJotGlobalSource).toContain("if (!workspaceId.trim()) return null;");
   });
 
   test("settings opens the active workspace notes route", () => {

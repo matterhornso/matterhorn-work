@@ -475,6 +475,15 @@ describe("backend capability UI contract", () => {
     expect(desktopCopy.detail).toContain("external Sui wallet");
   });
 
+  test("Sui wallet card presents preview status as a quiet state badge", () => {
+    const walletViewSource = readAppSource("react-app/domains/settings/pages/wallet-view.tsx");
+
+    expect(walletViewSource).toContain("function suiWalletStatusLabel");
+    expect(walletViewSource).toContain('"Early access"');
+    expect(walletViewSource).toContain('rounded-full px-2 py-0.5 text-[11px] font-medium');
+    expect(walletViewSource).not.toContain('rounded-md border px-2 py-0.5 text-xs font-medium", statusTone');
+  });
+
   test("data-map helpers summarize local storage and policy", () => {
     const dataMap = {
       success: true,

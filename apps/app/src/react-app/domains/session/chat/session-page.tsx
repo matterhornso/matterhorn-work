@@ -1243,17 +1243,28 @@ export function SessionPage(props: SessionPageProps) {
   }, []);
 
   const { openQuickJot } = useQuickJot();
+  const workspaceNotesId = (props.runtimeWorkspaceId ?? props.selectedWorkspaceDisplay.id ?? "").trim();
+  const workspaceNotesAvailable = Boolean(workspaceNotesId && props.selectedWorkspaceDisplay.id && !props.notFoundMessage);
   const addArtifactNote = useCallback(
     async (artifactPath: string, desk?: string, sessionSlug?: string) => {
       const noteContext = getArtifactNoteContext(artifactPath);
-      const workspaceId = (props.runtimeWorkspaceId ?? props.selectedWorkspaceId).trim();
+      const workspaceId = workspaceNotesId;
       const client = props.matterhornServerClient;
 
+      if (!props.selectedWorkspaceDisplay.id) {
+        showToast({
+          title: "Create a workspace before saving notes",
+          description: "Notes are stored inside a Matterhorn workspace.",
+          tone: "warning",
+        });
+        return;
+      }
+
       if (!workspaceId || !client) {
-        openQuickJot({
-          type: "output",
-          id: noteContext.path,
-          label: noteContext.fileName,
+        showToast({
+          title: "Workspace notes are unavailable",
+          description: "Reconnect this workspace before saving a note.",
+          tone: "warning",
         });
         return;
       }
@@ -1278,7 +1289,7 @@ export function SessionPage(props: SessionPageProps) {
         });
       }
     },
-    [navigate, openQuickJot, props.matterhornServerClient, props.runtimeWorkspaceId, props.selectedWorkspaceId],
+    [navigate, openQuickJot, props.matterhornServerClient, props.selectedWorkspaceDisplay.id, showToast, workspaceNotesId],
   );
 
   const sidePanelScopeId = props.selectedSessionId?.trim() || GLOBAL_HOME_SIDE_PANEL_KEY;
@@ -1344,11 +1355,14 @@ export function SessionPage(props: SessionPageProps) {
   const hasArtifactTargets = artifactTargetCount > 0;
   const routeSidePanel = useMemo(() => {
     const requestedPanel = new URLSearchParams(location.search).get("panel");
+    if (requestedPanel === "notes" && !workspaceNotesAvailable) return null;
     return SIDE_PANEL_ITEMS.includes(requestedPanel as SidePanelItem)
       ? requestedPanel as SidePanelItem
       : null;
-  }, [location.search]);
-  const activeSidePanel = voiceSidePanelOpen ? "voice" : routeSidePanel ?? sessionSidePanel;
+  }, [location.search, workspaceNotesAvailable]);
+  const activeSidePanel = voiceSidePanelOpen
+    ? "voice"
+    : routeSidePanel ?? (sessionSidePanel === "notes" && !workspaceNotesAvailable ? null : sessionSidePanel);
   const browserRailActive = activeSidePanel === "browser";
   const artifactRailActive = activeSidePanel === "artifacts";
   const showArtifactRailItem = hasArtifactTargets || artifactRailActive;
@@ -1855,8 +1869,16 @@ export function SessionPage(props: SessionPageProps) {
     toggleCurrentSidePanel("memory");
   }, [toggleCurrentSidePanel]);
   const openNotesRailPane = useCallback(() => {
+    if (!workspaceNotesAvailable) {
+      showToast({
+        title: "Create a workspace before opening notes",
+        description: "Notes are project evidence and need a workspace folder.",
+        tone: "warning",
+      });
+      return;
+    }
     toggleCurrentSidePanel("notes");
-  }, [toggleCurrentSidePanel]);
+  }, [showToast, toggleCurrentSidePanel, workspaceNotesAvailable]);
   const primeProtocolRailPrompt = useCallback((
     panel: VenueSidePanel,
     options?: { prompt?: string; source?: string; title?: string },
@@ -2245,22 +2267,24 @@ export function SessionPage(props: SessionPageProps) {
             </div>
 
             <div className="flex items-center gap-1.5 text-gray-10 mac:titlebar-no-drag">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="size-7 text-dls-secondary hover:text-dls-text"
-                onClick={() =>
-                  openQuickJot(
-                    props.selectedSessionId
-                      ? { type: "session", id: props.selectedSessionId, label: selectedSessionTitle }
-                      : undefined,
-                  )
-                }
-                title={t("notes.quick_jot_button_title")}
-                aria-label={t("notes.quick_jot_button_title")}
-              >
-                <PencilLine className="size-3.5" />
-              </Button>
+              {workspaceNotesAvailable ? (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-7 text-dls-secondary hover:text-dls-text"
+                  onClick={() =>
+                    openQuickJot(
+                      props.selectedSessionId
+                        ? { type: "session", id: props.selectedSessionId, label: selectedSessionTitle }
+                        : undefined,
+                    )
+                  }
+                  title={t("notes.quick_jot_button_title")}
+                  aria-label={t("notes.quick_jot_button_title")}
+                >
+                  <PencilLine className="size-3.5" />
+                </Button>
+              ) : null}
               {/* Revert/redo moved to per-message actions */}
               {props.developerMode ? (
                 <Button
@@ -2988,21 +3012,23 @@ export function SessionPage(props: SessionPageProps) {
                 </span>
               ) : null}
             </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className={cn(
-                `relative ${RAIL_BUTTON_CLASS}`,
-                notesRailActive && RAIL_ACTIVE_CLASS,
-              )}
-              onClick={openNotesRailPane}
-              title={t("notes.rail_title")}
-              aria-label={t("notes.rail_title")}
-              aria-pressed={notesRailActive}
-            >
-              <PencilLine size={17} />
-              <span className={RAIL_LABEL_CLASS}>{t("notes.rail_label")}</span>
-            </Button>
+            {workspaceNotesAvailable ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className={cn(
+                  `relative ${RAIL_BUTTON_CLASS}`,
+                  notesRailActive && RAIL_ACTIVE_CLASS,
+                )}
+                onClick={openNotesRailPane}
+                title={t("notes.rail_title")}
+                aria-label={t("notes.rail_title")}
+                aria-pressed={notesRailActive}
+              >
+                <PencilLine size={17} />
+                <span className={RAIL_LABEL_CLASS}>{t("notes.rail_label")}</span>
+              </Button>
+            ) : null}
             <div className={RAIL_SECTION_LABEL_CLASS}>
               Desks
             </div>

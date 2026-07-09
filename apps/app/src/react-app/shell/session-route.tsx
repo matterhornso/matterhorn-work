@@ -3258,9 +3258,24 @@ export function SessionRoute() {
       onOpenSettings={(route) => handleOpenSettings(route ?? "/settings/general")}
       onSendFeedback={() => setFeedbackDialogOpen(true)}
       onOpenNotes={() => {
-        navigate(selectedWorkspaceId ? workspaceNotesRoute(selectedWorkspaceId) : "/notes");
+        if (!selectedWorkspace?.id) {
+          setCreateWorkspaceError(null);
+          setCreateWorkspaceRemoteError(null);
+          setCreateWorkspaceOpen(true);
+          return;
+        }
+        navigate(workspaceNotesRoute(selectedWorkspace.id));
       }}
-      onQuickJot={() => openQuickJot()}
+      onQuickJot={() => {
+        if (!selectedWorkspace?.id) {
+          setCreateWorkspaceError(null);
+          setCreateWorkspaceRemoteError(null);
+          setCreateWorkspaceOpen(true);
+          return;
+        }
+        openQuickJot();
+      }}
+      notesEnabled={Boolean(selectedWorkspace?.id)}
       accessibleTargets={paletteAccessibleTargets}
       onOpenAccessibleTarget={(target) => {
         try {

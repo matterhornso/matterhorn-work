@@ -1,8 +1,9 @@
 /** @jsxImportSource react */
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 import { ACTIVE_WORKSPACE_CHANGED_EVENT, readActiveWorkspaceId } from "../../shell/session-memory";
+import { useQuickJotContext } from "./quick-jot-provider";
 import { QuickJotSheet } from "./quick-jot-sheet";
 
 function subscribeToStorage(callback: () => void) {
@@ -20,10 +21,17 @@ function readWorkspaceSnapshot() {
 }
 
 export function QuickJotGlobal() {
+  const { open, closeQuickJot } = useQuickJotContext();
   const workspaceId = useSyncExternalStore(
     subscribeToStorage,
     readWorkspaceSnapshot,
     readWorkspaceSnapshot,
   );
+
+  useEffect(() => {
+    if (!workspaceId.trim() && open) closeQuickJot();
+  }, [closeQuickJot, open, workspaceId]);
+
+  if (!workspaceId.trim()) return null;
   return <QuickJotSheet workspaceId={workspaceId} />;
 }

@@ -46,7 +46,7 @@ function WorkspaceNotesRedirect() {
   const workspaceId = params.workspaceId?.trim();
   return (
     <Navigate
-      to={workspaceId ? `${workspaceSessionRoute(workspaceId)}?panel=notes` : "/session?panel=notes"}
+      to={workspaceId ? `${workspaceSessionRoute(workspaceId)}?panel=notes` : "/session"}
       replace
     />
   );
@@ -277,7 +277,7 @@ export function AppRoot() {
               />
               <Route
                 path="/notes"
-                element={<Navigate to="/session?panel=notes" replace />}
+                element={<Navigate to="/session" replace />}
               />
               <Route
                 path="/workspace/:workspaceId/notes"

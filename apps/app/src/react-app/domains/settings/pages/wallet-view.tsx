@@ -74,6 +74,10 @@ function isSuiMatterhornNetwork(value: unknown): value is SuiMatterhornNetwork {
   return typeof value === "string" && SUI_NETWORKS.includes(value as SuiMatterhornNetwork);
 }
 
+function suiWalletStatusLabel(label: string): string {
+  return label.replace(/\bPreview\b/g, "Early access");
+}
+
 function txStatusIcon(status: string) {
   switch (status) {
     case "confirmed": return <CheckCircle2 className="size-3 text-green-500" />;
@@ -321,15 +325,15 @@ function SuiWalletPreviewSection(props: {
   const statusLabel = connection.isConnected
     ? "Connected"
     : runtimeSummary.status
-      ? runtimeSummary.label
+      ? suiWalletStatusLabel(runtimeSummary.label)
       : props.backendSui
-        ? backendCapabilityLabel(props.backendSui.status)
-        : "Preview";
+        ? suiWalletStatusLabel(backendCapabilityLabel(props.backendSui.status))
+        : "Early access";
   const statusTone = connection.isConnected
-    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+    ? "bg-emerald-500/10 text-emerald-300"
     : directSuiWalletAvailable
-      ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-      : "border-dls-border/35 bg-dls-surface-muted/45 text-dls-secondary";
+      ? "bg-dls-surface-muted/45 text-dls-secondary"
+      : "bg-dls-surface-muted/35 text-dls-muted";
 
   if (!directSuiWalletAvailable) {
     return (
@@ -347,7 +351,7 @@ function SuiWalletPreviewSection(props: {
               </p>
             </div>
           </div>
-          <span className={cn("shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium", statusTone)}>
+          <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", statusTone)} title={runtimeSummary.detail}>
             {statusLabel}
           </span>
         </div>
@@ -374,7 +378,7 @@ function SuiWalletPreviewSection(props: {
             </p>
           </div>
         </div>
-        <span className={cn("shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium", statusTone)}>
+        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", statusTone)} title={runtimeSummary.detail}>
           {statusLabel}
         </span>
       </div>

@@ -89,6 +89,7 @@ export type CommandPaletteProps = {
   onOpenSettings: (route?: string) => void;
   onOpenNotes?: () => void;
   onQuickJot?: () => void;
+  notesEnabled?: boolean;
   onSendFeedback?: () => void;
   /** Optional — open a URL in the user's browser. Falls back to window.open. */
   onOpenUrl?: (url: string) => void;
@@ -265,7 +266,7 @@ export function CommandPalette(props: CommandPaletteProps) {
           props.onOpenSettings();
         },
       },
-      {
+      ...(props.notesEnabled ? [{
         id: "open-notes",
         title: t("notes.cmd_notes_title"),
         detail: t("notes.cmd_notes_detail"),
@@ -288,7 +289,7 @@ export function CommandPalette(props: CommandPaletteProps) {
           props.onClose();
           props.onQuickJot?.();
         },
-      },
+      }] : []),
       // Top-bar shortcuts mirror documentation / feedback plus every settings
       // tab the user is likely to reach for from Cmd/Ctrl+K.
       {
