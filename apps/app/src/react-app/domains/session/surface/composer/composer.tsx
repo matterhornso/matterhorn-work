@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Agent } from "@opencode-ai/sdk/v2/client";
-import { ArrowUp, Check, ChevronDown, FileText, Paperclip, Plug, Puzzle, Settings, SlidersHorizontal, Square, Terminal, X, Zap } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, FileText, Hammer, ListChecks, MessageCircle, Paperclip, Play, Plug, Puzzle, Settings, SlidersHorizontal, Square, Terminal, X, Zap } from "lucide-react";
 import { getMatterhornDeskAgentById } from "@matterhorn-work/types/desk-agents";
 import fuzzysort from "fuzzysort";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,10 @@ import {
   RESPONSE_PERSPECTIVE_OPTIONS,
   type ResponsePerspective,
 } from "../../perspectives/response-perspective";
+import {
+  MATTERHORN_EXECUTION_MODE_OPTIONS,
+  type MatterhornExecutionMode,
+} from "../../modes/execution-mode";
 
 type MentionItem = {
   id: string;
@@ -61,6 +65,12 @@ function formatComposerAgentName(agentName: string) {
     .join(" ");
 }
 
+function ExecutionModeIcon({ mode, size = 13 }: { mode: MatterhornExecutionMode; size?: number }) {
+  if (mode === "discuss") return <MessageCircle size={size} />;
+  if (mode === "plan") return <ListChecks size={size} />;
+  return <Hammer size={size} />;
+}
+
 type ComposerProps = {
   draft: string;
   mentions: Record<string, "agent" | "file">;
@@ -87,6 +97,9 @@ type ComposerProps = {
   onModelVariantChange: (value: string | null) => void;
   responsePerspective: ResponsePerspective;
   onResponsePerspectiveChange: (perspective: ResponsePerspective) => void;
+  executionMode: MatterhornExecutionMode;
+  executionModesEnabled: boolean;
+  onExecutionModeChange: (mode: MatterhornExecutionMode) => void;
   agentLabel: string;
   selectedAgent: string | null;
   listAgents: () => Promise<Agent[]>;
@@ -336,6 +349,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   let fileInput: HTMLInputElement | undefined;
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [commands, setCommands] = useState<SlashCommandOption[]>([]);
   const [commandsLoading, setCommandsLoading] = useState(false);
   const [skillsLoading, setSkillsLoading] = useState(false);
@@ -377,6 +391,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   const [dropzoneActive, setDropzoneActive] = useState(false);
   const toolMenuRef = useRef<HTMLDivElement | null>(null);
   const agentMenuRef = useRef<HTMLDivElement | null>(null);
+  const modeMenuRef = useRef<HTMLDivElement | null>(null);
   // IME composition guard: while an IME composition is active, we must not
   // treat Enter as a submit. Three signals keep this reliable across WebKit,
   // Chrome, and Safari: event.isComposing, event.keyCode === 229, and the
@@ -443,6 +458,29 @@ export function ReactSessionComposer(props: ComposerProps) {
   useEffect(() => {
     setAgentMenuIndex(0);
   }, [agentMenuOpen]);
+
+  useEffect(() => {
+    if (!modeMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (modeMenuRef.current?.contains(target)) return;
+      setModeMenuOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setModeMenuOpen(false);
+    };
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [modeMenuOpen]);
+
+  useEffect(() => {
+    if (props.busy || !props.executionModesEnabled) setModeMenuOpen(false);
+  }, [props.busy, props.executionModesEnabled]);
 
   useEffect(() => {
     const target = agentItemRefs.current[agentMenuIndex];
@@ -1493,6 +1531,73 @@ export function ReactSessionComposer(props: ComposerProps) {
         {/* Below-panel control strip: agent + model + behavior variant */}
         <div className="mt-1.5 flex items-center justify-between px-1">
           <div className="flex flex-wrap items-center gap-1.5 text-gray-10 sm:gap-2.5">
+            {props.executionModesEnabled ? <div ref={modeMenuRef} className="relative">
+              <button
+                type="button"
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-md bg-dls-surface-muted/[0.18] px-2 text-[12px] font-medium text-dls-text transition-colors duration-150 hover:bg-dls-surface-muted/[0.28] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.3)] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none"
+                onClick={() => setModeMenuOpen((value) => !value)}
+                disabled={props.busy}
+                aria-haspopup="menu"
+                aria-expanded={modeMenuOpen}
+                title={`Mode: ${MATTERHORN_EXECUTION_MODE_OPTIONS.find((option) => option.value === props.executionMode)?.label ?? "Work"}`}
+              >
+                <ExecutionModeIcon mode={props.executionMode} />
+                <span className="hidden text-dls-muted sm:inline">Mode</span>
+                <span>{MATTERHORN_EXECUTION_MODE_OPTIONS.find((option) => option.value === props.executionMode)?.label ?? "Work"}</span>
+                <ChevronDown size={12} aria-hidden="true" />
+              </button>
+              {modeMenuOpen ? (
+                <div
+                  role="menu"
+                  aria-label="Execution mode"
+                  className="absolute bottom-full left-0 z-40 mb-2 w-[min(19rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-dls-border bg-dls-surface p-1.5 shadow-[var(--dls-shell-shadow)]"
+                >
+                  {MATTERHORN_EXECUTION_MODE_OPTIONS.map((option) => {
+                    const active = props.executionMode === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={active}
+                        className={cn(
+                          "flex w-full items-start gap-3 rounded-md px-2.5 py-2.5 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgba(var(--dls-accent-rgb),0.3)] motion-reduce:transition-none",
+                          active ? "bg-dls-surface-muted/[0.3]" : "hover:bg-dls-surface-muted/[0.2]",
+                        )}
+                        onClick={() => {
+                          props.onExecutionModeChange(option.value);
+                          setModeMenuOpen(false);
+                        }}
+                      >
+                        <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center text-dls-secondary">
+                          <ExecutionModeIcon mode={option.value} size={14} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center justify-between gap-3 text-[12px] font-semibold text-dls-text">
+                            {option.label}
+                            {active ? <Check size={13} className="shrink-0 text-dls-secondary" aria-hidden="true" /> : null}
+                          </span>
+                          <span className="mt-0.5 block text-[11px] leading-4 text-dls-secondary">
+                            {option.description}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div> : null}
+            {props.executionModesEnabled && props.executionMode === "plan" && !props.busy ? (
+              <button
+                type="button"
+                onClick={() => props.onExecutionModeChange("work")}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-dls-accent transition-colors hover:bg-dls-surface-muted/[0.2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.3)]"
+                title="Keep this plan in context and switch to Work mode"
+              >
+                <Play size={12} fill="currentColor" aria-hidden="true" />
+                Start work
+              </button>
+            ) : null}
             <div className="flex items-center gap-2.5">
               <span
                 aria-hidden="true"

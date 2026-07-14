@@ -31,6 +31,42 @@ truthfully labeled and no customer action leads to a dead end.
 | MCPs and Tools | Included where runtime-ready | Name real connections. Unsupported web connectors remain disabled or Coming soon. |
 | Settings and Appearance | Included | Persisted controls, truthful status ownership, and no dead-end actions. |
 
+## Chat Execution Modes
+
+Every chat exposes one compact execution-mode control beside the existing
+agent, perspective, and model controls. These concepts are intentionally
+separate:
+
+- **Mode** controls what the current request may do.
+- **Agent or Desk** controls who performs the request and keeps its own tool
+  allowlist and safety contract.
+- **Perspective** changes answer framing only.
+- **Model** selects the inference engine.
+
+The mode is stored per workspace session and defaults to **Work** for backward
+compatibility.
+
+| Mode | Customer promise | Runtime enforcement |
+| --- | --- | --- |
+| Discuss | Answer and inspect read-only context. No edits, commands, or session mutations. | Deny-by-default request tool map; only the default agent's native read/search tools or a known desk's explicit read-only subset are admitted. |
+| Plan | Research and produce an ordered implementation plan. No edits, commands, or session mutations. | Same deny-by-default restriction as Discuss plus a planning system contract. The composer exposes `Start work` to continue in the same session. |
+| Work | Edit the project and use approved tools. | Existing agent/desk allowlists, approvals, authorized roots, wallet review, entitlements, and transaction controls remain authoritative. |
+
+Changing mode never broadens a desk or custom agent. Unknown agents receive no
+tools in Discuss or Plan. The backend overwrites any client-supplied tool map
+for those modes, rejects conflicting header/body declarations, and blocks
+command, shell, revert, fork, share, unshare, summarize, rename, and delete
+session mutations. Accepted prompts and mode changes write redacted audit
+evidence without prompt contents.
+
+Wallet signing, transaction submission, billing changes, secret handling, and
+external publication retain their existing review and entitlement gates in all
+modes. No mode is a permission bypass.
+
+Release rollback: set `VITE_MATTERHORN_EXECUTION_MODES=0` and rebuild the app.
+The mode control disappears and all sessions use Work; the underlying desk,
+approval, wallet, billing, and transaction safety controls remain unchanged.
+
 ## Excluded Until Separately Green
 
 | Surface | Wednesday default | Enable only after |
@@ -85,6 +121,8 @@ From scope approval through launch:
   points its updater at an unsigned artifact;
 - production readiness reports an unexplained blocker outside the explicitly
   excluded launch scope.
+- Discuss or Plan can run a command, mutate session history, or broaden an
+  agent's existing tool permissions.
 
 ## Go/No-Go Rule
 
@@ -150,8 +188,8 @@ The exact-source final QA record is
 `docs/wednesday-launch-final-e2e-qa-2026-07-14.md`. It supersedes earlier
 near-final counts where they differ.
 
-- Complete app suite: 536 passed, 0 failed, 3,590 assertions.
-- Complete server suite: 695 passed, 0 failed, 4,921 assertions.
+- Complete app suite: 540 passed, 0 failed, 3,620 assertions.
+- Complete server suite: 700 passed, 0 failed, 4,965 assertions.
 - App and server TypeScript: passed.
 - Production desktop/app/server build: passed.
 - Full platform safety gate: all 10 stages passed.

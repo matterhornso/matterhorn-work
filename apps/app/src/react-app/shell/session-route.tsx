@@ -94,6 +94,14 @@ import {
   writeResponsePerspective,
   type ResponsePerspective,
 } from "../domains/session/perspectives/response-perspective";
+import {
+  buildMatterhornExecutionModeSystemPrompt,
+  buildMatterhornExecutionModeTools,
+  executionModesEnabled,
+  readMatterhornExecutionMode,
+  writeMatterhornExecutionMode,
+  type MatterhornExecutionMode,
+} from "../domains/session/modes/execution-mode";
 import { buildOpenworkEnvSystemContext } from "../domains/session/sync/env-context";
 import {
   permissionKey as reactPermissionKey,
@@ -571,6 +579,7 @@ async function draftToParts(draft: ComposerDraft, workspaceRoot: string) {
 }
 
 export function SessionRoute() {
+  const executionModeFeatureEnabled = executionModesEnabled();
   const navigate = useNavigate();
   const location = useLocation();
   const { openQuickJot } = useQuickJot();
@@ -637,6 +646,7 @@ export function SessionRoute() {
   );
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [responsePerspective, setResponsePerspective] = useState<ResponsePerspective>("balanced");
+  const [executionMode, setExecutionMode] = useState<MatterhornExecutionMode>("work");
   // One-way latch for "a refreshRouteState is currently running"; prevents
   // overlapping route refreshes from queueing up when the user clicks fast.
   const refreshInFlightRef = useRef(false);
@@ -723,10 +733,29 @@ export function SessionRoute() {
   useEffect(() => {
     setResponsePerspective(readResponsePerspective(selectedWorkspaceId, selectedSessionId));
   }, [selectedSessionId, selectedWorkspaceId]);
+  useEffect(() => {
+    setExecutionMode(readMatterhornExecutionMode(selectedWorkspaceId, selectedSessionId));
+  }, [selectedSessionId, selectedWorkspaceId]);
   const handleResponsePerspectiveChange = useCallback((perspective: ResponsePerspective) => {
     setResponsePerspective(perspective);
     writeResponsePerspective(selectedWorkspaceId, selectedSessionId, perspective);
   }, [selectedSessionId, selectedWorkspaceId]);
+  const handleExecutionModeChange = useCallback((mode: MatterhornExecutionMode) => {
+    if (!executionModeFeatureEnabled) return;
+    if (mode === executionMode) return;
+    const previousMode = executionMode;
+    setExecutionMode(mode);
+    writeMatterhornExecutionMode(selectedWorkspaceId, selectedSessionId, mode);
+    recordInspectorEvent("session.execution_mode.changed", {
+      workspaceId: selectedWorkspaceId,
+      sessionId: selectedSessionId,
+      previousMode,
+      mode,
+    });
+    if (client && selectedWorkspaceId && selectedSessionId) {
+      void client.recordSessionExecutionMode(selectedWorkspaceId, selectedSessionId, mode, previousMode).catch(() => undefined);
+    }
+  }, [client, executionMode, executionModeFeatureEnabled, selectedSessionId, selectedWorkspaceId]);
 
   const [permissionReplyBusy, setPermissionReplyBusy] = useState(false);
   const permissionReplyBusyRef = useRef(false);
@@ -1690,9 +1719,10 @@ export function SessionRoute() {
         ? createClient(opencodeBaseUrl, selectedWorkspaceRoot || undefined, {
             token: selectedWorkspaceServerToken,
             mode: "matterhorn",
+            executionMode,
           })
         : null,
-    [opencodeBaseUrl, selectedWorkspaceError, selectedWorkspaceRoot, selectedWorkspaceServerToken],
+    [executionMode, opencodeBaseUrl, selectedWorkspaceError, selectedWorkspaceRoot, selectedWorkspaceServerToken],
   );
   const providerListQuery = useProviderListQuery({
     client: opencodeClient,
@@ -2217,6 +2247,7 @@ export function SessionRoute() {
     text: string,
     sessionId: string,
     agentId?: string | null,
+    requestedExecutionMode: MatterhornExecutionMode = executionMode,
   ) => {
     const envRuntimeKey = buildMatterhornEnvRuntimeKey({
       baseUrl: client?.baseUrl ?? null,
@@ -2252,6 +2283,7 @@ export function SessionRoute() {
         : "";
 
     const responsePerspectivePrompt = buildResponsePerspectiveSystemPrompt(responsePerspective);
+    const executionModePrompt = buildMatterhornExecutionModeSystemPrompt(requestedExecutionMode);
     const deskAgentInstructions = getMatterhornDeskAgentById(agentId)?.instructions ?? "";
     let workflowRunPrompt = "";
     if (client && selectedWorkspaceId && agentId) {
@@ -2274,8 +2306,8 @@ export function SessionRoute() {
       }
     }
 
-    return [envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt, deskAgentInstructions, workflowRunPrompt, responsePerspectivePrompt].filter(Boolean).join("\n") || undefined;
-  }, [client, matterhornServerHostInfoState?.pid, matterhornServerHostInfoState?.port, responsePerspective, selectedWorkspaceId, wallet.snapshot]);
+    return [envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt, deskAgentInstructions, workflowRunPrompt, responsePerspectivePrompt, executionModePrompt].filter(Boolean).join("\n") || undefined;
+  }, [client, executionMode, matterhornServerHostInfoState?.pid, matterhornServerHostInfoState?.port, responsePerspective, selectedWorkspaceId, wallet.snapshot]);
 
   const selectedAgentRef = useRef<string | null>(selectedAgent);
   const pendingSelectedAgentRef = useRef<string | null | undefined>(undefined);
@@ -2364,11 +2396,17 @@ export function SessionRoute() {
         if (selectedModelUnavailable) throw new Error("Selected model is unavailable. Choose another model before sending.");
 
         if (draft.mode === "shell") {
+          if (executionMode !== "work") {
+            throw new Error(`${executionMode === "plan" ? "Plan" : "Discuss"} mode does not run shell commands. Switch to Work mode first.`);
+          }
           await shellInSession(opencodeClient, selectedSessionId, text);
           return;
         }
 
         if (draft.command) {
+          if (executionMode !== "work") {
+            throw new Error(`${executionMode === "plan" ? "Plan" : "Discuss"} mode does not run commands. Switch to Work mode first.`);
+          }
           const result = await opencodeClient.session.command({
             sessionID: selectedSessionId,
             command: draft.command.name,
@@ -2381,13 +2419,15 @@ export function SessionRoute() {
         }
 
         const parts = await draftToParts(draft, selectedWorkspaceRoot);
-        const systemContext = await buildSessionSystemContext(text, selectedSessionId, selectedAgent);
+        const systemContext = await buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode);
+        const executionModeTools = buildMatterhornExecutionModeTools(executionMode, selectedAgent);
 
         const result = await opencodeClient.session.promptAsync({
           sessionID: selectedSessionId,
           parts,
           model: selectedPromptModel ?? undefined,
           agent: selectedAgent ?? undefined,
+          ...(executionModeTools ? { tools: executionModeTools } : {}),
           ...(modelVariantValue ? { variant: modelVariantValue } : {}),
           ...(systemContext ? { system: systemContext } : {}),
         });
@@ -2409,14 +2449,17 @@ export function SessionRoute() {
       },
       responsePerspective,
       onResponsePerspectiveChange: handleResponsePerspectiveChange,
+      executionMode,
+      executionModesEnabled: executionModeFeatureEnabled,
+      onExecutionModeChange: handleExecutionModeChange,
       agentLabel: formatAgentDisplayName(selectedAgent),
       selectedAgent,
       listAgents: async () => {
         const list = unwrap(await opencodeClient.app.agents());
-        return list.filter((agent) => !agent.hidden && agent.mode !== "subagent");
+        return list.filter((agent) => !agent.hidden && agent.mode !== "subagent" && agent.name !== "plan" && agent.name !== "build");
       },
       onSelectAgent: handleSelectAgent,
-      listCommands: listSlashCommands,
+      listCommands: executionMode === "work" ? listSlashCommands : async () => [],
       recentFiles: [],
       searchFiles: async (query: string) => {
         const trimmed = query.trim();
@@ -2434,6 +2477,10 @@ export function SessionRoute() {
       isRemoteWorkspace: selectedWorkspace?.workspaceType === "remote",
       isSandboxWorkspace: selectedWorkspace ? isSandboxWorkspace(selectedWorkspace) : false,
       onRevertToMessage: (messageId: string) => {
+        if (executionMode !== "work") {
+          console.warn(`[revert] blocked in ${executionMode} mode; switch to Work mode first`);
+          return;
+        }
         void (async () => {
           try {
             // Abort any running generation first, like the actions-store does
@@ -2448,6 +2495,10 @@ export function SessionRoute() {
         })();
       },
       onForkAtMessage: (messageId: string) => {
+        if (executionMode !== "work") {
+          console.warn(`[fork] blocked in ${executionMode} mode; switch to Work mode first`);
+          return;
+        }
         void (async () => {
           try {
             const forked = await forkSession(opencodeClient, selectedSessionId, messageId);
@@ -2478,6 +2529,9 @@ export function SessionRoute() {
     buildSessionSystemContext,
     client,
     compactModelPickerOpen,
+    executionMode,
+    executionModeFeatureEnabled,
+    handleExecutionModeChange,
     handleOpenSettings,
     handleResponsePerspectiveChange,
     handleSelectAgent,
@@ -3230,7 +3284,7 @@ export function SessionRoute() {
             const workspaceClient = createClient(
               endpoint.opencodeBaseUrl,
               workspacePath,
-              { token: endpoint.token, mode: "matterhorn" },
+              { token: endpoint.token, mode: "matterhorn", executionMode: "work" },
             );
             try {
               const session = unwrap(
@@ -3248,6 +3302,7 @@ export function SessionRoute() {
                 ...taskLaunchEvent,
                 sessionId: session.id,
               });
+              writeMatterhornExecutionMode(workspaceId, session.id, "work");
               await options?.onSessionCreated?.(session.id);
               if (!sendImmediately) {
                 saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
@@ -3283,7 +3338,7 @@ export function SessionRoute() {
               }
 
               try {
-                const systemContext = await buildSessionSystemContext(prompt, session.id, agent);
+                const systemContext = await buildSessionSystemContext(prompt, session.id, agent, "work");
                 recordInspectorEvent("desk.task_launch.prompt_send_started", {
                   ...taskLaunchEvent,
                   sessionId: session.id,

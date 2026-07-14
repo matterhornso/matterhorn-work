@@ -67,6 +67,29 @@ Customer-facing navigation must not expose **Services** as a primary destination
 
 ## 4. Card Anatomy
 
+### Composer Capability Controls
+
+The composer control strip may show four independent concepts:
+
+- **Mode:** Discuss, Plan, or Work; controls request capabilities.
+- **Agent or Desk:** the actor and its domain tool/safety contract.
+- **Perspective:** Cautious, Balanced, or Optimistic answer framing only.
+- **Model:** the selected inference engine.
+
+Mode uses a compact icon-and-label menu, not a fourth segmented control. Its
+menu uses one surface, 8px radius or less, restrained contrast, and short
+descriptions. Selected state is visible without oversized badges or persistent
+explanatory copy. Disable mode changes while a response is active.
+
+Plan exposes a subtle `Start work` action that keeps the same session and
+context. Discuss and Plan do not advertise slash commands that they cannot
+execute. The feature can be removed with
+`VITE_MATTERHORN_EXECUTION_MODES=0`; when removed, Work remains the default.
+
+Mode never changes the visual or functional meaning of Agent, Perspective, or
+Model and never implies that wallet, billing, secret, transaction, or external
+submission controls have been bypassed.
+
 Every important card should answer:
 
 - **What is this?** clear title and desk label.
@@ -179,6 +202,8 @@ MCP cards show:
 - Horizontal overflow, right rail trapping, bottom composer overlap, clipped buttons, clipped cards, and nested scrolling inside cards.
 - Viewport breakpoints that force hidden second columns inside a narrow right rail.
 - Runtime status copy that says `apps connected` when the source only proves MCP processes are active.
+- A capability mode styled as response tone, an agent identity, or a global
+  permission bypass.
 
 ## 8. Implementation Checklist
 
@@ -190,6 +215,8 @@ Before shipping a UI PR:
 - Confirm right rail collapse behavior.
 - Confirm no horizontal overflow.
 - Confirm the composer does not overlap cards.
+- Confirm Discuss and Plan hide command affordances, lock mode switching while
+  busy, and preserve context when Plan hands off to Work.
 - Confirm all protocol previews preserve non-custodial language.
 - Confirm Wellness remains standalone and non-medical.
 - Confirm Memory has no hidden save behavior.

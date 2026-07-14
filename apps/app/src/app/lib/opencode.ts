@@ -1,4 +1,8 @@
 import { createOpencodeClient, type Message, type Part, type Session, type Todo } from "@opencode-ai/sdk/v2/client";
+import {
+  MATTERHORN_EXECUTION_MODE_HEADER,
+  type MatterhornExecutionMode,
+} from "@matterhorn-work/types/execution-mode";
 
 import { desktopFetch } from "./desktop";
 import { createMatterhornServerClient, MatterhornServerError } from "./matterhorn-server";
@@ -59,6 +63,7 @@ export type OpencodeAuth = {
   password?: string;
   token?: string;
   mode?: "basic" | "matterhorn";
+  executionMode?: MatterhornExecutionMode;
 };
 
 const DEFAULT_OPENCODE_REQUEST_TIMEOUT_MS = 10_000;
@@ -300,9 +305,13 @@ function nativeFetchRef(): typeof globalThis.fetch {
 
 const createDesktopFetch = (auth?: OpencodeAuth) => {
   const authHeader = resolveAuthHeader(auth);
-  const addAuth = (headers: Headers) => {
-    if (!authHeader || headers.has("Authorization")) return;
-    headers.set("Authorization", authHeader);
+  const addMatterhornHeaders = (headers: Headers) => {
+    if (authHeader && !headers.has("Authorization")) {
+      headers.set("Authorization", authHeader);
+    }
+    if (auth?.mode === "matterhorn" && auth.executionMode && !headers.has(MATTERHORN_EXECUTION_MODE_HEADER)) {
+      headers.set(MATTERHORN_EXECUTION_MODE_HEADER, auth.executionMode);
+    }
   };
 
   return (input: RequestInfo | URL, init?: RequestInit) => {
@@ -318,13 +327,13 @@ const createDesktopFetch = (auth?: OpencodeAuth) => {
 
     if (input instanceof Request) {
       const headers = new Headers(input.headers);
-      addAuth(headers);
+      addMatterhornHeaders(headers);
       const request = new Request(input, { headers });
       return fetchWithTimeout(underlyingFetch, request, undefined, timeoutMs);
     }
 
     const headers = new Headers(init?.headers);
-    addAuth(headers);
+    addMatterhornHeaders(headers);
     return fetchWithTimeout(
       underlyingFetch,
       input,
@@ -356,6 +365,9 @@ export function createClient(baseUrl: string, directory?: string, auth?: Opencod
     const authHeader = resolveAuthHeader(auth);
     if (authHeader) {
       headers.Authorization = authHeader;
+    }
+    if (auth?.mode === "matterhorn" && auth.executionMode) {
+      headers[MATTERHORN_EXECUTION_MODE_HEADER] = auth.executionMode;
     }
   }
 

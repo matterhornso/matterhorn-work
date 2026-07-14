@@ -81,6 +81,7 @@ import type {
 import type { MatterhornBackendReadinessResponse } from "@matterhorn-work/types/backend-readiness";
 import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
 import type { MatterhornBackendSupportReportResponse } from "@matterhorn-work/types/backend-support-report";
+import type { MatterhornExecutionMode } from "@matterhorn-work/types/execution-mode";
 import type {
   MatterhornWorkflowRun,
   MatterhornWorkflowRunListItem,
@@ -1631,6 +1632,22 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         { token, hostToken, timeoutMs: timeouts.sessionRead },
       );
     },
+    recordSessionExecutionMode: (
+      workspaceId: string,
+      sessionId: string,
+      mode: MatterhornExecutionMode,
+      previousMode?: MatterhornExecutionMode,
+    ) => requestJson<{ ok: boolean; sessionId: string; mode: MatterhornExecutionMode }>(
+      baseUrl,
+      `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/execution-mode`,
+      {
+        token,
+        hostToken,
+        method: "POST",
+        body: { mode, ...(previousMode ? { previousMode } : {}) },
+        timeoutMs: timeouts.sessionRead,
+      },
+    ),
     exportWorkspace: (
       workspaceId: string,
       options?: { sensitiveMode?: MatterhornWorkspaceExportSensitiveMode },

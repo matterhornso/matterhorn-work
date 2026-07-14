@@ -46,8 +46,8 @@ describe("Matterhorn response perspectives", () => {
     const longevity = getMatterhornDeskAgentById("matterhorn-longevity");
 
     expect(route).toContain("getMatterhornDeskAgentById(agentId)?.instructions");
-    expect(route).toContain("buildSessionSystemContext(text, selectedSessionId, selectedAgent)");
-    expect(route).toContain("buildSessionSystemContext(prompt, session.id, agent)");
+    expect(route).toContain("buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode)");
+    expect(route).toContain('buildSessionSystemContext(prompt, session.id, agent, "work")');
     expect(route).toContain("Canonical output directory:");
     expect(route).toContain("Do not create a parallel descriptive or custom session folder.");
     expect(longevity?.instructions).toContain("Never ask for injuries, pain, health status");

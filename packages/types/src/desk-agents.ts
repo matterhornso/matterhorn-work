@@ -20,6 +20,8 @@ export interface MatterhornDeskAgentManifest {
   toolAllowlist: string[];
   runtimePermissions?: Partial<Record<"task" | "webfetch" | "websearch", "allow" | "ask" | "deny">>;
   runtimeTools?: Record<string, boolean>;
+  /** Tools that remain safe when a session is narrowed to Discuss or Plan. */
+  runtimeReadOnlyTools?: string[];
   displayName: string;
   description: string;
   instructions: string;
@@ -138,6 +140,11 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "matterhorn-work_matterhorn_hyperliquid_get_orderbook": true,
       "matterhorn-work_matterhorn_hyperliquid_get_funding": true,
     },
+    runtimeReadOnlyTools: [
+      "matterhorn-work_matterhorn_hyperliquid_list_markets",
+      "matterhorn-work_matterhorn_hyperliquid_get_orderbook",
+      "matterhorn-work_matterhorn_hyperliquid_get_funding",
+    ],
     displayName: "Hyperliquid Agent",
     description: "Hyperliquid market-read, exposure, funding, watch, receipt, and external trade-handoff agent.",
     instructions: [
@@ -179,6 +186,10 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "matterhorn-work_matterhorn_polymarket_search_markets": true,
       "matterhorn-work_matterhorn_polymarket_check_compliance": true,
     },
+    runtimeReadOnlyTools: [
+      "matterhorn-work_matterhorn_polymarket_search_markets",
+      "matterhorn-work_matterhorn_polymarket_check_compliance",
+    ],
     displayName: "Polymarket Agent",
     description: "Polymarket research, liquidity, compliance, watch, receipt, and compliance-gated handoff agent.",
     instructions: [
@@ -221,6 +232,7 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "matterhorn-work_matterhorn_sui_get_balance": true,
       "matterhorn-work_matterhorn_sui_preview_transfer": true,
     },
+    runtimeReadOnlyTools: ["matterhorn-work_matterhorn_sui_get_balance"],
     displayName: "Sui Agent",
     description: "Sui wallet-standard account reads, transfer previews, wallet signing handoffs, and public receipt evidence.",
     instructions: [

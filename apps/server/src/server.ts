@@ -315,6 +315,13 @@ import type {
   MatterhornTeamShareableTokenScope,
 } from "@matterhorn-work/types/backend-team-access";
 import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
+import {
+  MATTERHORN_EXECUTION_MODE_HEADER,
+  buildMatterhornExecutionModeSystemPrompt,
+  buildMatterhornExecutionModeTools,
+  isMatterhornExecutionMode,
+  type MatterhornExecutionMode,
+} from "@matterhorn-work/types/execution-mode";
 import { existsSync, realpathSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -785,8 +792,26 @@ function assertOpencodeProxyAllowed(actor: Actor, method: string, proxyPath: str
   }
 }
 
-function isSessionCommandProxyRequest(method: string, proxyPath: string) {
-  return method === "POST" && /^\/session\/[^/]+\/command$/.test(normalizeOpencodeProxyPath(proxyPath));
+function isSessionPromptProxyRequest(method: string, proxyPath: string) {
+  return method === "POST" && /^\/session\/[^/]+\/prompt_async$/.test(normalizeOpencodeProxyPath(proxyPath));
+}
+
+function isRestrictedSessionMutationProxyRequest(method: string, proxyPath: string) {
+  const normalized = normalizeOpencodeProxyPath(proxyPath);
+  if ((method === "PATCH" || method === "DELETE") && /^\/session\/[^/]+$/.test(normalized)) return true;
+  return method === "POST" && /^\/session\/[^/]+\/(?:command|shell|revert|fork|share|unshare|summarize)$/.test(normalized);
+}
+
+function parseExecutionMode(value: unknown, field = "executionMode"): MatterhornExecutionMode {
+  if (value == null || value === "") return "work";
+  if (!isMatterhornExecutionMode(value)) {
+    throw new ApiError(400, "invalid_execution_mode", `${field} must be discuss, plan, or work`);
+  }
+  return value;
+}
+
+function requestExecutionMode(request: Request): MatterhornExecutionMode {
+  return parseExecutionMode(request.headers.get(MATTERHORN_EXECUTION_MODE_HEADER), MATTERHORN_EXECUTION_MODE_HEADER);
 }
 
 interface Route {
@@ -1243,6 +1268,7 @@ async function proxyOpencodeRequest(input: {
   headers.delete("x-openwork-client-id");
   headers.delete("host");
   headers.delete("origin");
+  headers.delete(MATTERHORN_EXECUTION_MODE_HEADER);
 
   const directory = workspace ? resolveOpencodeDirectory(workspace) : null;
   if (directory && !headers.has("x-opencode-directory")) {
@@ -1255,13 +1281,58 @@ async function proxyOpencodeRequest(input: {
   }
 
   const method = input.request.method.toUpperCase();
+  const headerExecutionMode = requestExecutionMode(input.request);
+  if (headerExecutionMode !== "work" && isRestrictedSessionMutationProxyRequest(method, proxyPath)) {
+    throw new ApiError(
+      403,
+      "execution_mode_restricted",
+      `${headerExecutionMode === "plan" ? "Plan" : "Discuss"} mode does not allow commands or session changes. Switch to Work mode first.`,
+    );
+  }
   // Buffer the request body so it can be forwarded reliably across Node.js
   // stream boundaries (Readable.toWeb streams from the HTTP adapter aren't
   // always accepted directly by Node's global fetch as a body).
-  const body = method === "GET" || method === "HEAD"
+  const rawBody = method === "GET" || method === "HEAD"
     ? undefined
     : await input.request.arrayBuffer().then((buf) => (buf.byteLength > 0 ? buf : undefined));
-  if (isSessionCommandProxyRequest(method, proxyPath)) {
+  let body: BodyInit | undefined = rawBody;
+  let promptAudit: { executionMode: MatterhornExecutionMode; agent?: string; sessionId: string } | null = null;
+  if (isSessionPromptProxyRequest(method, proxyPath)) {
+    let payload: Record<string, unknown>;
+    try {
+      payload = rawBody ? JSON.parse(new TextDecoder().decode(rawBody)) as Record<string, unknown> : {};
+    } catch {
+      throw new ApiError(400, "invalid_payload", "Prompt body must be valid JSON");
+    }
+    if (!isRecord(payload)) {
+      throw new ApiError(400, "invalid_payload", "Prompt body must be a JSON object");
+    }
+
+    const bodyExecutionMode = payload.executionMode == null
+      ? headerExecutionMode
+      : parseExecutionMode(payload.executionMode);
+    if (
+      input.request.headers.has(MATTERHORN_EXECUTION_MODE_HEADER)
+      && bodyExecutionMode !== headerExecutionMode
+    ) {
+      throw new ApiError(400, "execution_mode_mismatch", "Prompt execution mode does not match the request header");
+    }
+
+    const agent = typeof payload.agent === "string" && payload.agent.trim() ? payload.agent.trim() : undefined;
+    const tools = buildMatterhornExecutionModeTools(bodyExecutionMode, agent);
+    if (tools) payload.tools = tools;
+    const enforcedSystemPrompt = buildMatterhornExecutionModeSystemPrompt(bodyExecutionMode);
+    payload.system = typeof payload.system === "string" && payload.system.trim()
+      ? `${payload.system.trim()}\n\n${enforcedSystemPrompt}`
+      : enforcedSystemPrompt;
+    delete payload.executionMode;
+    body = JSON.stringify(payload);
+    headers.delete("content-length");
+
+    const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
+    promptAudit = { executionMode: bodyExecutionMode, agent, sessionId };
+  }
+  if (method === "POST" && /^\/session\/[^/]+\/command$/.test(normalizeOpencodeProxyPath(proxyPath))) {
     void fetch(targetUrl, {
       method,
       headers,
@@ -1284,6 +1355,22 @@ async function proxyOpencodeRequest(input: {
     });
   } finally {
     input.request.signal.removeEventListener("abort", abortUpstreamConnect);
+  }
+
+  if (response.ok && promptAudit && workspace) {
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: { type: "remote" },
+      action: "session.prompt.execution_mode",
+      target: promptAudit.sessionId,
+      summary: `Submitted prompt in ${promptAudit.executionMode} mode`,
+      timestamp: Date.now(),
+      metadata: {
+        executionMode: promptAudit.executionMode,
+        ...(promptAudit.agent ? { agent: promptAudit.agent.slice(0, 120) } : {}),
+      },
+    });
   }
 
   return sanitizeProxyResponse(response, input.request.signal, upstreamController);
@@ -2305,7 +2392,7 @@ function withCors(response: Response, request: Request, config: ServerConfig) {
   headers.set("Access-Control-Allow-Origin", allowOrigin);
   headers.set(
     "Access-Control-Allow-Headers",
-    "Authorization, Content-Type, X-Matterhorn-Host-Token, X-OpenWork-Host-Token, X-OpenWork-Client-Id, X-OpenCode-Directory, X-Opencode-Directory, x-opencode-directory",
+    "Authorization, Content-Type, X-Matterhorn-Execution-Mode, X-Matterhorn-Host-Token, X-OpenWork-Host-Token, X-OpenWork-Client-Id, X-OpenCode-Directory, X-Opencode-Directory, x-opencode-directory",
   );
   headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   headers.set("Vary", "Origin");
@@ -6866,8 +6953,19 @@ function createRoutes(
     }
     const body = await readJsonBody(ctx.request);
     const parts = parseSessionPromptParts(body);
+    const headerExecutionMode = requestExecutionMode(ctx.request);
+    const executionMode = body.executionMode == null
+      ? headerExecutionMode
+      : parseExecutionMode(body.executionMode);
+    if (
+      ctx.request.headers.has(MATTERHORN_EXECUTION_MODE_HEADER)
+      && executionMode !== headerExecutionMode
+    ) {
+      throw new ApiError(400, "execution_mode_mismatch", "Prompt execution mode does not match the request header");
+    }
     const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
     const auditMetadata = sessionPromptAuditMetadata(body, modelResolution);
+    auditMetadata.executionMode = executionMode;
     const directory = resolveOpencodeDirectory(workspace) ?? undefined;
     const opencode = createWorkspaceOpencodeClient(config, workspace);
     const sessionApi = opencode.session as typeof opencode.session & {
@@ -6881,17 +6979,22 @@ function createRoutes(
       paths: [workspace.path],
     });
 
+    const agent = typeof body.agent === "string" && body.agent.trim() ? body.agent.trim() : undefined;
+    const modeTools = buildMatterhornExecutionModeTools(executionMode, agent);
+    const modeSystemPrompt = buildMatterhornExecutionModeSystemPrompt(executionMode);
+    const requestedSystemPrompt = typeof body.system === "string" && body.system.trim() ? body.system.trim() : "";
+
     unwrapOpencodeResult(
       await sessionApi.promptAsync({
         sessionID: sessionId,
         ...(directory ? { directory } : {}),
         ...(typeof body.messageID === "string" && body.messageID.trim() ? { messageID: body.messageID.trim() } : {}),
         ...(modelResolution.model ? { model: modelResolution.model } : {}),
-        ...(typeof body.agent === "string" && body.agent.trim() ? { agent: body.agent.trim() } : {}),
+        ...(agent ? { agent } : {}),
         ...(typeof body.variant === "string" && body.variant.trim() ? { variant: body.variant.trim() } : {}),
         ...(typeof body.noReply === "boolean" ? { noReply: body.noReply } : {}),
-        ...(isBooleanRecord(body.tools) ? { tools: body.tools } : {}),
-        ...(typeof body.system === "string" && body.system.trim() ? { system: body.system } : {}),
+        ...(modeTools ? { tools: modeTools } : isBooleanRecord(body.tools) ? { tools: body.tools } : {}),
+        system: requestedSystemPrompt ? `${requestedSystemPrompt}\n\n${modeSystemPrompt}` : modeSystemPrompt,
         ...(typeof body.reasoning_effort === "string" && body.reasoning_effort.trim() ? { reasoning_effort: body.reasoning_effort.trim() } : {}),
         ...(typeof body.reasoningEffort === "string" && body.reasoningEffort.trim() ? { reasoning_effort: body.reasoningEffort.trim() } : {}),
         parts,
@@ -6911,6 +7014,35 @@ function createRoutes(
     });
 
     return jsonResponse({ ok: true, accepted: true, sessionId }, 202);
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/execution-mode", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sessionId) {
+      throw new ApiError(400, "invalid_payload", "sessionId is required");
+    }
+    const body = await readJsonBody(ctx.request);
+    const mode = parseExecutionMode(body.mode, "mode");
+    const previousMode = body.previousMode == null ? undefined : parseExecutionMode(body.previousMode, "previousMode");
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "session.execution_mode.change",
+      target: sessionId,
+      summary: `Changed execution mode to ${mode}`,
+      timestamp: Date.now(),
+      metadata: {
+        executionMode: mode,
+        ...(previousMode ? { previousExecutionMode: previousMode } : {}),
+      },
+    });
+
+    return jsonResponse({ ok: true, sessionId, mode });
   });
 
   addRoute(routes, "GET", "/workspace/:id/sessions/:sessionId/messages", "client", async (ctx) => {

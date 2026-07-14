@@ -48,6 +48,11 @@
       "development": "./src/desk-agents.ts",
       "default": "./src/desk-agents.ts"
     },
+    "./execution-mode": {
+      "types": "./src/execution-mode.ts",
+      "development": "./src/execution-mode.ts",
+      "default": "./src/execution-mode.ts"
+    },
     "./memory": {
       "types": "./src/memory.ts",
       "development": "./src/memory.ts",

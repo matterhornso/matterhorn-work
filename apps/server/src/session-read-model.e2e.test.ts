@@ -901,6 +901,219 @@ describe("workspace session read APIs", () => {
     expect(sawCommand).toBe(true);
   });
 
+  test("enforces deny-by-default tools for Discuss and Plan prompts", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/prompt_async`;
+
+    const discuss = await fetch(base, {
+      method: "POST",
+      headers: {
+        ...auth(openwork.token),
+        "Content-Type": "application/json",
+        "X-Matterhorn-Execution-Mode": "discuss",
+      },
+      body: JSON.stringify({
+        agent: "custom-agent",
+        executionMode: "discuss",
+        parts: [{ type: "text", text: "Inspect this project" }],
+        tools: { "*": true, bash: true, write: true },
+        system: "Existing workspace context",
+      }),
+    });
+    expect(discuss.status).toBe(200);
+
+    const plan = await fetch(base, {
+      method: "POST",
+      headers: {
+        ...auth(openwork.token),
+        "Content-Type": "application/json",
+        "X-Matterhorn-Execution-Mode": "plan",
+      },
+      body: JSON.stringify({
+        agent: "matterhorn-sui",
+        parts: [{ type: "text", text: "Plan a safe balance review" }],
+        tools: { "*": true, matterhorn_work_matterhorn_sui_preview_transfer: true },
+      }),
+    });
+    expect(plan.status).toBe(200);
+
+    const promptRequests = mock.requests.filter((request) => request.pathname === "/session/ses_1/prompt_async");
+    expect(promptRequests).toHaveLength(2);
+    expect(promptRequests[0]?.body).toMatchObject({
+      agent: "custom-agent",
+      tools: { "*": false },
+    });
+    expect(promptRequests[0]?.body).not.toHaveProperty("executionMode");
+    expect(String((promptRequests[0]?.body as { system?: unknown })?.system)).toContain("Mode: discuss");
+    expect(String((promptRequests[0]?.body as { system?: unknown })?.system)).toContain("Existing workspace context");
+    expect(promptRequests[1]?.body).toMatchObject({
+      agent: "matterhorn-sui",
+      tools: {
+        "*": false,
+        "matterhorn-work_matterhorn_sui_get_balance": true,
+      },
+    });
+    expect(JSON.stringify(promptRequests[1]?.body)).not.toContain("preview_transfer");
+    expect(String((promptRequests[1]?.body as { system?: unknown })?.system)).toContain("Mode: plan");
+  });
+
+  test("preserves Work-mode request tools without broadening them", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+
+    const response = await fetch(`http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/prompt_async`, {
+      method: "POST",
+      headers: {
+        ...auth(openwork.token),
+        "Content-Type": "application/json",
+        "X-Matterhorn-Execution-Mode": "work",
+      },
+      body: JSON.stringify({
+        agent: "custom-agent",
+        parts: [{ type: "text", text: "Do approved work" }],
+        tools: { custom_read: true, custom_write: false },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const promptRequest = mock.requests.find((request) => request.pathname === "/session/ses_1/prompt_async");
+    expect(promptRequest?.body).toMatchObject({ tools: { custom_read: true, custom_write: false } });
+    expect(String((promptRequest?.body as { system?: unknown })?.system)).toContain("Mode: work");
+  });
+
+  test("blocks mutating session proxy routes outside Work mode", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1`;
+    const cases = [
+      { method: "POST", suffix: "/command" },
+      { method: "POST", suffix: "/shell" },
+      { method: "POST", suffix: "/revert" },
+      { method: "POST", suffix: "/fork" },
+      { method: "POST", suffix: "/share" },
+      { method: "POST", suffix: "/unshare" },
+      { method: "POST", suffix: "/summarize" },
+      { method: "PATCH", suffix: "" },
+      { method: "DELETE", suffix: "" },
+    ];
+
+    for (const item of cases) {
+      const response = await fetch(`${base}${item.suffix}`, {
+        method: item.method,
+        headers: {
+          ...auth(openwork.token),
+          "Content-Type": "application/json",
+          "X-Matterhorn-Execution-Mode": item.suffix === "/shell" ? "plan" : "discuss",
+        },
+        body: JSON.stringify({ messageID: "msg_1" }),
+      });
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toMatchObject({ code: "execution_mode_restricted" });
+    }
+    expect(mock.requests).toHaveLength(0);
+  });
+
+  test("rejects invalid and conflicting execution mode declarations", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+    const endpoint = `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/prompt_async`;
+
+    const invalid = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        ...auth(openwork.token),
+        "Content-Type": "application/json",
+        "X-Matterhorn-Execution-Mode": "autonomous",
+      },
+      body: JSON.stringify({ parts: [{ type: "text", text: "Hello" }] }),
+    });
+    expect(invalid.status).toBe(400);
+    await expect(invalid.json()).resolves.toMatchObject({ code: "invalid_execution_mode" });
+
+    const mismatch = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        ...auth(openwork.token),
+        "Content-Type": "application/json",
+        "X-Matterhorn-Execution-Mode": "discuss",
+      },
+      body: JSON.stringify({
+        executionMode: "plan",
+        parts: [{ type: "text", text: "Hello" }],
+      }),
+    });
+    expect(mismatch.status).toBe(400);
+    await expect(mismatch.json()).resolves.toMatchObject({ code: "execution_mode_mismatch" });
+    expect(mock.requests).toHaveLength(0);
+  });
+
+  test("enforces execution mode on the stable prompt route and audits changes", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+
+    const changed = await fetch(`${base}/workspace/ws_1/sessions/ses_1/execution-mode`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "plan", previousMode: "discuss" }),
+    });
+    expect(changed.status).toBe(200);
+    await expect(changed.json()).resolves.toMatchObject({ ok: true, sessionId: "ses_1", mode: "plan" });
+
+    const prompt = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Plan a balance review",
+        agent: "matterhorn-sui",
+        executionMode: "plan",
+        tools: { "*": true, matterhorn_work_matterhorn_sui_preview_transfer: true },
+      }),
+    });
+    expect(prompt.status).toBe(202);
+    const promptRequest = mock.requests.find((request) => request.pathname === "/session/ses_1/prompt_async");
+    expect(promptRequest?.body).toMatchObject({
+      tools: {
+        "*": false,
+        "matterhorn-work_matterhorn_sui_get_balance": true,
+      },
+    });
+    expect(JSON.stringify(promptRequest?.body)).not.toContain("preview_transfer");
+
+    const auditResponse = await fetch(`${base}/workspace/ws_1/audit?limit=10`, {
+      headers: auth(openwork.token),
+    });
+    expect(auditResponse.status).toBe(200);
+    const auditBody = await auditResponse.json();
+    const modeAudit = auditBody.items.find((entry: { action?: string }) => entry.action === "session.execution_mode.change");
+    expect(modeAudit).toMatchObject({
+      target: "ses_1",
+      metadata: { executionMode: "plan", previousExecutionMode: "discuss" },
+    });
+  });
+
   test("keeps legacy /w workspace opencode proxy alias", async () => {
     const workspaceRoot = await createWorkspaceRoot();
     const mock = startMockOpencode();

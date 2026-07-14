@@ -71,8 +71,8 @@ unsigned-build warning. It is not the public macOS release.
 | App TypeScript | PASS |
 | Server TypeScript | PASS |
 | Production desktop/app/server build | PASS |
-| Complete app tests | 536 passed, 0 failed, 3,590 assertions, 69 files |
-| Complete server tests | 695 passed, 0 failed, 4,921 assertions, 55 files |
+| Complete app tests | 540 passed, 0 failed, 3,620 assertions, 70 files |
+| Complete server tests | 700 passed, 0 failed, 4,965 assertions, 55 files |
 | Platform safety gate | All 10 stages passed |
 | Focused managed MCP/workspace tests | 13 passed, 0 failed |
 | Desk-agent contract | PASS |
@@ -160,6 +160,39 @@ An earlier canary is retained as diagnostic evidence: before the deny-by-default
 runtime map, the model attempted to fall back to Bash after bounded evidence.
 The runtime rejected that attempt, and the final configuration removes the tool
 from the agent entirely. The final canary proves the corrected one-call path.
+
+## Chat Execution Mode Safety
+
+The release candidate adds per-session **Discuss**, **Plan**, and **Work**
+capability modes. The mode control is compact and remains distinct from Agent,
+Perspective, and Model. Plan can hand off to Work in the same session so the
+approved plan remains in context.
+
+Enforcement is defense in depth:
+
+- the app persists the mode per workspace session and adds it to OpenCode
+  requests;
+- the composer hides slash commands in Discuss and Plan and disables mode
+  changes while a response is active;
+- the proxy treats the backend mode header as authoritative, overwrites
+  client-supplied tools in Discuss and Plan, and denies unknown agents by
+  default;
+- the proxy blocks command, shell, history, sharing, summarization, rename, and
+  delete mutations outside Work;
+- the stable backend prompt route applies the same restrictions; and
+- mode changes and accepted prompts produce redacted audit entries.
+
+Focused evidence:
+
+- 9 app execution-mode and perspective contract tests pass;
+- 24 session-route server tests pass, including malicious tool broadening,
+  mode mismatch, stable-route enforcement, blocked mutations, and audit
+  evidence;
+- app, server, and shared-types TypeScript pass.
+
+The feature defaults on for the Wednesday candidate. Set
+`VITE_MATTERHORN_EXECUTION_MODES=0` and rebuild to remove the control and force
+Work mode without changing any underlying safety boundary.
 
 ## Responsive UI And UX Audit
 
@@ -287,6 +320,7 @@ Stop the Wednesday beta if any of these occurs:
 - session creation, prompt completion, direct reload, or workspace activation
   fails;
 - a protocol agent can access shell, generic web, or unbounded tools;
+- Discuss or Plan can mutate the workspace/session or broaden agent tools;
 - any secret appears in UI, logs, support reports, evidence, or exports;
 - a wallet flow can sign or submit without explicit external-wallet review;
 - Billing implies live charging while the provider is not configured;

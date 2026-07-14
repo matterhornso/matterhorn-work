@@ -4,6 +4,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { UIMessage } from "ai";
 import { useQuery } from "@tanstack/react-query";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
+import type { MatterhornExecutionMode } from "@matterhorn-work/types/execution-mode";
 import {
   AlertCircle,
   ArrowDown,
@@ -669,6 +670,9 @@ export type SessionSurfaceProps = {
   onModelVariantChange: (value: string | null) => void;
   responsePerspective: ResponsePerspective;
   onResponsePerspectiveChange: (perspective: ResponsePerspective) => void;
+  executionMode: MatterhornExecutionMode;
+  executionModesEnabled: boolean;
+  onExecutionModeChange: (mode: MatterhornExecutionMode) => void;
   agentLabel: string;
   selectedAgent: string | null;
   listAgents: () => Promise<import("@opencode-ai/sdk/v2/client").Agent[]>;
@@ -1176,8 +1180,12 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const handledTerminalFailureRef = useRef<string | null>(null);
   const suppressNextAbortFailureRef = useRef(false);
   const opencodeClient = useMemo(
-    () => createClient(props.opencodeBaseUrl, undefined, { token: props.matterhornToken, mode: "matterhorn" }),
-    [props.opencodeBaseUrl, props.matterhornToken],
+    () => createClient(props.opencodeBaseUrl, undefined, {
+      token: props.matterhornToken,
+      mode: "matterhorn",
+      executionMode: props.executionMode,
+    }),
+    [props.executionMode, props.matterhornToken, props.opencodeBaseUrl],
   );
 
   const snapshotQueryKey = useMemo(
@@ -2572,6 +2580,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
         onModelVariantChange={props.onModelVariantChange}
         responsePerspective={props.responsePerspective}
         onResponsePerspectiveChange={props.onResponsePerspectiveChange}
+        executionMode={props.executionMode}
+        executionModesEnabled={props.executionModesEnabled}
+        onExecutionModeChange={props.onExecutionModeChange}
         agentLabel={props.agentLabel}
         selectedAgent={props.selectedAgent}
         listAgents={props.listAgents}
