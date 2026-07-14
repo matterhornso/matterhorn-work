@@ -78,6 +78,29 @@ unsigned-build warning. It is not the public macOS release.
 | Desk-agent contract | PASS |
 | `git diff --check` before documentation | PASS |
 
+## Release Automation Safety
+
+The evidence tags `v0.13.13-beta.1` and `v0.13.13-beta.2` are not valid public
+release tags because the package version is `0.13.13`. Their queued release
+workflows were cancelled before any job started or release was created.
+
+The release workflow now:
+
+- infers prerelease status from a suffixed tag;
+- keeps npm, sidecar, Daytona, AUR, and public-release publication behind a
+  deliberate manual dispatch;
+- keeps npm, sidecar, and Daytona publishing off by default for prereleases;
+- creates every GitHub release as a draft and requires an explicit `publish`
+  dispatch after all requested release jobs succeed;
+- uses GitHub-hosted Linux runners instead of the unavailable custom runner;
+- uses Matterhorn Work branding in release titles and notes; and
+- is covered by `scripts/release-workflow-safety.test.mjs` inside the platform
+  safety gate.
+
+Do not use either beta evidence tag as a public release. A public build requires
+an exact package-version tag, configured signing and notarization, successful
+clean-machine acceptance, and an explicit release dispatch.
+
 The production build reports large JavaScript chunks. This is a performance
 debt item, not a functional or security failure. The main app, session,
 settings, and syntax-highlighting chunks should be split after launch without
@@ -240,7 +263,8 @@ must not claim a passed Lighthouse performance budget.
 ## Wednesday Launch Sequence
 
 1. Freeze the release branch. Do not merge unrelated UI or backend work.
-2. Confirm the final commit and beta tag match the artifact source commit.
+2. Confirm the release tag exactly matches all package versions and the
+   artifact source commit. Evidence-only beta tags are not release tags.
 3. Start the canonical durable stack on `4130/5190`.
 4. Confirm exactly one listener owns each canonical port.
 5. Check `/health` for backend version `0.13.13` and OpenCode `1.14.38`.

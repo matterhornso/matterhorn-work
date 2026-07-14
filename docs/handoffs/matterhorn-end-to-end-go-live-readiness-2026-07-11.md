@@ -2469,3 +2469,15 @@ and the ZIP hash is
 DMG and ZIP integrity passed, desktop doctor is ready with 9 passes and one
 expected server-health skip, and the packaged clean-profile smoke passed 11/11.
 The artifact remains unsigned, unnotarized, and unpublished.
+
+### July 14 release-automation containment
+
+The pushed beta evidence refs did not satisfy the exact package-version release
+contract: the packages are `0.13.13`, while the evidence refs include beta
+suffixes. Both queued release runs were cancelled before any job started or any
+GitHub release was created. The workflow now infers prerelease status, disables
+sidecar/npm/Daytona publishing by default for prereleases, requires a deliberate
+dispatch for package, AUR, and public-release publication, keeps tag pushes in
+draft, requires explicit publish approval after all requested jobs pass, uses
+available GitHub-hosted runners, and has a static safety contract in the full
+Matterhorn platform gate. The beta refs remain evidence markers only.

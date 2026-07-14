@@ -18,8 +18,8 @@ on:
         description: "Release notes body in Markdown (defaults to a short placeholder)"
         required: false
         type: string
-      draft:
-        description: "Create the GitHub Release as a draft"
+      publish:
+        description: "Publish the draft after every requested release job succeeds"
         required: false
         type: boolean
         default: false
@@ -65,12 +65,13 @@ concurrency:
 jobs:
   resolve-release:
     name: Resolve Release Metadata
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-22.04
     outputs:
       release_tag: ${{ steps.resolve.outputs.release_tag }}
       release_name: ${{ steps.resolve.outputs.release_name }}
       release_body: ${{ steps.resolve.outputs.release_body }}
       draft: ${{ steps.resolve.outputs.draft }}
+      publish: ${{ steps.resolve.outputs.publish }}
       prerelease: ${{ steps.resolve.outputs.prerelease }}
       notarize: ${{ steps.resolve.outputs.notarize }}
       build_electron: ${{ steps.resolve.outputs.build_electron }}
@@ -85,7 +86,7 @@ jobs:
           INPUT_TAG: ${{ github.event.inputs.tag }}
           INPUT_RELEASE_NAME: ${{ github.event.inputs.release_name }}
           INPUT_RELEASE_BODY: ${{ github.event.inputs.release_body }}
-          INPUT_DRAFT: ${{ github.event.inputs.draft }}
+          INPUT_PUBLISH: ${{ github.event.inputs.publish }}
           INPUT_PRERELEASE: ${{ github.event.inputs.prerelease }}
           INPUT_NOTARIZE: ${{ github.event.inputs.notarize }}
           INPUT_BUILD_ELECTRON: ${{ github.event.inputs.build_electron }}
@@ -120,30 +121,32 @@ jobs:
           if [ -n "$RELEASE_NAME_INPUT" ]; then
             RELEASE_NAME="$RELEASE_NAME_INPUT"
           else
-            RELEASE_NAME="OpenWork $TAG"
+            RELEASE_NAME="Matterhorn Work $TAG"
           fi
 
           RELEASE_BODY_INPUT="${INPUT_RELEASE_BODY:-}"
           if [ -n "$RELEASE_BODY_INPUT" ]; then
             RELEASE_BODY="$RELEASE_BODY_INPUT"
           else
-            printf -v RELEASE_BODY '%s\n\nOpenWork %s desktop release.\n\n%s\n%s' \
+            printf -v RELEASE_BODY '%s\n\nMatterhorn Work %s desktop release.\n\n%s\n%s' \
               "## What's new" \
               "$TAG" \
               "- Download the attached installer for your platform." \
               "- Electron builds use the attached latest-mac.yml updater feed."
           fi
 
-          draft="${INPUT_DRAFT:-}"
-          if [ -z "$draft" ]; then
-            if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
-              # Keep tag-triggered releases out of /releases/latest until assets + latest.json are ready.
-              draft="true"
+          # Every run assembles assets behind a draft. Publishing is a separate
+          # explicit approval after every requested release job succeeds.
+          draft="true"
+          publish="${INPUT_PUBLISH:-false}"
+          prerelease="${INPUT_PRERELEASE:-}"
+          if [ -z "$prerelease" ]; then
+            if [[ "$TAG" == *-* ]]; then
+              prerelease="true"
             else
-              draft="false"
+              prerelease="false"
             fi
           fi
-          prerelease="${INPUT_PRERELEASE:-false}"
           notarize="${INPUT_NOTARIZE:-}"
           if [ -z "$notarize" ]; then
             notarize="${DEFAULT_NOTARIZE:-true}"
@@ -156,16 +159,28 @@ jobs:
 
           publish_sidecars="${INPUT_PUBLISH_SIDECARS:-}"
           if [ -z "$publish_sidecars" ]; then
-            publish_sidecars="${DEFAULT_PUBLISH_SIDECARS:-true}"
+            if [ "$prerelease" = "true" ]; then
+              publish_sidecars="false"
+            else
+              publish_sidecars="${DEFAULT_PUBLISH_SIDECARS:-true}"
+            fi
           fi
           publish_npm="${INPUT_PUBLISH_NPM:-}"
           if [ -z "$publish_npm" ]; then
-            publish_npm="${DEFAULT_PUBLISH_NPM:-true}"
+            if [ "$prerelease" = "true" ]; then
+              publish_npm="false"
+            else
+              publish_npm="${DEFAULT_PUBLISH_NPM:-true}"
+            fi
           fi
 
           publish_daytona_snapshot="${INPUT_PUBLISH_DAYTONA_SNAPSHOT:-}"
           if [ -z "$publish_daytona_snapshot" ]; then
-            publish_daytona_snapshot="${DEFAULT_PUBLISH_DAYTONA_SNAPSHOT:-true}"
+            if [ "$prerelease" = "true" ]; then
+              publish_daytona_snapshot="false"
+            else
+              publish_daytona_snapshot="${DEFAULT_PUBLISH_DAYTONA_SNAPSHOT:-true}"
+            fi
           fi
 
           TAG="${TAG//$'\n'/}"
@@ -176,6 +191,7 @@ jobs:
           echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
           echo "draft=$draft" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           echo "notarize=$notarize" >> "$GITHUB_OUTPUT"
           echo "build_electron=$build_electron" >> "$GITHUB_OUTPUT"
@@ -221,7 +237,7 @@ jobs:
   verify-release:
     name: Verify Release Versions
     needs: resolve-release
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-22.04
     env:
       RELEASE_TAG: ${{ needs.resolve-release.outputs.release_tag }}
     steps:
@@ -438,7 +454,7 @@ jobs:
       needs.resolve-release.result == 'success' &&
       needs.verify-release.result == 'success' &&
       needs.publish-electron.result == 'success'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-22.04
     env:
       RELEASE_TAG: ${{ needs.resolve-release.outputs.release_tag }}
     steps:
@@ -469,8 +485,8 @@ jobs:
   release-orchestrator-sidecars:
     name: Build + Upload openwork-orchestrator Sidecars
     needs: [resolve-release, verify-release]
-    if: needs.resolve-release.outputs.publish_sidecars == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    if: github.event_name == 'workflow_dispatch' && needs.resolve-release.outputs.publish_sidecars == 'true'
+    runs-on: ubuntu-22.04
     env:
       RELEASE_TAG: ${{ needs.resolve-release.outputs.release_tag }}
     steps:
@@ -577,11 +593,12 @@ jobs:
     needs: [resolve-release, verify-release, release-orchestrator-sidecars]
     if: |
       always() &&
+      github.event_name == 'workflow_dispatch' &&
       needs.resolve-release.result == 'success' &&
       needs.verify-release.result == 'success' &&
       (needs.release-orchestrator-sidecars.result == 'success' || needs.release-orchestrator-sidecars.result == 'skipped') &&
       needs.resolve-release.outputs.publish_npm == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-22.04
     env:
       RELEASE_TAG: ${{ needs.resolve-release.outputs.release_tag }}
     steps:
@@ -721,6 +738,7 @@ jobs:
     needs: [resolve-release, verify-release, publish-npm]
     if: |
       always() &&
+      github.event_name == 'workflow_dispatch' &&
       needs.resolve-release.result == 'success' &&
       needs.verify-release.result == 'success' &&
       (needs.publish-npm.result == 'success' || needs.publish-npm.result == 'skipped') &&
@@ -735,10 +753,12 @@ jobs:
     needs: [resolve-release, publish-electron, publish-release]
     if: |
       always() &&
+      github.event_name == 'workflow_dispatch' &&
+      needs.resolve-release.outputs.prerelease == 'false' &&
       needs.resolve-release.result == 'success' &&
       needs.publish-electron.result == 'success' &&
       (needs.publish-release.result == 'success' || needs.publish-release.result == 'skipped')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
     env:
@@ -795,7 +815,8 @@ jobs:
       - publish-daytona-snapshot
     if: |
       always() &&
-      needs.resolve-release.outputs.draft == 'true' &&
+      github.event_name == 'workflow_dispatch' &&
+      needs.resolve-release.outputs.publish == 'true' &&
       needs.resolve-release.result == 'success' &&
       needs.verify-release.result == 'success' &&
       (needs.publish-electron.result == 'success' || needs.publish-electron.result == 'skipped') &&
@@ -803,7 +824,7 @@ jobs:
       (needs.release-orchestrator-sidecars.result == 'success' || needs.release-orchestrator-sidecars.result == 'skipped') &&
       (needs.publish-npm.result == 'success' || needs.publish-npm.result == 'skipped') &&
       (needs.publish-daytona-snapshot.result == 'success' || needs.publish-daytona-snapshot.result == 'skipped')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-22.04
     env:
       RELEASE_TAG: ${{ needs.resolve-release.outputs.release_tag }}
       RELEASE_PRERELEASE: ${{ needs.resolve-release.outputs.prerelease }}

@@ -234,6 +234,12 @@ not be distributed as the final Wednesday build.
 - notarization: skipped;
 - publishing: disabled.
 
+`v0.13.13-beta.2` is an evidence marker only, not a valid package release tag.
+Its automated release run was cancelled before execution because package
+versions are `0.13.13`, the desktop artifact is unsigned, and public publishing
+is disabled. The hardened workflow now creates releases only as drafts and
+requires a deliberate `publish` dispatch after all requested jobs succeed.
+
 After the artifact was verified and the release ref was pushed, the clean RC
 replaced the previous canonical stack on `4130/5190`. Exactly one process owns
 each port, backend health reports `0.13.13` with OpenCode `1.14.38`, the app
