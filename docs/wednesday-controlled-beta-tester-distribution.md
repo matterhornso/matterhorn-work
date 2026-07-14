@@ -64,11 +64,16 @@ Matterhorn Work.
 
 Final release record:
 
-- frozen source candidate: `PENDING_SOURCE_COMMIT`;
-- evidence-ledger commit: `PENDING_EVIDENCE_COMMIT`;
-- artifact directory: `PENDING_ARTIFACT_DIRECTORY`;
-- DMG SHA-256: `PENDING_DMG_SHA256`;
-- ZIP SHA-256: `PENDING_ZIP_SHA256`.
+- frozen source candidate: `19ca5c5d`;
+- evidence-ledger release ref: `v0.13.13-beta.1`;
+- artifact directory:
+  `/Users/abhinavramesh/Desktop/matterhorn-work-controlled-beta-19ca5c5d`;
+- DMG: `Matterhorn-Work-19ca5c5d-arm64-unsigned.dmg`;
+- DMG SHA-256:
+  `4f168ca1221f65dc21e97371f5cb65664205fff012a7c600c4b6f3d41e4c06f6`;
+- ZIP: `Matterhorn-Work-19ca5c5d-arm64-unsigned.zip`;
+- ZIP SHA-256:
+  `61a27cb71208ab8636af9c87918f06bee792ea699535d004870d87cac37570a3`.
 
 ## Testing Checklist
 

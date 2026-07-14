@@ -112,6 +112,25 @@ Authoritative decision record:
 Tester instructions:
 `docs/wednesday-controlled-beta-tester-distribution.md`.
 
+### Final private artifact
+
+The final named-tester artifact is bound to source candidate `19ca5c5d`:
+
+- directory:
+  `/Users/abhinavramesh/Desktop/matterhorn-work-controlled-beta-19ca5c5d`;
+- DMG SHA-256:
+  `4f168ca1221f65dc21e97371f5cb65664205fff012a7c600c4b6f3d41e4c06f6`;
+- ZIP SHA-256:
+  `61a27cb71208ab8636af9c87918f06bee792ea699535d004870d87cac37570a3`;
+- `hdiutil verify`: valid;
+- `unzip -t`: no errors;
+- desktop beta doctor: 11/11 pass;
+- packaged clean-profile smoke: 16/16 pass.
+
+The artifact is unsigned, unnotarized, and publish-disabled. It is approved
+only for named internal testers who have accepted the macOS warning and the
+scope exclusions above.
+
 ## Checkout and live stacks
 
 - Repository: `/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-latest`
