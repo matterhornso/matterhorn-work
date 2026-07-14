@@ -6,6 +6,10 @@ permission:
   task: deny
   webfetch: deny
   websearch: deny
+tools:
+  "*": false
+  "matterhorn-work_matterhorn_polymarket_search_markets": true
+  "matterhorn-work_matterhorn_polymarket_check_compliance": true
 matterhorn_desk_agent: v1
 matterhorn_desk_id: polymarket
 agent_id: matterhorn-polymarket

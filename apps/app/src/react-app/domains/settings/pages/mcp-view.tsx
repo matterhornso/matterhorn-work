@@ -1103,7 +1103,7 @@ export function McpView(props: McpViewProps) {
   };
 
   const supportsOauth = (entry: McpServerEntry) =>
-    entry.config.type === "remote" && entry.config.oauth !== false;
+    entry.config.managed !== true && entry.config.type === "remote" && entry.config.oauth !== false;
 
   const resolveStatus = (entry: McpServerEntry): ReactMcpStatus => {
     if (entry.config.enabled === false) return "disabled";
@@ -2233,6 +2233,7 @@ function McpConfiguredServerRow(props: {
 }
 
 function McpConfiguredServerDetails(props: Parameters<typeof McpConfiguredServerRow>[0]) {
+  const managed = props.entry.config.managed === true;
   return (
     <div className={props.compact
       ? "animate-in fade-in slide-in-from-top-1 space-y-3 px-3 pb-3 ps-[3.25rem] duration-200"
@@ -2240,7 +2241,7 @@ function McpConfiguredServerDetails(props: Parameters<typeof McpConfiguredServer
     }>
       <div className="flex items-center gap-4 text-xs">
         <span className="text-dls-secondary">{t("mcp.connection_type")}</span>
-        <span className="text-dls-text">{props.entry.config.type === "remote" ? t("mcp.type_cloud") : t("mcp.type_local")}</span>
+        <span className="text-dls-text">{managed ? "Built-in Matterhorn runtime" : props.entry.config.type === "remote" ? t("mcp.type_cloud") : t("mcp.type_local")}</span>
       </div>
       <div className="flex items-center gap-2">
         <span className="rounded-md border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-dls-text">
@@ -2260,11 +2261,15 @@ function McpConfiguredServerDetails(props: Parameters<typeof McpConfiguredServer
           <ChevronDown size={10} className="transition-transform group-open:rotate-180" />
         </summary>
         <div className="mt-1.5 break-all rounded-lg bg-dls-hover px-3 py-2 font-mono text-[11px] text-dls-secondary">
-          {props.entry.config.type === "remote" ? props.entry.config.url : props.entry.config.command?.join(" ")}
+          {managed ? "Managed locally by Matterhorn Work" : props.entry.config.type === "remote" ? props.entry.config.url : props.entry.config.command?.join(" ")}
         </div>
       </details>
-      <McpConfiguredServerAuthActions {...props} />
-      <div className="flex justify-end gap-2 pt-1">
+      {managed ? (
+        <p className="text-[11px] leading-5 text-dls-secondary">
+          Available automatically to Matterhorn desk agents while the local engine is running.
+        </p>
+      ) : <McpConfiguredServerAuthActions {...props} />}
+      {!managed ? <div className="flex justify-end gap-2 pt-1">
         {props.onToggleEnabled && props.entry.source !== "config.global" ? (
           <Button
             variant="outline"
@@ -2292,7 +2297,7 @@ function McpConfiguredServerDetails(props: Parameters<typeof McpConfiguredServer
         >
           {t("mcp.remove_app")}
         </Button>
-      </div>
+      </div> : null}
     </div>
   );
 }

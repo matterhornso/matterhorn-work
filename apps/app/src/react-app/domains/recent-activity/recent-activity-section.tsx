@@ -198,7 +198,6 @@ function ActivityRow(props: { item: RecentActivityItem; onSelect: () => void }) 
       type="button"
       className="group grid w-full grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-dls-hover/30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border/70"
       onClick={onSelect}
-      aria-label={`${title}, ${context}, ${relativeTime}`}
     >
       <span className={cn("flex size-5 shrink-0 items-center justify-center opacity-80", meta.tone)} aria-hidden="true">
         <Icon className="size-3" />
@@ -248,7 +247,6 @@ function LatestActivityPreview(props: {
         type="button"
         className="group flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border/70"
         onClick={props.onSelect}
-        aria-label={`${activityDisplayTitle(props.item)}, ${formatActivityTimestamp(props.item.timestamp)}`}
       >
         <span className={cn("flex size-5 shrink-0 items-center justify-center opacity-80", meta.tone)} aria-hidden="true">
           <Icon className="size-3" />

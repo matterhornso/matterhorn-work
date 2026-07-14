@@ -590,8 +590,8 @@ function HomeCapabilityOverview({
             >
               <button
                 type="button"
+                data-testid={`open-${item.id}-desk`}
                 className="grid w-full min-w-0 grid-cols-[34px_minmax(0,1fr)] gap-3 rounded-lg p-3.5 pr-10 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--matterhorn-desk-color)]"
-                aria-label={`Open ${item.title}`}
                 onClick={() => onOpenCapability?.(item.id)}
               >
                   <span className="flex size-8 items-center justify-center rounded-md bg-dls-canvas/70 text-[var(--matterhorn-desk-color)]">
@@ -3120,13 +3120,13 @@ export function SessionPage(props: SessionPageProps) {
               )}
               onClick={openMemoryRailPane}
               title={`${memoryInboxLabel}. Review remembered context, use selected memories in chat, forget records, and export evidence.`}
-              aria-label={`${memoryInboxLabel}. Review remembered context, use selected memories in chat, forget records, and export evidence.`}
               aria-pressed={memoryRailActive}
             >
               <Brain size={17} />
               <span className={RAIL_LABEL_CLASS}>Memory</span>
+              <span className="sr-only">{memoryInboxLabel}</span>
               {memorySuggestionUnreadCount > 0 ? (
-                <span className="absolute right-1 top-1 flex min-w-3 items-center justify-center rounded-md bg-dls-hover px-1 text-[9px] font-semibold leading-3 text-dls-secondary ring-1 ring-dls-border/40">
+                <span aria-hidden="true" className="absolute right-1 top-1 flex min-w-3 items-center justify-center rounded-md bg-dls-hover px-1 text-[9px] font-semibold leading-3 text-dls-secondary ring-1 ring-dls-border/40">
                   {memorySuggestionUnreadCount > 99 ? "99+" : memorySuggestionUnreadCount}
                 </span>
               ) : null}

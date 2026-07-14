@@ -21,24 +21,25 @@ function assertIncludes(relativePath, needle, note = needle) {
 assertIncludes("apps/app/src/react-app/domains/settings/pages/wallet-view.tsx", "Web browser");
 assertIncludes(
   "apps/app/src/react-app/domains/settings/pages/wallet-view.tsx",
-  "Browser wallet extensions do not inject into Electron",
+  "Browser wallet extensions do not inject into desktop",
 );
 assertIncludes(
   "apps/app/src/react-app/domains/settings/pages/wallet-view.tsx",
-  "WalletConnect or deep-link bridge",
+  "External signer handoffs are available here.",
 );
 assertIncludes("apps/app/src/react-app/domains/settings/pages/wallet-view.tsx", "Remote worker");
 
-assertIncludes("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx", "Install command available");
-assertIncludes("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx", "Backend tools available");
-assertIncludes("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx", "Not connected until configured");
-assertIncludes("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx", "UI Control is marked preview");
+assertIncludes("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx", "Install command");
+assertIncludes("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx", "server-backed and ready to install below");
+assertIncludes("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx", "No external MCPs connected.");
+assertIncludes("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx", "Preview desktop bridge");
+assertIncludes("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx", '"Coming soon"');
 
-assertIncludes("apps/app/src/react-app/domains/session/chat/session-page.tsx", "Draft ready");
-assertIncludes("apps/app/src/react-app/domains/session/chat/session-page.tsx", "been sent. Review");
-assertIncludes("apps/app/src/react-app/domains/session/chat/session-page.tsx", "Create editable draft");
+assertIncludes("apps/app/src/react-app/domains/session/chat/session-page.tsx", "Each inserts an editable prompt");
+assertIncludes("apps/app/src/react-app/domains/session/chat/session-page.tsx", "draftConfig?.confirmCtaLabel");
+assertIncludes("apps/app/src/react-app/domains/session/chat/session-page.tsx", "onCreateTaskWithPrompt");
 
-assertIncludes("apps/app/src/react-app/domains/wallet/pages/BittensorPanel.tsx", "Create chat draft");
+assertIncludes("apps/app/src/react-app/domains/wallet/pages/BittensorPanel.tsx", "stages an editable Bittensor Agent task");
 assertIncludes("apps/app/src/react-app/domains/wallet/pages/BittensorPanel.tsx", "nothing auto-sends");
 
 if (failures.length > 0) {

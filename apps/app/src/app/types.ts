@@ -339,6 +339,7 @@ export type McpServerConfig = {
   environment?: Record<string, string>;
   oauth?: Record<string, string> | false;
   timeout?: number;
+  managed?: boolean;
 };
 
 export type McpServerEntry = {

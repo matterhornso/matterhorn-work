@@ -30,6 +30,7 @@ const [
   watchScheduler,
   mcpBundle,
   activeLongevityAgent,
+  activeHyperliquidAgent,
   activePolymarketAgent,
   activeBittensorAgent,
 ] = await Promise.all([
@@ -50,6 +51,7 @@ const [
   read("scripts/bittensor-watch-autopilot-scheduler.mjs"),
   read("packages/matterhorn-work-mcp/index.mjs"),
   read(".opencode/agents/matterhorn-longevity.md"),
+  read(".opencode/agents/matterhorn-hyperliquid.md"),
   read(".opencode/agents/matterhorn-polymarket.md"),
   read(".opencode/agents/matterhorn-bittensor.md"),
 ]);
@@ -72,21 +74,28 @@ assertIncludes(deskAgents, 'label: "Train for endurance"', "Longevity endurance 
 assertIncludes(deskAgents, "Keep Improve VO2 max and Train for endurance as separate choices", "Longevity goal distinction");
 assertIncludes(activeLongevityAgent, "Improve VO2 max", "active Longevity agent VO2 max goal");
 assertIncludes(activeLongevityAgent, "Train for endurance", "active Longevity agent endurance goal");
+assertIncludes(deskAgents, "Start with the single most specific Hyperliquid desk tool", "Hyperliquid bounded read guidance");
+assertIncludes(activeHyperliquidAgent, "Start with the single most specific Hyperliquid desk tool", "active Hyperliquid bounded read guidance");
+assertIncludes(activeHyperliquidAgent, "websearch: deny", "active Hyperliquid web search runtime denial");
 assertIncludes(deskAgents, "do not delegate to subagents", "Polymarket bounded lookup guidance");
 assertIncludes(deskAgents, "Bound exact-market discovery to two Polymarket tool calls", "Polymarket bounded search guidance");
 assertIncludes(deskAgents, 'runtimePermissions: {', "desk agent runtime permission manifest");
 assertIncludes(deskAgents, 'websearch: "deny"', "desk agent web search runtime denial");
+assertIncludes(deskAgents, 'runtimeTools: {', "desk agent deny-by-default runtime tool manifest");
 assertIncludes(activePolymarketAgent, "do not delegate to subagents", "active Polymarket bounded lookup guidance");
 assertIncludes(activePolymarketAgent, "Bound exact-market discovery to two Polymarket tool calls", "active Polymarket bounded search guidance");
 assertIncludes(deskAgents, "If an event or market reports restricted: true or compliance_blocked", "Polymarket compliance stop guidance");
 assertIncludes(activePolymarketAgent, "If an event or market reports restricted: true or compliance_blocked", "active Polymarket compliance stop guidance");
 assertIncludes(activePolymarketAgent, "websearch: deny", "active Polymarket web search runtime denial");
 assertIncludes(deskAgents, "For a simple subnet discovery or comparison, do not delegate to subagents", "Bittensor bounded discovery guidance");
-assertIncludes(deskAgents, "make at most one public web search for current context", "Bittensor bounded search guidance");
-assertIncludes(deskAgents, "skip additional subnet-list and per-subnet explain calls", "Bittensor fallback latency guidance");
+assertIncludes(deskAgents, "Call the Bittensor desk tool exactly once", "Bittensor single-call guidance");
+assertIncludes(deskAgents, "answer from the bounded result instead of searching elsewhere", "Bittensor fallback guidance");
 assertIncludes(activeBittensorAgent, "For a simple subnet discovery or comparison, do not delegate to subagents", "active Bittensor bounded discovery guidance");
-assertIncludes(activeBittensorAgent, "make at most one public web search for current context", "active Bittensor bounded search guidance");
-assertIncludes(activeBittensorAgent, "skip additional subnet-list and per-subnet explain calls", "active Bittensor fallback latency guidance");
+assertIncludes(activeBittensorAgent, "Call the Bittensor desk tool exactly once", "active Bittensor single-call guidance");
+assertIncludes(activeBittensorAgent, "answer from the bounded result instead of searching elsewhere", "active Bittensor fallback guidance");
+assertIncludes(activeBittensorAgent, "websearch: deny", "active Bittensor web search runtime denial");
+assertIncludes(activeBittensorAgent, '"*": false', "active Bittensor deny-by-default tool map");
+assertIncludes(activeBittensorAgent, '"matterhorn-work_matterhorn_bittensor_chat": true', "active Bittensor MCP tool allowlist");
 assertIncludes(deskAgents, "getMatterhornDeskAgentById", "desk agent manifest");
 
 for (const [deskId, agentId] of [

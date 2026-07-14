@@ -15,7 +15,7 @@ import {
 } from "./managed-opencode.js";
 import { startServer } from "./server.js";
 import { ensureWorkspaceFiles } from "./workspace-init.js";
-import { openworkExtensionsPreviewPluginPath } from "./openwork-extensions-plugin-path.js";
+import { buildManagedOpencodeRuntimeConfig } from "./managed-opencode-runtime-config.js";
 import type { ServeResult } from "./serve-node.js";
 import type { ServerConfig } from "./types.js";
 
@@ -62,11 +62,9 @@ export async function startEmbeddedServer(options: EmbeddedServerOptions): Promi
   if (!config.opencodeBaseUrl && options.manageOpencode) {
     const workspace = config.workspaces[0];
     if (workspace?.path) {
-      const openworkExtensionsPreviewConfig = JSON.stringify({
-        plugin: [
-          "opencode-chrome-devtools",
-          openworkExtensionsPreviewPluginPath(),
-        ],
+      const managedRuntimeConfig = buildManagedOpencodeRuntimeConfig({
+        serverUrl,
+        clientToken: config.token,
       });
       const cwd = options.opencodeCwd
         || process.env.OPENWORK_MANAGED_OPENCODE_CWD?.trim()
@@ -80,13 +78,14 @@ export async function startEmbeddedServer(options: EmbeddedServerOptions): Promi
           ...(process.env.OPENWORK_DEV_MODE ? { OPENWORK_DEV_MODE: process.env.OPENWORK_DEV_MODE } : {}),
           OPENWORK_SERVER_URL: serverUrl,
           OPENWORK_SERVER_TOKEN: config.token,
-          OPENCODE_CONFIG_CONTENT: openworkExtensionsPreviewConfig,
+          OPENCODE_CONFIG_CONTENT: managedRuntimeConfig,
           OPENCODE_MODELS_URL: opencodeModelsUrl,
         },
         onEvent: options.onManagedOpencodeEvent,
       });
 
       config.opencodeBaseUrl = managedOpencode.url;
+      config.managedOpencodeMcp = true;
       config.opencodeUsername = managedOpencode.username;
       config.opencodePassword = managedOpencode.password;
       for (const entry of config.workspaces) {

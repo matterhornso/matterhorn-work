@@ -10,7 +10,7 @@ import {
 } from "./managed-opencode.js";
 import { createServerLogger, startServer } from "./server.js";
 import { ensureWorkspaceFiles } from "./workspace-init.js";
-import { openworkExtensionsPreviewPluginPath } from "./openwork-extensions-plugin-path.js";
+import { buildManagedOpencodeRuntimeConfig } from "./managed-opencode-runtime-config.js";
 import pkg from "../package.json" with { type: "json" };
 
 const args = parseCliArgs(process.argv.slice(2));
@@ -56,11 +56,9 @@ if (!config.readOnly) {
 if (!config.opencodeBaseUrl && process.env.OPENWORK_MANAGE_OPENCODE === "1") {
   const workspace = config.workspaces[0];
   if (workspace?.path) {
-    const openworkExtensionsPreviewConfig = JSON.stringify({
-      plugin: [
-        "opencode-chrome-devtools",
-        openworkExtensionsPreviewPluginPath(),
-      ],
+    const managedRuntimeConfig = buildManagedOpencodeRuntimeConfig({
+      serverUrl,
+      clientToken: config.token,
     });
     const managedOpencodeCwd = process.env.OPENWORK_MANAGED_OPENCODE_CWD?.trim() || workspace.path;
     await mkdir(managedOpencodeCwd, { recursive: true });
@@ -71,11 +69,12 @@ if (!config.opencodeBaseUrl && process.env.OPENWORK_MANAGE_OPENCODE === "1") {
         ...(process.env.OPENWORK_DEV_MODE ? { OPENWORK_DEV_MODE: process.env.OPENWORK_DEV_MODE } : {}),
         OPENWORK_SERVER_URL: serverUrl,
         OPENWORK_SERVER_TOKEN: config.token,
-        OPENCODE_CONFIG_CONTENT: openworkExtensionsPreviewConfig,
+        OPENCODE_CONFIG_CONTENT: managedRuntimeConfig,
       },
       onEvent: logManagedOpencodeEvent,
     });
     config.opencodeBaseUrl = managedOpencode.url;
+    config.managedOpencodeMcp = true;
     config.opencodeUsername = managedOpencode.username;
     config.opencodePassword = managedOpencode.password;
     for (const entry of config.workspaces) {

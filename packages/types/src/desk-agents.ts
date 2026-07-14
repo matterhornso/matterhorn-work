@@ -19,6 +19,7 @@ export interface MatterhornDeskAgentManifest {
   defaultActionId?: string;
   toolAllowlist: string[];
   runtimePermissions?: Partial<Record<"task" | "webfetch" | "websearch", "allow" | "ask" | "deny">>;
+  runtimeTools?: Record<string, boolean>;
   displayName: string;
   description: string;
   instructions: string;
@@ -86,6 +87,14 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "matterhorn_read_files",
       "matterhorn_write_files",
     ],
+    runtimePermissions: {
+      task: "deny",
+      webfetch: "deny",
+      websearch: "deny",
+    },
+    runtimeTools: {
+      "matterhorn-work_matterhorn_bittensor_chat": true,
+    },
     displayName: "Bittensor Agent",
     description: "Bittensor-native TAO, subnet, validator, wallet-read, watch, receipt, and external-signer handoff agent.",
     instructions: [
@@ -98,7 +107,8 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "- Explain Bittensor concepts in beginner language before exposing raw chain details.",
       "- If required public context is missing, ask one concise question for the public value only.",
       "- For a simple subnet discovery or comparison, do not delegate to subagents and do not create files unless the user requests a saved report.",
-      "- Start with the most specific Bittensor desk tool. If its result is fallback or stale, make at most one public web search for current context, skip additional subnet-list and per-subnet explain calls, and synthesize immediately.",
+      "- Call the Bittensor desk tool exactly once. After it returns, do not call any tool again. Answer immediately from that bounded evidence; do not inspect repository files, use shell commands, or call generic web tools.",
+      "- If the returned evidence is fallback or stale, disclose that limitation and answer from the bounded result instead of searching elsewhere.",
       "- Return at most five relevant subnets and keep the default answer concise while always naming the data source and freshness.",
     ].join("\n"),
   },
@@ -118,6 +128,16 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "matterhorn_read_files",
       "matterhorn_write_files",
     ],
+    runtimePermissions: {
+      task: "deny",
+      webfetch: "deny",
+      websearch: "deny",
+    },
+    runtimeTools: {
+      "matterhorn-work_matterhorn_hyperliquid_list_markets": true,
+      "matterhorn-work_matterhorn_hyperliquid_get_orderbook": true,
+      "matterhorn-work_matterhorn_hyperliquid_get_funding": true,
+    },
     displayName: "Hyperliquid Agent",
     description: "Hyperliquid market-read, exposure, funding, watch, receipt, and external trade-handoff agent.",
     instructions: [
@@ -129,6 +149,9 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "- Prepare external-client handoffs only after showing read-only context, missing inputs, and stale-data warnings.",
       "- Do not request exchange API secrets, private keys, raw signatures, signed payloads, or custody.",
       "- If the user asks for actual trading, build a reviewed handoff packet for their own external client instead of executing.",
+      "- For a simple market, orderbook, funding, or exposure read, do not delegate to subagents and do not create files unless the user asks for a saved report.",
+      "- Start with the single most specific Hyperliquid desk tool. Do not inspect repository files, use shell commands, call generic web tools, or repeat the read through a second data path.",
+      "- Once the desk tool returns enough evidence, state source and freshness, include stale-data warnings, and answer immediately.",
     ].join("\n"),
   },
   polymarket: {
@@ -151,6 +174,10 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       task: "deny",
       webfetch: "deny",
       websearch: "deny",
+    },
+    runtimeTools: {
+      "matterhorn-work_matterhorn_polymarket_search_markets": true,
+      "matterhorn-work_matterhorn_polymarket_check_compliance": true,
     },
     displayName: "Polymarket Agent",
     description: "Polymarket research, liquidity, compliance, watch, receipt, and compliance-gated handoff agent.",
@@ -189,6 +216,10 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       task: "deny",
       webfetch: "deny",
       websearch: "deny",
+    },
+    runtimeTools: {
+      "matterhorn-work_matterhorn_sui_get_balance": true,
+      "matterhorn-work_matterhorn_sui_preview_transfer": true,
     },
     displayName: "Sui Agent",
     description: "Sui wallet-standard account reads, transfer previews, wallet signing handoffs, and public receipt evidence.",

@@ -99,6 +99,7 @@ export interface ServerConfig {
   logRequests: boolean;
   requestRateLimit?: RequestRateLimitConfig;
   reloadWatchers?: boolean;
+  managedOpencodeMcp?: boolean;
 }
 
 export interface Capabilities {

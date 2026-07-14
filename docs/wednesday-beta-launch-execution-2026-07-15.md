@@ -128,7 +128,7 @@ external-signer boundaries, and execution blocks remain unchanged.
 | Release surface | Decision | Evidence and boundary |
 | --- | --- | --- |
 | Controlled local web beta | GO | Two independent durable workspaces passed 20/20 product stages with zero browser errors or network failures. |
-| Responsive UI and primary interactions | GO | The strict audit passed 104 surfaces and 11 interactions, inventoried 2,922 controls, and reported zero issues, console errors, page errors, or network failures. |
+| Responsive UI and primary interactions | GO | The final strict audit passed 104 surfaces and 11 interactions, inventoried 3,064 controls, and reported zero issues, console errors, page errors, or network failures. |
 | Notes, Memory, Outputs, History, Settings, and MCP UI | GO | Covered at desktop, compact-laptop, tablet, and mobile widths by the strict audit and by the complete ten-stage platform safety gate. |
 | Workspace activation and persistence | GO | Client and host credentials remain separate, host-auth activation is tested, and new workspace configuration persists through the durable server config. |
 | Wallet safety and previews | GO for automated non-custodial scope | Connector, approval, rejection, preview, receipt, and secret-redaction contracts pass. Matterhorn does not accept wallet secrets or submit transactions. |
@@ -145,6 +145,28 @@ external-signer boundaries, and execution blocks remain unchanged.
 | Production image-to-Sui publishing | NO-GO | Image provider, Walrus publisher/relay, Sui NFT package, Kiosk package, and TransferPolicy are not configured. |
 
 ## Frozen Evidence
+
+The exact-source final QA record is
+`docs/wednesday-launch-final-e2e-qa-2026-07-14.md`. It supersedes earlier
+near-final counts where they differ.
+
+- Complete app suite: 536 passed, 0 failed, 3,590 assertions.
+- Complete server suite: 695 passed, 0 failed, 4,921 assertions.
+- App and server TypeScript: passed.
+- Production desktop/app/server build: passed.
+- Full platform safety gate: all 10 stages passed.
+- Final strict responsive audit: 104 surfaces, 11 interactions, 3,064 controls,
+  zero issues.
+- Final second-user product canary: 20/20, zero warnings, browser errors, or
+  network failures.
+- Final Bittensor execution trace: exactly one bounded Matterhorn MCP call and
+  no shell, file, or generic web tool call.
+
+Primary final evidence:
+
+- `qa-reports/wednesday-launch-final-e2e-qa-2026-07-14/full-platform-final/summary.json`;
+- `qa-reports/wednesday-launch-final-e2e-qa-2026-07-14/user-one-product-smoke-final/summary.json`;
+- `qa-reports/wednesday-launch-final-e2e-qa-2026-07-14/user-two-product-smoke-final-v4/summary.json`.
 
 - Full platform safety gate: all 10 stages passed after the final source fixes.
 - Launch user one:

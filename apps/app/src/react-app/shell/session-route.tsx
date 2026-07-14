@@ -1698,6 +1698,7 @@ export function SessionRoute() {
     client: opencodeClient,
     baseUrl: opencodeBaseUrl,
     directory: selectedWorkspaceRoot || undefined,
+    enabled: modelPickerOpen,
   });
   const refreshWorkspaceModelSelection = useCallback((options?: { signal?: AbortSignal }) => {
     if (!client || !selectedWorkspaceId) {
@@ -1744,6 +1745,7 @@ export function SessionRoute() {
           checkRestriction: checkDesktopRestriction,
         }) ||
         (
+          providerListQuery.data &&
           checkDesktopRestriction({ restriction: "allowCustomProviders" }) &&
           !providerConnectedIds.some(
             (providerId) => providerId.trim() === selectedPromptModel.providerID.trim(),
@@ -2000,7 +2002,7 @@ export function SessionRoute() {
     (!canCreateTask && !routeError && !selectedWorkspaceError);
 
   useEffect(() => {
-    if (!opencodeClient) {
+    if (!opencodeClient || !modelPickerOpen) {
       setProviders([]);
       setProviderDefaults({});
       setProviderConnectedIds([]);
@@ -2067,16 +2069,14 @@ export function SessionRoute() {
     return () => {
       cancelled = true;
     };
-  }, [opencodeBaseUrl, opencodeClient, selectedWorkspaceRoot, denSessionVersion]);
+  }, [denSessionVersion, modelPickerOpen, opencodeBaseUrl, opencodeClient, selectedWorkspaceRoot]);
 
   const modelLabel = selectedPromptModel
     ? resolveModelDisplayName(selectedPromptModel.modelID)
     : t("session.default_model");
 
-  // Prefetch the full provider catalog once so `getModelBehaviorSummary` has
-  // everything it needs to expose the reasoning/thinking variants the active
-  // model supports — without waiting for the model picker to open. Cached
-  // as providerID → modelID → ProviderModel.
+  // Cache the provider catalog after the model picker requests it. The engine
+  // catalog can be several megabytes, so it must not delay the project home.
   useEffect(() => {
     const data = providerListQuery.data;
     if (!data?.all) return;

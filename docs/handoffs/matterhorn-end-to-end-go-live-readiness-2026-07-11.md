@@ -2420,3 +2420,42 @@ The complete decision record and remaining-owner checklist is in
 `docs/wednesday-beta-launch-execution-2026-07-15.md`. The dirty integration
 tree is intentionally preserved. Nothing was staged, committed, pushed,
 reset, reverted, or cleaned during this final reconciliation.
+
+## July 14 exact-source final E2E and managed MCP hardening
+
+The Wednesday release candidate received one final exact-source pass in the
+clean RC worktree. The managed OpenCode process now receives an authenticated
+Matterhorn MCP configuration in memory. The credential is never written to the
+workspace, and the MCP exposes only nine bounded status/read/preview tools.
+
+The four protocol agent definitions use deny-by-default runtime tool maps. The
+Bittensor agent is explicitly limited to one bounded Bittensor MCP call and
+must answer immediately from that evidence. The final user-two trace contains
+exactly one completed Bittensor MCP call and no Bash, file, generic web, or
+subagent tool part. This replaces an earlier diagnostic canary where the model
+attempted a shell fallback that the runtime rejected.
+
+Final verification on the exact source:
+
+- app tests: 536 passed, 0 failed, 3,590 assertions across 69 files;
+- server tests: 695 passed, 0 failed, 4,921 assertions across 55 files;
+- platform safety: all 10 stages passed;
+- app and server TypeScript: passed;
+- production desktop/app/server build: passed;
+- strict responsive audit: 104 surfaces, 11 interactions, 3,064 controls,
+  zero issues, console errors, page errors, or network failures;
+- final user-two product smoke: 20/20 with all protocol desk results completed,
+  zero warnings, browser errors, or network failures;
+- Bittensor result time improved from 53.5 seconds in the diagnostic run to
+  26.3 seconds in the final one-call run.
+
+Canonical launch URLs are now:
+
+- app: `http://127.0.0.1:5190/workspace/ws_18dc91c9102a/session`;
+- backend: `http://127.0.0.1:4130`.
+
+The durable final QA report is
+`docs/wednesday-launch-final-e2e-qa-2026-07-14.md`. The release decision remains
+GO for a controlled local beta and NO-GO for public macOS distribution, live
+charging, production image-to-Sui publishing, Matterhorn Cloud, claims of live
+Bittensor provider coverage, or claims of real wallet-extension acceptance.

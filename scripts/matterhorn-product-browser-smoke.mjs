@@ -370,7 +370,7 @@ async function startPrimaryDeskTask(page, config, desk) {
   await page.goto(workspaceUrl(config.url, "session"), { waitUntil: "load", timeout: 30_000 });
   await ensureWorkspaceHomeVisible(page);
   await page.getByText("Open a desk", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-  await clickFirstVisible(page.getByRole("button", { name: desk.openLabel, exact: true }), `${desk.openLabel} desk card`);
+  await clickFirstVisible(page.getByTestId(`open-${desk.id}-desk`), `${desk.openLabel} desk card`);
   await page.getByText(desk.heading, { exact: true }).waitFor({ state: "visible", timeout: 15_000 });
   await assertNoVisible(page.getByText("Show technical prompt", { exact: false }), `${desk.name} technical prompt disclosure`);
   await assertNoVisible(page.getByText("Boundary:", { exact: false }), `${desk.name} boundary copy`);
@@ -556,7 +556,7 @@ async function runSmoke(config) {
       await page.goto(workspaceUrl(config.url, "session"), { waitUntil: "load", timeout: 30_000 });
       await ensureWorkspaceHomeVisible(page);
       await page.getByText("Open a desk", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await clickFirstVisible(page.getByRole("button", { name: "Open Longevity", exact: true }), "Open Longevity desk card");
+      await clickFirstVisible(page.getByTestId("open-wellness-desk"), "Open Longevity desk card");
       await page.getByText("Longevity Agent", { exact: true }).first().waitFor({ state: "visible", timeout: 20_000 });
       await waitForAnyVisible(page, [
         page.getByText("7 stages", { exact: true }),

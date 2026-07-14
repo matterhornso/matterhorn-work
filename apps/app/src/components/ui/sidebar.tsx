@@ -677,15 +677,16 @@ function SidebarMenuSubButton({
   isActive = false,
   className,
   ...props
-}: useRender.ComponentProps<"a"> &
-  React.ComponentProps<"a"> & {
+}: useRender.ComponentProps<"button"> &
+  React.ComponentProps<"button"> & {
     size?: "sm" | "md"
     isActive?: boolean
   }) {
   return useRender({
-    defaultTagName: "a",
-    props: mergeProps<"a">(
+    defaultTagName: "button",
+    props: mergeProps<"button">(
       {
+        type: "button",
         className: cn(
           "flex h-7 ps-9 min-w-0 -translate-x-px rtl:translate-x-px items-center gap-2 overflow-hidden relative rounded-md px-3 text-sidebar-foreground ring-sidebar-ring outline-hidden group-data-[collapsible=icon]:hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-hover/menu-sub-item:bg-sidebar-accent group-hover/menu-sub-item:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-sm data-[size=sm]:text-xs data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground mac:hover:bg-black/5 mac:group-hover/menu-sub-item:bg-black/5 mac:active:bg-black/5 mac:data-active:bg-black/5 dark:mac:hover:bg-white/10 dark:mac:group-hover/menu-sub-item:bg-white/10 dark:mac:active:bg-white/10 dark:mac:data-active:bg-white/10",
           className

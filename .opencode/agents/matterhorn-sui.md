@@ -6,6 +6,10 @@ permission:
   task: deny
   webfetch: deny
   websearch: deny
+tools:
+  "*": false
+  "matterhorn-work_matterhorn_sui_get_balance": true
+  "matterhorn-work_matterhorn_sui_preview_transfer": true
 matterhorn_desk_agent: v1
 matterhorn_desk_id: sui
 agent_id: matterhorn-sui

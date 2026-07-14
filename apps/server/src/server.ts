@@ -416,6 +416,7 @@ import {
   googleWorkspaceTestConnection,
 } from "./extensions/google-workspace.js";
 import { callExperimentalExtensionAction, listExperimentalExtensionActions } from "./extensions/index.js";
+import { handleManagedOpencodeMcp } from "./managed-opencode-mcp.js";
 import pkg from "../package.json" with { type: "json" };
 import constants from "../../../constants.json" with { type: "json" };
 
@@ -5499,6 +5500,17 @@ function createRoutes(
     return jsonResponse({ ok: true, version: SERVER_VERSION, opencodeVersion: OPENCODE_VERSION, uptimeMs: Date.now() - config.startedAt });
   });
 
+  addRoute(routes, "POST", "/mcp/opencode", "client", async (ctx) => {
+    const payload = await readJsonBody(ctx.request, 256_000, "MCP");
+    const result = await handleManagedOpencodeMcp({
+      payload,
+      serverUrl: ctx.url.origin,
+      clientToken: config.token,
+    });
+    if (result.body === null) return new Response(null, { status: result.status });
+    return jsonResponse(result.body, result.status);
+  });
+
   // Dev log sink: append browser console + error events to a file that an
   // operator (or an AI driver) can tail. Unauth on purpose because this is
   // scoped to the dev host and needs to work before clients finish wiring
@@ -7997,6 +8009,18 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/mcp", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const items = await listMcp(workspace.path);
+    if (config.managedOpencodeMcp && !items.some((item) => item.name === "matterhorn-work")) {
+      items.unshift({
+        name: "matterhorn-work",
+        config: {
+          type: "remote",
+          url: `${ctx.url.origin}/mcp/opencode`,
+          enabled: true,
+          managed: true,
+        },
+        source: "config.remote",
+      });
+    }
     return jsonResponse({ items });
   });
 

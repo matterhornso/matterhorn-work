@@ -38,14 +38,23 @@ describe("ensureWorkspaceFiles", () => {
       expect(bittensorAgent).toContain("matterhorn_desk_id: bittensor");
       expect(bittensorAgent).toContain("agent_id: matterhorn-bittensor");
       expect(bittensorAgent).toContain("public SS58/coldkey/hotkey context only");
+      expect(bittensorAgent).toContain("websearch: deny");
+      expect(bittensorAgent).toContain('"*": false');
+      expect(bittensorAgent).toContain('"matterhorn-work_matterhorn_bittensor_chat": true');
+      expect(bittensorAgent).toContain("Call the Bittensor desk tool exactly once");
       expect(hyperliquidAgent).toContain("Hyperliquid Agent");
       expect(hyperliquidAgent).toContain("Can submit: No");
+      expect(hyperliquidAgent).toContain("websearch: deny");
+      expect(hyperliquidAgent).toContain('"matterhorn-work_matterhorn_hyperliquid_list_markets": true');
+      expect(hyperliquidAgent).toContain("single most specific Hyperliquid desk tool");
       expect(polymarketAgent).toContain("Polymarket Agent");
       expect(polymarketAgent).toContain("compliance-gated handoff");
       expect(polymarketAgent).toContain("websearch: deny");
+      expect(polymarketAgent).toContain('"matterhorn-work_matterhorn_polymarket_search_markets": true');
       expect(suiAgent).toContain("Sui Agent");
       expect(suiAgent).toContain("matterhorn_desk_id: sui");
       expect(suiAgent).toContain("task: deny");
+      expect(suiAgent).toContain('"matterhorn-work_matterhorn_sui_preview_transfer": true');
       expect(suiAgent).toContain("outputs/sui/<session-slug>");
       expect(longevityAgent).toContain("Longevity Agent");
       expect(longevityAgent).toContain("7-stage workflow");
@@ -106,6 +115,7 @@ describe("ensureWorkspaceFiles", () => {
       const suiAgent = await readFile(join(agentsDir, "matterhorn-sui.md"), "utf8");
 
       expect(polymarketAgent).toContain("websearch: deny");
+      expect(polymarketAgent).toContain('"*": false');
       expect(polymarketAgent).not.toContain("Old managed instructions");
       expect(suiAgent).toContain("Keep this custom content.");
       expect(result.reloadReasons).toContain("agents");

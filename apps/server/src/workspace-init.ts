@@ -154,12 +154,20 @@ function renderDeskAgentRuntimePermissions(
   return `permission:\n${entries.map(([permission, action]) => `  ${permission}: ${action}`).join("\n")}\n`;
 }
 
+function renderDeskAgentRuntimeTools(
+  agent: (typeof MATTERHORN_DESK_AGENT_MANIFESTS)[keyof typeof MATTERHORN_DESK_AGENT_MANIFESTS],
+): string {
+  const entries = Object.entries(agent.runtimeTools ?? {});
+  if (entries.length === 0) return "";
+  return `tools:\n  "*": false\n${entries.map(([tool, enabled]) => `  "${tool}": ${enabled}`).join("\n")}\n`;
+}
+
 function renderDeskAgentTemplate(agent: (typeof MATTERHORN_DESK_AGENT_MANIFESTS)[keyof typeof MATTERHORN_DESK_AGENT_MANIFESTS]): string {
   return `---
 description: ${agent.description}
 mode: primary
 temperature: 0.2
-${renderDeskAgentRuntimePermissions(agent)}matterhorn_desk_agent: v1
+${renderDeskAgentRuntimePermissions(agent)}${renderDeskAgentRuntimeTools(agent)}matterhorn_desk_agent: v1
 matterhorn_desk_id: ${agent.deskId}
 agent_id: ${agent.agentId}
 workflow_id: ${agent.workflowId}
