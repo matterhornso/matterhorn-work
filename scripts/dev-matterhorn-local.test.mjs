@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 
 const script = readFileSync("scripts/dev-matterhorn-local.mjs", "utf8");
 
@@ -37,6 +38,19 @@ assert.ok(
   script.includes("OPENWORK_MANAGE_OPENCODE=1 pnpm dev:matterhorn-local"),
   "dev:matterhorn-local should show the managed sidecar setup path",
 );
+assert.ok(
+  script.includes("MATTERHORN_LOCAL_SERVER_CONFIG") && script.includes('"--config", serverConfigPath'),
+  "dev:matterhorn-local should support a durable multi-workspace server config",
+);
+
+const help = spawnSync(process.execPath, ["scripts/dev-matterhorn-local.mjs", "--help"], {
+  cwd: process.cwd(),
+  encoding: "utf8",
+  timeout: 5_000,
+});
+assert.equal(help.status, 0, help.stderr || "dev:matterhorn-local --help should exit successfully");
+assert.match(help.stdout, /MATTERHORN_LOCAL_SERVER_CONFIG/);
+assert.doesNotMatch(help.stdout, /Starting Matterhorn Work local stack/);
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 assert.equal(

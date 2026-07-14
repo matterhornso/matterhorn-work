@@ -1,0 +1,65 @@
+{
+  "ok": true,
+  "ready": true,
+  "status": "READY_FOR_TEST_CUSTOMERS",
+  "checks": [
+    {
+      "id": "bundle.ready",
+      "status": "pass",
+      "message": "Bittensor evidence bundle must be ready."
+    },
+    {
+      "id": "bittensor.live_qa",
+      "status": "pass",
+      "message": "Bittensor live QA summary must be ready."
+    },
+    {
+      "id": "agent_control.ready",
+      "status": "pass",
+      "message": "Agent control live QA summary must be ready."
+    },
+    {
+      "id": "readiness_gate.ready",
+      "status": "pass",
+      "message": "Customer readiness gate must be ready."
+    },
+    {
+      "id": "ci.present",
+      "status": "pass",
+      "message": "CI evidence must include at least one check."
+    },
+    {
+      "id": "ci.no_failures",
+      "status": "pass",
+      "message": "CI evidence must have no failed checks."
+    },
+    {
+      "id": "ci.no_pending",
+      "status": "pass",
+      "message": "CI evidence must have no pending checks."
+    },
+    {
+      "id": "markdown.ready_result",
+      "status": "pass",
+      "message": "Markdown bundle must show READY_FOR_TEST_CUSTOMERS."
+    },
+    {
+      "id": "markdown.gate_summary",
+      "status": "pass",
+      "message": "Markdown bundle must include Gate Summary."
+    },
+    {
+      "id": "markdown.customer_demo",
+      "status": "pass",
+      "message": "Markdown bundle must include Before Customer Demo."
+    }
+  ],
+  "errors": [],
+  "warnings": [],
+  "safety": {
+    "nonCustodial": true,
+    "liveSubmissionEnabled": false,
+    "signsOrBroadcasts": false,
+    "acceptsSecrets": false
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "version": "matterhorn.bittensor-beta-rc-packet.v1",
+  "ready": true,
+  "generatedAt": "2026-07-14T08:26:35.384Z",
+  "git": {
+    "sha": "07a9c82a6bf2eea5ff6c3c519b0d420e683f26a5",
+    "branch": "codex/wednesday-beta-rc-2026-07-15"
+  },
+  "fixture": false,
+  "safety": {
+    "betaScope": "bittensor",
+    "nonCustodial": true,
+    "asksForSecrets": false,
+    "liveSubmissionEnabled": false,
+    "marketExecutionEnabled": false,
+    "bittensorExternalSignerRequired": true
+  },
+  "evidence": {
+    "betaGate": {
+      "present": true,
+      "ready": true,
+      "generatedAt": "2026-07-14T07:51:34.766Z",
+      "gitSha": "07a9c82a6bf2eea5ff6c3c519b0d420e683f26a5",
+      "gitBranch": "codex/wednesday-beta-rc-2026-07-15",
+      "pass": 16,
+      "fail": 0,
+      "skip": 0,
+      "requiredStages": [
+        {
+          "id": "bittensor.beta_static_gate",
+          "status": "pass"
+        },
+        {
+          "id": "bittensor.customer_readiness",
+          "status": "pass"
+        },
+        {
+          "id": "bittensor.receipt",
+          "status": "pass"
+        },
+        {
+          "id": "bittensor.watch_autopilot",
+          "status": "pass"
+        },
+        {
+          "id": "bittensor.watch_scheduler",
+          "status": "pass"
+        },
+        {
+          "id": "bittensor.signing_handoff",
+          "status": "pass"
+        },
+        {
+          "id": "bittensor.evidence_bundle",
+          "status": "pass"
+        },
+        {
+          "id": "bittensor.evidence_verify",
+          "status": "pass"
+        },
+        {
+          "id": "bittensor.adapter_readonly_canary",
+          "status": "pass"
+        },
+        {
+          "id": "market.execution_safety",
+          "status": "pass"
+        },
+        {
+          "id": "market.execution_readiness",
+          "status": "pass"
+        },
+        {
+          "id": "market.submit_sign_phase0_contract",
+          "status": "pass"
+        },
+        {
+          "id": "market.sign_request_phase1",
+          "status": "pass"
+        },
+        {
+          "id": "market.artifact_validation_phase2",
+          "status": "pass"
+        }
+      ],
+      "errors": [],
+      "warnings": []
+    },
+    "customerReadySmoke": {
+      "present": true,
+      "ready": true,
+      "pass": 52,
+      "fail": 0,
+      "skip": 0,
+      "errors": [],
+      "warnings": []
+    },
+    "bittensorEvidence": {
+      "present": true,
+      "ready": true,
+      "status": "READY_FOR_TEST_CUSTOMERS",
+      "errors": [],
+      "warnings": []
+    },
+    "livePublicQa": {
+      "present": true,
+      "ready": true,
+      "fixtureFallback": true,
+      "status": "SKIPPED_WITH_FIXTURE_FALLBACK",
+      "errors": [],
+      "warnings": [
+        "Live public-data QA used fallback for one or more optional evidence stages. Review the attached report and complete any launch-required inputs before full go-live."
+      ]
+    },
+    "browserQa": {
+      "present": true,
+      "ready": true,
+      "errors": [],
+      "warnings": []
+    }
+  },
+  "hashes": [
+    {
+      "file": "bittensor-beta-gate.json",
+      "sha256": "2362b01b6023d421aa4bd38cb3028d4afa036d40c77debd247a96c723a72e010"
+    },
+    {
+      "file": "customer-ready-crypto-smoke.json",
+      "sha256": "ffe08b7cd143099adc62af3a33e3590c578974069057c5e82584630f2d76ddac"
+    },
+    {
+      "file": "bittensor-customer-evidence-verify.json",
+      "sha256": "97b87a386da175eb7ca5e26aa38e6d38a03e68a7dd18ab7f213c85faa624931b"
+    },
+    {
+      "file": "matterhorn-live-public-qa.json",
+      "sha256": "722de5888435c3ed2f23dfde3ab7eedbd3f30addf3c5aa4eef6ab6d9ec6412de"
+    },
+    {
+      "file": "bittensor-browser-qa.md",
+      "sha256": "90faa74ac8770dc66cf7ff64f8511ee404b1b6f5f09560335193ebc87d72e865"
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    "Live public-data QA used fallback for one or more optional evidence stages. Review the attached report and complete any launch-required inputs before full go-live."
+  ],
+  "nextActions": [
+    "Cut beta/bittensor from the same SHA, attach packet artifacts, and start limited test-customer onboarding."
+  ]
+}

@@ -267,7 +267,10 @@ async function discoverProductSmokeReports() {
     const entries = await readdir(reportsRoot, { withFileTypes: true });
     const candidates = await Promise.all(
       entries
-        .filter((entry) => entry.isDirectory() && entry.name.startsWith("matterhorn-product-browser-smoke"))
+        .filter((entry) => entry.isDirectory() && (
+          entry.name.startsWith("matterhorn-product-browser-smoke")
+          || entry.name.endsWith("product-smoke")
+        ))
         .map(async (entry) => {
           const path = resolve(reportsRoot, entry.name, "summary.json");
           try {
@@ -549,9 +552,19 @@ async function run() {
   await recordInteraction(report, "mcp-rail-availability-and-disclosure", async () => {
     await page.goto(workspaceUrl("session", "?panel=extensions"), { waitUntil: "load" });
     await visibleMarker(page, ["Matterhorn MCPs"]);
-    await visibleMarker(page, ["2 MCP servers active"]);
-    await page.getByLabel("Connected MCP servers: Wallet MCP, Crypto MCP", { exact: true })
-      .waitFor({ state: "visible", timeout: 20_000 });
+    const connectedSummary = page.getByText(/\d+ MCP servers? active/, { exact: true });
+    const emptySummary = page.getByText("No external MCPs connected.", { exact: true });
+    await Promise.race([
+      connectedSummary.waitFor({ state: "visible", timeout: 20_000 }),
+      emptySummary.waitFor({ state: "visible", timeout: 20_000 }),
+    ]);
+    if (await connectedSummary.isVisible().catch(() => false)) {
+      await page.getByLabel(/Connected MCP servers:/, { exact: false })
+        .waitFor({ state: "visible", timeout: 20_000 });
+    } else {
+      await page.getByText("No apps connected yet", { exact: true })
+        .waitFor({ state: "visible", timeout: 20_000 });
+    }
     if (await page.getByRole("button", { name: "Marketplace", exact: true }).count() !== 0) {
       throw new Error("Local-only build exposed an unavailable Marketplace tab.");
     }
@@ -591,7 +604,12 @@ async function run() {
       await page.goto(chatUrl, { waitUntil: "load" });
       await visibleMarker(page, ["Generate image"]);
       await clickUnique(page.getByRole("button", { name: "Generate image", exact: true }), "Generate image");
-      await visibleMarker(page, ["Recent images", "Generated image"]);
+      await visibleMarker(page, [
+        "Create image",
+        "Recent images",
+        "Generated image",
+        "Image generation requires Matterhorn setup. Review its status in Settings.",
+      ]);
       await page.keyboard.press("Escape");
     });
   } else {

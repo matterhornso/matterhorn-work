@@ -14,6 +14,9 @@ const hostToken = process.env.MATTERHORN_LOCAL_HOST_TOKEN?.trim() || "matterhorn
 const preferredServerPort = Number(process.env.MATTERHORN_LOCAL_SERVER_PORT?.trim() || "4105");
 const preferredAppPort = Number(process.env.MATTERHORN_LOCAL_APP_PORT?.trim() || "5175");
 const workspaceRoot = path.resolve(process.env.MATTERHORN_LOCAL_WORKSPACE?.trim() || rootDir);
+const serverConfigPath = process.env.MATTERHORN_LOCAL_SERVER_CONFIG?.trim()
+  ? path.resolve(process.env.MATTERHORN_LOCAL_SERVER_CONFIG.trim())
+  : "";
 const opencodeBaseUrl =
   process.env.MATTERHORN_LOCAL_OPENCODE_URL?.trim() ||
   process.env.OPENWORK_OPENCODE_BASE_URL?.trim() ||
@@ -26,6 +29,23 @@ const manageOpencode =
 
 const children = new Set();
 let shuttingDown = false;
+
+function printHelp() {
+  console.log([
+    "Matterhorn Work local stack",
+    "",
+    "Environment:",
+    "  MATTERHORN_LOCAL_SERVER_PORT=<port>",
+    "  MATTERHORN_LOCAL_APP_PORT=<port>",
+    "  MATTERHORN_LOCAL_WORKSPACE=<path>",
+    "  MATTERHORN_LOCAL_SERVER_CONFIG=<server.json>",
+    "  MATTERHORN_LOCAL_CLIENT_TOKEN=<token>",
+    "  MATTERHORN_LOCAL_HOST_TOKEN=<token>",
+    "  MATTERHORN_LOCAL_OPENCODE_URL=<url>",
+    "",
+    "A server config is the durable source of truth for multi-workspace launches.",
+  ].join(os.EOL));
+}
 
 function opencodeSetupHintLines() {
   return [
@@ -245,8 +265,15 @@ function appCommand(appPort) {
 }
 
 async function main() {
+  if (process.argv.slice(2).some((value) => value === "--help" || value === "-h")) {
+    printHelp();
+    return;
+  }
   if (!existsSync(workspaceRoot)) {
     throw new Error(`Workspace path does not exist: ${workspaceRoot}`);
+  }
+  if (serverConfigPath && !existsSync(serverConfigPath)) {
+    throw new Error(`Matterhorn server config does not exist: ${serverConfigPath}`);
   }
 
   const serverPort = await findPort(preferredServerPort);
@@ -260,7 +287,7 @@ async function main() {
     "--port", String(serverPort),
     "--token", clientToken,
     "--host-token", hostToken,
-    "--workspace", workspaceRoot,
+    ...(serverConfigPath ? ["--config", serverConfigPath] : ["--workspace", workspaceRoot]),
     "--approval", "auto",
     "--approval-timeout", "30000",
     "--cors", "loopback",

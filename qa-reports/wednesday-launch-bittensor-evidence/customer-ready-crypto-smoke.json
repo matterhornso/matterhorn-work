@@ -1,0 +1,813 @@
+{
+  "ready": true,
+  "summary": {
+    "pass": 52,
+    "fail": 0,
+    "skip": 0
+  },
+  "dryRun": false,
+  "metadata": {
+    "generatedAt": "2026-07-14T07:52:00.073Z",
+    "gitSha": "07a9c82a6bf2eea5ff6c3c519b0d420e683f26a5",
+    "gitBranch": "codex/wednesday-beta-rc-2026-07-15"
+  },
+  "stages": [
+    {
+      "id": "crypto.unified_chat",
+      "label": "Unified crypto chat router",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 665,
+      "command": [
+        "pnpm",
+        "test:unified-crypto-chat"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:unified-crypto-chat /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> cd apps/server && bun test src/tools/crypto-chat.test.ts\n\nbun test v1.3.11 (af24e281)\n",
+      "stderr": "\nsrc/tools/crypto-chat.test.ts:\n(pass) unified crypto chat router > plans explicit venue overrides [0.98ms]\n(pass) unified crypto chat router > asks for one venue clarification when a prompt is too generic [0.33ms]\n(pass) unified crypto chat router > answers market execution readiness as a cross-venue safety contract [2.02ms]\n(pass) unified crypto chat router > answers market execution-chain prompts with a no-submit chat card [0.38ms]\n(pass) unified crypto chat router > answers specific market execution-step prompts with focused guidance [0.48ms]\n(pass) unified crypto chat router > answers official SDK validation prompts with public testnet guidance [0.44ms]\n(pass) unified crypto chat router > routes Bittensor chat through the Bittensor executor [0.21ms]\n(pass) unified crypto chat router > routes Hyperliquid reads through the Hyperliquid workflow [1.60ms]\n(pass) unified crypto chat router > returns Hyperliquid exposure as a read-only account snapshot [0.43ms]\n(pass) unified crypto chat router > routes Polymarket discovery through the Polymarket workflow [1.05ms]\n(pass) unified crypto chat router > returns Polymarket market context with compliance and preview availability [0.26ms]\n(pass) unified crypto chat router > rejects secret-shaped input before venue execution [0.12ms]\n(pass) unified crypto chat router > rejects credential-shaped prompt text before venue execution [0.10ms]\n(pass) unified crypto chat router > rejects malformed shared card contract objects [0.03ms]\n(pass) unified crypto chat router > maps venue card kinds into customer-readable shared card categories [0.15ms]\n(pass) unified crypto chat router > locks shared-card contract for representative Bittensor workflows [0.18ms]\n(pass) unified crypto chat router > locks shared-card contract for Hyperliquid read and preview workflows [9.48ms]\n(pass) unified crypto chat router > locks shared-card contract for Polymarket discovery, watch, and blocked preview workflows [1.02ms]\n\n 18 pass\n 0 fail\n 608 expect() calls\nRan 18 tests across 1 file. [251.00ms]\n",
+      "warnings": []
+    },
+    {
+      "id": "crypto.unified_chat_routes",
+      "label": "Unified crypto chat route contract",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 786,
+      "command": [
+        "pnpm",
+        "test:unified-crypto-chat-routes"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:unified-crypto-chat-routes /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> cd apps/server && bun test src/crypto-chat-routes.e2e.test.ts\n\nbun test v1.3.11 (af24e281)\n",
+      "stderr": "\nsrc/crypto-chat-routes.e2e.test.ts:\n(pass) unified crypto chat execute route > answers execution-readiness prompts with the no-submit shared-card contract [34.08ms]\n(pass) unified crypto chat execute route > answers execution-chain prompts through the unified chat route [7.21ms]\n(pass) unified crypto chat execute route > answers execution-step prompts through the unified chat route [6.80ms]\n(pass) unified crypto chat execute route > answers official SDK validation prompts through the unified chat route [6.95ms]\n(pass) unified crypto chat execute route > serves the read-only market execution-chain API contract [5.48ms]\n(pass) unified crypto chat execute route > serves the read-only market SDK validation API contract [5.28ms]\n(pass) unified crypto chat execute route > rejects missing messages and secret-shaped crypto chat inputs [9.44ms]\n\n 7 pass\n 0 fail\n 70 expect() calls\nRan 7 tests across 1 file. [480.00ms]\n",
+      "warnings": []
+    },
+    {
+      "id": "crypto.direct_prompt_safety",
+      "label": "Direct venue credential prompt safety",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 1937,
+      "command": [
+        "pnpm",
+        "test:crypto-direct-prompt-safety"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:crypto-direct-prompt-safety /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> cd apps/server && bun test src/tools/bittensor.test.ts src/tools/hyperliquid.test.ts src/tools/polymarket.test.ts\n\nbun test v1.3.11 (af24e281)\n",
+      "stderr": "adapter operator handoffs [3.83ms]\n(pass) executeBittensorChatWorkflow > builds sanitized canary outcome reports from adapter results [0.43ms]\n(pass) executeBittensorChatWorkflow > fails canary outcome reports when request hashes diverge [0.12ms]\n(pass) executeBittensorChatWorkflow > routes canary outcome report prompts through Bittensor chat [0.20ms]\n(pass) executeBittensorChatWorkflow > adds provider registry evidence to canary operator packets [0.77ms]\n(pass) executeBittensorChatWorkflow > builds blocked canary operator packets without approval templates [0.44ms]\n(pass) executeBittensorChatWorkflow > builds approval-ready canary packets only after real adapter manual review gates [2.64ms]\n(pass) executeBittensorChatWorkflow > builds one safe adapter onboarding plan before real execution [0.43ms]\n(pass) executeBittensorChatWorkflow > blocks adapter launch gate before configuration [0.23ms]\n(pass) executeBittensorChatWorkflow > marks launch gate mock-ready without enabling real adapters [0.34ms]\n(pass) executeBittensorChatWorkflow > probes mock adapter conformance without user task execution [0.15ms]\n(pass) executeBittensorChatWorkflow > exports adapter conformance evidence without endpoints or raw metadata [0.20ms]\n(pass) executeBittensorChatWorkflow > builds one redacted adapter operator handoff from evidence, conformance, and dry-run exports [1.13ms]\n(pass) executeBittensorChatWorkflow > routes ordinary adapter handoff chat prompts to the operator handoff packet [1.40ms]\n(pass) executeBittensorChatWorkflow > routes ordinary adapter marketplace chat prompts to the marketplace card [0.30ms]\n(pass) executeBittensorChatWorkflow > routes adapter marketplace export chat prompts to redacted markdown data [0.53ms]\n(pass) executeBittensorChatWorkflow > probes HTTPS adapter metadata conformance without sending request bodies or credentials [0.61ms]\n(pass) executeBittensorChatWorkflow > marks enabled mock subnet adapters as ready without exposing secret-shaped fields [0.12ms]\n(pass) executeBittensorChatWorkflow > blocks unsafe subnet adapter schemas and non-allowlisted HTTPS endpoints [0.10ms]\n(pass) executeBittensorChatWorkflow > validates HTTPS adapter allowlist and auth readiness without returning env names or token values [0.10ms]\n(pass) executeBittensorChatWorkflow > returns a warning dry-run report when no mock adapters are configured [0.05ms]\n(pass) executeBittensorChatWorkflow > runs mock subnet adapters through preview, hash gates, invocation, and redaction checks [0.42ms]\n(pass) executeBittensorChatWorkflow > exports mock subnet adapter dry-run evidence without raw task or full hashes [0.52ms]\n(pass) executeBittensorChatWorkflow > compares validators on a requested subnet [0.75ms]\n(pass) executeBittensorChatWorkflow > creates monitoring watches from ordinary chat prompts [0.43ms]\n(pass) executeBittensorChatWorkflow > creates actionable watches from riskiest wallet exposure [0.47ms]\n(pass) executeBittensorChatWorkflow > checks configured watches with actionable alert prompts [1.08ms]\n(pass) executeBittensorChatWorkflow > deep dives a validator hotkey on a subnet [1.16ms]\n(pass) executeBittensorChatWorkflow > builds an advanced unsigned staking allocation plan [7.07ms]\n(pass) executeBittensorChatWorkflow > clarifies staking preview when validator hotkey is missing [0.46ms]\n(pass) executeBittensorChatWorkflow > returns unsigned staking preview when required context exists [0.61ms]\n(pass) executeBittensorChatWorkflow > uses previous public netuid context for follow-up staking previews [0.51ms]\n(pass) executeBittensorChatWorkflow > does not store unexpected inline context fields [0.13ms]\n(pass) executeBittensorChatWorkflow > clarifies unstake previews instead of guessing validator context [0.30ms]\n(pass) executeBittensorChatWorkflow > returns unsigned transfer previews when recipient context exists [0.33ms]\n(pass) Bittensor intelligence reports > builds subnet intelligence from public metagraph and capability data [0.27ms]\n(pass) Bittensor intelligence reports > builds wallet intelligence from watch-only wallet positions [0.35ms]\n(pass) planBittensorChat > classifies beginner education requests [0.02ms]\n(pass) planBittensorChat > classifies subnet discovery requests and extracts netuids [0.09ms]\n(pass) planBittensorChat > asks for wallet address when wallet intent is missing SS58 [0.03ms]\n(pass) Bittensor chat cards > builds plan cards that preserve safety context [0.03ms]\n(pass) Bittensor chat cards > builds wallet and quote cards for chat rendering [0.28ms]\n(pass) capabilityFromSubnet > creates a Phase 3/4 capability manifest with benefits, examples, and adapter readiness [0.10ms]\n(pass) capabilityFromSubnet > reflects configured service adapters without exposing auth values [0.16ms]\n(pass) capabilityFromSubnet > builds subnet invocation preview cards without calling adapters [603.31ms]\n(pass) capabilityFromSubnet > marks configured service adapter previews as supported only after contract validation [0.26ms]\n(pass) capabilityFromSubnet > returns unsupported behavior for service invocation when the adapter contract is not ready [0.07ms]\n(pass) capabilityFromSubnet > rejects unsafe adapter contracts with secret-shaped schemas [0.03ms]\n(pass) capabilityFromSubnet > runs subnet adapter contract fixtures with sanitized results [0.20ms]\n(pass) capabilityFromSubnet > reports adapter contract expectation mismatches without exposing raw schemas [0.05ms]\n(pass) scoreBittensorSubnetForGoal > scores subnet categories from ordinary user goals [0.05ms]\n(pass) compareBittensorValidators > returns safe validator comparison cards for a subnet [0.05ms]\n(pass) compareBittensorValidators > warns when requested validator hotkeys are not in the provider sample [0.04ms]\n(pass) Bittensor advanced copilot engines > builds validator intelligence cards without secrets [0.07ms]\n(pass) Bittensor advanced copilot engines > builds unsigned staking plan cards [0.32ms]\n(pass) Bittensor advanced copilot engines > builds wallet decision briefs without custody fields [0.45ms]\n(pass) Bittensor advanced copilot engines > routes subnet decision prompts through Bittensor chat [0.17ms]\n(pass) Bittensor advanced copilot engines > clarifies personalized decision prompts when SS58 context is missing [0.18ms]\n(pass) Bittensor advanced copilot engines > builds wallet watch-policy presets without custody fields [0.33ms]\n(pass) Bittensor advanced copilot engines > routes watch-policy prompts through Bittensor chat [0.16ms]\n(pass) Bittensor advanced copilot engines > clarifies personalized watch-policy prompts when SS58 context is missing [0.05ms]\n(pass) auditBittensorReadiness > runs the Bittensor readiness gate without secret-shaped fields [1.99ms]\n(pass) auditBittensorReadiness > routes readiness prompts through Bittensor chat [0.74ms]\n(pass) prepareBittensorExtrinsic > builds unsigned external-signer preview [0.21ms]\n(pass) prepareBittensorExtrinsic > adds signing safety checklist to direct unsigned preview chat responses [0.40ms]\n(pass) prepareBittensorExtrinsic > creates a checksumed desktop signing handoff [0.13ms]\n(pass) prepareBittensorExtrinsic > creates no-secret signing receipts for handoff and submission follow-through [0.16ms]\n(pass) prepareBittensorExtrinsic > rejects handoff payloads with disallowed signing-material fields [0.13ms]\n(pass) signer and watch helpers > reports non-custodial signer status [0.02ms]\n(pass) signer and watch helpers > creates watchlist entries without secret fields [0.03ms]\n(pass) signer and watch helpers > evaluates watch entries into chat cards [0.11ms]\n(pass) signer and watch helpers > builds bounded watch alert digests with notification intents [548.58ms]\n(pass) signer and watch helpers > reports sidecar mode from configuration without exposing endpoint details [0.04ms]\n(pass) signer and watch helpers > reports sanitized sidecar health when no sidecar is configured [0.11ms]\n\n 234 pass\n 0 fail\n 1405 expect() calls\nRan 234 tests across 3 files. [1.63s]\n",
+      "warnings": [
+        "Output contains secret-topic safety language; verify this is warning copy, not leaked material."
+      ]
+    },
+    {
+      "id": "crypto.shared_card_contract",
+      "label": "Unified crypto shared-card contract",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 397,
+      "command": [
+        "pnpm",
+        "test:unified-crypto-shared-card-contract"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:unified-crypto-shared-card-contract /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/unified-crypto-shared-card-contract.test.mjs\n\nUnified crypto shared-card contract static check passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "crypto.cli",
+      "label": "Unified crypto CLI fallback smoke",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 2500,
+      "command": [
+        "pnpm",
+        "test:crypto-cli-fallback"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:crypto-cli-fallback /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/crypto-cli-fallback.test.mjs\n\nPASS crypto chat auto -> hyperliquid\nPASS crypto chat execution-readiness prompt\nPASS crypto readiness\nPASS crypto execution-readiness\nPASS crypto execution-chain guide\nPASS market ask -> polymarket\nPASS hyperliquid sign-request external signer only\nPASS polymarket sign-request external signer only\nPASS hyperliquid sign-request requires explicit testnet external signer mode\nPASS hyperliquid validate-artifact external metadata only\nPASS polymarket validate-artifact external metadata only\nPASS crypto secret flag rejection (no server call)\nPASS crypto customer-smoke dry-run\nPASS crypto customer-smoke CLI writes offline JSON evidence\nPASS crypto live-public-qa fixture\nPASS crypto live-public-qa CLI writes offline fixture evidence\nPASS crypto hermes-customer-qa dry-run\nPASS crypto hermes-customer-qa CLI prints offline command plan\nPASS crypto sdk-doctor\nPASS crypto sdk-doctor CLI is offline and non-custodial\nPASS crypto sdk-normalize\nPASS crypto sdk-normalize CLI is offline and non-custodial\nPASS crypto sdk-capture\nPASS crypto sdk-capture CLI is offline and non-custodial\nPASS crypto sdk-evidence\nPASS crypto sdk-evidence CLI is offline and non-custodial\nPASS crypto sdk-loop fixture\nPASS crypto sdk-loop CLI is offline and non-custodial\nPASS crypto sdk-validate-public fixture\nPASS crypto sdk-validate-public CLI is offline and non-custodial\nPASS crypto sdk-manifest-check\nPASS crypto sdk-manifest-check CLI is offline and non-custodial\nPASS crypto artifact-reconcile\nPASS crypto artifact-reconcile CLI is offline and non-custodial\nPASS crypto evidence-bundle CLI is offline and non-custodial\nPASS crypto evidence-verify\nPASS crypto evidence-verify CLI is offline and non-custodial\nPASS crypto bittensor-evidence-verify\nPASS crypto customer-packet CLI is offline and non-custodial\nPASS crypto receipt-check\nPASS crypto receipt-check CLI is offline and non-custodial\nPASS crypto CLI never touched submit/sign/exchange routes\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "crypto.agent_operator_loop",
+      "label": "Crypto agent operator loop",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 369,
+      "command": [
+        "pnpm",
+        "test:agent-crypto-operator-loop"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:agent-crypto-operator-loop /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/agent-crypto-operator-loop.test.mjs\n\nMatterhorn crypto agent operator loop static check passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "crypto.hermes_customer_qa",
+      "label": "Hermes crypto customer QA handoff",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 754,
+      "command": [
+        "pnpm",
+        "test:hermes-crypto-customer-qa"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:hermes-crypto-customer-qa /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/hermes-crypto-customer-qa.test.mjs\n\nHermes crypto customer QA handoff check passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "crypto.readiness_api",
+      "label": "Unified crypto readiness API contract",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 594,
+      "command": [
+        "pnpm",
+        "test:crypto-readiness-api"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:crypto-readiness-api /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/crypto-readiness-api.test.mjs\n\nCrypto readiness API static check passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "crypto.customer_readiness_ui",
+      "label": "Customer readiness UI contract",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 586,
+      "command": [
+        "pnpm",
+        "test:customer-readiness-ui"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:customer-readiness-ui /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/customer-readiness-ui.test.mjs\n\nCustomer readiness UI static check passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "crypto.customer_onboarding_ui",
+      "label": "Matterhorn customer onboarding UI contract",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 614,
+      "command": [
+        "pnpm",
+        "test:matterhorn-customer-onboarding-ui"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:matterhorn-customer-onboarding-ui /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/matterhorn-customer-onboarding-ui.test.mjs\n\nMatterhorn customer onboarding UI static check passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "bittensor.beta_release_gate",
+      "label": "Bittensor beta release gate contract",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 998,
+      "command": [
+        "pnpm",
+        "test:bittensor-beta-release-gate"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:bittensor-beta-release-gate /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/bittensor-beta-release-gate.test.mjs\n\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "bittensor.beta_customer_packet",
+      "label": "Bittensor beta release candidate packet",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 1472,
+      "command": [
+        "pnpm",
+        "test:bittensor-beta-customer-packet"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:bittensor-beta-customer-packet /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/bittensor-beta-customer-packet.test.mjs\n\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.safety_contract",
+      "label": "Market shared safety contract",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 539,
+      "command": [
+        "pnpm",
+        "test:market-safety-contract"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-safety-contract /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-safety-contract.test.mjs\n\nMarket safety contract static check passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.execution_safety",
+      "label": "Market execution safety gate",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 635,
+      "command": [
+        "pnpm",
+        "test:market-execution-safety-gate"
+      ],
+      "stdout": "liquid.ts contains verifyHyperliquidReceipt\nPASS apps/server/src/tools/hyperliquid.ts contains signerPolicy: \"external_signer_required\"\nPASS apps/server/src/tools/hyperliquid.ts contains canSubmit: false\nPASS apps/server/src/tools/hyperliquid.ts contains externalSignerOnly: true\nPASS apps/server/src/tools/hyperliquid.ts contains matterhorn.market.receipt.v1\nPASS apps/server/src/tools/hyperliquid.ts contains requiresClientValidation: true\nPASS apps/server/src/tools/hyperliquid.ts contains clientMustCompute\nPASS apps/server/src/tools/hyperliquid.ts contains Matterhorn does not sign, submit, or hold keys\nPASS apps/server/src/tools/hyperliquid.ts contains Rejects any signing material and never accepts a signature\nPASS Hyperliquid tool never enables canSubmit\nPASS Hyperliquid tool excludes /orders/submit\nPASS Hyperliquid tool excludes /orders/sign\nPASS Hyperliquid tool excludes /exchange/submit\nPASS Hyperliquid tool excludes submitOrder(\nPASS Hyperliquid tool excludes signOrder(\nPASS Hyperliquid tool excludes privateKey =\nPASS Hyperliquid tool excludes apiSecret =\nPASS apps/server/src/tools/polymarket.ts contains findForbiddenPolymarketCredentialInput\nPASS apps/server/src/tools/polymarket.ts contains buildPolymarketSigningHandoff\nPASS apps/server/src/tools/polymarket.ts contains verifyPolymarketReceipt\nPASS apps/server/src/tools/polymarket.ts contains signerPolicy: \"external_signer_required\"\nPASS apps/server/src/tools/polymarket.ts contains canSubmit: false\nPASS apps/server/src/tools/polymarket.ts contains externalSignerOnly: true\nPASS apps/server/src/tools/polymarket.ts contains matterhorn.market.receipt.v1\nPASS apps/server/src/tools/polymarket.ts contains requiresClientValidation: true\nPASS apps/server/src/tools/polymarket.ts contains walletMustSet\nPASS apps/server/src/tools/polymarket.ts contains Matterhorn does not sign, submit, or hold keys\nPASS apps/server/src/tools/polymarket.ts contains Rejects any signing material in the receipt and never accepts a signature\nPASS Polymarket tool never enables canSubmit\nPASS Polymarket tool excludes /orders/submit\nPASS Polymarket tool excludes /orders/sign\nPASS Polymarket tool excludes /exchange/submit\nPASS Polymarket tool excludes submitOrder(\nPASS Polymarket tool excludes signOrder(\nPASS Polymarket tool excludes privateKey =\nPASS Polymarket tool excludes apiSecret =\nPASS Polymarket typed-data may include signatureType as public EIP-712 metadata\nPASS apps/server/src/server.ts contains /api/hyperliquid/orders/handoff\nPASS apps/server/src/server.ts contains /api/hyperliquid/orders/receipt\nPASS apps/server/src/server.ts contains /api/polymarket/orders/handoff\nPASS apps/server/src/server.ts contains /api/polymarket/orders/receipt\nPASS apps/server/src/server.ts contains findForbiddenHyperliquidCredentialInput\nPASS apps/server/src/server.ts contains findForbiddenPolymarketCredentialInput\nPASS apps/server/src/server.ts contains market_secret_rejected\nPASS apps/server/src/server.ts excludes /api/hyperliquid/orders/submit\nPASS apps/server/src/server.ts excludes /api/polymarket/orders/submit\nPASS apps/server/src/server.ts contains Hyperliquid handoff input must not contain API secrets, private keys, signatures, or signed payloads\nPASS apps/server/src/server.ts contains Hyperliquid receipt must contain only public status\nPASS apps/server/src/server.ts contains verifyHyperliquidReceipt\nPASS Hyperliquid server routes excludes /orders/submit\nPASS Hyperliquid server routes excludes /orders/sign\nPASS Hyperliquid server routes excludes /exchange/submit\nPASS apps/server/src/server.ts contains Polymarket handoff input must not contain API secrets, private keys, signatures, or signed payloads\nPASS apps/server/src/server.ts contains Polymarket receipt must contain only public status\nPASS apps/server/src/server.ts contains verifyPolymarketReceipt\nPASS Polymarket server routes excludes /orders/submit\nPASS Polymarket server routes excludes /orders/sign\nPASS Polymarket server routes excludes /exchange/submit\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_hyperliquid_prepare_handoff\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_hyperliquid_verify_receipt\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_polymarket_prepare_handoff\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_polymarket_verify_receipt\nPASS packages/matterhorn-work-mcp/index.mjs contains /api/hyperliquid/orders/handoff\nPASS packages/matterhorn-work-mcp/index.mjs contains /api/hyperliquid/orders/receipt\nPASS packages/matterhorn-work-mcp/index.mjs contains /api/polymarket/orders/handoff\nPASS packages/matterhorn-work-mcp/index.mjs contains /api/polymarket/orders/receipt\nPASS Hyperliquid MCP section excludes schema field apiSecret\nPASS Hyperliquid MCP section excludes schema field api_secret\nPASS Hyperliquid MCP section excludes schema field privateKey\nPASS Hyperliquid MCP section excludes schema field private_key\nPASS Hyperliquid MCP section excludes schema field seed\nPASS Hyperliquid MCP section excludes schema field mnemonic\nPASS Hyperliquid MCP section excludes schema field signedPayload\nPASS Hyperliquid MCP section excludes schema field signed_payload\nPASS Hyperliquid MCP section excludes /orders/submit\nPASS Hyperliquid MCP section excludes /orders/sign\nPASS Hyperliquid MCP section excludes /exchange/submit\nPASS Polymarket MCP section excludes schema field apiSecret\nPASS Polymarket MCP section excludes schema field api_secret\nPASS Polymarket MCP section excludes schema field privateKey\nPASS Polymarket MCP section excludes schema field private_key\nPASS Polymarket MCP section excludes schema field seed\nPASS Polymarket MCP section excludes schema field mnemonic\nPASS Polymarket MCP section excludes schema field signedPayload\nPASS Polymarket MCP section excludes schema field signed_payload\nPASS Polymarket MCP section excludes /orders/submit\nPASS Polymarket MCP section excludes /orders/sign\nPASS Polymarket MCP section excludes /exchange/submit\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work hyperliquid handoff\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work hyperliquid receipt\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work polymarket handoff\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work polymarket receipt\nPASS apps/orchestrator/src/cli.ts contains assertNoHyperliquidSecrets\nPASS apps/orchestrator/src/cli.ts contains assertNoPolymarketSecrets\nPASS apps/orchestrator/src/cli.ts contains /api/hyperliquid/orders/handoff\nPASS apps/orchestrator/src/cli.ts contains /api/hyperliquid/orders/receipt\nPASS apps/orchestrator/src/cli.ts contains /api/polymarket/orders/handoff\nPASS apps/orchestrator/src/cli.ts contains /api/polymarket/orders/receipt\nPASS market CLI sections excludes /orders/submit\nPASS market CLI sections excludes /orders/sign\nPASS market CLI sections excludes /exchange/submit\nPASS docs/hyperliquid-read-preview.md contains External-Signer Execution\nPASS docs/hyperliquid-read-preview.md contains Matterhorn does **not** compute\nPASS docs/hyperliquid-read-preview.md contains Private keys, API secrets, signatures, signed actions, or signed payloads\nPASS docs/hyperliquid-read-preview.md contains It does not accept API secrets, private keys, signatures, or signed payloads\nPASS docs/hyperliquid-read-preview.md contains canSubmit: false\nPASS docs/hyperliquid-read-preview.md contains requiresClientValidation\nPASS docs/polymarket-read-preview.md contains External-Signer Execution\nPASS docs/polymarket-read-preview.md contains without Matterhorn ever holding a key, signing, submitting, or broadcasting\nPASS docs/polymarket-read-preview.md contains never the signature, API key, or submission\nPASS docs/polymarket-read-preview.md contains Private keys, API secrets, signatures, signed actions, or signed payloads\nPASS docs/polymarket-read-preview.md contains canSubmit: false\nPASS docs/polymarket-read-preview.md contains requiresClientValidation\nMarket execution safety gate passed.\n",
+      "stderr": "",
+      "warnings": [
+        "Output contains secret-topic safety language; verify this is warning copy, not leaked material."
+      ]
+    },
+    {
+      "id": "market.execution_readiness_api",
+      "label": "Market execution-readiness API and chat contract",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 508,
+      "command": [
+        "pnpm",
+        "test:market-execution-readiness-api"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-execution-readiness-api /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-execution-readiness-api.test.mjs\n\nMarket execution-readiness API static check passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.execution_readiness",
+      "label": "Market execution-readiness security gate",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 590,
+      "command": [
+        "pnpm",
+        "test:market-execution-readiness-gate"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-execution-readiness-gate /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-execution-readiness-gate.test.mjs\n\nMarket execution-readiness security gate passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.submit_sign_phase0_contract",
+      "label": "Market submit/sign Phase 0 contract",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 470,
+      "command": [
+        "pnpm",
+        "test:market-submit-sign-contract-phase0"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-submit-sign-contract-phase0 /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-submit-sign-contract-phase0.test.mjs\n\nMarket submit/sign Phase 0 contract gate passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.sign_request_phase1",
+      "label": "Market sign-request Phase 1 gate",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 326,
+      "command": [
+        "pnpm",
+        "test:market-sign-request-phase1"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-sign-request-phase1 /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-sign-request-phase1.test.mjs\n\nMarket sign-request Phase 1 gate passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.artifact_validation_phase2",
+      "label": "Market artifact validation Phase 2 gate",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 297,
+      "command": [
+        "pnpm",
+        "test:market-artifact-validation-phase2"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-artifact-validation-phase2 /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-artifact-validation-phase2.test.mjs\n\nMarket artifact validation Phase 2 gate passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.sign_artifact_routes",
+      "label": "Market sign-request and artifact-validation route contract",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 614,
+      "command": [
+        "pnpm",
+        "test:market-sign-artifact-routes"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-sign-artifact-routes /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> cd apps/server && bun test src/market-sign-artifact-routes.e2e.test.ts\n\nbun test v1.3.11 (af24e281)\n",
+      "stderr": "\nsrc/market-sign-artifact-routes.e2e.test.ts:\n(pass) market sign-request and artifact validation routes > creates testnet external sign requests and validates only public/redacted artifact metadata [53.88ms]\n\n 1 pass\n 0 fail\n 56 expect() calls\nRan 1 test across 1 file. [319.00ms]\n",
+      "warnings": []
+    },
+    {
+      "id": "market.artifact_reconciliation",
+      "label": "Market artifact reconciliation evidence",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 879,
+      "command": [
+        "pnpm",
+        "test:market-artifact-reconciliation"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-artifact-reconciliation /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-artifact-reconciliation.test.mjs\n\nMarket artifact reconciliation tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.execution_chain_gate",
+      "label": "Market execution chain aggregate gate",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 384,
+      "command": [
+        "pnpm",
+        "test:market-execution-chain-gate"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-execution-chain-gate /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-execution-chain-gate.test.mjs\n\nMarket execution chain aggregate gate passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.official_sdk_validation",
+      "label": "Market official SDK validation track",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 2872,
+      "command": [
+        "pnpm",
+        "test:market-official-sdk-validation-track"
+      ],
+      "stdout": "lizeHyperliquid\nPASS scripts/market-official-sdk-normalize.mjs contains normalizePolymarket\nPASS scripts/market-official-sdk-normalize.mjs contains FORBIDDEN_CREDENTIAL_KEY_RE\nPASS scripts/market-official-sdk-normalize.mjs contains operatorRedaction\nPASS scripts/market-official-sdk-normalize.mjs contains submissionFieldsRemoved\nPASS official SDK normalizer test passes\nPASS scripts/market-official-sdk-operator-loop.mjs contains runMarketOfficialSdkOperatorLoop\nPASS scripts/market-official-sdk-operator-loop.mjs contains runOfficialSdkValidationDoctor\nPASS scripts/market-official-sdk-operator-loop.mjs contains normalizeOfficialSdkArtifact\nPASS scripts/market-official-sdk-operator-loop.mjs contains buildCapturedEvidence\nPASS scripts/market-official-sdk-operator-loop.mjs contains buildMarketCustomerEvidenceBundle\nPASS scripts/market-official-sdk-operator-loop.mjs contains liveSubmissionEnabled: false\nPASS scripts/market-official-sdk-operator-loop.mjs contains signsOrSubmits: false\nPASS scripts/market-official-sdk-operator-loop.mjs contains matterhorn-market-sdk-operator-summary.md\nPASS scripts/market-official-sdk-operator-loop.mjs contains matterhorn-market-sdk-run-manifest.json\nPASS official SDK operator loop test passes\nPASS scripts/market-official-sdk-validate-public.mjs contains matterhorn.market.official-sdk-public-validation.v1\nPASS scripts/market-official-sdk-validate-public.mjs contains operator_owned_fixture\nPASS scripts/market-official-sdk-validate-public.mjs contains operator_owned_testnet\nPASS scripts/market-official-sdk-validate-public.mjs contains runOfficialSdkPublicValidation\nPASS scripts/market-official-sdk-validate-public.mjs contains runOfficialSdkValidationDoctor\nPASS scripts/market-official-sdk-validate-public.mjs contains normalizeOfficialSdkArtifact\nPASS scripts/market-official-sdk-validate-public.mjs contains buildCapturedEvidence\nPASS scripts/market-official-sdk-validate-public.mjs contains FORBIDDEN_JSON_KEY_RE\nPASS scripts/market-official-sdk-validate-public.mjs contains FORBIDDEN_CLI_FLAG_RE\nPASS scripts/market-official-sdk-validate-public.mjs contains liveSubmissionEnabled: false\nPASS scripts/market-official-sdk-validate-public.mjs contains signsOrSubmits: false\nPASS scripts/market-official-sdk-validate-public.mjs contains acceptsSecrets: false\nPASS scripts/market-official-sdk-validate-public.mjs contains matterhorn-market-sdk-public-validation.json\nPASS scripts/market-official-sdk-validate-public.mjs contains matterhorn-market-sdk-public-validation.sha256\nPASS official SDK public validation test passes\nPASS scripts/market-sdk-run-manifest-check.mjs contains matterhorn.market.sdk.run-manifest.v1\nPASS scripts/market-sdk-run-manifest-check.mjs contains verifyMarketSdkRunManifest\nPASS scripts/market-sdk-run-manifest-check.mjs contains liveSubmissionEnabled\nPASS scripts/market-sdk-run-manifest-check.mjs contains signsOrSubmits\nPASS scripts/market-sdk-run-manifest-check.mjs contains acceptsSecrets\nPASS scripts/market-sdk-run-manifest-check.mjs contains FORBIDDEN_KEY_RE\nPASS official SDK run manifest checker test passes\nPASS scripts/market-customer-evidence-bundle.mjs contains --operator-summary\nPASS scripts/market-customer-evidence-bundle.mjs contains FORBIDDEN_OPERATOR_SUMMARY_RE\nPASS scripts/market-customer-evidence-bundle.mjs contains operatorSummary\nPASS scripts/market-customer-evidence-bundle.mjs contains SHA-256\nPASS qa-fixtures/market-official-sdk/README.md contains hyperliquid-normalized-action.fixture.json\nPASS qa-fixtures/market-official-sdk/README.md contains polymarket-normalized-typed-data.fixture.json\nPASS qa-fixtures/market-official-sdk/README.md contains hyperliquid-forbidden-raw-signature.fixture.json\nPASS qa-fixtures/market-official-sdk/README.md contains polymarket-mismatched-domain.fixture.json\nPASS qa-fixtures/market-official-sdk/README.md contains Do not add private keys\nPASS qa-fixtures/market-official-sdk/README.md contains operator-owned-testnet-example\nPASS qa-fixtures/market-official-sdk/README.md contains hyperliquid-official-public.json\nPASS qa-fixtures/market-official-sdk/README.md contains polymarket-official-public.json\nPASS packages/types/src/markets.ts contains MARKET_SDK_VALIDATION_MODES\nPASS packages/types/src/markets.ts contains MarketSdkValidationMode\nPASS packages/types/src/markets.ts contains MARKET_SDK_VALIDATION_NETWORKS\nPASS packages/types/src/markets.ts contains MarketSdkValidationSafety\nPASS packages/types/src/markets.ts contains MarketSdkValidationCommands\nPASS packages/types/src/markets.ts contains MarketSdkValidationGuide\nPASS packages/types/src/markets.ts contains MarketSdkValidationCard\nPASS packages/types/src/markets.ts contains MarketSdkValidationResponse\nPASS packages/types/src/markets.ts contains matterhorn.market.sdk-validation-guide.v1\nPASS packages/types/src/markets.ts contains hyperliquid-testnet\nPASS packages/types/src/markets.ts contains polygon-amoy\nPASS packages/types/src/markets.ts contains canSubmit: false\nPASS packages/types/src/markets.ts contains liveSubmissionEnabled: false\nPASS packages/types/src/markets.ts contains nonCustodial: true\nPASS packages/types/src/markets.ts contains acceptsSecrets: false\nPASS packages/types/src/markets.ts contains acceptsRawSignatures: false\nPASS packages/types/src/markets.ts contains acceptsSignedPayloads: false\nPASS packages/types/src/markets.ts contains runsPrivateSdkSigning: false\nPASS packages/types/src/markets.ts contains computesFinalSignatures: false\nPASS packages/types/src/markets.ts contains callsExchanges: false\nPASS official SDK fixture validation test passes\nPASS official SDK operator artifact example test passes\nPASS docs/hyperliquid-read-preview.md contains requiresClientValidation\nPASS docs/hyperliquid-read-preview.md contains official Hyperliquid SDK\nPASS docs/hyperliquid-read-preview.md contains Matterhorn does **not** compute the `connectionId`\nPASS docs/hyperliquid-read-preview.md contains canSubmit: false\nPASS docs/polymarket-read-preview.md contains requiresClientValidation\nPASS docs/polymarket-read-preview.md contains @polymarket/clob-client\nPASS docs/polymarket-read-preview.md contains never the signature, API key, or submission\nPASS docs/polymarket-read-preview.md contains canSubmit: false\nPASS apps/server/src/tools/hyperliquid.ts contains requiresClientValidation: true\nPASS apps/server/src/tools/hyperliquid.ts contains clientMustCompute\nPASS apps/server/src/tools/hyperliquid.ts contains connectionId\nPASS apps/server/src/tools/hyperliquid.ts contains official Hyperliquid SDK\nPASS apps/server/src/tools/hyperliquid.ts contains canSubmit: false\nPASS apps/server/src/tools/hyperliquid.ts contains externalSignerOnly: true\nPASS Hyperliquid payloads keep requiresClientValidation true\nPASS Hyperliquid payloads never enable canSubmit\nPASS apps/server/src/tools/polymarket.ts contains requiresClientValidation: true\nPASS apps/server/src/tools/polymarket.ts contains walletMustSet\nPASS apps/server/src/tools/polymarket.ts contains @polymarket/clob-client\nPASS apps/server/src/tools/polymarket.ts contains POLYMARKET_EXCHANGE_ADDRESS\nPASS apps/server/src/tools/polymarket.ts contains canSubmit: false\nPASS apps/server/src/tools/polymarket.ts contains externalSignerOnly: true\nPASS Polymarket payloads keep requiresClientValidation true\nPASS Polymarket payloads never enable canSubmit\nPASS apps/server/src/server.ts excludes /api/hyperliquid/orders/submit\nPASS apps/server/src/server.ts excludes /api/polymarket/orders/submit\nPASS Hyperliquid SDK validation track excludes privateKey =\nPASS Hyperliquid SDK validation track excludes apiSecret =\nPASS Hyperliquid SDK validation track excludes seedPhrase =\nPASS Hyperliquid SDK validation track excludes mnemonic =\nPASS Polymarket SDK validation track excludes privateKey =\nPASS Polymarket SDK validation track excludes apiSecret =\nPASS Polymarket SDK validation track excludes seedPhrase =\nPASS Polymarket SDK validation track excludes mnemonic =\nMarket official SDK validation track gate passed.\n",
+      "stderr": "",
+      "warnings": [
+        "Output contains secret-topic safety language; verify this is warning copy, not leaked material."
+      ]
+    },
+    {
+      "id": "market.official_sdk_capture",
+      "label": "Market official SDK validation capture",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 790,
+      "command": [
+        "pnpm",
+        "test:market-official-sdk-validation-capture"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-official-sdk-validation-capture /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-official-sdk-validation-capture.test.mjs\n\nMarket official SDK validation capture tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.official_sdk_doctor",
+      "label": "Market official SDK validation doctor",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 489,
+      "command": [
+        "pnpm",
+        "test:market-official-sdk-validation-doctor"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-official-sdk-validation-doctor /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-official-sdk-validation-doctor.test.mjs\n\nMarket official SDK validation doctor tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.official_sdk_normalize",
+      "label": "Market official SDK artifact normalizer",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 718,
+      "command": [
+        "pnpm",
+        "test:market-official-sdk-normalize"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-official-sdk-normalize /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-official-sdk-normalize.test.mjs\n\nMarket official SDK normalizer tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.official_sdk_operator_loop",
+      "label": "Market official SDK operator loop",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 468,
+      "command": [
+        "pnpm",
+        "test:market-official-sdk-operator-loop"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-official-sdk-operator-loop /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-official-sdk-operator-loop.test.mjs\n\nMarket official SDK operator loop tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.official_sdk_validate_public",
+      "label": "Market official SDK public validation",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 833,
+      "command": [
+        "pnpm",
+        "test:market-official-sdk-validate-public"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-official-sdk-validate-public /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-official-sdk-validate-public.test.mjs\n\nMarket official SDK public validation tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.official_sdk_operator_artifacts",
+      "label": "Market official SDK operator artifact examples",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 388,
+      "command": [
+        "pnpm",
+        "test:market-official-sdk-operator-artifacts"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-official-sdk-operator-artifacts /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-official-sdk-operator-artifacts.test.mjs\n\nMarket official SDK operator artifact example tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.official_sdk_manifest_check",
+      "label": "Market official SDK run manifest checker",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 568,
+      "command": [
+        "pnpm",
+        "test:market-sdk-run-manifest-check"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-sdk-run-manifest-check /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-sdk-run-manifest-check.test.mjs\n\nMarket SDK run manifest checker tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.official_sdk_fixtures",
+      "label": "Market official SDK validation fixtures",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 723,
+      "command": [
+        "pnpm",
+        "test:market-official-sdk-validation-fixtures"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-official-sdk-validation-fixtures /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-official-sdk-validation-fixtures.test.mjs\n\nMarket official SDK validation fixture tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.customer_evidence_bundle",
+      "label": "Market customer evidence bundle",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 1307,
+      "command": [
+        "pnpm",
+        "test:market-customer-evidence-bundle"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-customer-evidence-bundle /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-customer-evidence-bundle.test.mjs\n\nMarket customer evidence bundle tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.customer_evidence_verify",
+      "label": "Market customer evidence verifier",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 592,
+      "command": [
+        "pnpm",
+        "test:market-customer-evidence-verify"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-customer-evidence-verify /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-customer-evidence-verify.test.mjs\n\nMarket customer evidence verifier test passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "crypto.customer_packet",
+      "label": "Crypto customer packet manifest",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 633,
+      "command": [
+        "pnpm",
+        "test:crypto-customer-packet"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:crypto-customer-packet /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/crypto-customer-packet.test.mjs\n\nCrypto customer packet tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.receipt_qa",
+      "label": "Market public receipt QA",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 406,
+      "command": [
+        "pnpm",
+        "test:market-receipt-qa"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-receipt-qa /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-receipt-qa.test.mjs\n\nPASS Hyperliquid public order-id receipt\nPASS Hyperliquid side mismatch\nPASS Hyperliquid raw signature rejection\nPASS Polymarket public tx receipt\nPASS Polymarket outcome mismatch\nPASS Polymarket nested signed payload rejection\nPASS receipt missing order id/hash warning\nPASS public receipt checker self-test\nMarket receipt QA harness passed.\n",
+      "stderr": "",
+      "warnings": [
+        "Output contains secret-topic safety language; verify this is warning copy, not leaked material."
+      ]
+    },
+    {
+      "id": "market.receipt_evidence",
+      "label": "Market receipt evidence docs/checks",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 327,
+      "command": [
+        "pnpm",
+        "test:market-receipt-evidence"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-receipt-evidence /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-receipt-evidence.test.mjs\n\nPASS market-receipt-qa.md teaches public-receipt-only + mismatch + missing-evidence\nPASS runbook keeps receipt import public-only\nPASS CLI exposes file-based receipt verification, no secret flags\nMarket receipt evidence checks passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "hyperliquid.readiness",
+      "label": "Hyperliquid readiness gate",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 335,
+      "command": [
+        "pnpm",
+        "test:hyperliquid-readiness-gate"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:hyperliquid-readiness-gate /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/hyperliquid-readiness-gate.test.mjs\n\nPASS apps/server/src/tools/hyperliquid.ts contains findForbiddenHyperliquidCredentialInput\nPASS apps/server/src/tools/hyperliquid.ts contains canSubmit: false\nPASS apps/server/src/tools/hyperliquid.ts contains signerPolicy: \"api_wallet_required\"\nPASS apps/server/src/tools/hyperliquid.ts contains getFunding(asset\nPASS apps/server/src/tools/hyperliquid.ts contains HyperliquidPositionSummary\nPASS apps/server/src/tools/hyperliquid.ts contains HyperliquidOpenOrderSummary\nPASS apps/server/src/tools/hyperliquid.ts contains HyperliquidFundingSnapshot\nPASS apps/server/src/tools/hyperliquid.ts contains notionalUsd\nPASS apps/server/src/tools/hyperliquid.ts contains HyperliquidMarketabilityEstimate\nPASS apps/server/src/tools/hyperliquid.ts contains HyperliquidLeverageContext\nPASS apps/server/src/tools/hyperliquid.ts contains requiresAccountContext\nPASS apps/server/src/tools/hyperliquid.ts contains closeContext\nPASS apps/server/src/tools/hyperliquid.ts contains estimateHyperliquidMarketability\nPASS apps/server/src/tools/hyperliquid.ts contains buildHyperliquidSigningHandoff\nPASS apps/server/src/tools/hyperliquid.ts contains verifyHyperliquidReceipt\nPASS apps/server/src/tools/hyperliquid.ts contains external_signer_required\nPASS apps/server/src/tools/hyperliquid.ts contains externalSignerOnly: true\nPASS apps/server/src/tools/hyperliquid.ts contains matterhorn.market.receipt.v1\nPASS apps/server/src/tools/hyperliquid.ts contains buildHyperliquidOrderActionPayload\nPASS apps/server/src/tools/hyperliquid.ts contains hyperliquid-l1-action\nPASS apps/server/src/tools/hyperliquid.ts contains requiresClientValidation: true\nPASS apps/server/src/tools/hyperliquid.ts contains clientMustCompute\nPASS Hyperliquid tool excludes signOrder\nPASS Hyperliquid tool excludes submitOrder\nPASS Hyperliquid tool excludes broadcast(\nPASS Hyperliquid tool excludes this.signer\nPASS Hyperliquid tool excludes privateKey =\nPASS Hyperliquid provider never enables canSubmit\nPASS Hyperliquid tool excludes orders/submit\nPASS Hyperliquid tool excludes exchangeRequest\nPASS Hyperliquid tool excludes signOrder\nPASS Hyperliquid tool excludes placeOrder\nPASS Hyperliquid tool excludes submitOrder\nPASS docs/hyperliquid-read-preview.md contains Preview Risk Fields\nPASS docs/hyperliquid-read-preview.md contains requiresAccountContext\nPASS docs/hyperliquid-read-preview.md contains marketability\nPASS docs/hyperliquid-read-preview.md contains annualizedFundingPct\nPASS docs/hyperliquid-read-preview.md contains requires account context\nPASS apps/server/src/server.ts contains /api/hyperliquid/markets\nPASS apps/server/src/server.ts contains /api/hyperliquid/account/:address\nPASS apps/server/src/server.ts contains /api/hyperliquid/account/:address/positions\nPASS apps/server/src/server.ts contains /api/hyperliquid/account/:address/open-orders\nPASS apps/server/src/server.ts contains /api/hyperliquid/funding/:asset\nPASS apps/server/src/server.ts contains /api/hyperliquid/orderbook/:asset\nPASS apps/server/src/server.ts contains /api/hyperliquid/orders/preview\nPASS apps/server/src/server.ts contains /api/hyperliquid/orders/handoff\nPASS apps/server/src/server.ts contains /api/hyperliquid/orders/receipt\nPASS apps/server/src/server.ts contains /api/hyperliquid/chat/execute\nPASS apps/server/src/server.ts contains market_secret_rejected\nPASS apps/server/src/server.ts excludes /api/hyperliquid/orders/submit\nPASS apps/server/src/server.ts excludes /api/hyperliquid/exchange\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_hyperliquid_chat\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_hyperliquid_list_markets\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_hyperliquid_get_account\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_hyperliquid_get_positions\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_hyperliquid_get_open_orders\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_hyperliquid_get_funding\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_hyperliquid_get_orderbook\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_hyperliquid_preview_order\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_hyperliquid_prepare_handoff\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_hyperliquid_verify_receipt\nPASS Hyperliquid MCP schema excludes apiSecret\nPASS Hyperliquid MCP schema excludes api_secret\nPASS Hyperliquid MCP schema excludes privateKey\nPASS Hyperliquid MCP schema excludes private_key\nPASS Hyperliquid MCP schema excludes seed\nPASS Hyperliquid MCP schema excludes mnemonic\nPASS Hyperliquid MCP schema excludes signature\nPASS Hyperliquid MCP schema excludes signedPayload\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work hyperliquid markets\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work hyperliquid positions\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work hyperliquid open-orders\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work hyperliquid funding\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work hyperliquid handoff\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work hyperliquid receipt\nPASS apps/orchestrator/src/cli.ts contains assertNoHyperliquidSecrets\nPASS scripts/hyperliquid-read-preview-qa.mjs contains Read normalized Hyperliquid positions\nPASS scripts/hyperliquid-read-preview-qa.mjs contains Read normalized Hyperliquid open orders\nPASS scripts/hyperliquid-read-preview-qa.mjs contains Read Hyperliquid funding context\nPASS scripts/hyperliquid-read-preview-qa.mjs contains credential-shaped preview input\nPASS scripts/hyperliquid-read-preview-qa.mjs contains previewsCanSubmit: false\nPASS scripts/hyperliquid-cli-fallback.test.mjs contains hyperliquid positions\nPASS scripts/hyperliquid-cli-fallback.test.mjs contains hyperliquid open-orders\nPASS scripts/hyperliquid-cli-fallback.test.mjs contains hyperliquid funding\nPASS scripts/hyperliquid-cli-fallback.test.mjs contains hyperliquid secret flag rejection\nPASS docs/hyperliquid-read-preview.md contains preview-only\nPASS docs/hyperliquid-read-preview.md contains API wallet creation or storage.\nPASS docs/hyperliquid-read-preview.md contains Private keys, API secrets, signatures, signed actions, or signed payloads.\nPASS docs/hyperliquid-read-preview.md contains does not accept API secrets, private keys, signatures, or signed payloads\nPASS docs/hyperliquid-read-preview.md contains matterhorn-work hyperliquid funding\nPASS docs/hyperliquid-read-preview.md contains /api/hyperliquid/funding/BTC\nPASS docs/hyperliquid-read-preview-qa.md contains positions\nPASS docs/hyperliquid-read-preview-qa.md contains open.orders\nPASS docs/hyperliquid-read-preview-qa.md contains funding\nPASS docs/hyperliquid-read-preview-qa.md contains No exchange submission.\nPASS docs/hermes-hyperliquid-usability-security-qa.md contains read-only plus preview-only\nPASS docs/hermes-hyperliquid-usability-security-qa.md contains No-Secret Tests\nPASS docs/hermes-hyperliquid-usability-security-qa.md contains Preview-Only Tests\nPASS docs/hermes-hyperliquid-usability-security-qa.md contains Failure Cases\nPASS docs/hermes-hyperliquid-usability-security-qa.md contains What a Tester Should Screenshot\nPASS docs/hermes-hyperliquid-usability-security-qa.md contains canSubmit: false\nPASS docs/hermes-hyperliquid-usability-security-qa.md contains no `/api/hyperliquid/orders/submit` route\nHyperliquid readiness gate passed.\n",
+      "stderr": "",
+      "warnings": [
+        "Output contains secret-topic safety language; verify this is warning copy, not leaked material."
+      ]
+    },
+    {
+      "id": "polymarket.readiness",
+      "label": "Polymarket readiness gate",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 462,
+      "command": [
+        "pnpm",
+        "test:polymarket-readiness-gate"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:polymarket-readiness-gate /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/polymarket-readiness-gate.test.mjs\n\nPASS apps/server/src/tools/polymarket.ts contains findForbiddenPolymarketCredentialInput\nPASS apps/server/src/tools/polymarket.ts contains canSubmit: false\nPASS apps/server/src/tools/polymarket.ts contains signerPolicy: \"api_wallet_required\"\nPASS apps/server/src/tools/polymarket.ts contains checkCompliance\nPASS apps/server/src/tools/polymarket.ts contains blocked_by_compliance\nPASS apps/server/src/tools/polymarket.ts contains buildBlockedPolymarketPreview\nPASS apps/server/src/tools/polymarket.ts contains estimatePolymarketFill\nPASS apps/server/src/tools/polymarket.ts contains PolymarketActionPreview\nPASS apps/server/src/tools/polymarket.ts contains encodeURIComponent\nPASS apps/server/src/tools/polymarket.ts contains PolymarketRiskContext\nPASS apps/server/src/tools/polymarket.ts contains breakevenProbability\nPASS apps/server/src/tools/polymarket.ts contains buildPolymarketResolution\nPASS apps/server/src/tools/polymarket.ts contains buildPolymarketPriceContext\nPASS apps/server/src/tools/polymarket.ts contains gapVsImpliedPct\nPASS apps/server/src/tools/polymarket.ts contains buildPolymarketWatchDescriptor\nPASS apps/server/src/tools/polymarket.ts contains matterhorn.polymarket.watch.v1\nPASS apps/server/src/tools/polymarket.ts contains polymarket_watch\nPASS apps/server/src/tools/polymarket.ts contains searchEvents\nPASS apps/server/src/tools/polymarket.ts contains mapEventRecord\nPASS apps/server/src/tools/polymarket.ts contains polymarket_event_list\nPASS apps/server/src/tools/polymarket.ts contains buildPolymarketSigningHandoff\nPASS apps/server/src/tools/polymarket.ts contains verifyPolymarketReceipt\nPASS apps/server/src/tools/polymarket.ts contains external_signer_required\nPASS apps/server/src/tools/polymarket.ts contains externalSignerOnly: true\nPASS apps/server/src/tools/polymarket.ts contains matterhorn.market.receipt.v1\nPASS apps/server/src/tools/polymarket.ts contains buildPolymarketOrderTypedData\nPASS apps/server/src/tools/polymarket.ts contains requiresClientValidation: true\nPASS apps/server/src/tools/polymarket.ts contains POLYMARKET_EXCHANGE_ADDRESS\nPASS apps/server/src/tools/polymarket.ts contains walletMustSet\nPASS Polymarket tool excludes signOrder\nPASS Polymarket tool excludes submitOrder\nPASS Polymarket tool excludes broadcast(\nPASS Polymarket tool excludes privateKey =\nPASS Polymarket tool excludes this.signer\nPASS Polymarket tool never enables canSubmit\nPASS Polymarket tool excludes method: \"POST\"\nPASS Polymarket tool excludes /orders/submit\nPASS Polymarket tool excludes submitOrder\nPASS Polymarket tool excludes placeOrder\nPASS Polymarket tool excludes signOrder\nPASS Polymarket tool excludes postOrder\nPASS Polymarket tool excludes sendOrder\nPASS Polymarket forbidden pattern includes private\nPASS Polymarket forbidden pattern includes mnemonic\nPASS Polymarket forbidden pattern includes apiSecret\nPASS Polymarket forbidden pattern includes api_secret\nPASS Polymarket forbidden pattern includes passphrase\nPASS Polymarket forbidden pattern includes rawSignature\nPASS Polymarket forbidden pattern includes signedPayload\nPASS Polymarket forbidden pattern includes wallet_export\nPASS apps/server/src/tools/polymarket.test.ts contains findForbiddenPolymarketCredentialInput\nPASS apps/server/src/tools/polymarket.test.ts contains blocked_by_compliance\nPASS apps/server/src/tools/polymarket.test.ts contains canSubmit\nPASS apps/server/src/server.ts contains /api/polymarket/markets\nPASS apps/server/src/server.ts contains /api/polymarket/events\nPASS apps/server/src/server.ts contains /api/polymarket/markets/:id\nPASS apps/server/src/server.ts contains /api/polymarket/orderbook/:tokenId\nPASS apps/server/src/server.ts contains /api/polymarket/compliance\nPASS apps/server/src/server.ts contains /api/polymarket/orders/preview\nPASS apps/server/src/server.ts contains /api/polymarket/orders/handoff\nPASS apps/server/src/server.ts contains /api/polymarket/orders/receipt\nPASS apps/server/src/server.ts contains /api/polymarket/chat/execute\nPASS apps/server/src/server.ts contains findForbiddenPolymarketCredentialInput\nPASS apps/server/src/server.ts contains market_secret_rejected\nPASS apps/server/src/server.ts excludes /api/polymarket/orders/submit\nPASS apps/server/src/server.ts excludes /api/polymarket/exchange\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_polymarket_chat\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_polymarket_search_markets\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_polymarket_search_events\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_polymarket_get_market\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_polymarket_get_orderbook\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_polymarket_check_compliance\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_polymarket_preview_order\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_polymarket_prepare_handoff\nPASS packages/matterhorn-work-mcp/index.mjs contains matterhorn_polymarket_verify_receipt\nPASS Polymarket MCP schema excludes apiSecret\nPASS Polymarket MCP schema excludes api_secret\nPASS Polymarket MCP schema excludes privateKey\nPASS Polymarket MCP schema excludes private_key\nPASS Polymarket MCP schema excludes seed\nPASS Polymarket MCP schema excludes mnemonic\nPASS Polymarket MCP schema excludes signature\nPASS Polymarket MCP schema excludes signedPayload\nPASS Polymarket MCP schema excludes /orders/submit\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work polymarket markets\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work polymarket events\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work polymarket preview-order\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work polymarket handoff\nPASS apps/orchestrator/src/cli.ts contains matterhorn-work polymarket receipt\nPASS apps/orchestrator/src/cli.ts contains assertNoPolymarketSecrets\nPASS scripts/polymarket-cli-fallback.test.mjs contains polymarket markets\nPASS scripts/polymarket-cli-fallback.test.mjs contains polymarket events\nPASS scripts/polymarket-cli-fallback.test.mjs contains polymarket preview-order\nPASS scripts/polymarket-cli-fallback.test.mjs contains polymarket handoff\nPASS scripts/polymarket-cli-fallback.test.mjs contains polymarket receipt\nPASS scripts/polymarket-cli-fallback.test.mjs contains polymarket secret flag rejection\nPASS docs/polymarket-read-preview.md contains read-only plus preview-only\nPASS docs/polymarket-read-preview.md contains Compliance Gate\nPASS docs/polymarket-read-preview.md contains blocked_by_compliance\nPASS docs/polymarket-read-preview.md contains canSubmit: false\nPASS docs/polymarket-read-preview.md contains Private keys, API secrets, signatures, signed actions, or signed payloads.\nPASS docs/polymarket-read-preview.md contains geoblock\nPASS scripts/polymarket-read-preview-qa.mjs contains discover\nPASS scripts/polymarket-read-preview-qa.mjs contains market.detail\nPASS scripts/polymarket-read-preview-qa.mjs contains orderbook\nPASS scripts/polymarket-read-preview-qa.mjs contains geoblock\nPASS scripts/polymarket-read-preview-qa.mjs contains order.preview\nPASS scripts/polymarket-read-preview-qa.mjs contains secret.rejection\nPASS scripts/polymarket-read-preview-qa.mjs contains previewsCanSubmit: false\nPolymarket readiness gate passed.\n",
+      "stderr": "",
+      "warnings": [
+        "Output contains secret-topic safety language; verify this is warning copy, not leaked material."
+      ]
+    },
+    {
+      "id": "hyperliquid.read_preview",
+      "label": "Hyperliquid read-preview self-test",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 532,
+      "command": [
+        "pnpm",
+        "test:hyperliquid-read-preview-qa"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:hyperliquid-read-preview-qa /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/hyperliquid-read-preview-qa.mjs --self-test --strict\n\nHyperliquid read/preview QA: PASS\n- PASS markets: List Hyperliquid markets\n- PASS orderbook: Read Hyperliquid orderbook\n- PASS account: Read public Hyperliquid account\n- PASS positions: Read normalized Hyperliquid positions\n- PASS open.orders: Read normalized Hyperliquid open orders\n- PASS funding: Read Hyperliquid funding context\n- PASS order.preview: Prepare non-submittable order preview\n- PASS chat.execute: Run Hyperliquid chat read/preview workflow\n- PASS secret.rejection: Reject credential-shaped preview input\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "polymarket.read_preview",
+      "label": "Polymarket read-preview self-test",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 445,
+      "command": [
+        "pnpm",
+        "test:polymarket-read-preview-qa"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:polymarket-read-preview-qa /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/polymarket-read-preview-qa.mjs --self-test --strict\n\nPolymarket read/preview QA: PASS\n- PASS discover: Discover markets via Gamma\n- PASS market.detail: Read market detail\n- PASS orderbook: Read CLOB orderbook\n- PASS geoblock: Check Polymarket geoblock\n- PASS order.preview: Build preview-only order\n- PASS secret.rejection: Reject signing-material payloads\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "hyperliquid.cli",
+      "label": "Hyperliquid CLI fallback smoke",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 715,
+      "command": [
+        "pnpm",
+        "test:hyperliquid-cli-fallback"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:hyperliquid-cli-fallback /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/hyperliquid-cli-fallback.test.mjs\n\nPASS hyperliquid markets\nPASS hyperliquid account\nPASS hyperliquid positions\nPASS hyperliquid open-orders\nPASS hyperliquid funding\nPASS hyperliquid orderbook\nPASS hyperliquid preview-order\nPASS hl chat alias\nPASS hyperliquid handoff\nPASS hyperliquid receipt\nPASS hyperliquid receipt from files\nPASS hyperliquid secret flag rejection\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "polymarket.cli",
+      "label": "Polymarket CLI fallback smoke",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 619,
+      "command": [
+        "pnpm",
+        "test:polymarket-cli-fallback"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:polymarket-cli-fallback /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/polymarket-cli-fallback.test.mjs\n\nPASS polymarket markets\nPASS polymarket events\nPASS polymarket market\nPASS polymarket orderbook\nPASS polymarket compliance\nPASS polymarket preview-order\nPASS pm chat alias\nPASS polymarket handoff\nPASS polymarket receipt\nPASS polymarket receipt from files\nPASS polymarket secret flag rejection\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.watch_workflows",
+      "label": "Market watch and alert workflows",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 262,
+      "command": [
+        "pnpm",
+        "test:market-watch-workflows"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-watch-workflows /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-watch-workflows.test.mjs\n\nMarket watch workflow contract test passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "market.watch_action_routes",
+      "label": "Market watch alert action route contract",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 422,
+      "command": [
+        "pnpm",
+        "test:market-watch-action-routes"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-watch-action-routes /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> cd apps/server && bun test src/market-watch-action-routes.e2e.test.ts\n\nbun test v1.3.11 (af24e281)\n",
+      "stderr": "\nsrc/market-watch-action-routes.e2e.test.ts:\n(pass) market watch action routes > reviews triggered Hyperliquid and Polymarket watch alerts without accepting prompts or secrets [21.82ms]\n\n 1 pass\n 0 fail\n 28 expect() calls\nRan 1 test across 1 file. [195.00ms]\n",
+      "warnings": []
+    },
+    {
+      "id": "market.live_readonly_self_test",
+      "label": "Market live read-only smoke self-test",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 333,
+      "command": [
+        "pnpm",
+        "test:market-live-readonly-smoke"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:market-live-readonly-smoke /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/market-live-readonly-smoke.test.mjs\n\nPASS allowed path (8 stages, no submit)\nPASS geoblocked path (no executable params in blocked preview)\nPASS no-market path (handoff skipped, not failed)\nPASS secret-shaped input rejected\nPASS static wiring (script/docs/package.json)\nMarket live read-only smoke test passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "bittensor.customer_readiness",
+      "label": "Bittensor customer readiness gate",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 541,
+      "command": [
+        "pnpm",
+        "test:bittensor-customer-readiness-gate"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:bittensor-customer-readiness-gate /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/bittensor-customer-readiness-gate.test.mjs\n\nMatterhorn Bittensor customer readiness gate test passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "bittensor.receipt",
+      "label": "Bittensor receipt check",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 431,
+      "command": [
+        "pnpm",
+        "test:bittensor-receipt-check"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:bittensor-receipt-check /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/bittensor-receipt-check.test.mjs\n\nBittensor receipt check tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "bittensor.watch_autopilot",
+      "label": "Bittensor watch autopilot",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 398,
+      "command": [
+        "pnpm",
+        "test:bittensor-watch-autopilot"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:bittensor-watch-autopilot /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/bittensor-watch-autopilot.test.mjs\n\nBittensor watch autopilot tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "bittensor.watch_scheduler",
+      "label": "Bittensor watch autopilot scheduler",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 420,
+      "command": [
+        "pnpm",
+        "test:bittensor-watch-autopilot-scheduler"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:bittensor-watch-autopilot-scheduler /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/bittensor-watch-autopilot-scheduler.test.mjs\n\nBittensor watch autopilot scheduler tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "bittensor.signing_handoff",
+      "label": "Bittensor signing handoff check",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 663,
+      "command": [
+        "pnpm",
+        "test:bittensor-signing-handoff-check"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:bittensor-signing-handoff-check /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/bittensor-signing-handoff-check.test.mjs\n\nBittensor signing handoff check tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "bittensor.evidence_bundle",
+      "label": "Bittensor customer evidence bundle",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 669,
+      "command": [
+        "pnpm",
+        "test:bittensor-customer-evidence-bundle"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:bittensor-customer-evidence-bundle /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/bittensor-customer-evidence-bundle.test.mjs\n\nBittensor customer evidence bundle tests passed.\n",
+      "stderr": "",
+      "warnings": []
+    },
+    {
+      "id": "bittensor.evidence_verify",
+      "label": "Bittensor customer evidence verifier",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 608,
+      "command": [
+        "pnpm",
+        "test:bittensor-customer-evidence-verify"
+      ],
+      "stdout": "\n> @matterhornso/matterhorn-work@0.0.0 test:bittensor-customer-evidence-verify /Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc\n> node scripts/bittensor-customer-evidence-verify.test.mjs\n\nBittensor customer evidence verifier test passed.\n",
+      "stderr": "",
+      "warnings": []
+    }
+  ],
+  "safety": {
+    "nonCustodial": true,
+    "liveSubmissionEnabled": false,
+    "asksForSecrets": false
+  }
+}

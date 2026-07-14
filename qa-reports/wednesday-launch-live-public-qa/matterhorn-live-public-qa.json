@@ -1,0 +1,123 @@
+{
+  "version": "matterhorn.crypto.live-public-qa.v1",
+  "status": "SKIPPED_WITH_FIXTURE_FALLBACK",
+  "ready": true,
+  "generatedAt": "2026-07-14T08:23:49.195Z",
+  "mode": "fixture_fallback",
+  "fixtureMode": false,
+  "git": {
+    "sha": "07a9c82a6bf2eea5ff6c3c519b0d420e683f26a5",
+    "branch": "codex/wednesday-beta-rc-2026-07-15"
+  },
+  "command": "matterhorn-work crypto live-public-qa --output-dir <dir> --strict --json",
+  "outputDir": "/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc/qa-reports/wednesday-launch-live-public-qa",
+  "inputs": {
+    "serverUrlConfigured": true,
+    "tokenConfigured": true,
+    "ss58AddressConfigured": true,
+    "validatorHotkeyConfigured": true,
+    "hyperliquidAsset": "BTC",
+    "polymarketMarketIdConfigured": false,
+    "netuid": "14",
+    "amountTao": "1",
+    "rateTolerance": "0.01"
+  },
+  "safety": {
+    "nonCustodial": true,
+    "liveSubmissionEnabled": false,
+    "signsOrSubmits": false,
+    "acceptsSecrets": false,
+    "acceptsSigningMaterial": false,
+    "publicInputsOnly": true,
+    "marketPreviewsCanSubmit": false
+  },
+  "summary": {
+    "pass": 7,
+    "fail": 0,
+    "skippedWithFixtureFallback": 3
+  },
+  "stages": [
+    {
+      "id": "customer_crypto_smoke",
+      "label": "Customer crypto smoke evidence",
+      "status": "pass",
+      "evidencePath": "/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc/qa-reports/wednesday-launch-bittensor-evidence/customer-ready-crypto-smoke.json",
+      "evidenceSha256": "ffe08b7cd143099adc62af3a33e3590c578974069057c5e82584630f2d76ddac",
+      "summary": "Ready report attached."
+    },
+    {
+      "id": "market_evidence_verify",
+      "label": "Market evidence verification",
+      "status": "SKIPPED_WITH_FIXTURE_FALLBACK",
+      "reason": "No market evidence verification JSON was provided. Attach one with --market-evidence-verify after running matterhorn-work crypto evidence-verify.",
+      "command": "matterhorn-work crypto evidence-verify --bundle-json <path> --bundle-md <path> --strict --json"
+    },
+    {
+      "id": "bittensor_evidence_verify",
+      "label": "Bittensor evidence verification",
+      "status": "pass",
+      "evidencePath": "/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc/qa-reports/wednesday-launch-bittensor-evidence/bittensor-customer-evidence-verify.json",
+      "evidenceSha256": "97b87a386da175eb7ca5e26aa38e6d38a03e68a7dd18ab7f213c85faa624931b",
+      "summary": "Ready report attached."
+    },
+    {
+      "id": "crypto_customer_packet",
+      "label": "Crypto customer packet evidence",
+      "status": "SKIPPED_WITH_FIXTURE_FALLBACK",
+      "reason": "No top-level customer packet JSON was provided. Attach one with --customer-packet after running matterhorn-work crypto customer-packet.",
+      "command": "matterhorn-work crypto customer-packet --customer-ready-smoke <path> --output <path> --json-output <path> --strict"
+    },
+    {
+      "id": "market_live_readonly_smoke",
+      "label": "Hyperliquid/Polymarket live read-only smoke",
+      "status": "pass",
+      "artifact": "/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc/qa-reports/wednesday-launch-live-public-qa/matterhorn-market-live-readonly-smoke.json",
+      "summary": "Ready report attached.",
+      "command": "node scripts/market-live-readonly-smoke.mjs --server-url <server-url> --token <client-token> --strict --json"
+    },
+    {
+      "id": "hyperliquid_watch_evidence",
+      "label": "Hyperliquid watch evidence",
+      "status": "pass",
+      "artifact": "/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc/qa-reports/wednesday-launch-live-public-qa/matterhorn-hyperliquid-watch-evidence.json",
+      "summary": "Created, checked, and digested a read-only Hyperliquid watch; no triggered/degraded alert required action review.",
+      "command": "matterhorn-work hyperliquid watch create --asset <asset> --kind funding_rate --direction change --threshold 0.01 --json && matterhorn-work hyperliquid watch check --json && matterhorn-work hyperliquid watch digest --json && matterhorn-work hyperliquid watch act --watch-file <public-hyperliquid-watch.json> --alert-index 0 --json"
+    },
+    {
+      "id": "polymarket_watch_evidence",
+      "label": "Polymarket watch evidence",
+      "status": "SKIPPED_WITH_FIXTURE_FALLBACK",
+      "reason": "No server URL, client token, or public Polymarket market id was provided, so Polymarket watch evidence was skipped in fixture fallback mode.",
+      "command": "matterhorn-work polymarket watch create <public-market-id> --json && matterhorn-work polymarket watch check --json && matterhorn-work polymarket watch digest --json && matterhorn-work polymarket watch act --watch-file <public-polymarket-watch.json> --alert-index 0 --json"
+    },
+    {
+      "id": "market_execution_chain_api",
+      "label": "Market execution-chain API",
+      "status": "pass",
+      "artifact": "/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc/qa-reports/wednesday-launch-live-public-qa/matterhorn-market-execution-chain.json",
+      "summary": "matterhorn.market.execution-chain-guide.v1 with 5 safe stages.",
+      "command": "curl -sS \"<server-url>/api/crypto/market-execution-chain\" -H \"Authorization: Bearer <client-token>\""
+    },
+    {
+      "id": "market_sdk_validation_api",
+      "label": "Market SDK-validation API",
+      "status": "pass",
+      "artifact": "/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc/qa-reports/wednesday-launch-live-public-qa/matterhorn-market-sdk-validation.json",
+      "summary": "matterhorn.market.sdk-validation-guide.v1 with 3 public validation modes.",
+      "command": "curl -sS \"<server-url>/api/crypto/market-sdk-validation\" -H \"Authorization: Bearer <client-token>\""
+    },
+    {
+      "id": "bittensor_live_qa",
+      "label": "Bittensor live public wallet/stake QA",
+      "status": "pass",
+      "artifact": "/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc/qa-reports/wednesday-launch-live-public-qa/matterhorn-bittensor-live-qa.json",
+      "summary": "Ready report attached.",
+      "command": "node scripts/bittensor-live-qa.mjs --server-url <server-url> --token <client-token> --ss58-address <public-coldkey> --validator-hotkey <public-validator-hotkey> --netuid 14 --amount-tao 1 --rate-tolerance 0.01 --strict --json"
+    }
+  ],
+  "files": {
+    "json": "/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc/qa-reports/wednesday-launch-live-public-qa/matterhorn-live-public-qa.json",
+    "markdown": "/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc/qa-reports/wednesday-launch-live-public-qa/matterhorn-live-public-qa.md",
+    "sha256": "/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc/qa-reports/wednesday-launch-live-public-qa/matterhorn-live-public-qa.sha256"
+  }
+}

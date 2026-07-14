@@ -1,0 +1,293 @@
+{
+  "ok": true,
+  "ready": true,
+  "serverUrl": "http://127.0.0.1:4140",
+  "checkedAt": "2026-07-14T07:51:25.830Z",
+  "summary": {
+    "pass": 21,
+    "warn": 0,
+    "fail": 0,
+    "skip": 0
+  },
+  "stages": [
+    {
+      "id": "bittensor.readiness",
+      "label": "Read Bittensor readiness",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.755Z",
+      "latencyMs": 1587,
+      "readinessStatus": "warning"
+    },
+    {
+      "id": "bittensor.capabilities.list",
+      "label": "List subnet capability manifests",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.759Z",
+      "latencyMs": 3,
+      "capabilityCount": 3,
+      "cards": []
+    },
+    {
+      "id": "bittensor.capabilities.subnet",
+      "label": "Read selected subnet capability manifest",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.761Z",
+      "latencyMs": 2,
+      "capabilityLevel": "adapter_required",
+      "serviceAdapter": "compute"
+    },
+    {
+      "id": "bittensor.learn",
+      "label": "Answer beginner Bittensor explanation",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.765Z",
+      "latencyMs": 4,
+      "intent": "learn",
+      "cards": [
+        "subnet_result",
+        "customer_guidance"
+      ]
+    },
+    {
+      "id": "bittensor.wallet.clarification",
+      "label": "Clarify wallet reads without SS58",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.768Z",
+      "latencyMs": 3,
+      "execution": "clarification_required",
+      "clarificationQuestion": "I can show your TAO and stake exposure, but I need your SS58 coldkey public address."
+    },
+    {
+      "id": "bittensor.wallet.snapshot",
+      "label": "Read watch-only TAO wallet snapshot",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.777Z",
+      "latencyMs": 9,
+      "execution": "answered",
+      "contextId": "bt-chat-mrkcras0-ucodf2",
+      "cards": [
+        "wallet_snapshot",
+        "customer_guidance"
+      ]
+    },
+    {
+      "id": "bittensor.wallet.stake_positions",
+      "label": "Read stake positions from public wallet context",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.779Z",
+      "latencyMs": 2,
+      "execution": "answered",
+      "cards": [
+        "wallet_snapshot",
+        "wallet_snapshot",
+        "customer_guidance"
+      ]
+    },
+    {
+      "id": "bittensor.wallet.intelligence",
+      "label": "Analyze watch-only wallet risk and exposure",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.782Z",
+      "latencyMs": 3,
+      "execution": "answered",
+      "cards": [
+        "intelligence_report",
+        "customer_guidance"
+      ]
+    },
+    {
+      "id": "bittensor.wallet.change_baseline",
+      "label": "Compare wallet exposure against the last public baseline",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.784Z",
+      "latencyMs": 2,
+      "execution": "answered",
+      "baselineAvailable": true,
+      "changedPositions": 0,
+      "cards": [
+        "intelligence_report",
+        "customer_guidance"
+      ]
+    },
+    {
+      "id": "bittensor.discover.image",
+      "label": "Discover image-generation subnets",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.787Z",
+      "latencyMs": 3,
+      "execution": "answered",
+      "cards": [
+        "subnet_comparison",
+        "subnet_comparison",
+        "subnet_comparison",
+        "customer_guidance"
+      ]
+    },
+    {
+      "id": "bittensor.subnet.intelligence",
+      "label": "Analyze subnet risk and live-data quality",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.790Z",
+      "latencyMs": 3,
+      "execution": "answered",
+      "cards": [
+        "intelligence_report",
+        "customer_guidance"
+      ]
+    },
+    {
+      "id": "bittensor.validators.compare",
+      "label": "Compare validators on a subnet",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.791Z",
+      "latencyMs": 1,
+      "execution": "answered",
+      "contextId": "bt-chat-mrkcrase-rojyzs",
+      "cards": [
+        "validator_selection",
+        "customer_guidance"
+      ]
+    },
+    {
+      "id": "bittensor.stake.clarification",
+      "label": "Clarify staking preview without validator hotkey",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.793Z",
+      "latencyMs": 1,
+      "execution": "clarification_required",
+      "cards": [
+        "validator_selection"
+      ],
+      "clarificationQuestion": "Which validator hotkey should I use for the unsigned stake preview?"
+    },
+    {
+      "id": "bittensor.stake.unsigned_preview",
+      "label": "Prepare unsigned external-signer staking preview",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.795Z",
+      "latencyMs": 2,
+      "execution": "unsigned_preview",
+      "requiresExternalSignature": true,
+      "cards": [
+        "signed_action_review",
+        "signed_action_review",
+        "customer_guidance"
+      ]
+    },
+    {
+      "id": "bittensor.extrinsic.prepare",
+      "label": "Prepare lower-level unsigned extrinsic preview",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.797Z",
+      "latencyMs": 2,
+      "action": "stake",
+      "requiresExternalSignature": true,
+      "cards": [
+        "signed_action_review"
+      ]
+    },
+    {
+      "id": "bittensor.extrinsic.handoff",
+      "label": "Create checksumed external-signing handoff",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.798Z",
+      "latencyMs": 1,
+      "payloadSha256": "82d1ae2d014f928a1171942be5eafcd5a21c93dc936a13815562d4497be5e74e",
+      "cards": [
+        "signing_handoff",
+        "signed_action_review"
+      ]
+    },
+    {
+      "id": "bittensor.subnet.unsupported_adapter",
+      "label": "Handle unsupported subnet service calls honestly",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.800Z",
+      "latencyMs": 1,
+      "execution": "unsupported",
+      "adapterSupported": null,
+      "cards": [
+        "unsupported_adapter",
+        "customer_guidance"
+      ]
+    },
+    {
+      "id": "bittensor.subnet.invocation_preview",
+      "label": "Preview subnet adapter request before invocation",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.801Z",
+      "latencyMs": 1,
+      "requestSha256": "08773d4dd676d4ef8fdac92f094868cb6451760e12550d9d120a22f715a6d107",
+      "requiresConfirmation": true,
+      "adapterSupported": false,
+      "cards": [
+        "unsupported_adapter"
+      ]
+    },
+    {
+      "id": "bittensor.monitoring.watch_create",
+      "label": "Create Bittensor monitoring watch",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.806Z",
+      "latencyMs": 5,
+      "watchId": "bt-watch-mrkcrass-p026ci",
+      "kind": "slippage",
+      "cards": [
+        "watchlist"
+      ]
+    },
+    {
+      "id": "bittensor.monitoring.watch_list",
+      "label": "List Bittensor monitoring watches",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.807Z",
+      "latencyMs": 1,
+      "watchCount": 103,
+      "cards": [
+        "watchlist",
+        "watchlist",
+        "watchlist",
+        "watchlist",
+        "watchlist",
+        "watchlist"
+      ]
+    },
+    {
+      "id": "bittensor.monitoring.watch_check",
+      "label": "Evaluate Bittensor monitoring watches",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.830Z",
+      "latencyMs": 23,
+      "evaluationCount": 103,
+      "alertCount": 0,
+      "alertKey": "subnet:14:no-wallet:no-validator",
+      "notificationIntent": "review_subnet",
+      "cards": [
+        "watchlist",
+        "watchlist",
+        "watchlist",
+        "watchlist",
+        "watchlist",
+        "watchlist",
+        "watchlist",
+        "watchlist"
+      ]
+    }
+  ],
+  "artifacts": {
+    "readinessStatus": "warning",
+    "capabilityCount": 3,
+    "selectedCapabilityLevel": "adapter_required",
+    "bittensorContextId": "bt-chat-mrkcras0-ucodf2",
+    "validatorContextId": "bt-chat-mrkcrase-rojyzs",
+    "extrinsicPreviewAction": "stake",
+    "signingHandoffPayloadSha256": "82d1ae2d014f928a1171942be5eafcd5a21c93dc936a13815562d4497be5e74e",
+    "subnetPreviewRequestSha256": "08773d4dd676d4ef8fdac92f094868cb6451760e12550d9d120a22f715a6d107",
+    "watchId": "bt-watch-mrkcrass-p026ci",
+    "watchCount": 103,
+    "watchEvaluationCount": 103,
+    "watchAlertCount": 0
+  },
+  "requestCount": 21,
+  "nextSteps": []
+}

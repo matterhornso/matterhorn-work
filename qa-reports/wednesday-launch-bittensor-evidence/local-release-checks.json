@@ -1,0 +1,19 @@
+{
+  "kind": "matterhorn.local-release-checks.v1",
+  "generatedAt": "2026-07-14T08:21:58Z",
+  "source": "Wednesday release candidate local verification",
+  "checks": [
+    {
+      "name": "Matterhorn platform safety gate",
+      "conclusion": "success"
+    },
+    {
+      "name": "App and server typechecks plus focused activation and persistence regressions",
+      "conclusion": "success"
+    },
+    {
+      "name": "Wednesday responsive full-platform browser audit",
+      "conclusion": "success"
+    }
+  ]
+}

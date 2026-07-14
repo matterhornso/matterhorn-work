@@ -599,6 +599,7 @@ export function SessionRoute() {
   const [client, setClient] = useState<MatterhornServerClient | null>(null);
   const [baseUrl, setBaseUrl] = useState("");
   const [token, setToken] = useState("");
+  const [hostToken, setHostToken] = useState("");
   const [workspaces, setWorkspaces] = useState<RouteWorkspace[]>([]);
   const [workspaceOrderIds, setWorkspaceOrderIds] = useState<string[]>(() => readWorkspaceOrderIds());
   const [sessionsByWorkspaceId, setSessionsByWorkspaceId] = useState<Record<string, any[]>>({});
@@ -621,10 +622,14 @@ export function SessionRoute() {
   // would change on every `setBaseUrl`/`setToken`, which used to cascade up
   // through `loadWorkspaceSessionsInBackground` and `refreshRouteState` and
   // produce a tight render-refresh-setWorkspaces loop.
-  const localServerRef = useRef<{ baseUrl: string; token: string }>({ baseUrl: "", token: "" });
+  const localServerRef = useRef<{ baseUrl: string; token: string; hostToken: string }>({
+    baseUrl: "",
+    token: "",
+    hostToken: "",
+  });
   useEffect(() => {
-    localServerRef.current = { baseUrl, token };
-  }, [baseUrl, token]);
+    localServerRef.current = { baseUrl, token, hostToken };
+  }, [baseUrl, hostToken, token]);
   const endpointForWorkspace = useCallback(
     (workspace: RouteWorkspace | null | undefined): ResolvedWorkspaceEndpoint | null =>
       resolveWorkspaceEndpoint(workspace, localServerRef.current),
@@ -994,10 +999,11 @@ export function SessionRoute() {
         // Keep `localServerRef` in lockstep with the disconnected state.
         // Otherwise a previously-cached baseUrl/token would still resolve a
         // (now invalid) endpoint for any callback that consults the ref.
-        localServerRef.current = { baseUrl: "", token: "" };
+        localServerRef.current = { baseUrl: "", token: "", hostToken: "" };
         setClient(null);
         setBaseUrl("");
         setToken("");
+        setHostToken("");
         const orderedDesktopWorkspaces = orderRouteWorkspaces(desktopWorkspaces, workspaceOrderIdsRef.current);
         setWorkspaces(orderedDesktopWorkspaces);
         sessionsByWorkspaceIdRef.current = {};
@@ -1015,7 +1021,11 @@ export function SessionRoute() {
       // `loadWorkspaceSessionsInBackground` calls that fire later in this
       // function. Stale ref => `resolveWorkspaceEndpoint` returns null for
       // local workspaces => sidebar gets stuck in "loading" forever.
-      localServerRef.current = { baseUrl: normalizedBaseUrl, token: resolvedToken };
+      localServerRef.current = {
+        baseUrl: normalizedBaseUrl,
+        token: resolvedToken,
+        hostToken: resolvedHostToken,
+      };
 
       const matterhornClient = createMatterhornServerClient({
         baseUrl: normalizedBaseUrl,
@@ -1060,6 +1070,7 @@ export function SessionRoute() {
       setClient(matterhornClient);
       setBaseUrl(normalizedBaseUrl);
       setToken(resolvedToken);
+      setHostToken(resolvedHostToken);
       setWorkspaces(nextWorkspaces);
       const nextSessionsByWorkspaceId = Object.fromEntries(cachedEntries.map((entry) => [entry.workspaceId, entry.sessions]));
       sessionsByWorkspaceIdRef.current = nextSessionsByWorkspaceId;
@@ -1599,8 +1610,8 @@ export function SessionRoute() {
   // For remote workspaces this is the worker that owns the workspace; for
   // local workspaces it's the user's local Matterhorn Work server.
   const selectedWorkspaceEndpoint = useMemo(
-    () => resolveWorkspaceEndpoint(selectedWorkspace, { baseUrl, token }),
-    [baseUrl, selectedWorkspace, token],
+    () => resolveWorkspaceEndpoint(selectedWorkspace, { baseUrl, token, hostToken }),
+    [baseUrl, hostToken, selectedWorkspace, token],
   );
   const selectedWorkspaceServerToken = selectedWorkspaceEndpoint?.token ?? "";
   const opencodeBaseUrl = selectedWorkspaceEndpoint?.opencodeBaseUrl ?? "";
@@ -2694,7 +2705,7 @@ export function SessionRoute() {
     ) {
       return;
     }
-    const endpoint = resolveWorkspaceEndpoint(workspace, { baseUrl, token });
+    const endpoint = resolveWorkspaceEndpoint(workspace, { baseUrl, token, hostToken });
     if (!endpoint || !endpoint.token) {
       return;
     }
@@ -3185,7 +3196,7 @@ export function SessionRoute() {
               });
               return false;
             }
-            const endpoint = resolveWorkspaceEndpoint(workspace, { baseUrl, token });
+            const endpoint = resolveWorkspaceEndpoint(workspace, { baseUrl, token, hostToken });
             if (!endpoint?.token) {
               recordInspectorEvent("desk.task_launch.failed", {
                 ...taskLaunchEvent,

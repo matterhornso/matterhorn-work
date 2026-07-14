@@ -1,0 +1,137 @@
+{
+  "ok": true,
+  "ready": true,
+  "serverUrl": "http://127.0.0.1:4140",
+  "checkedAt": "2026-07-14T07:51:26.228Z",
+  "summary": {
+    "pass": 15,
+    "warn": 0,
+    "fail": 0,
+    "skip": 0
+  },
+  "stages": [
+    {
+      "id": "server.health",
+      "label": "Matterhorn Work server health",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:24.241Z",
+      "latencyMs": 72
+    },
+    {
+      "id": "server.status",
+      "label": "Server status route",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.673Z",
+      "latencyMs": 5
+    },
+    {
+      "id": "server.capabilities",
+      "label": "Server capabilities route",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.673Z",
+      "latencyMs": 7
+    },
+    {
+      "id": "workspaces.list",
+      "label": "Workspace listing route",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.673Z",
+      "latencyMs": 6
+    },
+    {
+      "id": "bittensor.readiness",
+      "label": "Bittensor readiness route",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.673Z",
+      "latencyMs": 1431
+    },
+    {
+      "id": "session.create",
+      "label": "Create temporary chat session",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.736Z",
+      "latencyMs": 62,
+      "sessionId": "ses_0a06404f7ffedEDEXypTE4e8vR"
+    },
+    {
+      "id": "session.prompt",
+      "label": "Submit harmless prompt",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.880Z",
+      "latencyMs": 144,
+      "skipReply": false
+    },
+    {
+      "id": "session.status",
+      "label": "Read session status",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.898Z",
+      "latencyMs": 18
+    },
+    {
+      "id": "session.events",
+      "label": "Read bounded session event stream",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.918Z",
+      "latencyMs": 20,
+      "eventCount": 5,
+      "eventTypes": [
+        "session.snapshot",
+        "message.created",
+        "message.delta",
+        "message.created",
+        "session.status"
+      ]
+    },
+    {
+      "id": "session.cleanup",
+      "label": "Delete temporary chat session",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.933Z"
+    },
+    {
+      "id": "files.session",
+      "label": "Create read-only file session",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:25.937Z",
+      "latencyMs": 4,
+      "fileSessionId": "bd9bb2ab-1bd4-4d39-9459-a9fa8a310e85"
+    },
+    {
+      "id": "files.catalog",
+      "label": "Read file catalog",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:26.225Z",
+      "latencyMs": 288
+    },
+    {
+      "id": "files.read",
+      "label": "Read one workspace file",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:26.227Z",
+      "latencyMs": 2,
+      "path": ".matterhorn-work/memory/memory-index.json",
+      "bytes": 106
+    },
+    {
+      "id": "files.cleanup",
+      "label": "Close file session",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:26.227Z"
+    },
+    {
+      "id": "approvals.list",
+      "label": "List host approvals",
+      "status": "pass",
+      "observedAt": "2026-07-14T07:51:26.228Z",
+      "latencyMs": 1
+    }
+  ],
+  "artifacts": {
+    "workspaceId": "ws_18dc91c9102a",
+    "sessionId": "ses_0a06404f7ffedEDEXypTE4e8vR",
+    "fileSessionId": "bd9bb2ab-1bd4-4d39-9459-a9fa8a310e85",
+    "filePath": ".matterhorn-work/memory/memory-index.json"
+  },
+  "nextSteps": []
+}

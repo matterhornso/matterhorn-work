@@ -1,0 +1,359 @@
+{
+  "ready": false,
+  "dryRun": false,
+  "metadata": {
+    "generatedAt": "2026-07-14T08:27:22.760Z",
+    "serverUrl": "http://127.0.0.1:4140",
+    "workspaceId": "ws_18dc91c9102a",
+    "requireProduction": true
+  },
+  "safety": {
+    "nonCustodial": true,
+    "liveSubmissionEnabled": false,
+    "asksForSecrets": false,
+    "trainingUse": "none_by_default"
+  },
+  "summary": {
+    "pass": 12,
+    "fail": 3,
+    "skip": 0
+  },
+  "launchBlockers": [
+    {
+      "id": "billing.stripe_test",
+      "stageId": "billing.production_readiness",
+      "owner": "Matterhorn operator",
+      "label": "Stripe test billing",
+      "action": "Configure Stripe test checkout and signed webhooks, then verify both paths while live charging stays disabled.",
+      "checks": [
+        {
+          "id": "mock_mode",
+          "status": "preview"
+        },
+        {
+          "id": "live_payments_disabled",
+          "status": "working"
+        }
+      ]
+    },
+    {
+      "id": "generated_media.platform_setup",
+      "stageId": "generated_media.production_readiness",
+      "owner": "Matterhorn operator",
+      "label": "Generated-media production services",
+      "action": "Configure and verify: Production image provider, Walrus publisher, Walrus relay, Sui NFT package, Sui Kiosk package, Sui TransferPolicy.",
+      "requirements": [
+        {
+          "label": "Production image provider",
+          "status": "missing"
+        },
+        {
+          "label": "Walrus publisher",
+          "status": "missing"
+        },
+        {
+          "label": "Walrus relay",
+          "status": "missing"
+        },
+        {
+          "label": "Sui NFT package",
+          "status": "missing"
+        },
+        {
+          "label": "Sui Kiosk package",
+          "status": "missing"
+        },
+        {
+          "label": "Sui TransferPolicy",
+          "status": "missing"
+        }
+      ]
+    },
+    {
+      "id": "generated_media.flow",
+      "stageId": "generated_media.flow",
+      "owner": "Matterhorn operator",
+      "label": "Run image to Sui NFT receipt flow smoke",
+      "action": "generated media flow stopped at walrus.upload: Walrus storage is not included on Free. Upgrade to Matterhorn Max to continue."
+    }
+  ],
+  "artifacts": {
+    "productionCors": {
+      "defaultCors": "loopback",
+      "productionWildcardAllowed": false,
+      "checks": [
+        {
+          "id": "server_default",
+          "status": "pass"
+        },
+        {
+          "id": "config_regression_test",
+          "status": "pass"
+        },
+        {
+          "id": "local_dev_launcher",
+          "status": "pass"
+        },
+        {
+          "id": "generated_media_smoke_launcher",
+          "status": "pass"
+        },
+        {
+          "id": "environment_cors",
+          "status": "pass"
+        }
+      ]
+    },
+    "capabilities": {
+      "models": "working",
+      "memory": "working",
+      "notes": "working",
+      "outputs": "working",
+      "imageGeneration": "working",
+      "walrusStorage": "needs_setup",
+      "nftMinting": "needs_setup",
+      "nftMarketplaceListing": "needs_setup"
+    },
+    "readiness": {
+      "status": "working",
+      "blockingChecks": [],
+      "recommendedActions": []
+    },
+    "controlPlane": {
+      "status": "preview",
+      "readyFeatures": 6,
+      "totalFeatures": 6,
+      "exportableStores": 14
+    },
+    "supportReport": {
+      "filename": "matterhorn-backend-support-ws_18dc91c9102a-2026-07-14.json",
+      "warnings": 4,
+      "localTeamSharing": "local_tokens"
+    },
+    "dataMap": {
+      "stores": [
+        "audit",
+        "billing",
+        "chat",
+        "dataPolicy",
+        "evidence",
+        "feedback",
+        "imageOutputs",
+        "memory",
+        "modelPreferences",
+        "notes",
+        "outputs",
+        "taskEvents",
+        "walletEvidence",
+        "workflowRuns"
+      ],
+      "imageOutputsStatus": "preview"
+    },
+    "dataControls": {
+      "totalStores": 14,
+      "exportableStores": 14,
+      "userControlledStores": 8
+    },
+    "teamAccess": {
+      "mode": "local_tokens",
+      "cloudTeamsStatus": "needs_setup",
+      "tokenCount": 1
+    },
+    "ledger": {
+      "itemCount": 20,
+      "summary": {
+        "total": 20,
+        "notes": 1,
+        "memorySuggestions": 0,
+        "teamAccess": 0,
+        "wallets": 0,
+        "chats": 12,
+        "tasks": 0,
+        "outputs": 0,
+        "images": 0,
+        "nfts": 0,
+        "billing": 0,
+        "audits": 7,
+        "feedback": 0,
+        "redacted": 0
+      }
+    },
+    "ledgerExport": {
+      "filename": "matterhorn-project-ledger-ws_18dc91c9102a-2026-07-14.json",
+      "itemCount": 20,
+      "includes": [
+        "audit",
+        "opencode_runtime",
+        "project_evidence"
+      ]
+    },
+    "generatedMediaHistory": {
+      "itemCount": 0,
+      "counts": {
+        "images": 0,
+        "drafts": 0,
+        "minted": 0,
+        "listed": 0
+      }
+    }
+  },
+  "stages": [
+    {
+      "id": "workspace.resolve",
+      "label": "Resolve active workspace",
+      "status": "pass",
+      "durationMs": 0
+    },
+    {
+      "id": "production.cors_readiness",
+      "label": "Check production CORS readiness",
+      "status": "pass",
+      "durationMs": 53
+    },
+    {
+      "id": "backend.capabilities",
+      "label": "Read backend capabilities",
+      "status": "pass",
+      "durationMs": 48
+    },
+    {
+      "id": "workspace.readiness",
+      "label": "Read workspace readiness",
+      "status": "pass",
+      "durationMs": 11
+    },
+    {
+      "id": "backend.control_plane",
+      "label": "Read workspace control plane",
+      "status": "pass",
+      "durationMs": 134
+    },
+    {
+      "id": "backend.support_report",
+      "label": "Read redacted support report",
+      "status": "pass",
+      "durationMs": 91
+    },
+    {
+      "id": "backend.data_map",
+      "label": "Read workspace data map",
+      "status": "pass",
+      "durationMs": 2
+    },
+    {
+      "id": "backend.data_controls",
+      "label": "Read data controls",
+      "status": "pass",
+      "durationMs": 2
+    },
+    {
+      "id": "team.access_summary",
+      "label": "Read local team access summary",
+      "status": "pass",
+      "durationMs": 2
+    },
+    {
+      "id": "ledger.project",
+      "label": "Read project data ledger",
+      "status": "pass",
+      "durationMs": 6
+    },
+    {
+      "id": "ledger.export",
+      "label": "Read redacted data ledger export",
+      "status": "pass",
+      "durationMs": 68
+    },
+    {
+      "id": "billing.production_readiness",
+      "label": "Read billing production readiness",
+      "status": "fail",
+      "durationMs": 3,
+      "error": "production readiness requires verified Stripe test checkout and webhooks",
+      "details": {
+        "mode": "phase0_mock",
+        "provider": "mock",
+        "readyForTestCheckout": false,
+        "readyForWebhooks": false,
+        "livePaymentsEnabled": false,
+        "checks": [
+          {
+            "id": "mock_mode",
+            "status": "preview"
+          },
+          {
+            "id": "live_payments_disabled",
+            "status": "working"
+          }
+        ]
+      }
+    },
+    {
+      "id": "generated_media.production_readiness",
+      "label": "Read generated media production readiness",
+      "status": "fail",
+      "durationMs": 106,
+      "error": "generated media production readiness is blocked by 6 setup requirements",
+      "details": {
+        "mode": "needs_setup",
+        "status": "warning",
+        "ready": false,
+        "blockerCount": 6,
+        "blockers": [
+          {
+            "key": "openai_api_key",
+            "label": "Production image provider",
+            "status": "missing"
+          },
+          {
+            "key": "walrus_publisher",
+            "label": "Walrus publisher",
+            "status": "missing"
+          },
+          {
+            "key": "walrus_relay",
+            "label": "Walrus relay",
+            "status": "missing"
+          },
+          {
+            "key": "sui_nft_package",
+            "label": "Sui NFT package",
+            "status": "missing"
+          },
+          {
+            "key": "sui_kiosk_package",
+            "label": "Sui Kiosk package",
+            "status": "missing"
+          },
+          {
+            "key": "sui_transfer_policy",
+            "label": "Sui TransferPolicy",
+            "status": "missing"
+          }
+        ]
+      }
+    },
+    {
+      "id": "generated_media.history",
+      "label": "Read generated media history",
+      "status": "pass",
+      "durationMs": 2
+    },
+    {
+      "id": "generated_media.flow",
+      "label": "Run image to Sui NFT receipt flow smoke",
+      "status": "fail",
+      "durationMs": 135,
+      "error": "generated media flow stopped at walrus.upload: Walrus storage is not included on Free. Upgrade to Matterhorn Max to continue.",
+      "details": {
+        "failedStage": "walrus.upload",
+        "code": "billing_entitlement_required",
+        "entitlementKey": "walrus_storage",
+        "currentPlanId": "free",
+        "used": 0,
+        "limit": 0,
+        "resetsAt": "2026-08-01T00:00:00.000Z"
+      }
+    }
+  ]
+}

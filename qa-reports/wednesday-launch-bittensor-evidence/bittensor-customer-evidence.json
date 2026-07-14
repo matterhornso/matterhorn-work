@@ -1,0 +1,47 @@
+{
+  "generatedAt": "2026-07-14T08:22:54.096Z",
+  "ready": true,
+  "bittensor": {
+    "ready": true,
+    "detail": "21 passed, 0 failed, 0 skipped",
+    "passedStages": [
+      "Read Bittensor readiness",
+      "List subnet capability manifests",
+      "Read selected subnet capability manifest",
+      "Answer beginner Bittensor explanation",
+      "Clarify wallet reads without SS58",
+      "Read watch-only TAO wallet snapshot",
+      "Read stake positions from public wallet context",
+      "Analyze watch-only wallet risk and exposure",
+      "Compare wallet exposure against the last public baseline",
+      "Discover image-generation subnets",
+      "Analyze subnet risk and live-data quality",
+      "Compare validators on a subnet"
+    ],
+    "failedStages": []
+  },
+  "agentControl": {
+    "ready": true,
+    "detail": "15 passed, 0 failed"
+  },
+  "ci": {
+    "total": 3,
+    "passed": [
+      "Matterhorn platform safety gate",
+      "App and server typechecks plus focused activation and persistence regressions",
+      "Wednesday responsive full-platform browser audit"
+    ],
+    "failed": [],
+    "pending": []
+  },
+  "readinessGate": {
+    "ready": true,
+    "detail": "Readiness gate says ready"
+  },
+  "walletTimeline": null,
+  "adapterCandidate": null,
+  "adapterCanary": null,
+  "readonlyAdapterCanary": null,
+  "receiptCheck": null,
+  "watchAutopilotScheduler": null
+}

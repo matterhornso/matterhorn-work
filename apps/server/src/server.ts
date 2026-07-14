@@ -12011,7 +12011,6 @@ function serializeWorkspaceConfigEntry(workspace: WorkspaceInfo): Record<string,
 async function persistServerWorkspaceState(config: ServerConfig): Promise<boolean> {
   const configPath = config.configPath?.trim() ?? "";
   if (!configPath) return false;
-  if (!(await exists(configPath))) return false;
 
   const parsed = await readServerConfigFile(configPath);
   const next: OpenworkServerConfigFile = {

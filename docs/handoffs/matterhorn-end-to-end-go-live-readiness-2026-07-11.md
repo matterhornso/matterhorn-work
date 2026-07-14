@@ -2,6 +2,116 @@
 
 This is the current evidence ledger for the `codex/platform-soft-divider-ui` integration checkout. It records what was verified live from July 11 through July 13, what was verified in the isolated generated-media stack, and what still requires production infrastructure or manual device testing before the planned Wednesday, July 15 go-live.
 
+## July 14 Wednesday release-candidate status
+
+The Wednesday candidate is now isolated from the intentionally dirty
+integration checkout:
+
+- clean worktree:
+  `/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc`;
+- branch: `codex/wednesday-beta-rc-2026-07-15`;
+- version: `0.13.13`;
+- base integration commit: `a6dcfe100aa35597edb421ad65c0fcb46205fab4`;
+- initial RC commit: `07a9c82a6bf2eea5ff6c3c519b0d420e683f26a5`;
+- durable launch workspace config:
+  `/Users/abhinavramesh/Documents/Matterhorn-work/matterhorn-wednesday-launch-workspaces/server.json`;
+- launch user one: `ws_18dc91c9102a`;
+- launch user two: `ws_132174680a6d`.
+
+The original `codex/platform-soft-divider-ui` checkout, its running stack,
+untracked scratch, `.matterhorn-work`, and `qa-reports` remain untouched.
+
+### Final source fixes
+
+- The app now keeps client and host credentials distinct while activating a
+  workspace. A fresh browser no longer attempts host-only activation with the
+  client token.
+- Explicit workspace creation now writes the durable server configuration even
+  when the config file did not exist before launch.
+- `scripts/dev-matterhorn-local.mjs` accepts a validated
+  `MATTERHORN_LOCAL_SERVER_CONFIG`, forwards `--config`, and provides safe
+  `--help` output for reproducible multi-workspace launches.
+- The full browser audit discovers the current product-smoke evidence and
+  accepts truthful MCP and Generated Media empty/setup-owned states instead of
+  stale seeded-fixture copy.
+
+Focused host-auth, persistence, launcher, and audit-harness tests pass. App and
+server typechecks pass, `git diff --check` passes, and the complete ten-stage
+`pnpm test:matterhorn-platform-safety` gate passes after these fixes.
+
+### Two-user and full-platform evidence
+
+- launch user one: 20/20 product stages, zero browser errors or network
+  failures;
+- launch user two: 20/20 product stages, zero browser errors or network
+  failures;
+- strict audit: 104 surfaces, 11 interactions, 2,922 controls, zero responsive
+  issues, console errors, page errors, or network failures;
+- all four protocol desks returned the expected real-agent result or required
+  Sui question in both durable workspaces.
+
+Evidence:
+
+- `qa-reports/wednesday-launch-user-one-product-smoke/summary.json`;
+- `qa-reports/wednesday-launch-user-two-product-smoke/summary.json`;
+- `qa-reports/wednesday-launch-full-platform-audit-green/summary.json`;
+- `qa-reports/wednesday-launch-full-platform-audit-green/launch-summary.md`.
+
+The first user-two attempt timed out while waiting for a slow but safely
+completing Hyperliquid response. Its diagnostic folder is preserved at
+`qa-reports/wednesday-launch-user-two-product-smoke-provider-timeout/`; the
+subsequent strict run passed all 20 stages.
+
+### Bittensor decision
+
+The Bittensor formal packet is ready for limited test-customer QA:
+
+- static beta gate: 16/16;
+- customer-ready crypto smoke: 52/52;
+- live-route QA: 21/21;
+- agent-control QA: 15/15;
+- evidence verifier: ready with no errors or warnings;
+- formal packet: `READY_FOR_TEST_CUSTOMER_QA`.
+
+The public-data provider is not live in this stack. Subnet requests return
+`curated-fallback`, and no live validator rows were returned. This is a hard
+copy boundary: the controlled beta may demonstrate the Bittensor workflow and
+external-signer safety, but it may not claim live provider or validator data.
+
+Evidence:
+
+- `qa-reports/wednesday-launch-bittensor-packet-green/matterhorn-bittensor-beta-rc.json`;
+- `qa-reports/wednesday-launch-bittensor-evidence/bittensor-live-qa.json`;
+- `qa-reports/wednesday-launch-bittensor-evidence/customer-ready-crypto-smoke.json`;
+- `qa-reports/wednesday-launch-live-public-qa/matterhorn-live-public-qa.json`.
+
+### Controlled-beta exclusions
+
+The strict production-readiness probe reports 12 pass and 3 fail. The failures
+are expected platform-owned release inputs, not user setup:
+
+1. Billing remains in `phase0_mock`; Stripe test checkout and signed webhooks
+   are not verified.
+2. Production Generated Media lacks the image provider, Walrus publisher and
+   relay, and all three Sui package identifiers.
+3. The image-to-NFT flow correctly stops at the Free-plan Walrus entitlement.
+
+Matterhorn Cloud is also not included in this build. Real MetaMask, Coinbase
+Wallet, and Phantom device acceptance remains unverified because Chrome control
+reported `Browser is not available: extension`. Automated wallet safety and
+non-custodial contracts pass, but no device-verified claim is allowed.
+
+Public macOS distribution remains NO-GO until Developer ID signing,
+notarization, clean-Mac Gatekeeper, and signed updater-channel evidence exist.
+The private artifact may be shared only with named internal testers and must be
+identified as unsigned and unnotarized.
+
+Authoritative decision record:
+`docs/wednesday-beta-launch-execution-2026-07-15.md`.
+
+Tester instructions:
+`docs/wednesday-controlled-beta-tester-distribution.md`.
+
 ## Checkout and live stacks
 
 - Repository: `/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-latest`

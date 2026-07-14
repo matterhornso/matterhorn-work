@@ -31,6 +31,8 @@ export type ResolvedWorkspaceEndpoint = {
   baseUrl: string;
   /** Auth token for that server. May be empty for unauthenticated local servers. */
   token: string;
+  /** Host auth token for server-management routes. Never used as client auth. */
+  hostToken: string;
   /** Workspace id as the owning server expects it in URL paths. No `rem_` prefix. */
   workspaceId: string;
   /** True when the workspace lives on a remote Matterhorn Work worker, not the user's local server. */
@@ -46,6 +48,7 @@ export type ResolvedWorkspaceEndpoint = {
 export type LocalServerHandle = {
   baseUrl: string | null | undefined;
   token: string | null | undefined;
+  hostToken?: string | null | undefined;
 };
 
 type WorkspaceEndpointInput = Pick<
@@ -95,9 +98,13 @@ function pickRemoteToken(workspace: WorkspaceEndpointInput): string {
   return (
     workspace.matterhornToken ??
     workspace.matterhornClientToken ??
-    workspace.matterhornHostToken ??
     ""
   ).trim();
+}
+
+function pickRemoteHostToken(workspace: WorkspaceEndpointInput): string {
+  if (!workspace) return "";
+  return (workspace.matterhornHostToken ?? "").trim();
 }
 
 /**
@@ -116,10 +123,12 @@ export function resolveWorkspaceEndpoint(
     const baseUrl = pickRemoteBaseUrl(workspace);
     if (!baseUrl) return null;
     const token = pickRemoteToken(workspace);
+    const hostToken = pickRemoteHostToken(workspace);
     const workspaceId = workspaceServerId(workspace);
     const client = createMatterhornServerClient({
       baseUrl,
       token: token || undefined,
+      hostToken: hostToken || undefined,
     });
     const mountedBaseUrl = (
       buildMatterhornWorkspaceBaseUrl(baseUrl, workspaceId) ?? baseUrl
@@ -127,6 +136,7 @@ export function resolveWorkspaceEndpoint(
     return {
       baseUrl,
       token,
+      hostToken,
       workspaceId,
       isRemote: true,
       client,
@@ -138,10 +148,12 @@ export function resolveWorkspaceEndpoint(
   const localBaseUrl = (localServer.baseUrl ?? "").trim();
   if (!localBaseUrl) return null;
   const localToken = (localServer.token ?? "").trim();
+  const localHostToken = (localServer.hostToken ?? "").trim();
   const workspaceId = workspace.id.trim();
   const client = createMatterhornServerClient({
     baseUrl: localBaseUrl,
     token: localToken || undefined,
+    hostToken: localHostToken || undefined,
   });
   const mountedBaseUrl = (
     buildMatterhornWorkspaceBaseUrl(localBaseUrl, workspaceId) ?? localBaseUrl
@@ -149,6 +161,7 @@ export function resolveWorkspaceEndpoint(
   return {
     baseUrl: localBaseUrl,
     token: localToken,
+    hostToken: localHostToken,
     workspaceId,
     isRemote: false,
     client,

@@ -95,96 +95,131 @@ mock, or contract-only pass cannot override failed live or packaged evidence.
 Primary evidence ledger:
 `docs/handoffs/matterhorn-end-to-end-go-live-readiness-2026-07-11.md`.
 
-## Final Candidate Result - July 14
+## Frozen Wednesday Candidate - July 14
 
-Decision: **GO for the controlled local beta on the canonical managed stack.**
-This approval covers only the included journeys above and an explicitly
-unsigned internal macOS tester artifact. It is **not** approval for public
-macOS distribution, live charging, production media publishing, or a claim
-that real wallet extensions have completed device acceptance.
+Decision: **GO for a controlled local beta for named internal testers.**
 
-Canonical customer URL:
-`http://127.0.0.1:5190/workspace/ws_d6a5b5572860/session`
+This decision covers the verified local, non-custodial journeys only. It does
+not approve public macOS distribution, live charging, production media
+publishing, Matterhorn Cloud, protocol execution, or claims that real wallet
+extensions completed device acceptance.
 
-Canonical backend:
-`http://127.0.0.1:4130`
+Release version: `0.13.13`
 
-At final verification the backend health route returned version `0.13.12`, the
-app returned HTTP 200, and exactly one process owned each canonical port. Any
-parallel fixture or smoke stack must use a different checkout and workspace
-root.
+Release branch: `codex/wednesday-beta-rc-2026-07-15`
+
+Clean release worktree:
+`/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc`
+
+Durable launch workspaces:
+`/Users/abhinavramesh/Documents/Matterhorn-work/matterhorn-wednesday-launch-workspaces/server.json`
+
+Canonical URLs after cutover:
+
+- app: `http://127.0.0.1:5190/workspace/ws_18dc91c9102a/session`;
+- backend: `http://127.0.0.1:4130`.
+
+The launch operator must start the canonical stack with the durable server
+configuration, the complete Bittensor beta flags, and an explicit authenticated
+read-request budget of 5,000 requests per 60 seconds. This raised budget is for
+the multi-surface local release audit; write limits, approvals, entitlements,
+external-signer boundaries, and execution blocks remain unchanged.
 
 | Release surface | Decision | Evidence and boundary |
 | --- | --- | --- |
-| Controlled local web beta | GO | Final browser smoke passed 20/20, including real Bittensor, Hyperliquid, and Polymarket responses plus the expected Sui question stop. |
-| Clean-workspace onboarding | GO | A separate workspace passed 20/20 first-run journeys without relying on the seeded project. |
-| Notes, Memory, Outputs, History, Settings, MCP UI | GO | Covered by the browser suites and the complete ten-stage platform safety gate. |
-| Wallet safety and previews | GO for automated non-custodial scope | Safety, approval, connector, and preview contracts pass. Matterhorn does not accept wallet secrets or submit transactions. |
-| Real MetaMask, Coinbase Wallet, and Phantom devices | NO-GO pending device QA | No real-extension acceptance record is attached. Do not describe these connectors as device-verified. |
-| Generated Media local test flow | GO for local test only | The isolated fixture flow passed all 14 stages. Production publishing remains disabled. |
-| Billing local test UI | GO for truthful test-mode UI only | Live charging and paid entitlement activation remain disabled. |
-| Bittensor formal test-customer packet | NO-GO pending customer evidence | The static beta gate passes 16/16, but a real customer smoke, Bittensor evidence verification, and browser checklist are not attached. |
-| Internal unsigned macOS tester artifact | GO for named internal testers with warning | Packaged clean-profile smoke passed 16/16 and desktop doctor passed 11/11. |
-| Public macOS distribution | NO-GO | No Developer ID identity, notarization credentials, Gatekeeper pass, or signed updater-channel metadata is available. |
+| Controlled local web beta | GO | Two independent durable workspaces passed 20/20 product stages with zero browser errors or network failures. |
+| Responsive UI and primary interactions | GO | The strict audit passed 104 surfaces and 11 interactions, inventoried 2,922 controls, and reported zero issues, console errors, page errors, or network failures. |
+| Notes, Memory, Outputs, History, Settings, and MCP UI | GO | Covered at desktop, compact-laptop, tablet, and mobile widths by the strict audit and by the complete ten-stage platform safety gate. |
+| Workspace activation and persistence | GO | Client and host credentials remain separate, host-auth activation is tested, and new workspace configuration persists through the durable server config. |
+| Wallet safety and previews | GO for automated non-custodial scope | Connector, approval, rejection, preview, receipt, and secret-redaction contracts pass. Matterhorn does not accept wallet secrets or submit transactions. |
+| Real MetaMask, Coinbase Wallet, and Phantom devices | NO-GO pending device QA | Chrome control reported `Browser is not available: extension`. No real-extension acceptance record is attached, so connectors must not be described as device-verified. |
+| Bittensor workflow | GO for limited test-customer QA | The formal packet is ready, the static gate passed 16/16, the customer-ready crypto smoke passed 52/52, and live-route QA passed 21/21. Public data currently uses curated fallback; no live validator/provider rows were returned. |
+| Hyperliquid and Polymarket | GO for research and external handoff only | Public reads, previews, watches, and unsigned handoffs are covered. Live execution and submission stay disabled. |
+| Sui | GO for questions, public reads, and unsigned wallet handoff only | Automated Wallet Standard and Phantom fallback contracts pass. Production minting/listing and real-device signing are excluded. |
+| Generated Media local test flow | GO for local test only | Mock image history and local draft surfaces work. Production provider, Walrus, and Sui publishing inputs are absent. |
+| Billing local test UI | GO for truthful test-mode UI only | The UI exposes test mode and limitations. Live charging and paid entitlement activation remain disabled. |
+| Matterhorn Cloud | NOT INCLUDED | Account, cross-device sync, shared Cloud teammates, and Cloud workers are disabled in this build. Local work requires no Cloud account. |
+| Internal unsigned macOS tester artifact | PENDING FINAL REBUILD | Build from the frozen source candidate, verify DMG/ZIP integrity, run desktop doctor and clean-profile smoke, then publish checksums only to named testers. |
+| Public macOS distribution | NO-GO | No Developer ID identity, notarization credentials, clean-Mac Gatekeeper pass, or signed updater metadata is available. |
 | Production Billing | NO-GO | Stripe test checkout, portal, signed webhook, prices, and reconciliation are not configured. |
 | Production image-to-Sui publishing | NO-GO | Image provider, Walrus publisher/relay, Sui NFT package, Kiosk package, and TransferPolicy are not configured. |
 
 ## Frozen Evidence
 
-- Full platform safety gate: all 10 stages passed.
-- Final canonical browser result:
-  `qa-reports/matterhorn-product-browser-smoke-2026-07-14-canonical-final/summary.json`.
-- Clean-workspace result:
-  `qa-reports/matterhorn-product-browser-smoke-2026-07-14-clean-launch-workspace-r4/summary.json`.
-- Generated Media local-test result:
-  `qa-reports/generated-media-browser-smoke-2026-07-14-launch-final-r2/summary.json`.
-- Bittensor beta gate:
-  `qa-reports/matterhorn-bittensor-beta-2026-07-14.json`.
-- Customer-ready crypto gate:
-  `qa-reports/matterhorn-crypto-smoke-2026-07-14-r2.json`.
+- Full platform safety gate: all 10 stages passed after the final source fixes.
+- Launch user one:
+  `qa-reports/wednesday-launch-user-one-product-smoke/summary.json` - 20/20.
+- Launch user two:
+  `qa-reports/wednesday-launch-user-two-product-smoke/summary.json` - 20/20.
+- Strict responsive audit:
+  `qa-reports/wednesday-launch-full-platform-audit-green/summary.json` -
+  104 surfaces, 11 interactions, 2,922 controls, zero issues.
+- Durable responsive audit digest:
+  `qa-reports/wednesday-launch-full-platform-audit-green/launch-summary.md`.
 - Production readiness:
-  `qa-reports/product-readiness-2026-07-14-canonical-final.json` and
-  `qa-reports/product-readiness-2026-07-14-canonical-final.md`.
-- Corrected release-candidate pack:
-  `qa-reports/matterhorn-wednesday-rc-pack-2026-07-14-final-r2/matterhorn-monday-beta-rc.json`.
-- Packaged clean-profile result:
-  `qa-reports/desktop-packaged-clean-profile-2026-07-14.json`.
-- Desktop doctor:
-  `qa-reports/matterhorn-desktop-beta-doctor-2026-07-14.md`.
+  `qa-reports/wednesday-launch-production-readiness.json` and
+  `qa-reports/wednesday-launch-production-readiness.md` - 12 pass, 3 expected
+  production-only failures.
+- Bittensor formal packet:
+  `qa-reports/wednesday-launch-bittensor-packet-green/matterhorn-bittensor-beta-rc.json`.
+- Bittensor live-route QA:
+  `qa-reports/wednesday-launch-bittensor-evidence/bittensor-live-qa.json` -
+  21/21.
+- Customer-ready crypto smoke:
+  `qa-reports/wednesday-launch-bittensor-evidence/customer-ready-crypto-smoke.json` -
+  52/52.
+- Live public-data report:
+  `qa-reports/wednesday-launch-live-public-qa/matterhorn-live-public-qa.json` -
+  ready with fixture fallback for three optional stages.
 
-The corrected RC pack has 13 passing stages and two truthful evidence
-failures: the real-customer Bittensor packet and production integration
-readiness. Its deployed browser stage passes semantically. The pack parser was
-fixed to parse complete child JSON before redacting and truncating output, so a
-large successful browser report can no longer be falsely labeled `NOT_READY`.
+The strict production probe has 12 passing stages and three expected failures:
 
-Internal tester artifact:
-`/Users/abhinavramesh/Desktop/matterhorn-work-controlled-beta-a6dcfe10`
+1. Billing is still `phase0_mock`; verified Stripe test checkout and webhooks
+   are operator-owned release inputs.
+2. Generated Media is missing the production image key, Walrus publisher and
+   relay, and three Sui package identifiers.
+3. The production image-to-NFT flow correctly stops at the Free-plan Walrus
+   entitlement instead of bypassing Billing.
 
-- DMG SHA-256:
-  `ae07cc5eb17c09b8988874237ac0bf4952e52be277bab5489cc3f3d94973ffe9`
-- ZIP SHA-256:
-  `3a044e9cc1d1a762cb122f537f8bcb6f01b8531d07e467c959c69de4d2ecd8b8`
+These failures are not user setup requests. They are platform-operator work and
+remain outside the controlled beta promise.
+
+## Final Artifact Record
+
+The final artifact and checksums are written here only after the frozen source
+candidate is committed, rebuilt, and verified. The first private artifact from
+`07a9c82a` is diagnostic evidence only and must not be distributed as the final
+Wednesday build.
+
+- frozen source candidate: `PENDING_SOURCE_COMMIT`;
+- evidence-ledger commit: `PENDING_EVIDENCE_COMMIT`;
+- artifact directory: `PENDING_ARTIFACT_DIRECTORY`;
+- DMG SHA-256: `PENDING_DMG_SHA256`;
+- ZIP SHA-256: `PENDING_ZIP_SHA256`;
+- `hdiutil verify`: pending;
+- `unzip -t`: pending;
+- desktop doctor: pending;
+- packaged clean-profile smoke: pending.
 
 ## Remaining Owners
 
-1. **Matterhorn release operator:** configure Stripe test keys, prices,
-   checkout return URLs, signed webhooks, portal, and entitlement
-   reconciliation; rerun the strict production probe with live charging still
-   off.
-2. **Matterhorn media operator:** configure and review the production image
-   provider, Walrus publisher and relay, Sui NFT package, Kiosk package, and
-   TransferPolicy; rerun production diagnostics and the real publishing flow.
-3. **Wallet QA owner:** run MetaMask, Coinbase Wallet, and Phantom acceptance
+1. **Wallet QA owner:** run MetaMask, Coinbase Wallet, and Phantom acceptance
    on supported browsers and record connect, reject, approve, network mismatch,
    reload, and disconnect evidence without exposing secrets.
-4. **Bittensor customer QA owner:** attach a real customer-ready smoke result,
-   Bittensor evidence verification result, and browser checklist to regenerate
-   the formal customer packet.
-5. **macOS release owner:** provide Developer ID and notarization credentials,
-   bump the version beyond `0.13.12`, publish signed DMG/ZIP and updater
-   metadata, verify Gatekeeper on a clean Mac, and document rollback.
+2. **macOS release owner:** provide Developer ID and notarization credentials,
+   publish signed DMG/ZIP and updater metadata, verify Gatekeeper on a separate
+   clean Mac, and document rollback before public distribution.
+3. **Matterhorn Billing owner:** configure Stripe test keys, prices, checkout
+   returns, signed webhooks, portal, and entitlement reconciliation before any
+   paid beta.
+4. **Matterhorn media owner:** configure the production image provider, Walrus
+   publisher and relay, Sui NFT package, Kiosk package, and TransferPolicy;
+   then rerun production diagnostics and the real publishing flow.
+5. **Bittensor provider owner:** replace curated fallback with an accepted live
+   public provider and rerun the public-data packet before claiming live network
+   data or validator coverage.
 
-Until those owners close their gates, the launch message must say **controlled
+Until those owners close their gates, all launch copy must say **controlled
 local beta** and must not promise public macOS installation, live paid plans,
-production NFT publishing, or device-verified wallet support.
+production NFT publishing, live Bittensor provider data, or device-verified
+wallet support.
