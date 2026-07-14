@@ -64,10 +64,10 @@ for (const phrase of [
 }
 
 for (const phrase of [
-  "Desktop Beta First-Run",
+  "Desktop Release First-Run",
   "Gatekeeper",
   "pnpm electron:tester-artifact",
-  "pnpm desktop:beta-doctor",
+  "pnpm desktop:release-doctor",
   "matterhorn-electron-local-tester-artifact.json",
   "SHA256SUMS.txt",
   "First-Run UI Checklist",
