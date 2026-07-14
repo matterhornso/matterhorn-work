@@ -131,6 +131,33 @@ The artifact is unsigned, unnotarized, and publish-disabled. It is approved
 only for named internal testers who have accepted the macOS warning and the
 scope exclusions above.
 
+### Canonical cutover
+
+The previous integration stack and the isolated release-QA stack were stopped
+only after artifact verification. The clean RC now owns the canonical ports:
+
+- app: `http://127.0.0.1:5190/workspace/ws_18dc91c9102a/session`;
+- backend: `http://127.0.0.1:4130`;
+- backend version: `0.13.13`;
+- managed OpenCode version: `1.14.38`;
+- backend owners on `4130`: one;
+- app owners on `5190`: one.
+
+The stack uses the durable two-workspace server configuration, all Bittensor
+beta/read-preview safety flags, execution disabled, and a 5,000-request read
+budget per 60 seconds for the multi-surface release audit. Write limits,
+entitlements, approvals, external-signer controls, and submission blocks remain
+unchanged.
+
+The post-cutover result-required product smoke passed 20/20. Bittensor,
+Hyperliquid, Polymarket, and Sui all completed with assistant output; direct
+session reload, Longevity, Notes, Memory, Wallet, Settings, MCP truth, Billing
+copy, and Generated Media also passed. There were no warnings, browser errors,
+or network failures.
+
+Evidence:
+`qa-reports/wednesday-launch-canonical-cutover-smoke/summary.json`.
+
 ## Checkout and live stacks
 
 - Repository: `/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-latest`

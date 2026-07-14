@@ -1,0 +1,253 @@
+{
+  "name": "matterhorn-product-browser-smoke",
+  "url": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/session",
+  "startedAt": "2026-07-14T09:13:59.804Z",
+  "ready": true,
+  "stages": [
+    {
+      "id": "open_app",
+      "label": "Open Matterhorn app",
+      "status": "pass",
+      "durationMs": 2057
+    },
+    {
+      "id": "home_shell",
+      "label": "Check workspace home shell",
+      "status": "pass",
+      "durationMs": 15
+    },
+    {
+      "id": "wallet_readiness",
+      "label": "Check compact wallet readiness",
+      "status": "pass",
+      "durationMs": 67
+    },
+    {
+      "id": "desk_bittensor_task_start",
+      "label": "Start a Bittensor desk task",
+      "status": "pass",
+      "durationMs": 85688
+    },
+    {
+      "id": "desk_hyperliquid_task_start",
+      "label": "Start a Hyperliquid desk task",
+      "status": "pass",
+      "durationMs": 83512
+    },
+    {
+      "id": "desk_polymarket_task_start",
+      "label": "Start a Polymarket desk task",
+      "status": "pass",
+      "durationMs": 33553
+    },
+    {
+      "id": "desk_sui_task_start",
+      "label": "Start a Sui desk task",
+      "status": "pass",
+      "durationMs": 8610
+    },
+    {
+      "id": "session_direct_link_reload",
+      "label": "Open a persisted chat in a fresh browser context",
+      "status": "pass",
+      "durationMs": 1177
+    },
+    {
+      "id": "desk_longevity_workflow_start",
+      "label": "Start the Longevity workflow desk",
+      "status": "pass",
+      "durationMs": 1033
+    },
+    {
+      "id": "activity_summary",
+      "label": "Check compact Project Activity",
+      "status": "pass",
+      "durationMs": 959
+    },
+    {
+      "id": "project_history",
+      "label": "Open full Project history",
+      "status": "pass",
+      "durationMs": 931
+    },
+    {
+      "id": "notes_panel",
+      "label": "Open Notes inside session shell",
+      "status": "pass",
+      "durationMs": 929
+    },
+    {
+      "id": "memory_panel",
+      "label": "Open Memory review inside session shell",
+      "status": "pass",
+      "durationMs": 915
+    },
+    {
+      "id": "wallet_panel",
+      "label": "Open Wallet and Sui workflow panel",
+      "status": "pass",
+      "durationMs": 1245
+    },
+    {
+      "id": "settings_overview_support_report",
+      "label": "Check Settings overview and support report download",
+      "status": "pass",
+      "durationMs": 705
+    },
+    {
+      "id": "settings_wallet",
+      "label": "Check Wallet settings Sui copy",
+      "status": "pass",
+      "durationMs": 569
+    },
+    {
+      "id": "settings_ai_models",
+      "label": "Check AI provider and model picker",
+      "status": "pass",
+      "durationMs": 2033
+    },
+    {
+      "id": "settings_mcp_connections",
+      "label": "Check live MCP connection names",
+      "status": "pass",
+      "durationMs": 1124
+    },
+    {
+      "id": "settings_billing",
+      "label": "Check Billing settings payment flow copy",
+      "status": "pass",
+      "durationMs": 891
+    },
+    {
+      "id": "settings_generated_media",
+      "label": "Check Generated media settings surface",
+      "status": "pass",
+      "durationMs": 1173
+    }
+  ],
+  "artifacts": {
+    "workspaceId": "ws_18dc91c9102a",
+    "startedDeskTasks": [
+      "Bittensor",
+      "Hyperliquid",
+      "Polymarket",
+      "Sui",
+      "Longevity"
+    ],
+    "startedDeskTaskSessions": {
+      "Bittensor": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/session/ses_0a0185dd5ffeGTfP90OFOlLPcv",
+      "Hyperliquid": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/session/ses_0a0170f9bffeZnOfKpC83z79Go",
+      "Polymarket": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/session/ses_0a015c8f1ffeK0J76CU8OjEiwh",
+      "Sui": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/session/ses_0a01545f3ffe4Mru1nuPVlFfsV"
+    },
+    "startedDeskTaskEvents": {
+      "Bittensor": {
+        "at": 1784020443885,
+        "name": "desk.task_launch.prompt_sent",
+        "data": {
+          "workspaceId": "ws_18dc91c9102a",
+          "title": "Find useful subnets",
+          "agent": "matterhorn-bittensor",
+          "sendImmediately": true,
+          "promptLength": 141,
+          "sessionId": "ses_0a0185dd5ffeGTfP90OFOlLPcv"
+        }
+      },
+      "Hyperliquid": {
+        "at": 1784020529420,
+        "name": "desk.task_launch.prompt_sent",
+        "data": {
+          "workspaceId": "ws_18dc91c9102a",
+          "title": "Show market context",
+          "agent": "matterhorn-hyperliquid",
+          "sendImmediately": true,
+          "promptLength": 198,
+          "sessionId": "ses_0a0170f9bffeZnOfKpC83z79Go"
+        }
+      },
+      "Polymarket": {
+        "at": 1784020613058,
+        "name": "desk.task_launch.prompt_sent",
+        "data": {
+          "workspaceId": "ws_18dc91c9102a",
+          "title": "Check compliance",
+          "agent": "matterhorn-polymarket",
+          "sendImmediately": true,
+          "promptLength": 195,
+          "sessionId": "ses_0a015c8f1ffeK0J76CU8OjEiwh"
+        }
+      },
+      "Sui": {
+        "at": 1784020646585,
+        "name": "desk.task_launch.prompt_sent",
+        "data": {
+          "workspaceId": "ws_18dc91c9102a",
+          "title": "Prepare transfer preview",
+          "agent": "matterhorn-sui",
+          "sendImmediately": true,
+          "promptLength": 222,
+          "sessionId": "ses_0a01545f3ffe4Mru1nuPVlFfsV"
+        }
+      }
+    },
+    "stoppedDeskTasks": {
+      "Bittensor": false,
+      "Hyperliquid": false,
+      "Polymarket": false,
+      "Sui": false
+    },
+    "completedDeskTasks": [
+      "Bittensor",
+      "Hyperliquid",
+      "Polymarket",
+      "Sui"
+    ],
+    "deskTaskResults": {
+      "Bittensor": {
+        "outcome": "completed",
+        "assistantMessageCount": 6,
+        "assistantTextLength": 6624,
+        "durationMs": 84179
+      },
+      "Hyperliquid": {
+        "outcome": "completed",
+        "assistantMessageCount": 9,
+        "assistantTextLength": 3396,
+        "durationMs": 82135
+      },
+      "Polymarket": {
+        "outcome": "completed",
+        "assistantMessageCount": 7,
+        "assistantTextLength": 2226,
+        "durationMs": 32030
+      },
+      "Sui": {
+        "outcome": "completed",
+        "assistantMessageCount": 1,
+        "assistantTextLength": 1078,
+        "durationMs": 7155
+      }
+    },
+    "directSessionReloadUrl": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/session/ses_0a0185dd5ffeGTfP90OFOlLPcv",
+    "projectHistoryUrl": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/history",
+    "notesPanelUrl": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/session?panel=notes",
+    "memoryPanelUrl": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/session?panel=memory",
+    "walletPanelUrl": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/session?panel=wallet",
+    "supportReport": {
+      "offlineDiagnostics": true
+    },
+    "walletSettingsUrl": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/settings/wallet",
+    "aiSettingsUrl": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/settings/ai",
+    "connectedMcpServers": [],
+    "mcpSettingsUrl": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/settings/extensions/mcp",
+    "billingSettingsUrl": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/settings/billing",
+    "generatedMediaSettingsUrl": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/settings/generated-media",
+    "screenshot": "/Users/abhinavramesh/Documents/Matterhorn-work/wallet-copy-readability-wednesday-rc/qa-reports/wednesday-launch-canonical-cutover-smoke/matterhorn-product-browser-smoke.png",
+    "finalUrl": "http://127.0.0.1:5190/workspace/ws_18dc91c9102a/settings/generated-media"
+  },
+  "warnings": [],
+  "errors": [],
+  "networkFailures": [],
+  "ignoredNetworkResponses": [],
+  "finishedAt": "2026-07-14T09:17:47.730Z"
+}

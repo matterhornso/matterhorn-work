@@ -151,6 +151,9 @@ external-signer boundaries, and execution blocks remain unchanged.
   `qa-reports/wednesday-launch-user-one-product-smoke/summary.json` - 20/20.
 - Launch user two:
   `qa-reports/wednesday-launch-user-two-product-smoke/summary.json` - 20/20.
+- Canonical post-cutover smoke:
+  `qa-reports/wednesday-launch-canonical-cutover-smoke/summary.json` - 20/20
+  with result-required Bittensor, Hyperliquid, Polymarket, and Sui completions.
 - Strict responsive audit:
   `qa-reports/wednesday-launch-full-platform-audit-green/summary.json` -
   104 surfaces, 11 interactions, 2,922 controls, zero issues.
@@ -204,6 +207,12 @@ distributed as the final Wednesday build.
 - `unzip -t`: no errors;
 - desktop doctor: 11/11 pass;
 - packaged clean-profile smoke: 16/16 pass.
+
+After the artifact was verified and the release ref was pushed, the clean RC
+replaced the previous canonical stack on `4130/5190`. Exactly one process owns
+each port, backend health reports `0.13.13` with OpenCode `1.14.38`, the app
+returns HTTP 200, and the result-required canonical browser smoke passes 20/20
+with zero warnings, browser errors, or network failures.
 
 ## Remaining Owners
 

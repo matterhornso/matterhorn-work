@@ -75,6 +75,12 @@ Final release record:
 - ZIP SHA-256:
   `61a27cb71208ab8636af9c87918f06bee792ea699535d004870d87cac37570a3`.
 
+Canonical local app after launch cutover:
+`http://127.0.0.1:5190/workspace/ws_18dc91c9102a/session`.
+
+The URL is already connected to the local authenticated stack on the release
+operator's machine. Credentials are intentionally omitted from this document.
+
 ## Testing Checklist
 
 - create or open a project;
