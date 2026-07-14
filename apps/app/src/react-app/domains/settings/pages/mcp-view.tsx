@@ -768,7 +768,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
           title: "How it works",
           items: [
             "Evidence tools assemble deterministic reports from public, redacted, or server-held safe context.",
-            "Readiness tools state missing dependencies before a customer demo or handoff.",
+            "Readiness tools state missing dependencies before production use or a handoff.",
             "Verification tools reconcile artifacts against expected Matterhorn safety boundaries.",
           ],
         },
@@ -782,7 +782,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
         },
       ],
       [
-        "Run market execution readiness and list blockers for the customer demo.",
+        "Run market execution readiness and list blockers for production use.",
         "Build a customer packet for this public Bittensor wallet context.",
         "Reconcile this market artifact and explain whether it is safe to show.",
       ],
@@ -837,7 +837,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
         },
       ],
       [
-        "List workflow templates available for a first customer demo.",
+        "List workflow templates available for customer use.",
         "Generate a prompt pack for the Bittensor desk.",
         "Plan hosting and email capabilities without executing a provider.",
       ],

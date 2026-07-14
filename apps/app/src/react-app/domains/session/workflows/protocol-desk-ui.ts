@@ -79,7 +79,7 @@ export type CustomerProtocolDeskVisual = {
 };
 
 const STATUS_LABELS: Record<ProtocolDeskVisualStatus, string> = {
-  beta_ready: "Beta-ready",
+  beta_ready: "Read and preview",
   preview_only: "Preview only",
   workflow_ready: "Workflow-ready",
   planned_not_live: "Planned, not live",

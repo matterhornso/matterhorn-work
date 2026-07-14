@@ -68,7 +68,7 @@ for (const phrase of [
 assert.equal(panel.includes("Crypto workspace"), false, "Panel should not render a generic Crypto workspace title");
 
 // 3. The beta-tester sections exist.
-for (const section of ["Ask Agent ->", "Monday beta scenarios", "Monday beta launch checklist", "Safety status", "Evidence / QA"]) {
+for (const section of ["Ask Agent ->", "Guided test scenarios", "Release test checklist", "Safety status", "Evidence / QA"]) {
   assert.ok(panel.includes(`title="${section}"`), `Panel should render a "${section}" section`);
 }
 assert.ok(
@@ -118,7 +118,7 @@ assert.ok(panel.includes("Prepare a preview-only YES/NO plan with no executable 
 for (const phrase of [
   "MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS",
   "MONDAY_BETA_DEMO_SCENARIOS",
-  "Use these five guided scripts for the first 10 customer demos",
+  "Use these five operator scripts to verify customer journeys.",
   "askAgentForMondayBetaScenario",
   'source: "monday-beta-panel"',
   "copyMondayBetaScenarioCommand",
@@ -135,7 +135,7 @@ for (const phrase of [
 //     each customer call.
 for (const phrase of [
   "MONDAY_BETA_LAUNCH_CHECKLIST",
-  "Run this launch-room checklist before each Monday beta customer call.",
+  "Run this launch-room checklist before customer use.",
   "Every command is local, public/redacted, and evidence-oriented; none signs, submits, custodies, or broadcasts.",
   "App opens with first-class desks",
   "Crypto safety smoke is green",
@@ -151,8 +151,8 @@ for (const phrase of [
   "pnpm desktop:beta-doctor",
   "pnpm test:wellness-creator-workflow && node scripts/wellness-creator-workflow.mjs --check",
   "Copy launch check",
-  "Monday beta promise",
-  "Bittensor is the most mature beta path.",
+  "Release boundary",
+  "Bittensor supports public reads and unsigned previews.",
   "Longevity is a standalone workflow surface, not Web3 and not medical care.",
   "Longevity workflow: Standalone",
   "Not Web3, not medical advice, and no live payments or email.",
@@ -162,7 +162,7 @@ for (const phrase of [
 
 // 6. Safety status: the three venue lines + the custody/no-live-trade statement.
 for (const phrase of [
-  "Most complete beta flow",
+  "Public reads and unsigned previews.",
   "External signer required for actions",
   "Preview only, live submission off.",
   "Preview only, compliance checks required.",

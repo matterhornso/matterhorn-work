@@ -220,7 +220,7 @@ for (const phrase of [
   "buildCustomerBetaDemoStarterCards",
   "Choose a task to start this desk agent.",
   "Allowed workspace intents",
-  "Beta-ready",
+  "Read and preview",
   "Preview only",
   "Workflow-ready",
   "Planned, not live",

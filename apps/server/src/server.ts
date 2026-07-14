@@ -9788,7 +9788,7 @@ function createRoutes(
         status: bittensor.status,
         summary: bittensor.status === "pass"
           ? "Bittensor chat, read, preview, and non-custodial safety checks are ready."
-          : "Review Bittensor blockers or warnings before a customer demo.",
+          : "Review Bittensor blockers or warnings before production use.",
       },
       {
         id: "hyperliquid.read_preview",
@@ -9844,8 +9844,8 @@ function createRoutes(
         kind: "readiness_report",
         title: "Crypto customer readiness",
         summary: ready
-          ? "Runtime crypto surfaces are ready for a guarded customer demo after offline smoke evidence is attached."
-          : "Resolve readiness blockers before a customer demo.",
+          ? "Runtime crypto surfaces are ready within the stated read, preview, and external-handoff boundaries after offline smoke evidence is attached."
+          : "Resolve readiness blockers before production use.",
         tone: ready ? "good" : "danger",
         items: [
           { label: "Bittensor", value: bittensor.status, tone: bittensor.status === "pass" ? "good" : bittensor.status === "warning" ? "warning" : "danger" },

@@ -950,7 +950,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             ? `Local Matterhorn API unavailable for /api/crypto/market-execution-readiness: ${err.message}`
             : "Local Matterhorn API unavailable for /api/crypto/market-execution-readiness.",
         }],
-        nextActions: ["Restart or reconnect the Matterhorn Work local server, then refresh market execution readiness before customer demos."],
+        nextActions: ["Restart or reconnect the Matterhorn Work local server, then refresh market execution readiness before production use."],
         safety: {
           nonCustodial: true,
           liveSubmissionEnabled: false,
@@ -1182,7 +1182,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   };
 
   const askAgentAboutReadiness = async () => {
-    const prompt = "Bittensor Agent task: Review the current Matterhorn Bittensor customer readiness status. Explain any failing or warning checks, what is safe to demo, and the next command or fix to run before a test customer session.";
+    const prompt = "Bittensor Agent task: Review the current Matterhorn Bittensor customer readiness status. Explain any failing or warning checks, the supported production boundaries, and the next command or fix to run before customer use.";
     await sendToChat(prompt, { readiness });
   };
 
@@ -1220,7 +1220,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
   const askAgentForMondayBetaScenario = async (scenario: CustomerBetaDemoScenario) => {
     const prompt = [
-      "Use Matterhorn Monday beta demo mode.",
+      "Use Matterhorn guided test mode.",
       scenario.entryPrompt,
       "Keep all outputs public/redacted and customer-safe.",
       "Do not ask for seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, custody, live market submission, or real funds.",
@@ -1691,9 +1691,9 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               </div>
             </Section>
 
-            <Section title="Monday beta scenarios" icon={<Star className="size-4" />}>
+            <Section title="Guided test scenarios" icon={<Star className="size-4" />}>
               <p className="text-[11px] leading-5 text-dls-secondary">
-                Use these five guided scripts for the first 10 customer demos. Each task is editable and each evidence command is fixture/offline unless you supply public inputs.
+                Use these five operator scripts to verify customer journeys. Each task is editable and each evidence command is fixture/offline unless you supply public inputs.
               </p>
               <div className="mt-2 grid grid-cols-1 gap-2">
                 {MONDAY_BETA_DEMO_SCENARIOS.map((scenario) => {
@@ -1729,9 +1729,9 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               </div>
             </Section>
 
-            <Section title="Monday beta launch checklist" icon={<Shield className="size-4" />}>
+            <Section title="Release test checklist" icon={<Shield className="size-4" />}>
               <p className="text-[11px] leading-5 text-dls-secondary">
-                Run this launch-room checklist before each Monday beta customer call. Every command is local, public/redacted, and evidence-oriented; none signs, submits, custodies, or broadcasts.
+                Run this launch-room checklist before customer use. Every command is local, public/redacted, and evidence-oriented; none signs, submits, custodies, or broadcasts.
               </p>
               <div className="mt-2 grid grid-cols-1 gap-2">
                 {MONDAY_BETA_LAUNCH_CHECKLIST.map((item) => {
@@ -1759,8 +1759,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   );
                 })}
               </div>
-              <Notice tone="info" icon={<Shield className="size-4" />} title="Monday beta promise">
-                Bittensor is the most mature beta path. Hyperliquid and Polymarket are separate preview desks with external-signer language. Longevity is a standalone workflow surface, not Web3 and not medical care.
+              <Notice tone="info" icon={<Shield className="size-4" />} title="Release boundary">
+                Bittensor supports public reads and unsigned previews. Hyperliquid and Polymarket are separate preview desks with external-signer language. Longevity is a standalone workflow surface, not Web3 and not medical care.
               </Notice>
             </Section>
 
@@ -1769,7 +1769,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                   <p className="text-xs font-semibold text-dls-text">Bittensor</p>
                   <p className="mt-1 break-words text-[11px] leading-5 text-dls-secondary">
-                    Most complete beta flow. External signer required for actions; Matterhorn never holds keys.
+                    Public reads and unsigned previews. External signer required for actions; Matterhorn never holds keys.
                   </p>
                 </div>
                 <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
@@ -1823,13 +1823,13 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 {cryptoReadinessBlocker ? (
                   <p className="text-xs leading-5 text-red-300">Blocker: {cryptoReadinessBlocker}</p>
                 ) : cryptoReadinessFailures[0] ? (
-                  <p className="text-xs leading-5 text-red-300">{cryptoReadinessFailures[0].label ?? "Protocol readiness"}: {cryptoReadinessFailures[0].summary ?? "Needs attention before customer demo."}</p>
+                  <p className="text-xs leading-5 text-red-300">{cryptoReadinessFailures[0].label ?? "Protocol readiness"}: {cryptoReadinessFailures[0].summary ?? "Needs attention before production use."}</p>
                 ) : cryptoReadinessWarnings[0] ? (
-                  <p className="text-xs leading-5 text-amber-300">{cryptoReadinessWarnings[0].label ?? "Protocol readiness"}: {cryptoReadinessWarnings[0].summary ?? "Review before customer demo."}</p>
+                  <p className="text-xs leading-5 text-amber-300">{cryptoReadinessWarnings[0].label ?? "Protocol readiness"}: {cryptoReadinessWarnings[0].summary ?? "Review before production use."}</p>
                 ) : cryptoReadiness?.ready && readiness?.ready ? (
-                  <p className="text-xs leading-5 text-emerald-300">Protocol readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview demo flows.</p>
+                  <p className="text-xs leading-5 text-emerald-300">Protocol readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview flows.</p>
                 ) : (
-                  <p className="text-xs leading-5 text-dls-secondary">Check readiness before a test customer session.</p>
+                  <p className="text-xs leading-5 text-dls-secondary">Check readiness before customer use.</p>
                 )}
                 {cryptoReadinessNextAction || readinessNextAction ? (
                   <p className="text-xs leading-5 text-sky-200">Next: {cryptoReadinessNextAction ?? readinessNextAction}</p>
@@ -1856,14 +1856,14 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               </div>
             </Section>
 
-            <Section title="Desktop beta" icon={<ExternalLink className="size-4" />}>
+            <Section title="Desktop release checks" icon={<ExternalLink className="size-4" />}>
               <div className="space-y-3">
                 <p className="text-xs leading-5 text-dls-secondary">
-                  First-run tester path: build an unsigned local DMG/ZIP, run the desktop beta doctor, then capture install, launch, readiness, and safety evidence before a customer session.
+                  First-run test path: build an unsigned local DMG/ZIP, run the desktop release doctor, then capture install, launch, readiness, and safety evidence before customer use.
                 </p>
                 <div className="grid grid-cols-1 gap-2">
                   <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
-                    <p className="text-xs font-semibold text-dls-text">Bittensor: Beta-ready</p>
+                    <p className="text-xs font-semibold text-dls-text">Bittensor: Read and preview</p>
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Read, preview, watches, receipts, and external-signer handoff.</p>
                   </div>
                   <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">

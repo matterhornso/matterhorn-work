@@ -82,8 +82,8 @@ for (const phrase of [
 }
 
 for (const phrase of [
-  "Desktop beta",
-  "Bittensor: Beta-ready",
+  "Desktop release checks",
+  "Bittensor: Read and preview",
   "Hyperliquid/Polymarket: Preview only",
   "Longevity workflow: Standalone",
   "Open install guide",

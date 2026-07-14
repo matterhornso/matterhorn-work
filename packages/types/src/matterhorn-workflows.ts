@@ -3273,7 +3273,7 @@ export const BITTENSOR_TAO_STAKING_PREVIEW_DEMO_SCENARIO: CustomerBetaDemoScenar
   version: "matterhorn.customer.beta.demo.scenario.v1",
   id: "bittensor_tao_staking_preview",
   displayName: "Bittensor TAO staking preview",
-  targetCustomerPersona: "TAO operator or delegator participating in the Monday beta",
+  targetCustomerPersona: "TAO operator or delegator reviewing an unsigned staking preview",
   assignedBetaCustomers: ["Alpha Node DAO", "TensorVault Labs"],
   entryPrompt: "Show my TAO, compare validators on subnet 1, and prepare an unsigned 1 TAO staking preview",
   expectedArtifacts: [
@@ -3359,7 +3359,7 @@ export const HYPERLIQUID_ORDER_PREVIEW_DEMO_SCENARIO: CustomerBetaDemoScenario =
   version: "matterhorn.customer.beta.demo.scenario.v1",
   id: "hyperliquid_order_preview",
   displayName: "Hyperliquid trade handoff",
-  targetCustomerPersona: "Crypto trader reviewing Hyperliquid markets during the Monday beta",
+  targetCustomerPersona: "Crypto trader reviewing Hyperliquid markets and an external handoff",
   assignedBetaCustomers: ["Arbor Trading", "PerpPrime Capital"],
   entryPrompt: "Prepare a Hyperliquid BTC-PERP long handoff without signing or submitting anything",
   expectedArtifacts: [
@@ -3430,7 +3430,7 @@ export const POLYMARKET_MARKET_RESEARCH_DEMO_SCENARIO: CustomerBetaDemoScenario 
   version: "matterhorn.customer.beta.demo.scenario.v1",
   id: "polymarket_market_research",
   displayName: "Polymarket market research and preview",
-  targetCustomerPersona: "Prediction market researcher participating in the Monday beta",
+  targetCustomerPersona: "Prediction market researcher reviewing a compliance-gated preview",
   assignedBetaCustomers: ["Forecast Collective", "EdgeBet Research"],
   entryPrompt: "Summarize this Polymarket market and preview a yes position without signing or submitting",
   expectedArtifacts: [
@@ -3501,7 +3501,7 @@ export const WELLNESS_CLIENT_PROGRAM_PACKET_DEMO_SCENARIO: CustomerBetaDemoScena
   version: "matterhorn.customer.beta.demo.scenario.v1",
   id: "wellness_client_program_packet",
   displayName: "Longevity client program packet",
-  targetCustomerPersona: "Longevity creator or coach running the Monday beta",
+  targetCustomerPersona: "Longevity creator or coach preparing a reviewed client program",
   assignedBetaCustomers: ["Summit Wellness Co", "FitPath Studio"],
   entryPrompt: "Create a 6-week strength program packet for busy professionals with a weekly check-in workflow",
   expectedArtifacts: [
@@ -3611,7 +3611,7 @@ export const DECENTRALIZED_SERVICES_FUTURE_PLAN_DEMO_SCENARIO: CustomerBetaDemoS
   version: "matterhorn.customer.beta.demo.scenario.v1",
   id: "decentralized_services_future_plan",
   displayName: "Decentralized services future plan",
-  targetCustomerPersona: "Builder or operator planning future decentralized service actions during the Monday beta",
+  targetCustomerPersona: "Builder or operator planning future decentralized service actions",
   assignedBetaCustomers: ["OpenResearch DAO", "StackSafe Labs"],
   entryPrompt: "Plan a decentralized storage and email workflow for my research group",
   expectedArtifacts: [
@@ -3747,7 +3747,7 @@ export const BITTENSOR_DESK_MANIFEST: MatterhornDeskManifest = {
   deskDescription: "Read, preview, and external-signer handoffs for Bittensor staking and delegation.",
   deskAccent: "purple",
   customerPrimaryAction: "Preview stake or delegation handoff",
-  customerSafetyStrip: "Beta-ready. Read-only previews and external-signer handoffs only. Never provide private keys or seed phrases.",
+  customerSafetyStrip: "Read and preview only. External-signer handoffs only. Never provide private keys or seed phrases.",
   status: "beta_ready",
   allowedSurfaces: ["protocol_desk", "workflow_chat", "evidence_packet"],
   liveSubmissionEnabled: false,

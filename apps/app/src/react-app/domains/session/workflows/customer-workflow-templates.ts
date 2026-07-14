@@ -169,7 +169,7 @@ const CHAT_MODE_BY_PROTOCOL_WORKSPACE: Record<MatterhornProtocolWorkspaceId, Cus
 function statusLabel(status: CustomerWorkflowTemplate["status"] | undefined): string {
   switch (status) {
     case "beta_ready":
-      return "Beta-ready";
+      return "Read and preview";
     case "preview_only":
       return "Preview only";
     case "workflow_ready":
