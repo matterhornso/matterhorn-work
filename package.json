@@ -50,6 +50,7 @@
     "build:ui": "pnpm --filter @matterhorn-work/app build",
     "electron:tester-artifact": "node scripts/electron-local-tester-artifact.mjs",
     "desktop:beta-doctor": "node scripts/desktop-beta-first-run-doctor.mjs",
+    "desktop:release-doctor": "node scripts/desktop-beta-first-run-doctor.mjs",
     "smoke:desktop-packaged-clean-profile": "node scripts/desktop-packaged-clean-profile-smoke.mjs",
     "test:desktop-packaged-clean-profile-smoke": "node scripts/desktop-packaged-clean-profile-smoke.test.mjs",
     "beta:monday-rc": "node scripts/monday-beta-rc-pack.mjs",
@@ -231,6 +232,7 @@
       "protobufjs"
     ],
     "overrides": {
+      "@babel/core": "7.29.6",
       "@hono/node-server": "1.19.13",
       "@isaacs/brace-expansion": "5.0.1",
       "axios": "1.16.0",
@@ -240,16 +242,18 @@
       "fast-uri": "3.1.2",
       "file-type": "21.3.2",
       "follow-redirects": "1.16.0",
-      "hono": "4.12.21",
+      "form-data": "4.0.6",
+      "hono": "4.12.25",
       "ip-address": "10.1.1",
+      "js-yaml": "4.2.0",
       "minimatch": "10.2.3",
       "picomatch": "2.3.2",
       "postcss": "8.5.10",
       "qs": "6.15.2",
-      "react-router": "7.15.0",
+      "react-router": "7.15.1",
       "seroval": "1.4.1",
       "viem": "2.52.2",
-      "ws": "8.20.1",
+      "ws": "8.21.0",
       "yaml": "2.8.3"
     },
     "patchedDependencies": {}

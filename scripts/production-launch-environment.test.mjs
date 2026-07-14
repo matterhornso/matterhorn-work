@@ -137,12 +137,18 @@ for (const phrase of [
   "phase1_stripe_test",
   "--require-production",
   "--include-generated-media-flow",
-  "pnpm --silent beta:monday-rc",
+  "pnpm test:matterhorn-platform-safety",
+  "pnpm --filter matterhorn-work-orchestrator build:sidecars",
+  "node scripts/release/review.mjs --strict --json",
+  "pnpm desktop:release-doctor",
+  "pnpm smoke:desktop-packaged-clean-profile",
 ]) {
   assert.ok(guide.includes(phrase), `production launch guide must explain ${phrase}`);
 }
 
 const docsIndex = readFileSync("docs/README.md", "utf8");
 assert.ok(docsIndex.includes("production-launch-configuration.md"), "docs index must link the production launch guide");
+assert.ok(docsIndex.includes("friday-production-go-live-readiness-2026-07-17.md"), "docs index must link the Friday production readiness ledger");
+assert.ok(docsIndex.includes("friday-production-go-live-execution-2026-07-17.md"), "docs index must link the Friday production execution runbook");
 
 console.log("Matterhorn production launch environment contract passed.");

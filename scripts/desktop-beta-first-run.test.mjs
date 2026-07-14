@@ -16,6 +16,7 @@ function sha256(text) {
 const rootPackage = JSON.parse(read("package.json"));
 const doctor = read("scripts/desktop-beta-first-run-doctor.mjs");
 const doc = read("docs/desktop-beta-first-run.md");
+const productionGuide = read("docs/production-launch-configuration.md");
 const panel = read("apps/app/src/react-app/domains/wallet/pages/BittensorPanel.tsx");
 const desktopMain = read("apps/desktop/electron/main.mjs");
 const workflow = read(".github/workflows/ci-tests.yml");
@@ -26,13 +27,19 @@ assert.equal(
   "package.json should expose the desktop beta doctor",
 );
 assert.equal(
+  rootPackage.scripts["desktop:release-doctor"],
+  "node scripts/desktop-beta-first-run-doctor.mjs",
+  "package.json should expose the stable desktop release doctor",
+);
+assert.equal(
   rootPackage.scripts["test:desktop-beta-first-run"],
   "node scripts/desktop-beta-first-run.test.mjs",
   "package.json should expose the desktop beta first-run gate",
 );
 
 for (const phrase of [
-  "matterhorn.desktop-beta.first-run-doctor.v1",
+  "matterhorn.desktop.release-doctor.v1",
+  "pnpm desktop:release-doctor",
   "--artifact-dir",
   "--server-url",
   "--markdown-output",
@@ -46,6 +53,14 @@ for (const phrase of [
   "servicesWellness",
 ]) {
   assert.ok(doctor.includes(phrase), `doctor should include ${phrase}`);
+}
+
+for (const phrase of [
+  "Production Launch Configuration",
+  "pnpm desktop:release-doctor",
+  "signed/notarized package",
+]) {
+  assert.ok(productionGuide.includes(phrase), `production guide should include ${phrase}`);
 }
 
 for (const phrase of [
@@ -153,13 +168,13 @@ const result = spawnSync("node", [
 ], { encoding: "utf8" });
 assert.equal(result.status, 0, result.stderr);
 const report = JSON.parse(result.stdout);
-assert.equal(report.version, "matterhorn.desktop-beta.first-run-doctor.v1");
+assert.equal(report.version, "matterhorn.desktop.release-doctor.v1");
 assert.equal(report.ready, true);
-assert.equal(report.copyDiagnostics.customerBoundary.bittensor, "Beta-ready read/preview/external-signer workflow");
+assert.equal(report.copyDiagnostics.customerBoundary.bittensor, "Bittensor: public read, unsigned preview, and external-signer workflow");
 assert.ok(report.checks.some((check) => check.id === "artifact.dir" && check.status === "pass"));
 assert.ok(report.checks.some((check) => check.id === "server.health" && check.status === "skip"));
 assert.equal(/privateKey|apiSecret|rawSignature|signedPayload/.test(result.stdout), false);
 
 rmSync(fixtureDir, { recursive: true, force: true });
 
-console.log("Desktop beta first-run gate passed.");
+console.log("Desktop release and legacy beta first-run gate passed.");

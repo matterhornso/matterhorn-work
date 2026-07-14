@@ -53,12 +53,12 @@ function parseArgs(argv) {
 
 function printHelp() {
   process.stdout.write([
-    "Matterhorn Work desktop beta first-run doctor",
+    "Matterhorn Work desktop release doctor",
     "",
     "Usage:",
-    "  pnpm desktop:beta-doctor -- --json",
-    "  pnpm desktop:beta-doctor -- --artifact-dir ~/Desktop/matterhorn-work-build-<sha> --strict --json",
-    "  pnpm desktop:beta-doctor -- --server-url http://127.0.0.1:<port> --token <client-token> --json",
+    "  pnpm desktop:release-doctor -- --json",
+    "  pnpm desktop:release-doctor -- --artifact-dir ~/Desktop/matterhorn-work-build-<sha> --strict --json",
+    "  pnpm desktop:release-doctor -- --server-url http://127.0.0.1:<port> --token <client-token> --json",
     "",
     "The doctor is read-only. It never asks for keys, secrets, signatures, signed payloads, wallet exports, or funds.",
     "",
@@ -182,7 +182,7 @@ function markdown(report) {
     .map((item) => `| ${item.id} | ${item.status} | ${item.summary.replace(/\|/g, "\\|")} |`)
     .join("\n");
   return [
-    "# Matterhorn Work Desktop Beta First-Run Doctor",
+    "# Matterhorn Work Desktop Release Doctor",
     "",
     `- Git SHA: \`${report.gitSha}\``,
     `- Ready: \`${report.ready}\``,
@@ -225,21 +225,21 @@ const checks = [
   ),
   check(
     "script.doctor",
-    "Desktop beta doctor",
-    packageJson.scripts?.["desktop:beta-doctor"] === "node scripts/desktop-beta-first-run-doctor.mjs" ? "pass" : "fail",
-    "Validates this first-run doctor wiring.",
+    "Desktop release doctor",
+    packageJson.scripts?.["desktop:release-doctor"] === "node scripts/desktop-beta-first-run-doctor.mjs" ? "pass" : "fail",
+    "Validates the stable release doctor wiring.",
   ),
   check(
-    "docs.first_run",
-    "First-run QA guide",
-    requireText("docs/desktop-beta-first-run.md", ["Desktop Beta First-Run", "Gatekeeper", "pnpm desktop:beta-doctor", "No seed phrases"]) ? "pass" : "fail",
-    "Docs cover install, diagnostics, logs, and non-custodial safety.",
+    "docs.release",
+    "Production launch guide",
+    requireText("docs/production-launch-configuration.md", ["Production Launch Configuration", "pnpm desktop:release-doctor", "signed/notarized package", "seed phrases"]) ? "pass" : "fail",
+    "Docs cover production configuration, release diagnostics, signed packages, and non-custodial safety.",
   ),
   check(
-    "ui.beta_boundary",
-    "Customer-facing beta boundary",
-    panelText.includes("Desktop beta") && panelText.includes("Bittensor: Beta-ready") && panelText.includes("Hyperliquid/Polymarket: Preview only") ? "pass" : "fail",
-    "The Demo tab shows Bittensor beta, market preview, and future-service boundaries.",
+    "ui.release_boundary",
+    "Customer-facing release boundary",
+    panelText.includes("Read and preview") && panelText.includes("Preview only") && panelText.includes("Matterhorn uses public reads and external signer/client handoffs") ? "pass" : "fail",
+    "Stable UI distinguishes public reads, unsigned previews, and external handoffs without beta-era labels.",
   ),
   check(
     "safety.copy",
@@ -255,7 +255,7 @@ const failCount = checks.filter((item) => item.status === "fail").length;
 const warningCount = checks.filter((item) => item.status === "warning").length;
 const skipCount = checks.filter((item) => item.status === "skip").length;
 const report = {
-  version: "matterhorn.desktop-beta.first-run-doctor.v1",
+  version: "matterhorn.desktop.release-doctor.v1",
   generatedAt: new Date().toISOString(),
   gitSha: gitSha(),
   ready: failCount === 0,
@@ -267,18 +267,18 @@ const report = {
   },
   checks,
   copyDiagnostics: {
-    installGuide: "docs/desktop-beta-first-run.md",
+    installGuide: "docs/production-launch-configuration.md",
     testerArtifactCommand: "pnpm electron:tester-artifact -- --output-dir ~/Desktop/matterhorn-work-build-$(git rev-parse --short=8 HEAD) --json",
-    doctorCommand: "pnpm desktop:beta-doctor -- --artifact-dir <tester-build-dir> --strict --json",
+    doctorCommand: "pnpm desktop:release-doctor -- --artifact-dir <tester-build-dir> --strict --json",
     logLocations: [
       "~/Library/Logs/Matterhorn/",
       "~/Library/Application Support/Matterhorn/",
       "apps/desktop/dist-electron/mac-arm64/Matterhorn.app/Contents/Resources/app.asar",
     ],
     customerBoundary: {
-      bittensor: "Beta-ready read/preview/external-signer workflow",
-      hyperliquidPolymarket: "Preview/external-signer readiness only; no live submit",
-      servicesWellness: "Workflow packs and future hooks only; no live payments/email/storage",
+      bittensor: "Bittensor: public read, unsigned preview, and external-signer workflow",
+      hyperliquidPolymarket: "Hyperliquid and Polymarket: preview/external-signer readiness only; no live submit",
+      servicesWellness: "Services and wellness: workflow packs only; unavailable operator services remain disabled",
     },
   },
 };
@@ -290,7 +290,7 @@ if (config.markdownOutput) {
 if (config.json) {
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 } else {
-  console.log(`Matterhorn desktop beta first-run doctor: ${report.ready ? "READY" : "NOT READY"}`);
+  console.log(`Matterhorn desktop release doctor: ${report.ready ? "READY" : "NOT READY"}`);
   for (const item of checks) {
     console.log(`[${item.status}] ${item.id}: ${item.summary}`);
   }

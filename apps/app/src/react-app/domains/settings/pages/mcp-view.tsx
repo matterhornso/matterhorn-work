@@ -257,7 +257,7 @@ function protocolDeskLogoNode(entry: McpDirectoryInfo, size = 24) {
 function availabilityLabelForEntry(entry: McpDirectoryInfo, configured: boolean, disabledReason: string | null) {
   if (disabledReason) return "Blocked by platform";
   const id = entry.id ?? entry.serverName ?? getMcpServerName(entry);
-  if (id === "bittensor") return "Built-in beta";
+  if (id === "bittensor") return "Built-in preview";
   if (id === "hyperliquid" || id === "polymarket") return "Built-in preview";
   if (id === "matterhorn-memory" || id === "matterhorn-crypto") return "Built-in";
   if (id === "openai-image-gen" || id === "matterhorn-voice") return "Needs API key";

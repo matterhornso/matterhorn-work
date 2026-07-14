@@ -463,7 +463,7 @@ function venueToneStyle(activeVenue: CryptoVenue): CSSProperties {
 function protocolStatusLabel(status: MatterhornProtocolWorkspaceManifest["customerStatus"]): string {
   switch (status) {
     case "beta_ready":
-      return "Beta-ready";
+      return "Read and preview";
     case "preview_only":
       return "Preview only";
     case "workflow_ready":
@@ -557,7 +557,7 @@ const VENUE_DESKS: Record<CryptoVenue, {
     eyebrow: "TAO wallet · subnets · validators",
     headline: "Start with your TAO, then choose what to do next.",
     description: "Matterhorn explains Bittensor in plain language: check a public wallet, browse subnets, compare validators, prepare staking or transfer previews, and keep every action external-signer only.",
-    statusLabel: "Beta-ready",
+    statusLabel: "Read and preview",
     canSubmit: "Unsigned preview only",
     liveSubmission: "External signer only",
     signer: "External Bittensor signer required",
@@ -1465,7 +1465,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           <div className="mt-3 grid grid-cols-1 gap-1 rounded-lg bg-dls-surface-muted/35 p-1 sm:grid-cols-5">
             {[
               { key: "overview" as const, label: "Overview" },
-              { key: "demo" as const, label: "Demo" },
+              ...(BITTENSOR_BETA_MODE ? [{ key: "demo" as const, label: "Demo" }] : []),
               { key: "subnets" as const, label: "Subnets" },
               { key: "wallet" as const, label: "Wallet" },
               { key: "actions" as const, label: "Actions" },
@@ -1670,7 +1670,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           </div>
         )}
 
-        {venue === "bittensor" && tab === "demo" && (
+        {BITTENSOR_BETA_MODE && venue === "bittensor" && tab === "demo" && (
           <div className="space-y-4">
             <Section title="Ask Agent ->" icon={<BrainCircuit className="size-4" />}>
               <p className="text-[11px] leading-5 text-dls-secondary">
@@ -2441,7 +2441,7 @@ function UnifiedWalletPanel({
   const label = venue === "bittensor" ? "SS58 public wallet" : "External wallet/client";
   const value = venue === "bittensor"
     ? (watchAddress.trim() ? shortAddress(watchAddress.trim()) : "Not connected")
-    : "Preview-only beta";
+    : "Preview only";
   return (
     <div className="rounded-lg bg-dls-surface-muted/35 px-3 py-2.5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -2457,7 +2457,7 @@ function UnifiedWalletPanel({
             ) : null}
           </div>
           <div className="mt-1 text-[11px] leading-5 text-dls-secondary">
-            One wallet layer is the product direction. Today this beta uses public reads and external signer/client handoffs; Matterhorn never takes custody or secrets.
+            Matterhorn uses public reads and external signer/client handoffs; it never takes custody or secrets.
           </div>
         </div>
         <Button variant="outline" size="sm" className="shrink-0 text-xs" onClick={onOpenWallet}>

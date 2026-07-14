@@ -4,6 +4,15 @@ import { readFileSync } from "node:fs";
 
 const releaseWorkflow = readFileSync(".github/workflows/release-macos-aarch64.yml", "utf8");
 const daytonaWorkflow = readFileSync(".github/workflows/release-daytona-snapshot.yml", "utf8");
+const releaseReview = readFileSync("scripts/release/review.mjs", "utf8");
+
+for (const phrase of [
+  'orchestratorPkg.dependencies?.["matterhorn-work-server"]',
+  'manifest.entries?.["matterhorn-work-server"]?.version',
+  "Orchestrator server dependency matches server version",
+]) {
+  assert.ok(releaseReview.includes(phrase), `release review must understand the canonical Matterhorn server package: ${phrase}`);
+}
 
 for (const phrase of [
   'RELEASE_NAME="Matterhorn Work $TAG"',

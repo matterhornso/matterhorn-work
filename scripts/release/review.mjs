@@ -25,6 +25,11 @@ const serverPkg = readJson(resolve(root, "apps", "server", "package.json"));
 const opencodeRouterPkg = readJson(
   resolve(root, "apps", "opencode-router", "package.json"),
 );
+const orchestratorServerDependencyName = orchestratorPkg.dependencies?.["matterhorn-work-server"]
+  ? "matterhorn-work-server"
+  : orchestratorPkg.dependencies?.["openwork-server"]
+    ? "openwork-server"
+    : null;
 const versions = {
   app: appPkg.version ?? null,
   desktop: desktopPkg.version ?? null,
@@ -33,8 +38,10 @@ const versions = {
   opencodeRouter: opencodeRouterPkg.version ?? null,
   opencode: pinnedOpencodeVersion || null,
   opencodeRouterVersionPinned: desktopPkg.opencodeRouterVersion ?? null,
-  orchestratorOpenworkServerRange:
-    orchestratorPkg.dependencies?.["openwork-server"] ?? null,
+  orchestratorServerDependencyName,
+  orchestratorServerRange: orchestratorServerDependencyName
+    ? orchestratorPkg.dependencies?.[orchestratorServerDependencyName] ?? null
+    : null,
 };
 
 const checks = [];
@@ -91,19 +98,19 @@ if (versions.opencode) {
   );
 }
 
-const openworkServerRange = versions.orchestratorOpenworkServerRange ?? "";
-const openworkServerPinned = /^\d+\.\d+\.\d+/.test(openworkServerRange);
-if (!openworkServerRange) {
-  addWarning("openwork-orchestrator is missing an openwork-server dependency.");
-} else if (!openworkServerPinned) {
+const orchestratorServerRange = versions.orchestratorServerRange ?? "";
+const orchestratorServerPinned = /^\d+\.\d+\.\d+/.test(orchestratorServerRange);
+if (!orchestratorServerRange) {
+  addWarning("matterhorn-work-orchestrator is missing a matterhorn-work-server dependency.");
+} else if (!orchestratorServerPinned) {
   addWarning(
-    `openwork-orchestrator openwork-server dependency is not pinned (${openworkServerRange}).`,
+    `matterhorn-work-orchestrator ${versions.orchestratorServerDependencyName} dependency is not pinned (${orchestratorServerRange}).`,
   );
 } else {
   addCheck(
-    "Openwork-server dependency matches server version",
-    versions.server && openworkServerRange === versions.server,
-    `${openworkServerRange} vs ${versions.server ?? "?"}`,
+    "Orchestrator server dependency matches server version",
+    versions.server && orchestratorServerRange === versions.server,
+    `${versions.orchestratorServerDependencyName}@${orchestratorServerRange} vs ${versions.server ?? "?"}`,
   );
 }
 
@@ -122,7 +129,8 @@ if (existsSync(sidecarManifestPath)) {
     versions.orchestrator && manifest.version === versions.orchestrator,
     `${manifest.version ?? "?"} vs ${versions.orchestrator ?? "?"}`,
   );
-  const serverEntry = manifest.entries?.["openwork-server"]?.version;
+  const serverEntry = manifest.entries?.["matterhorn-work-server"]?.version
+    ?? manifest.entries?.["openwork-server"]?.version;
   const routerEntry = manifest.entries?.["opencode-router"]?.version;
   if (serverEntry) {
     addCheck(

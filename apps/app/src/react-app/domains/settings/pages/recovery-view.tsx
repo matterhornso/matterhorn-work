@@ -55,8 +55,8 @@ export function RecoveryView(props: RecoveryViewProps) {
         </Alert>
       )}
       <SettingsNotice>
-        Preview diagnostics: reset, repair, and Docker cleanup actions are intentionally disabled in the beta UI until the
-        desktop bridge exposes safe confirmation flows.
+        Diagnostics are available now. Reset, repair, and Docker cleanup stay disabled until the desktop bridge exposes
+        safe, verified confirmation flows.
       </SettingsNotice>
       <LayoutSectionItem>
         <LayoutSectionItemHeader>

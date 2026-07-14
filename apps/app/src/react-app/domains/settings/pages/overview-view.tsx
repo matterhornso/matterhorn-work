@@ -2138,7 +2138,7 @@ export function SettingsOverviewView(props: {
           description="Status of each Web3 workspace."
           status={<StatusBadge tone="ready">Boundaries visible</StatusBadge>}
         >
-          <Row label="Bittensor" hint="TAO, subnets, validators, and staking previews (external signer required)." value={<StatusBadge tone="ready">Beta ready</StatusBadge>} />
+          <Row label="Bittensor" hint="TAO, subnets, validators, and staking previews (external signer required)." value={<StatusBadge tone="ready">Read and preview</StatusBadge>} />
           <Row label="Hyperliquid" hint="Account, orderbook, and trade handoffs. Your client executes." value={<StatusBadge tone="preview">External handoff</StatusBadge>} />
           <Row label="Polymarket" hint="Market discovery, odds, compliance, and gated handoffs." value={<StatusBadge tone="preview">Compliance gated</StatusBadge>} />
           <p className="text-xs leading-5 text-dls-secondary">
@@ -2186,10 +2186,10 @@ export function SettingsOverviewView(props: {
           </div>
         </SettingsCard>
 
-        {/* 7. Beta Diagnostics */}
+        {/* 7. Release diagnostics */}
         <SettingsCard
           icon={<Stethoscope size={18} />}
-          title="Beta Diagnostics"
+          title="Release diagnostics"
           description="Version info and tools for reporting issues."
           status={<StatusBadge tone="desktop">Desktop only</StatusBadge>}
         >
@@ -2197,10 +2197,10 @@ export function SettingsOverviewView(props: {
           <Row
             label="Run a diagnostics check"
             hint="Copy and run this in your terminal to capture a redacted readiness report."
-            value={<CopyButton text="pnpm desktop:beta-doctor -- --strict --json" label="Copy command" />}
+            value={<CopyButton text="pnpm desktop:release-doctor -- --strict --json" label="Copy command" />}
           />
           <p className="text-xs leading-5 text-dls-secondary">
-            See the beta first-run and customer-evidence docs for the full checklist.
+            See the first-run and customer-evidence docs for the full checklist.
           </p>
         </SettingsCard>
 

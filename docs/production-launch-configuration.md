@@ -70,23 +70,33 @@ blocked and emits a `launchBlockers` list naming the responsible owner and next
 action. When generated-media flow testing is included, entitlement failures are
 reported separately from platform service configuration.
 
-Then run the complete release pack. It cannot report `ready: true` unless the
-platform safety gate, production backend probe, deployed browser smoke, real
-Bittensor evidence, and packaged desktop checks all pass:
+Then run the stable release gates. A public release is blocked unless the
+platform safety gate, production backend probe, release review, deployed
+browser smoke, real wallet/device acceptance, and packaged desktop checks all
+pass:
 
 ```bash
-pnpm --silent beta:monday-rc -- \
-  --output-dir /tmp/matterhorn-launch-rc \
+pnpm test:matterhorn-platform-safety
+
+node scripts/product-readiness-smoke.mjs \
   --server-url "$MATTERHORN_WORK_SERVER_URL" \
   --token "$MATTERHORN_WORK_TOKEN" \
   --workspace-id "$MATTERHORN_WORKSPACE_ID" \
-  --app-url "$MATTERHORN_APP_URL" \
-  --bittensor-beta-gate /tmp/matterhorn-bittensor-beta.json \
-  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
-  --bittensor-evidence-verify /tmp/matterhorn-bittensor-evidence-verify.json \
-  --bittensor-browser-qa /tmp/matterhorn-bittensor-browser-qa.md \
-  --strict --json
+  --require-production --include-generated-media-flow --strict --json
+
+SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)" \
+  pnpm --filter matterhorn-work-orchestrator build:sidecars
+SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)" \
+  node scripts/release/review.mjs --strict --json
+
+pnpm desktop:release-doctor -- \
+  --artifact-dir "$MATTERHORN_RELEASE_ARTIFACT_DIR" --strict --json
+pnpm smoke:desktop-packaged-clean-profile -- \
+  --artifact-dir "$MATTERHORN_RELEASE_ARTIFACT_DIR"
 ```
 
-Do not mark the launch ready from the fixture/offline contract report. The
-running production-required probe and the RC pack are the decision surfaces.
+Do not mark the launch ready from a fixture/offline contract report or an
+unsigned local artifact. The running production-required probe, exact deployed
+browser evidence, real-wallet acceptance record, and signed/notarized package
+evidence are the decision surfaces. The dated Friday execution and readiness
+ledgers contain the complete launch-room sequence.

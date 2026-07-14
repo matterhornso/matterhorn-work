@@ -562,7 +562,7 @@ export default function MarketplaceView() {
               Agent Marketplace Preview
             </h1>
             <p className="text-xs text-dls-secondary">
-              Browse future agent templates. Hiring, payment, and deployment are not live in this beta.
+              Browse future agent templates. Hiring, payment, and deployment are coming soon.
             </p>
           </div>
         </div>
@@ -586,7 +586,7 @@ export default function MarketplaceView() {
         ))}
         <div className="flex-1" />
         <div className="text-[10px] text-dls-muted self-center">
-          Preview-only in this beta. No wallet, payment, or live deployment.
+          Preview only. No wallet, payment, or live deployment.
         </div>
       </div>
 
@@ -735,7 +735,7 @@ export default function MarketplaceView() {
                     Choose a Blueprint
                   </h2>
                   <p className="text-xs text-dls-secondary">
-                    Select an agent template to generate a local preview. Deployment is not live in this beta.
+                    Select an agent template to generate a local preview. Deployment is not available yet.
                   </p>
                 </div>
 

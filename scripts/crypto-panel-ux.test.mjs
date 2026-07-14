@@ -71,6 +71,17 @@ assert.equal(panel.includes("Crypto workspace"), false, "Panel should not render
 for (const section of ["Ask Agent ->", "Monday beta scenarios", "Monday beta launch checklist", "Safety status", "Evidence / QA"]) {
   assert.ok(panel.includes(`title="${section}"`), `Panel should render a "${section}" section`);
 }
+assert.ok(
+  panel.includes('...(BITTENSOR_BETA_MODE ? [{ key: "demo" as const, label: "Demo" }] : [])'),
+  "Stable builds should not expose the beta demo tab unless the explicit beta flag is enabled",
+);
+assert.ok(
+  panel.includes('BITTENSOR_BETA_MODE && venue === "bittensor" && tab === "demo"'),
+  "Stable builds should keep beta operator content behind the explicit beta flag",
+);
+for (const phrase of ["Read and preview", '"Preview only"', "Matterhorn uses public reads and external signer/client handoffs"]) {
+  assert.ok(panel.includes(phrase), `Stable protocol UI should use release-accurate copy: ${phrase}`);
+}
 
 // 4. The six Ask Agent task button labels exist.
 for (const label of [

@@ -160,8 +160,8 @@ for (const phrase of [
   "Progress check-in",
   "Renewal/follow-up note",
   "Client handoff packet",
-  "Monday beta demos",
-  "Guided runs for the first 10 test customers",
+  "Guided test scenarios",
+  "Operator-only guided runs",
   "Public/redacted only",
   "Customers:",
   "Expected:",
@@ -718,7 +718,7 @@ for (const phrase of [
   "buildMatterhornOrientationSystemPrompt",
   "shouldInjectMatterhornOrientationPrompt(text)",
   "matterhornOrientationPrompt",
-  "[envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt, deskAgentInstructions, workflowRunPrompt, responsePerspectivePrompt]",
+  "[envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt, deskAgentInstructions, workflowRunPrompt, responsePerspectivePrompt, executionModePrompt]",
 ]) {
   assert.ok(sessionRoute.includes(phrase), `broad starter prompts should receive Matterhorn orientation context: ${phrase}`);
 }
@@ -971,7 +971,6 @@ assert.equal(
 
 for (const phrase of [
   "statusHint",
-  "Built-in beta",
   "Built-in preview",
   "Needs API key",
   "Requires setup",
@@ -1032,14 +1031,14 @@ assert.equal(english.includes("Enable Exa web search"), false, "English settings
 
 for (const phrase of [
   "Agent Marketplace Preview",
-  "Hiring, payment, and deployment are not live in this beta.",
-  "Preview-only in this beta. No wallet, payment, or live deployment.",
+  "Hiring, payment, and deployment are coming soon.",
+  "Preview only. No wallet, payment, or live deployment.",
   "Preview template",
   "Save preview",
   "Generate preview",
   "No wallet connection, payment, or on-chain deployment was attempted.",
 ]) {
-  assert.ok(marketplaceSettings.includes(phrase), `agent marketplace should be explicit preview-only beta UI: ${phrase}`);
+  assert.ok(marketplaceSettings.includes(phrase), `agent marketplace should be explicit preview-only UI: ${phrase}`);
 }
 for (const forbidden of [
   "Connect wallet to hire",

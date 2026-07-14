@@ -12,6 +12,7 @@ const desktopRuntime = readFileSync("apps/desktop/electron/runtime.mjs", "utf8")
 const desktopMigration = readFileSync("apps/desktop/electron/migration.mjs", "utf8");
 const desktopUpdater = readFileSync("apps/desktop/electron/updater.mjs", "utf8");
 const helperPrep = readFileSync("apps/desktop/scripts/prepare-computer-use-helper.mjs", "utf8");
+const sidecarPrep = readFileSync("apps/desktop/scripts/prepare-sidecar.mjs", "utf8");
 
 assert.equal(
   rootPackage.scripts["test:electron-packaging-sources"],
@@ -185,6 +186,11 @@ assert.match(helperPrep, /Matterhorn Work Automation Helper\.app/);
 assert.match(helperPrep, /legacyHelperAppName = "OpenWork Computer Use\.app"/);
 assert.match(helperPrep, /rmSync\(legacyAppPath, \{ recursive: true, force: true \}\)/);
 assert.match(helperPrep, /MATTERHORN_WORK_AUTOMATION_HELPER_FORCE_BUILD/);
+assert.equal(
+  sidecarPrep.includes("shell: true"),
+  false,
+  "sidecar compilation must pass arguments directly without an injectable shell",
+);
 assert.equal(
   [
     electronBuilderConfig,

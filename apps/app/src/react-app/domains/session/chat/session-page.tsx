@@ -2809,13 +2809,13 @@ export function SessionPage(props: SessionPageProps) {
                           <>
                             <details className="group rounded-lg bg-dls-surface-muted/35 px-3.5 py-3">
                               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-dls-text marker:hidden">
-                                <span>Monday beta demos</span>
+                                <span>Guided test scenarios</span>
                                 <span className="rounded-md bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
                                   Public/redacted only
                                 </span>
                               </summary>
                               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                                Guided runs for the first 10 test customers. Each inserts an editable prompt and points to an evidence command.
+                                Operator-only guided runs. Each inserts an editable prompt and points to a redacted evidence command.
                               </p>
                               <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-2">
                                 {mondayBetaDemoCards.map((demo) => {

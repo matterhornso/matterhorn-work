@@ -46,7 +46,7 @@ for (const title of [
   'title="Protocols"',
   'title="MCPs &amp; Connectors"',
   'title="Workspaces"',
-  'title="Beta Diagnostics"',
+  'title="Release diagnostics"',
   'title="Privacy &amp; Data"',
   'title="About"',
 ]) {
@@ -110,8 +110,8 @@ for (const phrase of [
   assert.ok(environmentView.includes(phrase), `Environment settings should include: ${phrase}`);
 }
 assert.ok(
-  recoveryView.includes("Preview diagnostics: reset, repair, and Docker cleanup actions are intentionally disabled"),
-  "Recovery should explain that destructive repair actions are preview/disabled in beta",
+  recoveryView.includes("Diagnostics are available now. Reset, repair, and Docker cleanup stay disabled"),
+  "Recovery should explain that destructive repair actions remain safely disabled in this release",
 );
 
 // 5d. Support links and web fallback should be Matterhorn-owned.
