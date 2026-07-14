@@ -17,7 +17,7 @@ export function backendCapabilityLabel(status: MatterhornCapabilityStatus): stri
     case "needs_setup":
       return "Needs setup";
     case "preview":
-      return "Preview";
+      return "Early access";
     case "unsupported":
       return "Not supported here";
     case "error":
@@ -133,7 +133,7 @@ export function storageLocationLabel(store: MatterhornDataStoreDescriptor): stri
   const firstPath = store.paths?.find((path) => path.trim());
   if (firstPath) return firstPath.trim();
   if (store.scope === "matterhorn_cloud") return "Matterhorn Cloud";
-  if (store.scope === "opencode_runtime") return "OpenCode runtime";
+  if (store.scope === "opencode_runtime") return "Chat runtime";
   if (store.scope === "machine_global") return "This device";
   if (store.scope === "workspace") return "Workspace folder";
   return "Location unavailable";

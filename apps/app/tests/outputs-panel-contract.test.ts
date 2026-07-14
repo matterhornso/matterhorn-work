@@ -6,6 +6,17 @@ function readAppSource(path: string) {
 }
 
 describe("Outputs panel contract", () => {
+  test("selected output actions have stable accessible boundaries", () => {
+    const source = readAppSource("domains/session/artifacts/artifact-panel.tsx");
+    const listSource = readAppSource("domains/session/artifacts/output-list.tsx");
+
+    expect(source).toContain('role="region"');
+    expect(source).toContain('aria-label="Output preview"');
+    expect(source).toContain('role="toolbar"');
+    expect(source).toContain('aria-label="Selected output actions"');
+    expect(listSource).toContain("aria-label={`Select output: ${output.title}`}");
+    expect(listSource).not.toContain('<button\n              key={output.id}');
+  });
   test("user-facing labels say Outputs, not Artifacts", () => {
     const sessionSource = readAppSource("domains/session/chat/session-page.tsx");
     const artifactSource = readAppSource("domains/session/artifacts/artifact-panel.tsx");
@@ -23,7 +34,7 @@ describe("Outputs panel contract", () => {
     expect(artifactSource).not.toContain("Close artifact");
   });
 
-  test("output rows surface path, desk, session, time, size, and origin", () => {
+  test("output browser keeps rows compact while preserving source metadata", () => {
     const listSource = readAppSource("domains/session/artifacts/output-list.tsx");
 
     expect(listSource).toContain("output.path");
@@ -35,9 +46,9 @@ describe("Outputs panel contract", () => {
     expect(listSource).toContain("output.isLegacy");
     expect(listSource).toContain("output.receiptStatus");
     expect(listSource).toContain("Receipt:");
-    expect(listSource).toContain("output.nftReceipt");
-    expect(listSource).toContain("nftReceiptKindLabel");
-    expect(listSource).toContain("compactNftReceiptValue");
+    expect(listSource).not.toContain("output.nftReceipt");
+    expect(listSource).not.toContain("output.receiptTitle");
+    expect(listSource).toContain("group-hover:opacity-100");
   });
 
   test("workflow output receipts feed the Outputs rail and panel", () => {
@@ -49,12 +60,10 @@ describe("Outputs panel contract", () => {
     expect(sessionSource).toContain("mergeOpenTargetsWithWorkflowOutputReceipts");
     expect(sessionSource).toContain("listProjectEvidence(outputReceiptWorkspaceId, { limit: 200 })");
     expect(artifactSource).toContain("outputReceipts?: WorkflowOutputReceipt[]");
-    expect(artifactSource).toContain("outputReceiptKindLabel");
-    expect(artifactSource).toContain("Image receipt");
-    expect(artifactSource).toContain("NFT receipt");
-    expect(artifactSource).toContain("Workflow receipt");
-    expect(artifactSource).toContain("selectedOutput?.nftReceipt");
-    expect(artifactSource).toContain("nftReceiptKindLabel");
+    expect(artifactSource).toContain("selectedOutput?.receiptTitle");
+    expect(artifactSource).toContain("selectedOutput?.receiptStatus");
+    expect(artifactSource).toContain("Browse outputs");
+    expect(artifactSource).toContain("File details");
     expect(receiptSource).toContain('"task.output_saved"');
     expect(receiptSource).toContain('"task.completed"');
     expect(receiptSource).toContain('"image.generated"');
@@ -96,6 +105,35 @@ describe("Outputs panel contract", () => {
     expect(contextSource).toContain('".opencode"');
     expect(contextSource).toContain('"openwork"');
     expect(contextSource).toContain('"outbox"');
+  });
+
+  test("narrow output panels keep controls and receipt data readable", () => {
+    const artifactSource = readAppSource("domains/session/artifacts/artifact-panel.tsx");
+    const listSource = readAppSource("domains/session/artifacts/output-list.tsx");
+    const previewSource = readAppSource("domains/session/artifacts/preview.tsx");
+
+    expect(artifactSource).toContain("@container/artifact");
+    expect(artifactSource).toContain("flex min-w-0 flex-wrap items-center");
+    expect(artifactSource).toContain("line-clamp-2 min-w-0 break-all");
+    expect(artifactSource).not.toContain("Saved in this project");
+    expect(listSource).toContain("@md/artifact:flex");
+    expect(listSource).toContain("output.originLabel && output.isLegacy");
+    expect(previewSource).toContain("[overflow-wrap:anywhere]");
+  });
+
+  test("JSON receipts show a readable summary before raw machine data", () => {
+    const artifactSource = readAppSource("domains/session/artifacts/artifact-panel.tsx");
+    const previewSource = readAppSource("domains/session/artifacts/preview.tsx");
+
+    expect(artifactSource).toContain("<StructuredJsonPreview");
+    expect(artifactSource).toContain('selectedOutput?.receiptKind === "nft"');
+    expect(previewSource).toContain("Raw receipt data");
+    expect(previewSource).toContain("Transaction digest");
+    expect(previewSource).toContain("External wallet");
+    expect(previewSource).toContain("Not stored");
+    expect(previewSource).toContain("Identifiers");
+    expect(previewSource).toContain("Copy ${receiptFieldLabels[key]}");
+    expect(previewSource).toContain("<details");
   });
 
   test("command palette uses Outputs terminology for accessible targets", () => {

@@ -12,6 +12,7 @@ export type DeskWorkflowStagePanelProps = {
   currentStageId?: string;
   taskStatus?: "idle" | "staged" | "running" | "waiting" | "completed" | "failed" | "cancelled";
   stageActionDisabled?: boolean;
+  stageActionLabel?: string;
   stageActionTitle?: string;
   onStartStage?: (stageId: string, prompt: string) => void;
   onJotNote?: () => void;
@@ -105,6 +106,7 @@ export function DeskWorkflowStagePanel({
   currentStageId,
   taskStatus = "idle",
   stageActionDisabled = false,
+  stageActionLabel = "Task unavailable",
   stageActionTitle,
   onStartStage,
   onJotNote,
@@ -182,7 +184,7 @@ export function DeskWorkflowStagePanel({
                 requiresExternalSigner={step.requiresExternalSigner}
                 requiresCustomerConfirmation={step.requiresCustomerConfirmation}
                 isCurrent={isCurrent}
-                actionLabel={stageActionDisabled ? "Needs setup" : isCurrent ? "Start" : "Stage task"}
+                actionLabel={stageActionDisabled ? stageActionLabel : "Run in chat"}
                 actionDisabled={stageActionDisabled}
                 actionTitle={stageActionTitle}
                 onAction={onStartStage ? () => onStartStage(step.id, rawPrompt) : undefined}

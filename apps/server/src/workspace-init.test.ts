@@ -42,8 +42,10 @@ describe("ensureWorkspaceFiles", () => {
       expect(hyperliquidAgent).toContain("Can submit: No");
       expect(polymarketAgent).toContain("Polymarket Agent");
       expect(polymarketAgent).toContain("compliance-gated handoff");
+      expect(polymarketAgent).toContain("websearch: deny");
       expect(suiAgent).toContain("Sui Agent");
       expect(suiAgent).toContain("matterhorn_desk_id: sui");
+      expect(suiAgent).toContain("task: deny");
       expect(suiAgent).toContain("outputs/sui/<session-slug>");
       expect(longevityAgent).toContain("Longevity Agent");
       expect(longevityAgent).toContain("7-stage workflow");
@@ -81,6 +83,32 @@ describe("ensureWorkspaceFiles", () => {
       expect(agent).toContain("Matterhorn Work Artifacts");
       expect(deskAgent).toContain("Bittensor Agent");
       expect(result.reloadReasons.sort()).toEqual(["agents", "config"]);
+    });
+  });
+
+  test("refreshes managed desk agents without replacing user-authored agents", async () => {
+    await withWorkspace(async (root) => {
+      const agentsDir = join(root, ".opencode", "agents");
+      await mkdir(agentsDir, { recursive: true });
+      await writeFile(
+        join(agentsDir, "matterhorn-polymarket.md"),
+        "---\nmatterhorn_desk_agent: v1\n---\n\nOld managed instructions\n",
+        "utf8",
+      );
+      await writeFile(
+        join(agentsDir, "matterhorn-sui.md"),
+        "---\ndescription: User-owned Sui agent\n---\n\nKeep this custom content.\n",
+        "utf8",
+      );
+
+      const result = await ensureWorkspaceFiles(root, "starter");
+      const polymarketAgent = await readFile(join(agentsDir, "matterhorn-polymarket.md"), "utf8");
+      const suiAgent = await readFile(join(agentsDir, "matterhorn-sui.md"), "utf8");
+
+      expect(polymarketAgent).toContain("websearch: deny");
+      expect(polymarketAgent).not.toContain("Old managed instructions");
+      expect(suiAgent).toContain("Keep this custom content.");
+      expect(result.reloadReasons).toContain("agents");
     });
   });
 

@@ -5,6 +5,9 @@ temperature: 0.2
 matterhorn_desk_agent: v1
 matterhorn_desk_id: mcps
 agent_id: matterhorn-mcps
+workflow_id: matterhorn_mcp_setup
+workflow_manifest_ref: matterhorn.workflow.manifest.v1/mcp_setup
+output_desk_id: mcp
 ---
 
 # MCP Agent

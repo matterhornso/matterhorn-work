@@ -7,6 +7,12 @@ import {
 } from "@paper-design/shaders"
 import { GrainGradient, type GrainGradientProps } from "@paper-design/shaders-react"
 import { resolvePaperGrainGradientConfig } from "../../common/paper"
+import {
+  canRenderPaperShader,
+  mergeFallbackStyle,
+  paperShaderFallbackDivProps,
+  paperGrainFallbackBackground,
+} from "./fallback"
 
 export interface PaperGrainGradientProps
   extends Omit<
@@ -62,12 +68,29 @@ export function PaperGrainGradient({
   })
 
   const sizingDefaults = getSizingDefaults(resolved.shape)
+  const resolvedWidth = width ?? (fill ? "100%" : undefined)
+  const resolvedHeight = height ?? (fill ? "100%" : undefined)
+
+  if (!canRenderPaperShader()) {
+    const fallbackProps = paperShaderFallbackDivProps(props as Record<string, unknown>)
+    return (
+      <div
+        {...fallbackProps}
+        style={mergeFallbackStyle(
+          fallbackProps.style,
+          resolvedWidth,
+          resolvedHeight,
+          paperGrainFallbackBackground(resolved.colorBack, resolved.colors),
+        )}
+      />
+    )
+  }
 
   return (
     <GrainGradient
       {...props}
-      width={width ?? (fill ? "100%" : undefined)}
-      height={height ?? (fill ? "100%" : undefined)}
+      width={resolvedWidth}
+      height={resolvedHeight}
       fit={fit ?? sizingDefaults.fit}
       rotation={rotation ?? sizingDefaults.rotation}
       scale={scale ?? sizingDefaults.scale}

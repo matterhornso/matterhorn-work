@@ -11,5 +11,8 @@
       "command": ["node", "packages/matterhorn-work-crypto-mcp/index.mjs"],
       "type": "local"
     }
+  },
+  "compaction": {
+    "auto": true
   }
 }

@@ -51,7 +51,7 @@ const setupStatusLabels: Record<PublishingSetupRequirement["status"], string> = 
 
 const statusLabels: Record<NftPublishingReadinessStatus, string> = {
   working: "Working",
-  needs_setup: "Needs setup",
+  needs_setup: "Platform setup",
   preview: "Preview",
   unsupported: "Not supported here",
   error: "Unavailable",
@@ -74,13 +74,14 @@ export function buildNftPublishingReadinessItems(
   const walrusStorage = capabilities.walrusStorage;
   const minting = capabilities.nftMinting;
   const listing = capabilities.nftMarketplaceListing;
+  const imageStatus = imageGenerationReadinessStatus(imageGeneration);
 
   return [
     {
       id: "image-generation",
       label: imageGeneration?.label ?? "Generated images",
-      status: normalizeStatus(imageGeneration?.status),
-      description: imageGeneration?.description ?? "Generate images in chat and save them as workspace outputs.",
+      status: imageStatus,
+      description: imageGenerationReadinessDescription(imageGeneration, imageStatus),
       value: imageGeneration?.value ?? imageProviderValue(imageGeneration),
       icon: <Image className="size-3.5" />,
     },
@@ -88,7 +89,12 @@ export function buildNftPublishingReadinessItems(
       id: "walrus-storage",
       label: walrusStorage?.label ?? "Walrus public storage",
       status: normalizeStatus(walrusStorage?.status),
-      description: walrusStorage?.description ?? "Walrus publisher and relay are required before public NFT media upload.",
+      description: readinessDescription(
+        "walrus-storage",
+        normalizeStatus(walrusStorage?.status),
+        walrusStorage?.description,
+        "Walrus publisher and relay are required before public NFT media upload.",
+      ),
       value: walrusStorage?.value ?? walrusValue(walrusStorage),
       icon: <CloudUpload className="size-3.5" />,
     },
@@ -96,7 +102,12 @@ export function buildNftPublishingReadinessItems(
       id: "nft-minting",
       label: minting?.label ?? "Sui NFT minting",
       status: normalizeStatus(minting?.status),
-      description: minting?.description ?? "Matterhorn prepares the mint plan. Your Sui wallet signs it.",
+      description: readinessDescription(
+        "nft-minting",
+        normalizeStatus(minting?.status),
+        minting?.description,
+        "Matterhorn prepares the mint plan. Your Sui wallet signs it.",
+      ),
       value: minting?.value ?? nftMintValue(minting),
       icon: <Coins className="size-3.5" />,
     },
@@ -104,11 +115,35 @@ export function buildNftPublishingReadinessItems(
       id: "marketplace-listing",
       label: listing?.label ?? "Marketplace listing",
       status: normalizeStatus(listing?.status),
-      description: listing?.description ?? "Sui Kiosk listing needs Kiosk and TransferPolicy config before wallet signing.",
+      description: readinessDescription(
+        "marketplace-listing",
+        normalizeStatus(listing?.status),
+        listing?.description,
+        "Sui Kiosk listing needs Kiosk and TransferPolicy config before wallet signing.",
+      ),
       value: listing?.value ?? nftListingValue(listing),
       icon: <Store className="size-3.5" />,
     },
   ];
+}
+
+function readinessDescription(
+  id: NftPublishingReadinessItem["id"],
+  status: NftPublishingReadinessStatus,
+  description: string | undefined,
+  fallback: string,
+): string {
+  if (status !== "needs_setup") return description ?? fallback;
+  if (id === "walrus-storage") {
+    return "Matterhorn must connect its public storage service before media can be published.";
+  }
+  if (id === "nft-minting") {
+    return "Matterhorn must configure its Sui NFT package before you can prepare a mint preview.";
+  }
+  if (id === "marketplace-listing") {
+    return "Matterhorn must configure its Sui marketplace packages before you can prepare a listing.";
+  }
+  return description ?? fallback;
 }
 
 export function rollUpNftPublishingReadinessStatus(items: NftPublishingReadinessItem[]): NftPublishingReadinessStatus {
@@ -144,6 +179,7 @@ export function NftPublishingReadinessRows(props: {
   description?: string;
   className?: string;
   surface?: boolean;
+  needsSetupLabel?: string;
 }) {
   return (
     <section
@@ -179,7 +215,9 @@ export function NftPublishingReadinessRows(props: {
               )}
             >
               {item.status === "needs_setup" ? <Wrench className="size-3" /> : null}
-              {statusLabels[item.status]}
+              {item.status === "needs_setup" && props.needsSetupLabel
+                ? props.needsSetupLabel
+                : statusLabels[item.status]}
             </span>
           </div>
         ))}
@@ -234,6 +272,29 @@ function normalizeStatus(status: NftPublishingReadinessStatus | undefined): NftP
   return status ?? "unavailable";
 }
 
+function imageProviderName(
+  capability: (CapabilityLike & Partial<MatterhornImageGenerationCapability>) | undefined,
+): string | undefined {
+  return capability?.providers?.[0]?.provider ?? capability?.defaultProvider;
+}
+
+function imageGenerationReadinessStatus(
+  capability: (CapabilityLike & Partial<MatterhornImageGenerationCapability>) | undefined,
+): NftPublishingReadinessStatus {
+  const status = normalizeStatus(capability?.status);
+  return status === "working" && imageProviderName(capability) === "mock" ? "preview" : status;
+}
+
+function imageGenerationReadinessDescription(
+  capability: (CapabilityLike & Partial<MatterhornImageGenerationCapability>) | undefined,
+  status: NftPublishingReadinessStatus,
+): string {
+  if (imageProviderName(capability) === "mock" && status === "preview") {
+    return "Mock image generation is available for local testing. Matterhorn must connect a production provider before launch.";
+  }
+  return capability?.description ?? "Generate images in chat and save them as workspace outputs.";
+}
+
 function imageProviderValue(capability: (CapabilityLike & Partial<MatterhornImageGenerationCapability>) | undefined): string {
   if (!capability) return "Provider status unavailable";
   const provider = capability.providers?.[0];
@@ -255,8 +316,17 @@ function requirementsFromCapability(
 function fallbackImageRequirements(
   capability: (CapabilityLike & Partial<MatterhornImageGenerationCapability>) | undefined,
 ): PublishingSetupRequirement[] {
+  if (imageProviderName(capability) === "mock") {
+    return [{
+      key: "openai_api_key",
+      label: "Production image provider",
+      status: "missing",
+      envVar: "OPENAI_API_KEY",
+      description: "Matterhorn must connect a production image provider before generated images are launch-ready.",
+    }];
+  }
   if (!capability || capability.status === "working" || capability.status === "preview") return [];
-  const provider = capability.providers?.[0]?.provider ?? capability.defaultProvider;
+  const provider = imageProviderName(capability);
   if (provider === "openai" || capability.status === "needs_setup") {
     return [{
       key: "openai_api_key",

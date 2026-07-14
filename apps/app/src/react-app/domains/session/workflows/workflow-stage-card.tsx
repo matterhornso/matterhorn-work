@@ -41,7 +41,7 @@ export interface WorkflowStageCardProps {
   safetyBoundary?: string;
   /** Whether this is the active/next stage. */
   isCurrent?: boolean;
-  /** Action button label (e.g. "Start", "Stage task"). */
+  /** Action button label (e.g. "Run in chat"). */
   actionLabel?: string;
   /** Disables the action button while preserving the visible task affordance. */
   actionDisabled?: boolean;
@@ -115,11 +115,12 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
 
   return (
     <div
+      role="group"
+      aria-label={title}
+      data-workflow-stage={title}
       className={cn(
-        "rounded-md bg-dls-surface-muted/[0.075] px-3.5 py-3 transition-colors hover:bg-dls-surface-muted/[0.13]",
-        isCurrent
-          ? "bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"
-          : null,
+        "rounded-md bg-dls-surface-muted/[0.20] px-3.5 py-3 transition-colors hover:bg-dls-surface-muted/[0.30] focus-within:bg-dls-surface-muted/[0.30]",
+        isCurrent ? "bg-dls-surface-muted/[0.28]" : null,
       )}
     >
       {/* Header row: title + status + action */}
@@ -141,7 +142,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
               disabled={actionDisabled}
               title={actionTitle}
               className={cn(
-                "h-6 gap-1 bg-transparent px-1.5 text-[11px] font-semibold hover:bg-transparent",
+                "h-8 gap-1 rounded-md bg-dls-surface-muted/[0.38] px-2.5 text-[11px] font-semibold hover:bg-dls-surface-muted/[0.52]",
                 toneClass ?? "text-[var(--matterhorn-desk-color)]",
                 "hover:text-[var(--matterhorn-desk-color)]",
                 "disabled:cursor-not-allowed disabled:opacity-45",

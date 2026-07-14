@@ -27,6 +27,10 @@ import type {
   MatterhornProjectFeedbackResponse,
 } from "@matterhorn-work/types/project-data-ledger";
 import type {
+  MatterhornWalletSafetyPolicyResponse,
+  MatterhornWalletSafetyPolicyUpdateRequest,
+} from "@matterhorn-work/types";
+import type {
   MatterhornBackendCapabilitiesResponse,
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
@@ -189,6 +193,85 @@ export type MatterhornWorkspaceList = {
   items: MatterhornWorkspaceInfo[];
   workspaces?: WorkspaceInfo[];
   activeId?: string | null;
+};
+
+export type MatterhornWalletSafetyEventInput = {
+  action:
+    | "tx_proposed"
+    | "tx_approved"
+    | "tx_rejected"
+    | "chain_mismatch"
+    | "mainnet_blocked"
+    | "wallet_unavailable"
+    | "limit_hit"
+    | "whitelist_denied"
+    | "rate_limit_hit"
+    | "simulation_failed"
+    | "countdown_expired";
+  chainId: number;
+  to: string;
+  valueUSD: number;
+  riskLevel: "low" | "medium" | "high";
+  reason: string;
+  sessionId?: string | null;
+  txHash?: string | null;
+  review?: {
+    reviewed: {
+      chainId: number;
+      to: string;
+      value: string;
+      valueUSD: number;
+      dataSelector?: string | null;
+      displayValue?: string | null;
+      proposedBy?: string | null;
+    };
+    submitted?: {
+      chainId: number;
+      to: string;
+      value: string;
+      dataSelector?: string | null;
+      txHash?: string | null;
+    } | null;
+  } | null;
+};
+
+export type MatterhornWalletSafetyEventResponse = {
+  success: true;
+  event: {
+    safetyAction: MatterhornWalletSafetyEventInput["action"];
+    chainId: number;
+    to: string;
+    valueUSD: number;
+    riskLevel: MatterhornWalletSafetyEventInput["riskLevel"];
+    reason: string;
+    sessionId: string | null;
+    txHash: string | null;
+    review?: MatterhornWalletSafetyEventInput["review"];
+  };
+};
+
+export type MatterhornWalletTransactionSimulationInput = {
+  chainId: number;
+  to: string;
+  data?: string;
+  value?: string;
+  from: string;
+  sessionId?: string | null;
+};
+
+export type MatterhornWalletTransactionSimulationResponse = {
+  success: true;
+  simulation: {
+    status: "passed" | "failed" | "unavailable";
+    chainId: number;
+    to: string;
+    from: string;
+    value: string;
+    dataSelector: string;
+    sessionId: string | null;
+    checkedAt: number;
+    error: string | null;
+  };
 };
 
 export type MatterhornMemorySearchOptions = {
@@ -362,7 +445,7 @@ export type MatterhornTaskRun = {
   workspaceId: string;
   desk: string;
   sessionSlug: string;
-  status: "running" | "completed" | "failed" | "cancelled";
+  status: "staged" | "running" | "waiting" | "completed" | "failed" | "cancelled";
   createdAt: number;
   updatedAt: number;
   outcomeSummary: string;
@@ -742,6 +825,42 @@ export type MatterhornSuiWorkspaceEvidence = {
   taskId: string;
   sessionSlug: string;
   source: "task_events";
+};
+
+export type MatterhornBittensorWorkspaceEvidence = {
+  workspaceId: string;
+  outputPath: string;
+  taskId: string;
+  sessionSlug: string;
+  source: "task_events";
+};
+
+export type MatterhornBittensorPublicReadEvidenceInput = {
+  kind?:
+    | "public_read"
+    | "wallet_snapshot"
+    | "subnet_context"
+    | "validator_comparison"
+    | "watch_digest"
+    | "chat_result"
+    | "readiness_report";
+  taskId?: string | null;
+  title?: string | null;
+  summary?: string | null;
+  payload?: Record<string, unknown>;
+  cards?: unknown[];
+};
+
+export type MatterhornBittensorPublicReadEvidenceResponse = {
+  success: true;
+  evidence: MatterhornBittensorWorkspaceEvidence;
+};
+
+export type MatterhornBittensorReceiptEvidenceResponse = {
+  success: true;
+  receipt: unknown;
+  cards: unknown[];
+  evidence: MatterhornBittensorWorkspaceEvidence;
 };
 
 export type MatterhornWorkspaceOutputDeleteResponse = {
@@ -1257,7 +1376,7 @@ async function requestJson<T>(
   );
 
   const text = await response.text();
-  const json = text ? JSON.parse(text) : null;
+  const json = parseJsonResponse(text, response.status);
 
   if (!response.ok) {
     const code = typeof json?.code === "string" ? json.code : "request_failed";
@@ -1266,6 +1385,18 @@ async function requestJson<T>(
   }
 
   return json as T;
+}
+
+function parseJsonResponse(text: string, status: number): any {
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    const message = status >= 500
+      ? "Workspace server returned an unreadable response."
+      : "Matterhorn Work engine returned an unreadable response.";
+    throw new MatterhornServerError(status, "invalid_response", message);
+  }
 }
 
 async function requestMultipartRaw(
@@ -1778,6 +1909,48 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         { token, hostToken, timeoutMs: timeouts.status },
       );
     },
+    recordWalletSafetyEvent: (workspaceId: string, event: MatterhornWalletSafetyEventInput) =>
+      requestJson<MatterhornWalletSafetyEventResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/wallet/safety-events`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: event,
+          timeoutMs: timeouts.config,
+        },
+      ),
+    getWalletSafetyPolicy: (workspaceId: string) =>
+      requestJson<MatterhornWalletSafetyPolicyResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/wallet/safety-policy`,
+        { token, hostToken, timeoutMs: timeouts.config },
+      ),
+    updateWalletSafetyPolicy: (workspaceId: string, policy: MatterhornWalletSafetyPolicyUpdateRequest) =>
+      requestJson<MatterhornWalletSafetyPolicyResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/wallet/safety-policy`,
+        {
+          token,
+          hostToken,
+          method: "PATCH",
+          body: policy,
+          timeoutMs: timeouts.config,
+        },
+      ),
+    simulateWalletTransaction: (workspaceId: string, input: MatterhornWalletTransactionSimulationInput) =>
+      requestJson<MatterhornWalletTransactionSimulationResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/wallet/simulate-transaction`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: input,
+          timeoutMs: timeouts.config,
+        },
+      ),
     submitProjectFeedback: (workspaceId: string, feedback: MatterhornProjectFeedbackRequest) =>
       requestJson<MatterhornProjectFeedbackResponse>(
         baseUrl,
@@ -2029,6 +2202,38 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           timeoutMs: timeouts.status,
         },
       ),
+    workspaceBittensorPublicReadEvidence: (
+      workspaceId: string,
+      payload: MatterhornBittensorPublicReadEvidenceInput,
+      options?: { sessionId?: string | null },
+    ) =>
+      requestJson<MatterhornBittensorPublicReadEvidenceResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/bittensor/evidence/public-read`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: { ...payload, sessionId: options?.sessionId ?? null },
+          timeoutMs: timeouts.status,
+        },
+      ),
+    workspaceBittensorReceiptEvidence: (
+      workspaceId: string,
+      payload: Record<string, unknown>,
+      options?: { sessionId?: string | null },
+    ) =>
+      requestJson<MatterhornBittensorReceiptEvidenceResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/bittensor/extrinsics/receipt`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: { payload, sessionId: options?.sessionId ?? null },
+          timeoutMs: timeouts.status,
+        },
+      ),
     deleteWorkspaceOutput: (workspaceId: string, outputPath: string) => {
       const query = new URLSearchParams({ path: outputPath });
       return requestJson<MatterhornWorkspaceOutputDeleteResponse>(
@@ -2142,6 +2347,27 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       requestJson<{ success: boolean; run: MatterhornWorkflowRun }>(
         baseUrl,
         `/api/workflows/runs/${encodeURIComponent(workflowRunId)}/start`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+        },
+      ),
+    setWorkflowRunWaiting: (workflowRunId: string, reason?: string) =>
+      requestJson<{ success: boolean; run: MatterhornWorkflowRun }>(
+        baseUrl,
+        `/api/workflows/runs/${encodeURIComponent(workflowRunId)}/waiting`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: reason ? { reason } : {},
+        },
+      ),
+    completeWorkflowRun: (workflowRunId: string) =>
+      requestJson<{ success: boolean; run: MatterhornWorkflowRun }>(
+        baseUrl,
+        `/api/workflows/runs/${encodeURIComponent(workflowRunId)}/complete`,
         {
           token,
           hostToken,

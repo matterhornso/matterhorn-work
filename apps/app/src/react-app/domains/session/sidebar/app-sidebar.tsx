@@ -30,6 +30,7 @@ import {
   isWindowsPlatform,
 } from "../../../../app/utils";
 import { t } from "../../../../i18n";
+import { useShellConfig } from "../../../shell/shell-config";
 
 import {
   Sidebar,
@@ -288,8 +289,8 @@ function RemoteConnectionIssueCard(props: {
     <SidebarMenuSubItem>
       <div
         className={cn(
-          "w-full rounded-[15px] border border-red-7/35 bg-red-1/40 px-3 py-3 text-left",
-          isOffline && "border-amber-7/35 bg-amber-2/45",
+          "w-full rounded-lg border border-transparent bg-red-1/40 px-3 py-3 text-left",
+          isOffline && "bg-amber-2/45",
         )}
       >
         <div className="flex items-start gap-2.5">
@@ -422,6 +423,7 @@ function sessionActivityTextClass(status: string | undefined) {
 }
 
 export function AppSidebar(props: AppSidebarProps) {
+  const { config: shellConfig } = useShellConfig();
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = React.useState<Set<string>>(
     () => new Set(),
   );
@@ -578,16 +580,18 @@ export function AppSidebar(props: AppSidebarProps) {
           </m.div>
         </LazyMotion>
 
-        <SidebarFooter>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton onClick={props.onOpenCreateWorkspace}>
-                <Plus className="size-4" />
-                {t("workspace_list.add_workspace")}
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarFooter>
+        {shellConfig.addWorkspace ? (
+          <SidebarFooter>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={props.onOpenCreateWorkspace}>
+                  <Plus className="size-4" />
+                  {t("workspace_list.add_workspace")}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarFooter>
+        ) : null}
         <SidebarRail
           aria-label={props.onStartResize ? t("session.resize_workspace_column") : undefined}
           title={props.onStartResize ? t("session.resize_workspace_column") : undefined}
@@ -680,6 +684,7 @@ function WorkspaceHeader({
         onClick?.(event);
         handleSelectWorkspace();
       }}
+      aria-current={ctx.selectedWorkspaceId === workspace.id ? "page" : undefined}
     >
       <WorkspaceIcon seed={workspaceLabel(workspace)} sizeClass="size-4" />
       <div
@@ -961,8 +966,10 @@ function SessionMenuItem({ session, sessionIndex, tree, workspaceId, forcedExpan
             <CollapsibleTrigger
               render={
                 <SidebarMenuSubButton
+                  render={<button type="button" />}
                   className={cn("relative", depth > 0 && "ps-13")}
                   isActive={isSelected}
+                  aria-current={isSelected ? "page" : undefined}
                   onClick={openSession}
                   onPointerEnter={prefetchSession}
                   onFocus={prefetchSession}
@@ -995,6 +1002,7 @@ function SessionMenuItem({ session, sessionIndex, tree, workspaceId, forcedExpan
       <SessionContextMenu sessionId={session.id}>
         <SidebarMenuSubButton
           isActive={isSelected}
+          aria-current={isSelected ? "page" : undefined}
           onClick={openSession}
           onPointerEnter={prefetchSession}
           onFocus={prefetchSession}

@@ -17,6 +17,8 @@ const dirs: string[] = [];
 const priorEnvStore = process.env.OPENWORK_ENV_STORE;
 const priorTokenStore = process.env.OPENWORK_TOKEN_STORE;
 const priorOpenAiApiKey = process.env.OPENAI_API_KEY;
+const priorOpenAiRealtimeApiKey = process.env.OPENAI_REALTIME_API_KEY;
+const priorOpenWorkOpenAiRealtimeApiKey = process.env.OPENWORK_OPENAI_REALTIME_API_KEY;
 const nativeFetch = globalThis.fetch;
 
 function baseConfig(input: Partial<Pick<ServerConfig, "corsOrigins">> = {}): ServerConfig {
@@ -81,6 +83,16 @@ afterEach(async () => {
     delete process.env.OPENAI_API_KEY;
   } else {
     process.env.OPENAI_API_KEY = priorOpenAiApiKey;
+  }
+  if (priorOpenAiRealtimeApiKey === undefined) {
+    delete process.env.OPENAI_REALTIME_API_KEY;
+  } else {
+    process.env.OPENAI_REALTIME_API_KEY = priorOpenAiRealtimeApiKey;
+  }
+  if (priorOpenWorkOpenAiRealtimeApiKey === undefined) {
+    delete process.env.OPENWORK_OPENAI_REALTIME_API_KEY;
+  } else {
+    process.env.OPENWORK_OPENAI_REALTIME_API_KEY = priorOpenWorkOpenAiRealtimeApiKey;
   }
   globalThis.fetch = nativeFetch;
 });
@@ -287,10 +299,14 @@ describe("env routes", () => {
 
   test("voice realtime session accepts owner bearer token", async () => {
     process.env.OPENAI_API_KEY = "sk-test";
+    delete process.env.OPENAI_REALTIME_API_KEY;
+    delete process.env.OPENWORK_OPENAI_REALTIME_API_KEY;
+    let observedSessionRequest: unknown = null;
     globalThis.fetch = ((input, init) => {
       const url = String(input);
       if (url === "https://api.openai.com/v1/realtime/client_secrets") {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer sk-test" });
+        observedSessionRequest = JSON.parse(String(init?.body ?? "{}"));
         return Promise.resolve(new Response(JSON.stringify({ client_secret: { value: "rt-secret", expires_at: 123 } }), {
           status: 200,
           headers: { "content-type": "application/json" },
@@ -319,6 +335,30 @@ describe("env routes", () => {
       clientSecret: "rt-secret",
       expiresAt: 123,
     });
+    expect(JSON.stringify(observedSessionRequest)).toContain("Matterhorn Work Voice Mode");
+    expect(JSON.stringify(observedSessionRequest)).toContain("semantic Matterhorn Work UI tools");
+    expect(JSON.stringify(observedSessionRequest)).toContain("openwork_snapshot");
+    expect(JSON.stringify(observedSessionRequest)).toContain("compatibility tool IDs control Matterhorn Work");
+    expect(JSON.stringify(observedSessionRequest)).not.toContain("OpenWork Voice Mode");
+    expect(JSON.stringify(observedSessionRequest)).not.toContain("semantic OpenWork UI tools");
+  });
+
+  test("voice realtime missing key error uses Matterhorn copy", async () => {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_REALTIME_API_KEY;
+    delete process.env.OPENWORK_OPENAI_REALTIME_API_KEY;
+
+    const { base } = await boot();
+    const response = await fetch(`${base}/voice/realtime/session`, {
+      method: "POST",
+      headers: hostAuth(),
+      body: JSON.stringify({}),
+    });
+    const body = await response.json() as { message?: string };
+
+    expect(response.status).toBe(400);
+    expect(body.message).toContain("Matterhorn Work environment variables");
+    expect(body.message).not.toContain("OpenWork Environment Variables");
   });
 
   test("values persist across server restart", async () => {

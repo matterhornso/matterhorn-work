@@ -684,7 +684,7 @@ export function createConnectionsStore(options: {
     }
 
     const matchingQuickConnect = MCP_QUICK_CONNECT.find((candidate) => {
-      const candidateSlug = candidate.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const candidateSlug = candidate.id ?? getMcpServerName(candidate);
       return candidateSlug === entry.name || candidate.name === entry.name;
     });
 
@@ -897,7 +897,7 @@ export function createConnectionsStore(options: {
     lastWorkspaceContextKey = workspaceContextKey;
     lastProjectDir = projectDir;
 
-    if (!started || disposed || !isDesktopRuntime() || !changed) {
+    if (!started || disposed || !changed) {
       return;
     }
 

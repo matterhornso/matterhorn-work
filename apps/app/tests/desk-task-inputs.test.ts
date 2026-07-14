@@ -40,4 +40,14 @@ describe("desk task required inputs", () => {
   test("allows tasks without placeholders to launch immediately", () => {
     expect(getDeskTaskInputRequirement("Find useful Bittensor subnets for image generation.")).toBeNull();
   });
+
+  test("requires public market context before a compliance task starts", () => {
+    const prompt = "Check compliance for <paste market URL or slug>.";
+    const requirement = getDeskTaskInputRequirement(prompt);
+
+    expect(requirement?.kind).toBe("market");
+    expect(requirement?.actionLabel).toBe("Add market");
+    expect(validateDeskTaskInput(requirement!, "will-bitcoin-reach-150000-in-2026")).toBeNull();
+    expect(buildDeskTaskPromptWithInput(prompt, requirement!, "market-slug")).toContain("market-slug");
+  });
 });

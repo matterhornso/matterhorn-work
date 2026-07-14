@@ -4,10 +4,6 @@ import { Copy, ExternalLink, FileText, FolderOpen, NotebookPen, Trash2 } from "l
 import { Button } from "@/components/ui/button";
 import { cn, formatFileSize } from "@/lib/utils";
 import { formatRelativeTime } from "../../../../app/utils";
-import {
-  compactNftReceiptValue,
-  nftReceiptKindLabel,
-} from "../../project-evidence/nft-receipt-metadata";
 import { ArtifactIcon } from "./artifact-icon";
 import type { OutputDescriptor } from "./output-descriptor";
 
@@ -46,24 +42,28 @@ export function OutputList({
   if (outputs.length === 0) return null;
 
   return (
-    <div className="shrink-0 border-b border-border/45 bg-background">
-      <div className="max-h-48 overflow-y-auto">
+    <div className="mt-1 shrink-0 rounded-lg bg-dls-surface-muted/[0.12] p-1">
+      <div className="max-h-52 overflow-y-auto">
         {outputs.map((output) => {
           const isSelected = output.id === selectedId;
           return (
-            <button
+            <div
               key={output.id}
-              type="button"
-              onClick={() => onSelect(output)}
               className={cn(
-                "group flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/35 focus-visible:bg-muted/35 focus-visible:outline-none",
-                isSelected && "bg-muted/45 hover:bg-muted/45",
+                "group flex w-full items-start gap-1 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-dls-surface-muted/[0.14]",
+                isSelected && "bg-dls-surface-muted/[0.18] hover:bg-dls-surface-muted/[0.18]",
               )}
             >
-              <span className="mt-0.5 shrink-0 text-muted-foreground">
-                <ArtifactIcon type={output.preview ?? "external"} />
-              </span>
-              <span className="min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => onSelect(output)}
+                aria-label={`Select output: ${output.title}`}
+                className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-1.5 py-1 text-left focus-visible:bg-dls-surface-muted/[0.18] focus-visible:outline-none"
+              >
+                <span className="mt-0.5 shrink-0 text-muted-foreground">
+                  <ArtifactIcon type={output.preview ?? "external"} />
+                </span>
+                <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 items-center gap-1.5">
                   <span className="block truncate text-xs font-medium text-foreground">
                     {output.title}
@@ -75,22 +75,7 @@ export function OutputList({
                 <span className="block truncate text-[11px] text-muted-foreground" title={output.path}>
                   {output.path}
                 </span>
-                {output.receiptTitle ? (
-                  <span className="block truncate text-[11px] text-muted-foreground" title={output.receiptSummary ?? output.receiptTitle}>
-                    Receipt: {output.receiptTitle}
-                  </span>
-                ) : null}
-                {output.nftReceipt ? (
-                  <span
-                    className="block truncate text-[11px] text-muted-foreground"
-                    title={output.nftReceipt.transactionDigest ?? output.nftReceipt.objectId}
-                  >
-                    NFT: {nftReceiptKindLabel(output.nftReceipt.kind)}
-                    {output.nftReceipt.network ? ` · ${output.nftReceipt.network}` : ""}
-                    {output.nftReceipt.objectId ? ` · ${compactNftReceiptValue(output.nftReceipt.objectId)}` : ""}
-                  </span>
-                ) : null}
-                <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   {output.desk ? (
                     <span className="text-[10px] font-medium text-muted-foreground">
                       {output.desk}
@@ -101,24 +86,14 @@ export function OutputList({
                       {output.sessionSlug}
                     </span>
                   ) : null}
-                  {output.originLabel ? (
-                    <span className={cn(
-                      "text-[10px] font-medium",
-                      output.isLegacy
-                        ? "text-amber-300"
-                        : "text-emerald-300",
-                    )}>
+                  {output.originLabel && output.isLegacy ? (
+                    <span className="text-[10px] font-medium text-amber-300">
                       {output.originLabel}
                     </span>
                   ) : null}
                   {output.receiptStatus ? (
                     <span className="text-[10px] font-medium text-muted-foreground">
                       Receipt: {receiptStatusLabel(output.receiptStatus)}
-                    </span>
-                  ) : null}
-                  {output.taskId ? (
-                    <span className="max-w-[120px] truncate text-[10px] text-muted-foreground" title={output.taskId}>
-                      {output.taskId}
                     </span>
                   ) : null}
                   {output.updatedAt ? (
@@ -130,8 +105,9 @@ export function OutputList({
                     <span className="text-[10px] text-muted-foreground">{formatFileSize(output.size)}</span>
                   ) : null}
                 </span>
-              </span>
-              <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex sm:flex">
+                </span>
+              </button>
+              <span className="hidden shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 @md/artifact:flex">
                 {onCopyPath ? (
                   <Button
                     variant="ghost"
@@ -202,7 +178,7 @@ export function OutputList({
                   <ExternalLink className="size-3.5" />
                 </Button>
               </span>
-            </button>
+            </div>
           );
         })}
       </div>

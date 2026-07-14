@@ -14,6 +14,12 @@ const managedEnvKeys = [
   "OPENWORK_APPROVAL_MODE",
   "MATTERHORN_WORK_CORS_ORIGINS",
   "OPENWORK_CORS_ORIGINS",
+  "MATTERHORN_WORK_REQUEST_RATE_LIMIT_ENABLED",
+  "OPENWORK_REQUEST_RATE_LIMIT_ENABLED",
+  "MATTERHORN_WORK_REQUEST_RATE_LIMIT_WINDOW_MS",
+  "OPENWORK_REQUEST_RATE_LIMIT_WINDOW_MS",
+  "MATTERHORN_WORK_REQUEST_RATE_LIMIT_MAX",
+  "OPENWORK_REQUEST_RATE_LIMIT_MAX",
 ] as const;
 
 const originalEnv = new Map<string, string | undefined>(
@@ -59,6 +65,8 @@ describe("Matterhorn Work env aliases", () => {
     process.env.MATTERHORN_WORK_TOKEN = "matterhorn-client";
     process.env.OPENWORK_HOST_TOKEN = "legacy-host";
     process.env.MATTERHORN_WORK_HOST_TOKEN = "matterhorn-host";
+    process.env.OPENWORK_REQUEST_RATE_LIMIT_MAX = "50";
+    process.env.MATTERHORN_WORK_REQUEST_RATE_LIMIT_MAX = "75";
 
     const config = await resolveServerConfig(baseCli(makeConfigPath()));
 
@@ -66,6 +74,7 @@ describe("Matterhorn Work env aliases", () => {
     expect(config.hostToken).toBe("matterhorn-host");
     expect(config.tokenSource).toBe("env");
     expect(config.hostTokenSource).toBe("env");
+    expect(config.requestRateLimit?.maxRequests).toBe(75);
   });
 
   test("falls back to legacy OPENWORK env vars", async () => {
@@ -73,6 +82,9 @@ describe("Matterhorn Work env aliases", () => {
     process.env.OPENWORK_HOST_TOKEN = "legacy-host";
     process.env.OPENWORK_APPROVAL_MODE = "auto";
     process.env.OPENWORK_CORS_ORIGINS = "https://one.example,https://two.example";
+    process.env.OPENWORK_REQUEST_RATE_LIMIT_ENABLED = "false";
+    process.env.OPENWORK_REQUEST_RATE_LIMIT_WINDOW_MS = "120000";
+    process.env.OPENWORK_REQUEST_RATE_LIMIT_MAX = "400";
 
     const config = await resolveServerConfig(baseCli(makeConfigPath()));
 
@@ -80,5 +92,10 @@ describe("Matterhorn Work env aliases", () => {
     expect(config.hostToken).toBe("legacy-host");
     expect(config.approval.mode).toBe("auto");
     expect(config.corsOrigins).toEqual(["https://one.example", "https://two.example"]);
+    expect(config.requestRateLimit).toMatchObject({
+      enabled: false,
+      windowMs: 120000,
+      maxRequests: 400,
+    });
   });
 });

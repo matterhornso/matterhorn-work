@@ -36,6 +36,8 @@ Customer-facing navigation must not expose **Services** as a primary destination
 - Use Matterhorn blue for primary affordances and selected state, not every surface.
 - Use semantic status colors for pass, warning, blocked, degraded, and preview-only states.
 - Use desk accents sparingly: headers, badges, focus outlines, icon wells, and chart accents.
+- Keep dark-theme text crisp without flattening hierarchy: primary `#fafcff`, secondary `#d0dae5`, and muted metadata `#c4ceda`. Secondary and muted body copy must remain above WCAG AA on the app background; opacity modifiers are reserved for genuinely subordinate metadata.
+- Light-theme secondary and muted text use `#41495a` and `#4c5566` respectively so supporting copy stays readable on the pale Matterhorn canvas.
 
 ### Desk Colors
 
@@ -55,6 +57,10 @@ Customer-facing navigation must not expose **Services** as a primary destination
 - No horizontal overflow.
 - Composer: bottom anchored inside the main desk column, never covering panel content.
 - Right rail: optional contextual tools, never a permanent trap. It should collapse before the main desk becomes unusable.
+- Right rails share the main workspace canvas. Use open sections and spacing; do not stack a card around every group.
+- Rail content responds to its container width, not the global viewport. A 340-500px rail is a single-pane surface even on a wide desktop.
+- Notes and other list/detail rails use explicit list -> detail -> back navigation at narrow widths.
+- Machine payloads such as receipt JSON render as readable summaries first; raw data belongs behind disclosure.
 - Cards: one card level only. Avoid cards inside cards.
 - Operational card radius: 8-12px. Badges can be pill-shaped if small.
 - Spacing: use 4px grid. Operational panels should prefer 16-24px padding.
@@ -171,6 +177,8 @@ MCP cards show:
 - Secret-taking fields or examples.
 - Nested cards, decorative glass, huge rounded cards, pill overload, gradient-orb backgrounds.
 - Horizontal overflow, right rail trapping, bottom composer overlap, clipped buttons, clipped cards, and nested scrolling inside cards.
+- Viewport breakpoints that force hidden second columns inside a narrow right rail.
+- Runtime status copy that says `apps connected` when the source only proves MCP processes are active.
 
 ## 8. Implementation Checklist
 

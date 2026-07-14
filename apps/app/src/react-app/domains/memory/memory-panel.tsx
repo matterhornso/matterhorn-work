@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BrainCircuit,
+  Archive,
   ChevronDown,
   Download,
   Eye,
@@ -741,7 +741,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-dls-background text-dls-text">
+    <div className="matterhorn-rail-content flex h-full min-h-0 flex-col bg-dls-background text-dls-text">
       <header className="flex shrink-0 items-start justify-between gap-3 px-5 pb-4 pt-5">
         <div className="min-w-0">
           <div className="text-lg font-semibold">Memory</div>
@@ -814,7 +814,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3">
               <span className="flex size-7 shrink-0 items-center justify-center rounded-md text-dls-secondary">
-                <BrainCircuit className="size-4" />
+                <Archive className="size-4" />
               </span>
               <div>
                 <div className="text-sm font-semibold">Memory review</div>

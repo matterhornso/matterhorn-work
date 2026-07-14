@@ -1,10 +1,7 @@
 /** @jsxImportSource react */
+import type { ReactNode } from "react";
 import { AlertTriangle, Info, Lock, RotateCcw } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
@@ -178,15 +175,24 @@ type ToggleRowProps = {
   disabled?: boolean;
   unavailable?: string | null;
   warning?: string | null;
-  cloudOnly?: boolean;
   className?: string;
 };
 
-function CloudOnlyBadge() {
+function CustomizationNotice(props: {
+  children: ReactNode;
+  icon?: ReactNode;
+  tone?: "neutral" | "warning";
+}) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-md bg-dls-hover size-5 justify-center text-xs font-medium text-dls-secondary" aria-label="Cloud only">
-      <Lock className="size-3" />
-    </span>
+    <div
+      className={cn(
+        "flex items-start gap-2 text-[13px] leading-5 text-dls-secondary",
+        props.tone === "warning" && "text-amber-300/85",
+      )}
+    >
+      {props.icon ? <span className="mt-0.5 shrink-0">{props.icon}</span> : null}
+      <span>{props.children}</span>
+    </div>
   );
 }
 
@@ -196,30 +202,45 @@ function ToggleRow(props: ToggleRowProps) {
       <LayoutSectionItemHeader>
         <LayoutSectionItemTitle>
           {props.label}
-          {props.cloudOnly ? <CloudOnlyBadge /> : null}
         </LayoutSectionItemTitle>
         <LayoutSectionItemDescription>{props.description}</LayoutSectionItemDescription>
         <LayoutSectionItemHeaderActions>
           <Switch
             aria-label={props.label}
             checked={props.checked}
-            disabled={props.disabled || props.cloudOnly}
+            disabled={props.disabled}
             onCheckedChange={props.onChange}
           />
         </LayoutSectionItemHeaderActions>
       </LayoutSectionItemHeader>
       {props.warning && !props.checked ? (
-        <Alert variant="warning">
-          <AlertTriangle />
-          <AlertDescription>{props.warning}</AlertDescription>
-        </Alert>
+        <CustomizationNotice tone="warning" icon={<AlertTriangle className="size-3.5" />}>
+          {props.warning}
+        </CustomizationNotice>
       ) : null}
       {props.unavailable ? (
-        <Alert>
-          <Info />
-          <AlertDescription>{props.unavailable}</AlertDescription>
-        </Alert>
+        <CustomizationNotice icon={<Info className="size-3.5" />}>
+          {props.unavailable}
+        </CustomizationNotice>
       ) : null}
+    </LayoutSectionItem>
+  );
+}
+
+function ReadOnlyRow(props: {
+  label: string;
+  description: string;
+  status: string;
+}) {
+  return (
+    <LayoutSectionItem className="gap-3">
+      <LayoutSectionItemHeader>
+        <LayoutSectionItemTitle>{props.label}</LayoutSectionItemTitle>
+        <LayoutSectionItemDescription>{props.description}</LayoutSectionItemDescription>
+        <LayoutSectionItemHeaderActions>
+          <span className="py-0.5 text-sm font-medium text-dls-secondary">{props.status}</span>
+        </LayoutSectionItemHeaderActions>
+      </LayoutSectionItemHeader>
     </LayoutSectionItem>
   );
 }
@@ -243,7 +264,7 @@ export function ShellCustomizationView() {
   };
 
   return (
-    <LayoutStack>
+    <LayoutStack className="gap-y-10">
       {/* ---- Branding ---- */}
       <LayoutSection>
         <LayoutSectionHeader>
@@ -255,34 +276,21 @@ export function ShellCustomizationView() {
 
         <LayoutSectionItem>
           <LayoutSectionItemHeader>
-            <LayoutSectionItemTitle>Change application name</LayoutSectionItemTitle>
+            <LayoutSectionItemTitle>Application name</LayoutSectionItemTitle>
             <LayoutSectionItemDescription>
               Appears in the title bar, sidebar, and welcome screen.
             </LayoutSectionItemDescription>
             <LayoutSectionItemHeaderActions>
-              <Field className="w-64 max-w-full gap-0">
-               <FieldLabel className="sr-only" htmlFor="shell-app-name">
-                  App name
-                </FieldLabel>
-                <Input
-                  id="shell-app-name"
-                  className="h-8 text-xs"
-                  value={config.appName}
-                  placeholder="Matterhorn Work"
-                  disabled
-                  onChange={(event) => update({ appName: event.currentTarget.value || DEFAULT_SHELL_CONFIG.appName })}
-                />
-              </Field>
+              <span className="py-0.5 text-sm font-medium text-dls-secondary">
+                {config.appName}
+              </span>
             </LayoutSectionItemHeaderActions>
           </LayoutSectionItemHeader>
-          <Alert>
-            <Info />
-            <AlertDescription>Changing the application name is not available yet.</AlertDescription>
-          </Alert>
+          <CustomizationNotice icon={<Info className="size-3.5" />}>
+            Changing the application name is not available yet.
+          </CustomizationNotice>
         </LayoutSectionItem>
       </LayoutSection>
-
-      <Separator />
 
       {/* ---- Visibility ---- */}
       <LayoutSection>
@@ -293,13 +301,11 @@ export function ShellCustomizationView() {
           </LayoutSectionDescription>
         </LayoutSectionHeader>
 
-        <Alert>
-          <AlertDescription>
-            Anything you hide is still available via the command palette (Cmd+K).
-          </AlertDescription>
-        </Alert>
+        <CustomizationNotice icon={<Info className="size-3.5" />}>
+          Anything you hide is still available via the command palette (Cmd+K).
+        </CustomizationNotice>
 
-        <LayoutSectionItem className="rounded-lg border border-dls-border p-4">
+        <LayoutSectionItem className="py-2">
           <ShellWireframe config={config} />
         </LayoutSectionItem>
 
@@ -319,7 +325,7 @@ export function ShellCustomizationView() {
         />
 
         {config.statusBar ? (
-          <div className="ml-6 flex flex-col gap-3 border border-dls-border px-4 py-4 rounded-lg -mr-4">
+          <div className="ml-6 flex flex-col gap-3 pl-4">
             <ToggleRow
               label="Display documentation link"
               description="Show a link to your documentation."
@@ -353,17 +359,12 @@ export function ShellCustomizationView() {
           description="Let users choose which AI model to use."
           checked={config.modelPicker}
           onChange={(v) => update({ modelPicker: v })}
-          disabled
-          unavailable="The model picker display control is not available yet."
         />
 
-        <ToggleRow
+        <ReadOnlyRow
           label="Display browser panel"
-          description="A built-in browser for viewing web content alongside sessions."
-          checked={config.browser}
-          onChange={(v) => update({ browser: v })}
-          disabled
-          unavailable="The browser panel display control is not available yet."
+          description="Browser availability is controlled by the desktop or web host."
+          status="Host managed"
         />
 
         <ToggleRow
@@ -379,79 +380,62 @@ export function ShellCustomizationView() {
           description="Let users create or join additional workspaces."
           checked={config.addWorkspace}
           onChange={(v) => update({ addWorkspace: v })}
-          disabled
-          unavailable="The new workspace button display control is not available yet."
         />
       </LayoutSection>
-
-      <Separator />
 
       {/* ---- Cloud-managed (grayed out) ---- */}
       <LayoutSection>
         <LayoutSectionHeader>
-          <LayoutSectionTitle>Organization-wide settings</LayoutSectionTitle>
+          <LayoutSectionTitle>Organization controls</LayoutSectionTitle>
           <LayoutSectionDescription>
-            These settings are managed by your organization via Matterhorn Cloud.
+            Cloud-managed policy is not included in this local build.
           </LayoutSectionDescription>
         </LayoutSectionHeader>
 
-        <Alert variant="warning">
-          <Lock />
-          <AlertDescription>
-            These settings can only be changed by your organization admin. Contact your admin to make changes.
-          </AlertDescription>
-        </Alert>
+        <CustomizationNotice icon={<Lock className="size-3.5" />}>
+          These values show the active local policy. Matterhorn Cloud can manage them when Cloud is enabled.
+        </CustomizationNotice>
 
-        <ToggleRow
+        <ReadOnlyRow
           label="Settings access"
           description="Let users open the settings panel."
-          checked={true}
-          onChange={() => {}}
-          cloudOnly
+          status="Allowed"
         />
 
-        <ToggleRow
+        <ReadOnlyRow
           label="Model restrictions"
           description="Limit which AI models and providers users can choose from."
-          checked={false}
-          onChange={() => {}}
-          cloudOnly
+          status="None"
         />
 
-        <ToggleRow
+        <ReadOnlyRow
           label="Extension restrictions"
           description="Limit which extensions, plugins, and skills users can install."
-          checked={false}
-          onChange={() => {}}
-          cloudOnly
+          status="None"
         />
 
-        <ToggleRow
+        <ReadOnlyRow
           label="Enable welcome page"
           description="A getting-started screen for first-time users."
-          checked={config.welcomePage}
-          onChange={(v) => update({ welcomePage: v })}
-          cloudOnly
-          disabled
+          status="Local default"
         />
       </LayoutSection>
-
-      <Separator />
 
       {/* ---- Reset ---- */}
       <div className="flex items-center justify-between">
         <div className="text-sm text-dls-secondary">
           {isDefault ? "All settings are at their defaults." : "Some settings have been customized."}
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={resetAll}
-          disabled={isDefault}
-        >
-          <RotateCcw size={12} />
-          Reset to defaults
-        </Button>
+        {!isDefault ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={resetAll}
+          >
+            <RotateCcw size={12} />
+            Reset to defaults
+          </Button>
+        ) : null}
       </div>
     </LayoutStack>
   );

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { buildDenAuthUrl, normalizeDenBaseUrl } from "../src/app/lib/den";
 import en from "../src/i18n/locales/en";
+
+function readReactAppSource(path: string) {
+  return readFileSync(new URL(`../src/react-app/${path}`, import.meta.url), "utf8");
+}
 
 function isUnavailableDefaultCloudUrl(value: string): boolean {
   try {
@@ -46,5 +51,20 @@ describe("Den auth URL behavior", () => {
   test("auth i18n strings reference matterhorn-work deep links", () => {
     expect(en["den.signin_code_note"]).toContain("matterhorn-work://den-auth");
     expect(en["den.signin_link_placeholder"]).toContain("matterhorn-work://den-auth");
+  });
+
+  test("plain sign-in cannot trap local users in a Cloud-only flow", () => {
+    const appRoot = readReactAppSource("shell/app-root.tsx");
+    const forcedSignin = readReactAppSource("domains/cloud/forced-signin-page.tsx");
+    const surface = readReactAppSource("domains/cloud/den-signin-surface.tsx");
+
+    expect(appRoot).toContain("isExplicitCloudSignin");
+    expect(appRoot).toContain('params.get("intent") === "cloud-auth"');
+    expect(appRoot).toContain("navigate(\"/session\", { replace: true })");
+    expect(forcedSignin).toContain("readDenBootstrapConfig().requireSignin");
+    expect(forcedSignin).toContain("onContinueWithoutCloud");
+    expect(surface).toContain("Continue locally without Cloud");
+    expect(surface).toContain("Matterhorn Cloud is not live in this local build yet.");
+    expect(surface).toContain("Sign in with Matterhorn Cloud, or continue locally");
   });
 });

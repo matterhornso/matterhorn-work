@@ -42,6 +42,7 @@ const extensionDetailModal = read("apps/app/src/react-app/design-system/extensio
 const settingsSurfaceRoute = read("apps/app/src/react-app/shell/settings-route.tsx");
 const settingsOverview = read("apps/app/src/react-app/domains/settings/pages/overview-view.tsx");
 const cloudAccountSettings = read("apps/app/src/react-app/domains/settings/pages/cloud-account-view.tsx");
+const profileCapabilityStatus = read("apps/app/src/react-app/domains/profile/profile-capability-status.tsx");
 const feedback = read("apps/app/src/app/lib/feedback.ts");
 const den = read("apps/app/src/app/lib/den.ts");
 const denSigninSurface = read("apps/app/src/react-app/domains/cloud/den-signin-surface.tsx");
@@ -130,7 +131,7 @@ assert.equal(
 );
 
 for (const phrase of [
-  "Start a desk task, continue a chat, or collect notes and outputs for this workspace.",
+  "Chats, desks, notes, and saved outputs for this project.",
   "New project",
   "New chat",
   "Open Bittensor desk",
@@ -148,7 +149,6 @@ for (const phrase of [
   "matterhorn-capability-card",
   "grid gap-2 sm:grid-cols-2",
   "Open desk",
-  "Stage agent task",
   "Business workflows",
   "Longevity is a standalone service workflow desk for trainers, yoga instructors, and dieticians.",
   "It is not Web3, not markets, and not medical care.",
@@ -196,7 +196,6 @@ for (const phrase of [
   "External trade handoff",
   "Trade handoff",
   "Non-medical workflow",
-  "Stage agent task",
   "Show my TAO",
   "Compare validators",
   "Prepare Hyperliquid BTC-PERP handoff",
@@ -267,11 +266,13 @@ assert.ok(
   "active chat title should expose a header rename action, not hide naming in the sidebar only",
 );
 assert.ok(
-  sessionPage.includes("onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string; agent?: string }) => void") &&
+  sessionPage.includes("onCreateTaskWithPrompt?: (") &&
+    sessionPage.includes("onSessionCreated?: (sessionId: string) => void") &&
     sessionPage.includes('agent: agentIdForDesk(panel)') &&
     sessionPage.includes('agent: demo.agentId ?? agentIdForDesk(demo.iconHint),') &&
     sessionRoute.includes("const title = options?.title?.trim()") &&
     sessionRoute.includes("const agent = options?.agent?.trim()") &&
+    sessionRoute.includes("options?.onSessionCreated?.(session.id)") &&
     sessionRoute.includes("setSelectedAgent(agent || null)") &&
     sessionRoute.includes("workspaceClient.session.update({") &&
     sessionRoute.includes("[displaySession as any, ...(current[workspaceId] ?? [])]"),
@@ -279,10 +280,19 @@ assert.ok(
 );
 assert.ok(
   sessionPage.includes('openWorkflowDesk("wellness", wellnessRailLauncher.prompt, {') &&
-    sessionPage.includes("stageWorkflowRun(props.matterhornServerClient, {") &&
-    sessionPage.includes("startWorkflowRun(props.matterhornServerClient!, run.workflowRunId)") &&
+    sessionPage.includes("stageWorkflowRun(props.matterhornServerClient!, {") &&
+    sessionPage.includes("if (!options?.launchAgent)") &&
+    sessionPage.includes("startWorkflowRun(props.matterhornServerClient!, stagedRun.workflowRunId)") &&
     sessionPage.includes("window.dispatchEvent(new Event(\"matterhorn:task-log-updated\"));"),
-  "Longevity launchers should create backend workflow runs instead of prompted generic chats",
+  "Longevity launchers should prepare backend workflow records before stage execution",
+);
+assert.ok(
+  sessionPage.includes("launchAgent?: boolean") &&
+    sessionPage.includes("props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, visibleUserIntent") &&
+    sessionPage.includes("launchAgent: true") &&
+    sessionPage.includes("agent: agentIdForDesk(deskId)") &&
+    sessionPage.includes("sendImmediately: true"),
+  "Longevity stage actions should open a real agent chat where the result is visible",
 );
 assert.ok(
   commandPalette.includes('title: "Go home"') &&
@@ -392,7 +402,7 @@ for (const phrase of [
 for (const phrase of [
   "protocolWorkflowLaunchers",
   "businessWorkflowLaunchers",
-  "blankWorkflowLauncher",
+  "props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId)",
   'card.panel === "bittensor"',
   'card.panel === "hyperliquid"',
   'card.panel === "polymarket"',
@@ -417,6 +427,9 @@ for (const forbidden of [
 ]) {
   assert.equal(`${welcome}\n${english}\n${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(forbidden), false, `old generic onboarding copy should be removed: ${forbidden}`);
 }
+
+assert.equal(sessionSurface.includes("Stage agent task"), false, "session starter cards should launch directly without repeated internal staging copy");
+assert.equal(settingsRoute.includes("border-l border-dls-border/30 pl-3"), false, "MCP setup should avoid hard left-rule dividers");
 
 assert.ok(walletPanel.includes('lazy(() => import("./pages/BittensorPanel"))'), "Protocol rail should mount the venue panel");
 assert.ok(walletPanel.includes("<BittensorPanel initialVenue={initialVenue} />"), "Protocol panel should render the selected workspace");
@@ -556,7 +569,7 @@ assert.ok(
   "embedded settings should tell the MCP view to use compact right-rail layout",
 );
 assert.ok(
-  sessionPage.includes('className="flex h-full min-h-0 flex-col overflow-hidden bg-background"'),
+  sessionPage.includes('className="matterhorn-side-panel flex h-full min-h-0 flex-col overflow-hidden bg-dls-background"'),
   "MCP/settings rail should avoid nested scrolling and let the compact settings surface own overflow",
 );
 assert.equal(
@@ -613,8 +626,8 @@ for (const phrase of [
   "profileRailActive",
   'onClick={() => setCurrentSidePanel("profile")}',
   'aria-pressed={profileRailActive}',
-  "Profile, settings, and task logs",
-  'renderCompactSettingsRail("general")',
+  "Profile and account",
+  'renderCompactSettingsRail("cloud-account")',
   'activeSidePanel === "wallet"',
   'renderCompactSettingsRail("wallet")',
   'renderCompactSettingsRail("extensions")',
@@ -636,21 +649,17 @@ assert.ok(settingsShell.includes('props.compact ? "sr-only" : "truncate"'), "com
 assert.equal(settingsShell.includes('className="min-w-0 max-w-46 justify-start gap-2"'), false, "compact settings rail should not use the old large dropdown trigger as the primary header");
 assert.ok(extensionsView.includes("compact?: boolean"), "extensions settings should support embedded compact right-rail rendering");
 assert.ok(extensionsView.includes('props.compact ? "space-y-4 max-w-none" : "space-y-6 max-w-3xl"'), "embedded extensions settings should remove full-page max-width spacing");
-assert.ok(extensionsView.includes('props.compact ? "grid w-full min-w-0 grid-cols-2 gap-1" : "inline-flex w-fit"'), "embedded extensions tabs should use equal compact columns instead of crowding content");
-assert.ok(extensionsView.includes("h-auto min-w-0 whitespace-normal"), "embedded extensions tabs should stay tappable without forcing long labels outside the rail");
-assert.ok(extensionsView.includes("h-auto min-w-0 flex-col items-center gap-0.5 whitespace-normal"), "embedded Marketplace tab should stack its status label in compact rail layout");
+assert.ok(extensionsView.includes('"grid min-w-0 flex-1 grid-cols-2 border-b border-dls-border/40"'), "embedded extensions tabs should use equal compact columns, fill the available space beside refresh, and keep a quiet baseline");
+assert.ok(extensionsView.includes("h-9 min-w-0 rounded-none border-x-0 border-t-0 border-b-2"), "embedded extensions tabs should use a slim active underline instead of filled blocks");
+assert.equal(extensionsView.includes("post-go-live"), false, "Marketplace tabs should omit redundant launch-status copy");
 assert.ok(extensionsView.includes('<span className="min-w-0 max-w-full truncate">Marketplace</span>'), "embedded Marketplace label should be constrained inside its compact tab");
 assert.ok(settingsSurfaceRoute.includes("compact={props.embedded}"), "embedded settings should tell extensions and MCP views to use compact right-rail layout");
 assert.ok(settingsSurfaceRoute.includes("<CloudAccountView\n            compact={props.embedded}"), "embedded Profile rail should render the compact account surface");
 assert.ok(settingsSurfaceRoute.includes("<WalletSettingsView\n            compact={props.embedded}"), "embedded Wallet rail should render the compact wallet surface");
 for (const phrase of [
-  "matterhorn-profile-rail max-w-none gap-4",
-  "Profile readiness",
-  "Local workspace",
+  "matterhorn-profile-rail max-w-none gap-6",
   "Matterhorn Cloud",
-  "Matterhorn-owned",
   "getProfileReadiness",
-  "profileReadiness.stateCopy.body",
   "ProfileReadinessSupportSection",
   "readiness.supportLinks",
   "Send feedback",
@@ -662,7 +671,17 @@ for (const phrase of [
   assert.ok(cloudAccountSettings.includes(phrase), `profile rail should have a compact first-class account state: ${phrase}`);
 }
 for (const phrase of [
-  "matterhorn-wallet-rail max-w-none gap-4",
+  "Local profile",
+  "Preferences and workspace access",
+  "Local teammate access",
+  "Technical details",
+  "Backend version",
+  "Not included",
+]) {
+  assert.ok(profileCapabilityStatus.includes(phrase), `profile rail should keep local status clear and progressively disclosed: ${phrase}`);
+}
+for (const phrase of [
+  "matterhorn-wallet-rail max-w-none gap-5",
   "Protocol support",
   "EVM wallet",
   "getWalletRuntimeCapability",
@@ -670,7 +689,7 @@ for (const phrase of [
   "WalletBoundaryList",
   "capability.safetyCopy",
   "External signer",
-  "Preview only",
+  "Connect an EVM or Sui wallet.",
   "No EVM wallet connector detected",
   "Install or enable MetaMask, Rabby, or another injected wallet. Public reads and market previews still work.",
   "public SS58/coldkey data",
@@ -681,6 +700,7 @@ for (const phrase of [
 ]) {
   assert.ok(walletSettings.includes(phrase), `wallet rail should have compact, honest wallet state: ${phrase}`);
 }
+assert.equal(walletSettings.includes("Preview only"), false, "healthy wallet connection states should stay silent");
 assert.equal(sessionPage.includes("ProfileRailPanel"), false, "Profile rail should use the real Account settings page, not a custom mini-panel");
 assert.equal(sessionPage.includes('activeSidePanel === "wallet" || isVenueSidePanel(activeSidePanel)'), false, "Wallet rail should not be merged with protocol action panels");
 assert.ok(
@@ -698,7 +718,7 @@ for (const phrase of [
   "buildMatterhornOrientationSystemPrompt",
   "shouldInjectMatterhornOrientationPrompt(text)",
   "matterhornOrientationPrompt",
-  "[envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt]",
+  "[envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt, deskAgentInstructions, workflowRunPrompt, responsePerspectivePrompt]",
 ]) {
   assert.ok(sessionRoute.includes(phrase), `broad starter prompts should receive Matterhorn orientation context: ${phrase}`);
 }
@@ -801,7 +821,7 @@ for (const phrase of [
   "Protocol MCP",
   "grid-cols-[34px_minmax(0,1fr)]",
   "grid-cols-[44px_minmax(0,1fr)]",
-  "border-l border-dls-border/30 pl-3",
+  "rounded-lg bg-dls-surface-muted/18 px-3 py-2",
   "Safety",
   "Full docs",
   "Open GitHub docs",
@@ -904,8 +924,8 @@ assert.ok(
   "ExtensionCard should keep the legacy card default while exposing a responsive stream presentation.",
 );
 assert.ok(
-  settingsRoute.includes("compact={props.compact}"),
-  "MCP product cards should inherit the compact right-rail rendering mode.",
+  settingsRoute.includes("onCopyCommand={copyMatterhornMcpCommand}\n        compact"),
+  "MCP product cards should use compact disclosure rows at every settings width.",
 );
 assert.equal(
   settingsRoute.includes("shadow-[0_18px_42px_-34px_rgba(0,0,0,0.7)]"),
@@ -932,8 +952,8 @@ assert.ok(
   "MCP custom app card should inherit the compact right-rail rendering mode.",
 );
 assert.ok(
-  settingsRoute.includes('props.compact\n        ? "rounded-lg bg-dls-surface-muted/22 p-3"'),
-  "MCP custom app card should use a compact, soft rail treatment.",
+  settingsRoute.includes('props.compact\n        ? "px-1 py-2"'),
+  "MCP custom app action should use an open compact rail treatment.",
 );
 assert.ok(
   settingsRoute.includes("break-words font-mono"),

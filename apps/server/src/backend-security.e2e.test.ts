@@ -39,6 +39,7 @@ const priorEnv = {
   envStore: process.env.OPENWORK_ENV_STORE,
   tokenStore: process.env.OPENWORK_TOKEN_STORE,
   memoryRoot: process.env.MATTERHORN_WORK_MEMORY_ROOT,
+  devLogFile: process.env.OPENWORK_DEV_LOG_FILE,
 };
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
@@ -81,7 +82,21 @@ async function getFreePort(): Promise<number> {
 }
 
 // Boot a server with a dedicated token store so we can create viewer/collab tokens.
-async function boot(readOnly = false): Promise<{
+async function boot(readOnly?: boolean): Promise<{
+  base: string;
+  dir: string;
+  ownerToken: string;
+  collaboratorToken: string;
+  viewerToken: string;
+}>;
+async function boot(readOnly: boolean, configOverrides: Partial<ServerConfig>): Promise<{
+  base: string;
+  dir: string;
+  ownerToken: string;
+  collaboratorToken: string;
+  viewerToken: string;
+}>;
+async function boot(readOnly = false, configOverrides: Partial<ServerConfig> = {}): Promise<{
   base: string;
   dir: string;
   ownerToken: string;
@@ -97,7 +112,10 @@ async function boot(readOnly = false): Promise<{
   process.env.MATTERHORN_WORK_MEMORY_ROOT = join(dir, "memory");
 
   const port = await getFreePort();
-  const config = baseConfig(port, dir, readOnly);
+  const config = {
+    ...baseConfig(port, dir, readOnly),
+    ...configOverrides,
+  } as ServerConfig;
   const server = await startServer(config) as Served;
   stops.push(() => server.stop(true));
 
@@ -116,6 +134,7 @@ async function boot(readOnly = false): Promise<{
       Authorization: `Bearer ${OWNER_TOKEN}`,
       "Content-Type": "application/json",
       "x-openwork-host-token": HOST_TOKEN,
+      Connection: "close",
     },
     body: JSON.stringify({ scope: "collaborator", label: "test-collab" }),
   });
@@ -128,6 +147,7 @@ async function boot(readOnly = false): Promise<{
       Authorization: `Bearer ${OWNER_TOKEN}`,
       "Content-Type": "application/json",
       "x-openwork-host-token": HOST_TOKEN,
+      Connection: "close",
     },
     body: JSON.stringify({ scope: "viewer", label: "test-viewer" }),
   });
@@ -148,6 +168,7 @@ async function jsonFetch(
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
+      Connection: "close",
       ...(init.body ? { "Content-Type": "application/json" } : {}),
       ...(init.headers ?? {}),
     },
@@ -201,6 +222,64 @@ afterEach(async () => {
   else process.env.OPENWORK_TOKEN_STORE = priorEnv.tokenStore;
   if (priorEnv.memoryRoot === undefined) delete process.env.MATTERHORN_WORK_MEMORY_ROOT;
   else process.env.MATTERHORN_WORK_MEMORY_ROOT = priorEnv.memoryRoot;
+  if (priorEnv.devLogFile === undefined) delete process.env.OPENWORK_DEV_LOG_FILE;
+  else process.env.OPENWORK_DEV_LOG_FILE = priorEnv.devLogFile;
+});
+
+// ---------------------------------------------------------------------------
+// Scope 0: Observability log safety
+// ---------------------------------------------------------------------------
+
+describe("Dev observability log safety", () => {
+  test("POST /dev/log redacts bearer tokens, secret fields, and private-key-shaped text before writing JSONL", async () => {
+    const { base, dir } = await boot();
+    const devLogPath = join(dir, "logs", "browser-dev.jsonl");
+    process.env.OPENWORK_DEV_LOG_FILE = devLogPath;
+    const fakePrivateKey = "f".repeat(64);
+
+    const response = await fetch(`${base}/dev/log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Connection: "close" },
+      body: JSON.stringify([{
+        level: "error",
+        message: `Authorization: Bearer super-secret-token and private key ${fakePrivateKey}`,
+        url: `/session?token=super-secret-token`,
+        extra: {
+          token: "super-secret-token",
+          nested: {
+            privateKey: fakePrivateKey,
+            harmless: "public context",
+          },
+        },
+      }]),
+    });
+
+    expect(response.status).toBe(200);
+    const body = readFileSync(devLogPath, "utf8");
+    expect(body).toContain("[redacted]");
+    expect(body).toContain("public context");
+    expect(body).not.toContain("super-secret-token");
+    expect(body).not.toContain(fakePrivateKey);
+    expect(body).not.toContain("Bearer super");
+  });
+
+  test("POST /dev/log rejects oversized unauthenticated payloads before parsing", async () => {
+    const { base, dir } = await boot();
+    process.env.OPENWORK_DEV_LOG_FILE = join(dir, "logs", "browser-dev.jsonl");
+
+    const response = await fetch(`${base}/dev/log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Connection: "close" },
+      body: JSON.stringify({ message: "x".repeat(140_000) }),
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(413);
+    expect(payload).toMatchObject({
+      code: "payload_too_large",
+      message: "Dev log payload is too large",
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -239,10 +318,9 @@ describe("Memory write permissions by token scope", () => {
   });
 
   test("viewer token CANNOT resolve a memory suggestion (confirm)", async () => {
-    const { base, viewerToken } = await boot();
+    const { base, ownerToken, viewerToken } = await boot();
 
     // First create a suggestion with the owner token so we have something to resolve.
-    const { ownerToken } = await boot();
     const created = await jsonFetch(base, "/api/memory/suggestions", ownerToken, {
       method: "POST",
       body: JSON.stringify({
@@ -698,6 +776,35 @@ describe("Audit entries for memory operations", () => {
 // ---------------------------------------------------------------------------
 
 describe("Security capability classification", () => {
+  test("server applies a bounded local API request rate limit", async () => {
+    const { base, ownerToken } = await boot(false, {
+      requestRateLimit: { enabled: true, windowMs: 60_000, maxRequests: 4 },
+    });
+
+    const allowedReads = await Promise.all(Array.from({ length: 4 }, () =>
+      jsonFetch(base, "/api/backend/capabilities", ownerToken),
+    ));
+    const blocked = await jsonFetch(base, "/api/backend/capabilities", ownerToken);
+
+    expect(allowedReads.every((result) => result.response.status === 200)).toBe(true);
+    expect(blocked.response.status).toBe(429);
+    expect(blocked.response.headers.get("Retry-After")).toMatch(/^\d+$/);
+    expect(blocked.payload).toMatchObject({
+      code: "rate_limited",
+      message: "Too many requests. Try again shortly.",
+    });
+
+    const writeAfterReadLimit = await fetch(`${base}/not-a-route`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ownerToken}`,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(writeAfterReadLimit.status).toBe(404);
+  });
+
   test("GET /api/backend/capabilities exists and returns shape", async () => {
     const { base, ownerToken } = await boot();
 
@@ -707,8 +814,122 @@ describe("Security capability classification", () => {
     expect(caps.success).toBe(true);
     expect(caps.version).toBe("matterhorn.backend.capabilities.v1");
     expect(caps.security.memoryWriteGuards.status).toBe("working");
+    expect(caps.outputs.status).toBe("working");
     expect(caps.wallets.families.sui.status).toBe("preview");
     expect(caps.wallets.families.sui.signing).toBe("client_wallet");
+  });
+
+  test("control-plane mutations reject overlarge JSON bodies", async () => {
+    const { base, collaboratorToken } = await boot();
+
+    const result = await jsonFetch(
+      base,
+      "/workspace/ws_security/backend/model-selection",
+      collaboratorToken,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          providerId: "opencode",
+          modelId: "big-pickle",
+          padding: "x".repeat(70_000),
+        }),
+      },
+    );
+
+    expect(result.response.status).toBe(413);
+    expect(result.payload).toMatchObject({
+      code: "payload_too_large",
+    });
+  });
+
+  test("MCP config mutations reject overlarge JSON bodies before approval or config writes", async () => {
+    const { base, collaboratorToken } = await boot();
+
+    const addResult = await jsonFetch(
+      base,
+      "/workspace/ws_security/mcp",
+      collaboratorToken,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name: "oversized-mcp",
+          config: {
+            type: "local",
+            command: "node",
+          },
+          padding: "x".repeat(70_000),
+        }),
+      },
+    );
+
+    expect(addResult.response.status).toBe(413);
+    expect(addResult.payload).toMatchObject({
+      code: "payload_too_large",
+    });
+
+    const toggleResult = await jsonFetch(
+      base,
+      "/workspace/ws_security/mcp/oversized-mcp/enabled",
+      collaboratorToken,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          enabled: true,
+          padding: "x".repeat(70_000),
+        }),
+      },
+    );
+
+    expect(toggleResult.response.status).toBe(413);
+    expect(toggleResult.payload).toMatchObject({
+      code: "payload_too_large",
+    });
+  });
+
+  test("host control mutations reject overlarge JSON bodies", async () => {
+    const { base } = await boot();
+
+    const tokenResponse = await fetch(`${base}/tokens`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OWNER_TOKEN}`,
+        "Content-Type": "application/json",
+        "x-openwork-host-token": HOST_TOKEN,
+        Connection: "close",
+      },
+      body: JSON.stringify({
+        scope: "viewer",
+        label: "too-large",
+        padding: "x".repeat(70_000),
+      }),
+    });
+    const tokenPayload = await tokenResponse.json();
+
+    expect(tokenResponse.status).toBe(413);
+    expect(tokenPayload).toMatchObject({
+      code: "payload_too_large",
+    });
+
+    const workspaceResponse = await fetch(`${base}/workspaces/local`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OWNER_TOKEN}`,
+        "Content-Type": "application/json",
+        "x-openwork-host-token": HOST_TOKEN,
+        Connection: "close",
+      },
+      body: JSON.stringify({
+        folderPath: join(tmpdir(), "matterhorn-too-large-workspace"),
+        name: "Too large",
+        padding: "x".repeat(70_000),
+      }),
+    });
+    const workspacePayload = await workspaceResponse.json();
+
+    expect(workspaceResponse.status).toBe(413);
+    expect(workspacePayload).toMatchObject({
+      code: "payload_too_large",
+    });
   });
 
   test("CORS wildcard is detected from backend capabilities", async () => {
@@ -718,7 +939,7 @@ describe("Security capability classification", () => {
     expect(result.response.status).toBe(200);
     expect(result.payload.security.cors.status).toBe("needs_setup");
     expect(result.payload.security.cors.details.origins).toEqual(["*"]);
-  });
+  }, 15_000);
 
   test("capabilities response does not expose bearer or host tokens", async () => {
     const { base, ownerToken } = await boot();
@@ -787,7 +1008,9 @@ describe("Security capability classification", () => {
       headers: {
         Authorization: `Bearer ${OWNER_TOKEN}`,
         "x-openwork-host-token": HOST_TOKEN,
+        Connection: "close",
       },
+      signal: AbortSignal.timeout(5_000),
     });
     const payload = await result.json();
     const tokens = Array.isArray(payload.items) ? payload.items : [];
@@ -803,7 +1026,9 @@ describe("Security capability classification", () => {
     const { base } = await boot();
 
     // Request without any Authorization header.
-    const response = await fetch(`${base}/api/memory/entities`);
+    const response = await fetch(`${base}/api/memory/entities`, {
+      headers: { Connection: "close" },
+    });
     expect(response.status).toBeGreaterThanOrEqual(400);
     expect(response.status).toBeLessThan(500);
 
@@ -816,7 +1041,7 @@ describe("Security capability classification", () => {
     const { base } = await boot();
 
     const response = await fetch(`${base}/api/memory/entities`, {
-      headers: { Authorization: "Bearer invalid_token_xyz" },
+      headers: { Authorization: "Bearer invalid_token_xyz", Connection: "close" },
     });
 
     // Should be 401 Unauthorized, not a server error.

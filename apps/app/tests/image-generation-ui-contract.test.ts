@@ -206,6 +206,7 @@ describe("Generated image card", () => {
       onSaveToOutputs: () => {},
       onMakeNft: () => {},
     }));
+    expect(html).toContain("data-testid=\"generated-image-card\"");
     expect(html).toContain("a tiny robot");
     expect(html).toContain("mock");
     expect(html).toContain("1024x1024");
@@ -281,12 +282,32 @@ describe("Image generation composer", () => {
     expect(html).toContain("Create image");
   });
 
-  test("needs_setup state shows setup message", () => {
+  test("working state can use the chat draft as the image prompt", () => {
     const html = renderToStaticMarkup(
-      React.createElement(ImageGenerationComposer, { capabilityStatus: "needs_setup", onGenerate: () => {} }),
+      React.createElement(ImageGenerationComposer, {
+        capabilityStatus: "working",
+        suggestedPrompt: "Generate a calm Sui wallet onboarding illustration",
+        onGenerate: () => {},
+      }),
     );
-    expect(html).toContain("needs setup");
-    expect(html).toContain("Add an image provider");
+    expect(html).toContain("Use chat draft");
+    expect(html).toContain("Use draft");
+    expect(html).toContain("Describe the image");
+    expect(html).not.toContain("Use current chat draft");
+  });
+
+  test("needs_setup state identifies Matterhorn as the setup owner", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ImageGenerationComposer, {
+        capabilityStatus: "needs_setup",
+        setupHref: "/workspace/ws_test/settings/generated-media",
+        onGenerate: () => {},
+      }),
+    );
+    expect(html).toContain("requires Matterhorn setup");
+    expect(html).toContain("Review its status in Settings");
+    expect(html).toContain("Review status");
+    expect(html).toContain("/workspace/ws_test/settings/generated-media");
   });
 });
 
@@ -315,6 +336,7 @@ describe("Session image generation panel", () => {
           workspaceId: "ws_test",
           sessionId: "ses_test",
           defaultOpen: true,
+          suggestedPrompt: "Generate a polished Bittensor dashboard image",
           capabilitiesOverride: {
             imageGeneration: { status: "working" },
             walrusStorage: { status: "needs_setup" },
@@ -326,8 +348,12 @@ describe("Session image generation panel", () => {
     );
 
     expect(html).toContain("Generate image");
+    expect(html).toContain("aria-expanded=\"true\"");
+    expect(html).toContain("aria-controls=");
     expect(html).toContain("Describe the image");
-    expect(html).toContain("Ready");
+    expect(html).toContain("Use chat draft");
+    expect(html).not.toContain("Use current chat draft");
+    expect(html).not.toContain("Ready");
   });
 
   test("formats billing entitlement errors for image and NFT actions", () => {
@@ -337,9 +363,22 @@ describe("Session image generation panel", () => {
     expect(source).toContain("billing_entitlement_limit_reached");
     expect(source).toContain("formatEntitlementReset(details.resetsAt)");
     expect(source).toContain('action: "billing"');
-    expect(source).toContain("/settings/billing");
+    expect(source).toContain("workspaceSettingsRoute");
+    expect(source).toContain('workspaceSettingsRoute(props.workspaceId, "billing")');
+    expect(source).toContain('workspaceSettingsRoute(props.workspaceId, "generated-media")');
     expect(source).toContain("requires an upgrade");
     expect(source).toContain("limit reached");
+    expect(source).toContain("isHigherPlan");
+    expect(source).toContain('Wait for the allowance to reset.');
+    expect(source).toContain('includes ${limit} per allowance period');
+    expect(source).toContain('action: upgradePlanIds.length > 0 ? "billing" : undefined');
+  });
+
+  test("session surface passes the active chat draft into the image panel", () => {
+    const source = readFileSync("apps/app/src/react-app/domains/session/surface/session-surface.tsx", "utf8");
+
+    expect(source).toContain("const draft = useComposerStateStore");
+    expect(source).toContain("suggestedPrompt={draft}");
   });
 });
 
@@ -400,7 +439,7 @@ describe("NFT draft panel", () => {
 
     expect(summaries.mintPreviewReady).toBe(true);
     expect(summaries.mint).toEqual({
-      title: "Mint preview ready",
+      title: "Mint handoff ready",
       lines: [
         "Network sui-testnet",
         `Package ${suiPackageId}`,
@@ -409,7 +448,7 @@ describe("NFT draft panel", () => {
     });
     expect(summaries.listingPreviewReady).toBe(true);
     expect(summaries.listing).toEqual({
-      title: "Listing preview ready",
+      title: "Listing handoff ready",
       lines: [
         "Network sui-testnet",
         "Marketplace Sui Kiosk",
@@ -461,6 +500,7 @@ describe("NFT draft panel", () => {
 
   test("component source exposes mint preview, wallet signing, and receipt fields", () => {
     const source = readFileSync("apps/app/src/react-app/domains/session/media/nft-draft-panel.tsx", "utf8");
+    expect(source).toContain("Prepare mint handoff");
     expect(source).toContain("Mint plan ready");
     expect(source).toContain("Sign in wallet");
     expect(source).toContain("Mint digest");
@@ -471,6 +511,7 @@ describe("NFT draft panel", () => {
   test("component source exposes marketplace listing preview and receipt fields", () => {
     const source = readFileSync("apps/app/src/react-app/domains/session/media/nft-draft-panel.tsx", "utf8");
     expect(source).toContain("Marketplace");
+    expect(source).toContain("Prepare listing handoff");
     expect(source).toContain("Listing plan ready");
     expect(source).toContain("Sign in wallet");
     expect(source).toContain("Price (MIST)");
@@ -487,7 +528,7 @@ describe("NFT draft panel", () => {
     expect(source).toContain("Marketplace listing");
   });
 
-  test("component renders backend NFT setup requirements", () => {
+  test("component renders customer-safe NFT setup requirements", () => {
     const html = renderToStaticMarkup(
       React.createElement(NftSetupRequirements, {
         requirements: [
@@ -508,8 +549,11 @@ describe("NFT draft panel", () => {
         ],
       }),
     );
-    expect(html).toContain("Setup needed");
-    expect(html).toContain("MATTERHORN_SUI_NFT_PACKAGE_ID");
+    expect(html).toContain("Matterhorn setup");
+    expect(html).toContain("Matterhorn must finish the platform configuration");
+    expect(html).toContain("Sui NFT package");
+    expect(html).toContain("Mint previews need the Move package id.");
+    expect(html).not.toContain("MATTERHORN_SUI_NFT_PACKAGE_ID");
     expect(html).not.toContain("MATTERHORN_SUI_NFT_MODULE_NAME");
   });
 
@@ -562,9 +606,33 @@ describe("NFT draft panel", () => {
 
     expect(html).toContain("Publishing path");
     expect(html).toContain("mock/mock-image-1");
+    expect(items[0]?.status).toBe("preview");
+    expect(items[0]?.description).toContain("Matterhorn must connect a production provider before launch");
     expect(html).toContain("Publisher/relay needed");
     expect(html).toContain("Package needed");
     expect(html).toContain("Kiosk/TransferPolicy needed");
+  });
+
+  test("mock image generation stays usable while production setup reports all six operator inputs", () => {
+    const requirements = buildNftPublishingSetupRequirements({
+      imageGeneration: {
+        status: "working",
+        providers: [{ status: "working", label: "Mock", provider: "mock", model: "mock-image-1", size: "1024x1024", quality: "auto", format: "png" }],
+        defaultProvider: "mock",
+        defaultModel: "mock-image-1",
+      },
+      walrusStorage: { status: "needs_setup", publisherConfigured: false, relayConfigured: false },
+      nftMinting: { status: "needs_setup", network: "sui-testnet", custody: false, signing: "client_wallet", packageConfigured: false, kioskConfigured: false },
+      nftMarketplaceListing: { status: "needs_setup", network: "sui-testnet", custody: false, signing: "client_wallet", packageConfigured: false, kioskConfigured: false },
+    });
+
+    expect(requirements).toHaveLength(6);
+    expect(requirements[0]).toMatchObject({
+      key: "openai_api_key",
+      label: "Production image provider",
+      status: "missing",
+      envVar: "OPENAI_API_KEY",
+    });
   });
 });
 

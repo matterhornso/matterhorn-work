@@ -58,6 +58,12 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("Account and local/cloud profile readiness.");
     expect(source).not.toContain("You are not signed in to a Matterhorn Work account.");
     expect(source).not.toContain("<StatusBadge tone=\"setup\">Signed out</StatusBadge>");
+    expect(source).toContain("function UnavailableStatus(props: { label?: string })");
+    expect(source).toContain('{props.label ?? "Engine offline"}');
+    expect(source).toContain('<UnavailableStatus label="Workspace unavailable" />');
+    expect(source).toContain("text-red-10");
+    expect(source).toContain("bg-red-9");
+    expect(source).not.toContain('<StatusBadge tone="error">Unavailable</StatusBadge>');
   });
 
   test("renders data policy from workspace data-map instead of static copy", () => {
@@ -116,6 +122,16 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("Upgrade to Matterhorn Max to create teammate tokens.");
     expect(source).toContain("onOpenBilling={() => onSelectTab(\"billing\")}");
     expect(source).toContain("refetchBilling={workspaceBillingStatusQuery.refetch}");
+  });
+
+  test("keeps prepared, running, and waiting task states visually distinct", () => {
+    const source = readAppSource("domains/settings/pages/overview-view.tsx");
+
+    expect(source).toContain('status === "staged"');
+    expect(source).toContain('label: "Prepared"');
+    expect(source).toContain('status === "waiting"');
+    expect(source).toContain('label: "Waiting"');
+    expect(source).toContain('label: "Running"');
   });
 });
 

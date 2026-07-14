@@ -10,9 +10,12 @@ type SessionMessageRole = "assistant" | "system" | "user";
 type SessionActivityRecord = {
   status: SessionActivityStatus;
   runActive: boolean;
+  runStartedAt?: number;
   assistantOutput: boolean;
   errorActive: boolean;
   compacting: boolean;
+  optimisticRunTitle?: string;
+  optimisticRunAgent?: string;
   waitingPermissionIds: string[];
   waitingQuestionIds: string[];
   messageRoles: Record<string, SessionMessageRole>;
@@ -32,6 +35,7 @@ type SessionActivityStore = {
   getStatus: (workspaceId: string, sessionId: string) => SessionActivityStatus;
   seedWorkspaceSessions: (workspaceId: string, sessions: SessionLike[]) => void;
   seedSessionRun: (workspaceId: string, sessionId: string, status: unknown, assistantOutput: boolean) => void;
+  startOptimisticRun: (workspaceId: string, sessionId: string, options?: { title?: string; agent?: string }) => void;
   setRunStatus: (workspaceId: string, sessionId: string, status: unknown) => void;
   markMessageRole: (workspaceId: string, sessionId: string, messageId: string, role: SessionMessageRole) => void;
   markAssistantOutput: (workspaceId: string, sessionId: string, messageId?: string, options?: { allowUnknownMessageRole?: boolean }) => void;
@@ -105,9 +109,16 @@ function updateRecord(
   updater: (record: SessionActivityRecord) => SessionActivityRecord,
 ) {
   const workspaceRecords = state.recordsByWorkspaceId[workspaceId] ?? {};
-  const nextRecord = updater(workspaceRecords[sessionId] ?? createRecord());
+  const currentRecord = workspaceRecords[sessionId] ?? createRecord();
+  const nextRecord = updater(currentRecord);
   const status = statusForRecord(nextRecord);
-  const recordWithStatus = { ...nextRecord, status, updatedAt: Date.now() };
+  const now = Date.now();
+  const runStartedAt = nextRecord.runActive
+    ? currentRecord.runActive && currentRecord.runStartedAt
+      ? currentRecord.runStartedAt
+      : now
+    : undefined;
+  const recordWithStatus = { ...nextRecord, status, runStartedAt, updatedAt: now };
   return {
     recordsByWorkspaceId: {
       ...state.recordsByWorkspaceId,
@@ -179,10 +190,30 @@ export const useSessionActivityStore = create<SessionActivityStore>((set, get) =
         assistantOutput: runActive && assistantOutput,
         errorActive: runActive ? false : record.errorActive,
         compacting: runActive ? record.compacting : false,
+        optimisticRunTitle: runActive ? record.optimisticRunTitle : undefined,
+        optimisticRunAgent: runActive ? record.optimisticRunAgent : undefined,
         waitingPermissionIds: runActive ? record.waitingPermissionIds : [],
         waitingQuestionIds: runActive ? record.waitingQuestionIds : [],
       };
     }));
+  },
+  startOptimisticRun: (workspaceId, sessionId, options) => {
+    const workspace = workspaceId.trim();
+    const session = sessionId.trim();
+    if (!workspace || !session) return;
+    const title = options?.title?.trim();
+    const agent = options?.agent?.trim();
+    set((state) => updateRecord(state, workspace, session, (record) => ({
+      ...record,
+      runActive: true,
+      assistantOutput: false,
+      errorActive: false,
+      compacting: false,
+      optimisticRunTitle: title || record.optimisticRunTitle,
+      optimisticRunAgent: agent || record.optimisticRunAgent,
+      waitingPermissionIds: [],
+      waitingQuestionIds: [],
+    })));
   },
   setRunStatus: (workspaceId, sessionId, status) => {
     const workspace = workspaceId.trim();
@@ -197,6 +228,8 @@ export const useSessionActivityStore = create<SessionActivityStore>((set, get) =
         assistantOutput: runActive && record.runActive ? record.assistantOutput : false,
         errorActive: runActive ? false : record.errorActive,
         compacting: runActive ? record.compacting : false,
+        optimisticRunTitle: runActive ? record.optimisticRunTitle : undefined,
+        optimisticRunAgent: runActive ? record.optimisticRunAgent : undefined,
         waitingPermissionIds: runActive ? record.waitingPermissionIds : [],
         waitingQuestionIds: runActive ? record.waitingQuestionIds : [],
       };
@@ -260,6 +293,8 @@ export const useSessionActivityStore = create<SessionActivityStore>((set, get) =
       runActive: false,
       assistantOutput: false,
       compacting: false,
+      optimisticRunTitle: undefined,
+      optimisticRunAgent: undefined,
     })));
   },
   clearError: (workspaceId, sessionId) => {

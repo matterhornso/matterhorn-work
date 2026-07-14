@@ -3,12 +3,19 @@ import { useCallback, useMemo, useEffect, useRef, useState } from "react";
 import { useAccount, useChainId, useSendTransaction, useSignMessage, usePublicClient } from "wagmi";
 
 import type { WalletStore } from "./state/wallet-store";
-import { useWalletStore, computeTxValueUSD, parseTxValueWei } from "./state/wallet-store";
+import {
+  useWalletStore,
+  analyzeWalletTransaction,
+  approvalPolicyFromSafetyPolicy,
+  evaluateWalletApprovalAgainstPolicy,
+  walletSafetyPolicyFromSnapshot,
+} from "./state/wallet-store";
 import { buildSessionWalletContext, type SessionWalletContext } from "./SessionContextProvider";
 import { CHAIN_NAMES, FORCE_TESTNET } from "../../infra/chains";
 import { USDC_BY_CHAIN } from "../../infra/contracts";
 import { isWhitelistedAddress } from "./infra/whitelist";
 import { appendSecurityLog } from "./state/security-log";
+import { sendReviewedWalletTransaction } from "./lib/reviewed-wallet-send";
 
 /**
  * Hook that provides the session-scoped wallet context
@@ -16,8 +23,7 @@ import { appendSecurityLog } from "./state/security-log";
  * inject wallet context into agent prompts and handle
  * transaction approval.
  */
-const SWAP_HOUR_WINDOW_MS = 60 * 60 * 1000;
-const MAX_SWAPS_PER_HOUR = 5;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 export function useSessionWallet(store: WalletStore) {
   const state = useWalletStore(store);
@@ -26,6 +32,7 @@ export function useSessionWallet(store: WalletStore) {
   const publicClient = usePublicClient();
   const { sendTransactionAsync } = useSendTransaction();
   const { signMessageAsync } = useSignMessage();
+  const safetyPolicy = useMemo(() => walletSafetyPolicyFromSnapshot(state), [state]);
 
   // Build the session context for injection into agent prompts
   const walletContext: SessionWalletContext = useMemo(() => {
@@ -45,55 +52,63 @@ export function useSessionWallet(store: WalletStore) {
 
     if (!wagmiAddress) throw new Error("Wallet not connected");
 
-    if (FORCE_TESTNET && approval.chainId === 8453) {
-      throw new Error("Mainnet is disabled (FORCE_TESTNET=true)");
-    }
-
-    if (chainId && chainId !== approval.chainId) {
-      const expected = CHAIN_NAMES[approval.chainId] ?? `chain ${approval.chainId}`;
-      const actual = CHAIN_NAMES[chainId] ?? `chain ${chainId}`;
-      throw new Error(`Switch your wallet to ${expected}. It is currently on ${actual}.`);
-    }
-
-    const hash = await sendTransactionAsync({
-      chainId: approval.chainId,
-      to: approval.to as `0x${string}`,
-      value: parseTxValueWei(approval.value),
-      data: approval.data as `0x${string}` | undefined,
+    const connectedChainId = chainId ?? state.chainId;
+    const result = await sendReviewedWalletTransaction({
+      approval,
+      connectedChainId,
+      forceTestnet: FORCE_TESTNET || !state.mainnetEnabled,
+      chainName: (id) => CHAIN_NAMES[id] ?? `chain ${id}`,
+      policy: approvalPolicyFromSafetyPolicy(safetyPolicy),
+      sendTransaction: sendTransactionAsync,
+      onTransaction: (tx) => store.addTransaction(tx),
+      onDailySpend: (amountUSD) => store.incrementDailySpendUSD(amountUSD),
+      onSwapSubmitted: () => store.incrementSessionSwapCount(),
+      onSecurityLog: appendSecurityLog,
+      approvedReason: "User approved via TransactionApproval modal",
     });
 
     store.clearApproval();
-    const txValueUSD = computeTxValueUSD(approval.value);
-    store.incrementDailySpendUSD(txValueUSD);
-    store.addTransaction({
-      hash,
-      to: approval.to as `0x${string}`,
-      value: approval.value,
-      status: "pending",
-      timestamp: Date.now(),
-      chainId: approval.chainId,
-      proposedBy: approval.proposedBy,
-      riskLevel: approval.riskLevel,
-    });
-    appendSecurityLog({
-      timestamp: Date.now(),
-      action: "tx_approved",
-      chainId: approval.chainId,
-      to: approval.to,
-      valueUSD: txValueUSD,
-      riskLevel: approval.riskLevel,
-      reason: "User approved via TransactionApproval modal",
-    });
-
-    return hash;
-  }, [state.pendingApproval, wagmiAddress, chainId, sendTransactionAsync, store]);
+    return result.hash;
+  }, [
+    state.pendingApproval,
+    state.chainId,
+    state.mainnetEnabled,
+    safetyPolicy,
+    wagmiAddress,
+    chainId,
+    sendTransactionAsync,
+    store,
+  ]);
 
   /**
    * Reject a pending TX — clears the approval request.
    */
   const rejectTx = useCallback(() => {
+    const approval = state.pendingApproval;
+    if (approval?.type === "tx") {
+      let valueUSD = 0;
+      try {
+        valueUSD = analyzeWalletTransaction({
+          chainId: approval.chainId,
+          to: approval.to,
+          value: approval.value,
+          data: approval.data,
+        }).valueUSD;
+      } catch {
+        valueUSD = 0;
+      }
+      appendSecurityLog({
+        timestamp: Date.now(),
+        action: "tx_rejected",
+        chainId: approval.chainId,
+        to: approval.to,
+        valueUSD,
+        riskLevel: approval.riskLevel,
+        reason: "User rejected the transaction review.",
+      });
+    }
     store.clearApproval();
-  }, [store]);
+  }, [state.pendingApproval, store]);
 
   /**
    * Mark a transaction as confirmed or failed.
@@ -114,55 +129,32 @@ export function useSessionWallet(store: WalletStore) {
     async (to: string, value: string, data?: string, proposedBy = "user_manual") => {
       const currentChainId = chainId ?? state.chainId ?? 84532;
       const whitelisted = isWhitelistedAddress(currentChainId, to);
-      const valueUSD = computeTxValueUSD(value);
+      const analysis = analyzeWalletTransaction({ chainId: currentChainId, to, value, data });
+      const valueUSD = analysis.valueUSD;
       let riskLevel: "low" | "medium" | "high" = "low";
       if (!whitelisted) riskLevel = "high";
       else if (valueUSD > state.maxPerTransactionUSD) riskLevel = "medium";
       else if (valueUSD + state.dailySpendUSD > state.maxDailySpendUSD) riskLevel = "medium";
 
-      if (state.maxPerTransactionUSD > 0 && valueUSD > state.maxPerTransactionUSD) {
-        store.setError(`This transaction exceeds your per-transaction limit of $${state.maxPerTransactionUSD}`);
-        appendSecurityLog({
-          timestamp: Date.now(),
-          action: "limit_hit",
-          chainId: currentChainId,
-          to,
-          valueUSD,
-          riskLevel,
-          reason: `Per-transaction limit exceeded ($${state.maxPerTransactionUSD})`,
-        });
-        return;
-      }
-
-      if (state.maxDailySpendUSD > 0 && valueUSD + state.dailySpendUSD > state.maxDailySpendUSD) {
-        store.setError(`This transaction exceeds your daily limit of $${state.maxDailySpendUSD}`);
-        appendSecurityLog({
-          timestamp: Date.now(),
-          action: "limit_hit",
-          chainId: currentChainId,
-          to,
-          valueUSD,
-          riskLevel,
-          reason: `Daily spend limit exceeded ($${state.maxDailySpendUSD})`,
-        });
-        return;
-      }
-
       const now = Date.now();
-      const hourMs = 60 * 60 * 1000;
-      const windowExpired = now - state.lastSwapReset >= hourMs;
-      const swapLimitExceeded = !windowExpired && state.sessionSwapCount >= MAX_SWAPS_PER_HOUR;
-      if (swapLimitExceeded) {
+      const blockingReasons = evaluateWalletApprovalAgainstPolicy({
+        valueUSD,
+        policy: safetyPolicy,
+        isSwap: analysis.isSwap,
+        now,
+      });
+      if (blockingReasons.length > 0) {
+        const isRateLimit = blockingReasons.some((reason) => reason.includes("rate limit"));
         appendSecurityLog({
           timestamp: now,
-          action: "rate_limit_hit",
+          action: isRateLimit ? "rate_limit_hit" : "limit_hit",
           chainId: currentChainId,
-          to: to || "0x0000000000000000000000000000000000000000",
+          to: to || ZERO_ADDRESS,
           valueUSD,
           riskLevel,
-          reason: `Swap rate limit reached (${MAX_SWAPS_PER_HOUR}/hour)`,
+          reason: blockingReasons.join(" "),
         });
-        store.setError(`Swap rate limit reached (${MAX_SWAPS_PER_HOUR}/hour). This protects against runaway agent loops.`);
+        store.setError(blockingReasons.join(" "));
         return;
       }
 
@@ -170,8 +162,7 @@ export function useSessionWallet(store: WalletStore) {
       let contractWarning: string | null = null;
       try {
         if (publicClient) {
-          const code = await publicClient.getBytecode({ address: to as `0x${string}` })
-;
+          const code = await publicClient.getBytecode({ address: to as `0x${string}` });
           if (!code || code === "0x") {
             if (data && data !== "0x") {
               contractWarning = "This recipient has no contract code, but data is attached. It may be a mistaken transfer.";
@@ -191,12 +182,10 @@ export function useSessionWallet(store: WalletStore) {
         to,
         valueUSD,
         riskLevel,
-        reason: swapLimitExceeded
-          ? `Rate limit active (${MAX_SWAPS_PER_HOUR}/hour)`
-          : contractWarning ?? (whitelisted ? "Whitelisted address" : "Unknown contract"),
+        reason: analysis.warnings[0] ?? contractWarning ?? (whitelisted ? "Whitelisted address" : "Unknown contract"),
       });
     },
-    [chainId, state.chainId, store, state.maxPerTransactionUSD, state.maxDailySpendUSD, state.dailySpendUSD, state.sessionSwapCount, state.lastSwapReset, publicClient],
+    [chainId, state.chainId, store, state.maxPerTransactionUSD, state.maxDailySpendUSD, state.dailySpendUSD, safetyPolicy, publicClient],
   );
 
   /**
@@ -206,32 +195,39 @@ export function useSessionWallet(store: WalletStore) {
     async (step: { to: string; data?: string; value?: string; chainId?: number }): Promise<`0x${string}`> => {
       if (!wagmiAddress) throw new Error("Wallet not connected");
       const targetChainId = step.chainId ?? state.chainId ?? 84532;
-      if (chainId && chainId !== targetChainId) {
-        const expected = CHAIN_NAMES[targetChainId] ?? `chain ${targetChainId}`;
-        const actual = CHAIN_NAMES[chainId] ?? `chain ${chainId}`;
-        throw new Error(`Switch your wallet to ${expected}. It is currently on ${actual}.`);
-      }
-      const hash = await sendTransactionAsync({
-        chainId: targetChainId,
-        to: step.to as `0x${string}`,
-        value: step.value ? parseTxValueWei(step.value) : undefined,
-        data: step.data as `0x${string}` | undefined,
+      const connectedChainId = chainId ?? state.chainId;
+      const result = await sendReviewedWalletTransaction({
+        approval: {
+          chainId: targetChainId,
+          to: step.to,
+          value: step.value ?? "0",
+          data: step.data,
+          proposedBy: "batch",
+          riskLevel: "medium",
+        },
+        connectedChainId,
+        forceTestnet: FORCE_TESTNET || !state.mainnetEnabled,
+        chainName: (id) => CHAIN_NAMES[id] ?? `chain ${id}`,
+        policy: approvalPolicyFromSafetyPolicy(safetyPolicy),
+        sendTransaction: sendTransactionAsync,
+        onTransaction: (tx) => store.addTransaction(tx),
+        onDailySpend: (amountUSD) => store.incrementDailySpendUSD(amountUSD),
+        onSwapSubmitted: () => store.incrementSessionSwapCount(),
+        onSecurityLog: appendSecurityLog,
+        blockedReasonPrefix: "Batch step blocked: ",
+        approvedReason: "User approved a batch transaction step.",
       });
-      store.addTransaction({
-        hash,
-        to: step.to as `0x${string}`,
-        value: step.value ?? "0",
-        status: "pending",
-        timestamp: Date.now(),
-        chainId: targetChainId,
-        proposedBy: "batch",
-        riskLevel: "medium",
-      });
-      const txValueUSD = computeTxValueUSD(step.value ?? "0");
-      store.incrementDailySpendUSD(txValueUSD);
-      return hash;
+      return result.hash;
     },
-    [wagmiAddress, chainId, sendTransactionAsync, store, state.chainId],
+    [
+      wagmiAddress,
+      chainId,
+      sendTransactionAsync,
+      store,
+      state.chainId,
+      state.mainnetEnabled,
+      safetyPolicy,
+    ],
   );
 
   /**

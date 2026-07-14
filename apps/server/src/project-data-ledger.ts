@@ -162,9 +162,41 @@ function teamAccessAuditTitle(action: string): string | null {
   return null;
 }
 
-function walletAuditTitle(action: string): string | null {
-  if (action === "workspace.sui.preview.create") return "Sui preview saved";
-  if (action === "workspace.sui.receipt.import") return "Sui receipt saved";
+function walletAuditTitle(entry: AuditEntry): string | null {
+  if (entry.action === "workspace.sui.preview.create") return "Sui preview saved";
+  if (entry.action === "workspace.sui.receipt.import") return "Sui receipt saved";
+  if (entry.action === "workspace.wallet.safety_policy.update") return "Wallet safety policy updated";
+  if (entry.action === "workspace.wallet.safety_event") {
+    const metadata = entry.metadata && typeof entry.metadata === "object" && !Array.isArray(entry.metadata)
+      ? entry.metadata as Record<string, unknown>
+      : {};
+    switch (metadata.safetyAction) {
+      case "tx_proposed":
+        return "Wallet transaction proposed";
+      case "tx_approved":
+        return "Wallet transaction approved";
+      case "tx_rejected":
+        return "Wallet transaction rejected";
+      case "chain_mismatch":
+        return "Wallet chain mismatch blocked";
+      case "mainnet_blocked":
+        return "Mainnet transaction blocked";
+      case "wallet_unavailable":
+        return "Wallet unavailable";
+      case "limit_hit":
+        return "Wallet spend limit blocked";
+      case "whitelist_denied":
+        return "Wallet allowlist blocked";
+      case "rate_limit_hit":
+        return "Wallet rate limit blocked";
+      case "simulation_failed":
+        return "Wallet simulation failed";
+      case "countdown_expired":
+        return "Wallet approval expired";
+      default:
+        return "Wallet safety event";
+    }
+  }
   return null;
 }
 
@@ -211,7 +243,7 @@ function billingAuditTitle(entry: AuditEntry): string | null {
 function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry {
   const memoryTitle = memoryAuditTitle(entry.action);
   const teamAccessTitle = teamAccessAuditTitle(entry.action);
-  const walletTitle = walletAuditTitle(entry.action);
+  const walletTitle = walletAuditTitle(entry);
   const outputTitle = outputAuditTitle(entry.action);
   const chatTitle = chatAuditTitle(entry.action);
   const modelSelectionTitle = modelSelectionAuditTitle(entry.action);

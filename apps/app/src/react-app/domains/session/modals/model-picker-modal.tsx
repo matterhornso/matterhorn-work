@@ -73,6 +73,7 @@ function markSeededHiddenModels(): void {
 
 export type ModelPickerModalProps = {
   open: boolean;
+  loading?: boolean;
   options: ModelOption[];
   disabledProviders?: string[];
   query: string;
@@ -272,7 +273,14 @@ export function ModelPickerModal(props: ModelPickerModalProps) {
 
           {/* Content */}
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 -mr-1">
-            {providerGroups.length === 0 ? (
+            {props.loading && providerGroups.length === 0 ? (
+              <div
+                role="status"
+                className="rounded-lg bg-dls-hover/20 px-4 py-6 text-center text-sm text-dls-secondary"
+              >
+                Loading available models...
+              </div>
+            ) : providerGroups.length === 0 ? (
               <div className="space-y-3 rounded-lg border border-dls-border bg-dls-hover/30 px-4 py-6 text-center">
                 <div className="text-sm text-dls-secondary">
                   {props.query.trim() ? "No models match your search." : "No models available. Connect a provider to get started."}
@@ -441,5 +449,4 @@ function DefaultModelRow({
     </button>
   );
 }
-
 

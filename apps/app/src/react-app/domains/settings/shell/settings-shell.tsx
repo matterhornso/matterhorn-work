@@ -29,6 +29,8 @@ import {
   getSettingsTabLabel,
   getSettingsTabStatus,
   getWorkspaceSettingsTabs,
+  settingsReadinessStatusLabel,
+  shouldDisplaySettingsReadinessStatus,
 } from "./settings-page";
 
 type SettingsPageFrameProps = Omit<React.ComponentProps<typeof SettingsPage>, "children">;
@@ -54,13 +56,15 @@ export type SettingsShellProps = SettingsPageFrameProps & {
 };
 
 export function SettingsShell(props: SettingsShellProps) {
-  const title = getSettingsTabLabel(props.activeTab);
+  const title = props.compact && props.activeTab === "cloud-account"
+    ? "Profile"
+    : getSettingsTabLabel(props.activeTab);
 
   if (props.compact) {
     const ActiveIcon = getSettingsTabIcon(props.activeTab);
     return (
-      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background">
-        <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-dls-border px-3 mac:titlebar-drag">
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-dls-background">
+        <header className="flex h-11 shrink-0 items-center justify-between gap-2 px-3 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.08)] mac:titlebar-drag">
           <div className="flex min-w-0 items-center gap-2 mac:titlebar-no-drag">
             <ActiveIcon className="size-4 shrink-0 text-dls-secondary" />
             <span className="truncate text-sm font-semibold text-dls-text">{title}</span>
@@ -126,14 +130,11 @@ export function SettingsShell(props: SettingsShellProps) {
         />
         <SidebarInset className="min-h-0 overflow-hidden bg-background mac:bg-background/80 mac:[&_header]:transition-[padding-left] mac:[&_header]:duration-200 mac:[&_header]:ease-linear mac:peer-data-[state=collapsed]:[&_header]:pl-16 [&_header]:pl-16 md:[&_header]:pl-6">
           <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            <header className="shrink-0 flex h-10 items-center justify-between border-b border-dls-border px-4 md:px-6 mac:titlebar-drag">
-              <div className="flex min-w-0 items-center gap-3">
+            <header className="flex h-9 shrink-0 items-center justify-between px-4 md:hidden mac:titlebar-drag">
+              <div className="flex min-w-0 items-center gap-2">
                 <SidebarTrigger className="mac:titlebar-no-drag md:hidden" />
                 {props.headerLeadingSlot}
-                <h1 className="truncate text-[15px] font-semibold text-dls-text">{title}</h1>
-                <span className="hidden truncate text-[13px] font-medium text-dls-text lg:inline">
-                  {props.selectedWorkspaceName}
-                </span>
+                <span className="truncate text-xs font-medium text-dls-secondary">{title}</span>
                 {props.developerMode && props.headerStatus ? (
                   <span className="hidden text-[12px] font-medium text-dls-text lg:inline">
                     {props.headerStatus}
@@ -223,6 +224,7 @@ function SettingsSectionMenu(
             {section.label ? <DropdownMenuLabel>{section.label}</DropdownMenuLabel> : null}
             {section.tabs.map((tab) => {
               const Icon = getSettingsTabIcon(tab);
+              const status = getSettingsTabStatus(tab, props.backendSettingsSections);
               return (
                 <DropdownMenuItem
                   key={tab}
@@ -231,9 +233,9 @@ function SettingsSectionMenu(
                 >
                   <Icon />
                   <span>{getSettingsTabLabel(tab)}</span>
-                  {getSettingsTabStatus(tab, props.backendSettingsSections) ? (
-                    <span className="ml-auto rounded-md border border-dls-border px-1.5 py-0.5 text-[9px] font-medium tracking-normal text-dls-secondary">
-                      {getSettingsTabStatus(tab, props.backendSettingsSections)}
+                  {shouldDisplaySettingsReadinessStatus(status) && status ? (
+                    <span className="ml-auto text-[10px] font-medium tracking-normal text-amber-300/85">
+                      {settingsReadinessStatusLabel(status)}
                     </span>
                   ) : null}
                 </DropdownMenuItem>

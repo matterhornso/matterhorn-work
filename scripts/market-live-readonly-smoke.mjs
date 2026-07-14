@@ -14,11 +14,18 @@
 
 import { createServer } from "node:http";
 
-const FORBIDDEN_PAYLOAD_RE =
-  /(seed|mnemonic|privateKey|private_key|apiSecret|api_secret|passphrase|walletExport|wallet_export|rawSignature|raw_signature|signedPayload|signed_payload|"signature")/i;
+const FORBIDDEN_PAYLOAD_KEY_RE =
+  /^(seed|seedPhrase|seed_phrase|mnemonic|privateKey|private_key|apiSecret|api_secret|passphrase|walletExport|wallet_export|rawSignature|raw_signature|signedPayload|signed_payload|signedOrder|signed_order|signature)$/i;
+const FORBIDDEN_PAYLOAD_ASSIGNMENT_RE =
+  /\b(seed|seedPhrase|seed_phrase|mnemonic|privateKey|private_key|apiSecret|api_secret|passphrase|walletExport|wallet_export|rawSignature|raw_signature|signedPayload|signed_payload|signedOrder|signed_order|signature)\b[ \t]*[:=][ \t]*\S+/i;
 
 function containsForbiddenPayload(value) {
-  return FORBIDDEN_PAYLOAD_RE.test(JSON.stringify(value));
+  if (typeof value === "string") return FORBIDDEN_PAYLOAD_ASSIGNMENT_RE.test(value);
+  if (!value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some(containsForbiddenPayload);
+  return Object.entries(value).some(([key, child]) =>
+    FORBIDDEN_PAYLOAD_KEY_RE.test(key) || containsForbiddenPayload(child),
+  );
 }
 
 function containsCanSubmitTrue(value) {
@@ -111,7 +118,7 @@ async function createMockServer(token, options = {}) {
     }
     if (req.method === "POST" && url.pathname === "/api/hyperliquid/orders/handoff") {
       if (containsForbiddenPayload(body)) return jsonResponse(res, 400, { error: "market_secret_rejected" });
-      return jsonResponse(res, 200, { success: true, handoff: { venue: "hyperliquid", signerPolicy: "external_signer_required", externalSignerOnly: true, canSubmit: false, previewSha256: "a".repeat(64), handoffSha256: "h".repeat(64) } });
+      return jsonResponse(res, 200, { success: true, handoff: { venue: "hyperliquid", signerPolicy: "external_signer_required", externalSignerOnly: true, canSubmit: false, signingPayload: { requiresClientValidation: true, clientMustCompute: ["signature"] }, warnings: ["Matterhorn never receives raw signatures or signed payloads."], previewSha256: "a".repeat(64), handoffSha256: "h".repeat(64) } });
     }
 
     // Polymarket

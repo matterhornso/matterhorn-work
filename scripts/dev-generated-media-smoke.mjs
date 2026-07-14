@@ -17,6 +17,7 @@ const preferredServerPort = Number(process.env.MATTERHORN_MEDIA_SMOKE_SERVER_POR
 const preferredAppPort = Number(process.env.MATTERHORN_MEDIA_SMOKE_APP_PORT?.trim() || "5182");
 const workspaceRoot = path.resolve(process.env.MATTERHORN_MEDIA_SMOKE_WORKSPACE?.trim() || rootDir);
 const storageEpochs = process.env.MATTERHORN_MEDIA_SMOKE_WALRUS_EPOCHS?.trim() || "3";
+const requestRateLimitMax = process.env.MATTERHORN_MEDIA_SMOKE_REQUEST_RATE_LIMIT_MAX?.trim() || "5000";
 
 const fakeSuiIds = {
   nftPackage: "0x1111111111111111111111111111111111111111111111111111111111111111",
@@ -41,6 +42,7 @@ function help() {
     "- mock image generation",
     "- a fake loopback Walrus publisher/relay",
     "- preview-only Sui package, Kiosk, and TransferPolicy ids",
+    "- a local Max billing context so repeated QA runs do not exhaust free-plan limits",
     "",
     "Usage:",
     "  node scripts/dev-generated-media-smoke.mjs",
@@ -49,7 +51,9 @@ function help() {
     "  MATTERHORN_MEDIA_SMOKE_WORKSPACE=/path/to/workspace",
     "  MATTERHORN_MEDIA_SMOKE_SERVER_PORT=4125",
     "  MATTERHORN_MEDIA_SMOKE_APP_PORT=5182",
+    "  MATTERHORN_MEDIA_SMOKE_REQUEST_RATE_LIMIT_MAX=5000",
     "",
+    "The request budget applies only to this synthetic loopback QA stack.",
     "No OpenAI key, wallet secret, seed phrase, or server-side signing is used.",
   ].join(os.EOL);
 }
@@ -139,6 +143,7 @@ function serverCommand() {
 function appCommand(appPort) {
   const appDir = path.join(rootDir, "apps", "app");
   const viteBin = path.join(appDir, "node_modules", ".bin", process.platform === "win32" ? "vite.cmd" : "vite");
+  const rootViteBin = path.join(rootDir, "node_modules", "vite", "bin", "vite.js");
   const viteArgs = [
     "--host",
     "127.0.0.1",
@@ -149,6 +154,10 @@ function appCommand(appPort) {
 
   if (existsSync(viteBin)) {
     return { command: viteBin, args: viteArgs, cwd: appDir };
+  }
+
+  if (existsSync(rootViteBin)) {
+    return { command: process.execPath, args: [rootViteBin, ...viteArgs], cwd: appDir };
   }
 
   return {
@@ -256,6 +265,16 @@ function startFakeOpencode() {
     response.end(JSON.stringify(payload));
   };
 
+  const requestDirectory = (request) => {
+    const raw = request.headers["x-opencode-directory"];
+    if (typeof raw !== "string" || !raw.trim()) return workspaceRoot;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  };
+
   const createSession = (request, body) => {
     sessionSequence += 1;
     const id = `ses_generated_media_smoke_${String(sessionSequence).padStart(3, "0")}`;
@@ -267,7 +286,7 @@ function startFakeOpencode() {
       id,
       title,
       slug: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "generated-media-smoke",
-      directory: request.headers["x-opencode-directory"] || workspaceRoot,
+      directory: requestDirectory(request),
       time: { created: now, updated: now },
     };
     sessions.set(id, session);
@@ -283,7 +302,7 @@ function startFakeOpencode() {
       id: sessionId,
       title: "Generated media smoke",
       slug: "generated-media-smoke",
-      directory: request.headers["x-opencode-directory"] || workspaceRoot,
+      directory: requestDirectory(request),
       time: { created: now, updated: now },
     };
     sessions.set(sessionId, session);
@@ -304,6 +323,10 @@ function startFakeOpencode() {
     ],
     default: { opencode: "big-pickle" },
     connected: ["opencode"],
+  };
+  const mcpStatuses = {
+    wallet: { status: "connected" },
+    crypto: { status: "connected" },
   };
 
   const server = createServer(async (request, response) => {
@@ -338,6 +361,11 @@ function startFakeOpencode() {
 
     if (url.pathname === "/provider" && request.method === "GET") {
       json(response, 200, providerList);
+      return;
+    }
+
+    if (url.pathname === "/mcp" && request.method === "GET") {
+      json(response, 200, mcpStatuses);
       return;
     }
 
@@ -595,11 +623,16 @@ async function main() {
   console.log(`Fake Walrus: ${fakeWalrusUrl}`);
   console.log("Image generation: mock provider, no OpenAI key required.");
   console.log("Sui: preview-only fake package/Kiosk/TransferPolicy ids; no custody or signing.");
+  console.log("Billing: local Max plan for repeatable smoke testing; no payment provider is used.");
+  console.log(`QA request budget: ${requestRateLimitMax} requests per 60-second loopback bucket.`);
 
   spawnChild("server", command, serverArgs, {
     env: {
       ...process.env,
       OPENWORK_DEV_MODE: "1",
+      MATTERHORN_WORK_REQUEST_RATE_LIMIT_MAX: requestRateLimitMax,
+      MATTERHORN_BILLING_CURRENT_PLAN: "max",
+      MATTERHORN_BILLING_ACCOUNT_PATH: path.join(os.tmpdir(), `matterhorn-generated-media-smoke-billing-${process.pid}.json`),
       MATTERHORN_IMAGE_PROVIDER: "mock",
       MATTERHORN_WALRUS_PUBLISHER_URL: fakeWalrusUrl,
       MATTERHORN_WALRUS_RELAY_URL: fakeWalrusUrl,
@@ -618,7 +651,7 @@ async function main() {
 
   await waitForJson(`${serverUrl}/health`, { timeoutMs: 45_000 });
   const workspaceList = await waitForJson(`${serverUrl}/workspaces`, {
-    timeoutMs: 15_000,
+    timeoutMs: 45_000,
     headers: { Authorization: `Bearer ${clientToken}` },
   });
   const activeWorkspaceId =
@@ -627,6 +660,21 @@ async function main() {
 
   if (!activeWorkspaceId) {
     throw new Error("Matterhorn Work server started, but it did not report an active workspace.");
+  }
+
+  const billingStatus = await waitForJson(
+    `${serverUrl}/workspace/${encodeURIComponent(activeWorkspaceId)}/billing/status`,
+    {
+      timeoutMs: 45_000,
+      headers: { Authorization: `Bearer ${clientToken}` },
+    },
+  );
+  const smokePlanId = billingStatus?.status?.subscription?.planId;
+  const imageLimit = billingStatus?.status?.usage?.generatedImages?.limit;
+  if (smokePlanId !== "max" || imageLimit !== null) {
+    throw new Error(
+      `Generated-media smoke billing isolation failed: expected Max with unlimited images, received ${smokePlanId || "unknown"} with limit ${String(imageLimit)}.`,
+    );
   }
 
   const app = appCommand(appPort);

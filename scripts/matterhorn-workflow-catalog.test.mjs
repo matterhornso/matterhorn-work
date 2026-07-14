@@ -76,7 +76,7 @@ assert.equal(catalog.counts.byCategory.markets, 1);
 assert.equal(catalog.counts.byCategory.decentralized_services, 1);
 
 assert.ok(Array.isArray(catalog.customerTemplates), "catalog should include customerTemplates");
-assert.equal(catalog.customerTemplates.length, 6, "catalog should include six customer templates");
+assert.equal(catalog.customerTemplates.length, 7, "catalog should include seven customer templates");
 const customerIds = catalog.customerTemplates.map((template) => template.id);
 assert.deepEqual(
   customerIds.sort(),
@@ -86,6 +86,7 @@ assert.deepEqual(
     "decentralized_services_operator",
     "hyperliquid_trader",
     "polymarket_researcher",
+    "sui_wallet_workflow",
     "wellness_creator_workflow",
   ].sort(),
 );

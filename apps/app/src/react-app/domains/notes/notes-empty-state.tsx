@@ -21,7 +21,7 @@ export function NotesEmptyState({
   description = t("notes.empty_default_description"),
 }: NotesEmptyStateProps) {
   return (
-    <Empty variant="ghost" className="py-16">
+    <Empty variant="ghost" className="py-8">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <NotebookPen />

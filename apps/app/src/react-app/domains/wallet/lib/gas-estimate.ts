@@ -4,10 +4,11 @@
 
 import { createPublicClient, http, type Address, type Hex } from "viem";
 import { base, baseSepolia } from "viem/chains";
+import { parseTxValueWei } from "../state/wallet-store";
 
 const clients = {
-  [base.id]: createPublicClient({ chain: base, transport: http() }),
-  [baseSepolia.id]: createPublicClient({ chain: baseSepolia, transport: http() }),
+  [base.id]: createPublicClient({ chain: base, transport: http("https://mainnet.base.org") }),
+  [baseSepolia.id]: createPublicClient({ chain: baseSepolia, transport: http("https://sepolia.base.org") }),
 };
 
 export type GasEstimateResult = {
@@ -21,6 +22,18 @@ export type GasEstimateResult = {
   success: false;
   error: string;
 };
+
+export function sanitizeGasEstimateError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err ?? "");
+  const lower = message.toLowerCase();
+  if (lower.includes("insufficient funds")) return "Gas estimate failed because the connected wallet may not have enough funds.";
+  if (lower.includes("execution reverted") || lower.includes("reverted")) return "Gas estimate failed because the transaction would revert.";
+  if (lower.includes("user rejected") || lower.includes("denied")) return "Gas estimate was rejected by the wallet or provider.";
+  if (lower.includes("unsupported chain")) return "Gas estimate is unavailable on this network.";
+  if (lower.includes("timeout") || lower.includes("timed out")) return "Gas estimate timed out. Try again after the provider responds.";
+  if (lower.includes("network") || lower.includes("fetch")) return "Gas estimate failed because the network provider did not respond.";
+  return "Gas estimate is unavailable. Review the transaction details before continuing.";
+}
 
 /**
  * Estimate gas for a transaction on the given chain.
@@ -48,7 +61,7 @@ export async function estimateGasClient({
       client.estimateGas({
         to,
         data,
-        value: BigInt(value ?? "0"),
+        value: parseTxValueWei(value ?? "0"),
         account: from,
       }),
       client.getGasPrice().catch(() => null),
@@ -69,7 +82,7 @@ export async function estimateGasClient({
   } catch (err) {
     return {
       success: false,
-      error: err instanceof Error ? err.message : "Gas estimation failed",
+      error: sanitizeGasEstimateError(err),
     };
   }
 }

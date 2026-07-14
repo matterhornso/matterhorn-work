@@ -1,9 +1,10 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Agent } from "@opencode-ai/sdk/v2/client";
-import { ArrowUp, Check, ChevronDown, ChevronRight, FileText, Paperclip, Plug, Settings, Square, Terminal, X, Zap } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, FileText, Paperclip, Plug, Puzzle, Settings, SlidersHorizontal, Square, Terminal, X, Zap } from "lucide-react";
 import { getMatterhornDeskAgentById } from "@matterhorn-work/types/desk-agents";
 import fuzzysort from "fuzzysort";
+import { cn } from "@/lib/utils";
 import { OPENWORK_EXTENSION_CATALOG, type McpDirectoryInfo } from "../../../../../app/constants";
 import type { CloudImportedPlugin, CloudImportedPluginFile } from "../../../../../app/cloud/import-state";
 import type { ComposerAttachment, McpServerEntry, McpStatusMap, ModelRef, SkillCard, SlashCommandOption } from "../../../../../app/types";
@@ -20,6 +21,10 @@ import {
   ReactComposerNotice,
   type ReactComposerNotice as ReactComposerNoticeData,
 } from "./notice";
+import {
+  RESPONSE_PERSPECTIVE_OPTIONS,
+  type ResponsePerspective,
+} from "../../perspectives/response-perspective";
 
 type MentionItem = {
   id: string;
@@ -66,6 +71,7 @@ type ComposerProps = {
   disabled: boolean;
   modelUnavailable?: boolean;
   statusLabel: string;
+  showModelPicker?: boolean;
   modelPickerOpen: boolean;
   selectedModel: ModelRef;
   onModelPickerOpenChange: (open: boolean) => void;
@@ -79,6 +85,8 @@ type ComposerProps = {
   modelVariant: string | null;
   modelBehaviorOptions?: { value: string | null; label: string }[];
   onModelVariantChange: (value: string | null) => void;
+  responsePerspective: ResponsePerspective;
+  onResponsePerspectiveChange: (perspective: ResponsePerspective) => void;
   agentLabel: string;
   selectedAgent: string | null;
   listAgents: () => Promise<Agent[]>;
@@ -305,6 +313,22 @@ function pluginSlashCommandName(file: CloudImportedPluginFile) {
     return skill?.trim() || null;
   }
   return null;
+}
+
+function ToolMenuLoading({ label }: { label: string }) {
+  return (
+    <div role="status" aria-label={label} className="space-y-3 px-2 py-2">
+      {["primary", "secondary", "tertiary"].map((row, index) => (
+        <div key={row} className="flex items-center gap-3 motion-safe:animate-pulse">
+          <span className="size-4 shrink-0 rounded bg-dls-surface-muted/40" />
+          <span className="min-w-0 flex-1 space-y-1.5">
+            <span className="block h-2.5 rounded bg-dls-surface-muted/45" style={{ width: `${58 - index * 7}%` }} />
+            <span className="block h-2 rounded bg-dls-surface-muted/25" style={{ width: `${82 - index * 9}%` }} />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function ReactSessionComposer(props: ComposerProps) {
@@ -1029,7 +1053,7 @@ export function ReactSessionComposer(props: ComposerProps) {
         {/* Main composer panel */}
         <div
           data-testid="session-composer-shell"
-          className={`relative overflow-visible rounded-xl border border-transparent bg-dls-surface-muted/[0.075] shadow-none transition-colors focus-within:border-dls-border/25 focus-within:bg-dls-surface-muted/[0.11] ${panelRoundedClass}`}
+          className={`relative overflow-visible rounded-xl border border-transparent bg-dls-surface-muted/[0.16] shadow-none transition-colors focus-within:border-dls-border/25 focus-within:bg-dls-surface-muted/[0.23] ${panelRoundedClass}`}
         >
           {props.topAccessory ? <div className="relative z-10 px-3 pt-3 sm:px-4">{props.topAccessory}</div> : null}
           <ReactComposerNotice notice={props.notice} />
@@ -1220,57 +1244,66 @@ export function ReactSessionComposer(props: ComposerProps) {
                     }}
                     aria-expanded={toolMenuOpen}
                     aria-haspopup="dialog"
+                    aria-label={t("composer.tools_label")}
                     title={t("composer.tools_label")}
                   >
                     <Plug size={16} />
                   </button>
                   {toolMenuOpen ? (
-                    <div className="absolute bottom-full left-0 z-40 mb-3 w-[min(calc(100vw-2.5rem),34rem)] overflow-hidden rounded-lg bg-dls-surface/98 shadow-sm ring-1 ring-dls-border/25">
-                      <div className="grid grid-cols-[152px_minmax(0,1fr)] sm:grid-cols-[176px_minmax(0,1fr)]">
-                        <div className="border-r border-dls-border bg-gray-2/30 p-2">
+                    <div
+                      role="dialog"
+                      aria-label={t("composer.tools_label")}
+                      className="matterhorn-tool-menu absolute bottom-full left-0 z-40 mb-3 w-[min(calc(100vw-2.5rem),30rem)] overflow-hidden rounded-lg bg-dls-surface shadow-[var(--dls-overlay-shadow)] ring-1 ring-dls-border/30"
+                    >
+                      <div className="matterhorn-tool-menu-frame flex flex-col">
+                        <div className="flex items-center gap-1 bg-dls-surface-muted/[0.12] p-2">
+                          <div role="tablist" aria-label="Tool categories" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
                           {([
-                            ["commands", t("dashboard.commands")],
-                            ["skills", t("dashboard.skills")],
-                            ["extensions", "Extensions"],
-                            ["mcps", t("composer.mcps_label")],
-                          ] as const).map(([section, label]) => (
+                            { section: "commands", label: t("dashboard.commands"), icon: Terminal },
+                            { section: "skills", label: t("dashboard.skills"), icon: Zap },
+                            { section: "extensions", label: "Extensions", icon: Puzzle },
+                            { section: "mcps", label: t("composer.mcps_label"), icon: Plug },
+                          ] as const).map(({ section, label, icon: Icon }) => (
                             <button
                               key={section}
                               type="button"
-                              className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${toolMenuSection === section ? "bg-gray-3 text-gray-12" : "text-gray-11 hover:bg-gray-2"}`}
+                              role="tab"
+                              aria-selected={toolMenuSection === section}
+                              className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${toolMenuSection === section ? "bg-dls-canvas text-dls-text shadow-[0_1px_3px_rgba(0,0,0,0.18)]" : "text-dls-secondary hover:bg-dls-hover/35 hover:text-dls-text"}`}
                               onClick={() => setToolMenuSection(section)}
                             >
-                              <span className="truncate">{label}</span>
-                              <ChevronRight size={14} className="shrink-0 text-gray-9" />
+                              <Icon size={13} className="shrink-0" />
+                              <span>{label}</span>
                             </button>
                           ))}
-                          {pluginSections.length > 0 ? <div className="my-2 border-t border-dls-border" /> : null}
                           {pluginSections.map(({ section, plugin }) => (
                             <button
                               key={plugin.pluginId}
                               type="button"
-                              className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${toolMenuSection === section ? "bg-gray-3 text-gray-12" : "text-gray-11 hover:bg-gray-2"}`}
+                              role="tab"
+                              aria-selected={toolMenuSection === section}
+                              className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${toolMenuSection === section ? "bg-dls-canvas text-dls-text shadow-[0_1px_3px_rgba(0,0,0,0.18)]" : "text-dls-secondary hover:bg-dls-hover/35 hover:text-dls-text"}`}
                               onClick={() => setToolMenuSection(section)}
                             >
-                              <span className="truncate">{plugin.name}</span>
-                              <ChevronRight size={14} className="shrink-0 text-gray-9" />
+                              <FileText size={13} className="shrink-0" />
+                              <span className="max-w-28 truncate">{plugin.name}</span>
                             </button>
                           ))}
-                        </div>
-                        <div className="max-h-72 overflow-y-auto p-2">
-                          <div className="mb-2 flex justify-end border-b border-dls-border px-1 pb-2">
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1.5 rounded-md bg-gray-2/70 px-3 py-1.5 text-[12px] font-medium text-gray-11 transition-colors hover:bg-gray-3"
-                              onClick={() => {
-                                setToolMenuOpen(false);
-                                openToolMenuSettings();
-                              }}
-                            >
-                              <Settings size={12} />
-                              {t("composer.configure")}
-                            </button>
                           </div>
+                          <button
+                            type="button"
+                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors hover:bg-dls-hover/40 hover:text-dls-text"
+                            onClick={() => {
+                              setToolMenuOpen(false);
+                              openToolMenuSettings();
+                            }}
+                            aria-label={t("composer.configure")}
+                            title={t("composer.configure")}
+                          >
+                            <Settings size={14} />
+                          </button>
+                        </div>
+                        <div className="matterhorn-tool-menu-list max-h-[min(16rem,calc(100vh-13rem))] overflow-y-auto p-2" aria-busy={commandsLoading || skillsLoading || mcpLoading || pluginsLoading}>
                           {toolMenuSection === "commands" ? (
                             toolCommandItems.length > 0 ? (
                               <div className="grid gap-1">
@@ -1278,7 +1311,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                   <button
                                     key={command.id}
                                     type="button"
-                                    className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
+                                    className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
                                     onClick={() => applyCommandSelection(command)}
                                   >
                                     <Terminal size={14} className="mt-0.5 shrink-0 text-gray-9" />
@@ -1289,9 +1322,11 @@ export function ReactSessionComposer(props: ComposerProps) {
                                   </button>
                                 ))}
                               </div>
+                            ) : !commandsLoaded && commandsLoading ? (
+                              <ToolMenuLoading label={t("composer.loading_commands")} />
                             ) : (
                               <div className="px-3 py-2 text-xs text-gray-10">
-                                {!commandsLoaded && commandsLoading ? t("composer.loading_commands") : t("composer.no_commands")}
+                                {t("composer.no_commands")}
                               </div>
                             )
                           ) : null}
@@ -1302,7 +1337,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                   <button
                                     key={command.id}
                                     type="button"
-                                    className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
+                                    className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
                                     onClick={() => applyCommandSelection(command)}
                                   >
                                     <Zap size={14} className="mt-0.5 shrink-0 text-gray-9" />
@@ -1313,9 +1348,11 @@ export function ReactSessionComposer(props: ComposerProps) {
                                   </button>
                                 ))}
                               </div>
+                            ) : (!skillsLoaded && skillsLoading) || (!commandsLoaded && commandsLoading) ? (
+                              <ToolMenuLoading label={t("composer.loading_commands")} />
                             ) : (
                               <div className="px-3 py-2 text-xs text-gray-10">
-                                {(!skillsLoaded && skillsLoading) || (!commandsLoaded && commandsLoading) ? t("composer.loading_commands") : t("context_panel.no_skills")}
+                                {t("context_panel.no_skills")}
                               </div>
                             )
                           ) : null}
@@ -1323,7 +1360,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                             activeMcpItems.length > 0 ? (
                               <div className="grid gap-1">
                                 {activeMcpItems.map(({ entry, status }) => (
-                                  <div key={entry.name} className="flex items-start gap-3 rounded-lg px-3 py-2.5 text-gray-11">
+                                  <div key={entry.name} className="flex items-start gap-2.5 rounded-md px-2.5 py-2 text-gray-11">
                                     <div className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
                                       {extensionIcon(entry, 14)}
                                     </div>
@@ -1339,9 +1376,11 @@ export function ReactSessionComposer(props: ComposerProps) {
                                   </div>
                                 ))}
                               </div>
+                            ) : !mcpLoaded && mcpLoading ? (
+                              <ToolMenuLoading label={t("composer.loading_commands")} />
                             ) : (
                               <div className="px-3 py-2 text-xs text-gray-10">
-                                {!mcpLoaded && mcpLoading ? t("composer.loading_commands") : (mcpStatus ?? t("context_panel.no_mcp"))}
+                                {mcpStatus ?? t("context_panel.no_mcp")}
                               </div>
                             )
                           ) : null}
@@ -1352,7 +1391,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                   <button
                                     key={entry.id ?? entry.serverName ?? entry.name}
                                     type="button"
-                                    className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
+                                    className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
                                     onClick={() => applyExtensionSelection(entry)}
                                   >
                                     <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border border-dls-border bg-white shadow-sm">
@@ -1381,7 +1420,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                   <button
                                     key={`${file.configObjectId}:${file.path}`}
                                     type="button"
-                                    className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
+                                    className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
                                     onClick={() => applyPluginFileSelection(file)}
                                   >
                                     <FileText size={14} className="mt-0.5 shrink-0 text-gray-9" />
@@ -1399,9 +1438,11 @@ export function ReactSessionComposer(props: ComposerProps) {
                             ) : (
                               <div className="px-3 py-2 text-xs text-gray-10">No plugin files imported yet.</div>
                             )
+                          ) : toolMenuSection.startsWith("plugin:") && !pluginsLoaded && pluginsLoading ? (
+                            <ToolMenuLoading label={t("composer.loading_commands")} />
                           ) : toolMenuSection.startsWith("plugin:") ? (
                             <div className="px-3 py-2 text-xs text-gray-10">
-                              {!pluginsLoaded && pluginsLoading ? t("composer.loading_commands") : "Plugin files are unavailable."}
+                              Plugin files are unavailable.
                             </div>
                           ) : null}
                         </div>
@@ -1452,6 +1493,43 @@ export function ReactSessionComposer(props: ComposerProps) {
         {/* Below-panel control strip: agent + model + behavior variant */}
         <div className="mt-1.5 flex items-center justify-between px-1">
           <div className="flex flex-wrap items-center gap-1.5 text-gray-10 sm:gap-2.5">
+            <div className="flex items-center gap-2.5">
+              <span
+                aria-hidden="true"
+                className="hidden h-7 select-none items-center gap-1.5 px-0.5 text-[10px] font-normal text-dls-muted lg:inline-flex"
+              >
+                <SlidersHorizontal size={12} strokeWidth={1.7} />
+                <span>Perspective</span>
+              </span>
+              <div
+                role="radiogroup"
+                aria-label="Response perspective"
+                className="grid grid-cols-3 gap-0.5 rounded-md bg-dls-surface-muted/[0.16] p-0.5"
+              >
+                {RESPONSE_PERSPECTIVE_OPTIONS.map((option) => {
+                  const active = props.responsePerspective === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      title={option.description}
+                      disabled={props.busy}
+                      className={cn(
+                        "min-h-7 rounded-[5px] px-2 text-[11px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.3)] motion-reduce:transition-none",
+                        active
+                          ? "bg-dls-canvas text-dls-text shadow-[0_1px_3px_rgba(0,0,0,0.24)]"
+                          : "text-dls-secondary hover:bg-dls-surface-muted/[0.2] hover:text-dls-text",
+                      )}
+                      onClick={() => props.onResponsePerspectiveChange(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div ref={agentMenuRef} className="relative">
               <button
                 type="button"
@@ -1518,14 +1596,16 @@ export function ReactSessionComposer(props: ComposerProps) {
               ) : null}
             </div>
 
-            <ModelSelect
-              open={props.modelPickerOpen}
-              value={props.selectedModel}
-              onOpenChange={props.onModelPickerOpenChange}
-              onChange={props.onModelChange}
-              disabled={props.busy}
-              displayLabel={t("composer.assistant_identity")}
-            />
+            {props.showModelPicker !== false ? (
+              <ModelSelect
+                open={props.modelPickerOpen}
+                value={props.selectedModel}
+                onOpenChange={props.onModelPickerOpenChange}
+                onChange={props.onModelChange}
+                disabled={props.busy}
+                displayLabel={t("composer.assistant_identity")}
+              />
+            ) : null}
             {props.modelUnavailable ? (
               <span className="text-xs font-medium text-red-10">Model no longer available</span>
             ) : null}

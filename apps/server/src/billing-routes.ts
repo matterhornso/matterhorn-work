@@ -17,6 +17,7 @@ import {
   buildMatterhornBillingSubscription,
   billingUsagePeriodForSubscription,
   createBillingProvider,
+  effectiveMatterhornBillingSubscription,
   isBillingUsageTimestampInPeriod,
   resolveBillingProviderConfigFromEnv,
   type BillingProvider,
@@ -50,8 +51,64 @@ function forbidden(code: string, message: string): Response {
   return jsonResponse({ success: false, code, message }, 403);
 }
 
-function jsonBody<T>(request: Request): Promise<T> {
-  return request.json() as Promise<T>;
+function payloadTooLarge(message: string): Response {
+  return jsonResponse({ success: false, code: "payload_too_large", message }, 413);
+}
+
+const BILLING_MUTATION_BODY_MAX_BYTES = 16_384;
+const STRIPE_WEBHOOK_BODY_MAX_BYTES = 262_144;
+
+async function readBodyTextLimited(request: Request, maxBytes: number, label: string): Promise<string | Response> {
+  const contentLength = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    return payloadTooLarge(`${label} payload is too large.`);
+  }
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        return payloadTooLarge(`${label} payload is too large.`);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+async function jsonBody<T>(
+  request: Request,
+  options: { maxBytes?: number; optional?: boolean; label?: string } = {},
+): Promise<T | Response> {
+  const text = await readBodyTextLimited(
+    request,
+    options.maxBytes ?? BILLING_MUTATION_BODY_MAX_BYTES,
+    options.label ?? "Billing request",
+  );
+  if (text instanceof Response) return text;
+  if (options.optional && !text.trim()) return {} as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return badRequest("invalid_json", "Billing request body is not valid JSON.");
+  }
 }
 
 function providerError(error: unknown): Response {
@@ -69,6 +126,12 @@ function billingWriteBlocker(ctx: { config: ServerConfig; actor?: Pick<Actor, "s
     return forbidden("forbidden", `Viewer tokens cannot ${action}.`);
   }
   return null;
+}
+
+type BillingCheckoutPlanId = MatterhornBillingCheckoutRequest["planId"];
+
+function isBillingCheckoutPlanId(planId: unknown): planId is BillingCheckoutPlanId {
+  return planId === "free" || planId === "plus" || planId === "max";
 }
 
 function nextBillingPeriod(now = new Date()): { currentPeriodStart: string; currentPeriodEnd: string } {
@@ -117,37 +180,94 @@ async function recordBillingAudit(input: {
 async function persistStripeWebhookBilling(input: {
   result: Awaited<ReturnType<BillingProvider["handleStripeWebhook"]>>;
   ctx: BillingRouteContext;
-}): Promise<boolean> {
+}): Promise<{
+  accepted: boolean;
+  synced: boolean;
+  mutation:
+    | "synced"
+    | "duplicate_event"
+    | "stale_event"
+    | "checkout_mismatch"
+    | "subscription_mismatch"
+    | "not_handled";
+}> {
   const { result, ctx } = input;
   if (!result.verified || !result.handled || !result.workspaceId || !result.planId || !ctx.resolveWorkspace) {
-    return false;
+    return { accepted: false, synced: false, mutation: "not_handled" };
   }
   let workspace: WorkspaceInfo;
   try {
     workspace = await ctx.resolveWorkspace(ctx.config, result.workspaceId);
   } catch {
-    return false;
+    return { accepted: false, synced: false, mutation: "not_handled" };
   }
   const accountStore = new MatterhornBillingAccountStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
   const existingAccount = await accountStore.get();
+  const processedEventIds = existingAccount?.processedProviderEventIds ?? [];
+  if (result.eventId && (existingAccount?.lastProviderEventId === result.eventId || processedEventIds.includes(result.eventId))) {
+    return { accepted: true, synced: false, mutation: "duplicate_event" };
+  }
+  const pendingCheckout = activeMatterhornBillingPendingCheckout(existingAccount?.pendingCheckout);
+  if (result.eventType === "checkout.session.completed") {
+    const checkoutSessionId = result.providerCheckoutSessionId ?? null;
+    const pendingSessionId = pendingCheckout?.providerSessionId ?? null;
+    if (
+      !pendingCheckout ||
+      pendingCheckout.provider !== "stripe" ||
+      pendingCheckout.mode !== "stripe_test" ||
+      pendingCheckout.planId !== result.planId ||
+      (pendingSessionId ? pendingSessionId !== checkoutSessionId : Boolean(checkoutSessionId))
+    ) {
+      return { accepted: false, synced: false, mutation: "checkout_mismatch" };
+    }
+  }
   if (
-    result.eventId &&
-    existingAccount?.source === "stripe_test_webhook" &&
-    existingAccount.lastProviderEventId === result.eventId
+    result.eventType === "customer.subscription.created" ||
+    result.eventType === "customer.subscription.updated" ||
+    result.eventType === "customer.subscription.deleted"
   ) {
-    return true;
+    const existingSubscription = existingAccount?.subscription;
+    const existingProviderSubscriptionId = existingSubscription?.providerSubscriptionId ?? null;
+    const existingProviderCustomerId = existingSubscription?.providerCustomerId ?? null;
+    const incomingProviderSubscriptionId = result.providerSubscriptionId ?? null;
+    const incomingProviderCustomerId = result.providerCustomerId ?? null;
+    if (!existingAccount || !existingProviderSubscriptionId || !existingProviderCustomerId) {
+      return { accepted: false, synced: false, mutation: "subscription_mismatch" };
+    }
+    if (
+      incomingProviderSubscriptionId !== existingProviderSubscriptionId ||
+      incomingProviderCustomerId !== existingProviderCustomerId
+    ) {
+      return { accepted: false, synced: false, mutation: "subscription_mismatch" };
+    }
+  }
+  const incomingCreatedAt = result.eventCreatedAt ? Date.parse(result.eventCreatedAt) : NaN;
+  const previousCreatedAt = existingAccount?.lastProviderEventCreatedAt
+    ? Date.parse(existingAccount.lastProviderEventCreatedAt)
+    : NaN;
+  if (
+    Number.isFinite(incomingCreatedAt) &&
+    Number.isFinite(previousCreatedAt) &&
+    incomingCreatedAt < previousCreatedAt
+  ) {
+    return { accepted: true, synced: false, mutation: "stale_event" };
   }
 
   const now = new Date().toISOString();
   const status = result.subscriptionStatus ?? (result.planId === "free" ? "none" : "active");
+  const fallbackPeriod = nextBillingPeriod(result.eventCreatedAt ? new Date(result.eventCreatedAt) : new Date());
+  const nextProcessedEventIds = [
+    ...(processedEventIds.filter((id) => id !== result.eventId)),
+    ...(result.eventId ? [result.eventId] : []),
+  ].slice(-50);
   await accountStore.save({
     version: "matterhorn.billing.account.v1",
     workspaceId: workspace.id,
     subscription: {
       ...buildMatterhornBillingSubscription(result.planId),
       status,
-      currentPeriodStart: result.currentPeriodStart ?? now,
-      currentPeriodEnd: result.currentPeriodEnd ?? null,
+      currentPeriodStart: result.currentPeriodStart ?? fallbackPeriod.currentPeriodStart,
+      currentPeriodEnd: result.currentPeriodEnd ?? (result.planId === "free" ? null : fallbackPeriod.currentPeriodEnd),
       cancelAtPeriodEnd: result.cancelAtPeriodEnd ?? false,
       providerCustomerId: result.providerCustomerId ?? null,
       providerSubscriptionId: result.providerSubscriptionId ?? null,
@@ -157,7 +277,9 @@ async function persistStripeWebhookBilling(input: {
     source: "stripe_test_webhook",
     lastProviderEventId: result.eventId ?? null,
     lastProviderEventType: result.eventType ?? null,
+    lastProviderEventCreatedAt: result.eventCreatedAt ?? existingAccount?.lastProviderEventCreatedAt ?? null,
     lastProviderSyncedAt: now,
+    processedProviderEventIds: nextProcessedEventIds,
   });
   await recordBillingAudit({
     workspace,
@@ -168,7 +290,7 @@ async function persistStripeWebhookBilling(input: {
     mode: providerModeForAudit(ctx.provider),
     provider: ctx.provider.config.provider,
   });
-  return true;
+  return { accepted: true, synced: true, mutation: "synced" };
 }
 
 function providerModeForAudit(provider: BillingProvider): string {
@@ -191,6 +313,73 @@ export function createBillingRouteContext(config: ServerConfig): BillingRouteCon
 export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext): void {
   const { provider } = ctx;
 
+  async function startWorkspaceCheckout(
+    routeCtx: Parameters<RouteHandler>[0],
+    workspaceId: string,
+    input: Partial<MatterhornBillingCheckoutRequest>,
+  ): Promise<Response> {
+    const blocker = billingWriteBlocker(routeCtx, "start checkout");
+    if (blocker) return blocker;
+    if (!ctx.resolveWorkspace) {
+      return badRequest("workspace_unavailable", "Workspace billing is unavailable for this server.");
+    }
+    if (provider.config.mode === "live") {
+      return badRequest("live_payments_disabled", "Live payments are not enabled.");
+    }
+    if (provider.config.livePaymentsEnabled) {
+      return badRequest("live_payments_disabled", "Live payments are not enabled.");
+    }
+    if (!isBillingCheckoutPlanId(input.planId)) {
+      return badRequest("invalid_plan", "A valid planId is required.");
+    }
+    const workspace = await ctx.resolveWorkspace(ctx.config, workspaceId);
+    const interval = input.interval === "year" ? "year" : "month";
+    const result = await provider.buildCheckout({
+      planId: input.planId,
+      interval,
+      successUrl: input.successUrl,
+      cancelUrl: input.cancelUrl,
+      workspaceId: workspace.id,
+    }).catch((error) => error);
+    if (result instanceof Error) return providerError(result);
+    const period = nextBillingPeriod();
+    const accountStore = new MatterhornBillingAccountStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+    const existingAccount = await accountStore.get();
+    const isStripeTestCheckout = provider.config.mode === "phase1_stripe_test" && provider.config.provider === "stripe";
+    const pendingCheckout: MatterhornBillingPendingCheckout = {
+      planId: input.planId,
+      interval,
+      provider: isStripeTestCheckout ? "stripe" : "mock",
+      mode: isStripeTestCheckout ? "stripe_test" : "mock",
+      providerSessionId: result.providerSessionId ?? null,
+      createdAt: period.currentPeriodStart,
+      expiresAt: result.expiresAt ?? null,
+    };
+    const subscription: MatterhornBillingSubscription =
+      existingAccount?.subscription ?? buildMatterhornBillingSubscription(provider.config.currentPlanId);
+    await accountStore.save({
+      version: "matterhorn.billing.account.v1",
+      workspaceId: workspace.id,
+      subscription,
+      pendingCheckout,
+      updatedAt: period.currentPeriodStart,
+      source: isStripeTestCheckout ? "stripe_test_checkout" : "mock_checkout",
+    });
+    await recordBillingAudit({
+      workspace,
+      actor: routeCtx.actor,
+      action: "workspace.billing.checkout",
+      summary: isStripeTestCheckout
+        ? `Started Stripe test checkout for ${input.planId}.`
+        : `Started local billing preview checkout for ${input.planId}.`,
+      planId: input.planId,
+      interval,
+      mode: provider.config.mode,
+      provider: provider.config.provider,
+    });
+    return jsonResponse(result);
+  }
+
   addRoute("GET", "/api/billing/plans", "client", async () => {
     return jsonResponse(buildBillingPlansResponse(provider.config));
   });
@@ -211,7 +400,8 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id }).list(),
       ctx.countTeamMembers ? ctx.countTeamMembers(workspace).catch(() => 1) : Promise.resolve(1),
     ]);
-    const subscription = account?.subscription ?? buildMatterhornBillingSubscription(provider.config.currentPlanId);
+    const storedSubscription = account?.subscription ?? buildMatterhornBillingSubscription(provider.config.currentPlanId);
+    const subscription = effectiveMatterhornBillingSubscription(storedSubscription);
     const usagePeriod = billingUsagePeriodForSubscription(subscription);
     const usage = {
       generatedImages: images.filter((image) => isBillingUsageTimestampInPeriod(image.createdAt, usagePeriod)).length,
@@ -236,77 +426,11 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
   });
 
   addRoute("POST", "/workspace/:id/billing/checkout", "client", async (routeCtx) => {
-    const blocker = billingWriteBlocker(routeCtx, "start checkout");
-    if (blocker) return blocker;
-    if (!ctx.resolveWorkspace) {
-      return badRequest("workspace_unavailable", "Workspace billing is unavailable for this server.");
-    }
-    if (provider.config.mode === "live") {
-      return badRequest("live_payments_disabled", "Live payments are not enabled.");
-    }
-    if (provider.config.livePaymentsEnabled) {
-      return badRequest("live_payments_disabled", "Live payments are not enabled.");
-    }
-    const input = await jsonBody<Partial<MatterhornBillingCheckoutRequest>>(routeCtx.request);
-    if (!input.planId || (input.planId !== "free" && input.planId !== "plus" && input.planId !== "max")) {
-      return badRequest("invalid_plan", "A valid planId is required.");
-    }
-    const workspace = await ctx.resolveWorkspace(ctx.config, routeCtx.params.id);
-    const interval = input.interval === "year" ? "year" : "month";
-    const result = await provider.buildCheckout({
-      planId: input.planId,
-      interval,
-      successUrl: input.successUrl,
-      cancelUrl: input.cancelUrl,
-      workspaceId: workspace.id,
-    }).catch((error) => error);
-    if (result instanceof Error) return providerError(result);
-    const period = nextBillingPeriod();
-    const accountStore = new MatterhornBillingAccountStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
-    const existingAccount = await accountStore.get();
-    const isStripeTestCheckout = provider.config.mode === "phase1_stripe_test" && provider.config.provider === "stripe";
-    const pendingCheckout: MatterhornBillingPendingCheckout | null = isStripeTestCheckout
-      ? {
-          planId: input.planId,
-          interval,
-          provider: "stripe",
-          mode: "stripe_test",
-          providerSessionId: result.providerSessionId ?? null,
-          createdAt: period.currentPeriodStart,
-          expiresAt: result.expiresAt ?? null,
-        }
-      : null;
-    const subscription: MatterhornBillingSubscription = isStripeTestCheckout
-      ? existingAccount?.subscription ?? buildMatterhornBillingSubscription(provider.config.currentPlanId)
-      : {
-          ...buildMatterhornBillingSubscription(input.planId),
-          interval,
-          currentPeriodStart: period.currentPeriodStart,
-          currentPeriodEnd: period.currentPeriodEnd,
-          providerCustomerId: `mock_cus_${workspace.id}`,
-          providerSubscriptionId: `mock_sub_${workspace.id}_${input.planId}`,
-        };
-    await accountStore.save({
-      version: "matterhorn.billing.account.v1",
-      workspaceId: workspace.id,
-      subscription,
-      pendingCheckout,
-      updatedAt: period.currentPeriodStart,
-      source: isStripeTestCheckout ? "stripe_test_checkout" : "mock_checkout",
+    const input = await jsonBody<Partial<MatterhornBillingCheckoutRequest>>(routeCtx.request, {
+      label: "Workspace billing checkout",
     });
-    await recordBillingAudit({
-      workspace,
-      actor: routeCtx.actor,
-      action: "workspace.billing.checkout",
-      summary: isStripeTestCheckout
-        ? `Started Stripe test checkout for ${input.planId}.`
-        : `Updated workspace billing plan to ${input.planId}.`,
-      planId: input.planId,
-      interval,
-      mode: provider.config.mode,
-      provider: provider.config.provider,
-    });
-    return jsonResponse(result);
+    if (input instanceof Response) return input;
+    return startWorkspaceCheckout(routeCtx, routeCtx.params.id, input);
   });
 
   addRoute("POST", "/api/billing/checkout", "client", async (routeCtx) => {
@@ -318,18 +442,21 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
     if (provider.config.livePaymentsEnabled) {
       return badRequest("live_payments_disabled", "Live payments are not enabled.");
     }
-    const input = await jsonBody<Partial<MatterhornBillingCheckoutRequest>>(routeCtx.request);
-    if (!input.planId || (input.planId !== "free" && input.planId !== "plus" && input.planId !== "max")) {
+    const input = await jsonBody<Partial<MatterhornBillingCheckoutRequest>>(routeCtx.request, {
+      label: "Billing checkout",
+    });
+    if (input instanceof Response) return input;
+    if (!isBillingCheckoutPlanId(input.planId)) {
       return badRequest("invalid_plan", "A valid planId is required.");
     }
-    const result = await provider.buildCheckout({
-      planId: input.planId,
-      interval: input.interval === "year" ? "year" : "month",
-      successUrl: input.successUrl,
-      cancelUrl: input.cancelUrl,
-    }).catch((error) => error);
-    if (result instanceof Error) return providerError(result);
-    return jsonResponse(result);
+    const workspaceId = input.workspaceId?.trim();
+    if (!workspaceId) {
+      return badRequest(
+        "workspace_required",
+        "Billing checkout must be started from a workspace so the subscription can be reconciled.",
+      );
+    }
+    return startWorkspaceCheckout(routeCtx, workspaceId, input);
   });
 
   addRoute("POST", "/workspace/:id/billing/portal", "client", async (routeCtx) => {
@@ -346,8 +473,11 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
       workspaceRoot: workspace.path,
       workspaceId: workspace.id,
     }).get();
-    const input = await jsonBody<Partial<MatterhornBillingPortalRequest>>(routeCtx.request)
-      .catch((): Partial<MatterhornBillingPortalRequest> => ({}));
+    const input = await jsonBody<Partial<MatterhornBillingPortalRequest>>(routeCtx.request, {
+      optional: true,
+      label: "Workspace billing portal",
+    });
+    if (input instanceof Response) return input;
     const result = await provider.buildPortal({
       ...input,
       providerCustomerId: input.providerCustomerId ?? account?.subscription.providerCustomerId ?? undefined,
@@ -400,7 +530,9 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
     const account = await accountStore.get();
     const pendingCheckout = account?.pendingCheckout ?? null;
     const cleared = Boolean(account && pendingCheckout);
-    const subscription = account?.subscription ?? buildMatterhornBillingSubscription(provider.config.currentPlanId);
+    const subscription = effectiveMatterhornBillingSubscription(
+      account?.subscription ?? buildMatterhornBillingSubscription(provider.config.currentPlanId),
+    );
     if (account && pendingCheckout) {
       await accountStore.save({
         ...account,
@@ -443,8 +575,11 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
     if (provider.config.mode === "live") {
       return badRequest("live_payments_disabled", "Live payments are not enabled.");
     }
-    const input = await jsonBody<Partial<MatterhornBillingPortalRequest>>(routeCtx.request)
-      .catch((): Partial<MatterhornBillingPortalRequest> => ({}));
+    const input = await jsonBody<Partial<MatterhornBillingPortalRequest>>(routeCtx.request, {
+      optional: true,
+      label: "Billing portal",
+    });
+    if (input instanceof Response) return input;
     const result = await provider.buildPortal(input).catch((error) => error);
     if (result instanceof Error) return providerError(result);
     return jsonResponse(result);
@@ -454,8 +589,16 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
     if (provider.config.mode === "live" || provider.config.provider !== "stripe") {
       return jsonResponse({ success: true, received: true, verified: false, livemode: false, handled: false });
     }
+    const blocker = billingWriteBlocker(routeCtx, "process Stripe webhook");
+    if (blocker) return blocker;
     const signature = routeCtx.request.headers.get("stripe-signature") ?? undefined;
-    const rawPayload = await routeCtx.request.text().catch(() => "");
+    const rawPayloadResult = await readBodyTextLimited(
+      routeCtx.request,
+      STRIPE_WEBHOOK_BODY_MAX_BYTES,
+      "Stripe webhook",
+    );
+    if (rawPayloadResult instanceof Response) return rawPayloadResult;
+    const rawPayload = rawPayloadResult;
     let payload: unknown = {};
     try {
       payload = rawPayload ? JSON.parse(rawPayload) : {};
@@ -464,11 +607,12 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
     }
     const input: MatterhornBillingWebhookStripeRequest = { signature, payload, rawPayload };
     const result = await provider.handleStripeWebhook(input);
-    const workspaceSynced = await persistStripeWebhookBilling({ result, ctx });
+    const persistence = await persistStripeWebhookBilling({ result, ctx });
     return jsonResponse({
       ...result,
-      handled: result.handled && (workspaceSynced || !result.workspaceId),
-      workspaceSynced,
+      handled: result.handled && (persistence.accepted || !result.workspaceId),
+      workspaceSynced: persistence.synced,
+      webhookMutation: persistence.mutation,
     });
   });
 }

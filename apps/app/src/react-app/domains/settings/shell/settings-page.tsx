@@ -8,12 +8,14 @@ import {
   Cog,
   Container,
   CreditCard,
+  Cpu,
   FolderLock,
   Layout,
   Paintbrush,
   Puzzle,
   Bot,
   Image as ImageIcon,
+  LayoutDashboard,
   RefreshCcw,
   ShieldCheck,
   SlidersHorizontal,
@@ -23,7 +25,6 @@ import {
   UserCircle,
   Wallet,
   Wrench,
-  Zap,
 } from "lucide-react";
 
 import {
@@ -66,9 +67,9 @@ import { WorkspaceIcon } from "../../../design-system/workspace-icon";
 export function getSettingsTabIcon(tab: SettingsTab) {
   switch (tab) {
     case "overview":
-      return Sparkles;
+      return LayoutDashboard;
     case "ai":
-      return Zap;
+      return Cpu;
     case "preferences":
       return SlidersHorizontal;
     case "shell":
@@ -216,8 +217,15 @@ export function getSettingsTabDescription(tab: SettingsTab) {
 
 export type SettingsReadinessStatus =
   | "Working"
-  | "Needs setup"
+  | "Connect wallet"
+  | "Connect provider"
+  | "Configure MCP"
+  | "Review access"
+  | "Configure cloud"
+  | "Platform setup"
+  | "Local only"
   | "Preview"
+  | "Preview only"
   | "Not supported here"
   | "Desktop only"
   | "Cloud only"
@@ -243,11 +251,42 @@ function capabilityStatusRank(status: MatterhornCapabilityStatus) {
   return 1;
 }
 
-function capabilityStatusToSettingsStatus(status: MatterhornCapabilityStatus): SettingsReadinessStatus {
+function setupStatusForTab(tab: SettingsTab): SettingsReadinessStatus {
+  if (tab === "wallet") return "Connect wallet";
+  if (tab === "ai" || tab === "cloud-providers") return "Connect provider";
+  if (tab === "extensions") return "Configure MCP";
+  if (tab === "permissions") return "Review access";
+  if (tab === "cloud-account" || tab === "cloud-workers") return "Configure cloud";
+  return "Platform setup";
+}
+
+function capabilityStatusToSettingsStatus(
+  status: MatterhornCapabilityStatus,
+  tab: SettingsTab,
+): SettingsReadinessStatus {
   if (status === "working") return "Working";
-  if (status === "needs_setup") return "Needs setup";
-  if (status === "preview") return "Preview";
+  if (status === "needs_setup") return setupStatusForTab(tab);
+  if (status === "preview") {
+    if (tab === "permissions") return "Working";
+    if (tab === "cloud-account" || tab === "cloud-workers") return "Local only";
+    if (tab === "billing") return "Preview only";
+    return "Preview";
+  }
   return "Not supported here";
+}
+
+export function settingsReadinessStatusLabel(status: SettingsReadinessStatus | "Unavailable"): string {
+  return status === "Preview" ? "Early access" : status;
+}
+
+export function shouldDisplaySettingsReadinessStatus(status: SettingsReadinessStatus | null): boolean {
+  return Boolean(status && ![
+    "Working",
+    "Preview",
+    "Desktop only",
+    "Cloud only",
+    "Developer",
+  ].includes(status));
 }
 
 function liveSettingsTabStatus(
@@ -264,7 +303,7 @@ function liveSettingsTabStatus(
   const highestPriority = matched.reduce((current, next) =>
     capabilityStatusRank(next.status) > capabilityStatusRank(current.status) ? next : current,
   );
-  return capabilityStatusToSettingsStatus(highestPriority.status);
+  return capabilityStatusToSettingsStatus(highestPriority.status, tab);
 }
 
 export function getSettingsTabStatus(
@@ -279,12 +318,15 @@ export function getSettingsTabStatus(
     case "appearance":
     case "extensions":
       return "Working";
+    case "ai":
+      return "Working";
     case "wallet":
     case "generated-media":
-    case "ai":
+      return "Preview";
     case "cloud-account":
+      return "Local only";
     case "billing":
-      return "Needs setup";
+      return "Preview only";
     case "shell":
     case "marketplace":
     case "recovery":
@@ -320,25 +362,29 @@ export function getCloudSettingsTabs(developerMode = false): SettingsTab[] {
 }
 
 function SettingsTabReadinessBadge(props: { status: SettingsReadinessStatus | null }) {
-  if (!props.status) return null;
+  if (!props.status || !shouldDisplaySettingsReadinessStatus(props.status)) return null;
 
   const tone =
-    props.status === "Working"
-      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-      : props.status === "Needs setup"
-        ? "border-sky-500/30 bg-sky-500/10 text-sky-300"
-        : props.status === "Preview"
-          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-          : props.status === "Developer"
-            ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
-            : "border-slate-500/40 bg-slate-500/10 text-slate-300";
+    props.status === "Connect wallet" ||
+    props.status === "Connect provider" ||
+    props.status === "Configure MCP" ||
+    props.status === "Review access" ||
+    props.status === "Configure cloud" ||
+    props.status === "Platform setup"
+      ? "text-amber-300/85"
+      : props.status === "Preview only"
+        ? "text-amber-300/85"
+      : "text-dls-muted";
 
   return (
-    <span className={`ml-auto hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-medium tracking-normal xl:inline-flex ${tone}`}>
-      {props.status}
+    <span className={`ml-auto hidden shrink-0 text-[10px] font-medium tracking-normal xl:inline ${tone}`}>
+      {settingsReadinessStatusLabel(props.status)}
     </span>
   );
 }
+
+const SETTINGS_SIDEBAR_ITEM_CLASS =
+  "rounded-none px-3 text-sidebar-foreground/82 hover:bg-white/[0.035] hover:text-sidebar-accent-foreground data-active:bg-transparent data-active:font-semibold data-active:text-sidebar-accent-foreground data-active:[&_svg]:text-[rgb(var(--matterhorn-blue-rgb))] dark:mac:data-active:bg-transparent";
 
 type SettingsPageProps = {
   activeTab: SettingsTab;
@@ -356,6 +402,7 @@ type SettingsPageProps = {
   children: React.ReactNode;
   backendSettingsSections?: MatterhornSettingsSectionCapability[] | null;
   showPanelHeading?: boolean;
+  compact?: boolean;
 };
 
 type SettingsSidebarProps = Pick<SettingsPageProps, "activeTab" | "onSelectTab" | "developerMode"> & {
@@ -423,6 +470,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                 <SidebarMenuButton
                   type="button"
                   isActive={props.activeTab === "general"}
+                  className={SETTINGS_SIDEBAR_ITEM_CLASS}
                   onClick={() => props.onSelectTab("general")}
                 >
                   <Cog />
@@ -444,6 +492,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                     <SidebarMenuButton
                       type="button"
                       isActive={props.activeTab === tab}
+                      className={SETTINGS_SIDEBAR_ITEM_CLASS}
                       onClick={() => props.onSelectTab(tab)}
                     >
                       <Icon />
@@ -468,6 +517,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                     <SidebarMenuButton
                       type="button"
                       isActive={props.activeTab === tab}
+                      className={SETTINGS_SIDEBAR_ITEM_CLASS}
                       onClick={() => props.onSelectTab(tab)}
                     >
                       <Icon />
@@ -492,6 +542,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                     <SidebarMenuButton
                       type="button"
                       isActive={props.activeTab === tab}
+                      className={SETTINGS_SIDEBAR_ITEM_CLASS}
                       onClick={() => props.onSelectTab(tab)}
                     >
                       <Icon />
@@ -514,7 +565,7 @@ export function SettingsPage(props: SettingsPageProps) {
   const showToolbar = props.showUpdateToolbar && props.activeTab === "general";
 
   return (
-    <SettingsContent>
+    <SettingsContent compact={props.compact}>
       {showHeading || showToolbar ? (
         <SettingsPanel>
           {showHeading ? (

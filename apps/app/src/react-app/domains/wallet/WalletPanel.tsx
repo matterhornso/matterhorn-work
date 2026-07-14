@@ -9,7 +9,7 @@ import { CHAIN_NAMES } from "../../infra/chains";
 import { MAINNET } from "../../infra/token-registry";
 import { TransactionHistory } from "./components/TransactionHistory";
 import { TokenIcon } from "./components/TokenIcon";
-import { getSecurityLog, type SecurityLogEntry } from "./state/security-log";
+import { getSecurityLog, subscribeSecurityLog, type SecurityLogEntry } from "./state/security-log";
 import { useTokenPrices } from "./hooks/useTokenPrices";
 
 const PortfolioView = lazy(() => import("./pages/PortfolioView"));
@@ -45,6 +45,9 @@ function securityLogActionLabel(action: SecurityLogEntry["action"]): string {
     tx_proposed: "Proposed",
     tx_approved: "Approved",
     tx_rejected: "Rejected",
+    chain_mismatch: "Wrong chain",
+    mainnet_blocked: "Mainnet blocked",
+    wallet_unavailable: "Wallet missing",
     limit_hit: "Limit",
     whitelist_denied: "Denied",
     rate_limit_hit: "Rate limit",
@@ -60,6 +63,9 @@ function securityLogColor(action: SecurityLogEntry["action"]): string {
       return "text-emerald-400";
     case "tx_rejected":
       return "text-red-400";
+    case "chain_mismatch":
+    case "mainnet_blocked":
+    case "wallet_unavailable":
     case "limit_hit":
     case "rate_limit_hit":
       return "text-amber-400";
@@ -85,12 +91,14 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
   const [activePanel, setActivePanel] = useState<PanelType>("crypto");
   const [isPortfolioLoading, setIsPortfolioLoading] = useState(false);
   const [portfolioData, setPortfolioData] = useState<import("./pages/PortfolioView").PortfolioData | null>(null);
-  const securityLog = useMemo(() => getSecurityLog(5), []);
+  const [securityLog, setSecurityLog] = useState<SecurityLogEntry[]>(() => getSecurityLog(5));
   const { prices, fetchPrices, getPrice } = useTokenPrices();
 
   useEffect(() => {
     setActivePanel("crypto");
   }, [initialVenue]);
+
+  useEffect(() => subscribeSecurityLog(() => setSecurityLog(getSecurityLog(5))), []);
 
   const handlePortfolioOpen = useCallback(async () => {
     if (!state.address || !state.chainId) return;

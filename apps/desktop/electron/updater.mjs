@@ -4,6 +4,20 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ELECTRON_UPDATER_CHANNEL_FILENAME = "electron-updater-channel.v1.json";
+const UPDATE_CHANNEL_UNPUBLISHED_MESSAGE = "This update channel is not published yet.";
+const UPDATE_CHECK_FAILED_MESSAGE = "Update check failed. Try again later.";
+
+export function describeElectronUpdaterError(error) {
+  const code = typeof error?.code === "string" ? error.code : "";
+  const message = typeof error?.message === "string" ? error.message : String(error ?? "");
+  if (
+    code === "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND"
+    || /cannot find channel\s+["']?latest[^\s"']*["']?\s+update info/i.test(message)
+  ) {
+    return UPDATE_CHANNEL_UNPUBLISHED_MESSAGE;
+  }
+  return UPDATE_CHECK_FAILED_MESSAGE;
+}
 
 // In dev mode, app.getVersion() returns the Electron framework version
 // (e.g. "35.7.5") instead of the Matterhorn app version. Read from
@@ -164,10 +178,11 @@ async function applyElectronUpdaterFeed(app, updater) {
 
 // electron-updater wiring. Packaged-only; dev builds skip this so the
 // updater doesn't try to probe a non-existent release channel.
-export function registerUpdaterIpc({ app, ipcMain, getMainWindow }) {
+export function registerUpdaterIpc({ app, ipcMain, getMainWindow, trustedMainWindowHandler }) {
   let autoUpdaterInstance = null;
   let autoUpdaterLoaded = false;
   let checkedUpdateVersion = null;
+  const trustedHandler = trustedMainWindowHandler ?? ((_channel, handler) => handler);
 
   function sendToRenderer(channel, data) {
     try {
@@ -191,7 +206,12 @@ export function registerUpdaterIpc({ app, ipcMain, getMainWindow }) {
         autoUpdaterInstance.autoDownload = false;
         autoUpdaterInstance.autoInstallOnAppQuit = true;
         autoUpdaterInstance.on("error", (err) => {
-          console.warn("[updater] error", err);
+          const message = describeElectronUpdaterError(err);
+          if (message === UPDATE_CHANNEL_UNPUBLISHED_MESSAGE) {
+            console.info(`[updater] ${message}`);
+            return;
+          }
+          console.warn(`[updater] ${message}`);
         });
         // Forward download progress to the renderer so the UI can show
         // incremental bytes instead of staying stuck at 0.
@@ -213,12 +233,12 @@ export function registerUpdaterIpc({ app, ipcMain, getMainWindow }) {
     return autoUpdaterInstance;
   }
 
-  ipcMain.handle("openwork:updater:getChannel", async () => {
+  ipcMain.handle("openwork:updater:getChannel", trustedHandler("openwork:updater:getChannel", async () => {
     const channel = await readElectronUpdaterChannel(app);
     return updaterChannelState(app, channel);
-  });
+  }));
 
-  ipcMain.handle("openwork:updater:setChannel", async (_event, rawChannel) => {
+  ipcMain.handle("openwork:updater:setChannel", trustedHandler("openwork:updater:setChannel", async (_event, rawChannel) => {
     const channel = await writeElectronUpdaterChannel(app, rawChannel);
     checkedUpdateVersion = null;
     const updater = await ensureAutoUpdater();
@@ -226,9 +246,9 @@ export function registerUpdaterIpc({ app, ipcMain, getMainWindow }) {
       return applyElectronUpdaterFeed(app, updater);
     }
     return updaterChannelState(app, channel);
-  });
+  }));
 
-  ipcMain.handle("openwork:updater:check", async (_event, rawChannel) => {
+  ipcMain.handle("openwork:updater:check", trustedHandler("openwork:updater:check", async (_event, rawChannel) => {
     if (rawChannel !== undefined) {
       await writeElectronUpdaterChannel(app, rawChannel);
     }
@@ -253,11 +273,11 @@ export function registerUpdaterIpc({ app, ipcMain, getMainWindow }) {
       };
     } catch (error) {
       checkedUpdateVersion = null;
-      return { available: false, reason: String(error?.message ?? error), ...channelState };
+      return { available: false, reason: describeElectronUpdaterError(error), ...channelState };
     }
-  });
+  }));
 
-  ipcMain.handle("openwork:updater:download", async () => {
+  ipcMain.handle("openwork:updater:download", trustedHandler("openwork:updater:download", async () => {
     const updater = await ensureAutoUpdater();
     if (!updater) return { ok: false, reason: "unavailable" };
     try {
@@ -276,20 +296,20 @@ export function registerUpdaterIpc({ app, ipcMain, getMainWindow }) {
       await updater.downloadUpdate();
       return { ok: true };
     } catch (error) {
-      return { ok: false, reason: String(error?.message ?? error) };
+      return { ok: false, reason: describeElectronUpdaterError(error) };
     }
-  });
+  }));
 
-  ipcMain.handle("openwork:updater:installAndRestart", async () => {
+  ipcMain.handle("openwork:updater:installAndRestart", trustedHandler("openwork:updater:installAndRestart", async () => {
     const updater = await ensureAutoUpdater();
     if (!updater) return { ok: false, reason: "unavailable" };
     try {
       updater.quitAndInstall(false, true);
       return { ok: true };
     } catch (error) {
-      return { ok: false, reason: String(error?.message ?? error) };
+      return { ok: false, reason: describeElectronUpdaterError(error) };
     }
-  });
+  }));
 
   return { ensureAutoUpdater };
 }

@@ -1,42 +1,33 @@
 # Matterhorn Work
 
-> **Cowork for Web3.** A desktop agentic workspace with native wallet support and on-chain actions, built by [Matterhorn](https://matterhorn.so).
+Matterhorn Work is a local-first agent workspace for chat, protocol research, workflow execution, project notes, memory review, generated outputs, and external-signer handoffs.
 
-Matterhorn Work is a desktop agentic workspace where crypto-native AI agents plan and execute on-chain actions. Wallet connect, transaction approval, chain-aware sessions, and a DePIN agent marketplace — all in a dark-only theme with violet-500 (`#7c3aed`) accents on a `#0a0a0f` background.
+The customer experience is organized around desks rather than raw tools:
 
----
+- **Bittensor:** public TAO wallet reads, subnet and validator research, watches, unsigned action previews, and external-signer handoffs.
+- **Hyperliquid:** market, funding, orderbook, account, and position research with preview and handoff boundaries.
+- **Polymarket:** market discovery, outcome and liquidity research, compliance-aware previews, and receipts.
+- **Sui:** wallet-standard connection, public account reads, transfer previews, and NFT/receipt evidence.
+- **Longevity:** non-medical service workflows for trainers, yoga instructors, dieticians, coaches, and client packet creation.
+- **Memory, Notes, and Outputs:** project-owned context, explicit memory review, and readable evidence rather than hidden persistence.
 
-## What Matterhorn Work Is
+Matterhorn does not ask for seed phrases, private keys, mnemonics, wallet exports, raw signatures, signed payloads, or API secrets. Signing stays in the user's wallet or external signer.
 
-Matterhorn Work is a practical control surface for agentic work with crypto-native capabilities:
+## Current Product Surfaces
 
-- **Local-first agentic workspace** — run agent workflows from one place with full tool execution and streaming
-- **Desktop + server mode** — Electron shell for interactive use, headless API for remote clients
-- **Matterhorn Work engine** — OpenCode-backed agent loop with tool execution, permission gating, template workflows
-- **MCP extensions** — installable modules for new capabilities, registered via `opencode.jsonc`
-- **Session streaming** — SSE-based real-time updates so users can watch agent execution live
-- **Crypto-native** — every session carries wallet + chain context; agents propose on-chain actions, user approves in-workspace
-- **Composable** — use the desktop app, messaging connectors, or server mode based on the task
+| Surface | Current behavior |
+| --- | --- |
+| Chat | OpenCode-backed coding-agent harness with streaming, tools, permissions, and session state. |
+| Response perspective | Per-session Cautious, Balanced, or Optimistic framing. Safety rules never change with perspective. |
+| Project Home | Start chats, open desks, inspect wallet readiness, view recent activity, and reach notes or outputs. |
+| Wallet | EVM and Sui connection, workspace safety policy, reviewed transaction previews, and an audit-oriented safety ledger. |
+| Notes | Workspace-local notes with search, filters, buffered autosave, linked context, deletion, and explicit Memory suggestions. |
+| Memory | Suggestion inbox and explicit confirm/edit/dismiss lifecycle. No hidden memory writes. |
+| Outputs | Images, documents, receipts, and structured JSON summaries with raw data behind disclosure. |
+| MCPs & Tools | Built-in Matterhorn MCP catalog plus live status for configured MCP server processes. |
+| Settings | Profile, permissions, providers, generated media, MCPs, wallet policy, appearance, diagnostics, and cloud readiness. |
 
----
-
-## Features
-
-| Feature | Description |
-|---------|-------------|
-| **Wallet connect** | Connect MetaMask, Coinbase Wallet, or any injected provider via wagmi v2 + viem |
-| **On-chain transactions** | Agent proposes a TX → user approves in-workspace → TX broadcasts to Base or Base Sepolia |
-| **Chain context** | Every agent session inherits the connected wallet's address and chain (Base 8453 / Base Sepolia 84532) |
-| **Web3 skill pack** | 24 MCP skills covering DeFi protocols (Uniswap, Aave, Pendle), bridges (deBridge), DePIN (Akash, Helium, Render), and payments (x402, RBF Protocol) |
-| **Agent marketplace** | Browse, hire, and deploy agents to DePIN compute — credentialled with ERC-8004 passports |
-| **Background job scheduling** | Cron-based agent execution without keeping the workspace open |
-| **ENS address book** | Resolve and manage ENS names with favorites and groups |
-| **Token price feeds** | Real-time pricing via CoinGecko API |
-| **Multi-protocol DeFi** | Aave V3 (borrow/repay/withdraw), CoW Swap (limit orders), cross-chain bridging |
-
----
-
-## Quick start
+## Quick Start
 
 ```bash
 git clone https://github.com/matterhornso/matterhorn-work.git
@@ -45,38 +36,70 @@ pnpm install
 pnpm dev
 ```
 
-Requires pnpm 10+. The desktop app launches with an Electron shell connected to the Matterhorn Work engine.
+Requirements:
 
----
+- Node.js and pnpm 10+
+- Bun for the server and test suites
+- macOS for the current Electron development path
+
+For the deterministic local web stack used by product QA:
+
+```bash
+pnpm dev:matterhorn-local
+```
+
+The launcher prints the UI, Matterhorn server, and managed OpenCode runtime URLs. Treat tokens printed by local launchers as secrets.
 
 ## Architecture
 
-```
+```text
 apps/
-  app/          React 19 UI (Vite SPA, Tailwind, shadcn/ui)
-  desktop/      Electron shell
-  server/       Matterhorn Work agent server
+  app/                React application and customer UI
+  desktop/            Electron shell and trusted desktop IPC
+  server/             Workspace-scoped control plane and storage APIs
+  opencode-router/    Token-protected local messaging/router bridge
+  orchestrator/       Local process and MCP configuration CLI
 packages/
-  matterhorn-work-mcp/          Unified server-control MCP for Codex/Claude
-  matterhorn-work-wallet-mcp/   Wallet MCP server (stdio transport)
-  matterhorn-work-ui-mcp/       UI control MCP server
-  ui/                           Shared component library
+  matterhorn-work-mcp/          Server-control MCP
+  matterhorn-work-wallet-mcp/   Local wallet MCP
+  matterhorn-work-crypto-mcp/   Markets, protocol, security, and Bittensor MCP
+  matterhorn-memory-vault/      Explicit memory lifecycle and storage
+  types/                         Shared API and product contracts
+  ui/                            Shared UI primitives
 .opencode/
-  skills/web3/                 24 Web3 skill definitions
+  agents/              Desk-specific agent profiles
+  skills/              Workspace skills
 ```
 
-Every session carries wallet context. The agent can propose on-chain actions, and the wallet panel surfaces them for user approval — no extension popups, no copy-pasting addresses.
+Normal chat is routed through the managed OpenCode coding-agent harness. Direct provider APIs are reserved for specialized capabilities such as image generation or realtime voice; they are not the default chat path.
 
-For the naming boundary between the product-facing **Matterhorn Work engine** and the underlying OpenCode runtime, see [docs/opencode-runtime-abstraction.md](docs/opencode-runtime-abstraction.md).
+## Safety And Verification
 
-For Claude Code, Codex, Cursor, and other external agent control, see [docs/agent-control-surface.md](docs/agent-control-surface.md) and [docs/agent-mcp-install.md](docs/agent-mcp-install.md).
+Run focused tests for the area being changed, then run the complete platform gate before a PR:
 
----
+```bash
+pnpm test:matterhorn-platform-safety
+```
 
-## Download
+The gate covers wallet behavior, money-path backend security, desk depth, billing integrity, local router and Electron boundaries, observability, design contracts, browser-smoke contracts, and product readiness.
 
-Pre-built macOS (Apple Silicon):
-- **[DMG](https://github.com/matterhornso/matterhorn-work/releases/latest)** — drag to Applications
-- **[ZIP](https://github.com/matterhornso/matterhorn-work/releases/latest)** — unzip and run
+## Documentation
 
-Not code-signed yet — right-click → Open on first launch.
+Start with [docs/README.md](docs/README.md). It distinguishes current implementation docs from historical plans and dated handoffs.
+
+Key guides:
+
+- [Platform architecture](docs/platform-architecture.md)
+- [Product surfaces](docs/product-surfaces.md)
+- [Notes](docs/notes.md)
+- [Response perspectives](docs/response-perspectives.md)
+- [Wallet and signing](docs/wallet-and-signing.md)
+- [Outputs and generated media](docs/outputs-and-generated-media.md)
+- [MCP installation](docs/agent-mcp-install.md)
+- [Platform safety gate](docs/platform-safety-gate.md)
+- [Matterhorn design system](docs/ui/matterhorn-design-system.md)
+- [Engine/OpenCode naming boundary](docs/opencode-runtime-abstraction.md)
+
+## Releases
+
+Release artifacts are published through [GitHub Releases](https://github.com/matterhornso/matterhorn-work/releases). Packaging and code-signing readiness vary by build; check the release notes before distributing a desktop artifact.

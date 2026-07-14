@@ -87,20 +87,23 @@
   --dls-background: #f6f9ff;
   --dls-canvas: #eef7ff;
   --dls-surface-muted: #eaf4ff;
+  --dls-surface-raised: #ffffff;
+  --dls-surface-overlay: #ffffff;
   --dls-border: #b9dceb;
   --dls-accent: var(--matterhorn-ink);
   --dls-accent-hover: #000000;
   --dls-accent-fg: var(--matterhorn-blue);
   --dls-accent-rgb: var(--matterhorn-ink-rgb);
-  --dls-secondary-rgb: 70 80 100;
+  --dls-secondary-rgb: 65 73 90;
   --dls-text-primary: var(--slate-12);
-  --dls-text-secondary: #465064;
+  --dls-text-secondary: #41495a;
   --dls-hover: rgba(56, 189, 248, 0.12);
   --dls-active: rgba(56, 189, 248, 0.2);
   --dls-radius: 10px;
   --dls-radius-lg: 12px;
   --dls-shell-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --dls-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --dls-card-shadow: 0 8px 24px rgba(15, 23, 42, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --dls-overlay-shadow: 0 24px 64px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.78);
   --dls-glass-bg: var(--dls-surface);
   --dls-glass-border: var(--dls-border);
   --dls-glow: none;
@@ -115,7 +118,7 @@
   --secondary: #eaf4ff;
   --secondary-foreground: var(--slate-12);
   --muted: #eaf4ff;
-  --muted-foreground: #465064;
+  --muted-foreground: #4c5566;
   --accent: #e0f7ff;
   --accent-foreground: var(--slate-12);
   --destructive: var(--red-9);
@@ -167,24 +170,27 @@
   --status-warning-rgb: 251 191 36;
   --status-blocked: #f87171;
   --status-blocked-rgb: 248 113 113;
-  --dls-surface: #0c0c0c;
-  --dls-sidebar: #0a1018;
-  --dls-app-bg: #070a10;
-  --dls-background: #070a10;
-  --dls-canvas: #111827;
-  --dls-surface-muted: #182033;
+  --dls-surface: #0b0f14;
+  --dls-sidebar: #17202a;
+  --dls-app-bg: #05070b;
+  --dls-background: #05070b;
+  --dls-canvas: #1b2530;
+  --dls-surface-muted: #263442;
+  --dls-surface-raised: #151d26;
+  --dls-surface-overlay: #1d2834;
   --dls-border: rgba(var(--matterhorn-blue-rgb), 0.28);
   --dls-accent: var(--matterhorn-blue);
   --dls-accent-hover: #e7f8ff;
   --dls-accent-fg: var(--matterhorn-ink);
   --dls-accent-rgb: var(--matterhorn-blue-rgb);
-  --dls-secondary-rgb: 203 213 225;
+  --dls-secondary-rgb: 208 218 229;
   --dls-text-primary: #fafcff;
-  --dls-text-secondary: #cbd5e1;
+  --dls-text-secondary: #d0dae5;
   --dls-hover: rgba(56, 189, 248, 0.13);
   --dls-active: rgba(56, 189, 248, 0.22);
   --dls-shell-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
-  --dls-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --dls-card-shadow: 0 10px 28px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --dls-overlay-shadow: 0 24px 72px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.065);
   --dls-glass-bg: var(--dls-surface);
   --dls-glass-border: rgba(var(--matterhorn-blue-rgb), 0.18);
   --dls-glow: none;
@@ -194,6 +200,16 @@ html,
 body {
   height: 100%;
   overflow: hidden;
+}
+
+.matterhorn-raised-surface {
+  background: var(--dls-surface-raised);
+  box-shadow: var(--dls-card-shadow);
+}
+
+.matterhorn-overlay-surface {
+  background: var(--dls-surface-overlay);
+  box-shadow: var(--dls-overlay-shadow);
 }
 
 #root {
@@ -355,6 +371,14 @@ body {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   box-shadow: var(--dls-glow);
+}
+
+/* Right rails share the workspace canvas; content groups provide hierarchy without stacked cards. */
+.matterhorn-side-panel .ow-soft-card {
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .ow-glow-border {
@@ -615,19 +639,19 @@ select:disabled {
 
 .dark,
 [data-theme="dark"] {
-  --background: #070a10;
+  --background: #05070b;
   --foreground: #fafcff;
-  --card: #0c0c0c;
+  --card: var(--dls-surface-raised);
   --card-foreground: #fafcff;
-  --popover: #0a1018;
+  --popover: var(--dls-surface-overlay);
   --popover-foreground: #fafcff;
   --primary: var(--matterhorn-blue);
   --primary-foreground: var(--matterhorn-ink);
-  --secondary: #182033;
+  --secondary: #263442;
   --secondary-foreground: #fafcff;
-  --muted: #182033;
-  --muted-foreground: #cbd5e1;
-  --accent: #142237;
+  --muted: #263442;
+  --muted-foreground: #c4ceda;
+  --accent: #172434;
   --accent-foreground: #fafcff;
   --destructive: var(--red-9);
   --warning: var(--amber-11);
@@ -639,11 +663,11 @@ select:disabled {
   --chart-3: var(--matterhorn-amber);
   --chart-4: var(--matterhorn-rose);
   --chart-5: var(--matterhorn-violet);
-  --sidebar: #0a1018;
+  --sidebar: #17202a;
   --sidebar-foreground: #fafcff;
   --sidebar-primary: var(--matterhorn-blue);
   --sidebar-primary-foreground: var(--matterhorn-ink);
-  --sidebar-accent: #182033;
+  --sidebar-accent: #263442;
   --sidebar-accent-foreground: #fafcff;
   --sidebar-border: rgba(var(--matterhorn-blue-rgb), 0.26);
   --sidebar-ring: var(--matterhorn-sky);
@@ -702,5 +726,23 @@ select:disabled {
   }
   html {
     @apply font-sans;
+  }
+}
+@media (max-height: 420px) {
+  .matterhorn-tool-menu {
+    position: fixed !important;
+    inset: 3rem 0.75rem 0.75rem !important;
+    width: auto !important;
+    margin-bottom: 0 !important;
+  }
+
+  .matterhorn-tool-menu-frame {
+    height: 100%;
+  }
+
+  .matterhorn-tool-menu-list {
+    min-height: 0;
+    max-height: none;
+    flex: 1;
   }
 }

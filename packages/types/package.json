@@ -68,6 +68,11 @@
       "development": "./src/project-data-ledger.ts",
       "default": "./src/project-data-ledger.ts"
     },
+    "./wallet-safety-policy": {
+      "types": "./src/wallet-safety-policy.ts",
+      "development": "./src/wallet-safety-policy.ts",
+      "default": "./src/wallet-safety-policy.ts"
+    },
     "./backend-capabilities": {
       "types": "./src/backend-capabilities.ts",
       "development": "./src/backend-capabilities.ts",

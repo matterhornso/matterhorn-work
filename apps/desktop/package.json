@@ -1,7 +1,7 @@
 {
   "name": "@matterhorn-work/desktop",
   "private": true,
-  "version": "0.13.12",
+  "version": "0.13.13",
   "description": "Matterhorn Work desktop shell",
   "author": {
     "name": "Matterhorn",
@@ -42,5 +42,5 @@
     "electron-devtools-installer": "^4.0.0"
   },
   "packageManager": "pnpm@10.27.0",
-  "opencodeRouterVersion": "0.13.12"
+  "opencodeRouterVersion": "0.13.13"
 }

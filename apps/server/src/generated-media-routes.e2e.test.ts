@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { MatterhornGeneratedImage } from "@matterhorn-work/types/generated-media";
+import { auditLogPath } from "./audit.js";
+import { MatterhornBillingAccountStore } from "./billing-account-store.js";
 import { MatterhornGeneratedImageStore } from "./generated-image-store.js";
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
@@ -82,6 +84,17 @@ async function textFetch(base: string, path: string, init?: RequestInit, token?:
     },
   });
   return { response, text: await response.text() };
+}
+
+function readAuditActions(): string[] {
+  const path = auditLogPath(WORKSPACE_ID);
+  if (!existsSync(path)) return [];
+  return readFileSync(path, "utf8")
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { action?: string })
+    .map((entry) => entry.action ?? "");
 }
 
 function bootWalrusPublisher(payload: unknown, options?: { status?: number; delayMs?: number }) {
@@ -328,15 +341,21 @@ describe("Generated media routes", () => {
       non_custody_safety: "pass",
     });
     expect(result.payload.productionSmokePlan).toMatchObject({
-      mode: "production_candidate",
-      canRunEndToEnd: true,
+      mode: "needs_setup",
+      canRunEndToEnd: false,
       publicWritesOnlyAfterUserAction: true,
-      blockers: [],
     });
     expect(result.payload.productionSmokePlan.stages).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: "walrus_public_upload", status: "manual", writeScope: "public_storage", requiresPublicWrite: true }),
-      expect.objectContaining({ id: "sui_wallet_mint", status: "manual", writeScope: "wallet_signed_transaction", requiresWallet: true }),
-      expect.objectContaining({ id: "sui_kiosk_listing", status: "manual", writeScope: "wallet_signed_transaction", requiresWallet: true }),
+      expect.objectContaining({ id: "walrus_public_upload", status: "blocked", writeScope: "public_storage", requiresPublicWrite: true }),
+      expect.objectContaining({ id: "sui_wallet_mint", status: "blocked", writeScope: "wallet_signed_transaction", requiresWallet: true }),
+      expect.objectContaining({ id: "sui_kiosk_listing", status: "blocked", writeScope: "wallet_signed_transaction", requiresWallet: true }),
+    ]));
+    expect(result.payload.productionSmokePlan.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ envVar: "MATTERHORN_WALRUS_PUBLISHER_URL", status: "invalid" }),
+      expect.objectContaining({ envVar: "MATTERHORN_WALRUS_RELAY_URL", status: "invalid" }),
+      expect.objectContaining({ envVar: "MATTERHORN_SUI_NFT_PACKAGE_ID", status: "invalid" }),
+      expect.objectContaining({ envVar: "MATTERHORN_SUI_KIOSK_PACKAGE_ID", status: "invalid" }),
+      expect.objectContaining({ envVar: "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID", status: "invalid" }),
     ]));
     expect(walrus.calls.map((call) => call.method).sort()).toEqual(["HEAD", "OPTIONS"]);
     expect(walrus.calls.some((call) => call.method === "PUT")).toBe(false);
@@ -403,6 +422,18 @@ describe("Generated media routes", () => {
     expect(result.payload.image.provider).toBe("mock");
     expect(result.payload.image.prompt).toBe("a tiny robot");
     expect(result.payload.image.relativePath).toMatch(/\.matterhorn-work\/outputs\/images\/img_/);
+  });
+
+  test("POST /workspace/:id/images/generate rejects oversized JSON before provider work", async () => {
+    const { base } = await boot();
+    const result = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "x".repeat(300_000) }),
+    });
+
+    expect(result.response.status).toBe(413);
+    expect(result.payload.code).toBe("payload_too_large");
+    expect(result.payload.message).toBe("Generated media request payload is too large.");
   });
 
   test("POST /workspace/:id/images/generate reports invalid provider setup as setup failure", async () => {
@@ -526,6 +557,29 @@ describe("Generated media routes", () => {
     expect(draftResult.payload.draft.title).toBe("Test NFT");
     expect(draftResult.payload.draft.status).toBe("draft");
     expect(draftResult.payload.draft.storage.status).toBe("local_only");
+  });
+
+  test("PATCH NFT draft updates metadata and records an audit entry", async () => {
+    const { base } = await boot();
+    const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "an auditable NFT draft image" }),
+    });
+    const imageId = generated.payload.image.id;
+    const draftResult = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${imageId}/nft-draft`, {
+      method: "POST",
+      body: JSON.stringify({ title: "Original NFT" }),
+    });
+    const draftId = draftResult.payload.draft.id;
+
+    const updated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draftId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title: "Updated NFT", description: "Updated before mint preview." }),
+    });
+
+    expect(updated.response.status).toBe(200);
+    expect(updated.payload.draft.title).toBe("Updated NFT");
+    expect(readAuditActions()).toContain("workspace.nft.draft_updated");
   });
 
   test("DELETE NFT draft removes a local draft and unblocks image deletion", async () => {
@@ -768,10 +822,14 @@ describe("Generated media billing entitlements", () => {
     expect(blocked.payload.details).toMatchObject({
       entitlementKey: "image_generation",
       currentPlanId: "free",
+      requiredPlanIds: ["plus", "max"],
       used: 10,
       limit: 10,
       reason: "limit_reached",
     });
+    expect(blocked.payload.message).toBe(
+      "Image generation limit reached on Free. Upgrade to Matterhorn Plus or Matterhorn Max or wait for the allowance to reset.",
+    );
 
     const ledger = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/data-ledger?kind=billing&limit=5`);
     expect(ledger.response.status).toBe(200);
@@ -818,7 +876,7 @@ describe("Generated media billing entitlements", () => {
     expect(status.payload.status.usage.generatedImages.resetsAt).toEqual(expect.any(String));
   });
 
-  test("workspace checkout plan raises image allowance without changing global billing env", async () => {
+  test("workspace checkout preview keeps image allowance on the current plan", async () => {
     const { base } = await boot();
 
     for (let index = 0; index < 10; index += 1) {
@@ -837,10 +895,22 @@ describe("Generated media billing entitlements", () => {
 
     const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
       method: "POST",
-      body: JSON.stringify({ prompt: "allowed by workspace plus checkout" }),
+      body: JSON.stringify({ prompt: "blocked until checkout is confirmed" }),
     });
-    expect(generated.response.status).toBe(200);
-    expect(generated.payload.success).toBe(true);
+    expect(generated.response.status).toBe(429);
+    expect(generated.payload.details).toMatchObject({
+      currentPlanId: "free",
+      limit: 10,
+      reason: "limit_reached",
+    });
+
+    const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(status.response.status).toBe(200);
+    expect(status.payload.status.subscription.planId).toBe("free");
+    expect(status.payload.status.pendingCheckout).toMatchObject({
+      planId: "plus",
+      mode: "mock",
+    });
   });
 
   test("Stripe checkout stays pending and does not raise image allowance before webhook sync", async () => {
@@ -886,6 +956,65 @@ describe("Generated media billing entitlements", () => {
     expect(status.payload.status.pendingCheckout).toMatchObject({
       planId: "plus",
       mode: "stripe_test",
+    });
+  });
+
+  test("expired paid subscription snapshots fall back to Free before media entitlements are checked", async () => {
+    const { base, dir } = await boot();
+    const now = Date.now();
+    await new MatterhornBillingAccountStore({
+      workspaceRoot: dir,
+      workspaceId: WORKSPACE_ID,
+    }).save({
+      version: "matterhorn.billing.account.v1",
+      workspaceId: WORKSPACE_ID,
+      subscription: {
+        planId: "plus",
+        status: "active",
+        interval: "month",
+        currentPeriodStart: new Date(now - 35 * 24 * 60 * 60 * 1000).toISOString(),
+        currentPeriodEnd: new Date(now - 24 * 60 * 60 * 1000).toISOString(),
+        cancelAtPeriodEnd: false,
+        providerCustomerId: "cus_test_expired_plus",
+        providerSubscriptionId: "sub_test_expired_plus",
+      },
+      pendingCheckout: null,
+      updatedAt: new Date(now - 24 * 60 * 60 * 1000).toISOString(),
+      source: "stripe_test_webhook",
+    });
+
+    const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(status.response.status).toBe(200);
+    expect(status.payload.status.subscription).toMatchObject({
+      planId: "free",
+      status: "none",
+      providerCustomerId: "cus_test_expired_plus",
+      providerSubscriptionId: "sub_test_expired_plus",
+    });
+    expect(status.payload.status.usage.generatedImages).toMatchObject({
+      used: 0,
+      limit: 10,
+    });
+
+    for (let index = 0; index < 10; index += 1) {
+      const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+        method: "POST",
+        body: JSON.stringify({ prompt: `expired paid snapshot image ${index}` }),
+      });
+      expect(generated.response.status).toBe(200);
+    }
+
+    const blocked = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "stale paid plan should not unlock this image" }),
+    });
+    expect(blocked.response.status).toBe(429);
+    expect(blocked.payload.details).toMatchObject({
+      entitlementKey: "image_generation",
+      currentPlanId: "free",
+      used: 10,
+      limit: 10,
+      reason: "limit_reached",
     });
   });
 
@@ -1000,7 +1129,7 @@ describe("Generated media billing entitlements", () => {
     });
   });
 
-  test("workspace checkout Plus unlocks mint preview checks without global billing env", async () => {
+  test("workspace checkout preview does not unlock mint preview checks without confirmed billing", async () => {
     const { base } = await boot();
     const { draft } = await createDraft(base);
 
@@ -1013,8 +1142,13 @@ describe("Generated media billing entitlements", () => {
     const mintPreview = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/mint/preview`, {
       method: "POST",
     });
-    expect(mintPreview.response.status).toBe(503);
-    expect(mintPreview.payload.code).toBe("sui_nft_package_needs_setup");
+    expect(mintPreview.response.status).toBe(402);
+    expect(mintPreview.payload.details).toMatchObject({
+      entitlementKey: "nft_mint_preview",
+      currentPlanId: "free",
+      requiredPlanIds: ["plus", "max"],
+      reason: "not_included",
+    });
 
     const storagePrepare = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/nft-drafts/${draft.id}/storage/prepare`, {
       method: "POST",
@@ -1022,7 +1156,7 @@ describe("Generated media billing entitlements", () => {
     expect(storagePrepare.response.status).toBe(402);
     expect(storagePrepare.payload.details).toMatchObject({
       entitlementKey: "walrus_storage",
-      currentPlanId: "plus",
+      currentPlanId: "free",
       requiredPlanIds: ["max"],
     });
   });
@@ -1117,6 +1251,7 @@ describe("Generated media Sui NFT setup previews", () => {
     expect(result.payload.draft.status).toBe("storage_ready");
     expect(result.payload.draft.storage.provider).toBe("walrus");
     expect(result.payload.draft.storage.status).toBe("ready_to_upload");
+    expect(readAuditActions()).toContain("workspace.nft.storage_prepare");
   });
 
   test("storage upload sends image bytes to a Walrus publisher and stores public blob metadata", async () => {

@@ -185,3 +185,44 @@ jobs:
             /tmp/matterhorn-crypto-smoke.json
             /tmp/matterhorn-crypto-smoke.sha256
           if-no-files-found: error
+
+  matterhorn-platform-safety:
+    name: matterhorn-platform-safety
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.27.0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --prefer-offline
+
+      - name: Validate platform safety gate wiring
+        run: pnpm test:matterhorn-platform-safety-gate
+
+      - name: Run Matterhorn platform safety gate
+        run: pnpm test:matterhorn-platform-safety
+
+      - name: Validate production CORS readiness
+        run: pnpm test:production-cors-readiness
+
+      - name: Run production CORS readiness
+        run: pnpm smoke:production-cors-readiness
+
+      - name: Validate product readiness smoke wiring
+        run: pnpm test:product-readiness-smoke

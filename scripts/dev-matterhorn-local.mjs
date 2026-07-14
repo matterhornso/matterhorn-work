@@ -225,6 +225,11 @@ function appCommand(appPort) {
     return { command: viteBin, args: viteArgs, cwd: appDir };
   }
 
+  const viteJs = path.join(appDir, "node_modules", "vite", "bin", "vite.js");
+  if (existsSync(viteJs)) {
+    return { command: process.execPath, args: [viteJs, ...viteArgs], cwd: appDir };
+  }
+
   return {
     command: "npx",
     args: [

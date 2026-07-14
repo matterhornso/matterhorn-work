@@ -30,7 +30,11 @@ export function GeneratedImageCard(props: GeneratedImageCardProps) {
   }, [props.onGenerateVariant]);
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg bg-dls-surface-muted/16 p-3">
+    <div
+      className="flex flex-col gap-3 rounded-lg bg-dls-surface-muted/16 p-3"
+      data-testid="generated-image-card"
+      data-image-id={image.id}
+    >
       <div className="flex min-w-0 items-center gap-2 text-xs text-dls-secondary">
         <Image size={14} className="shrink-0" />
         <span className="font-medium text-dls-text">Generated image</span>

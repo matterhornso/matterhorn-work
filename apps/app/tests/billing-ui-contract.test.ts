@@ -90,13 +90,13 @@ const mockClient: MatterhornServerClient = {
         setup: {
           mode: "phase0_mock",
           provider: "mock",
-          readyForTestCheckout: true,
+          readyForTestCheckout: false,
           readyForWebhooks: false,
           livePaymentsEnabled: false,
           checks: [
             {
               id: "mock_mode",
-              label: "Mock checkout",
+              label: "Local plan preview",
               status: "preview",
               description: "Plan changes are local test state only. No payment provider is contacted.",
             },
@@ -133,13 +133,13 @@ const mockClient: MatterhornServerClient = {
         setup: {
           mode: "phase0_mock",
           provider: "mock",
-          readyForTestCheckout: true,
+          readyForTestCheckout: false,
           readyForWebhooks: false,
           livePaymentsEnabled: false,
           checks: [
             {
               id: "mock_mode",
-              label: "Mock checkout",
+              label: "Local plan preview",
               status: "preview",
               description: "Plan changes are local test state only. No payment provider is contacted.",
             },
@@ -172,8 +172,14 @@ describe("Billing settings view", () => {
     expect(html).toContain("Billing");
     expect(html).toContain("Current plan");
     expect(html).toContain("No raw card data");
-    expect(html).toContain("Billing plans could not load");
-    expect(html).toContain("Test mode");
+    expect(html).toContain("Matterhorn Plus");
+    expect(html).toContain("Matterhorn Max");
+    expect(html).toContain("$9.99/month");
+    expect(html).toContain("$89.99/month");
+    expect(html).toContain("Showing the local Matterhorn plan catalog");
+    expect(html).toContain("Connect the Matterhorn Work engine to open checkout");
+    expect(html).not.toContain("Billing plans could not load");
+    expect(html).toContain("Local preview");
     expect(html).toContain("Plans");
     expect(html).toContain("What billing changes");
     expect(html).toContain("Always available");
@@ -211,6 +217,11 @@ describe("Billing settings view", () => {
     expect(clientSource).toContain("/billing/portal");
     expect(clientSource).toContain("/billing/pending-checkout");
     expect(billingViewSource).toContain("runtimeWorkspaceId");
+    expect(billingViewSource).toContain("buildMatterhornBillingPlans");
+    expect(billingViewSource).toContain("LOCAL_BILLING_PLANS");
+    expect(billingViewSource).toContain("usingLocalPlanCatalog");
+    expect(billingViewSource).toContain("Showing the local Matterhorn plan catalog");
+    expect(billingViewSource).toContain("Connect the Matterhorn Work engine to open checkout");
     expect(billingViewSource).toContain("client?.workspaceBillingStatus(workspaceId)");
     expect(billingViewSource).toContain("status?.setup.checks");
     expect(billingViewSource).toContain("status?.accountLinkage");
@@ -222,33 +233,66 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("Ends");
     expect(billingViewSource).toContain("pendingCheckoutExpiryCopy");
     expect(billingViewSource).toContain("status?.pendingCheckout?.expiresAt");
-    expect(billingViewSource).toContain("or expires");
-    expect(billingViewSource).toContain("Test checkout ready");
+    expect(billingViewSource).toContain("pendingCheckoutCopy");
+    expect(billingViewSource).toContain("Stripe test webhook confirms it");
+    expect(billingViewSource).toContain("local preview and does not change plan access");
+    expect(billingViewSource).toContain("Stripe test ready");
+    expect(billingViewSource).toContain("Platform setup");
     expect(billingViewSource).toContain("client?.billingStatus()");
     expect(billingViewSource).toContain("client?.workspaceBillingCheckout(workspaceId");
+    expect(billingViewSource).toContain("Open a workspace before changing plans.");
+    expect(billingViewSource).toContain("Billing checkout is tied to a workspace so subscriptions can reconcile.");
+    expect(billingViewSource).not.toContain("client?.billingCheckout({ planId");
     expect(billingViewSource).toContain("client?.workspaceBillingPortal(workspaceId");
     expect(billingViewSource).toContain("client.workspaceBillingPendingCheckoutClear(workspaceId)");
     expect(billingViewSource).toContain("Clear pending");
     expect(billingViewSource).toContain("statusQuery.refetch()");
     expect(billingViewSource).toContain("checkoutReady");
-    expect(billingViewSource).toContain("portalDisabled");
+    expect(billingViewSource).toContain("portalCanOpen");
+    expect(billingViewSource).toContain("Active for this workspace");
+    expect(billingViewSource).toContain("Matterhorn must connect billing before plan changes open");
     expect(billingViewSource).toContain("stripe_test_customer");
     expect(billingViewSource).toContain("status.usage.generatedImages.resetsAt");
     expect(billingViewSource).toContain("status.usage.nftDrafts.resetsAt");
     expect(billingViewSource).toContain("formatEntitlementReset(props.resetsAt)");
-    expect(billingViewSource).toContain("valueLabel = formatEntitlementUsage(props.used, props.limit)");
-    expect(billingViewSource).toContain("`${props.limit} included`");
+    expect(billingViewSource).toContain("`${props.used} historical`");
+    expect(billingViewSource).toContain("`Plan includes ${props.limit}`");
     expect(billingViewSource).toContain("NFT mint previews");
     expect(billingViewSource).toContain("entitlementUsageStatus(props.used, props.limit)");
     expect(billingViewSource).toContain("useStatusToasts");
-    expect(billingViewSource).toContain("Checkout opened");
+    expect(billingViewSource).toContain("billingPlanActionLabel");
+    expect(billingViewSource).toContain("shortBillingPlanName");
+    expect(billingViewSource).toContain("Preview ${shortBillingPlanName(props.plan)}");
+    expect(billingViewSource).toContain("Start ${shortBillingPlanName(props.plan)} checkout");
+    expect(billingViewSource).toContain("Start ${shortBillingPlanName(props.plan)}");
+    expect(billingViewSource).toContain("billingPortalActionLabel");
+    expect(billingViewSource).toContain("Billing account not connected");
+    expect(billingViewSource).toContain("Manage test plan");
+    expect(billingViewSource).toContain("PaymentReadinessSummary");
+    expect(billingViewSource).toContain("Payment flow");
+    expect(billingViewSource).toContain("Stripe checkout requires Matterhorn platform setup.");
+    expect(billingViewSource).not.toContain("sm:grid-cols-3");
+    expect(billingViewSource).toContain("Checkout");
+    expect(billingViewSource).toContain("Billing portal");
+    expect(billingViewSource).toContain("Not connected");
+    expect(billingViewSource).toContain("Stripe test portal");
+    expect(billingViewSource).toContain("Billing portal ready");
+    expect(billingViewSource).toContain("Matterhorn has not connected a payment provider.");
+    expect(billingViewSource).toContain("Live charging");
+    expect(billingViewSource).toContain("Stripe test checkout");
+    expect(billingViewSource).toContain("Local plan preview");
+    expect(billingViewSource).toContain("Live charges off");
+    expect(billingViewSource).toContain("Live Stripe mode stays blocked until keys, webhooks, prices, and review are complete.");
+    expect(billingViewSource).toContain("Plan preview saved");
+    expect(billingViewSource).toContain("Test checkout opened");
+    expect(billingViewSource).toContain("no real charges are processed");
     expect(billingViewSource).toContain("Billing portal unavailable");
     expect(billingViewSource).toContain("Billing readiness");
     expect(billingViewSource).toContain("What billing changes");
     expect(billingViewSource).toContain("Local workspace control stays available");
     expect(billingViewSource).toContain("Chat, local notes, memory review, protocol reads, exports, and settings are not blocked by billing.");
     expect(billingViewSource).toContain("Mint previews require Plus or Max; Walrus upload and marketplace listing require Max.");
-    expect(settingsRouteSource).toContain("<BillingSettingsView matterhornServerClient={matterhornClient} runtimeWorkspaceId={runtimeWorkspaceId} />");
+    expect(settingsRouteSource).toContain("<BillingSettingsView matterhornServerClient={settingsCapabilityClient} runtimeWorkspaceId={runtimeWorkspaceId} />");
     expect(readFileSync(
       join(import.meta.dir, "../src/react-app/domains/settings/shell/settings-page.tsx"),
       "utf8",

@@ -1,20 +1,23 @@
-# Monday Beta Launch Readiness Audit
+# Monday Beta Contract Readiness Audit
 
 **Generated:** 1970-01-01T00:00:00.000Z
-**Mode:** fixture/offline — no provider calls
-**Overall:** ✅ READY
+**Mode:** fixture/offline — production is not assessed
+**Contract result:** ✅ READY
+**Launch decision:** NOT ASSESSED
 
 ## Executive summary
 
-All audited contract layers required for the Monday beta are present and enforce the expected safety posture.
+All audited contract fixtures are present and enforce the expected safety posture. This is not production go-live approval.
 
-## Stale PR audit
+Production readiness requires a running deployed stack, real provider and billing configuration, browser acceptance evidence, and the full platform safety gate.
+
+## Repository follow-up
 
 | Item | Status | Detail |
 |---|---|---|
-| PR #2 is tracked as stale/open | ✅ | PR #2 (feat: add Bittensor workspace MVP) is still open and targets an old base; its app/server/MCP changes have been superseded by later PRs on dev. |
+| Legacy PR #2 cleanup note is present | ✅ | Historical note only; verify current GitHub state before taking action. |
 
-PR #2 (`feat: add Bittensor workspace MVP`) is still open against an old `dev` base. Its `apps/app`, `apps/server`, and crypto-MCP surface has been superseded by subsequent PRs including the protocol workspace shell, customer workflow templates, and Monday beta scenario/registry work. It should be closed before beta launch to avoid confusion.
+This fixture report does not query GitHub. Verify the current PR state before closing or changing any branch.
 
 ## Findings by area
 
@@ -34,6 +37,7 @@ PR #2 (`feat: add Bittensor workspace MVP`) is still open against an old `dev` b
 | Customer template bittensor_operator maps to protocol workspace bittensor | ✅ | mapping valid |
 | Customer template hyperliquid_trader maps to protocol workspace hyperliquid | ✅ | mapping valid |
 | Customer template polymarket_researcher maps to protocol workspace polymarket | ✅ | mapping valid |
+| Customer template sui_wallet_workflow maps to protocol workspace sui | ✅ | mapping valid |
 | Customer template wellness_creator_workflow maps to protocol workspace wellness | ✅ | mapping valid |
 | Customer template decentralized_services_operator maps to protocol workspace decentralized_services | ✅ | mapping valid |
 
@@ -93,6 +97,15 @@ pnpm test:matterhorn-workflow-contract
 pnpm test:customer-demo-scenarios
 pnpm test:customer-demo-evidence-pack
 ```
+
+## Required production decision checks
+
+```bash
+node scripts/product-readiness-smoke.mjs --server-url <url> --token <token> --workspace-id <id> --require-production --strict --json
+pnpm test:matterhorn-platform-safety
+```
+
+A launch decision is blocked when either command fails. Local fixtures, mocks, and preview receipts are not production evidence.
 
 ## References
 

@@ -229,17 +229,24 @@ function summarizeLivePublicQa(raw) {
     fixtureFallback,
     status: raw.status ?? raw.result ?? null,
     errors: ready ? [] : ["Live public-data QA is attached but not ready."],
-    warnings: fixtureFallback ? ["Live public-data QA used fixture fallback. Replace with public SS58 evidence before full go-live."] : [],
+    warnings: fixtureFallback
+      ? ["Live public-data QA used fallback for one or more optional evidence stages. Review the attached report and complete any launch-required inputs before full go-live."]
+      : [],
   };
 }
 
 function summarizeBrowserQa(markdown) {
   if (!markdown) return { present: false, ready: false, errors: ["Browser QA checklist is missing."], warnings: [] };
   const required = [
-    "Bittensor Demo tab",
-    "show my TAO",
-    "where am I staked",
+    "Bittensor desk",
+    "Show my TAO balance",
+    "Find useful subnets",
+    "Compare validators",
+    "Prepare staking preview",
+    "public SS58",
+    "degraded provider",
     "external signer",
+    "launched session",
     "mobile",
     "tablet",
     "desktop",
@@ -283,8 +290,8 @@ function renderMarkdown(packet) {
     "",
     "## Customer Demo Checklist",
     "",
-    "- Open the Bittensor panel with beta mode enabled.",
-    "- Confirm the Demo tab says Bittensor Beta and hides market demo prompts.",
+    "- Open the Bittensor desk with beta mode enabled.",
+    "- Confirm the desk exposes balance, subnet, validator, and staking-preview tasks.",
     "- Test `show my TAO` with a public SS58 address.",
     "- Test `where am I staked?` using the same public address.",
     "- Test subnet discovery for image generation.",

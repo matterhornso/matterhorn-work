@@ -148,7 +148,7 @@ export function useSessionControlActions(input: UseSessionControlActionsInput) {
       const title = stringArg(args, "title");
       if (!sessionId) return { ok: false, error: "sessionId is required" };
       if (!title) return { ok: false, error: "title is required" };
-      if (!opencodeClient) return { ok: false, error: "OpenCode client is not connected" };
+      if (!opencodeClient) return { ok: false, error: "Matterhorn engine is not connected" };
 
       const targetWorkspace = findSessionWorkspace(workspaces, sessionsByWorkspaceId, sessionId);
       await opencodeClient.session.update({

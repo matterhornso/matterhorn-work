@@ -30,7 +30,7 @@ import {
 } from "./remote-workspace.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const NATIVE_DEEP_LINK_EVENT = "openwork:deep-link-native";
+const NATIVE_DEEP_LINK_EVENT = "matterhorn:deep-link-native";
 const NATIVE_MENU_OPEN_SETTINGS_EVENT = "openwork:native-menu:open-settings";
 const NATIVE_MENU_TOGGLE_SIDEBAR_EVENT = "openwork:native-menu:toggle-sidebar";
 const TAURI_APP_IDENTIFIER = "com.differentai.openwork";
@@ -376,9 +376,18 @@ const explicitCdpPort = Number.parseInt(
   process.env.OPENWORK_ELECTRON_REMOTE_DEBUG_PORT?.trim() ?? "",
   10,
 );
-const remoteDebugPort = Number.isFinite(explicitCdpPort) && explicitCdpPort > 0
-  ? explicitCdpPort
-  : await findFreeCdpPort([9223, 9224, 9225, 9226, 9227]);
+const remoteDebugOptIn =
+  !app.isPackaged &&
+  (
+    isDevMode ||
+    process.env.MATTERHORN_ENABLE_ELECTRON_REMOTE_DEBUG === "1" ||
+    process.env.OPENWORK_ENABLE_ELECTRON_REMOTE_DEBUG === "1"
+  );
+const remoteDebugPort = remoteDebugOptIn
+  ? Number.isFinite(explicitCdpPort) && explicitCdpPort > 0
+    ? explicitCdpPort
+    : await findFreeCdpPort([9223, 9224, 9225, 9226, 9227])
+  : 0;
 if (remoteDebugPort > 0) {
   app.commandLine.appendSwitch("remote-debugging-port", String(remoteDebugPort));
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
@@ -387,9 +396,12 @@ if (remoteDebugPort > 0) {
 // agent instructions via ensureOpenworkAgent → resolveAgentTemplate.
 process.env.OPENWORK_ELECTRON_REMOTE_DEBUG_PORT = String(remoteDebugPort);
 
-// Apply extra Chromium flags from ELECTRON_EXTRA_LAUNCH_ARGS.
-// Used in headless/Daytona environments to pass e.g. --disable-gpu.
-const extraLaunchArgs = (process.env.ELECTRON_EXTRA_LAUNCH_ARGS ?? "").trim();
+// Apply extra Chromium flags only to source/dev launches. Packaged builds must
+// not allow an environment variable to re-enable remote debugging or weaken
+// Chromium security after the explicit production gates above.
+const extraLaunchArgs = !app.isPackaged
+  ? (process.env.ELECTRON_EXTRA_LAUNCH_ARGS ?? "").trim()
+  : "";
 if (extraLaunchArgs) {
   for (const arg of extraLaunchArgs.split(/\s+/)) {
     const cleaned = arg.replace(/^--/, "");
@@ -474,17 +486,32 @@ const uiControlToken = randomBytes(32).toString("hex");
 
 function isLocalRendererOrigin(origin) {
   const value = String(origin ?? "").trim();
-  if (!value || value === "file://") return true;
-  try {
-    const url = new URL(value);
-    return url.protocol === "file:" || url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "[::1]";
-  } catch {
-    return false;
-  }
+  if (!value) return false;
+  return isAllowedMainWindowUrl(value);
 }
 
 function isMainWindowWebContents(webContents) {
   return Boolean(mainWindow && webContents && webContents.id === mainWindow.webContents.id);
+}
+
+function isTrustedMainWindowIpcEvent(event) {
+  const sender = event?.sender;
+  if (!isMainWindowWebContents(sender)) return false;
+  const frameUrl = event?.senderFrame?.url || sender.getURL?.() || "";
+  return isLocalRendererOrigin(frameUrl);
+}
+
+function requireTrustedMainWindowIpcEvent(event, channel) {
+  if (isTrustedMainWindowIpcEvent(event)) return;
+  console.warn(`[desktop-ipc] blocked ${channel} from untrusted renderer`);
+  throw new Error("This desktop action is only available from the Matterhorn Work window.");
+}
+
+function trustedMainWindowHandler(channel, handler) {
+  return (event, ...args) => {
+    requireTrustedMainWindowIpcEvent(event, channel);
+    return handler(event, ...args);
+  };
 }
 
 function shouldAllowMainWindowPermission(webContents, permission, origin, details = {}) {
@@ -740,8 +767,8 @@ function listBrowserTabs() {
         url: tab.view.webContents.getURL(),
         title: tab.view.webContents.getTitle(),
         favicon: tab.favicon,
-        canGoBack: tab.view.webContents.canGoBack(),
-        canGoForward: tab.view.webContents.canGoForward(),
+        canGoBack: tab.view.webContents.navigationHistory.canGoBack(),
+        canGoForward: tab.view.webContents.navigationHistory.canGoForward(),
         isLoading: tab.view.webContents.isLoading(),
         isActive: tabId === activeBrowserTabId,
       };
@@ -756,8 +783,8 @@ function browserStatePayload() {
     ? {
         url: activeWebContents.getURL(),
         title: activeWebContents.getTitle(),
-        canGoBack: activeWebContents.canGoBack(),
-        canGoForward: activeWebContents.canGoForward(),
+        canGoBack: activeWebContents.navigationHistory.canGoBack(),
+        canGoForward: activeWebContents.navigationHistory.canGoForward(),
         isLoading: activeWebContents.isLoading(),
       }
     : {
@@ -786,6 +813,175 @@ function isHttpUrl(url) {
   } catch {
     return false;
   }
+}
+
+function isAllowedExternalUrl(url) {
+  try {
+    const parsed = new URL(String(url ?? "").trim());
+    if (parsed.protocol === "mailto:") return true;
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    if (isLoopbackHostname(parsed.hostname) || isPrivateIpv4Literal(parsed.hostname)) return false;
+    if (parsed.hostname.includes(":")) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeHostnameForPolicy(hostname) {
+  let value = String(hostname ?? "").trim().toLowerCase();
+  if (value.startsWith("[") && value.endsWith("]")) value = value.slice(1, -1);
+  while (value.endsWith(".")) value = value.slice(0, -1);
+  return value;
+}
+
+function isLoopbackHostname(hostname) {
+  const value = normalizeHostnameForPolicy(hostname);
+  return (
+    value === "localhost" ||
+    value === "127.0.0.1" ||
+    value === "::1" ||
+    value === "0:0:0:0:0:0:0:1" ||
+    value === "::ffff:127.0.0.1" ||
+    value === "::ffff:7f00:1"
+  );
+}
+
+function isPrivateIpv4Literal(hostname) {
+  const parts = String(hostname ?? "").split(".");
+  if (parts.length !== 4) return false;
+  const octets = parts.map((part) => Number.parseInt(part, 10));
+  if (octets.some((octet, index) => !Number.isInteger(octet) || String(octet) !== parts[index] || octet < 0 || octet > 255)) {
+    return false;
+  }
+  const [a, b] = octets;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a >= 224
+  );
+}
+
+const desktopFetchPublicHttpsOptIn =
+  !app.isPackaged && envFlagEnabled("MATTERHORN_DESKTOP_FETCH_ALLOW_PUBLIC_HTTPS");
+
+function isAllowedDesktopFetchUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    if (isLoopbackHostname(parsed.hostname)) return true;
+    if (!desktopFetchPublicHttpsOptIn) return false;
+    if (parsed.protocol !== "https:") return false;
+    if (isPrivateIpv4Literal(parsed.hostname)) return false;
+    if (parsed.hostname.includes(":")) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedMainWindowUrl(rawUrl) {
+  const value = String(rawUrl ?? "").trim();
+  if (value === "file://") return true;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol === "file:") return true;
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    return isLoopbackHostname(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+const DESKTOP_FETCH_DEFAULT_TIMEOUT_MS = 30_000;
+const DESKTOP_FETCH_MAX_TIMEOUT_MS = 60_000;
+const DESKTOP_FETCH_MAX_BODY_BYTES = 1_000_000;
+const ALLOWED_DESKTOP_FETCH_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]);
+const BLOCKED_DESKTOP_FETCH_REQUEST_HEADERS = new Set([
+  "connection",
+  "cookie",
+  "host",
+  "proxy-authorization",
+  "sec-fetch-dest",
+  "sec-fetch-mode",
+  "sec-fetch-site",
+  "sec-fetch-user",
+  "set-cookie",
+]);
+const BLOCKED_DESKTOP_FETCH_RESPONSE_HEADERS = new Set([
+  "set-cookie",
+  "set-cookie2",
+]);
+
+function resolveDesktopFetchTimeoutMs(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DESKTOP_FETCH_DEFAULT_TIMEOUT_MS;
+  return Math.min(Math.round(parsed), DESKTOP_FETCH_MAX_TIMEOUT_MS);
+}
+
+function resolveDesktopFetchMethod(value) {
+  const method = typeof value === "string" && value.trim()
+    ? value.trim().toUpperCase()
+    : "GET";
+  if (!ALLOWED_DESKTOP_FETCH_METHODS.has(method)) {
+    throw new Error("Desktop fetch method is not allowed.");
+  }
+  return method;
+}
+
+function resolveDesktopFetchBody(method, value) {
+  if (method === "GET" || method === "HEAD") return undefined;
+  if (typeof value !== "string") return undefined;
+  if (Buffer.byteLength(value, "utf8") > DESKTOP_FETCH_MAX_BODY_BYTES) {
+    throw new Error("Desktop fetch request body exceeded the maximum size.");
+  }
+  return value;
+}
+
+function sanitizeDesktopFetchHeaders(headers) {
+  if (!headers || typeof headers !== "object") return undefined;
+  const next = new Headers(headers);
+  for (const header of BLOCKED_DESKTOP_FETCH_REQUEST_HEADERS) {
+    next.delete(header);
+  }
+  return next;
+}
+
+function sanitizeDesktopFetchResponseHeaders(headers) {
+  return Array.from(headers.entries()).filter(([name]) => (
+    !BLOCKED_DESKTOP_FETCH_RESPONSE_HEADERS.has(name.toLowerCase())
+  ));
+}
+
+async function readDesktopFetchResponseBody(response) {
+  const body = response.body;
+  if (!body) return "";
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      bytes += value.byteLength;
+      if (bytes > DESKTOP_FETCH_MAX_BODY_BYTES) {
+        await reader.cancel();
+        throw new Error("Desktop fetch response exceeded the maximum size.");
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return text + decoder.decode();
 }
 
 function normalizeMenuOverlayPoint(point) {
@@ -903,7 +1099,7 @@ function tabMenuRequest(tab, point) {
     bounds: menuOverlayBounds(normalizeMenuOverlayPoint(point)),
     items: [
       { id: "copy-url", label: "Copy URL", iconName: "copy", disabled: !url },
-      { id: "open-external", label: "Open in Browser", iconName: "external", disabled: !(url && isHttpUrl(url)) },
+      { id: "open-external", label: "Open in Browser", iconName: "external", disabled: !(url && isAllowedExternalUrl(url)) },
       { id: "close-tab", label: "Close Tab", iconName: "close", separatorBefore: true },
       { id: "close-all-tabs", label: "Close All Tabs", iconName: "close" },
     ],
@@ -947,7 +1143,7 @@ function handleMenuOverlayChoice(payload) {
       if (request.url) clipboard.writeText(request.url);
       break;
     case "open-external":
-      if (request.url && isHttpUrl(request.url)) void shell.openExternal(request.url);
+      if (request.url && isAllowedExternalUrl(request.url)) void shell.openExternal(request.url);
       break;
     case "close-tab":
       if (tab) closeBrowserTab(tab.tabId);
@@ -977,7 +1173,7 @@ function createBrowserTab(url = "about:blank", { select = true } = {}) {
   // Cookies live on the session object, not the document — they survive this.
   view.webContents.loadURL("about:blank");
   view.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
-    void shell.openExternal(targetUrl);
+    if (isAllowedExternalUrl(targetUrl)) void shell.openExternal(targetUrl);
     return { action: "deny" };
   });
   view.webContents.on("did-start-navigation", (_event, targetUrl, isInPlace, isMainFrame) => {
@@ -1604,7 +1800,7 @@ async function fetchOpenworkWorkspaceList(hostUrl, token, hostToken) {
   try {
     const response = await fetch(url, { headers, signal: controller.signal });
     if (!response.ok) {
-      throw new Error(`OpenWork workspace discovery failed (${response.status} ${response.statusText || "HTTP error"})`);
+      throw new Error(`Matterhorn workspace discovery failed (${response.status} ${response.statusText || "HTTP error"})`);
     }
     return await response.json();
   } finally {
@@ -1654,7 +1850,18 @@ async function readWorkspaceState() {
   let changed = false;
   const idMap = new Map();
   const migratedWorkspaces = workspaces.map((entry) => {
-    const workspace = entry && typeof entry === "object" ? entry : normalizeWorkspaceEntry(entry ?? {});
+    const rawWorkspace = entry && typeof entry === "object" ? entry : {};
+    const workspace = normalizeWorkspaceEntry(rawWorkspace);
+    if (
+      rawWorkspace.matterhornHostUrl !== workspace.matterhornHostUrl ||
+      rawWorkspace.matterhornToken !== workspace.matterhornToken ||
+      rawWorkspace.matterhornClientToken !== workspace.matterhornClientToken ||
+      rawWorkspace.matterhornHostToken !== workspace.matterhornHostToken ||
+      rawWorkspace.matterhornWorkspaceId !== workspace.matterhornWorkspaceId ||
+      rawWorkspace.matterhornWorkspaceName !== workspace.matterhornWorkspaceName
+    ) {
+      changed = true;
+    }
     if (workspace.workspaceType !== "remote" || workspace.remoteType !== "openwork") return workspace;
 
     const remoteWorkspaceId = String(workspace.openworkWorkspaceId ?? "").trim()
@@ -1760,13 +1967,13 @@ async function disposeRuntimeBeforeQuit() {
 
 function assertMatterhornServerReady(info) {
   if (!info?.running) {
-    throw new Error("OpenWork server did not stay running after startup.");
+    throw new Error("Matterhorn Work engine did not stay running after startup.");
   }
   if (!info.baseUrl) {
-    throw new Error("OpenWork server did not report a base URL after startup.");
+    throw new Error("Matterhorn Work engine did not report a base URL after startup.");
   }
   if (!info.ownerToken && !info.clientToken) {
-    throw new Error("OpenWork server did not report an access token after startup.");
+    throw new Error("Matterhorn Work engine did not report an access token after startup.");
   }
   return info;
 }
@@ -1845,6 +2052,12 @@ function ensureRuntimeBootstrap() {
 }
 
 function normalizeWorkspaceEntry(input) {
+  const matterhornHostUrl = input.matterhornHostUrl ?? input.openworkHostUrl ?? null;
+  const matterhornToken = input.matterhornToken ?? input.openworkToken ?? null;
+  const matterhornClientToken = input.matterhornClientToken ?? input.openworkClientToken ?? null;
+  const matterhornHostToken = input.matterhornHostToken ?? input.openworkHostToken ?? null;
+  const matterhornWorkspaceId = input.matterhornWorkspaceId ?? input.openworkWorkspaceId ?? null;
+  const matterhornWorkspaceName = input.matterhornWorkspaceName ?? input.openworkWorkspaceName ?? null;
   return {
     id: String(input.id),
     name: String(input.name ?? "Workspace"),
@@ -1855,12 +2068,20 @@ function normalizeWorkspaceEntry(input) {
     baseUrl: input.baseUrl ?? null,
     directory: input.directory ?? null,
     displayName: input.displayName ?? null,
-    openworkHostUrl: input.openworkHostUrl ?? null,
-    openworkToken: input.openworkToken ?? null,
-    openworkClientToken: input.openworkClientToken ?? null,
-    openworkHostToken: input.openworkHostToken ?? null,
-    openworkWorkspaceId: input.openworkWorkspaceId ?? null,
-    openworkWorkspaceName: input.openworkWorkspaceName ?? null,
+    matterhornHostUrl,
+    matterhornToken,
+    matterhornClientToken,
+    matterhornHostToken,
+    matterhornWorkspaceId,
+    matterhornWorkspaceName,
+    // Keep legacy keys while older desktop builds and migration tools still
+    // share this state file. The renderer consumes the canonical keys above.
+    openworkHostUrl: matterhornHostUrl,
+    openworkToken: matterhornToken,
+    openworkClientToken: matterhornClientToken,
+    openworkHostToken: matterhornHostToken,
+    openworkWorkspaceId: matterhornWorkspaceId,
+    openworkWorkspaceName: matterhornWorkspaceName,
     sandboxBackend: input.sandboxBackend ?? null,
     sandboxRunId: input.sandboxRunId ?? null,
     sandboxContainerName: input.sandboxContainerName ?? null,
@@ -2208,9 +2429,21 @@ async function handleDesktopInvoke(event, command, ...args) {
       }
       const remoteType = input.remoteType === "opencode" ? "opencode" : "openwork";
       const directory = typeof input.directory === "string" && input.directory.trim() ? input.directory.trim() : null;
-      const rawOpenworkHostUrl = typeof input.openworkHostUrl === "string" && input.openworkHostUrl.trim()
+      const matterhornHostUrl = typeof input.matterhornHostUrl === "string"
+        ? input.matterhornHostUrl.trim()
+        : "";
+      const rawOpenworkHostUrl = matterhornHostUrl || (typeof input.openworkHostUrl === "string" && input.openworkHostUrl.trim()
         ? input.openworkHostUrl.trim()
-        : null;
+        : null);
+      const openworkToken = typeof input.matterhornToken === "string"
+        ? input.matterhornToken.trim()
+        : input.openworkToken;
+      const openworkClientToken = typeof input.matterhornClientToken === "string"
+        ? input.matterhornClientToken.trim()
+        : input.openworkClientToken;
+      const openworkHostToken = typeof input.matterhornHostToken === "string"
+        ? input.matterhornHostToken.trim()
+        : input.openworkHostToken;
       const openworkHostUrl = remoteType === "openwork"
         ? stripOpenworkWorkspaceMount(rawOpenworkHostUrl ?? baseUrl)
         : rawOpenworkHostUrl;
@@ -2224,15 +2457,15 @@ async function handleDesktopInvoke(event, command, ...args) {
       if (remoteType === "openwork" && !resolvedOpenworkWorkspaceId) {
         const discovered = await discoverOpenworkWorkspace({
           hostUrl: openworkHostUrl ?? baseUrl,
-          token: input.openworkToken,
-          hostToken: input.openworkHostToken,
+          token: openworkToken,
+          hostToken: openworkHostToken,
           directory,
         });
         if (!discovered?.id) {
           throw new Error(
             directory
-              ? `OpenWork server has no workspace matching ${directory}.`
-              : "OpenWork server returned no workspaces.",
+              ? `Matterhorn Work engine has no workspace matching ${directory}.`
+              : "Matterhorn Work engine returned no workspaces.",
           );
         }
         resolvedOpenworkWorkspaceId = String(discovered.id).trim();
@@ -2252,9 +2485,9 @@ async function handleDesktopInvoke(event, command, ...args) {
         baseUrl: remoteType === "openwork" ? (openworkHostUrl ?? baseUrl) : baseUrl,
         directory,
         openworkHostUrl,
-        openworkToken: input.openworkToken ?? null,
-        openworkClientToken: input.openworkClientToken ?? null,
-        openworkHostToken: input.openworkHostToken ?? null,
+        openworkToken: openworkToken || null,
+        openworkClientToken: openworkClientToken || null,
+        openworkHostToken: openworkHostToken || null,
         openworkWorkspaceId: resolvedOpenworkWorkspaceId,
         openworkWorkspaceName: resolvedOpenworkWorkspaceName,
         sandboxBackend: input.sandboxBackend ?? null,
@@ -2306,8 +2539,8 @@ async function handleDesktopInvoke(event, command, ...args) {
             if (!discovered?.id) {
               throw new Error(
                 directory
-                  ? `OpenWork server has no workspace matching ${directory}.`
-                  : "OpenWork server returned no workspaces.",
+                  ? `Matterhorn Work engine has no workspace matching ${directory}.`
+                  : "Matterhorn Work engine returned no workspaces.",
               );
             }
             remoteWorkspaceId = String(discovered.id).trim();
@@ -2691,18 +2924,22 @@ async function handleDesktopInvoke(event, command, ...args) {
       const url = String(args[0] ?? "").trim();
       const init = args[1] ?? {};
       if (!url) throw new Error("URL is required.");
-      const timeoutMs = Number(init.timeoutMs);
+      if (!isAllowedDesktopFetchUrl(url)) {
+        throw new Error("Desktop fetch is restricted to loopback endpoints by default.");
+      }
+      const timeoutMs = resolveDesktopFetchTimeoutMs(init.timeoutMs);
+      const method = resolveDesktopFetchMethod(init.method);
       const response = await fetch(url, {
-        method: typeof init.method === "string" ? init.method : undefined,
-        headers: init.headers && typeof init.headers === "object" ? init.headers : undefined,
-        body: typeof init.body === "string" ? init.body : undefined,
-        signal: Number.isFinite(timeoutMs) && timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined,
+        method,
+        headers: sanitizeDesktopFetchHeaders(init.headers),
+        body: resolveDesktopFetchBody(method, init.body),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       return {
         status: response.status,
         statusText: response.statusText,
-        headers: Array.from(response.headers.entries()),
-        body: await response.text(),
+        headers: sanitizeDesktopFetchResponseHeaders(response.headers),
+        body: await readDesktopFetchResponseBody(response),
       };
     }
     case "__homeDir":
@@ -2785,7 +3022,7 @@ async function runOpenworkControlCommand(command, args = {}) {
   if (command === "snapshot") {
     return evaluateOpenworkControl(`(async () => {
       const control = window.__openworkControl;
-      if (!control) return { ok: false, error: "OpenWork control surface is not available yet." };
+      if (!control) return { ok: false, error: "Matterhorn control surface is not available yet." };
       control.setEnabled?.(true);
       return { ok: true, ...control.snapshot() };
     })()`);
@@ -2793,7 +3030,7 @@ async function runOpenworkControlCommand(command, args = {}) {
   if (command === "actions") {
     return evaluateOpenworkControl(`(async () => {
       const control = window.__openworkControl;
-      if (!control) return { ok: false, error: "OpenWork control surface is not available yet." };
+      if (!control) return { ok: false, error: "Matterhorn control surface is not available yet." };
       control.setEnabled?.(true);
       return { ok: true, actions: control.listActions() };
     })()`);
@@ -2802,15 +3039,15 @@ async function runOpenworkControlCommand(command, args = {}) {
     return evaluateOpenworkControl(`(async () => {
       const control = window.__openworkControl;
       const input = JSON.parse(${argsJsonLiteral});
-      if (!control) return { ok: false, error: "OpenWork control surface is not available yet." };
+      if (!control) return { ok: false, error: "Matterhorn control surface is not available yet." };
       if (!input || typeof input.actionId !== "string" || !input.actionId.trim()) {
-        return { ok: false, error: "Missing OpenWork actionId." };
+        return { ok: false, error: "Missing Matterhorn actionId." };
       }
       control.setEnabled?.(true);
       return control.execute(input.actionId, input.args ?? {});
     })()`, { focus: true });
   }
-  return { ok: false, error: `Unknown OpenWork control command: ${command}` };
+  return { ok: false, error: `Unknown Matterhorn control command: ${command}` };
 }
 
 async function startUiControlServer() {
@@ -2849,7 +3086,7 @@ async function startUiControlServer() {
   });
   const address = uiControlServer.address();
   const port = typeof address === "object" && address ? address.port : null;
-  if (!port) throw new Error("Could not start OpenWork UI control bridge.");
+  if (!port) throw new Error("Could not start Matterhorn UI control bridge.");
   const discoveryPayload = `${JSON.stringify({ version: 1, app: APP_NAME, identifier: APP_IDENTIFIER, platform: process.platform, baseUrl: `http://127.0.0.1:${port}`, token: uiControlToken }, null, 2)}\n`;
   uiControlDiscoveryPaths = [
     path.join(app.getPath("userData"), "matterhorn-work-ui-control.json"),
@@ -2923,12 +3160,8 @@ async function createMainWindow() {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    const local =
-      url.startsWith("file://") ||
-      url.startsWith("http://127.0.0.1") ||
-      url.startsWith("http://localhost");
-    if (!local) {
-      void shell.openExternal(url);
+    if (!isAllowedMainWindowUrl(url)) {
+      if (isAllowedExternalUrl(url)) void shell.openExternal(url);
       return { action: "deny" };
     }
     return { action: "allow" };
@@ -2950,53 +3183,53 @@ async function createMainWindow() {
   return mainWindow;
 }
 
-ipcMain.handle("openwork:desktop", handleDesktopInvoke);
-ipcMain.handle("openwork:shell:openExternal", async (_event, url) => {
-  if (typeof url === "string" && url.trim().length > 0) {
-    await shell.openExternal(url);
+ipcMain.handle("openwork:desktop", trustedMainWindowHandler("openwork:desktop", handleDesktopInvoke));
+ipcMain.handle("openwork:shell:openExternal", trustedMainWindowHandler("openwork:shell:openExternal", async (_event, url) => {
+  if (typeof url === "string" && isAllowedExternalUrl(url)) {
+    await shell.openExternal(url.trim());
   }
-});
-ipcMain.handle("openwork:shell:relaunch", async () => {
+}));
+ipcMain.handle("openwork:shell:relaunch", trustedMainWindowHandler("openwork:shell:relaunch", async () => {
   app.relaunch();
   app.exit(0);
-});
-ipcMain.handle("openwork:system:architecture", async () => resolveArchitectureInfo());
+}));
+ipcMain.handle("openwork:system:architecture", trustedMainWindowHandler("openwork:system:architecture", async () => resolveArchitectureInfo()));
 
 // ── Embedded browser IPC ────────────────────────────────────────────────
-ipcMain.handle("openwork:browser:show", (_event, bounds) => attachBrowserView(bounds));
-ipcMain.handle("openwork:browser:hide", () => hideBrowserView());
-ipcMain.handle("openwork:browser:navigate", (_event, url) => {
+ipcMain.handle("openwork:browser:show", trustedMainWindowHandler("openwork:browser:show", (_event, bounds) => attachBrowserView(bounds)));
+ipcMain.handle("openwork:browser:hide", trustedMainWindowHandler("openwork:browser:hide", () => hideBrowserView()));
+ipcMain.handle("openwork:browser:navigate", trustedMainWindowHandler("openwork:browser:navigate", (_event, url) => {
   const view = getActiveBrowserView() ?? createBrowserTab("about:blank", { select: true }).view;
   view.webContents.loadURL(normalizeBrowserUrl(url));
-});
-ipcMain.handle("openwork:browser:back", () => {
+}));
+ipcMain.handle("openwork:browser:back", trustedMainWindowHandler("openwork:browser:back", () => {
   const webContents = getActiveWebContents();
-  if (webContents?.canGoBack()) webContents.goBack();
-});
-ipcMain.handle("openwork:browser:forward", () => {
+  if (webContents?.navigationHistory.canGoBack()) webContents.navigationHistory.goBack();
+}));
+ipcMain.handle("openwork:browser:forward", trustedMainWindowHandler("openwork:browser:forward", () => {
   const webContents = getActiveWebContents();
-  if (webContents?.canGoForward()) webContents.goForward();
-});
-ipcMain.handle("openwork:browser:reload", () => getActiveWebContents()?.reload());
-ipcMain.handle("openwork:browser:bounds", (_event, bounds) => {
+  if (webContents?.navigationHistory.canGoForward()) webContents.navigationHistory.goForward();
+}));
+ipcMain.handle("openwork:browser:reload", trustedMainWindowHandler("openwork:browser:reload", () => getActiveWebContents()?.reload()));
+ipcMain.handle("openwork:browser:bounds", trustedMainWindowHandler("openwork:browser:bounds", (_event, bounds) => {
   lastBrowserBounds = bounds;
   const view = getActiveBrowserView();
   if (view && browserViewVisible && bounds.width > 0 && bounds.height > 0) {
     view.setBounds(bounds);
   }
-});
-ipcMain.handle("openwork:browser:state", () => browserStatePayload());
-ipcMain.handle("openwork:browser:createTab", (_event, url) => {
+}));
+ipcMain.handle("openwork:browser:state", trustedMainWindowHandler("openwork:browser:state", () => browserStatePayload()));
+ipcMain.handle("openwork:browser:createTab", trustedMainWindowHandler("openwork:browser:createTab", (_event, url) => {
   const tab = createBrowserTab(url ?? "about:blank", { select: true });
   return { tabId: tab.tabId };
-});
-ipcMain.handle("openwork:browser:closeTab", (_event, tabId) => closeBrowserTab(tabId == null ? undefined : String(tabId)));
-ipcMain.handle("openwork:browser:closeAllTabs", () => closeAllBrowserTabs());
-ipcMain.handle("openwork:browser:selectTab", (_event, tabId) => selectBrowserTab(String(tabId ?? "")).tabId);
-ipcMain.handle("openwork:browser:reorderTabs", (_event, tabIds) => reorderBrowserTabs(tabIds));
-ipcMain.handle("openwork:browser:listTabs", () => listBrowserTabs());
-ipcMain.handle("openwork:browser:tabContextMenu", (_event, tabId, point) => showBrowserTabContextMenu(tabId, point));
-ipcMain.handle("openwork:browser:destroy", () => destroyBrowserView());
+}));
+ipcMain.handle("openwork:browser:closeTab", trustedMainWindowHandler("openwork:browser:closeTab", (_event, tabId) => closeBrowserTab(tabId == null ? undefined : String(tabId))));
+ipcMain.handle("openwork:browser:closeAllTabs", trustedMainWindowHandler("openwork:browser:closeAllTabs", () => closeAllBrowserTabs()));
+ipcMain.handle("openwork:browser:selectTab", trustedMainWindowHandler("openwork:browser:selectTab", (_event, tabId) => selectBrowserTab(String(tabId ?? "")).tabId));
+ipcMain.handle("openwork:browser:reorderTabs", trustedMainWindowHandler("openwork:browser:reorderTabs", (_event, tabIds) => reorderBrowserTabs(tabIds)));
+ipcMain.handle("openwork:browser:listTabs", trustedMainWindowHandler("openwork:browser:listTabs", () => listBrowserTabs()));
+ipcMain.handle("openwork:browser:tabContextMenu", trustedMainWindowHandler("openwork:browser:tabContextMenu", (_event, tabId, point) => showBrowserTabContextMenu(tabId, point)));
+ipcMain.handle("openwork:browser:destroy", trustedMainWindowHandler("openwork:browser:destroy", () => destroyBrowserView()));
 ipcMain.on("openwork:menu-overlay:ready", (event) => {
   if (event.sender !== menuOverlayView?.webContents) return;
   markMenuOverlayReady(menuOverlayView);
@@ -3015,8 +3248,13 @@ ipcMain.on("openwork:menu-overlay:dismiss", (event) => {
   hideMenuOverlay();
 });
 
-registerMigrationIpc({ app, ipcMain });
-const { ensureAutoUpdater } = registerUpdaterIpc({ app, ipcMain, getMainWindow: () => mainWindow });
+registerMigrationIpc({ app, ipcMain, trustedMainWindowHandler });
+const { ensureAutoUpdater } = registerUpdaterIpc({
+  app,
+  ipcMain,
+  getMainWindow: () => mainWindow,
+  trustedMainWindowHandler,
+});
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();

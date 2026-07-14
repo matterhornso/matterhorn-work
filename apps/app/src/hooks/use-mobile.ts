@@ -1,6 +1,8 @@
 import * as React from "react";
 
-const MOBILE_BREAKPOINT = 768
+// Session side panels switch from a full-screen overlay to the docked `lg`
+// layout at 1024px. Keep the runtime breakpoint aligned with that CSS boundary.
+const MOBILE_BREAKPOINT = 1024
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)

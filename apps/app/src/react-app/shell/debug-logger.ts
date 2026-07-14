@@ -28,6 +28,31 @@ type DevLogEntry = {
   sessionKey?: string;
 };
 
+const REDACTED = "[redacted]";
+const SENSITIVE_FIELD_PATTERN = /(^|[_-])(authorization|auth|api[_-]?key|api[_-]?secret|bearer|jwt|mnemonic|password|passphrase|private[_-]?key|raw[_-]?signature|secret|seed|signed[_-]?payload|token|wallet[_-]?export)($|[_-])/i;
+const SECRET_ASSIGNMENT_PATTERN = /\b((?:api[_-]?key|api[_-]?secret|authorization|bearer|mnemonic|password|passphrase|private[_-]?key|raw[_-]?signature|secret|seed(?:\s+phrase)?|signed[_-]?payload|token|wallet[_-]?export)\s*[:=]\s*)(["']?)[^\s"',;}]+(\2)/gi;
+const BEARER_PATTERN = /\b(bearer\s+)[a-z0-9._~+/=-]+/gi;
+const PRIVATE_KEY_CONTEXT_PATTERN = /\b(private\s+key|mnemonic|seed\s+phrase|wallet\s+export)\b[\s:=]+[a-z0-9\s._~+/=-]{16,}/gi;
+
+function redactSensitiveText(value: string): string {
+  return value
+    .replace(BEARER_PATTERN, `$1${REDACTED}`)
+    .replace(SECRET_ASSIGNMENT_PATTERN, `$1${REDACTED}`)
+    .replace(PRIVATE_KEY_CONTEXT_PATTERN, (_match, label: string) => `${label} ${REDACTED}`);
+}
+
+function sanitizeLogEntry(entry: DevLogEntry): DevLogEntry {
+  return {
+    ...entry,
+    ...(entry.source ? { source: redactSensitiveText(entry.source) } : {}),
+    ...(entry.url ? { url: redactSensitiveText(entry.url) } : {}),
+    ...(entry.message ? { message: redactSensitiveText(entry.message) } : {}),
+    ...(entry.stack ? { stack: redactSensitiveText(entry.stack) } : {}),
+    ...(entry.args ? { args: entry.args.map((arg) => safeStringify(arg)) } : {}),
+    ...(entry.extra ? { extra: safeStringify(entry.extra) as Record<string, unknown> } : {}),
+  };
+}
+
 let started = false;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let queue: DevLogEntry[] = [];
@@ -103,10 +128,15 @@ function safeStringify(input: unknown, depth = 0): unknown {
     if (typeof input === "function") return `[function ${(input as Function).name || "anonymous"}]`;
     if (typeof input === "bigint") return input.toString();
     if (typeof input === "symbol") return input.toString();
+    if (typeof input === "string") return redactSensitiveText(input);
     return input;
   }
   if (input instanceof Error) {
-    return { name: input.name, message: input.message, stack: input.stack };
+    return {
+      name: input.name,
+      message: redactSensitiveText(input.message),
+      stack: input.stack ? redactSensitiveText(input.stack) : undefined,
+    };
   }
   if (Array.isArray(input)) {
     return input.slice(0, 25).map((item) => safeStringify(item, depth + 1));
@@ -119,7 +149,9 @@ function safeStringify(input: unknown, depth = 0): unknown {
       break;
     }
     try {
-      out[key] = safeStringify(value, depth + 1);
+      out[key] = SENSITIVE_FIELD_PATTERN.test(key)
+        ? REDACTED
+        : safeStringify(value, depth + 1);
     } catch {
       out[key] = "[unserializable]";
     }
@@ -167,18 +199,24 @@ async function flushQueue() {
 }
 
 function enqueue(entry: DevLogEntry) {
-  queue.push({ sessionKey, ...entry });
+  const sanitizedEntry = sanitizeLogEntry(entry);
+  queue.push({ sessionKey, ...sanitizedEntry });
   if (queue.length > 200) queue.splice(0, queue.length - 200);
-  recordInspectorEvent(`log.${entry.level}`, entry);
+  if (typeof window !== "undefined") {
+    window.setTimeout(() => recordInspectorEvent(`log.${sanitizedEntry.level}`, sanitizedEntry), 0);
+  } else {
+    recordInspectorEvent(`log.${sanitizedEntry.level}`, sanitizedEntry);
+  }
   scheduleFlush();
 }
 
 export function recordDebugLog(entry: DevLogEntry) {
+  const sanitizedEntry = sanitizeLogEntry(entry);
   if (!started || !isEnabled()) {
-    recordInspectorEvent(`log.${entry.level}`, entry);
+    recordInspectorEvent(`log.${sanitizedEntry.level}`, sanitizedEntry);
     return;
   }
-  enqueue(entry);
+  enqueue(sanitizedEntry);
 }
 
 function isEnabled(): boolean {
@@ -218,7 +256,7 @@ export function startDebugLogger(opts?: { serverUrl?: () => string | Promise<str
         enqueue({
           level,
           url: typeof location !== "undefined" ? location.pathname + location.search : undefined,
-          message: typeof args[0] === "string" ? args[0] : undefined,
+          message: typeof args[0] === "string" ? redactSensitiveText(args[0]) : undefined,
           args: args.map((arg) => safeStringify(arg)),
         });
       } catch {
@@ -234,8 +272,8 @@ export function startDebugLogger(opts?: { serverUrl?: () => string | Promise<str
     enqueue({
       level: "uncaught",
       source: event.filename,
-      message: event.message,
-      stack: target?.stack,
+      message: redactSensitiveText(event.message),
+      stack: target?.stack ? redactSensitiveText(target.stack) : undefined,
       extra: { line: event.lineno, col: event.colno },
     });
   };
@@ -246,8 +284,12 @@ export function startDebugLogger(opts?: { serverUrl?: () => string | Promise<str
     const reason = event.reason;
     enqueue({
       level: "unhandledRejection",
-      message: reason instanceof Error ? reason.message : typeof reason === "string" ? reason : undefined,
-      stack: reason instanceof Error ? reason.stack : undefined,
+      message: reason instanceof Error
+        ? redactSensitiveText(reason.message)
+        : typeof reason === "string"
+          ? redactSensitiveText(reason)
+          : undefined,
+      stack: reason instanceof Error && reason.stack ? redactSensitiveText(reason.stack) : undefined,
       extra: { reason: safeStringify(reason) as Record<string, unknown> },
     });
   };

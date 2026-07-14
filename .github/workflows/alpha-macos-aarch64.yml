@@ -182,7 +182,10 @@ jobs:
         run: pnpm --filter @matterhorn-work/desktop build:electron
 
       - name: Package Electron alpha tester artifact (macOS, unsigned)
-        if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured != 'true'
+        # This step intentionally overrides MACOS_NOTARIZE below. Do not test
+        # that variable here: step-level env is visible to `if` evaluation and
+        # would skip packaging before the upload step runs.
+        if: steps.alpha-signing.outputs.configured != 'true'
         shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false

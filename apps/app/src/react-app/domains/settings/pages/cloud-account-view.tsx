@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import * as React from "react";
-import { ArrowUpRight, ExternalLink, ListChecks } from "lucide-react";
+import { ArrowUpRight, Cloud, ExternalLink, SlidersHorizontal } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
@@ -12,8 +12,9 @@ import {
 } from "@/components/ui/collapsible";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import { t } from "@/i18n";
+import { MATTERHORN_CLOUD_ENABLED } from "../../../../app/lib/den";
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import { CloudAccountSection } from "../cloud/cloud-account-section";
 import { useCloudSession } from "../cloud/cloud-session-provider";
@@ -36,8 +37,6 @@ import {
   type ProfileReadiness,
 } from "@matterhorn-work/types";
 import { ProfileCapabilityStatus } from "../../profile/profile-capability-status";
-import { getSessionActivityStatusLabel, type SessionActivityStatus } from "../../session/status/session-activity-store";
-import { useWorkflowTaskLog } from "./use-workflow-task-log";
 
 type CloudAccountSession = Pick<
   ReturnType<typeof useDenSession>,
@@ -81,11 +80,12 @@ type DenSignedOutPanelProps = Pick<
   | "onOpenBrowserAuth"
   | "onSubmitManualAuth"
   | "sessionBusy"
->;
+> & { cloudAvailable: boolean };
 
 function DenSignedOutPanel({
   authBusy,
   authError,
+  cloudAvailable,
   compact = false,
   onClearAuthError,
   onOpenBrowserAuth,
@@ -103,7 +103,11 @@ function DenSignedOutPanel({
     setManualAuthOpen(false);
   };
 
-  const content = (
+  const content = !cloudAvailable ? (
+    <SettingsNotice>
+      Matterhorn Cloud is not available in this build. Local workspaces, chats, notes, memory, and outputs continue to work without an account.
+    </SettingsNotice>
+  ) : (
     <>
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -159,7 +163,10 @@ function DenSignedOutPanel({
 
       {authError ? <SettingsNotice tone="error">{authError}</SettingsNotice> : null}
 
-      <SettingsInset className="rounded-lg text-sm text-gray-10">
+      <SettingsInset className={cn(
+        "text-sm text-gray-10",
+        compact ? "rounded-none bg-transparent px-0 py-0" : "rounded-lg",
+      )}>
         {t("den.auto_reconnect_hint")}
       </SettingsInset>
     </>
@@ -194,149 +201,56 @@ function cloudAuthState(isSignedIn: boolean, authError: string | null | undefine
 }
 
 function ProfileReadinessSupportSection({
+  compact = false,
   onSendFeedback,
   readiness,
 }: {
+  compact?: boolean;
   onSendFeedback?: () => void;
   readiness: ProfileReadiness;
 }) {
   const { docsUrl, feedbackUrl, issueUrl, accountUrl } = readiness.supportLinks;
+  const actionClass =
+    "inline-flex items-center gap-1.5 rounded-md bg-dls-surface-muted/[0.18] px-2.5 py-1.5 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:bg-dls-surface-muted/[0.30] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--matterhorn-blue-rgb),0.28)]";
   return (
-    <section className="flex flex-col gap-2 rounded-lg bg-dls-surface-muted/20 px-3 py-3 text-xs leading-5 text-dls-secondary">
-      <h4 className="font-semibold text-dls-text">{readiness.stateCopy.headline}</h4>
-      <p>{readiness.stateCopy.body}</p>
+    <section className={cn(
+      "flex flex-col gap-2 text-xs leading-5 text-dls-secondary",
+      compact ? "matterhorn-rail-section" : "rounded-lg bg-dls-surface-muted/[0.08] px-3 py-3",
+    )}>
+      <h4 className="font-semibold text-dls-text">
+        {compact ? "Help and support" : readiness.stateCopy.headline}
+      </h4>
+      <p>{compact ? "Get product help or report a problem." : readiness.stateCopy.body}</p>
       <div className="flex flex-wrap gap-2">
         {onSendFeedback ? (
           <button
             type="button"
-            className="flex items-center gap-1 rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover"
+            className={actionClass}
             onClick={onSendFeedback}
           >
             Send feedback
           </button>
         ) : feedbackUrl ? (
-          <a className="flex items-center gap-1 rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover" href={feedbackUrl} target="_blank" rel="noreferrer">
+          <a className={actionClass} href={feedbackUrl} target="_blank" rel="noreferrer">
             Send feedback <ExternalLink size={10} />
           </a>
         ) : null}
         {docsUrl ? (
-          <a className="flex items-center gap-1 rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover" href={docsUrl} target="_blank" rel="noreferrer">
+          <a className={actionClass} href={docsUrl} target="_blank" rel="noreferrer">
             Docs <ExternalLink size={10} />
           </a>
         ) : null}
         {issueUrl ? (
-          <a className="flex items-center gap-1 rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover" href={issueUrl} target="_blank" rel="noreferrer">
+          <a className={actionClass} href={issueUrl} target="_blank" rel="noreferrer">
             Report issue <ExternalLink size={10} />
           </a>
         ) : null}
         {accountUrl ? (
-          <a className="flex items-center gap-1 rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover" href={accountUrl} target="_blank" rel="noreferrer">
+          <a className={actionClass} href={accountUrl} target="_blank" rel="noreferrer">
             Account settings <ExternalLink size={10} />
           </a>
         ) : null}
       </div>
-    </section>
-  );
-}
-
-function formatTaskLogTime(updatedAt: number) {
-  if (!updatedAt) return "Just now";
-  return new Date(updatedAt).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function TaskLogSourceBadge({ source }: { source: "backend" | "local" }) {
-  if (source === "backend") {
-    return (
-      <span className="rounded bg-dls-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-dls-accent">
-        Workflow
-      </span>
-    );
-  }
-  return (
-    <span className="rounded bg-dls-surface/70 px-1.5 py-0.5 text-[10px] font-medium text-dls-secondary">
-      Local
-    </span>
-  );
-}
-
-function formatTaskLogDesk(deskId?: string) {
-  if (!deskId) return "Matterhorn";
-  if (deskId === "wellness") return "Longevity";
-  if (deskId === "mcps") return "MCPs";
-  return deskId
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function taskLogTitle(log: { visibleUserIntent?: string; sessionId: string }) {
-  const intent = log.visibleUserIntent?.trim();
-  if (intent) return intent;
-  return `Task ${log.sessionId.slice(0, 8)}`;
-}
-
-function ProfileTaskLogSection({
-  workspaceId,
-  matterhornServerClient,
-}: {
-  workspaceId?: string;
-  matterhornServerClient?: MatterhornServerClient | null;
-}) {
-  const { logs, error } = useWorkflowTaskLog(workspaceId, matterhornServerClient ?? undefined);
-
-  return (
-    <section className="flex flex-col gap-3 rounded-lg bg-dls-surface-muted/20 px-3 py-3 text-xs leading-5 text-dls-secondary">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-2">
-          <ListChecks className="mt-0.5 size-4 shrink-0 text-dls-text" />
-          <div className="min-w-0">
-            <h4 className="font-semibold text-dls-text">Task log</h4>
-            <p>Recent task state from this workspace session.</p>
-          </div>
-        </div>
-        <span className="shrink-0 font-semibold text-dls-text">{logs.length}</span>
-      </div>
-
-      {error ? (
-        <div className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-3 text-center text-dls-secondary">
-          {error}
-        </div>
-      ) : logs.length ? (
-        <div className="grid gap-1">
-          {logs.map((log) => (
-            <div key={log.id} className="grid gap-1 rounded-md px-2.5 py-2">
-              <div className="flex items-center justify-between gap-3">
-                <span className="truncate font-medium text-dls-text">
-                  {taskLogTitle(log)}
-                </span>
-                <span className="shrink-0 text-[11px] text-dls-secondary">{formatTaskLogTime(log.updatedAt)}</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                {log.deskId ? <span>{formatTaskLogDesk(log.deskId)}</span> : null}
-                <span>{getSessionActivityStatusLabel(log.status as SessionActivityStatus)}</span>
-                {log.waitingCount ? <span>{log.waitingCount} waiting</span> : null}
-                <TaskLogSourceBadge source={log.source} />
-                <span className="truncate text-dls-muted">Workspace {log.workspaceId.slice(-8)}</span>
-              </div>
-              {log.outputBasePath ? (
-                <div className="truncate rounded bg-dls-surface/45 px-2 py-1 font-mono text-[10px] leading-4 text-dls-secondary">
-                  {log.outputBasePath}
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-lg border border-dls-border/45 px-3 py-3 text-center">
-          Task events appear here when Matterhorn starts, waits, finishes, or errors.
-        </div>
-      )}
     </section>
   );
 }
@@ -371,6 +285,7 @@ export function CloudAccountView({
     },
   });
   const backendProfileError = backendProfileQuery.error instanceof Error ? backendProfileQuery.error : null;
+  const cloudAvailable = MATTERHORN_CLOUD_ENABLED || developerMode;
 
   React.useEffect(() => {
     if (!isSignedIn || !session.needsOrgSelection) return;
@@ -379,60 +294,54 @@ export function CloudAccountView({
 
   if (compact) {
     return (
-      <SettingsStack className="matterhorn-profile-rail max-w-none gap-4">
-        <section className="flex flex-col gap-3 border-b border-dls-border/45 pb-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <h3 className="truncate text-sm font-semibold text-dls-text">{t("den.cloud_section_title")}</h3>
-              <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                {isSignedIn ? t("den.cloud_signed_in_desc") : t("den.cloud_section_desc")}
-              </p>
-            </div>
-            <SettingsStatusBadge tone={session.summaryTone} label={session.summaryLabel} />
-          </div>
-          {!isSignedIn ? (
-            <p className="text-xs leading-5 text-dls-secondary">{t("den.cloud_sleep_hint")}</p>
-          ) : null}
-        </section>
-
+      <SettingsStack className="matterhorn-profile-rail max-w-none gap-6">
         <ProfileCapabilityStatus
+          compact
           capabilities={backendProfileQuery.data ?? null}
+          cloudAvailable={cloudAvailable}
           error={backendProfileError}
           isLoading={backendProfileQuery.isLoading}
         />
 
-        <section className="flex flex-col gap-3 rounded-lg bg-dls-surface-muted/35 px-3 py-3">
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-dls-secondary">Profile readiness</h4>
-            <p className="mt-1 text-xs leading-5 text-dls-secondary">
-              {profileReadiness.stateCopy.body}
-            </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-10 w-full justify-start gap-2 border-0 bg-dls-surface-muted/[0.32] px-3 text-dls-text shadow-none hover:bg-dls-surface-muted/[0.46]"
+          onClick={() => navigate(workspaceId ? `/workspace/${workspaceId}/settings/preferences` : "/settings/preferences")}
+        >
+          <SlidersHorizontal className="size-3.5" />
+          Open workspace preferences
+        </Button>
+
+        <section className="flex flex-col gap-3 rounded-lg bg-dls-surface-muted/[0.12] px-3.5 py-3.5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-2.5">
+              <Cloud className="mt-0.5 size-4 shrink-0 text-dls-secondary" />
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-semibold text-dls-text">{t("den.cloud_section_title")}</h3>
+                <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                  {cloudAvailable
+                    ? isSignedIn ? t("den.cloud_signed_in_desc") : t("den.cloud_section_desc")
+                    : "Cross-device sync and shared Cloud teammates are not included. Local chats, notes, memory, and outputs keep working."}
+                </p>
+              </div>
+            </div>
+            <span className="shrink-0 text-[11px] font-medium text-dls-secondary">
+              {cloudAvailable ? session.summaryLabel : "Not included"}
+            </span>
           </div>
-          <div className="grid gap-1 text-xs leading-5">
-            <div className="flex items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.08] px-2.5 py-2">
-              <span className="text-dls-secondary">Local workspace</span>
-              <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-300">Ready</span>
-            </div>
-            <div className="flex items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.08] px-2.5 py-2">
-              <span className="text-dls-secondary">Matterhorn Cloud</span>
-              <span className="rounded-md bg-sky-500/10 px-2 py-0.5 font-medium text-sky-300">
-                {isSignedIn ? "Connected" : "Needs sign in"}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-3 py-2">
-              <span className="text-dls-secondary">Support</span>
-              <span className="rounded-md bg-violet-500/10 px-2 py-0.5 font-medium text-violet-300">Matterhorn-owned</span>
-            </div>
-          </div>
+          {cloudAvailable && !isSignedIn ? (
+            <p className="pl-[1.625rem] text-xs leading-5 text-dls-secondary">{t("den.cloud_sleep_hint")}</p>
+          ) : null}
         </section>
 
-        {statusMessage && !session.authError && !session.orgsError ? (
+        {statusMessage && cloudAvailable && !session.authError && !session.orgsError ? (
           <SettingsNotice>{statusMessage}</SettingsNotice>
         ) : null}
 
         {session.baseUrlError ? <SettingsNotice tone="error">{session.baseUrlError}</SettingsNotice> : null}
 
-        {isSignedIn ? (
+        {cloudAvailable ? isSignedIn ? (
           <CloudAccountSection
             activeOrgId={activeOrganization?.id ?? ""}
             authBusy={session.authBusy}
@@ -450,12 +359,13 @@ export function CloudAccountView({
             compact
             authBusy={session.authBusy}
             authError={session.authError}
+            cloudAvailable={cloudAvailable}
             onClearAuthError={session.onClearAuthError}
             onOpenBrowserAuth={session.onOpenBrowserAuth}
             onSubmitManualAuth={session.onSubmitManualAuth}
             sessionBusy={session.sessionBusy}
           />
-        )}
+        ) : null}
 
         {developerMode ? (
           <CloudDevMode
@@ -469,12 +379,8 @@ export function CloudAccountView({
           />
         ) : null}
 
-        <ProfileTaskLogSection
-          workspaceId={workspaceId}
-          matterhornServerClient={matterhornServerClient}
-        />
-
         <ProfileReadinessSupportSection
+          compact
           onSendFeedback={onSendFeedback}
           readiness={profileReadiness}
         />
@@ -484,11 +390,10 @@ export function CloudAccountView({
 
   return (
     <SettingsStack>
-      <Separator />
-
       <SettingsSection>
         <ProfileCapabilityStatus
           capabilities={backendProfileQuery.data ?? null}
+          cloudAvailable={cloudAvailable}
           error={backendProfileError}
           isLoading={backendProfileQuery.isLoading}
         />
@@ -499,7 +404,10 @@ export function CloudAccountView({
           <SettingsSectionHeaderContent>
             <SettingsSectionHeaderTitle>
               {t("den.cloud_section_title")}
-              <SettingsStatusBadge tone={session.summaryTone} label={session.summaryLabel} />
+              <SettingsStatusBadge
+                tone={cloudAvailable ? session.summaryTone : "neutral"}
+                label={cloudAvailable ? session.summaryLabel : "Not included"}
+              />
             </SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
               {t(isSignedIn ? "den.cloud_signed_in_desc" : "den.cloud_section_desc")}
@@ -543,26 +451,20 @@ export function CloudAccountView({
             onRefreshOrgs={session.onRefreshOrgs}
             onSignOut={session.onSignOut}
           />
-        ) : null}
+        ) : (
+          <DenSignedOutPanel
+            compact
+            authBusy={session.authBusy}
+            authError={session.authError}
+            cloudAvailable={cloudAvailable}
+            onClearAuthError={session.onClearAuthError}
+            onOpenBrowserAuth={session.onOpenBrowserAuth}
+            onSubmitManualAuth={session.onSubmitManualAuth}
+            sessionBusy={session.sessionBusy}
+          />
+        )}
       </SettingsSection>
 
-      <Separator />
-
-      {!isSignedIn ? (
-        <DenSignedOutPanel
-          authBusy={session.authBusy}
-          authError={session.authError}
-          onClearAuthError={session.onClearAuthError}
-          onOpenBrowserAuth={session.onOpenBrowserAuth}
-          onSubmitManualAuth={session.onSubmitManualAuth}
-          sessionBusy={session.sessionBusy}
-        />
-      ) : null}
-
-      <ProfileTaskLogSection
-        workspaceId={workspaceId}
-        matterhornServerClient={matterhornServerClient}
-      />
     </SettingsStack>
   );
 }

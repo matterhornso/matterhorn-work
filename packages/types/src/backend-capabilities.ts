@@ -164,6 +164,7 @@ export interface MatterhornBackendCapabilitiesResponse {
   storage: MatterhornStorageCapability;
   memory: MatterhornMemoryCapability;
   notes: MatterhornNotesCapability;
+  outputs: MatterhornCapability;
   evidence: MatterhornEvidenceCapability;
   wallets: MatterhornWalletCapability;
   teams: MatterhornTeamCapability;

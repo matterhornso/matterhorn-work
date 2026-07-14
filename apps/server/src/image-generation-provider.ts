@@ -61,6 +61,8 @@ const SECRET_PATTERNS = [
   /\bprivate key\b/i,
 ];
 
+const OPENAI_IMAGE_GENERATION_TIMEOUT_MS = 60_000;
+
 export function detectSecretShapedInput(value: string): boolean {
   return SECRET_PATTERNS.some((pattern) => pattern.test(value));
 }
@@ -263,6 +265,7 @@ async function openaiGenerate(input: ImageGenerationProviderInput, apiKey?: stri
         quality,
         response_format: "b64_json",
       }),
+      signal: AbortSignal.timeout(OPENAI_IMAGE_GENERATION_TIMEOUT_MS),
     });
 
     if (!response.ok) {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises"
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import {
@@ -91,6 +91,16 @@ try {
   const searchByTag = await vault.searchRecords({ tags: ["bittensor"], limit: 10 })
   assert.equal(searchByTag.length, 1)
 
+  await assert.rejects(
+    () =>
+      vault.captureRecord(
+        record({
+          id: "../escape",
+        }),
+      ),
+    /Invalid memory record id/,
+  )
+
   const dismissedSuggestion = await vault.resolveSuggestion(suggestion(), { action: "dismiss" })
   assert.equal(dismissedSuggestion.saved, false)
   assert.equal(dismissedSuggestion.dismissed, true)
@@ -177,4 +187,43 @@ try {
 } finally {
   vault.close()
   await rm(rootDir, { recursive: true, force: true })
+}
+
+const bulkRootDir = await mkdtemp(path.join(os.tmpdir(), "matterhorn-memory-vault-bulk-"))
+const bulkExportDir = path.join(bulkRootDir, "export")
+const bulkVault = createMatterhornMemoryVault(bulkRootDir)
+
+try {
+  for (let index = 0; index < 505; index += 1) {
+    await bulkVault.captureRecord(
+      record({
+        id: `mem_bulk_${String(index).padStart(3, "0")}`,
+        title: `Bulk export memory ${index}`,
+        summary: `Bulk export memory ${index} should not be omitted by list pagination.`,
+        body: {
+          ss58Address: `5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1bulk${index}`,
+          netuid: 14,
+        },
+      }),
+    )
+  }
+  const exported = await bulkVault.exportBundle(bulkExportDir)
+  assert.equal(exported.recordCount, 505)
+} finally {
+  bulkVault.close()
+  await rm(bulkRootDir, { recursive: true, force: true })
+}
+
+const corruptRootDir = await mkdtemp(path.join(os.tmpdir(), "matterhorn-memory-vault-corrupt-"))
+const corruptVault = createMatterhornMemoryVault(corruptRootDir)
+
+try {
+  await corruptVault.initialize()
+  const indexPath = path.join(corruptRootDir, "memory-index.json")
+  await writeFile(indexPath, "{ not valid json", "utf8")
+  await assert.rejects(() => corruptVault.listRecords(), /Could not read Matterhorn memory index/)
+  assert.equal(await readFile(indexPath, "utf8"), "{ not valid json")
+} finally {
+  corruptVault.close()
+  await rm(corruptRootDir, { recursive: true, force: true })
 }

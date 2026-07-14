@@ -13,6 +13,7 @@ import { BetaAuthProvider } from "../domains/auth";
 import { DesktopConfigProvider } from "../domains/cloud/desktop-config-provider";
 import { RestrictionNoticeProvider } from "../domains/cloud/restriction-notice-provider";
 import { StatusToastsProvider } from "../domains/shell-feedback/status-toasts";
+import { PhantomSuiConnectionProvider } from "../domains/wallet/phantom-sui-provider";
 import { LocalProvider } from "../kernel/local-provider";
 import { ServerProvider } from "../kernel/server-provider";
 import { ArchitectureMismatchGate } from "./architecture-mismatch-gate";
@@ -71,7 +72,8 @@ export function AppProviders({ children }: AppProvidersProps) {
   return (
     <WagmiProvider config={wagmiConfig}>
       <DAppKitProvider dAppKit={suiDAppKit}>
-        <LazyWalletProvider>
+        <PhantomSuiConnectionProvider>
+          <LazyWalletProvider>
           <BootStateProvider>
             <ServerProvider defaultUrl={defaultUrl}>
               <ArchitectureMismatchGate>
@@ -92,7 +94,8 @@ export function AppProviders({ children }: AppProvidersProps) {
               </ArchitectureMismatchGate>
             </ServerProvider>
           </BootStateProvider>
-        </LazyWalletProvider>
+          </LazyWalletProvider>
+        </PhantomSuiConnectionProvider>
       </DAppKitProvider>
     </WagmiProvider>
   );

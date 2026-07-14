@@ -6,7 +6,10 @@ import {
   type MatterhornProtocolWorkspaceId,
   type MatterhornProtocolWorkspaceLaunchBehavior,
 } from "@matterhorn-work/types/matterhorn-workflows";
-import { matterhornDeskAgentIdForDesk } from "@matterhorn-work/types/desk-agents";
+import {
+  LONGEVITY_PRIMARY_GOAL_OPTIONS,
+  matterhornDeskAgentIdForDesk,
+} from "@matterhorn-work/types/desk-agents";
 import {
   getCustomerProtocolDeskVisual,
   protocolDeskIdForChatMode,
@@ -190,6 +193,16 @@ function starterStatusLabel(template: CustomerWorkflowTemplate): string {
   return statusLabel(template.status);
 }
 
+function starterCardStatusLabel(
+  template: CustomerWorkflowTemplate,
+  protocolDesk: CustomerProtocolDeskVisual | null,
+): string {
+  if (template.status === "workflow_ready" || protocolDesk?.status === "workflow_ready") {
+    return "";
+  }
+  return protocolDesk?.statusLabel ?? starterStatusLabel(template);
+}
+
 function demoStatusLabel(status: CustomerBetaDemoScenario["status"]): string {
   switch (status) {
     case "demo_ready":
@@ -244,7 +257,8 @@ function buildCustomerWorkflowPromptFromText(template: CustomerWorkflowTemplate,
       const task = /build the full 7-stage longevity workflow/i.test(prompt)
         ? "Start the Longevity workflow for my clients"
         : prompt.replace(/\.+$/, "");
-      return `${task}. Ask me for missing audience, goal, constraints, schedule, and output details before creating the workflow.`;
+      const goalChoices = LONGEVITY_PRIMARY_GOAL_OPTIONS.map((option) => option.label).join(", ");
+      return `${task}. Ask me for missing audience, goal, constraints, schedule, and output details before creating the workflow. When asking Program Goal, include these distinct choices: ${goalChoices}. Allow a custom goal.`;
     }
     case "services":
       return `${prompt}. ${SERVICES_SUFFIX} ${intentContext}`.trim();
@@ -620,7 +634,7 @@ export function buildCustomerWorkflowStarterCards(
       iconHint: template.ui.iconHint,
       panel: template.routing.opensPanel,
       recommendedSurface: template.launch.recommendedSurface,
-      statusLabel: protocolDesk?.statusLabel ?? starterStatusLabel(template),
+      statusLabel: starterCardStatusLabel(template, protocolDesk),
       safetySummary: protocolDesk?.safetySummary ?? safetySummary(template),
       workspaceDisplayName: protocolDesk?.displayName ?? template.protocolWorkspace?.displayName,
       launchBehavior: template.protocolWorkspace?.launchBehavior,

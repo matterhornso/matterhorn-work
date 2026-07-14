@@ -36,7 +36,7 @@ export type ExtensionsViewProps = {
   accessHint?: string | null;
   suggestedPlugins: SuggestedPlugin[];
   extensions: PluginsExtensionsStore;
-  mcpConnectedAppsCount: number;
+  mcpConnectedAppNames: string[];
   /** The MCP view (quick-connect grid + configured servers). Skills are injected into it. */
   mcpView: ReactNode;
   /** Organization marketplace content, rendered in the same Extensions pane. */
@@ -48,11 +48,37 @@ export type ExtensionsViewProps = {
   compact?: boolean;
 };
 
+function mcpServerDisplayName(name: string) {
+  const words = name
+    .trim()
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1));
+  const label = words.join(" ") || "MCP";
+  return /\bmcp\b/i.test(label) ? label : `${label} MCP`;
+}
+
 export function ExtensionsView(props: ExtensionsViewProps) {
   const [view, setView] = useState<"my" | "marketplace">("my");
+  const marketplaceAvailable = Boolean(props.cloudMarketplaceView);
   const pluginCount = useMemo(
     () => props.extensions.pluginList().length,
     [props.extensions],
+  );
+  const connectedAppNames = props.mcpConnectedAppNames.map(mcpServerDisplayName);
+  const connectedAppCount = connectedAppNames.length;
+
+  const refreshButton = (
+    <Button
+      aria-label={t("common.refresh")}
+      title={t("common.refresh")}
+      variant="ghost"
+      size="icon-sm"
+      className="shrink-0 border-0 bg-transparent text-dls-secondary shadow-none hover:bg-dls-surface-muted/[0.12] hover:text-dls-text"
+      onClick={props.onRefresh}
+    >
+      <RefreshCw className={cn("size-4", props.busy && "animate-spin")} aria-hidden="true" />
+    </Button>
   );
 
   return (
@@ -60,65 +86,67 @@ export function ExtensionsView(props: ExtensionsViewProps) {
       "w-full animate-in fade-in duration-300",
       props.compact ? "space-y-4 max-w-none" : "space-y-6 max-w-3xl",
     )}>
-      <div className={cn(
-        "flex items-center justify-between",
-        props.compact && "gap-2",
-      )}>
-        <div className="flex flex-wrap items-center gap-2">
-          {props.mcpConnectedAppsCount > 0 ? (
-            <div className={cn(
-              "inline-flex items-center gap-2 rounded-md bg-green-3 px-3 py-1",
-              props.compact && "px-2 py-0.5",
-            )}>
-              <div className="size-2 rounded-full bg-green-9" />
-              <span className={cn("text-xs font-medium text-green-11", props.compact && "text-[11px]")}>
-                {t("extensions.app_count", { count: props.mcpConnectedAppsCount })}
+      {connectedAppCount > 0 || !marketplaceAvailable ? (
+        <div className="flex min-w-0 items-start justify-between gap-3 text-xs">
+          {connectedAppCount > 0 ? (
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className={cn(
+                "inline-flex items-center text-green-11",
+                props.compact
+                  ? "gap-1.5 text-[11px] font-medium"
+                  : "gap-2 rounded-md bg-green-3 px-3 py-1 font-medium",
+              )}>
+                <span className={cn("rounded-full bg-green-9", props.compact ? "size-1.5" : "size-2")} />
+                {connectedAppCount} {connectedAppCount === 1 ? t("mcp.app_connected") : t("mcp.apps_connected")}
+              </span>
+              <span className="min-w-0 text-dls-secondary" aria-label={`Connected MCP servers: ${connectedAppNames.join(", ")}`}>
+                {connectedAppNames.join(" · ")}
               </span>
             </div>
-          ) : null}
+          ) : <span />}
+          {!marketplaceAvailable ? refreshButton : null}
         </div>
-        <Button
-          aria-label={t("common.refresh")}
-          title={t("common.refresh")}
-          variant="ghost"
-          size="icon-sm"
-          className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
-          onClick={props.onRefresh}
-        >
-          <RefreshCw className={cn("size-4", props.busy && "animate-spin")} aria-hidden="true" />
-        </Button>
-      </div>
+      ) : null}
 
-      <div className={cn(
-        "rounded-md bg-dls-surface-muted/15 p-1",
-        props.compact ? "grid w-full min-w-0 grid-cols-2 gap-1" : "inline-flex w-fit",
-      )}>
-        <Button
-          variant={view === "my" ? "secondary" : "ghost"}
-          size="sm"
-          className={cn(
-            props.compact && "h-auto min-w-0 whitespace-normal px-2 py-2 text-sm leading-5",
-          )}
-          onClick={() => setView("my")}
-        >
-          <span className="min-w-0 truncate">My Extensions</span>
-        </Button>
-        <Button
-          variant={view === "marketplace" ? "secondary" : "ghost"}
-          size="sm"
-          className={cn(
+      {marketplaceAvailable ? (
+        <div className="flex items-end justify-between gap-2">
+          <div className={cn(
             props.compact
-              ? "h-auto min-w-0 flex-col items-center gap-0.5 whitespace-normal px-2 py-2 text-sm leading-5"
-              : "gap-1.5",
-          )}
-          onClick={() => setView("marketplace")}
-        >
-          <span className="min-w-0 max-w-full truncate">Marketplace</span>
-          <span className="min-w-0 max-w-full truncate text-[11px] font-normal leading-4 text-dls-secondary">
-            post-go-live
-          </span>
-        </Button>
-      </div>
+              ? "grid min-w-0 flex-1 grid-cols-2 border-b border-dls-border/40"
+              : "inline-flex w-fit rounded-md bg-dls-surface-muted/15 p-1",
+          )}>
+            <Button
+              variant={view === "my" ? "secondary" : "ghost"}
+              size="sm"
+              className={cn(
+                props.compact && cn(
+                  "h-9 min-w-0 rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-2 text-sm leading-5 shadow-none hover:bg-dls-surface-muted/[0.12]",
+                  view === "my" && "border-[rgb(var(--dls-accent-rgb))] text-dls-text",
+                ),
+              )}
+              onClick={() => setView("my")}
+            >
+              <span className="min-w-0 truncate">My Extensions</span>
+            </Button>
+            <Button
+              variant={view === "marketplace" ? "secondary" : "ghost"}
+              size="sm"
+              className={cn(
+                props.compact
+                  ? cn(
+                    "h-9 min-w-0 rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-2 text-sm leading-5 shadow-none hover:bg-dls-surface-muted/[0.12]",
+                    view === "marketplace" && "border-[rgb(var(--dls-accent-rgb))] text-dls-text",
+                  )
+                  : undefined,
+              )}
+              onClick={() => setView("marketplace")}
+            >
+              <span className="min-w-0 max-w-full truncate">Marketplace</span>
+            </Button>
+          </div>
+          {refreshButton}
+        </div>
+      ) : null}
 
       {view === "my" ? (
         <>
@@ -147,29 +175,7 @@ export function ExtensionsView(props: ExtensionsViewProps) {
             </details>
           ) : null}
         </>
-      ) : (
-        <div
-          className={cn(
-            "space-y-3 rounded-lg border border-dls-border bg-dls-surface px-4 py-5",
-            props.compact && "px-3 py-4",
-          )}
-        >
-          <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-dls-text">
-              Marketplace extensions are post-go-live
-            </h3>
-            <p className="text-sm leading-6 text-dls-secondary">
-              The built-in Matterhorn MCPs are the beta-ready extension path
-              today. Organization marketplace extensions require Matterhorn
-              Cloud marketplace setup, so this catalog is parked until after
-              go-live.
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => setView("my")}>
-            View Matterhorn MCPs
-          </Button>
-        </div>
-      )}
+      ) : props.cloudMarketplaceView}
     </section>
   );
 }

@@ -14,6 +14,27 @@ const DIRECT_RUNTIME = "direct";
 const ORCHESTRATOR_RUNTIME = "openwork-orchestrator";
 const OPENWORK_SERVER_PORT_RANGE_START = 48_000;
 const OPENWORK_SERVER_PORT_RANGE_END = 51_000;
+const DESKTOP_MANAGED_CORS_ORIGINS = Object.freeze(["loopback", "file://"]);
+
+function parseCorsOrigins(value) {
+  return String(value ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+function desktopManagedCorsOrigins() {
+  const override = parseCorsOrigins(
+    process.env.MATTERHORN_WORK_CORS_ORIGINS ??
+      process.env.OPENWORK_CORS_ORIGINS ??
+      "",
+  );
+  return override.length ? override : [...DESKTOP_MANAGED_CORS_ORIGINS];
+}
+
+function desktopManagedCorsArg() {
+  return desktopManagedCorsOrigins().join(",");
+}
 
 function truncateOutput(value, limit = 8000) {
   const text = String(value ?? "");
@@ -135,13 +156,13 @@ function snapshotOpenworkServerState(state) {
 
 function assertMatterhornServerReady(snapshot) {
   if (!snapshot?.running) {
-    throw new Error("OpenWork server did not stay running after startup.");
+    throw new Error("Matterhorn Work engine did not stay running after startup.");
   }
   if (!snapshot.baseUrl) {
-    throw new Error("OpenWork server did not report a base URL after startup.");
+    throw new Error("Matterhorn Work engine did not report a base URL after startup.");
   }
   if (!snapshot.ownerToken && !snapshot.clientToken) {
-    throw new Error("OpenWork server did not report an access token after startup.");
+    throw new Error("Matterhorn Work engine did not report an access token after startup.");
   }
   return snapshot;
 }
@@ -817,7 +838,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
         resolvedSource: null,
         version: null,
         supportsServe: false,
-        notes: ["OpenCode binary not found in bundled sidecars or PATH."],
+        notes: ["Matterhorn engine binary not found in bundled sidecars or PATH."],
         serveHelpStatus: null,
         serveHelpStdout: null,
         serveHelpStderr: null,
@@ -828,10 +849,10 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     const helpResult = spawnSync(resolved.path, ["serve", "--help"], { encoding: "utf8" });
     const notes = [`Using ${resolved.source}: ${resolved.path}`];
     if (versionResult.status !== 0) {
-      notes.push("OpenCode version probe failed.");
+      notes.push("Matterhorn engine version probe failed.");
     }
     if (helpResult.status !== 0) {
-      notes.push("OpenCode serve --help probe failed.");
+      notes.push("Matterhorn engine serve probe failed.");
     }
 
     return {
@@ -1037,13 +1058,13 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       : [...packagedPaths, devPath];
     const embeddedPath = candidates.find((candidate) => existsSync(candidate));
     if (!embeddedPath) {
-      throw new Error(`Cannot find OpenWork embedded server bundle. Checked: ${candidates.join(", ")}`);
+      throw new Error(`Cannot find Matterhorn embedded server bundle. Checked: ${candidates.join(", ")}`);
     }
     const { startEmbeddedServer } = await import(pathToFileURL(embeddedPath).href);
     const handle = await startEmbeddedServer({
       host,
       port,
-      corsOrigins: ["*"],
+      corsOrigins: desktopManagedCorsOrigins(),
       approvalMode: "auto",
       workspaces: workspacePaths,
       token: tokens.clientToken,
@@ -1053,6 +1074,17 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       manageOpencode: options.manageOpencode === true,
       opencodeBin: managedOpencode?.path ?? undefined,
       opencodeCwd: managedOpencodeWorkdir(),
+      onManagedOpencodeEvent: (event) => {
+        if (event?.type === "health_failure" && event.consecutiveFailures < event.threshold) return;
+        const detail = event?.type === "restarted"
+          ? `recovered after ${event.reason} (restart ${event.restartCount})`
+          : event?.type === "restart_scheduled"
+            ? `restart scheduled after ${event.reason} in ${event.delayMs}ms`
+            : event?.type === "restart_failed"
+              ? `restart failed after ${event.reason}; retrying`
+              : `failed ${event?.consecutiveFailures ?? 0} consecutive health checks`;
+        appendOutput(openworkServerState, "lastStderr", `Managed OpenCode ${detail}\n`);
+      },
     });
     inProcessServer = handle;
 
@@ -1108,7 +1140,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
           engineState.childExited = false;
         }
       } catch (error) {
-        appendOutput(openworkServerState, "lastStderr", `OpenWork server workspace probe: ${error instanceof Error ? error.message : String(error)}\n`);
+        appendOutput(openworkServerState, "lastStderr", `Matterhorn server workspace probe: ${error instanceof Error ? error.message : String(error)}\n`);
       }
     }
     await persistPreferredOpenworkPort(activeWorkspace, boundPort);
@@ -1173,7 +1205,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       String(opencodePort),
       "--allow-external",
       "--cors",
-      "*",
+      desktopManagedCorsArg(),
     ];
 
     spawnManagedChild(orchestratorState, orchestratorProgram, args, { env });
@@ -1190,7 +1222,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     const health = await waitForHttpOk(`${orchestratorState.baseUrl}/health`, 180_000).then((response) => response.json());
     const opencode = health?.opencode;
     if (!opencode?.port) {
-      throw new Error("Orchestrator did not report OpenCode status.");
+      throw new Error("Orchestrator did not report Matterhorn engine status.");
     }
 
     engineState.runtime = ORCHESTRATOR_RUNTIME;
@@ -1222,7 +1254,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     spawnManagedChild(
       engineState,
       opencodeBinary.path,
-      ["serve", "--hostname", "127.0.0.1", "--port", String(port), "--cors", "*"],
+      ["serve", "--hostname", "127.0.0.1", "--port", String(port), "--cors", desktopManagedCorsArg()],
       {
         cwd: projectDir,
         env,
@@ -1281,7 +1313,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
         opencodeBinPath: options.opencodeBinPath,
       });
     } catch (error) {
-      appendOutput(engineState, "lastStderr", `OpenWork server: ${error instanceof Error ? error.message : String(error)}\n`);
+      appendOutput(engineState, "lastStderr", `Matterhorn server: ${error instanceof Error ? error.message : String(error)}\n`);
       throw error;
     }
 
@@ -1335,7 +1367,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
   async function engineRestart(options = {}) {
     const projectDir = engineState.projectDir;
     if (!projectDir) {
-      throw new Error("OpenCode is not configured for a local workspace");
+      throw new Error("Matterhorn engine is not configured for a local workspace");
     }
     return engineStart(projectDir, {
       runtime: engineState.runtime,
@@ -1435,7 +1467,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
         status: -1,
         stdout: "",
         stderr:
-          "Guided install is not supported on Windows yet. Install the OpenWork-pinned OpenCode version manually, then restart OpenWork.",
+          "Guided install is not supported on Windows yet. Install the Matterhorn engine version manually, then restart Matterhorn Work.",
       };
     }
 

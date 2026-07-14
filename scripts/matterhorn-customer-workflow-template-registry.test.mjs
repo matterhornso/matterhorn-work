@@ -10,6 +10,7 @@ const expectedIds = [
   "bittensor_operator",
   "hyperliquid_trader",
   "polymarket_researcher",
+  "sui_wallet_workflow",
   "wellness_creator_workflow",
   "decentralized_services_operator",
   "blank_chat_workflow",
@@ -86,6 +87,7 @@ const mappedTemplateIds = [
   "bittensor_operator",
   "hyperliquid_trader",
   "polymarket_researcher",
+  "sui_wallet_workflow",
   "wellness_creator_workflow",
   "decentralized_services_operator",
 ];
@@ -112,6 +114,7 @@ const deskMappedTemplateIds = [
   "bittensor_operator",
   "hyperliquid_trader",
   "polymarket_researcher",
+  "sui_wallet_workflow",
   "wellness_creator_workflow",
   "decentralized_services_operator",
   "blank_chat_workflow",
@@ -196,7 +199,7 @@ for (const template of catalog.customerTemplates) {
   );
   assert.equal(template.routing.startsSession, true, `${template.id} routing.startsSession must be true`);
   assert.ok(
-    ["bittensor", "hyperliquid", "polymarket", "wellness", "services", "general"].includes(
+    ["bittensor", "hyperliquid", "polymarket", "sui", "wellness", "services", "general"].includes(
       template.routing.chatMode,
     ),
     `${template.id} routing.chatMode must be a known mode`,

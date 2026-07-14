@@ -5,6 +5,7 @@ import {
   buildCustomerWorkflowStarterCards,
   normalizeCustomerWorkflowTemplates,
 } from "../src/react-app/domains/session/workflows/customer-workflow-templates";
+import { LONGEVITY_PRIMARY_GOAL_OPTIONS } from "@matterhorn-work/types/desk-agents";
 
 const expectedTemplateIds = [
   "bittensor_operator",
@@ -34,6 +35,13 @@ describe("customer workflow template launch cards", () => {
 
     expect(blankChat?.title).toBe("Start chat");
     expect(blankChat?.statusLabel).toBe("");
+  });
+
+  test("healthy workflow-ready starter states stay silent", () => {
+    const cards = buildCustomerWorkflowStarterCards(FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES);
+    const wellness = cards.find((card) => card.id === "wellness_creator_workflow");
+
+    expect(wellness?.statusLabel).toBe("");
   });
 
   test("protocol prompts carry non-custodial safety language", () => {
@@ -70,12 +78,26 @@ describe("customer workflow template launch cards", () => {
 
     expect(wellness?.prompt).toContain("Start a Longevity program");
     expect(wellness?.prompt).toContain("Ask me for missing audience");
+    expect(wellness?.prompt).toContain("Improve VO2 max");
+    expect(wellness?.prompt).toContain("Train for endurance");
+    expect(wellness?.prompt).toContain("Allow a custom goal");
     expect(wellness?.prompt).not.toContain("Run this as a visible 7-stage workflow");
     expect(wellness?.safetySummary).toContain("no medical advice");
     expect(wellness?.safetySummary).toContain("no live payments");
 
     expect(services).toBeUndefined();
     expect(cards.map((card) => card.title).join(" ")).not.toContain("Services");
+  });
+
+  test("Longevity goal intake keeps aerobic capacity and endurance distinct", () => {
+    const labels = LONGEVITY_PRIMARY_GOAL_OPTIONS.map((option) => option.label);
+
+    expect(labels).toContain("Improve VO2 max");
+    expect(labels).toContain("Train for endurance");
+    expect(LONGEVITY_PRIMARY_GOAL_OPTIONS.find((option) => option.id === "improve_vo2_max")?.description)
+      .toContain("cardiorespiratory fitness");
+    expect(LONGEVITY_PRIMARY_GOAL_OPTIONS.find((option) => option.id === "train_for_endurance")?.description)
+      .toContain("endurance events");
   });
 
   test("invalid or empty server payloads fall back to safe local templates", () => {

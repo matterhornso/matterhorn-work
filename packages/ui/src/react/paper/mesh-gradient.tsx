@@ -2,6 +2,12 @@
 
 import { MeshGradient, type MeshGradientProps } from "@paper-design/shaders-react"
 import { resolvePaperMeshGradientConfig } from "../../common/paper"
+import {
+  canRenderPaperShader,
+  mergeFallbackStyle,
+  paperMeshFallbackBackground,
+  paperShaderFallbackDivProps,
+} from "./fallback"
 
 export interface PaperMeshGradientProps
   extends Omit<
@@ -43,12 +49,29 @@ export function PaperMeshGradient({
     speed,
     frame,
   })
+  const resolvedWidth = width ?? (fill ? "100%" : undefined)
+  const resolvedHeight = height ?? (fill ? "100%" : undefined)
+
+  if (!canRenderPaperShader()) {
+    const fallbackProps = paperShaderFallbackDivProps(props as Record<string, unknown>)
+    return (
+      <div
+        {...fallbackProps}
+        style={mergeFallbackStyle(
+          fallbackProps.style,
+          resolvedWidth,
+          resolvedHeight,
+          paperMeshFallbackBackground(resolved.colors),
+        )}
+      />
+    )
+  }
 
   return (
     <MeshGradient
       {...props}
-      width={width ?? (fill ? "100%" : undefined)}
-      height={height ?? (fill ? "100%" : undefined)}
+      width={resolvedWidth}
+      height={resolvedHeight}
       colors={resolved.colors}
       distortion={resolved.distortion}
       swirl={resolved.swirl}

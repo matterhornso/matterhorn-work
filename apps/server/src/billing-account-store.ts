@@ -1,5 +1,5 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type {
   MatterhornBillingAccountSource,
   MatterhornBillingPendingCheckout,
@@ -16,7 +16,9 @@ export interface MatterhornBillingAccountSnapshot {
   source: Exclude<MatterhornBillingAccountSource, "env_default">;
   lastProviderEventId?: string | null;
   lastProviderEventType?: string | null;
+  lastProviderEventCreatedAt?: string | null;
   lastProviderSyncedAt?: string | null;
+  processedProviderEventIds?: string[];
 }
 
 export interface BillingAccountStoreOptions {
@@ -25,10 +27,14 @@ export interface BillingAccountStoreOptions {
 }
 
 function billingDir(workspaceRoot: string): string {
+  const overridePath = process.env.MATTERHORN_BILLING_ACCOUNT_PATH?.trim();
+  if (overridePath) return dirname(resolve(overridePath));
   return join(workspaceRoot, ".matterhorn-work", "billing");
 }
 
 function billingAccountPath(workspaceRoot: string): string {
+  const overridePath = process.env.MATTERHORN_BILLING_ACCOUNT_PATH?.trim();
+  if (overridePath) return resolve(overridePath);
   return join(billingDir(workspaceRoot), "subscription.json");
 }
 

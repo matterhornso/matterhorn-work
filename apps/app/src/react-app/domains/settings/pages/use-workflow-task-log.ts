@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MatterhornWorkflowRunListItem } from "@matterhorn-work/types/workflow-runs";
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
-import { useSessionActivityStore, type SessionActivityStatus } from "../../session/status/session-activity-store";
+import {
+  getSessionActivityStatusLabel,
+  useSessionActivityStore,
+  type SessionActivityStatus,
+} from "../../session/status/session-activity-store";
 
 export type TaskLogSource = "backend" | "local";
 
@@ -18,21 +22,19 @@ export type TaskLogEntry = {
   source: TaskLogSource;
 };
 
-function backendStatusToLabel(status: string): SessionActivityStatus | string {
-  switch (status) {
-    case "staged":
-    case "running":
-      return "thinking";
-    case "waiting":
-      return "waiting";
-    case "completed":
-      return "idle";
-    case "failed":
-      return "error";
-    case "cancelled":
-      return "idle";
-    default:
-      return status;
+export function getTaskLogStatusLabel(log: Pick<TaskLogEntry, "source" | "status">): string {
+  if (log.source === "local") {
+    return getSessionActivityStatusLabel(log.status as SessionActivityStatus);
+  }
+
+  switch (log.status) {
+    case "staged": return "Prepared";
+    case "running": return "Running";
+    case "waiting": return "Waiting";
+    case "completed": return "Completed";
+    case "failed": return "Failed";
+    case "cancelled": return "Cancelled";
+    default: return log.status;
   }
 }
 
@@ -105,7 +107,7 @@ export function useWorkflowTaskLog(
       deskId: run.deskId,
       outputBasePath: run.outputBasePath,
       visibleUserIntent: run.visibleUserIntent,
-      status: backendStatusToLabel(run.status),
+      status: run.status,
       updatedAt: run.updatedAt,
       waitingCount: 0,
       source: "backend",

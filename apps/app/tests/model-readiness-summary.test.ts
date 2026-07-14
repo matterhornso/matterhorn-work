@@ -4,6 +4,7 @@ import type { MatterhornBackendModelsResponse } from "@matterhorn-work/types/bac
 import {
   buildModelCatalogRows,
   buildModelReadinessSummary,
+  countConnectedCatalogModels,
 } from "../src/react-app/domains/settings/state/model-readiness-summary";
 
 const baseBackendModels: MatterhornBackendModelsResponse = {
@@ -126,7 +127,7 @@ describe("model readiness summary", () => {
     expect(summary.answerPath.detail).toContain("session.promptAsync");
     expect(summary.providerList.value).toBe("Local provider list");
     expect(summary.providerList.detail).toContain("local engine provider list");
-    expect(summary.providerCatalog.value).toBe("1 providers · 2 models");
+    expect(summary.providerCatalog.value).toBe("1 provider · 2 models");
     expect(summary.selectionPolicy.value).toBe("Workspace");
     expect(summary.trainingPolicy).toContain("No model training by default");
     expect(summary.trainingPolicy).toContain("product quality review");
@@ -208,10 +209,32 @@ describe("model readiness summary", () => {
       connectedModelCount: 8,
     });
 
-    expect(summary.statusLabel).toBe("Needs engine");
+    expect(summary.statusLabel).toBe("Start engine");
     expect(summary.statusTone).toBe("warning");
     expect(summary.providerCatalog.value).toBe("2 providers · 8 models");
     expect(summary.providerCatalog.detail).toContain("workspace is not connected to an agent engine yet");
+  });
+
+  test("names provider setup as the workspace-owner action", () => {
+    const summary = buildModelReadinessSummary({
+      currentModelLabel: "Engine fallback",
+      currentModelRef: "",
+      backendModels: {
+        ...baseBackendModels,
+        catalog: {
+          ...baseBackendModels.catalog,
+          status: "needs_setup",
+          serverFetched: true,
+          connectedProviderCount: 0,
+          modelCount: 0,
+        },
+      },
+      catalogQueryFailed: false,
+      connectedProviderCount: 0,
+      connectedModelCount: 0,
+    });
+
+    expect(summary.statusLabel).toBe("Connect provider");
   });
 
   test("builds readable backend model catalog rows from the live provider list", () => {
@@ -271,7 +294,8 @@ describe("model readiness summary", () => {
       connectedModelCount: 6,
     });
 
-    expect(summary.catalogRows).toHaveLength(2);
+    expect(summary.catalogRows).toHaveLength(1);
     expect(summary.catalogRows[0]?.sampleModels).toContain("+1 more");
+    expect(countConnectedCatalogModels(catalog)).toBe(5);
   });
 });

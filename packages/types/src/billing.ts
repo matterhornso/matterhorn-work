@@ -94,7 +94,12 @@ export type MatterhornBillingSetupCheckId =
   | "stripe_plus_price"
   | "stripe_max_price"
   | "stripe_test_customer"
-  | "live_payments_disabled";
+  | "live_payments_disabled"
+  | "live_mode_blocked"
+  | "stripe_live_key_rejected"
+  | "stripe_live_webhook_missing"
+  | "stripe_live_prices_missing"
+  | "billing_integrity_review_required";
 
 export interface MatterhornBillingSetupCheck {
   id: MatterhornBillingSetupCheckId;
@@ -200,15 +205,24 @@ export interface MatterhornBillingWebhookStripeResponse {
   handled: boolean;
   eventId?: string | null;
   eventType?: string | null;
+  eventCreatedAt?: string | null;
   workspaceId?: string | null;
   planId?: MatterhornBillingPlanId | null;
   subscriptionStatus?: MatterhornBillingSubscription["status"] | null;
+  providerCheckoutSessionId?: string | null;
   providerCustomerId?: string | null;
   providerSubscriptionId?: string | null;
   currentPeriodStart?: string | null;
   currentPeriodEnd?: string | null;
   cancelAtPeriodEnd?: boolean | null;
   workspaceSynced?: boolean;
+  webhookMutation?:
+    | "synced"
+    | "duplicate_event"
+    | "stale_event"
+    | "checkout_mismatch"
+    | "subscription_mismatch"
+    | "not_handled";
 }
 
 export interface MatterhornBillingCheckoutSession {
@@ -271,4 +285,75 @@ export function matterhornPlanEntitlementLimit(
   };
   const value = limits[planId][key];
   return value === undefined ? 0 : value;
+}
+
+export const MATTERHORN_BILLING_ENTITLEMENT_ORDER: MatterhornEntitlementKey[] = [
+  "image_generation",
+  "image_editing",
+  "nft_mint_preview",
+  "nft_marketplace_listing",
+  "walrus_storage",
+  "cloud_sync",
+  "team_members",
+  "memory_global_scope",
+  "priority_support",
+  "api_access",
+  "extended_outputs",
+];
+
+export const MATTERHORN_BILLING_ENTITLEMENT_LABELS: Record<MatterhornEntitlementKey, { label: string; description: string }> = {
+  image_generation: { label: "Image generation", description: "Generate images from chat prompts." },
+  image_editing: { label: "Image editing", description: "Edit generated images with prompts." },
+  nft_mint_preview: { label: "NFT mint previews", description: "Prepare Sui NFT mint transactions." },
+  nft_marketplace_listing: { label: "NFT marketplace listing", description: "List NFTs on a Sui marketplace via Kiosk." },
+  walrus_storage: { label: "Walrus storage", description: "Upload images and metadata to Walrus." },
+  cloud_sync: { label: "Cloud sync", description: "Sync workspace data across devices with Matterhorn Cloud." },
+  team_members: { label: "Team members", description: "Share a workspace with collaborators." },
+  memory_global_scope: { label: "Global memory scope", description: "Opt into cross-workspace memory tags." },
+  priority_support: { label: "Priority support", description: "Faster responses from the Matterhorn team." },
+  api_access: { label: "API access", description: "Programmatic access to Matterhorn endpoints." },
+  extended_outputs: { label: "Extended outputs", description: "Higher output storage and longer retention." },
+};
+
+export function buildMatterhornBillingPlanEntitlements(planId: MatterhornBillingPlanId): MatterhornEntitlement[] {
+  return MATTERHORN_BILLING_ENTITLEMENT_ORDER.map((key) => {
+    const limit = matterhornPlanEntitlementLimit(planId, key);
+    return {
+      key,
+      ...MATTERHORN_BILLING_ENTITLEMENT_LABELS[key],
+      included: limit === null || limit > 0,
+      limit,
+      softLimit: planId === "free" && key === "image_generation",
+    };
+  });
+}
+
+export function buildMatterhornBillingPlans(): MatterhornBillingPlan[] {
+  return [
+    {
+      id: "free",
+      name: "Free",
+      tagline: "Local-first notes, memory, and chat.",
+      price: { amountCents: 0, currency: "USD", interval: "month" },
+      ctaLabel: "Current plan",
+      entitlements: buildMatterhornBillingPlanEntitlements("free"),
+    },
+    {
+      id: "plus",
+      name: "Matterhorn Plus",
+      tagline: "Generate images and create NFT drafts.",
+      price: { amountCents: 999, currency: "USD", interval: "month" },
+      ctaLabel: "Upgrade to Plus",
+      popular: true,
+      entitlements: buildMatterhornBillingPlanEntitlements("plus"),
+    },
+    {
+      id: "max",
+      name: "Matterhorn Max",
+      tagline: "Unlimited creation and publishing allowances, plus expanded team limits.",
+      price: { amountCents: 8999, currency: "USD", interval: "month" },
+      ctaLabel: "Upgrade to Max",
+      entitlements: buildMatterhornBillingPlanEntitlements("max"),
+    },
+  ];
 }

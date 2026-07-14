@@ -54,6 +54,52 @@ The doctor checks:
 - optional local server health and crypto readiness when `--server-url` is
   supplied.
 
+The doctor validates the artifact, but the packaged clean-profile smoke launches
+the `.app` itself with isolated temporary user data:
+
+```bash
+pnpm smoke:desktop-packaged-clean-profile -- --strict --json
+```
+
+To test the exact hash-bound ZIP instead of the unpacked build directory:
+
+```bash
+pnpm smoke:desktop-packaged-clean-profile -- \
+  --artifact-dir "$BUILD_DIR" \
+  --strict \
+  --json
+```
+
+It verifies the token-protected loopback control bridge, the first-run welcome
+route, General, MCP, AI provider, Appearance, and Session navigation, stable
+process lifetime, quiet unpublished update behavior, and temporary-profile
+cleanup. It also inspects the extracted app's `Info.plist` and requires the
+`matterhorn-work` URL scheme. This is still same-machine automation; retain the clean-machine install
+and Gatekeeper pass below before public release.
+
+When a live test backend is available, include it to exercise the packaged
+`matterhorn-work://connect-remote` path through macOS LaunchServices and
+Electron's `open-url` channel:
+
+```bash
+pnpm smoke:desktop-packaged-clean-profile -- \
+  --artifact-dir "$BUILD_DIR" \
+  --server-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --strict \
+  --json
+```
+
+The smoke must finish on `/workspace/<remote-id>/session`. It records neither
+the deep-link URL nor the token and fails if the token appears in captured app
+output. This proves same-machine packaged LaunchServices delivery and
+authenticated remote workspace creation. A clean-machine release pass must
+still verify default scheme association outside the development machine.
+
+The authenticated packaged smoke also opens the Electron-only Browser rail,
+loads the test backend's loopback `/health` page in a native tab, reads the
+browser snapshot, and closes the panel. It never navigates to a public site.
+
 For a Markdown evidence file:
 
 ```bash

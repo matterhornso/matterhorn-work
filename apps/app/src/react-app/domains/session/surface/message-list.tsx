@@ -17,6 +17,7 @@ import {
   Folder,
   GitFork,
   Globe,
+  Save,
   Search,
   ShieldAlert,
   Terminal,
@@ -26,7 +27,6 @@ import {
 } from "lucide-react";
 
 import { openDesktopPath, revealDesktopItemInDir } from "../../../../app/lib/desktop";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   SYNTHETIC_SESSION_ERROR_MESSAGE_PREFIX,
@@ -182,6 +182,7 @@ type SessionTranscriptProps = {
   onForkAtMessage?: (messageId: string) => void;
   openTargets?: OpenTarget[];
   onOpenTarget?: (target: OpenTarget) => void;
+  onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
 };
 
 // 500 was too high for real-world Matterhorn Work sessions: a handful of giant
@@ -482,13 +483,30 @@ async function revealFileInFinder(path: string) {
   }
 }
 
+function MessageActionIconButton(props: {
+  title: string;
+  "aria-label": string;
+  onClick: () => void | Promise<void>;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={props.title}
+      aria-label={props["aria-label"]}
+      onClick={() => void props.onClick()}
+      className="inline-flex size-7 items-center justify-center rounded-md text-dls-secondary transition-colors duration-150 hover:bg-dls-hover/55 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+    >
+      {props.children}
+    </button>
+  );
+}
+
 function CopyButton(props: { getText: () => string }) {
   const [copied, setCopied] = useState(false);
 
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
+    <MessageActionIconButton
       title="Copy message"
       aria-label="Copy message"
       onClick={async () => {
@@ -498,7 +516,7 @@ function CopyButton(props: { getText: () => string }) {
       }}
     >
       {copied ? <Check size={14} /> : <Copy size={14} />}
-    </Button>
+    </MessageActionIconButton>
   );
 }
 
@@ -679,7 +697,7 @@ function FileCard(props: {
   );
 }
 
-type BittensorChatCard = {
+export type BittensorPublicEvidenceCard = {
   version?: string;
   kind?: string;
   venue?: "auto" | "bittensor" | "hyperliquid" | "polymarket" | string;
@@ -709,6 +727,7 @@ type BittensorChatCard = {
   source?: unknown;
 };
 
+type BittensorChatCard = BittensorPublicEvidenceCard;
 type BittensorChatCardItem = NonNullable<BittensorChatCard["items"]>[number];
 
 function isRecordValue(value: unknown): value is Record<string, unknown> {
@@ -1120,7 +1139,52 @@ function BittensorCardActionButton(props: { card: BittensorChatCard; action: Non
   );
 }
 
-function BittensorToolCards(props: { cards: BittensorChatCard[] }) {
+function isBittensorEvidenceCard(card: BittensorChatCard) {
+  const venue = typeof card.venue === "string" ? card.venue.trim().toLowerCase() : "";
+  return !venue || venue === "auto" || venue === "bittensor";
+}
+
+function BittensorEvidenceSaveButton(props: {
+  card: BittensorChatCard;
+  onSaveEvidence: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
+}) {
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const disabled = status === "saving" || status === "saved";
+  const label = status === "saving"
+    ? "Saving..."
+    : status === "saved"
+      ? "Saved"
+      : status === "failed"
+        ? "Retry save"
+        : "Save output";
+
+  return (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1.5 rounded-md bg-dls-surface px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-dls-hover/45 hover:text-primary disabled:opacity-60"
+      disabled={disabled}
+      onClick={async () => {
+        setStatus("saving");
+        try {
+          await props.onSaveEvidence(props.card);
+          setStatus("saved");
+        } catch {
+          setStatus("failed");
+        }
+      }}
+      title="Save this public Bittensor result to Outputs and Project Activity"
+      aria-label={label}
+    >
+      {status === "saved" ? <Check size={12} /> : <Save size={12} />}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function BittensorToolCards(props: {
+  cards: BittensorChatCard[];
+  onSaveEvidence?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
+}) {
   if (!props.cards.length) return null;
 
   return (
@@ -1130,6 +1194,7 @@ function BittensorToolCards(props: { cards: BittensorChatCard[] }) {
         const items = (card.items ?? []).slice(0, 12);
         const warnings = (card.warnings ?? []).filter(Boolean).slice(0, 3);
         const actions = (card.actions ?? []).slice(0, 2);
+        const canSaveEvidence = Boolean(props.onSaveEvidence && isBittensorEvidenceCard(card));
         return (
           <div
             key={`${card.kind ?? "card"}:${title}:${index}`}
@@ -1176,8 +1241,11 @@ function BittensorToolCards(props: { cards: BittensorChatCard[] }) {
                   </div>
                 ) : null}
 
-                {actions.length ? (
+                {actions.length || canSaveEvidence ? (
                   <div className="mt-3 flex flex-wrap gap-1.5">
+                    {canSaveEvidence && props.onSaveEvidence ? (
+                      <BittensorEvidenceSaveButton card={card} onSaveEvidence={props.onSaveEvidence} />
+                    ) : null}
                     {actions.map((action, actionIndex) => (
                       <BittensorCardActionButton key={`${action.kind ?? "action"}:${action.label ?? actionIndex}`} card={card} action={action} />
                     ))}
@@ -1197,6 +1265,7 @@ function StepRow(props: {
   part: TranscriptPart;
   expanded: boolean;
   onToggle: () => void;
+  onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
 }) {
   const summary = useMemo(() => summarizeStep(props.part), [props.part]);
   const toolState = useMemo(() => {
@@ -1272,7 +1341,7 @@ function StepRow(props: {
       {statusText ? <div className="ml-7 mt-2 text-sm leading-[1.65] text-muted-foreground">{statusText}</div> : null}
       {bittensorCards.length ? (
         <div className="mt-3 ml-7 max-w-[720px]">
-          <BittensorToolCards cards={bittensorCards} />
+          <BittensorToolCards cards={bittensorCards} onSaveEvidence={props.onSaveBittensorEvidence} />
         </div>
       ) : null}
       {props.expanded ? (
@@ -1280,7 +1349,7 @@ function StepRow(props: {
           {hasStructuredValue(toolInput) ? (
             <div>
               <div className="mb-1 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Request</div>
-              <pre className="overflow-x-auto rounded-[16px] border border-dls-border/70 bg-dls-surface px-4 py-3 text-xs leading-6 text-muted-foreground">
+              <pre className="overflow-x-auto rounded-lg border border-transparent bg-dls-surface-muted/[0.08] px-4 py-3 text-xs leading-6 text-muted-foreground">
                 {formatStructuredValue(toolInput)}
               </pre>
             </div>
@@ -1288,7 +1357,7 @@ function StepRow(props: {
           {hasStructuredValue(toolOutput) ? (
             <div>
               <div className="mb-1 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Result</div>
-              <pre className="overflow-x-auto rounded-[16px] border border-dls-border/70 bg-dls-surface px-4 py-3 text-xs leading-6 text-muted-foreground">
+              <pre className="overflow-x-auto rounded-lg border border-transparent bg-dls-surface-muted/[0.08] px-4 py-3 text-xs leading-6 text-muted-foreground">
                 {formatStructuredValue(toolOutput)}
               </pre>
             </div>
@@ -1296,7 +1365,7 @@ function StepRow(props: {
           {toolError ? (
             <div>
               <div className="mb-1 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Error</div>
-              <pre className="overflow-x-auto rounded-[16px] border border-red-6/40 bg-red-3/20 px-4 py-3 text-xs leading-6 text-red-11">
+              <pre className="overflow-x-auto rounded-lg border border-transparent bg-red-3/20 px-4 py-3 text-xs leading-6 text-red-11">
                 {toolError}
               </pre>
             </div>
@@ -1315,6 +1384,7 @@ function StepsContainer(props: {
   isActive: boolean;
   expandedStepIds: Set<string>;
   onExpandedStepIdsChange: (updater: (current: Set<string>) => Set<string>) => void;
+  onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
 }) {
   const toggleSteps = (id: string) => {
     props.onExpandedStepIdsChange((current) => {
@@ -1346,6 +1416,7 @@ function StepsContainer(props: {
                     part={part}
                     expanded={props.expandedStepIds.has(rowId)}
                     onToggle={() => toggleSteps(rowId)}
+                    onSaveBittensorEvidence={props.onSaveBittensorEvidence}
                   />
                 );
               })}
@@ -1441,6 +1512,7 @@ function MessageBlockRow(props: {
   onForkAtMessage?: (messageId: string) => void;
   openTargets?: OpenTarget[];
   onOpenTarget?: (target: OpenTarget) => void;
+  onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
 }) {
   const block = props.block;
   const blockMessageIds = block.kind === "steps-cluster" ? block.messageIds : [block.messageId];
@@ -1467,8 +1539,8 @@ function MessageBlockRow(props: {
           className={cn(
             block.isUser
               ? props.isNestedVariant
-                ? "relative max-w-[92%] rounded-lg border border-dls-border bg-dls-sidebar px-4 py-3 text-sm leading-relaxed text-foreground"
-                : "relative max-w-[85%] rounded-lg border border-dls-border bg-dls-sidebar px-6 py-4 text-sm leading-relaxed text-foreground"
+                ? "relative max-w-[92%] rounded-lg bg-dls-surface-muted/[0.14] px-4 py-3 text-sm leading-relaxed text-foreground ring-1 ring-white/[0.08]"
+                : "relative max-w-[85%] rounded-lg bg-dls-surface-muted/[0.14] px-5 py-3.5 text-sm leading-relaxed text-foreground ring-1 ring-white/[0.08]"
               : props.isNestedVariant
                 ? "w-full relative text-sm leading-[1.65] text-foreground group"
                 : "w-full relative max-w-[760px] text-sm leading-[1.7] text-foreground group",
@@ -1482,6 +1554,7 @@ function MessageBlockRow(props: {
             isActive={props.isStreaming && block.messageIds.includes(props.latestAssistantMessageId)}
             expandedStepIds={props.expandedStepIds}
             onExpandedStepIdsChange={props.onExpandedStepIdsChange}
+            onSaveBittensorEvidence={props.onSaveBittensorEvidence}
           />
         </div>
       </div>
@@ -1512,7 +1585,7 @@ function MessageBlockRow(props: {
       >
         <div className={cn("w-full relative", !props.isNestedVariant && "max-w-[650px]", searchOutlineClass)}>
           <div
-            className="inline-flex max-w-full items-start gap-2 rounded-[18px] border border-red-7/20 bg-red-1/35 px-3 py-2 text-sm leading-5 text-red-12 shadow-sm"
+            className="inline-flex max-w-full items-start gap-2 rounded-lg bg-red-1/35 px-3 py-2 text-sm leading-5 text-red-12 shadow-sm"
             role="alert"
           >
             <CircleAlert size={14} className="mt-0.5 shrink-0" />
@@ -1525,18 +1598,18 @@ function MessageBlockRow(props: {
 
   return (
     <div
-      className={cn("flex group justify-start relative pb-4", block.isUser && "justify-end", !props.isNestedVariant && "pb-8")}
+      className={cn("flex group justify-start pb-4", block.isUser && "justify-end")}
       data-message-role={block.isUser ? "user" : "assistant"}
       data-message-id={block.messageId}
       style={{ contain: "layout style paint", ...perfStyle }}
     >
       <div
         className={cn(
-          "text-sm text-foreground leading-relaxed",
-          block.isUser && "border border-dls-border bg-dls-sidebar",
+          "relative text-sm text-foreground leading-relaxed",
+          block.isUser && "bg-dls-surface-muted/[0.14] ring-1 ring-white/[0.08]",
           block.isUser && props.isNestedVariant && "max-w-[92%] rounded-lg px-4 py-3",
-          block.isUser && !props.isNestedVariant && "max-w-[85%] rounded-lg px-6 py-4",
-          !block.isUser && "w-full antialiased group",
+          block.isUser && !props.isNestedVariant && "max-w-[85%] rounded-lg px-5 py-3.5 pr-24",
+          !block.isUser && "w-full antialiased",
           !block.isUser && !props.isNestedVariant && "max-w-[760px]",
           searchOutlineClass,
         )}
@@ -1616,6 +1689,7 @@ function MessageBlockRow(props: {
                   isActive={isStreamingLatestAssistant}
                   expandedStepIds={props.expandedStepIds}
                   onExpandedStepIdsChange={props.onExpandedStepIdsChange}
+                  onSaveBittensorEvidence={props.onSaveBittensorEvidence}
                 />
               ) : null}
             </div>
@@ -1627,31 +1701,28 @@ function MessageBlockRow(props: {
         {!props.isNestedVariant ? (
           <div
             className={cn(
-              "absolute bottom-2 flex items-center gap-0.5 opacity-100 pointer-events-auto md:opacity-0 md:pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:group-focus-within:opacity-100 md:group-focus-within:pointer-events-auto transition-opacity select-none",
-              block.isUser ? "right-0" : "left-0",
+              "flex items-center gap-0.5 select-none transition-opacity duration-150",
+              "opacity-100 pointer-events-auto md:opacity-0 md:pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:group-focus-within:opacity-100 md:group-focus-within:pointer-events-auto",
+              block.isUser ? "absolute right-2 top-2" : "mt-2",
             )}
           >
             {props.onRevertToMessage ? (
-              <Button
-                variant="ghost"
-                size="icon-sm"
+              <MessageActionIconButton
                 onClick={() => props.onRevertToMessage?.(block.messageId)}
                 title="Revert to here"
                 aria-label="Revert to this message"
               >
                 <Undo2 size={14} />
-              </Button>
+              </MessageActionIconButton>
             ) : null}
             {props.onForkAtMessage ? (
-              <Button
-                variant="ghost"
-                size="icon-sm"
+              <MessageActionIconButton
                 onClick={() => props.onForkAtMessage?.(block.messageId)}
                 title="Fork from here"
                 aria-label="Fork conversation from this message"
               >
                 <GitFork size={14} />
-              </Button>
+              </MessageActionIconButton>
             ) : null}
             <CopyButton getText={() => messageToText(block.message)} />
           </div>
@@ -1930,6 +2001,7 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
                       onForkAtMessage={props.onForkAtMessage}
                       openTargets={props.openTargets}
                       onOpenTarget={props.onOpenTarget}
+                      onSaveBittensorEvidence={props.onSaveBittensorEvidence}
                     />
                   </div>
                 );
@@ -1958,6 +2030,7 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
               onForkAtMessage={props.onForkAtMessage}
               openTargets={props.openTargets}
               onOpenTarget={props.onOpenTarget}
+              onSaveBittensorEvidence={props.onSaveBittensorEvidence}
             />
           ))}
         </div>

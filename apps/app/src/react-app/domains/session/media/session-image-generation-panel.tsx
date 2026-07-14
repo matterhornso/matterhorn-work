@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "lucide-react";
 
@@ -36,6 +36,7 @@ import {
 import type { NftDraftPublishingCapabilities } from "./nft-draft-panel";
 import { buildNftPublishingSetupRequirements, type NftPublishingReadinessCapabilities } from "./nft-publishing-readiness";
 import { formatEntitlementReset } from "../../billing/entitlements";
+import { workspaceSettingsRoute } from "../../../shell/workspace-routes";
 
 type NftCapabilityStatus = "working" | "needs_setup" | "preview";
 type GeneratedMediaErrorCopy = { title: string; description?: string; action?: "billing" };
@@ -47,6 +48,7 @@ export interface SessionImageGenerationPanelProps {
   defaultOpen?: boolean;
   onNotice?: (notice: ReactComposerNotice) => void;
   capabilitiesOverride?: NftPublishingReadinessCapabilities;
+  suggestedPrompt?: string;
 }
 
 function capabilityReady(status: MatterhornCapabilityStatus | undefined) {
@@ -105,18 +107,26 @@ function generatedMediaErrorCopy(error: unknown): GeneratedMediaErrorCopy {
     const requiredPlanIds = Array.isArray(details.requiredPlanIds)
       ? details.requiredPlanIds.filter((planId): planId is string => typeof planId === "string")
       : [];
-    const requiredPlans = formatPlanList(requiredPlanIds);
+    const upgradePlanIds = requiredPlanIds.filter((planId) => isHigherPlan(planId, details.currentPlanId));
+    const requiredPlans = formatPlanList(upgradePlanIds);
     const used = typeof details.used === "number" ? details.used : null;
     const limit = typeof details.limit === "number" ? details.limit : null;
     const resetLabel = typeof details.resetsAt === "string" ? formatEntitlementReset(details.resetsAt) : null;
 
     if (details.reason === "limit_reached") {
-      const usage = used !== null && limit !== null ? ` You have used ${used} of ${limit}.` : "";
+      const usage = used !== null && limit !== null
+        ? used > limit
+          ? ` ${used} used; ${currentPlan} includes ${limit} per allowance period.`
+          : ` You have used ${used} of ${limit}.`
+        : "";
       const resetCopy = resetLabel ? ` ${resetLabel}.` : "";
+      const nextStep = upgradePlanIds.length > 0
+        ? ` Upgrade to ${requiredPlans} to continue.`
+        : " Wait for the allowance to reset.";
       return {
         title: `${label} limit reached`,
-        description: `${currentPlan} has reached its allowance.${usage}${resetCopy} Upgrade to ${requiredPlans} to continue.`,
-        action: "billing",
+        description: `${currentPlan} has reached its allowance.${usage}${resetCopy}${nextStep}`,
+        action: upgradePlanIds.length > 0 ? "billing" : undefined,
       };
     }
 
@@ -144,6 +154,12 @@ function formatPlanList(planIds: string[]) {
   return `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
 }
 
+function isHigherPlan(candidatePlanId: string, currentPlanId: unknown) {
+  if (typeof currentPlanId !== "string") return true;
+  const planRank: Record<string, number> = { free: 0, plus: 1, max: 2 };
+  return (planRank[candidatePlanId] ?? -1) > (planRank[currentPlanId] ?? -1);
+}
+
 function nftSetupRequirementsFromError(error: unknown): MatterhornNftSetupRequirement[] {
   if (!(error instanceof MatterhornServerError)) return [];
   const details = error.details as Partial<MatterhornNftPreviewErrorDetails> | undefined;
@@ -152,6 +168,7 @@ function nftSetupRequirementsFromError(error: unknown): MatterhornNftSetupRequir
 
 export function SessionImageGenerationPanel(props: SessionImageGenerationPanelProps) {
   const queryClient = useQueryClient();
+  const panelId = useId();
   const [open, setOpen] = useState(props.defaultOpen ?? false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<GeneratedMediaErrorCopy | null>(null);
@@ -187,11 +204,11 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
   const canGenerate = capabilityReady(imageGenerationStatus);
   const historyItems = generatedMediaHistoryQuery.data?.items ?? [];
   const latestImage = selectedImage ?? historyItems[0]?.image ?? null;
-  const capabilityLabel = capabilitiesQuery.isLoading && !capabilities
+  const capabilityHint = capabilitiesQuery.isLoading && !capabilities
     ? "Checking image provider..."
     : canGenerate
-      ? "Ready"
-      : "Needs setup";
+      ? null
+      : "Platform setup";
   const publishingSetupRequirements = useMemo(() => buildNftPublishingSetupRequirements({
     imageGeneration: capabilities?.imageGeneration,
     walrusStorage: capabilities?.walrusStorage,
@@ -237,7 +254,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
 
   const generateImage = useCallback(async (input: MatterhornImageGenerationInput) => {
     if (!canGenerate) {
-      setError({ title: "Image generation needs setup." });
+      setError({ title: "Matterhorn has not configured image generation yet." });
       return;
     }
     setOpen(true);
@@ -480,34 +497,47 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
   }, [generatedMediaHistoryQueryKey, nftDraft, props.client, props.onNotice, props.workspaceId, queryClient]);
 
   const nftCapabilities = nftDraftPublishingCapabilitiesFromBackend(capabilities);
+  const generatedMediaSettingsHref = workspaceSettingsRoute(props.workspaceId, "generated-media");
+  const billingSettingsHref = workspaceSettingsRoute(props.workspaceId, "billing");
 
   return (
-    <div className="space-y-2 rounded-lg bg-dls-surface-muted/[0.045] px-3 py-2" data-testid="session-image-generation-panel">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="space-y-2 rounded-lg bg-dls-surface-muted/[0.035] px-2.5 py-2" data-testid="session-image-generation-panel">
+      <div className="flex min-w-0 items-center">
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-md px-1.5 py-1 text-[12px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover/45 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--matterhorn-blue-rgb),0.28)]"
+          className="inline-flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-[12px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover/45 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--matterhorn-blue-rgb),0.28)]"
           onClick={() => setOpen((current) => !current)}
           aria-expanded={open}
+          aria-controls={panelId}
         >
-          <Image className="size-3" />
-          <span>Generate image</span>
+          <Image className="size-3.5 shrink-0 text-dls-text/75" />
+          <span className="truncate">Generate image</span>
+          {capabilityHint ? (
+            <span className="min-w-0 truncate text-[11px] font-normal text-dls-secondary/80">· {capabilityHint}</span>
+          ) : null}
         </button>
-        <span className="text-[11px] text-dls-secondary">{capabilityLabel}</span>
       </div>
 
       {open ? (
-        <div className="space-y-2">
+        <div id={panelId} className="space-y-2">
           {canGenerate ? (
             <ImageGenerationComposer
               capabilityStatus={imageGenerationStatus}
               isGenerating={generating}
               onGenerate={generateImage}
+              suggestedPrompt={props.suggestedPrompt}
             />
-          ) : (
-            <div className="rounded-md bg-dls-surface-muted/45 px-3 py-2 text-[12px] leading-5 text-dls-secondary">
-              Image generation needs setup. Configure an image provider, or run the local app with the mock provider for testing.
+          ) : capabilitiesQuery.isLoading && !capabilities ? (
+            <div className="rounded-md bg-dls-surface-muted/30 px-3 py-2 text-[12px] leading-5 text-dls-secondary" role="status">
+              Checking image provider...
             </div>
+          ) : (
+            <ImageGenerationComposer
+              capabilityStatus={imageGenerationStatus ?? "needs_setup"}
+              isGenerating={generating}
+              onGenerate={generateImage}
+              setupHref={generatedMediaSettingsHref}
+            />
           )}
           {generating ? <GeneratedImageLoadingCard /> : null}
           {error ? (
@@ -516,7 +546,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
               description={error.description}
               onRetry={latestImage ? () => void generateImage({ prompt: latestImage.prompt }) : undefined}
               actionHref={error.action === "billing"
-                ? `/workspace/${encodeURIComponent(props.workspaceId)}/settings/billing`
+                ? billingSettingsHref
                 : undefined}
               actionLabel={error.action === "billing" ? "Open Billing" : undefined}
             />

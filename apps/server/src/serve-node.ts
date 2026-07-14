@@ -66,7 +66,7 @@ async function waitForDrainOrClose(nodeRes: ServerResponse): Promise<void> {
 /**
  * Convert a Node.js IncomingMessage into a Web API Request.
  */
-function toWebRequest(nodeReq: IncomingMessage, hostname: string, port: number): Request {
+function toWebRequest(nodeReq: IncomingMessage, hostname: string, port: number, signal?: AbortSignal): Request {
   const url = `http://${hostname}:${port}${nodeReq.url ?? "/"}`;
   const method = nodeReq.method ?? "GET";
   const headers = new Headers();
@@ -93,6 +93,7 @@ function toWebRequest(nodeReq: IncomingMessage, hostname: string, port: number):
     method,
     headers,
     body,
+    signal,
     // @ts-expect-error duplex is required for streaming request bodies in Node
     duplex: hasBody ? "half" : undefined,
   });
@@ -122,16 +123,27 @@ async function writeWebResponse(webRes: Response, nodeRes: ServerResponse): Prom
   }
 
   const reader = webRes.body.getReader();
+  let downstreamClosed = false;
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (!isResponseWritable(nodeRes)) break;
+      if (!isResponseWritable(nodeRes)) {
+        downstreamClosed = true;
+        break;
+      }
       if (!nodeRes.write(value)) {
         await waitForDrainOrClose(nodeRes);
+        if (!isResponseWritable(nodeRes)) {
+          downstreamClosed = true;
+          break;
+        }
       }
     }
   } finally {
+    if (downstreamClosed) {
+      await reader.cancel("downstream disconnected").catch(() => undefined);
+    }
     reader.releaseLock();
     endResponse(nodeRes);
   }
@@ -144,8 +156,14 @@ async function writeWebResponse(webRes: Response, nodeRes: ServerResponse): Prom
  */
 export function serve(options: ServeOptions): Promise<ServeResult> {
   const { hostname, port, fetch: fetchHandler } = options;
+  const activeRequestControllers = new Set<AbortController>();
 
   const server = createServer(async (nodeReq, nodeRes) => {
+    const requestController = new AbortController();
+    activeRequestControllers.add(requestController);
+    const abortRequest = () => requestController.abort();
+    nodeReq.once("aborted", abortRequest);
+    nodeRes.once("close", abortRequest);
     nodeRes.on("error", (error) => {
       if (isWriteAfterEndError(error)) {
         console.warn("[serve-node] Ignored response write after end");
@@ -155,16 +173,21 @@ export function serve(options: ServeOptions): Promise<ServeResult> {
     });
 
     try {
-      const webReq = toWebRequest(nodeReq, hostname, boundPort);
+      const webReq = toWebRequest(nodeReq, hostname, boundPort, requestController.signal);
       const webRes = await fetchHandler(webReq);
       await writeWebResponse(webRes, nodeRes);
     } catch (error) {
+      if (requestController.signal.aborted || !isResponseWritable(nodeRes)) return;
       console.error("[serve-node] Unhandled error:", error);
       if (!isResponseWritable(nodeRes)) return;
       if (!nodeRes.headersSent) {
         nodeRes.writeHead(500, { "Content-Type": "application/json" });
       }
       endResponse(nodeRes, JSON.stringify({ error: "internal_error" }));
+    } finally {
+      nodeReq.off("aborted", abortRequest);
+      nodeRes.off("close", abortRequest);
+      activeRequestControllers.delete(requestController);
     }
   });
 
@@ -187,6 +210,7 @@ export function serve(options: ServeOptions): Promise<ServeResult> {
         port: boundPort,
         stop: () => {
           if (stopPromise) return stopPromise;
+          for (const controller of activeRequestControllers) controller.abort();
           stopPromise = new Promise<void>((stopResolve, stopReject) => {
             server.close((error) => {
               if (error) {
@@ -199,7 +223,15 @@ export function serve(options: ServeOptions): Promise<ServeResult> {
               }
               stopResolve();
             });
-            server.closeAllConnections();
+            const closeConnections = () => {
+              server.closeIdleConnections();
+              server.closeAllConnections();
+            };
+            closeConnections();
+            // A response can finish between the first sweep and Node marking its
+            // socket idle. Sweep once more on the next turn so shutdown does not
+            // wait for the keep-alive timeout.
+            setImmediate(closeConnections);
           });
           return stopPromise;
         },

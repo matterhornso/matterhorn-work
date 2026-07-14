@@ -44,3 +44,22 @@ export function drainPendingDeepLinks(target: Window): string[] {
   }
   return [...pending];
 }
+
+export function takePendingDeepLinks(
+  target: Window,
+  predicate: (url: string) => boolean,
+): string[] {
+  const pending = target.__OPENWORK__?.deepLinks ?? [];
+  const matched: string[] = [];
+  const remaining: string[] = [];
+
+  for (const url of pending) {
+    if (predicate(url)) matched.push(url);
+    else remaining.push(url);
+  }
+
+  if (target.__OPENWORK__) {
+    target.__OPENWORK__.deepLinks = remaining;
+  }
+  return matched;
+}

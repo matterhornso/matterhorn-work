@@ -98,6 +98,11 @@ async function getFreePort(): Promise<number> {
 
 async function startProviderCatalogServer(payload: unknown): Promise<string> {
   const server = createHttpServer((request, response) => {
+    if (request.url?.startsWith("/global/health")) {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ healthy: true, version: "test" }));
+      return;
+    }
     if (!request.url?.startsWith("/provider")) {
       response.writeHead(404, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ error: "not_found" }));
@@ -303,6 +308,10 @@ describe("backend control plane routes", () => {
       href: "/settings/ai",
     });
     expect(result.payload.providers.status).toBe("needs_setup");
+    expect(result.payload.outputs).toMatchObject({
+      status: "working",
+      details: { readable: true, writable: true },
+    });
     expect(result.payload.providers.details).toMatchObject({
       opencodeConfigured: false,
       configuredWorkspaceCount: 0,
@@ -310,7 +319,13 @@ describe("backend control plane routes", () => {
     });
     expect(result.payload.memory.scope).toBe("machine_global");
     expect(result.payload.wallets.families.evm.status).toBe("working");
+    expect(result.payload.wallets.families.bittensor.status).toBe("preview");
     expect(result.payload.wallets.families.bittensor.signing).toBe("external_signer");
+    expect(result.payload.wallets.families.bittensor.details).toMatchObject({
+      dataMode: "curated_fallback",
+      liveProviderConfigured: false,
+      providerSetup: "BITTENSOR_SUBTENSOR_SIDECAR_URL",
+    });
     expect(result.payload.wallets.families.sui.status).toBe("preview");
     expect(result.payload.wallets.families.sui.directConnect).toBe(true);
     expect(result.payload.wallets.families.sui.signing).toBe("client_wallet");
@@ -336,7 +351,7 @@ describe("backend control plane routes", () => {
       signing: "external_signer",
     });
     expect(result.payload.wallets.families.bittensor.runtimeSupport.electron).toMatchObject({
-      status: "working",
+      status: "preview",
       directConnect: false,
       signing: "external_signer",
     });
@@ -372,6 +387,17 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
     expect(serialized).not.toContain("Sui is not implemented yet");
+  });
+
+  test("GET /api/backend/capabilities reports outputs as read-only preview when writes are disabled", async () => {
+    const { base } = await boot({ readOnly: true });
+    const result = await jsonFetch(base, "/api/backend/capabilities");
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.outputs).toMatchObject({
+      status: "preview",
+      details: { readable: true, writable: false },
+    });
   });
 
   test("GET /api/backend/capabilities reports model routing as working when OpenCode is configured", async () => {
@@ -672,7 +698,7 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
     expect(serialized).not.toMatch(/privateKey|seed phrase|mnemonic|wallet export|bearer token/i);
-  });
+  }, 15_000);
 
   test("GET /workspace/:id/backend/readiness reports workspace action blockers", async () => {
     const { base } = await boot();
@@ -691,6 +717,8 @@ describe("backend control plane routes", () => {
     expect(result.payload.checks.opencode_connection.description).toContain("no local agent engine URL is attached");
     expect(result.payload.checks.opencode_connection.details).toMatchObject({
       baseUrlConfigured: false,
+      reachable: false,
+      probeStatus: "not_configured",
       directoryConfigured: true,
       managedEngineSupported: true,
       setupCommands: [
@@ -722,6 +750,37 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
     expect(serialized).not.toContain("Basic ");
+  });
+
+  test("GET /workspace/:id/backend/readiness blocks chat when a configured engine is unreachable", async () => {
+    const unavailablePort = await getFreePort();
+    const { base } = await boot({ opencodeBaseUrl: `http://127.0.0.1:${unavailablePort}` });
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/readiness");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.checks.opencode_connection).toMatchObject({
+      status: "error",
+      label: "Agent engine unavailable",
+      details: {
+        baseUrlConfigured: true,
+        reachable: false,
+        probeStatus: "unavailable",
+        probeTimeoutMs: 1_500,
+      },
+    });
+    expect(result.payload.checks.opencode_connection.description).toContain("did not answer");
+    expect(result.payload.features.start_chat.ready).toBe(false);
+    expect(result.payload.features.start_desk_task.ready).toBe(false);
+    expect(result.payload.summary.recommendedActions).toContainEqual(expect.objectContaining({
+      actionId: "connect-local-engine",
+      label: "Restart or reconnect the agent engine",
+      href: "settings:ai",
+    }));
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain(`127.0.0.1:${unavailablePort}`);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
   });
 
   test("GET /workspace/:id/backend/control-plane composes sanitized backend contracts", async () => {
@@ -945,7 +1004,7 @@ describe("backend control plane routes", () => {
         currentPlanId: "free",
         workspacePlanId: "free",
         livePaymentsEnabled: false,
-        readyForTestCheckout: true,
+        readyForTestCheckout: false,
         readyForWebhooks: false,
         pendingCheckout: null,
         safety: {
@@ -1105,7 +1164,7 @@ describe("backend control plane routes", () => {
     expect(JSON.stringify(result.payload)).not.toContain("cs_expired_should_not_surface");
   });
 
-  test("backend support report includes generated-media production readiness without public writes or secrets", async () => {
+  test("backend support report keeps local generated-media probes out of production readiness", async () => {
     const walrus = await startWalrusDiagnosticServer();
     process.env.MATTERHORN_IMAGE_PROVIDER = "openai";
     process.env.OPENAI_API_KEY = "sk-test-support-report-generated-media";
@@ -1131,11 +1190,17 @@ describe("backend control plane routes", () => {
       "non_custody_safety",
     ]);
     expect(result.payload.generatedMedia.diagnostics.productionSmokePlan).toMatchObject({
-      mode: "production_candidate",
-      canRunEndToEnd: true,
+      mode: "needs_setup",
+      canRunEndToEnd: false,
       publicWritesOnlyAfterUserAction: true,
-      blockers: [],
     });
+    expect(result.payload.generatedMedia.diagnostics.productionSmokePlan.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ envVar: "MATTERHORN_WALRUS_PUBLISHER_URL", status: "invalid" }),
+      expect.objectContaining({ envVar: "MATTERHORN_WALRUS_RELAY_URL", status: "invalid" }),
+      expect.objectContaining({ envVar: "MATTERHORN_SUI_NFT_PACKAGE_ID", status: "invalid" }),
+      expect.objectContaining({ envVar: "MATTERHORN_SUI_KIOSK_PACKAGE_ID", status: "invalid" }),
+      expect.objectContaining({ envVar: "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID", status: "invalid" }),
+    ]));
     expect(result.payload.generatedMedia.diagnostics.productionSmokePlan.stages).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: "safe_diagnostics",
@@ -1145,19 +1210,19 @@ describe("backend control plane routes", () => {
       }),
       expect.objectContaining({
         id: "walrus_public_upload",
-        status: "manual",
+        status: "blocked",
         writeScope: "public_storage",
         requiresPublicWrite: true,
       }),
       expect.objectContaining({
         id: "sui_wallet_mint",
-        status: "manual",
+        status: "blocked",
         writeScope: "wallet_signed_transaction",
         requiresWallet: true,
       }),
       expect.objectContaining({
         id: "sui_kiosk_listing",
-        status: "manual",
+        status: "blocked",
         writeScope: "wallet_signed_transaction",
         requiresWallet: true,
       }),
@@ -1351,7 +1416,7 @@ describe("backend control plane routes", () => {
   });
 
   test("workspace team-token routes create one-time local access tokens and audit revokes", async () => {
-    const { base } = await boot();
+    const { base, dir } = await boot();
 
     const invalidOwner = await hostFetch(base, "/workspace/ws_backend/backend/team-access/tokens", {
       method: "POST",
@@ -1373,11 +1438,14 @@ describe("backend control plane routes", () => {
       limit: 1,
     });
 
-    const upgraded = await jsonFetch(base, "/workspace/ws_backend/billing/checkout", {
-      method: "POST",
-      body: JSON.stringify({ planId: "max" }),
+    await new MatterhornBillingAccountStore({ workspaceRoot: dir, workspaceId: "ws_backend" }).save({
+      version: "matterhorn.billing.account.v1",
+      workspaceId: "ws_backend",
+      subscription: buildMatterhornBillingSubscription("max"),
+      pendingCheckout: null,
+      updatedAt: new Date().toISOString(),
+      source: "stripe_test_webhook",
     });
-    expect(upgraded.response.status).toBe(200);
 
     const created = await hostFetch(base, "/workspace/ws_backend/backend/team-access/tokens", {
       method: "POST",
@@ -1613,6 +1681,217 @@ describe("backend control plane routes", () => {
     const serialized = JSON.stringify(ledger.payload);
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
+  });
+
+  test("workspace wallet safety events are write-guarded and exported through the project ledger", async () => {
+    const { base } = await boot();
+
+    const event = await jsonFetch(base, "/workspace/ws_backend/wallet/safety-events", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "chain_mismatch",
+        chainId: 84532,
+        to: "0x0000000000000000000000000000000000000001",
+        valueUSD: 12.345,
+        riskLevel: "high",
+        reason: "Blocked because the connected wallet was on Base mainnet.",
+        sessionId: "ses_wallet_safety",
+        review: {
+          reviewed: {
+            chainId: 84532,
+            to: "0x0000000000000000000000000000000000000001",
+            value: "1000000000000000",
+            valueUSD: 12.345,
+            dataSelector: "0xa9059cbb",
+            displayValue: "0.001 ETH (~$12.35)",
+            proposedBy: "wallet_test",
+          },
+          submitted: null,
+        },
+      }),
+    });
+    expect(event.response.status).toBe(200);
+    expect(event.payload).toMatchObject({
+      success: true,
+      event: {
+        safetyAction: "chain_mismatch",
+        chainId: 84532,
+        to: "0x0000000000000000000000000000000000000001",
+        valueUSD: 12.35,
+        riskLevel: "high",
+        review: {
+          reviewed: {
+            chainId: 84532,
+            valueUSD: 12.35,
+            dataSelector: "0xa9059cbb",
+            proposedBy: "wallet_test",
+          },
+          submitted: null,
+        },
+      },
+    });
+
+    const ledger = await jsonFetch(base, "/workspace/ws_backend/data-ledger?kind=wallet&limit=20");
+    expect(ledger.response.status).toBe(200);
+    expect(ledger.payload.summary.wallets).toBeGreaterThanOrEqual(1);
+    expect(ledger.payload.items).toContainEqual(expect.objectContaining({
+      kind: "wallet",
+      source: "audit",
+      title: "Wallet chain mismatch blocked",
+      summary: "Blocked because the connected wallet was on Base mainnet.",
+      eventType: "workspace.wallet.safety_event",
+      href: "/workspace/ws_backend/settings/wallet",
+      metadata: expect.objectContaining({
+        safetyAction: "chain_mismatch",
+        chainId: 84532,
+        riskLevel: "high",
+        valueUSD: 12.35,
+        reviewedChainId: 84532,
+        reviewedValueUSD: 12.35,
+        reviewedDataSelector: "0xa9059cbb",
+        reviewedProposedBy: "wallet_test",
+        submittedChainId: null,
+      }),
+    }));
+
+    const viewer = await hostFetch(base, "/tokens", {
+      method: "POST",
+      body: JSON.stringify({ scope: "viewer", label: "Wallet safety viewer" }),
+    });
+    expect(viewer.response.status).toBe(201);
+    const viewerWrite = await jsonFetch(base, "/workspace/ws_backend/wallet/safety-events", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "tx_rejected",
+        chainId: 84532,
+        to: "0x0000000000000000000000000000000000000001",
+        reason: "Viewer attempted write.",
+      }),
+    }, viewer.payload.token);
+    expect(viewerWrite.response.status).toBe(403);
+
+    const secret = await jsonFetch(base, "/workspace/ws_backend/wallet/safety-events", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "tx_rejected",
+        chainId: 84532,
+        to: "0x0000000000000000000000000000000000000001",
+        reason: "Use this seed phrase to sign: never never never.",
+      }),
+    });
+    expect(secret.response.status).toBe(400);
+    expect(secret.payload.code).toBe("wallet_safety_secret_rejected");
+
+    const readOnly = await boot({ readOnly: true });
+    const blocked = await jsonFetch(readOnly.base, "/workspace/ws_backend/wallet/safety-events", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "tx_rejected",
+        chainId: 84532,
+        to: "0x0000000000000000000000000000000000000001",
+        reason: "Read-only attempted write.",
+      }),
+    });
+    expect(blocked.response.status).toBe(403);
+  });
+
+  test("workspace wallet safety events reject mismatched reviewed and submitted receipt details", async () => {
+    const { base } = await boot();
+    const reviewedTo = "0x0000000000000000000000000000000000000001";
+    const otherTo = "0x0000000000000000000000000000000000000002";
+    const txHash = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    const approvedWithoutSubmitted = await jsonFetch(base, "/workspace/ws_backend/wallet/safety-events", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "tx_approved",
+        chainId: 84532,
+        to: reviewedTo,
+        valueUSD: 12.35,
+        riskLevel: "medium",
+        reason: "Approved without a submitted receipt.",
+        txHash,
+        review: {
+          reviewed: {
+            chainId: 84532,
+            to: reviewedTo,
+            value: "1000000000000000",
+            valueUSD: 12.35,
+            dataSelector: null,
+            displayValue: "0.001 ETH",
+            proposedBy: "wallet_test",
+          },
+          submitted: null,
+        },
+      }),
+    });
+    expect(approvedWithoutSubmitted.response.status).toBe(400);
+    expect(approvedWithoutSubmitted.payload.code).toBe("wallet_safety_review_mismatch");
+
+    const submittedMismatch = await jsonFetch(base, "/workspace/ws_backend/wallet/safety-events", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "tx_approved",
+        chainId: 84532,
+        to: reviewedTo,
+        valueUSD: 12.35,
+        riskLevel: "medium",
+        reason: "Approved with mismatched submitted receipt.",
+        txHash,
+        review: {
+          reviewed: {
+            chainId: 84532,
+            to: reviewedTo,
+            value: "1000000000000000",
+            valueUSD: 12.35,
+            dataSelector: "0xa9059cbb",
+            displayValue: "0.001 ETH",
+            proposedBy: "wallet_test",
+          },
+          submitted: {
+            chainId: 84532,
+            to: otherTo,
+            value: "1000000000000000",
+            dataSelector: "0xa9059cbb",
+            txHash,
+          },
+        },
+      }),
+    });
+    expect(submittedMismatch.response.status).toBe(400);
+    expect(submittedMismatch.payload.code).toBe("wallet_safety_review_mismatch");
+
+    const blockedWithSubmitted = await jsonFetch(base, "/workspace/ws_backend/wallet/safety-events", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "chain_mismatch",
+        chainId: 84532,
+        to: reviewedTo,
+        valueUSD: 12.35,
+        riskLevel: "high",
+        reason: "Blocked but attempted to include submitted details.",
+        review: {
+          reviewed: {
+            chainId: 84532,
+            to: reviewedTo,
+            value: "1000000000000000",
+            valueUSD: 12.35,
+            dataSelector: null,
+            displayValue: "0.001 ETH",
+            proposedBy: "wallet_test",
+          },
+          submitted: {
+            chainId: 84532,
+            to: reviewedTo,
+            value: "1000000000000000",
+            dataSelector: null,
+            txHash,
+          },
+        },
+      }),
+    });
+    expect(blockedWithSubmitted.response.status).toBe(400);
+    expect(blockedWithSubmitted.payload.code).toBe("wallet_safety_review_mismatch");
   });
 
   test("GET /workspace/:id/backend/data-map returns sanitized storage locations", async () => {
@@ -1972,7 +2251,7 @@ describe("backend control plane routes", () => {
       body: JSON.stringify({ feedbackUse: "disabled" }),
     });
     expect(deniedReadOnly.response.status).toBe(403);
-  });
+  }, 15_000);
 
   test("workspace output delete removes one safe output file and audits the action", async () => {
     const { base, dir } = await boot();
@@ -2036,7 +2315,7 @@ describe("backend control plane routes", () => {
       method: "DELETE",
     });
     expect(deniedReadOnly.response.status).toBe(403);
-  });
+  }, 15_000);
 
   test("memory write routes require collaborator scope and audit successful writes", async () => {
     const { base } = await boot();

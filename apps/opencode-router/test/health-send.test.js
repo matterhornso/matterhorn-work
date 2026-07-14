@@ -8,6 +8,8 @@ import assert from "node:assert/strict";
 import { startBridge } from "../dist/bridge.js";
 import { BridgeStore } from "../dist/db.js";
 
+const HEALTH_TOKEN = "test-router-health-token";
+
 function createLoggerStub() {
   const base = {
     child() {
@@ -29,6 +31,111 @@ async function freePort() {
   await new Promise((resolve) => server.close(resolve));
   return port;
 }
+
+test("health server keeps status public but requires a token for writes", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "opencodeRouter-health-auth-"));
+  const dbPath = path.join(dir, "opencode-router.db");
+  const store = new BridgeStore(dbPath);
+  const healthPort = await freePort();
+
+  const bridge = await startBridge(
+    {
+      configPath: path.join(dir, "opencode-router.json"),
+      configFile: { version: 1 },
+      opencodeUrl: "http://127.0.0.1:4096",
+      opencodeDirectory: dir,
+      telegramBots: [],
+      slackApps: [],
+      dataDir: dir,
+      dbPath,
+      logFile: path.join(dir, "opencode-router.log"),
+      toolUpdatesEnabled: false,
+      groupsEnabled: false,
+      permissionMode: "allow",
+      toolOutputLimit: 1200,
+      healthPort,
+      healthToken: HEALTH_TOKEN,
+      logLevel: "silent",
+    },
+    createLoggerStub(),
+    undefined,
+    {
+      client: {
+        global: {
+          health: async () => ({ healthy: true, version: "test" }),
+        },
+      },
+      store,
+      adapters: new Map(),
+      disableEventStream: true,
+    },
+  );
+
+  const health = await fetch(`http://127.0.0.1:${healthPort}/health`);
+  assert.equal(health.status, 200);
+  assert.equal(health.headers.get("access-control-allow-origin"), null);
+  assert.equal((await health.json()).ok, true);
+
+  const rejectedRead = await fetch(`http://127.0.0.1:${healthPort}/bindings`);
+  assert.equal(rejectedRead.status, 401);
+  assert.equal((await rejectedRead.json()).ok, false);
+
+  const authorizedRead = await fetch(`http://127.0.0.1:${healthPort}/bindings`, {
+    headers: { Authorization: `Bearer ${HEALTH_TOKEN}` },
+  });
+  assert.equal(authorizedRead.status, 200);
+  assert.equal((await authorizedRead.json()).ok, true);
+
+  const rejected = await fetch(`http://127.0.0.1:${healthPort}/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channel: "slack", directory: dir, text: "hello" }),
+  });
+  assert.equal(rejected.status, 401);
+  assert.equal((await rejected.json()).ok, false);
+
+  const preflight = await fetch(`http://127.0.0.1:${healthPort}/send`, {
+    method: "OPTIONS",
+    headers: {
+      Origin: "https://attacker.example",
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": "content-type,authorization",
+      "Access-Control-Request-Private-Network": "true",
+    },
+  });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get("access-control-allow-origin"), null);
+  assert.equal(preflight.headers.get("access-control-allow-private-network"), null);
+
+  const nullOriginPreflight = await fetch(`http://127.0.0.1:${healthPort}/send`, {
+    method: "OPTIONS",
+    headers: {
+      Origin: "null",
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": "content-type,authorization",
+      "Access-Control-Request-Private-Network": "true",
+    },
+  });
+  assert.equal(nullOriginPreflight.status, 204);
+  assert.equal(nullOriginPreflight.headers.get("access-control-allow-origin"), null);
+  assert.equal(nullOriginPreflight.headers.get("access-control-allow-private-network"), null);
+
+  const loopbackPreflight = await fetch(`http://127.0.0.1:${healthPort}/send`, {
+    method: "OPTIONS",
+    headers: {
+      Origin: "http://127.0.0.1:5173",
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": "content-type,authorization",
+      "Access-Control-Request-Private-Network": "true",
+    },
+  });
+  assert.equal(loopbackPreflight.status, 204);
+  assert.equal(loopbackPreflight.headers.get("access-control-allow-origin"), "http://127.0.0.1:5173");
+  assert.equal(loopbackPreflight.headers.get("access-control-allow-private-network"), "true");
+
+  await bridge.stop();
+  store.close();
+});
 
 test("health /send delivers to directory bindings", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "opencodeRouter-health-send-"));
@@ -67,6 +174,7 @@ test("health /send delivers to directory bindings", async () => {
       permissionMode: "allow",
       toolOutputLimit: 1200,
       healthPort,
+      healthToken: HEALTH_TOKEN,
       logLevel: "silent",
     },
     createLoggerStub(),
@@ -85,7 +193,7 @@ test("health /send delivers to directory bindings", async () => {
 
   const response = await fetch(`http://127.0.0.1:${healthPort}/send`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${HEALTH_TOKEN}` },
     body: JSON.stringify({ channel: "slack", directory: dir, text: "hello" }),
   });
   assert.equal(response.status, 200);
@@ -122,6 +230,7 @@ test("health /send reports no-op when no bindings exist", async () => {
       permissionMode: "allow",
       toolOutputLimit: 1200,
       healthPort,
+      healthToken: HEALTH_TOKEN,
       logLevel: "silent",
     },
     createLoggerStub(),
@@ -140,7 +249,7 @@ test("health /send reports no-op when no bindings exist", async () => {
 
   const response = await fetch(`http://127.0.0.1:${healthPort}/send`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${HEALTH_TOKEN}` },
     body: JSON.stringify({ channel: "slack", directory: dir, text: "hello" }),
   });
   assert.equal(response.status, 200);
@@ -189,6 +298,7 @@ test("health /send can deliver directly with peerId", async () => {
       permissionMode: "allow",
       toolOutputLimit: 1200,
       healthPort,
+      healthToken: HEALTH_TOKEN,
       logLevel: "silent",
     },
     createLoggerStub(),
@@ -207,7 +317,7 @@ test("health /send can deliver directly with peerId", async () => {
 
   const response = await fetch(`http://127.0.0.1:${healthPort}/send`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${HEALTH_TOKEN}` },
     body: JSON.stringify({ channel: "slack", peerId: "D555", text: "hello-direct" }),
   });
   assert.equal(response.status, 200);
@@ -276,6 +386,7 @@ test("health /send can deliver file parts end-to-end", async () => {
       permissionMode: "allow",
       toolOutputLimit: 1200,
       healthPort,
+      healthToken: HEALTH_TOKEN,
       logLevel: "silent",
     },
     createLoggerStub(),
@@ -294,7 +405,7 @@ test("health /send can deliver file parts end-to-end", async () => {
 
   const response = await fetch(`http://127.0.0.1:${healthPort}/send`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${HEALTH_TOKEN}` },
     body: JSON.stringify({
       channel: "slack",
       peerId: "D999",
@@ -308,6 +419,89 @@ test("health /send can deliver file parts end-to-end", async () => {
   assert.equal(Array.isArray(json.targets), true);
   assert.equal(json.targets[0].sentParts, 1);
   assert.equal(deliveries.length, 1);
+
+  await bridge.stop();
+  store.close();
+});
+
+test("health /send rejects file parts outside the active workspace", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "opencodeRouter-health-send-media-"));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "opencodeRouter-outside-media-"));
+  const dbPath = path.join(dir, "opencode-router.db");
+  const store = new BridgeStore(dbPath);
+  const healthPort = await freePort();
+  const outsideFile = path.join(outside, "secret.txt");
+  fs.writeFileSync(outsideFile, "do-not-send");
+
+  const deliveries = [];
+  const slackAdapter = {
+    key: "slack:default",
+    name: "slack",
+    identityId: "default",
+    maxTextLength: 39_000,
+    async start() {},
+    async stop() {},
+    async sendMessage(peerId, message) {
+      deliveries.push({ peerId, message });
+      return {
+        attemptedParts: message.parts.length,
+        sentParts: message.parts.length,
+        partResults: message.parts.map((part, index) => ({
+          index,
+          type: part.type,
+          sent: true,
+        })),
+      };
+    },
+  };
+
+  const bridge = await startBridge(
+    {
+      configPath: path.join(dir, "opencode-router.json"),
+      configFile: { version: 1 },
+      opencodeUrl: "http://127.0.0.1:4096",
+      opencodeDirectory: dir,
+      telegramBots: [],
+      slackApps: [],
+      dataDir: dir,
+      dbPath,
+      logFile: path.join(dir, "opencode-router.log"),
+      toolUpdatesEnabled: false,
+      groupsEnabled: false,
+      permissionMode: "allow",
+      toolOutputLimit: 1200,
+      healthPort,
+      healthToken: HEALTH_TOKEN,
+      logLevel: "silent",
+    },
+    createLoggerStub(),
+    undefined,
+    {
+      client: {
+        global: {
+          health: async () => ({ healthy: true, version: "test" }),
+        },
+      },
+      store,
+      adapters: new Map([["slack:default", slackAdapter]]),
+      disableEventStream: true,
+    },
+  );
+
+  const response = await fetch(`http://127.0.0.1:${healthPort}/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${HEALTH_TOKEN}` },
+    body: JSON.stringify({
+      channel: "slack",
+      peerId: "D999",
+      parts: [{ type: "file", filePath: outsideFile }],
+    }),
+  });
+  assert.equal(response.status, 400);
+  const json = await response.json();
+  assert.equal(json.ok, false);
+  assert.match(String(json.error || ""), /active workspace/i);
+  assert.equal(deliveries.length, 0);
 
   await bridge.stop();
   store.close();
@@ -335,6 +529,7 @@ test("health /send rejects invalid telegram direct peerId", async () => {
       permissionMode: "allow",
       toolOutputLimit: 1200,
       healthPort,
+      healthToken: HEALTH_TOKEN,
       logLevel: "silent",
     },
     createLoggerStub(),
@@ -353,7 +548,7 @@ test("health /send rejects invalid telegram direct peerId", async () => {
 
   const response = await fetch(`http://127.0.0.1:${healthPort}/send`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${HEALTH_TOKEN}` },
     body: JSON.stringify({ channel: "telegram", peerId: "@hotkartoffel", text: "hello-direct" }),
   });
   assert.equal(response.status, 400);
@@ -404,6 +599,7 @@ test("health /send removes invalid telegram bindings and still sends valid ones"
       permissionMode: "allow",
       toolOutputLimit: 1200,
       healthPort,
+      healthToken: HEALTH_TOKEN,
       logLevel: "silent",
     },
     createLoggerStub(),
@@ -422,7 +618,7 @@ test("health /send removes invalid telegram bindings and still sends valid ones"
 
   const response = await fetch(`http://127.0.0.1:${healthPort}/send`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${HEALTH_TOKEN}` },
     body: JSON.stringify({ channel: "telegram", directory: dir, text: "hello" }),
   });
   assert.equal(response.status, 200);

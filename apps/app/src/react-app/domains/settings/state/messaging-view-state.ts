@@ -201,6 +201,14 @@ export function useMessagingViewProps(
     setAgentLoading(true);
     setAgentError(null);
     try {
+      const fileStat = await client.statWorkspaceFile(id, OPENCODE_ROUTER_AGENT_FILE_PATH);
+      if (!fileStat.exists || fileStat.kind !== "file") {
+        setAgentExists(false);
+        setAgentContent("");
+        setAgentDraft("");
+        setAgentBaseUpdatedAt(null);
+        return;
+      }
       const result = (await client.readWorkspaceFile(
         id,
         OPENCODE_ROUTER_AGENT_FILE_PATH,

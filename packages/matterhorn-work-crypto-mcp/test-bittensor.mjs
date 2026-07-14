@@ -6,6 +6,8 @@ import path from "node:path";
 import assert from "node:assert/strict";
 
 const VALID_SS58 = "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF";
+const SERVER_TOKEN = "test-managed-opencode-token";
+let authorizedRequestCount = 0;
 
 const subnet = {
   netuid: 14,
@@ -47,6 +49,13 @@ const subnetCard = {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
   res.setHeader("Content-Type", "application/json");
+
+  if (req.headers.authorization !== `Bearer ${SERVER_TOKEN}`) {
+    res.statusCode = 401;
+    res.end(JSON.stringify({ success: false, error: "unauthorized" }));
+    return;
+  }
+  authorizedRequestCount += 1;
 
   if (req.method === "GET" && url.pathname === "/api/bittensor/subnets") {
     res.end(JSON.stringify({ success: true, subnets: [subnet], cards: [subnetCard] }));
@@ -1399,7 +1408,13 @@ const port = typeof address === "object" && address ? address.port : 0;
 const mcpPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "index.mjs");
 const child = spawn("node", [mcpPath], {
   stdio: ["pipe", "pipe", "pipe"],
-  env: { ...process.env, MATTERHORN_SERVER_URL: `http://127.0.0.1:${port}` },
+  env: {
+    ...process.env,
+    MATTERHORN_SERVER_URL: "",
+    MATTERHORN_SERVER_TOKEN: "",
+    OPENWORK_SERVER_URL: `http://127.0.0.1:${port}`,
+    OPENWORK_SERVER_TOKEN: SERVER_TOKEN,
+  },
 });
 
 let buffer = "";
@@ -1912,6 +1927,7 @@ try {
   const checkedWatches = await ask({ jsonrpc: "2.0", id: 21, method: "tools/call", params: { name: "bittensor_check_watches", arguments: {} } });
   assert.equal(JSON.parse(checkedWatches.result.content[0].text).evaluations[0].status, "ok");
   assert.equal(JSON.parse(checkedWatches.result.content[0].text).cards[0].kind, "watchlist");
+  assert.ok(authorizedRequestCount > 0, "managed OpenCode server URL and bearer token should reach the backend");
 
   console.log("All Bittensor MCP smoke tests passed.");
 } finally {

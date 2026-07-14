@@ -73,14 +73,14 @@ function AuthorizedFolderItem(props: AuthorizedFolderItemProps) {
   const folderName = getFolderName(props.folder);
 
   return (
-    <li className="flex flex-row items-center justify-between gap-3 rounded-lg border border-dls-border px-4 py-3">
+    <li className="flex flex-row items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.14] px-4 py-3">
       <div className="flex min-w-0 gap-3">
         <div className="min-w-0 flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <Folder size={16} className="shrink-0 text-muted-foreground" />
             <span className="truncate text-sm font-medium text-dls-text">{folderName}</span>
             {isWorkspaceRoot ? (
-              <span className="shrink-0 rounded-full border border-dls-border bg-dls-hover px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              <span className="shrink-0 text-xs text-muted-foreground">
                 {t("context_panel.workspace_root_badge")}
               </span>
             ) : null}
@@ -158,8 +158,15 @@ export function AuthorizedFoldersPanel(props: AuthorizedFoldersPanelProps) {
     return null;
   }, [canReadConfig, canWriteConfig, matterhornServerReady, matterhornServerWorkspaceReady]);
 
-  const canPickAuthorizedFolder =
-    isDesktopRuntime() && canWriteConfig && props.activeWorkspaceType === "local";
+  const desktopRuntime = isDesktopRuntime();
+  const addFolderUnavailableStatus = useMemo(() => {
+    if (!desktopRuntime) return "Desktop app only";
+    if (props.activeWorkspaceType !== "local") return "Local workspace only";
+    if (!matterhornServerReady || !matterhornServerWorkspaceReady) return "Connect workspace";
+    if (!canWriteConfig) return "Read only";
+    return null;
+  }, [canWriteConfig, desktopRuntime, matterhornServerReady, matterhornServerWorkspaceReady, props.activeWorkspaceType]);
+  const canPickAuthorizedFolder = addFolderUnavailableStatus === null;
   const workspaceRootFolder = props.selectedWorkspaceRoot.trim();
   const visibleAuthorizedFolders = useMemo(() => {
     const root = workspaceRootFolder;
@@ -287,6 +294,32 @@ export function AuthorizedFoldersPanel(props: AuthorizedFoldersPanelProps) {
     }
   }, [authorizedFolders, persistAuthorizedFolders, workspaceRootFolder]);
 
+  const renderAddFolderAction = (placement: "header" | "empty") => {
+    if (addFolderUnavailableStatus) {
+      return placement === "header" ? (
+        <span className="py-0.5 text-sm font-medium text-dls-secondary">
+          {addFolderUnavailableStatus}
+        </span>
+      ) : (
+        <p className="text-sm leading-6 text-dls-secondary">
+          {addFolderUnavailableStatus === "Desktop app only"
+            ? "Open this workspace in the desktop app to authorize another folder."
+            : addFolderUnavailableStatus}
+        </p>
+      );
+    }
+
+    return (
+      <Button
+        onClick={() => void pickAuthorizedFolder()}
+        disabled={authorizedFoldersLoading || authorizedFoldersSaving}
+      >
+        <Plus className="size-4" />
+        Add folder
+      </Button>
+    );
+  };
+
   return (
     <LayoutSectionItem className="gap-6">
       <LayoutSectionItemHeader>
@@ -297,13 +330,7 @@ export function AuthorizedFoldersPanel(props: AuthorizedFoldersPanelProps) {
           {t("context_panel.authorized_folders_desc")}
         </LayoutSectionItemDescription>
         <LayoutSectionItemHeaderActions>
-          <Button
-            onClick={() => void pickAuthorizedFolder()}
-            disabled={authorizedFoldersLoading || authorizedFoldersSaving || !canPickAuthorizedFolder}
-          >
-            <Plus className="size-4" />
-            Add folder
-          </Button>
+          {renderAddFolderAction("header")}
         </LayoutSectionItemHeaderActions>
       </LayoutSectionItemHeader>
 
@@ -340,15 +367,9 @@ export function AuthorizedFoldersPanel(props: AuthorizedFoldersPanelProps) {
                 <EmptyDescription>
                   {t("context_panel.add_folder_hint")}
                 </EmptyDescription>
-              </EmptyHeader>
+            </EmptyHeader>
             <EmptyContent>
-              <Button
-                onClick={() => void pickAuthorizedFolder()}
-                disabled={authorizedFoldersLoading || authorizedFoldersSaving || !canPickAuthorizedFolder}
-              >
-                <Plus className="size-4" />
-                Add folder
-              </Button>
+              {renderAddFolderAction("empty")}
             </EmptyContent>
             </Empty>
           )}

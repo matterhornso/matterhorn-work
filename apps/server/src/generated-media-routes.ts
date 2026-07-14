@@ -52,6 +52,7 @@ import { normalizeMatterhornSuiAddress } from "./tools/sui.js";
 import {
   billingUsagePeriodForSubscription,
   checkMatterhornBillingEntitlement,
+  effectiveMatterhornBillingSubscription,
   isBillingUsageTimestampInPeriod,
   resolveBillingProviderConfigFromEnv,
   type BillingProviderConfig,
@@ -62,6 +63,7 @@ type NftReceiptKind = "mint" | "listing";
 type NftPreviewKind = "mint_preview" | "listing_preview";
 
 type PublicNftReceiptMetadata = Record<string, string | number | boolean | null>;
+const GENERATED_MEDIA_JSON_BODY_MAX_BYTES = 256_000;
 
 export interface RequestContext {
   actor?: { type: "remote" | "host"; scope?: TokenScope };
@@ -378,6 +380,15 @@ export function addGeneratedMediaRoutes(
     const store = new MatterhornImageNftDraftStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const draft = await store.update(ctx.params.draftId, input);
     if (!draft) throw new ApiError(404, "nft_draft_not_found", "NFT draft not found.");
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.nft.draft_updated",
+      target: draft.id,
+      summary: `Updated NFT draft ${draft.id}`,
+      timestamp: Date.now(),
+    });
     const response: MatterhornImageNftDraftResponse = { success: true, draft: redactNftDraftForResponse(draft) };
     return jsonResponse(response);
   });
@@ -411,6 +422,19 @@ export function addGeneratedMediaRoutes(
     }
 
     const updated = await store.updateStorageStatus(draft.id, "ready_to_upload", { provider: "walrus" });
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.nft.storage_prepare",
+      target: draft.id,
+      summary: `Prepared Walrus storage handoff for NFT draft ${draft.id}`,
+      timestamp: Date.now(),
+      metadata: {
+        provider: "walrus",
+        storageStatus: updated?.storage.status ?? "ready_to_upload",
+      },
+    });
     const response: MatterhornImageNftDraftResponse = { success: true, draft: redactNftDraftForResponse(updated!) };
     return jsonResponse(response);
   });
@@ -920,10 +944,11 @@ async function resolveGeneratedMediaBillingContext(workspace: WorkspaceInfo): Pr
     workspaceRoot: workspace.path,
     workspaceId: workspace.id,
   }).get();
+  const effectiveSubscription = effectiveMatterhornBillingSubscription(account?.subscription ?? null);
   const effectiveBillingConfig = account
-    ? { ...billingConfig, currentPlanId: account.subscription.planId }
+    ? { ...billingConfig, currentPlanId: effectiveSubscription.planId }
     : billingConfig;
-  const usagePeriod = billingUsagePeriodForSubscription(account?.subscription ?? null);
+  const usagePeriod = billingUsagePeriodForSubscription(effectiveSubscription);
   return { effectiveBillingConfig, usagePeriod };
 }
 
@@ -943,16 +968,21 @@ async function requireGeneratedMediaEntitlement(
   const code = check.reason === "limit_reached"
     ? "billing_entitlement_limit_reached"
     : "billing_entitlement_required";
-  const requiredPlans = formatRequiredPlanNames(check.allowedPlanIds);
+  const requiredPlanIds = check.reason === "limit_reached"
+    ? higherBillingPlanIds(check.planId, check.allowedPlanIds)
+    : check.allowedPlanIds;
+  const requiredPlans = formatRequiredPlanNames(requiredPlanIds);
   const currentPlan = formatBillingPlanName(check.planId);
   const message = check.reason === "limit_reached"
-    ? `${check.label} limit reached on ${currentPlan}. Upgrade to ${requiredPlans} or wait for the allowance to reset.`
+    ? requiredPlanIds.length > 0
+      ? `${check.label} limit reached on ${currentPlan}. Upgrade to ${requiredPlans} or wait for the allowance to reset.`
+      : `${check.label} limit reached on ${currentPlan}. Wait for the allowance to reset.`
     : `${check.label} is not included on ${currentPlan}. Upgrade to ${requiredPlans} to continue.`;
   const metadata = {
     entitlementKey: check.key,
     entitlementLabel: check.label,
     currentPlanId: check.planId,
-    requiredPlanIds: check.allowedPlanIds.join(","),
+    requiredPlanIds: requiredPlanIds.join(","),
     requiredPlans,
     used: check.used,
     limit: check.limit,
@@ -980,7 +1010,7 @@ async function requireGeneratedMediaEntitlement(
     entitlementKey: check.key,
     entitlementLabel: check.label,
     currentPlanId: check.planId,
-    requiredPlanIds: check.allowedPlanIds,
+    requiredPlanIds,
     used: check.used,
     limit: check.limit,
     reason: check.reason,
@@ -1033,6 +1063,12 @@ function formatRequiredPlanNames(planIds: string[]): string {
   const names = planIds.map((planId) => formatBillingPlanName(planId));
   if (names.length === 1) return names[0];
   return `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+}
+
+function higherBillingPlanIds(currentPlanId: string, planIds: string[]): string[] {
+  const planRank: Record<string, number> = { free: 0, plus: 1, max: 2 };
+  const currentRank = planRank[currentPlanId] ?? -1;
+  return planIds.filter((planId) => (planRank[planId] ?? -1) > currentRank);
 }
 
 function formatBillingPlanName(planId: string): string {
@@ -1590,16 +1626,52 @@ function throwNftPreviewError(
   throw new ApiError(status, code, message, nftPreviewErrorDetails(requirements));
 }
 
+async function readGeneratedMediaBodyText(request: Request): Promise<string> {
+  const contentLength = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(contentLength) && contentLength > GENERATED_MEDIA_JSON_BODY_MAX_BYTES) {
+    throw new ApiError(413, "payload_too_large", "Generated media request payload is too large.");
+  }
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > GENERATED_MEDIA_JSON_BODY_MAX_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new ApiError(413, "payload_too_large", "Generated media request payload is too large.");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 async function readJsonBody(request: Request): Promise<unknown> {
   try {
-    return await request.json();
-  } catch {
+    return JSON.parse(await readGeneratedMediaBodyText(request));
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw new ApiError(400, "invalid_json_body", "Request body is not valid JSON.");
   }
 }
 
 async function readOptionalJsonBody(request: Request): Promise<unknown> {
-  const text = await request.text();
+  const text = await readGeneratedMediaBodyText(request);
   if (!text.trim()) return {};
   try {
     return JSON.parse(text);

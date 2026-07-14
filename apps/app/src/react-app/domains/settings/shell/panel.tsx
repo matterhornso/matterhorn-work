@@ -7,10 +7,20 @@ import { Button } from "@/components/ui/button";
 
 type SettingsContentProps = {
   children: React.ReactNode;
+  compact?: boolean;
 };
 
 export function SettingsContent(props: SettingsContentProps) {
-  return <div className="min-w-0 min-h-0 flex-1 overflow-y-auto flex flex-col gap-6 p-4 md:p-6 lg:p-8 items-center">{props.children}</div>;
+  return (
+    <div className={cn(
+      "min-h-0 min-w-0 flex-1 overflow-y-auto flex flex-col",
+      props.compact
+        ? "items-stretch gap-5 px-4 py-5"
+        : "items-center gap-6 p-4 md:p-6 lg:p-8",
+    )}>
+      {props.children}
+    </div>
+  );
 }
 
 type SettingsPanelProps = {

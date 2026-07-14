@@ -1,8 +1,10 @@
 # Wallet, Profile, MCP Readiness Contracts
 
+> **Implementation status (2026-07-11):** This file records the original shared-type contract. For current customer behavior and runtime semantics, read [Product surfaces](../product-surfaces.md), [Platform architecture](../platform-architecture.md), and [MCP docs](../mcp/README.md). Configured MCP runtime status is separate from catalog-card status, Profile opens account readiness, and Wallet includes Sui plus workspace-backed safety policy.
+
 > **Owner:** Kimi  
 > **Audience:** Codex, product, QA  
-> **Scope:** Typed contracts for Wallet runtime capability, Profile/account readiness, MCP card connectivity, and Chat draft state. No production app code changes.
+> **Scope:** Typed contracts for Wallet runtime capability, Profile/account readiness, MCP card connectivity, and Chat draft state. The production app now consumes and extends these contracts.
 
 ## Files
 

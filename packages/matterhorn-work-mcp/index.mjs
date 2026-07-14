@@ -562,17 +562,17 @@ const tools = [
   },
   {
     name: "matterhorn_workflows_customer_templates",
-    description: "Read customer-facing Matterhorn Work workflow templates for Bittensor, Hyperliquid, Polymarket, longevity creators, decentralized services, and blank chat. Template catalog only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
+    description: "Read customer-facing Matterhorn Work workflow templates for Bittensor, Hyperliquid, Polymarket, Sui, longevity creators, decentralized services, and blank chat. Template catalog only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
     inputSchema: {
       type: "object",
       properties: {
         customerTemplate: {
           type: "string",
-          description: "Optional customer template id such as bittensor_operator, hyperliquid_trader, polymarket_researcher, wellness_creator_workflow, decentralized_services_operator, or blank_chat_workflow.",
+          description: "Optional customer template id such as bittensor_operator, hyperliquid_trader, polymarket_researcher, sui_wallet_workflow, wellness_creator_workflow, decentralized_services_operator, or blank_chat_workflow.",
         },
         category: {
           type: "string",
-          enum: ["bittensor", "markets", "wellness", "decentralized_services", "future"],
+          enum: ["bittensor", "markets", "web3", "wellness", "decentralized_services", "future"],
           description: "Optional customer template category filter.",
         },
         status: {

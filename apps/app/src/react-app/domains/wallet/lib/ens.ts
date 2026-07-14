@@ -10,7 +10,7 @@ import type { Address } from "viem";
 
 const mainnetClient = createPublicClient({
   chain: mainnet,
-  transport: http(),
+  transport: http("https://ethereum-rpc.publicnode.com"),
 });
 
 /**

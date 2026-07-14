@@ -1,5 +1,7 @@
 # Matterhorn Work — Product UI System
 
+> **Current implementation note (2026-07-11):** Use [Matterhorn design system](matterhorn-design-system.md) and [Product surfaces](../product-surfaces.md) as the current source of truth. This broader system document remains useful for product rationale and historical design decisions.
+
 **Spec version:** 1.0
 **Audience:** Design engineers, frontend implementers, agent prompts
 **Scope:** All customer-facing UI in the Matterhorn Work app (market browsing, workflow execution, portfolio tracking, settings)

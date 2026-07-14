@@ -7,7 +7,12 @@
  */
 import { mkdir } from "node:fs/promises";
 import { resolveServerConfig, type CliArgs } from "./config.js";
-import { createManagedOpencodeServer, type ManagedOpencodeServer } from "./managed-opencode.js";
+import {
+  createManagedOpencodeServer,
+  type ManagedOpencodeEvent,
+  type ManagedOpencodeServer,
+  type ManagedOpencodeStatus,
+} from "./managed-opencode.js";
 import { startServer } from "./server.js";
 import { ensureWorkspaceFiles } from "./workspace-init.js";
 import { openworkExtensionsPreviewPluginPath } from "./openwork-extensions-plugin-path.js";
@@ -21,6 +26,8 @@ export type EmbeddedServerOptions = CliArgs & {
   opencodeBin?: string;
   /** Working directory for the managed OpenCode process. */
   opencodeCwd?: string;
+  /** Receives sanitized lifecycle events for desktop or host logging. */
+  onManagedOpencodeEvent?: (event: ManagedOpencodeEvent) => void;
 };
 
 export type EmbeddedServerHandle = {
@@ -30,6 +37,8 @@ export type EmbeddedServerHandle = {
   url: string;
   /** The resolved server config (with OpenCode URLs populated). */
   config: ServerConfig;
+  /** Read-only managed engine state for diagnostics. */
+  managedOpencodeStatus: () => ManagedOpencodeStatus | null;
   /** Stop the HTTP server and managed OpenCode (if any). */
   stop: () => void;
 };
@@ -74,6 +83,7 @@ export async function startEmbeddedServer(options: EmbeddedServerOptions): Promi
           OPENCODE_CONFIG_CONTENT: openworkExtensionsPreviewConfig,
           OPENCODE_MODELS_URL: opencodeModelsUrl,
         },
+        onEvent: options.onManagedOpencodeEvent,
       });
 
       config.opencodeBaseUrl = managedOpencode.url;
@@ -94,6 +104,7 @@ export async function startEmbeddedServer(options: EmbeddedServerOptions): Promi
     port: server.port,
     url: `http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${server.port}`,
     config,
+    managedOpencodeStatus: () => managedOpencode?.status() ?? null,
     stop() {
       managedOpencode?.close();
       server.stop();

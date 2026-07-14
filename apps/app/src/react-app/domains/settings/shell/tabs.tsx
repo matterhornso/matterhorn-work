@@ -9,7 +9,7 @@ type TabsSidebarProps = {
 
 export function TabsSidebar(props: TabsSidebarProps) {
   return (
-    <aside className={cn("space-y-6 md:sticky md:top-4 md:self-start")}>{props.children}</aside>
+    <aside aria-label="Settings sections" className={cn("space-y-6 md:sticky md:top-4 md:self-start")}>{props.children}</aside>
   );
 }
 
@@ -55,6 +55,7 @@ export function TabsTrigger(props: TabsTriggerProps) {
   return (
     <button
       type="button"
+      aria-current={props.active ? "page" : undefined}
       className={cn(
         "flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-[13px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover/35 hover:text-dls-text",
         props.active &&

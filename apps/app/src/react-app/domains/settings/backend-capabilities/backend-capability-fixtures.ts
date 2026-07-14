@@ -154,6 +154,11 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
     indexPath: ".matterhorn-work/notes/index.json",
     description: "Notes are workspace-local markdown plus index.json.",
   },
+  outputs: {
+    ...cap("working", "Workspace outputs"),
+    details: { readable: true, writable: true },
+    description: "The engine can read and save user-visible deliverables in workspace output stores.",
+  },
   evidence: {
     ...cap("working", "Evidence / Activity"),
     sources: ["notes", "memory", "task_events", "task_runs", "outputs", "workflow_runs"],
@@ -175,14 +180,14 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
       },
       sui: {
         family: "sui",
-        ...cap("preview", "Sui wallet preview"),
+        ...cap("preview", "Sui wallet"),
         custody: false,
         directConnect: true,
         publicRead: true,
         preview: true,
         signing: "client_wallet",
         supportedChains: ["sui-testnet", "sui-mainnet"],
-        description: "Sui wallet-standard connect is in preview. Matterhorn Work never holds keys.",
+        description: "Sui wallet-standard connect is in early access. Matterhorn Work never holds keys.",
         runtimeSupport: {
           web: {
             runtime: "web",
@@ -195,7 +200,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
           },
           desktop: {
             runtime: "desktop",
-            ...cap("preview", "Desktop external handoff", "Desktop prepares Sui previews; signing happens in an external Sui wallet or protocol client."),
+            ...cap("preview", "Desktop external handoff", "Desktop prepares Sui handoffs; signing happens in an external Sui wallet or protocol client."),
             custody: false,
             directConnect: false,
             publicRead: true,
@@ -204,7 +209,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
           },
           electron: {
             runtime: "electron",
-            ...cap("preview", "Electron external handoff", "Electron prepares Sui previews; signing happens in an external Sui wallet or protocol client."),
+            ...cap("preview", "Electron external handoff", "Electron prepares Sui handoffs; signing happens in an external Sui wallet or protocol client."),
             custody: false,
             directConnect: false,
             publicRead: true,
@@ -286,13 +291,13 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
     setup: {
       mode: "phase0_mock",
       provider: "mock",
-      readyForTestCheckout: true,
+      readyForTestCheckout: false,
       readyForWebhooks: false,
       livePaymentsEnabled: false,
       checks: [
         {
           id: "mock_mode",
-          label: "Mock checkout",
+          label: "Local plan preview",
           status: "preview",
           description: "Plan changes are local test state only. No payment provider is contacted.",
         },

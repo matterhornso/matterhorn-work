@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, join, resolve } from "node:path";
 
 import type { MediaKind } from "./media.js";
+import { isWithinWorkspaceRootPath } from "./path-scope.js";
 
 export type StoredMediaFile = {
   filePath: string;
@@ -140,12 +141,19 @@ export class MediaStore {
       throw error;
     }
 
-    const resolved = isAbsolute(raw) ? resolve(raw) : resolve(input.baseDirectory, raw);
+    const baseDirectory = resolve(input.baseDirectory);
+    const resolved = isAbsolute(raw) ? resolve(raw) : resolve(baseDirectory, raw);
+    if (!isWithinWorkspaceRootPath({ workspaceRoot: baseDirectory, candidate: resolved })) {
+      const error = new Error("File path must stay within the active workspace.") as Error & { status?: number };
+      error.status = 400;
+      throw error;
+    }
+
     let info;
     try {
       info = await stat(resolved);
     } catch (error) {
-      const wrapped = new Error(`File not found: ${resolved}`) as Error & { status?: number };
+      const wrapped = new Error(`File not found: ${basename(resolved)}`) as Error & { status?: number };
       wrapped.status = 404;
       (wrapped as any).cause = error;
       throw wrapped;
@@ -157,9 +165,19 @@ export class MediaStore {
       throw error;
     }
 
+    const [realBase, realFile] = await Promise.all([
+      realpath(baseDirectory),
+      realpath(resolved),
+    ]);
+    if (!isWithinWorkspaceRootPath({ workspaceRoot: realBase, candidate: realFile })) {
+      const error = new Error("File path must stay within the active workspace.") as Error & { status?: number };
+      error.status = 400;
+      throw error;
+    }
+
     if (typeof input.maxBytes === "number" && Number.isFinite(input.maxBytes) && info.size > input.maxBytes) {
       const error = new Error(
-        `File exceeds maximum allowed size (${info.size} > ${Math.floor(input.maxBytes)} bytes): ${resolved}`,
+        `File exceeds maximum allowed size (${info.size} > ${Math.floor(input.maxBytes)} bytes): ${basename(resolved)}`,
       ) as Error & { status?: number };
       error.status = 413;
       throw error;

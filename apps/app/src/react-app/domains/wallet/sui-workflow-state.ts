@@ -72,13 +72,13 @@ export function getSuiWorkflowAvailability(input: SuiWorkflowAvailabilityInput):
   if (!canPreparePreview) {
     signPreviewReason = previewBlocker.reason;
   } else if (!input.previewReady) {
-    signPreviewReason = "Prepare a Sui preview before signing.";
+    signPreviewReason = "Prepare a Sui handoff before signing.";
   } else if (!directWalletAvailable) {
     signPreviewReason = "Sign this handoff in an external Sui wallet or protocol client.";
   } else if (!hasValue(input.connectedAddress)) {
     signPreviewReason = "Connect the Sui wallet that owns the sender address.";
   } else if (!sameAddress(input.connectedAddress, input.previewSender ?? input.sender)) {
-    signPreviewReason = "The connected Sui wallet does not match the preview sender.";
+    signPreviewReason = "The connected Sui wallet does not match the handoff sender.";
   }
 
   const canSignPreview = signPreviewReason === null;

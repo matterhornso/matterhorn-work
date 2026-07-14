@@ -7,6 +7,7 @@ import { usePanelRef } from "react-resizable-panels";
 import {
   AlertCircle,
   BarChart3,
+  Brain,
   BrainCircuit,
   Copy,
   Dumbbell,
@@ -22,12 +23,15 @@ import {
   ShieldCheck,
   CircleUserRound,
   Wallet as WalletIcon,
-  Zap,
 } from "lucide-react";
 
 import { t } from "../../../../i18n";
 import { OPENWORK_EXTENSION_CATALOG } from "../../../../app/constants";
-import { type MatterhornServerClient, type MatterhornServerStatus } from "../../../../app/lib/matterhorn-server";
+import {
+  type MatterhornServerClient,
+  type MatterhornServerStatus,
+  type MatterhornWalletTransactionSimulationInput,
+} from "../../../../app/lib/matterhorn-server";
 import { getDisplaySessionTitle } from "../../../../app/lib/session-title";
 import type { BootPhase } from "../../../../app/lib/startup-boot";
 import type { WorkspaceInfo } from "../../../../app/lib/desktop";
@@ -84,6 +88,7 @@ import { StatusBar, type StatusBarProps } from "./status-bar";
 import { OwDotTicker } from "../../../shell/dot-ticker";
 import { useReactRenderWatchdog } from "../../../shell/react-render-watchdog";
 import { useShellConfig } from "../../../shell/shell-config";
+import { SurfaceErrorBoundary } from "../../../shell/surface-error-boundary";
 import {
   GLOBAL_HOME_SIDE_PANEL_KEY,
   SIDE_PANEL_ITEMS,
@@ -105,6 +110,7 @@ import { useStatusToasts } from "../../shell-feedback/status-toasts";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
+import { configureSecurityLogReporter } from "../../wallet/state/security-log";
 import { useJobCron } from "../../wallet/hooks/useJobCron";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
@@ -122,6 +128,7 @@ import {
 import {
   CUSTOMER_LAUNCHER_DESK_VISUALS,
   getCustomerProtocolDeskVisual,
+  getDeskWorkflowManifest,
   type CustomerProtocolDeskId,
 } from "../workflows/protocol-desk-ui";
 import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
@@ -352,7 +359,7 @@ const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: str
     {
       title: "Check compliance",
       detail: "If blocked, do not expose executable price, size, share, or order fields.",
-      prompt: "Check whether this Polymarket market is eligible for a handoff. If compliance blocks the flow, do not show executable price, size, share, or order fields.",
+      prompt: "Check whether this Polymarket market is eligible for a handoff: <paste market URL or slug>. If compliance blocks the flow, do not show executable price, size, share, or order fields.",
     },
     {
       title: "Prepare trade handoff",
@@ -446,12 +453,25 @@ function HomeWalletRuntimeStatus({
         : "Wallet readiness not reported";
 
   return (
-    <div className="rounded-md bg-dls-surface-muted/15 px-3 py-2.5 text-sm">
+    <div className="rounded-md bg-dls-canvas/55 px-3 py-2.5 text-sm">
       <div className="flex items-center justify-between gap-3 text-left">
         <span className="flex min-w-0 items-center gap-2">
           <WalletIcon className="size-4 shrink-0 text-dls-secondary" />
           <span className="font-medium text-dls-text">Wallet readiness</span>
-          <span className="min-w-0 truncate text-xs text-dls-secondary">{headline}</span>
+          {rows.length && !loading && !error ? (
+            <span className="flex min-w-0 flex-wrap items-center gap-1" aria-label={headline}>
+              {rows.map((row) => (
+                <span
+                  key={row.family}
+                  className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-4", homeWalletTone(row.status))}
+                >
+                  {row.family}: {backendCapabilityLabel(row.status)}
+                </span>
+              ))}
+            </span>
+          ) : (
+            <span className="min-w-0 truncate text-xs text-dls-secondary">{headline}</span>
+          )}
         </span>
         <Popover>
           <PopoverTrigger
@@ -566,7 +586,7 @@ function HomeCapabilityOverview({
             <article
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="matterhorn-capability-card group grid min-w-0 gap-3 relative rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.055)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.10)]"
+              className="matterhorn-capability-card group grid min-w-0 gap-3 relative rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.085)] shadow-[var(--dls-card-shadow)] transition-[background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-px hover:bg-[rgba(var(--matterhorn-desk-rgb),0.14)] motion-reduce:transform-none motion-reduce:transition-none"
             >
               <button
                 type="button"
@@ -574,7 +594,7 @@ function HomeCapabilityOverview({
                 aria-label={`Open ${item.title}`}
                 onClick={() => onOpenCapability?.(item.id)}
               >
-                <span className="flex size-8 items-center justify-center rounded-md bg-dls-surface/45 text-[var(--matterhorn-desk-color)]">
+                  <span className="flex size-8 items-center justify-center rounded-md bg-dls-canvas/70 text-[var(--matterhorn-desk-color)]">
                   <DeskBrandMark id={item.id} size={24} />
                 </span>
                 <div className="min-w-0">
@@ -656,7 +676,12 @@ function WorkflowDeskHomeSurface({
           .map((checkId) => readinessQuery.data?.checks[checkId]?.label ?? checkId)
           .join(", ")}.`
         : null;
-  const taskStatus = launchState?.run?.status ?? (
+  const startTaskActionLabel = !matterhornServerClient
+    ? "Engine offline"
+    : !readinessWorkspaceId
+      ? "Open workspace"
+      : "Platform setup";
+  const taskStatus = launchState?.status === "launching" ? "running" : (
     launchState?.status === "staging"
       ? "staged"
       : launchState?.status === "failed"
@@ -673,7 +698,7 @@ function WorkflowDeskHomeSurface({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
-            className="inline-flex w-fit items-center gap-2 rounded-lg bg-transparent px-1 py-1.5 text-xs font-semibold text-dls-secondary transition-colors hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+            className="inline-flex w-fit items-center gap-2 rounded-md bg-dls-surface-muted/[0.20] px-2.5 py-1.5 text-xs font-semibold text-dls-secondary transition-colors hover:bg-dls-surface-muted/[0.32] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
             onClick={onBackHome}
             aria-label="Back to Home"
           >
@@ -690,11 +715,15 @@ function WorkflowDeskHomeSurface({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg font-semibold text-dls-text">{visual?.agentName ?? "Longevity Agent"}</h2>
-                {taskStatus === "failed" ? (
+                {launchState?.status === "failed" ? (
                   <span className="text-[11px] font-semibold text-rose-300">Needs attention</span>
-                ) : taskStatus === "idle" ? null : (
-                  <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">Started</span>
-                )}
+                ) : launchState?.status === "ready" ? (
+                  <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">Ready</span>
+                ) : launchState?.status === "launching" ? (
+                  <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">Starting</span>
+                ) : launchState?.status === "staging" ? (
+                  <span className="text-[11px] font-semibold text-dls-secondary">Preparing</span>
+                ) : null}
               </div>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
                 {visual?.agentDescription ?? "Run a standardized workflow with visible stages, outputs, and safety boundaries."}
@@ -723,6 +752,7 @@ function WorkflowDeskHomeSurface({
           currentStageId={launchState?.run?.stageId}
           taskStatus={taskStatus}
           stageActionDisabled={startTaskBlocked}
+          stageActionLabel={startTaskActionLabel}
           stageActionTitle={startTaskBlocker ?? undefined}
           onStartStage={onStartStage}
         />
@@ -770,7 +800,7 @@ function ProtocolDeskEmptyState({
   panel: VenueSidePanel;
   matterhornServerClient: MatterhornServerClient | null;
   runtimeWorkspaceId: string | null;
-  onUsePrompt: (prompt: string, title?: string) => void;
+  onUsePrompt: (prompt: string, title?: string) => boolean | void | Promise<boolean | void>;
   onBackHome: () => void;
 }) {
   const visual = getCustomerProtocolDeskVisual(panel);
@@ -820,6 +850,11 @@ function ProtocolDeskEmptyState({
           .map((checkId) => readinessQuery.data?.checks[checkId]?.label ?? checkId)
           .join(", ")}.`
         : null;
+  const startTaskActionLabel = !matterhornServerClient
+    ? "Engine offline"
+    : !readinessWorkspaceId
+      ? "Open workspace"
+      : "Platform setup";
   const deskSafetyInfo = panel === "bittensor"
     ? "Runs public SS58 reads and unsigned previews. Signing stays in an external Bittensor-compatible wallet."
     : panel === "polymarket"
@@ -836,7 +871,16 @@ function ProtocolDeskEmptyState({
     setPendingInput(null);
     setTaskInputValue("");
     setTaskInputError(null);
-    onUsePrompt(prompt, title);
+    const result = onUsePrompt(prompt, title);
+    void Promise.resolve(result)
+      .then((started) => {
+        if (started === false) {
+          setLaunchingTaskTitle((current) => current === title ? null : current);
+        }
+      })
+      .catch(() => {
+        setLaunchingTaskTitle((current) => current === title ? null : current);
+      });
   }, [onUsePrompt]);
 
   const handleTaskAction = useCallback((item: { title: string; prompt: string }) => {
@@ -878,7 +922,7 @@ function ProtocolDeskEmptyState({
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          className="inline-flex w-fit items-center gap-2 rounded-md px-2 py-1.5 text-xs font-semibold text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.10)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+          className="inline-flex w-fit items-center gap-2 rounded-md bg-dls-surface-muted/[0.20] px-2.5 py-1.5 text-xs font-semibold text-dls-secondary transition-colors hover:bg-dls-surface-muted/[0.32] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
           onClick={onBackHome}
           aria-label="Back to Home"
         >
@@ -980,7 +1024,7 @@ function ProtocolDeskEmptyState({
                 objective={item.detail}
                 status="idle"
                 evidenceHints={[evidenceHint]}
-                actionLabel={isLaunching ? "Starting..." : startTaskBlocked ? "Needs setup" : inputRequirement?.actionLabel ?? draftConfig?.confirmCtaLabel ?? "Start task"}
+                actionLabel={isLaunching ? "Starting..." : startTaskBlocked ? startTaskActionLabel : inputRequirement?.actionLabel ?? draftConfig?.confirmCtaLabel ?? "Start task"}
                 actionDisabled={startTaskBlocked || Boolean(launchingTaskTitle)}
                 actionTitle={startTaskBlocker ?? inputRequirement?.helpText ?? undefined}
                 onAction={() => handleTaskAction(item)}
@@ -1052,7 +1096,7 @@ type StatusBarOverrides = Pick<
 
 type WorkflowDeskLaunchState = {
   deskId: WorkflowDeskId;
-  status: "idle" | "staging" | "running" | "failed";
+  status: "idle" | "staging" | "ready" | "launching" | "failed";
   run: MatterhornWorkflowRun | null;
   message: string | null;
   intent: string | null;
@@ -1085,8 +1129,12 @@ export type SessionPageSidebarProps = {
   onOpenSession: (workspaceId: string, sessionId: string) => void;
   onPrefetchSession?: (workspaceId: string, sessionId: string) => void;
   onCreateTaskInWorkspace: (workspaceId: string) => void;
-  // Stable launcher contract: onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string; agent?: string }) => void
-  onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string; agent?: string; sendImmediately?: boolean }) => void;
+  // Stable launcher contract: returns false when the task could not actually start.
+  onCreateTaskWithPrompt?: (
+    workspaceId: string,
+    prompt: string,
+    options?: { title?: string; agent?: string; sendImmediately?: boolean; onSessionCreated?: (sessionId: string) => void | Promise<void> },
+  ) => boolean | void | Promise<boolean | void>;
   onOpenRenameWorkspace: (workspaceId: string) => void;
   onShareWorkspace: (workspaceId: string) => void;
   onRevealWorkspace: (workspaceId: string) => void;
@@ -1243,8 +1291,8 @@ export function SessionPage(props: SessionPageProps) {
   }, []);
 
   const { openQuickJot } = useQuickJot();
-  const workspaceNotesId = (props.runtimeWorkspaceId ?? props.selectedWorkspaceDisplay.id ?? "").trim();
-  const workspaceNotesAvailable = Boolean(workspaceNotesId && props.selectedWorkspaceDisplay.id && !props.notFoundMessage);
+  const workspaceNotesId = (props.runtimeWorkspaceId ?? "").trim();
+  const workspaceNotesAvailable = Boolean(workspaceNotesId && props.matterhornServerClient && !props.notFoundMessage);
   const addArtifactNote = useCallback(
     async (artifactPath: string, desk?: string, sessionSlug?: string) => {
       const noteContext = getArtifactNoteContext(artifactPath);
@@ -1307,6 +1355,37 @@ export function SessionPage(props: SessionPageProps) {
   const [, setExtensionStateVersion] = useState(0);
   const loadedHiddenTargetsKeyRef = useRef<string | null>(null);
   const outputReceiptWorkspaceId = (props.runtimeWorkspaceId ?? props.selectedWorkspaceId).trim();
+  const simulateWalletTransaction = useCallback(
+    (input: MatterhornWalletTransactionSimulationInput) => {
+      if (!props.matterhornServerClient || !outputReceiptWorkspaceId) {
+        return Promise.reject(new Error("Wallet simulation service is unavailable."));
+      }
+      return props.matterhornServerClient.simulateWalletTransaction(outputReceiptWorkspaceId, input);
+    },
+    [props.matterhornServerClient, outputReceiptWorkspaceId],
+  );
+  useEffect(() => {
+    const client = props.matterhornServerClient;
+    const workspaceId = props.runtimeWorkspaceId?.trim();
+    if (!client || !workspaceId) {
+      return configureSecurityLogReporter(null);
+    }
+    return configureSecurityLogReporter({
+      workspaceId,
+      report: async (entry) => {
+        await client.recordWalletSafetyEvent(workspaceId, {
+          action: entry.action,
+          chainId: entry.chainId,
+          to: entry.to,
+          valueUSD: entry.valueUSD,
+          riskLevel: entry.riskLevel,
+          reason: entry.reason,
+          txHash: entry.txHash ?? null,
+          review: entry.review ?? null,
+        });
+      },
+    });
+  }, [props.matterhornServerClient, props.runtimeWorkspaceId]);
   const homeWalletCapabilitiesQuery = useQuery({
     queryKey: ["home-wallet-backend-capabilities", outputReceiptWorkspaceId] as const,
     queryFn: () => props.matterhornServerClient!.backendCapabilities(),
@@ -1379,8 +1458,9 @@ export function SessionPage(props: SessionPageProps) {
   const dockedSidePanelOpen = sidePanelOpen && !isMobileViewport;
   const mobileSidePanelOpen = sidePanelOpen && isMobileViewport;
   const protocolSidePanelOpen = isVenueSidePanel(visibleSidePanel);
+  const embeddedSettingsPanelOpen = visibleSidePanel === "extensions" || visibleSidePanel === "profile" || visibleSidePanel === "wallet";
   const sidePanelTitle = visibleSidePanel === "profile"
-    ? "Settings"
+    ? "Profile"
     : visibleSidePanel === "wallet"
       ? "Wallet"
       : visibleSidePanel === "extensions"
@@ -1402,7 +1482,7 @@ export function SessionPage(props: SessionPageProps) {
     const slot = props.settingsSlotForPath?.(initialPath)
       ?? (initialPath === "extensions" ? props.settingsSlot : null);
     return slot ? (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <div className="matterhorn-side-panel flex h-full min-h-0 flex-col overflow-hidden bg-dls-background">
         {slot}
       </div>
     ) : null;
@@ -1424,10 +1504,6 @@ export function SessionPage(props: SessionPageProps) {
   const mondayBetaDemoCards = useMemo(
     () => buildCustomerBetaDemoStarterCards(customerWorkflowTemplatesQuery.data),
     [customerWorkflowTemplatesQuery.data],
-  );
-  const customerWorkflowLaunchers = useMemo(
-    () => customerWorkflowStarterCards.filter((card) => card.id !== "blank_chat_workflow"),
-    [customerWorkflowStarterCards],
   );
   const protocolWorkflowLaunchers = useMemo(
     () => customerWorkflowStarterCards.filter((card) => card.panel === "bittensor" || card.panel === "hyperliquid" || card.panel === "polymarket" || card.panel === "sui"),
@@ -1471,10 +1547,6 @@ export function SessionPage(props: SessionPageProps) {
     () => customerWorkflowStarterCards.filter((card) => card.id === "wellness_creator_workflow"),
     [customerWorkflowStarterCards],
   );
-  const blankWorkflowLauncher = useMemo(
-    () => customerWorkflowStarterCards.find((card) => card.id === "blank_chat_workflow") ?? null,
-    [customerWorkflowStarterCards],
-  );
   const wellnessRailLauncher = useMemo(
     () => customerWorkflowStarterCards.find((card) => card.id === "wellness_creator_workflow") ?? null,
     [customerWorkflowStarterCards],
@@ -1506,9 +1578,6 @@ export function SessionPage(props: SessionPageProps) {
   const homeOutputsPath = homeProjectPath ? joinWorkspaceChildPath(homeProjectPath, "outputs") : "outputs/";
   const homeProjectName = props.selectedWorkspaceDisplay.displayName || props.selectedWorkspaceDisplay.name || "Current project";
   const homeFolderLabel = compactPathSegment(homeProjectPath) || "No local folder";
-  const goHome = useCallback(() => {
-    props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
-  }, [props.selectedWorkspaceId, props.sidebar]);
 
   const openRunHistory = useCallback(() => {
     if (props.sidebar.onOpenWorkspaceHistory) {
@@ -1545,7 +1614,25 @@ export function SessionPage(props: SessionPageProps) {
     setSidePanelState(GLOBAL_VOICE_SIDE_PANEL_KEY, panel === "voice" ? "voice" : null);
     if (panel === "voice") return;
     setSidePanelState(sidePanelScopeId, panel);
-  }, [setSidePanelState, sidePanelScopeId]);
+
+    // Async task launches can navigate before their desk-close callback runs.
+    // Read the live URL so a stale render closure cannot send the user back to
+    // workspace home after the new session is already open.
+    const currentLocation = typeof window !== "undefined" ? window.location : location;
+    const params = new URLSearchParams(currentLocation.search);
+    const routedPanel = params.get("panel");
+    if (!routedPanel || routedPanel === panel) return;
+    if (panel) params.set("panel", panel);
+    else params.delete("panel");
+    navigate(
+      {
+        pathname: currentLocation.pathname,
+        search: params.toString() ? `?${params.toString()}` : "",
+        hash: currentLocation.hash,
+      },
+      { replace: true },
+    );
+  }, [location.hash, location.pathname, location.search, navigate, setSidePanelState, sidePanelScopeId]);
 
   useEffect(() => {
     const requestedPanel = new URLSearchParams(location.search).get("panel");
@@ -1608,6 +1695,11 @@ export function SessionPage(props: SessionPageProps) {
     setCurrentSidePanel(null);
   }, [setCurrentSidePanel]);
 
+  const goHome = useCallback(() => {
+    returnToProjectHome();
+    props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
+  }, [props.selectedWorkspaceId, props.sidebar, returnToProjectHome]);
+
   const closeWorkflowDesk = useCallback(() => {
     setActiveWorkflowDeskId(null);
     setWorkflowLaunchState(null);
@@ -1617,7 +1709,7 @@ export function SessionPage(props: SessionPageProps) {
   const openWorkflowDesk = useCallback((
     deskId: WorkflowDeskId,
     prompt: string,
-    options?: { title?: string; stageId?: string; actionId?: string; sourceId?: string },
+    options?: { title?: string; stageId?: string; actionId?: string; sourceId?: string; launchAgent?: boolean },
   ) => {
     const visibleUserIntent = prompt.trim();
     if (!visibleUserIntent) return;
@@ -1625,6 +1717,19 @@ export function SessionPage(props: SessionPageProps) {
     props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
     setCurrentSidePanel(null);
     setActiveWorkflowDeskId(deskId);
+
+    if (!options?.launchAgent) {
+      setWorkflowLaunchState({
+        deskId,
+        status: props.matterhornServerClient ? "ready" : "failed",
+        run: null,
+        message: props.matterhornServerClient
+          ? `Choose a stage to begin. Outputs will save under outputs/${getCustomerProtocolDeskVisual(deskId)?.outputDeskId ?? deskId}/<session-slug>/`
+          : "Matterhorn Work engine is unavailable for this project. Retry the connection or restart Matterhorn Work if it stays offline.",
+        intent: visibleUserIntent,
+      });
+      return;
+    }
 
     const baseState: WorkflowDeskLaunchState = {
       deskId,
@@ -1639,39 +1744,46 @@ export function SessionPage(props: SessionPageProps) {
 
     if (!props.matterhornServerClient) return;
 
-    const sessionId = `workflow_${deskId}_${Date.now().toString(36)}`;
-    if (deskId === "wellness") {
-      dispatchMatterhornMemorySuggestions({
-        desk: "wellness",
-        prompt: visibleUserIntent,
-        source: "workflow_output",
-        sourceId: options?.sourceId ?? "wellness-workflow-launcher",
-        workspaceId: props.selectedWorkspaceId,
-        sessionId,
-        templateId: "wellness_creator_workflow",
+    void (async () => {
+      const startResult = props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, visibleUserIntent, {
+        title: options.title ?? getCustomerProtocolDeskVisual(deskId)?.agentName ?? "Desk task",
+        agent: agentIdForDesk(deskId),
+        sendImmediately: true,
+        onSessionCreated: async (sessionId) => {
+          if (deskId === "wellness") {
+            dispatchMatterhornMemorySuggestions({
+              desk: "wellness",
+              prompt: visibleUserIntent,
+              source: "workflow_output",
+              sourceId: options?.sourceId ?? "wellness-workflow-launcher",
+              workspaceId: props.selectedWorkspaceId,
+              sessionId,
+              templateId: "wellness_creator_workflow",
+            });
+          }
+          const stagedRun = await stageWorkflowRun(props.matterhornServerClient!, {
+            workspaceId: props.selectedWorkspaceId,
+            sessionId,
+            deskId,
+            actionId: options?.actionId,
+            stageId: options?.stageId,
+            visibleUserIntent,
+          });
+          const run = await startWorkflowRun(props.matterhornServerClient!, stagedRun.workflowRunId);
+          setWorkflowLaunchState({
+            deskId,
+            status: "launching",
+            run,
+            message: `Starting ${options.title ?? "stage"} in a new chat...`,
+            intent: visibleUserIntent,
+          });
+          window.dispatchEvent(new Event("matterhorn:task-log-updated"));
+        },
       });
-    }
-
-    void stageWorkflowRun(props.matterhornServerClient, {
-      workspaceId: props.selectedWorkspaceId,
-      sessionId,
-      deskId,
-      actionId: options?.actionId,
-      stageId: options?.stageId,
-      visibleUserIntent,
-    })
-      .then((run) => startWorkflowRun(props.matterhornServerClient!, run.workflowRunId))
-      .then((run) => {
-        setWorkflowLaunchState({
-          deskId,
-          status: "running",
-          run,
-          message: `Started. Outputs will save under ${run.outputBasePath}`,
-          intent: visibleUserIntent,
-        });
-        window.dispatchEvent(new Event("matterhorn:task-log-updated"));
-      })
-      .catch((error) => {
+      if (startResult === undefined || await Promise.resolve(startResult) === false) {
+        throw new Error("The workflow was prepared, but the agent chat could not start. Check the selected model and try again.");
+      }
+    })().catch((error) => {
         setWorkflowLaunchState({
           deskId,
           status: "failed",
@@ -1853,6 +1965,10 @@ export function SessionPage(props: SessionPageProps) {
   useControlAction(canExposeBrowserControlActions ? openBrowserUrlControlAction : null);
 
   const openArtifactRailPane = useCallback(() => {
+    if (artifactRailActive) {
+      toggleCurrentSidePanel("artifacts");
+      return;
+    }
     if (!hasArtifactTargets) return;
     if (!artifactRailActive) {
       preserveSidePanelOnPanelOpenRef.current = true;
@@ -1879,6 +1995,17 @@ export function SessionPage(props: SessionPageProps) {
     }
     toggleCurrentSidePanel("notes");
   }, [showToast, toggleCurrentSidePanel, workspaceNotesAvailable]);
+  const openWorkspaceQuickJot = useCallback((attachment?: Parameters<typeof openQuickJot>[0]) => {
+    if (!workspaceNotesAvailable) {
+      showToast({
+        title: "Create a workspace before saving notes",
+        description: "Notes are stored as project evidence inside a Matterhorn workspace.",
+        tone: "warning",
+      });
+      return;
+    }
+    openQuickJot(attachment);
+  }, [openQuickJot, showToast, workspaceNotesAvailable]);
   const primeProtocolRailPrompt = useCallback((
     panel: VenueSidePanel,
     options?: { prompt?: string; source?: string; title?: string },
@@ -1918,7 +2045,7 @@ export function SessionPage(props: SessionPageProps) {
       onClose={closeRightPane}
     />
   ) : visibleSidePanel === "profile" && props.settingsSlotForPath ? (
-    renderCompactSettingsRail("general")
+    renderCompactSettingsRail("cloud-account")
   ) : visibleSidePanel === "wallet" && props.settingsSlotForPath ? (
     renderCompactSettingsRail("wallet")
   ) : visibleSidePanel === "memory" ? (
@@ -1977,6 +2104,15 @@ export function SessionPage(props: SessionPageProps) {
   ) : (
     <BrowserPanel onClose={closeRightPane} />
   );
+  const guardedSidePanelContent = sidePanelContent ? (
+    <SurfaceErrorBoundary
+      resetKey={`${visibleSidePanel ?? "none"}:${props.runtimeWorkspaceId ?? props.selectedWorkspaceId}:${props.selectedSessionId ?? "home"}`}
+      source={`SessionSidePanel:${visibleSidePanel ?? "unknown"}`}
+      title={`${sidePanelTitle} stopped working`}
+    >
+      {sidePanelContent}
+    </SurfaceErrorBoundary>
+  ) : null;
   useEffect(() => {
     const open = (event: Event) => {
       const requested = (event as CustomEvent<OpenTarget>).detail;
@@ -2240,7 +2376,9 @@ export function SessionPage(props: SessionPageProps) {
                   ? t("session.create_or_connect_workspace")
                   : props.workspaceHomeView === "history" && !props.selectedSessionId
                     ? "Project history"
-                    : selectedSessionTitle || t("session.default_title")}
+                    : !props.selectedSessionId
+                      ? "Project home"
+                      : selectedSessionTitle || t("session.default_title")}
               </h1>
               {props.selectedSessionId && props.onRenameSession && !showWorkspaceSetupEmptyState ? (
                 <Button
@@ -2273,7 +2411,7 @@ export function SessionPage(props: SessionPageProps) {
                   size="icon-sm"
                   className="size-7 text-dls-secondary hover:text-dls-text"
                   onClick={() =>
-                    openQuickJot(
+                    openWorkspaceQuickJot(
                       props.selectedSessionId
                         ? { type: "session", id: props.selectedSessionId, label: selectedSessionTitle }
                         : undefined,
@@ -2383,15 +2521,21 @@ export function SessionPage(props: SessionPageProps) {
                 <div className={`mx-auto max-w-[800px] px-6 ${showWorkspaceSetupEmptyState ? "pt-20" : "pt-10"}`}>
                   {props.notFoundMessage ? (
                     <div className="px-6 py-16 text-center">
-                      <div className="mx-auto max-w-md rounded-lg bg-dls-card px-5 py-6">
-                        <h3 className="text-base font-medium text-dls-text">Workspace or session not found</h3>
-                        <p className="mt-2 text-sm leading-6 text-dls-secondary">{props.notFoundMessage}</p>
+                      <div className="mx-auto flex max-w-md flex-col items-center gap-5">
+                        <div className="flex size-11 items-center justify-center rounded-xl bg-dls-surface-muted/20 text-dls-secondary">
+                          <FolderOpen className="size-5" strokeWidth={1.7} aria-hidden="true" />
+                        </div>
+                        <div className="space-y-2">
+                          <h3 className="text-lg font-medium text-dls-text">{t("session.create_or_connect_workspace")}</h3>
+                          <p className="text-sm leading-6 text-dls-secondary">{props.notFoundMessage}</p>
+                        </div>
+                        <Button onClick={props.sidebar.onOpenCreateWorkspace}>{t("workspace.create_workspace")}</Button>
                       </div>
                     </div>
                   ) : showWorkspaceSetupEmptyState ? (
                     <div className="space-y-6 px-6 text-center">
-                      <div className="mx-auto flex size-16 items-center justify-center rounded-lg bg-dls-hover text-dls-secondary">
-                        <Zap className="text-dls-secondary" />
+                      <div className="mx-auto flex size-11 items-center justify-center rounded-xl bg-dls-surface-muted/20 text-dls-secondary">
+                        <FolderOpen className="size-5" strokeWidth={1.7} aria-hidden="true" />
                       </div>
                       <div className="space-y-2">
                         <h3 className="text-xl font-medium">{t("session.create_or_connect_workspace")}</h3>
@@ -2459,8 +2603,9 @@ export function SessionPage(props: SessionPageProps) {
                       onStartStage={(stageId, prompt) => {
                         openWorkflowDesk(activeWorkflowDeskId, prompt, {
                           stageId,
-                          title: getCustomerProtocolDeskVisual(activeWorkflowDeskId)?.agentName,
+                          title: getDeskWorkflowManifest(activeWorkflowDeskId)?.steps.find((step) => step.id === stageId)?.name,
                           sourceId: `${activeWorkflowDeskId}-${stageId}`,
+                          launchAgent: true,
                         });
                       }}
                     />
@@ -2479,22 +2624,34 @@ export function SessionPage(props: SessionPageProps) {
                         runtimeWorkspaceId={props.runtimeWorkspaceId}
                         onBackHome={returnToProjectHome}
                         onUsePrompt={(prompt, title) => {
-                          if (typeof window !== "undefined") {
-                            const state = window.history.state && typeof window.history.state === "object"
-                              ? window.history.state as Record<string, unknown>
-                              : {};
-                            if (state.matterhornFocusedDesk) {
-                              const nextState = { ...state };
-                              delete nextState.matterhornFocusedDesk;
-                              window.history.replaceState(nextState, "", window.location.href);
+                          const clearFocusedDesk = () => {
+                            if (typeof window !== "undefined") {
+                              const state = window.history.state && typeof window.history.state === "object"
+                                ? window.history.state as Record<string, unknown>
+                                : {};
+                              if (state.matterhornFocusedDesk) {
+                                const nextState = { ...state };
+                                delete nextState.matterhornFocusedDesk;
+                                window.history.replaceState(nextState, "", window.location.href);
+                              }
                             }
-                          }
-                          focusedDeskHistoryRef.current = null;
-                          setCurrentSidePanel(null);
-                          props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, {
+                            focusedDeskHistoryRef.current = null;
+                            setCurrentSidePanel(null);
+                          };
+                          let taskSessionCreated = false;
+                          const startResult = props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, {
                             title,
                             agent: agentIdForDesk(focusedProtocolPanel),
                             sendImmediately: true,
+                            onSessionCreated: () => {
+                              taskSessionCreated = true;
+                              clearFocusedDesk();
+                            },
+                          });
+                          if (startResult === undefined) return false;
+                          return Promise.resolve(startResult).then((started) => {
+                            if (started === false && !taskSessionCreated) setCurrentSidePanel(focusedProtocolPanel);
+                            return started;
                           });
                         }}
                       />
@@ -2505,14 +2662,14 @@ export function SessionPage(props: SessionPageProps) {
                       style={{ scrollbarGutter: "stable" } as CSSProperties}
                     >
                       <div className="relative w-full max-w-5xl space-y-6">
-                        <section className="space-y-3" aria-label="Workspace home">
+                        <section className="space-y-3 rounded-lg bg-dls-canvas/35 px-4 py-4" aria-label="Workspace home">
                           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                             <div className="min-w-0">
                               <h2 className="truncate text-lg font-semibold leading-7 text-dls-text">
                                 {homeProjectName}
                               </h2>
                               <p className="max-w-2xl text-sm leading-6 text-dls-secondary">
-                                Start a desk task, continue a chat, or collect notes and outputs for this workspace.
+                                Chats, desks, notes, and saved outputs for this project.
                               </p>
                             </div>
                             <div className="flex flex-wrap gap-2 md:justify-end">
@@ -2521,16 +2678,7 @@ export function SessionPage(props: SessionPageProps) {
                                 size="sm"
                                 className="h-8 px-3"
                                 disabled={props.sidebar.newTaskDisabled}
-                                onClick={() => {
-                                  if (blankWorkflowLauncher && props.sidebar.onCreateTaskWithPrompt) {
-                                    props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, {
-                                      title: blankWorkflowLauncher.title,
-                                      sendImmediately: true,
-                                    });
-                                    return;
-                                  }
-                                  props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
-                                }}
+                                onClick={() => props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId)}
                               >
                                 New chat
                               </Button>
@@ -2548,75 +2696,79 @@ export function SessionPage(props: SessionPageProps) {
                                 variant="ghost"
                                 size="sm"
                                 className="h-8 bg-transparent px-3"
-                                onClick={() => openQuickJot()}
+                                onClick={() => openWorkspaceQuickJot()}
                               >
-                                Jot note
+                                New note
                               </Button>
                             </div>
                           </div>
-                          <div className="flex min-w-0 flex-col gap-2 text-xs text-dls-secondary sm:flex-row sm:items-center sm:justify-between">
-                            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-                              <span className="inline-flex min-w-0 items-baseline gap-2">
-                                <span className="font-medium text-dls-text">Folder</span>
-                                <span
-                                  className="min-w-0 max-w-[18rem] truncate font-mono text-[11px] leading-4 text-dls-secondary"
-                                  title={homeProjectPath || "No local project folder selected"}
-                                >
-                                  {homeFolderLabel}
-                                </span>
+                          <div className="grid min-w-0 gap-2 text-xs text-dls-secondary lg:grid-cols-2">
+                            <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2">
+                              <span className="font-medium text-dls-text">Project folder</span>
+                              <span
+                                className="min-w-0 truncate font-mono text-[11px] leading-4 text-dls-secondary"
+                                title={homeProjectPath || "No local project folder selected"}
+                              >
+                                {homeFolderLabel}
                               </span>
-                              <span className="inline-flex min-w-0 items-baseline gap-2">
-                                <span className="font-mono text-[11px] leading-4 text-dls-secondary" title={homeOutputsPath}>outputs/</span>
+                              <span className="flex shrink-0 items-center gap-0.5">
+                                <WorkspaceHomeIconAction
+                                  label={homePathCopyLabel === "Project path" ? "Project path copied" : "Copy project path"}
+                                  tooltip={homePathCopyLabel === "Project path" ? "Copied" : "Copy project path"}
+                                  disabled={!homeProjectPath}
+                                  onClick={() => void copyHomePath(homeProjectPath, "Project path")}
+                                >
+                                  <Copy className="size-3.5" />
+                                </WorkspaceHomeIconAction>
+                                <WorkspaceHomeIconAction
+                                  label="Open project folder"
+                                  tooltip="Open project folder"
+                                  disabled={!homeProjectPath}
+                                  onClick={() => props.sidebar.onRevealWorkspace(props.selectedWorkspaceId)}
+                                >
+                                  <FolderOpen className="size-3.5" />
+                                </WorkspaceHomeIconAction>
                               </span>
                             </div>
-                            <div className="flex shrink-0 items-center gap-1">
-                              <WorkspaceHomeIconAction
-                                label={homePathCopyLabel === "Project path" ? "Project path copied" : "Copy project path"}
-                                tooltip={homePathCopyLabel === "Project path" ? "Copied" : "Copy project path"}
-                                disabled={!homeProjectPath}
-                                onClick={() => void copyHomePath(homeProjectPath, "Project path")}
-                              >
-                                <Copy className="size-3.5" />
-                              </WorkspaceHomeIconAction>
-                              <WorkspaceHomeIconAction
-                                label="Open project folder"
-                                tooltip="Open project folder"
-                                disabled={!homeProjectPath}
-                                onClick={() => props.sidebar.onRevealWorkspace(props.selectedWorkspaceId)}
-                              >
-                                <FolderOpen className="size-3.5" />
-                              </WorkspaceHomeIconAction>
-                              <WorkspaceHomeIconAction
-                                label={homePathCopyLabel === "Outputs path" ? "Outputs path copied" : "Copy outputs path"}
-                                tooltip={homePathCopyLabel === "Outputs path" ? "Copied" : "Copy outputs path"}
-                                onClick={() => void copyHomePath(homeOutputsPath, "Outputs path")}
-                              >
-                                <Copy className="size-3.5" />
-                              </WorkspaceHomeIconAction>
-                              <WorkspaceHomeIconAction
-                                label="Open outputs folder"
-                                tooltip="Open outputs folder"
-                                disabled={!homeProjectPath || !props.onRevealPath}
-                                onClick={() => {
-                                  if (!props.onRevealPath) return;
-                                  void props.onRevealPath(homeOutputsPath, "Outputs folder");
-                                }}
-                              >
-                                <FolderOpen className="size-3.5" />
-                              </WorkspaceHomeIconAction>
-                              <WorkspaceHomeIconAction
-                                label="Jot a note about outputs"
-                                tooltip="Jot a note about outputs"
-                                onClick={() =>
-                                  openQuickJot({
-                                    type: "output",
-                                    id: homeOutputsPath,
-                                    label: "Outputs",
-                                  })
-                                }
-                              >
-                                <PencilLine className="size-3.5" />
-                              </WorkspaceHomeIconAction>
+                            <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2">
+                              <span className="font-medium text-dls-text">Saved outputs</span>
+                              <span className="min-w-0 truncate font-mono text-[11px] leading-4 text-dls-secondary" title={homeOutputsPath}>
+                                outputs/
+                              </span>
+                              <span className="flex shrink-0 items-center gap-0.5">
+                                <WorkspaceHomeIconAction
+                                  label={homePathCopyLabel === "Outputs path" ? "Outputs path copied" : "Copy outputs path"}
+                                  tooltip={homePathCopyLabel === "Outputs path" ? "Copied" : "Copy outputs path"}
+                                  onClick={() => void copyHomePath(homeOutputsPath, "Outputs path")}
+                                >
+                                  <Copy className="size-3.5" />
+                                </WorkspaceHomeIconAction>
+                                <WorkspaceHomeIconAction
+                                  label="Open outputs folder"
+                                  tooltip="Open outputs folder"
+                                  disabled={!homeProjectPath || !props.onRevealPath}
+                                  onClick={() => {
+                                    if (!props.onRevealPath) return;
+                                    void props.onRevealPath(homeOutputsPath, "Outputs folder");
+                                  }}
+                                >
+                                  <FolderOpen className="size-3.5" />
+                                </WorkspaceHomeIconAction>
+                                <WorkspaceHomeIconAction
+                                  label="Jot a note about outputs"
+                                  tooltip="Jot a note about outputs"
+                                  disabled={!workspaceNotesAvailable}
+                                  onClick={() =>
+                                    openWorkspaceQuickJot({
+                                      type: "output",
+                                      id: homeOutputsPath,
+                                      label: "Outputs",
+                                    })
+                                  }
+                                >
+                                  <PencilLine className="size-3.5" />
+                                </WorkspaceHomeIconAction>
+                              </span>
                             </div>
                           </div>
                         </section>
@@ -2795,34 +2947,6 @@ export function SessionPage(props: SessionPageProps) {
                             </details>
                           </>
                         ) : null}
-                        <section className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-2">
-                          {blankWorkflowLauncher ? (
-                            <button
-                              type="button"
-                              className="flex min-h-[92px] w-full items-start gap-3 rounded-lg bg-dls-surface-muted/70 p-3.5 text-left transition-colors hover:bg-dls-hover"
-                              onClick={() => {
-                                props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, {
-                                  title: blankWorkflowLauncher.title,
-                                  sendImmediately: true,
-                                });
-                              }}
-                            >
-                              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
-                                <FileText className="size-4" />
-                              </span>
-                              <span>
-                                <span className="flex flex-wrap items-center gap-2">
-                                  <span className="text-[13px] font-medium text-dls-text">{blankWorkflowLauncher.title}</span>
-                                  <span className="rounded-md bg-dls-hover px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                                    {blankWorkflowLauncher.statusLabel}
-                                  </span>
-                                </span>
-                                <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">{blankWorkflowLauncher.description}</span>
-                                <span className="mt-2 block text-[10px] leading-relaxed text-dls-secondary/90">{blankWorkflowLauncher.safetySummary}</span>
-                              </span>
-                            </button>
-                          ) : null}
-                        </section>
                       </div>
                     </div>
                   )}
@@ -2865,16 +2989,16 @@ export function SessionPage(props: SessionPageProps) {
                   defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
                   minSize={visibleSidePanel === "extensions" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
                   maxSize={protocolSidePanelOpen || visibleSidePanel === "memory" || visibleSidePanel === "notes" || visibleSidePanel === "extensions" ? "500px" : "70%"}
-                  className="hidden h-full min-h-0 overflow-hidden lg:flex lg:flex-col"
+                  className="matterhorn-side-panel hidden h-full min-h-0 overflow-hidden bg-dls-background lg:flex lg:flex-col"
                 >
                   <Suspense fallback={<LazyPanelFallback />}>
-                    {sidePanelContent}
+                    {guardedSidePanelContent}
                   </Suspense>
                 </ResizablePanel>
               </>
             ) : null}
           </ResizablePanelGroup>
-          <aside className="hidden w-[var(--nav-rail-width-compact)] shrink-0 flex-col items-center gap-1 bg-dls-sidebar/80 px-2 py-2 text-dls-text mac:titlebar-no-drag lg:flex 2xl:w-[var(--nav-rail-width)]">
+          <aside className="hidden w-[var(--nav-rail-width-compact)] shrink-0 flex-col items-center gap-1 bg-dls-sidebar px-2 py-2 text-dls-text mac:titlebar-no-drag lg:flex 2xl:w-[var(--nav-rail-width)]">
             {sidePanelOpen ? (
               <Button
                 variant="ghost"
@@ -2897,8 +3021,8 @@ export function SessionPage(props: SessionPageProps) {
                   profileRailActive && RAIL_ACTIVE_CLASS,
                 )}
                 onClick={() => setCurrentSidePanel("profile")}
-                title="Profile, settings, and task logs"
-                aria-label="Profile, settings, and task logs"
+                title="Profile and account"
+                aria-label="Profile and account"
                 aria-pressed={profileRailActive}
               >
                 <CircleUserRound size={17} />
@@ -2966,15 +3090,10 @@ export function SessionPage(props: SessionPageProps) {
                 title={hasArtifactTargets ? `Outputs (${artifactTargetCount})` : "Outputs"}
                 aria-label={hasArtifactTargets ? `Outputs (${artifactTargetCount})` : "Outputs"}
                 aria-pressed={artifactRailActive}
-                disabled={!hasArtifactTargets}
+                disabled={!hasArtifactTargets && !artifactRailActive}
               >
                 <FileText size={17} />
                 <span className={RAIL_LABEL_CLASS}>Outputs</span>
-                {artifactTargetCount > 0 ? (
-                  <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
-                    {artifactTargetCount > 9 ? "9+" : artifactTargetCount}
-                  </span>
-                ) : null}
               </Button>
             ) : null}
             <Button
@@ -3004,7 +3123,7 @@ export function SessionPage(props: SessionPageProps) {
               aria-label={`${memoryInboxLabel}. Review remembered context, use selected memories in chat, forget records, and export evidence.`}
               aria-pressed={memoryRailActive}
             >
-              <BrainCircuit size={17} />
+              <Brain size={17} />
               <span className={RAIL_LABEL_CLASS}>Memory</span>
               {memorySuggestionUnreadCount > 0 ? (
                 <span className="absolute right-1 top-1 flex min-w-3 items-center justify-center rounded-md bg-dls-hover px-1 text-[9px] font-semibold leading-3 text-dls-secondary ring-1 ring-dls-border/40">
@@ -3080,17 +3199,6 @@ export function SessionPage(props: SessionPageProps) {
                   className={RAIL_DESK_BUTTON_CLASS}
                   onClick={() => {
                     if (item.launcher) {
-                      dispatchMatterhornMemorySuggestions({
-                        desk: "wellness",
-                        prompt: item.launcher.prompt,
-                        source: "workflow_output",
-                        sourceId: "wellness-rail-launcher",
-                        workspaceId: props.selectedWorkspaceId,
-                        sessionId: props.selectedSessionId,
-                        templateId: item.id,
-                      });
-                    }
-                    if (item.launcher) {
                       openWorkflowDesk("wellness", item.launcher.prompt, {
                         title: item.launcher.title,
                         sourceId: "wellness-rail-launcher",
@@ -3110,26 +3218,28 @@ export function SessionPage(props: SessionPageProps) {
           </aside>
           </div>
           {mobileSidePanelOpen ? (
-            <div className="fixed inset-0 z-40 flex bg-background lg:hidden">
-              <div className="flex h-full min-h-0 w-full flex-col bg-background">
-                <div className="flex h-11 shrink-0 items-center justify-between bg-dls-surface-muted/[0.08] px-3">
-                  <span className="min-w-0 truncate text-sm font-semibold text-dls-text">
-                    {sidePanelTitle}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="size-8 rounded-md text-dls-secondary hover:bg-dls-hover hover:text-dls-text"
-                    onClick={closeRightPane}
-                    title="Back to workspace"
-                    aria-label="Back to workspace"
-                  >
-                    <PanelRightClose className="size-4" />
-                  </Button>
-                </div>
+            <div className="matterhorn-side-panel fixed inset-0 z-40 flex bg-dls-background lg:hidden">
+              <div className="flex h-full min-h-0 w-full flex-col bg-dls-background">
+                {!embeddedSettingsPanelOpen ? (
+                  <div className="flex h-11 shrink-0 items-center justify-between bg-dls-surface-muted/[0.08] px-3">
+                    <span className="min-w-0 truncate text-sm font-semibold text-dls-text">
+                      {sidePanelTitle}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="size-8 rounded-md text-dls-secondary hover:bg-dls-hover hover:text-dls-text"
+                      onClick={closeRightPane}
+                      title="Back to workspace"
+                      aria-label="Back to workspace"
+                    >
+                      <PanelRightClose className="size-4" />
+                    </Button>
+                  </div>
+                ) : null}
                 <div className="min-h-0 flex-1 overflow-hidden">
                   <Suspense fallback={<LazyPanelFallback />}>
-                    {sidePanelContent}
+                    {guardedSidePanelContent}
                   </Suspense>
                 </div>
               </div>
@@ -3187,8 +3297,9 @@ export function SessionPage(props: SessionPageProps) {
       {/* Feature 3: TX Pipeline — modal overlay for transaction approval */}
       <TransactionApproval
         store={wallet.store}
-        onApprove={() => { void sessionWallet.approveTx(); }}
+        onApprove={() => sessionWallet.approveTx()}
         onReject={sessionWallet.rejectTx}
+        onSimulateTransaction={props.matterhornServerClient && outputReceiptWorkspaceId ? simulateWalletTransaction : undefined}
         onExecuteBatchStep={sessionWallet.executeBatchStep}
       />
 

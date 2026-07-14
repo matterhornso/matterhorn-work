@@ -12,6 +12,8 @@ assert.ok(
 assert.ok(
   script.includes("startFakeOpencode") &&
     script.includes("ensureSession") &&
+    script.includes("decodeURIComponent(raw)") &&
+    script.includes("requestDirectory(request)") &&
     script.includes('url.pathname === "/session"') &&
     script.includes('url.pathname === "/session/status"') &&
     script.includes('request.method === "PATCH"') &&
@@ -29,6 +31,12 @@ assert.ok(
   "generated-media smoke launcher should expose a minimal provider catalog",
 );
 assert.ok(
+  script.includes('url.pathname === "/mcp"') &&
+    script.includes('wallet: { status: "connected" }') &&
+    script.includes('crypto: { status: "connected" }'),
+  "generated-media smoke launcher should expose live status for its configured wallet and crypto MCPs",
+);
+assert.ok(
   script.includes('url.pathname === "/global/health"') &&
     script.includes('url.pathname === "/config"') &&
     script.includes('url.pathname === "/event"') &&
@@ -39,6 +47,29 @@ assert.ok(
 assert.ok(
   script.includes('MATTERHORN_IMAGE_PROVIDER: "mock"'),
   "generated-media smoke launcher must force mock image generation",
+);
+assert.ok(
+  script.includes('MATTERHORN_BILLING_CURRENT_PLAN: "max"') &&
+  script.includes("MATTERHORN_BILLING_ACCOUNT_PATH:") &&
+    script.includes("local Max billing context") &&
+    script.includes("no payment provider is used"),
+  "generated-media smoke launcher should use a repeatable local Max billing context without payment providers",
+);
+assert.ok(
+  script.includes('smokePlanId !== "max" || imageLimit !== null') &&
+    script.includes("Generated-media smoke billing isolation failed"),
+  "generated-media smoke launcher should verify its isolated backend has unlimited QA image allowance",
+);
+assert.ok(
+  script.includes('MATTERHORN_MEDIA_SMOKE_REQUEST_RATE_LIMIT_MAX?.trim() || "5000"') &&
+    script.includes("MATTERHORN_WORK_REQUEST_RATE_LIMIT_MAX: requestRateLimitMax") &&
+    script.includes("synthetic loopback QA stack"),
+  "generated-media smoke launcher should provide a repeatable browser-audit request budget without changing production defaults",
+);
+assert.ok(
+  script.includes('waitForJson(`${serverUrl}/workspaces`, {\n    timeoutMs: 45_000') &&
+    script.includes('`${serverUrl}/workspace/${encodeURIComponent(activeWorkspaceId)}/billing/status`,\n    {\n      timeoutMs: 45_000'),
+  "generated-media smoke launcher should allow authenticated workspace bootstrap routes the full startup window",
 );
 assert.ok(
   script.includes("createServer") && script.includes('url.pathname === "/v1/blobs"'),
@@ -70,6 +101,12 @@ assert.ok(
     script.includes("VITE_MATTERHORN_WORK_TOKEN") &&
     script.includes("VITE_MATTERHORN_WORK_FORCE_SETTINGS"),
   "generated-media smoke launcher should wire the app to the local Matterhorn server",
+);
+assert.ok(
+  script.includes('"node_modules", "vite", "bin", "vite.js"') &&
+    script.includes("rootViteBin") &&
+    script.includes("process.execPath"),
+  "generated-media smoke launcher should fall back to the root Vite binary when app node_modules is partially linked",
 );
 
 assert.equal(

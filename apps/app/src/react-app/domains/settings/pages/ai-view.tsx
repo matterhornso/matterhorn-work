@@ -24,7 +24,11 @@ import {
   LayoutStack,
 } from "../settings-layout";
 import { notifyWorkspaceModelSelectionChanged } from "../model-selection-events";
-import { buildModelReadinessSummary, type ModelReadinessDetail } from "../state/model-readiness-summary";
+import {
+  buildModelReadinessSummary,
+  countConnectedCatalogModels,
+  type ModelReadinessDetail,
+} from "../state/model-readiness-summary";
 
 type ConnectedProvider = {
   id: string;
@@ -76,6 +80,13 @@ function providerStatusTone(label: string): "ready" | "warning" | "neutral" {
   if (label.toLowerCase().includes("connected")) return "ready";
   if (label.toLowerCase().includes("error") || label.toLowerCase().includes("fail")) return "warning";
   return "neutral";
+}
+
+function catalogProviderSource(source?: string): ConnectedProvider["source"] {
+  if (source === "env" || source === "api" || source === "config" || source === "custom") {
+    return source;
+  }
+  return undefined;
 }
 
 function ModelRoutingRow({ item }: { item: ModelReadinessDetail }) {
@@ -159,7 +170,43 @@ export function AiSettingsView(props: AiSettingsViewProps) {
   const effectiveWorkspaceModel = workspaceModelSelectionQuery.data?.effectiveModel ?? backendModels?.defaultModel ?? null;
   const catalogQueryFailed = workspaceBackendModelsQuery.isError || backendModelsQuery.isError;
   const connectedProviderCount = catalog?.serverFetched ? catalog.connectedProviderCount : props.connectedProviders.length;
-  const connectedModelCount = catalog?.serverFetched ? catalog.modelCount : props.connectedModelCount;
+  const connectedModelCount = catalog?.serverFetched
+    ? countConnectedCatalogModels(catalog)
+    : props.connectedModelCount;
+  const providerCatalogLoading = workspaceBackendModelsQuery.isLoading || backendModelsQuery.isLoading;
+  const catalogProviderById = new Map((catalog?.providers ?? []).map((provider) => [provider.id, provider]));
+  const connectedProviders = props.connectedProviders.length > 0
+    ? props.connectedProviders.map((provider) => {
+      const catalogProvider = catalogProviderById.get(provider.id);
+      return {
+        ...provider,
+        name: catalogProvider?.name || provider.name,
+        source: provider.source ?? catalogProviderSource(catalogProvider?.source),
+        modelCount: catalogProvider?.modelCount ?? provider.modelCount,
+      };
+    })
+    : (catalog?.providers ?? [])
+      .filter((provider) => provider.connected)
+      .map((provider) => ({
+        id: provider.id,
+        name: provider.name,
+        source: catalogProviderSource(provider.source),
+        modelCount: provider.modelCount,
+      }));
+  const providerSummary = catalog?.serverFetched
+    ? `${connectedProviderCount} provider${connectedProviderCount === 1 ? "" : "s"} connected`
+    : !props.matterhornServerClient
+      ? "Agent engine unavailable"
+      : providerCatalogLoading
+      ? "Checking provider connections"
+      : props.providerSummary;
+  const providerStatusLabel = catalog?.serverFetched
+    ? connectedProviderCount > 0 ? "Connected" : "Disconnected"
+    : !props.matterhornServerClient
+      ? "Offline"
+      : providerCatalogLoading
+      ? "Checking"
+      : props.providerStatusLabel;
   const modelReadiness = buildModelReadinessSummary({
     currentModelLabel: props.defaultModelLabel,
     currentModelRef: props.defaultModelRef,
@@ -171,7 +218,18 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     connectedProviderCount,
     connectedModelCount,
   });
-  const canSaveWorkspaceDefault = Boolean(props.defaultModelProviderId && props.defaultModelId && props.matterhornServerClient && runtimeWorkspaceId);
+  const selectedModelMatchesWorkspaceDefault = Boolean(
+    workspaceSelection &&
+    workspaceSelection.providerId === props.defaultModelProviderId?.trim() &&
+    workspaceSelection.modelId === props.defaultModelId?.trim(),
+  );
+  const canSaveWorkspaceDefault = Boolean(
+    props.defaultModelProviderId &&
+    props.defaultModelId &&
+    props.matterhornServerClient &&
+    runtimeWorkspaceId &&
+    !selectedModelMatchesWorkspaceDefault,
+  );
   const canUseWorkspaceDefault = Boolean(props.hasLocalModelOverride && workspaceSelection && props.onUseWorkspaceDefault);
   const modelSelectionStatus =
     localModelStatus ??
@@ -198,7 +256,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
 
         {opencodeSetupMissing ? (
           <SettingsNotice>
-            Local agent engine needs setup. Start the local stack with managed engine, or attach an existing engine URL before starting chats and desk tasks.
+            The local agent engine is not running. Start Matterhorn with its managed engine, or attach an existing engine URL before starting chats and desk tasks.
           </SettingsNotice>
         ) : null}
 
@@ -234,16 +292,18 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                   Use workspace default
                 </Button>
               ) : null}
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setLocalModelStatus(null);
-                  saveWorkspaceDefaultMutation.mutate();
-                }}
-                disabled={props.busy || !canSaveWorkspaceDefault || saveWorkspaceDefaultMutation.isPending}
-              >
-                Save as workspace default
-              </Button>
+              {canSaveWorkspaceDefault ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setLocalModelStatus(null);
+                    saveWorkspaceDefaultMutation.mutate();
+                  }}
+                  disabled={props.busy || saveWorkspaceDefaultMutation.isPending}
+                >
+                  Save as workspace default
+                </Button>
+              ) : null}
               {workspaceSelection ? (
                 <Button
                   variant="ghost"
@@ -341,10 +401,10 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         <LayoutSectionItem>
           <LayoutSectionItemHeader>
             <LayoutSectionItemTitle>
-              {props.providerSummary}
+              {providerSummary}
               <SettingsStatusBadge
-                tone={providerStatusTone(props.providerStatusLabel)}
-                label={props.providerStatusLabel}
+                tone={providerStatusTone(providerStatusLabel)}
+                label={providerStatusLabel}
               />
             </LayoutSectionItemTitle>
             <LayoutSectionItemHeaderActions>
@@ -380,12 +440,12 @@ export function AiSettingsView(props: AiSettingsViewProps) {
           </LayoutSectionItem>
         ) : null}
 
-        {props.connectedProviders.length > 0 ? (
+        {connectedProviders.length > 0 ? (
           <div className="space-y-2">
-            {props.connectedProviders.map((provider) => (
+            {connectedProviders.map((provider) => (
               <LayoutSectionItem
                 key={provider.id}
-                className="flex-row flex-wrap items-center justify-between gap-3 rounded-lg border border-dls-border px-4 py-3"
+                className="flex-row flex-wrap items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.075] px-3 py-2.5"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <ProviderIcon providerId={provider.id} size={20} className="text-dls-text" />
@@ -398,7 +458,12 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                         </span>
                       ) : null}
                     </div>
-                    <div className="truncate font-mono text-xs text-muted-foreground">{provider.id}</div>
+                    <div className="truncate font-mono text-xs text-muted-foreground">
+                      {provider.id}
+                      {provider.modelCount != null
+                        ? ` · ${provider.modelCount} model${provider.modelCount === 1 ? "" : "s"}`
+                        : ""}
+                    </div>
                   </div>
                 </div>
                 {!props.cloudProviderIds?.has(provider.id) ? (

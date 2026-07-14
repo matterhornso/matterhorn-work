@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useState, useEffect } from "react";
-import { Send, User, Wallet, ArrowUpRight, CheckCircle, Star, Folder } from "lucide-react";
+import { Send, User, Wallet, ArrowUpRight, CheckCircle, Star, Folder, BookmarkPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -21,12 +21,13 @@ const TOKEN_ICONS: Record<string, { color: string; bg: string }> = {
 
 export default function TransferPanel({ store }: { store: WalletStore }) {
   const state = useWalletStore(store);
-  const { addresses, toggleFavorite } = useAddressBook();
+  const { addresses, add, toggleFavorite } = useAddressBook();
   const [token, setToken] = useState<"native" | string>("native");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
   const [showAddressBook, setShowAddressBook] = useState(false);
+  const [label, setLabel] = useState("");
 
   const registry = state.chainId ? tokensForChain(state.chainId) : undefined;
   const tokenList = registry
@@ -88,6 +89,23 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
     }
   };
 
+  const matchingSavedAddress = addresses.find((entry) => (
+    entry.address.toLowerCase() === effectiveAddress.toLowerCase()
+  ));
+
+  const handleSaveRecipient = async () => {
+    if (!effectiveAddress || matchingSavedAddress) return;
+    const fallbackName = hasFreshResolution && resolvedName ? resolvedName : `${effectiveAddress.slice(0, 6)}...${effectiveAddress.slice(-4)}`;
+    await add({
+      name: label.trim() || fallbackName,
+      address: effectiveAddress,
+      ensName: hasFreshResolution && resolvedName ? resolvedName : undefined,
+      chainId: state.chainId ?? undefined,
+    });
+    setLabel("");
+    setShowAddressBook(true);
+  };
+
   return (
     <div className="flex flex-col gap-4 p-4 h-full overflow-auto animate-fade-in">
       {/* Header */}
@@ -131,7 +149,17 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
 
       {/* Recipient */}
       <div className="ow-soft-card p-4 space-y-3">
-        <div className="ow-section-heading">Recipient</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="ow-section-heading">Recipient</div>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-full bg-dls-surface-muted/20 px-2.5 py-1 text-xs font-medium text-dls-secondary transition-colors hover:bg-dls-hover/50 hover:text-dls-text"
+            onClick={() => setShowAddressBook((value) => !value)}
+          >
+            <Folder className="size-3.5" />
+            {addresses.length > 0 ? `${addresses.length} saved` : "Address book"}
+          </button>
+        </div>
         <div className="relative">
           <Input
             value={to}
@@ -162,6 +190,31 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
               <CheckCircle className="size-3 text-emerald-400" />
             </div>
             <span className="font-mono">{resolvedAddress}</span>
+          </div>
+        )}
+        {effectiveAddress && !matchingSavedAddress && (
+          <div className="flex flex-col gap-2 rounded-lg bg-dls-surface-muted/20 p-2 sm:flex-row">
+            <Input
+              value={label}
+              onChange={(event) => setLabel(event.target.value)}
+              placeholder="Label this recipient"
+              className="h-9 flex-1 bg-transparent text-sm"
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-9 shrink-0"
+              onClick={() => void handleSaveRecipient()}
+            >
+              <BookmarkPlus className="size-3.5" />
+              Save
+            </Button>
+          </div>
+        )}
+        {effectiveAddress && matchingSavedAddress && (
+          <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs leading-5 text-emerald-300">
+            Saved as <span className="font-medium text-emerald-100">{matchingSavedAddress.name}</span>. Still review the wallet approval before signing.
           </div>
         )}
         {showAddressBook && addresses.length > 0 && (

@@ -6,7 +6,7 @@ import { chromium } from "playwright";
 const repoRoot = resolve(import.meta.dirname, "..");
 const DEFAULT_URL = "http://127.0.0.1:5182/workspace/ws_d6a5b5572860/session";
 const DEFAULT_OUTPUT_DIR = "qa-reports/generated-media-browser-smoke";
-const DEFAULT_PROMPT = "sleek Matterhorn Work console showing generated media receipt cards";
+const DEFAULT_PROMPT_BASE = "sleek Matterhorn Work console showing generated media receipt cards";
 const SMOKE_NFT_OBJECT_ID = "0x7777777777777777777777777777777777777777777777777777777777777777";
 const SMOKE_MINT_DIGEST = "smokeMintDigest111111111111111111111111111111111111111111";
 const SMOKE_LISTING_DIGEST = "smokeListingDigest222222222222222222222222222222222222222";
@@ -33,13 +33,16 @@ function parseArgs(argv = process.argv.slice(2)) {
     flags.add(name);
   }
 
+  const promptBase = values.get("--prompt") || process.env.MATTERHORN_MEDIA_BROWSER_PROMPT || DEFAULT_PROMPT_BASE;
+  const runId = `smoke-${Date.now().toString(36)}`;
+
   return {
     help: flags.has("--help") || flags.has("-h"),
     headed: flags.has("--headed") || process.env.MATTERHORN_MEDIA_BROWSER_HEADED === "1",
     json: flags.has("--json"),
     strict: flags.has("--strict") || process.env.MATTERHORN_MEDIA_BROWSER_STRICT === "1",
     url: values.get("--url") || process.env.MATTERHORN_MEDIA_BROWSER_URL || DEFAULT_URL,
-    prompt: values.get("--prompt") || process.env.MATTERHORN_MEDIA_BROWSER_PROMPT || DEFAULT_PROMPT,
+    prompt: `${promptBase} ${runId}`,
     outputDir: resolve(repoRoot, values.get("--output-dir") || process.env.MATTERHORN_MEDIA_BROWSER_OUTPUT_DIR || DEFAULT_OUTPUT_DIR),
   };
 }
@@ -192,7 +195,11 @@ function shouldFailOnNetworkResponse(failure) {
 }
 
 function nftDialog(page) {
-  return page.locator('[role="dialog"]').filter({ hasText: "Make NFT" }).first();
+  return page.locator('[role="dialog"]').filter({ hasText: "Publish as NFT" }).first();
+}
+
+function generatedImageCard(page, prompt) {
+  return page.getByTestId("generated-image-card").filter({ hasText: prompt }).first();
 }
 
 function generatedMediaSettingsUrl(appUrl) {
@@ -287,17 +294,16 @@ async function runSmoke(config) {
     });
 
     await stage(report, "home_wallet_readiness", "Check Home wallet readiness", async () => {
-      const readiness = page.locator("details").filter({ hasText: "Wallet readiness" }).first();
-      await readiness.waitFor({ state: "visible", timeout: 20_000 });
-      await readiness.getByText(/Sui: (Working|Preview|Needs setup|Not supported here)/).waitFor({
+      await page.getByText("Wallet readiness", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText(/Sui: (Working|Early access|Needs setup|Not supported here)/).waitFor({
         state: "visible",
         timeout: 20_000,
       });
-      await readiness.locator("summary").click();
-      await readiness
+      await page.getByLabel("Wallet readiness details").click();
+      await page
         .getByText("Sui signing stays in your wallet; desktop uses external handoff.", { exact: true })
         .waitFor({ state: "visible", timeout: 10_000 });
-      await readiness.getByRole("button", { name: "Open wallet", exact: true }).waitFor({
+      await page.getByRole("button", { name: "Open wallet", exact: true }).waitFor({
         state: "visible",
         timeout: 10_000,
       });
@@ -310,7 +316,7 @@ async function runSmoke(config) {
 
     await stage(report, "open_image_panel", "Open chat image generation panel", async () => {
       const panel = page.getByTestId("session-image-generation-panel");
-      const promptField = panel.getByPlaceholder("Describe an image to generate...", { exact: true });
+      const promptField = panel.getByPlaceholder("Describe the image...", { exact: true });
       if ((await promptField.count()) > 0) return;
       await clickFirstVisible(panel.getByRole("button", { name: "Generate image", exact: true }), "Generate image toggle");
       await promptField.waitFor({ state: "visible", timeout: 10_000 });
@@ -318,9 +324,28 @@ async function runSmoke(config) {
 
     await stage(report, "generate_image", "Generate image from chat", async () => {
       const panel = page.getByTestId("session-image-generation-panel");
-      await panel.getByPlaceholder("Describe an image to generate...", { exact: true }).fill(config.prompt);
-      await panel.getByRole("button", { name: "Generate", exact: true }).click();
-      await panel.getByText("Image saved to outputs", { exact: false }).waitFor({ state: "visible", timeout: 30_000 });
+      await panel.getByPlaceholder("Describe the image...", { exact: true }).fill(config.prompt);
+      const generationResponsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          new URL(response.url()).pathname.endsWith("/images/generate"),
+        { timeout: 30_000 },
+      );
+      await panel.getByRole("button", { name: "Create image", exact: true }).click();
+      const generationResponse = await generationResponsePromise;
+      if (!generationResponse.ok()) {
+        let detail = "The backend rejected the request.";
+        try {
+          const payload = await generationResponse.json();
+          detail = payload?.error?.message || payload?.message || payload?.error || detail;
+        } catch {
+          // Keep bounded fallback copy when a provider returns no JSON body.
+        }
+        throw new Error(`Image generation request failed (${generationResponse.status()}): ${detail}`);
+      }
+      const createdCard = generatedImageCard(page, config.prompt);
+      await createdCard.getByText(config.prompt, { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
+      await createdCard.getByText("Saved to Outputs", { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
       report.artifacts.generatedImage = {
         prompt: config.prompt,
         savedToOutputs: true,
@@ -328,32 +353,32 @@ async function runSmoke(config) {
     });
 
     await stage(report, "open_nft_panel", "Open NFT draft panel", async () => {
-      await clickFirstVisible(page.getByRole("button", { name: "Make NFT", exact: true }), "Make NFT button");
+      await clickFirstVisible(generatedImageCard(page, config.prompt).getByRole("button", { name: "Make NFT", exact: true }), "Make NFT button");
       const dialog = nftDialog(page);
-      await dialog.getByText("Publishing readiness", { exact: true }).waitFor({ state: "visible", timeout: 15_000 });
+      await dialog.getByText("Publishing path", { exact: true }).waitFor({ state: "visible", timeout: 15_000 });
       await dialog.getByText("Sui NFT minting", { exact: false }).waitFor({ state: "visible", timeout: 15_000 });
-      await dialog.getByText("NFT marketplace listing", { exact: false }).waitFor({ state: "visible", timeout: 15_000 });
+      await dialog.getByText("NFT marketplace listing", { exact: true }).waitFor({ state: "visible", timeout: 15_000 });
     });
 
     await stage(report, "create_nft_draft", "Create local NFT draft", async () => {
       await fillIfPresent(page, "Title", "Matterhorn generated-media smoke NFT");
       await fillIfPresent(page, "Description", "Local smoke draft for generated media publishing.");
-      await page.getByRole("button", { name: "Create local draft", exact: true }).click();
+      await page.getByRole("button", { name: "Create draft", exact: true }).click();
       await page.getByText("NFT draft created", { exact: false }).waitFor({ state: "visible", timeout: 20_000 });
       await nftDialog(page).getByText("Storage", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     });
 
     await stage(report, "upload_storage", "Prepare and upload media to fake Walrus", async () => {
-      const prepare = await waitForEnabled(page.getByRole("button", { name: "Prepare upload", exact: true }), "Prepare upload button");
+      const prepare = await waitForEnabled(page.getByRole("button", { name: "Prepare", exact: true }), "Prepare button");
       await prepare.click();
-      const upload = await waitForEnabled(page.getByRole("button", { name: "Upload", exact: true }), "Upload button", 20_000);
+      const upload = await waitForEnabled(page.getByRole("button", { name: "Upload to Walrus", exact: true }), "Upload to Walrus button", 20_000);
       await upload.click();
       await page.getByText("matterhorn_smoke_blob", { exact: false }).waitFor({ state: "visible", timeout: 25_000 });
       report.artifacts.storage = { uploaded: true };
     });
 
     await stage(report, "preview_mint", "Prepare Sui mint preview", async () => {
-      const previewMint = await waitForEnabled(page.getByRole("button", { name: "Preview mint", exact: true }), "Preview mint button", 20_000);
+      const previewMint = await waitForEnabled(page.getByRole("button", { name: "Prepare mint handoff", exact: true }), "Prepare mint handoff button", 20_000);
       await previewMint.click();
       await nftDialog(page).getByText("Mint plan ready", { exact: false }).waitFor({ state: "visible", timeout: 20_000 });
       report.artifacts.mintPreview = { ready: true, custody: false };
@@ -363,8 +388,8 @@ async function runSmoke(config) {
       const dialog = nftDialog(page);
       await dialog.getByLabel("Mint digest", { exact: true }).fill(SMOKE_MINT_DIGEST);
       await dialog.getByLabel("Minted object id", { exact: true }).fill(SMOKE_NFT_OBJECT_ID);
-      await dialog.getByRole("button", { name: "Record mint receipt", exact: true }).click();
-      await dialog.getByText("confirmed", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await dialog.getByRole("button", { name: "Save mint receipt", exact: true }).click();
+      await dialog.getByText("Confirmed", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText("Mint receipt recorded", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
       report.artifacts.mintReceipt = {
         recorded: true,
@@ -374,9 +399,11 @@ async function runSmoke(config) {
 
     await stage(report, "preview_listing", "Prepare Sui Kiosk listing preview", async () => {
       const dialog = nftDialog(page);
+      await dialog.getByText("Listing inputs", { exact: true }).click();
+      await dialog.getByLabel("NFT object id", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
       await dialog.getByLabel("NFT object id", { exact: true }).fill(SMOKE_NFT_OBJECT_ID);
-      await fillIfPresent(page, "Price (MIST)", SMOKE_LISTING_PRICE_MIST);
-      const previewListing = await waitForEnabled(page.getByRole("button", { name: "Preview listing", exact: true }), "Preview listing button", 20_000);
+      await dialog.getByLabel("Price (MIST)", { exact: true }).fill(SMOKE_LISTING_PRICE_MIST);
+      const previewListing = await waitForEnabled(page.getByRole("button", { name: "Prepare listing handoff", exact: true }), "Prepare listing handoff button", 20_000);
       await previewListing.click();
       await nftDialog(page).getByText("Listing plan ready", { exact: false }).waitFor({ state: "visible", timeout: 20_000 });
       report.artifacts.listingPreview = { ready: true, custody: false };
@@ -385,8 +412,8 @@ async function runSmoke(config) {
     await stage(report, "record_listing_receipt", "Record public listing receipt", async () => {
       const dialog = nftDialog(page);
       await dialog.getByLabel("Listing transaction digest", { exact: true }).fill(SMOKE_LISTING_DIGEST);
-      await dialog.getByRole("button", { name: "Record listing receipt", exact: true }).click();
-      await dialog.getByText("listed", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await dialog.getByRole("button", { name: "Save listing receipt", exact: true }).click();
+      await dialog.getByText("Listed", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText("Listing receipt recorded", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
       await page
         .getByLabel("Generated media history")
@@ -404,14 +431,14 @@ async function runSmoke(config) {
     await stage(report, "settings_generated_media", "Check Generated media settings readiness", async () => {
       await page.goto(generatedMediaSettingsUrl(config.url), { waitUntil: "load", timeout: 30_000 });
       await page.getByText("Production readiness", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("Setup diagnostics", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("Recent media", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("NFT drafts", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("Data controls", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("Publishing readiness", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Media library", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByRole("button", { name: "NFT drafts", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Publishing path", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText(config.prompt, { exact: false }).first().waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("listed", { exact: true }).first().waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("Data controls", { exact: true }).scrollIntoViewIfNeeded();
+      await page.getByText("Listed", { exact: true }).first().waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Diagnostics and readiness report", { exact: true }).click();
+      await page.getByRole("button", { name: "Run diagnostics", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Storage and data controls", { exact: true }).click();
       await page.getByText("Local generated media delete", { exact: false }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText("Delete generated image", { exact: false }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText("Delete NFT draft", { exact: false }).waitFor({ state: "visible", timeout: 20_000 });
@@ -428,7 +455,7 @@ async function runSmoke(config) {
 
     await stage(report, "settings_generated_media_diagnostics", "Run generated media setup diagnostics", async () => {
       await page.getByRole("button", { name: "Run diagnostics", exact: true }).click();
-      await page.getByText("Generated media setup passed all safe diagnostics.", { exact: true }).waitFor({
+      await page.getByText("Generated media setup passed all safe diagnostics.", { exact: true }).first().waitFor({
         state: "visible",
         timeout: 20_000,
       });
@@ -444,17 +471,22 @@ async function runSmoke(config) {
         state: "visible",
         timeout: 20_000,
       });
-      await page.getByText("Local test", { exact: true }).waitFor({
+      const productionPlanHeader = page.getByText("Production smoke plan", { exact: true }).locator("..");
+      const productionMode = productionPlanHeader.getByText(/^(?:Local test|Platform setup)$/, { exact: true });
+      await productionMode.waitFor({
         state: "visible",
         timeout: 20_000,
       });
+      const productionSmokeMode = (await productionMode.innerText()).trim() === "Local test"
+        ? "local_test"
+        : "needs_setup";
       await page.getByText("Public writes require user action", { exact: true }).waitFor({
         state: "visible",
         timeout: 20_000,
       });
       report.artifacts.generatedMediaDiagnostics = {
         status: "pass",
-        productionSmokeMode: "local_test",
+        productionSmokeMode,
         publicWritesDuringDiagnostics: false,
       };
     });

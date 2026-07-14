@@ -16,6 +16,7 @@ import type {
   MatterhornBillingStatus,
   MatterhornBillingSubscription,
 } from "@matterhorn-work/types/billing";
+import { buildMatterhornBillingPlans } from "@matterhorn-work/types/billing";
 import {
   SettingsInset,
   SettingsPill,
@@ -30,8 +31,9 @@ import {
   entitlementUsageStatus,
   formatEntitlementLimit,
   formatEntitlementReset,
-  formatEntitlementUsage,
 } from "../../billing/entitlements";
+
+const LOCAL_BILLING_PLANS = buildMatterhornBillingPlans();
 
 export type BillingSettingsViewProps = {
   matterhornServerClient?: MatterhornServerClient | null;
@@ -66,13 +68,17 @@ function billingActionErrorMessage(error: unknown, fallback: string): string {
 function billingModeLabel(status?: MatterhornBillingStatus | null): string {
   if (status?.mode === "phase1_stripe_test") return "Stripe test";
   if (status?.mode === "live") return "Live";
-  return "Test mode";
+  return "Local preview";
 }
 
 function billingPlanDisplayName(planId: MatterhornBillingPlanId): string {
   if (planId === "plus") return "Matterhorn Plus";
   if (planId === "max") return "Matterhorn Max";
   return "Free";
+}
+
+function shortBillingPlanName(plan: MatterhornBillingPlan): string {
+  return plan.name.replace(/^Matterhorn\s+/i, "").trim() || billingPlanDisplayName(plan.id);
 }
 
 function formatBillingDate(value?: string | null): string | null {
@@ -113,6 +119,111 @@ function includedEntitlements(plan: MatterhornBillingPlan) {
   return plan.entitlements.filter((entitlement) => entitlement.included).slice(0, 4);
 }
 
+function billingPlanActionLabel(props: {
+  mode: MatterhornBillingStatus["mode"];
+  plan: MatterhornBillingPlan;
+}): string {
+  if (props.mode === "phase0_mock") return `Preview ${shortBillingPlanName(props.plan)}`;
+  if (props.mode === "phase1_stripe_test") return `Start ${shortBillingPlanName(props.plan)} checkout`;
+  return `Start ${shortBillingPlanName(props.plan)}`;
+}
+
+function billingPortalActionLabel(status?: MatterhornBillingStatus | null, portalReady = false): string {
+  if (status?.mode === "phase0_mock") return "Billing account not connected";
+  if (!portalReady) return "Portal setup needed";
+  if (status?.mode === "phase1_stripe_test") return "Manage test plan";
+  return "Manage billing";
+}
+
+function PaymentReadinessSummary(props: {
+  status?: MatterhornBillingStatus | null;
+  checkoutReady: boolean;
+  portalReady: boolean;
+  hasClient: boolean;
+  hasWorkspace: boolean;
+}) {
+  const mode = props.status?.mode ?? "phase0_mock";
+  const checkoutLabel = !props.hasClient
+    ? "Engine offline"
+    : !props.hasWorkspace
+      ? "Open a workspace"
+    : !props.status
+      ? "Checking"
+    : props.checkoutReady
+      ? mode === "phase1_stripe_test"
+        ? "Stripe test checkout"
+        : "Local plan preview"
+      : "Platform setup";
+  const checkoutDetail = !props.hasClient
+    ? "Connect the Matterhorn Work engine to open checkout."
+    : !props.hasWorkspace
+      ? "Billing checkout is tied to a workspace so subscriptions can reconcile."
+    : !props.status
+      ? "Reading the workspace billing configuration."
+    : props.checkoutReady
+      ? mode === "phase1_stripe_test"
+        ? "Uses Stripe test sessions only. No live charges."
+        : "Lets you try plan changes locally. No payment provider is contacted."
+      : "Finish the billing setup checks before checkout opens.";
+  const portalRowLabel = "Billing portal";
+  const portalLabel = !props.status
+    ? "Checking"
+    : mode === "phase0_mock"
+      ? "Not connected"
+      : !props.portalReady
+        ? "Portal setup needed"
+        : mode === "phase1_stripe_test"
+          ? "Stripe test portal"
+          : "Billing portal ready";
+  const portalDetail = !props.status
+    ? "Looking for a provider customer or local preview mode."
+    : mode === "phase0_mock"
+      ? "Matterhorn has not connected a payment provider. There is no billing account to manage."
+      : !props.portalReady
+        ? "A test customer must be connected by Matterhorn before the billing portal can open."
+        : mode === "phase1_stripe_test"
+          ? "Subscription management opens in Stripe test mode. No live charges."
+          : "Subscription management opens in the configured billing portal.";
+  const liveLabel = !props.status
+    ? "Checking"
+    : props.status.setup.livePaymentsEnabled
+      ? "Live charges enabled"
+      : "Live charges off";
+  const liveDetail = !props.status
+    ? "Live payment status comes from the Matterhorn billing setup."
+    : props.status.setup.livePaymentsEnabled
+    ? "Live billing is enabled for this workspace."
+    : "Live Stripe mode stays blocked until keys, webhooks, prices, and review are complete.";
+  const rows = [
+    { label: "Checkout", value: checkoutLabel, detail: checkoutDetail },
+    { label: portalRowLabel, value: portalLabel, detail: portalDetail },
+    { label: "Live charging", value: liveLabel, detail: liveDetail },
+  ];
+
+  return (
+    <div className="rounded-lg bg-dls-surface-muted/[0.06] px-3 py-2">
+      <div className="pb-1">
+        <p className="text-sm font-medium text-dls-text">Payment flow</p>
+        <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+          Local previews are available now. Stripe checkout requires Matterhorn platform setup.
+        </p>
+      </div>
+      {rows.map((row) => (
+        <div
+          key={row.label}
+          className="grid gap-1 py-2 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:gap-4"
+        >
+          <div className="text-xs font-medium leading-5 text-dls-secondary">{row.label}</div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium leading-5 text-dls-text">{row.value}</p>
+            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{row.detail}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PlanCard(props: {
   plan: MatterhornBillingPlan;
   current: boolean;
@@ -122,15 +233,19 @@ function PlanCard(props: {
   busy: boolean;
 }) {
   const isLive = props.mode === "live";
-  const disabled = props.current || props.busy || isLive || !props.checkoutReady;
+  const canSelectPlan = !props.current && !isLive && props.checkoutReady;
   const features = includedEntitlements(props.plan);
+  const actionLabel = billingPlanActionLabel({
+    mode: props.mode,
+    plan: props.plan,
+  });
   return (
     <div
       className={cn(
-        "relative flex min-h-[250px] flex-col gap-3 rounded-lg border px-4 py-4 transition-colors",
+        "relative flex min-h-[250px] flex-col gap-3 rounded-lg px-4 py-4 transition-colors",
         props.current
-          ? "border-dls-border/55 bg-dls-hover/20"
-          : "border-dls-border/20 bg-transparent hover:border-dls-border/40 hover:bg-dls-hover/10",
+          ? "bg-dls-hover/20 ring-1 ring-dls-border/25"
+          : "bg-dls-surface-muted/[0.06] hover:bg-dls-hover/10",
       )}
     >
       {props.plan.popular ? (
@@ -169,16 +284,26 @@ function PlanCard(props: {
           </li>
         ))}
       </ul>
-      <Button
-        variant={props.current ? "outline" : "default"}
-        size="sm"
-        className="mt-auto h-8 text-xs"
-        disabled={disabled}
-        onClick={() => props.onSelect(props.plan.id)}
-      >
-        {props.busy ? <Loader2 size={12} className="animate-spin" /> : null}
-        {props.current ? "Current plan" : isLive ? "Unavailable" : !props.checkoutReady ? "Setup needed" : props.plan.ctaLabel}
-      </Button>
+      {canSelectPlan ? (
+        <Button
+          variant="default"
+          size="sm"
+          className="mt-auto h-8 rounded-md text-xs shadow-none"
+          disabled={props.busy}
+          onClick={() => props.onSelect(props.plan.id)}
+        >
+          {props.busy ? <Loader2 size={12} className="animate-spin" /> : null}
+          {actionLabel}
+        </Button>
+      ) : (
+        <p className="mt-auto text-xs leading-5 text-dls-secondary">
+          {props.current
+            ? "Active for this workspace"
+            : isLive
+              ? "Plan changes are unavailable in this build"
+              : "Matterhorn must connect billing before plan changes open"}
+        </p>
+      )}
     </div>
   );
 }
@@ -192,8 +317,13 @@ function UsageRow(props: {
   const resetLabel = formatEntitlementReset(props.resetsAt);
   const status = entitlementUsageStatus(props.used, props.limit);
   const percent = usagePercent(props.used, props.limit);
-  const valueLabel = formatEntitlementUsage(props.used, props.limit);
-  const limitLabel = props.limit === null ? "Unlimited" : props.limit === 0 ? "Not included" : `${props.limit} included`;
+  const isHistoricalOnly = props.limit === 0 && props.used > 0;
+  const valueLabel = isHistoricalOnly ? `${props.used} historical` : `${props.used} used`;
+  const limitLabel = props.limit === null
+    ? "Unlimited on this plan"
+    : props.limit === 0
+      ? "Not included on this plan"
+      : `Plan includes ${props.limit}`;
   return (
     <div className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(160px,220px)] sm:items-center">
       <div className="min-w-0">
@@ -242,13 +372,13 @@ function PolicyRow(props: {
 
 function PlanPolicySection(props: { status?: MatterhornBillingStatus | null }) {
   const generatedImageUsage = props.status
-    ? formatEntitlementUsage(props.status.usage.generatedImages.used, props.status.usage.generatedImages.limit)
+    ? formatPlanAllowance(props.status.usage.generatedImages.limit)
     : "Free 10 / Plus 100 / Max unlimited";
   const nftUsage = props.status
-    ? formatEntitlementUsage(props.status.usage.nftDrafts.used, props.status.usage.nftDrafts.limit)
+    ? formatPlanAllowance(props.status.usage.nftDrafts.limit)
     : "Plus / Max";
   const teamUsage = props.status
-    ? formatEntitlementUsage(props.status.usage.teamMembers.used, props.status.usage.teamMembers.limit)
+    ? formatPlanAllowance(props.status.usage.teamMembers.limit)
     : "1 on Free and Plus / 10 on Max";
 
   return (
@@ -285,6 +415,12 @@ function PlanPolicySection(props: { status?: MatterhornBillingStatus | null }) {
   );
 }
 
+function formatPlanAllowance(limit: number | null): string {
+  if (limit === null) return "Unlimited on this plan";
+  if (limit === 0) return "Not included on this plan";
+  return `${limit} included on this plan`;
+}
+
 export function BillingSettingsView(props: BillingSettingsViewProps) {
   const client = props.matterhornServerClient;
   const workspaceId = props.runtimeWorkspaceId?.trim() ?? "";
@@ -304,17 +440,24 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
   });
 
   const checkoutMutation = useMutation({
-    mutationFn: (planId: MatterhornBillingPlanId) =>
-      workspaceId
-        ? client?.workspaceBillingCheckout(workspaceId, { planId, interval: "month" }) ??
-          Promise.reject(new Error("No client"))
-        : client?.billingCheckout({ planId, interval: "month" }) ?? Promise.reject(new Error("No client")),
+    mutationFn: (planId: MatterhornBillingPlanId) => {
+      if (!workspaceId) {
+        return Promise.reject(new Error("Open a workspace before changing plans."));
+      }
+      return client?.workspaceBillingCheckout(workspaceId, { planId, interval: "month" }) ??
+        Promise.reject(new Error("No client"));
+    },
     onSuccess: (data) => {
       if (data?.checkoutUrl) {
-        window.open(data.checkoutUrl, "_blank", "noopener,noreferrer");
+        const isMock = data.mode === "mock";
+        if (!isMock) {
+          window.open(data.checkoutUrl, "_blank", "noopener,noreferrer");
+        }
         showToast({
-          title: "Checkout opened",
-          description: "Complete the hosted checkout, then Matterhorn will refresh this workspace plan.",
+          title: isMock ? "Plan preview saved" : "Test checkout opened",
+          description: isMock
+            ? "This does not change access or contact a payment provider."
+            : "Complete the Stripe test checkout, then Matterhorn will refresh this workspace plan.",
           tone: "info",
         });
       }
@@ -336,10 +479,15 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
         : client?.billingPortal() ?? Promise.reject(new Error("No client")),
     onSuccess: (data) => {
       if (data?.portalUrl) {
-        window.open(data.portalUrl, "_blank", "noopener,noreferrer");
+        const isMock = data.mode === "mock";
+        if (!isMock) {
+          window.open(data.portalUrl, "_blank", "noopener,noreferrer");
+        }
         showToast({
-          title: "Billing portal opened",
-          description: "Subscription management opens in a hosted billing page.",
+          title: isMock ? "Plan management opened" : "Billing portal opened",
+          description: isMock
+            ? "This is local plan management. No payment provider account is contacted."
+            : "Subscription management opens in a hosted billing page.",
           tone: "info",
         });
       }
@@ -374,7 +522,9 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
     },
   });
 
-  const plans = plansQuery.data?.plans ?? [];
+  const serverPlans = plansQuery.data?.plans ?? [];
+  const plans = serverPlans.length ? serverPlans : LOCAL_BILLING_PLANS;
+  const usingLocalPlanCatalog = serverPlans.length === 0;
   const status = statusQuery.data?.status;
   const billingLoadError = plansQuery.error ?? statusQuery.error ?? (!client ? "Matterhorn Work engine is offline" : null);
   const currentPlanId = status?.subscription.planId ?? plansQuery.data?.currentPlanId ?? "free";
@@ -382,16 +532,22 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
     ? plans.find((plan) => plan.id === status.pendingCheckout?.planId)
     : null;
   const setupChecks = status?.setup.checks ?? [];
-  const checkoutReady = status?.mode === "phase0_mock" || status?.setup.readyForTestCheckout === true;
+  const checkoutReady = Boolean(workspaceId) && (status?.mode === "phase0_mock" || status?.setup.readyForTestCheckout === true);
   const portalReady =
-    status?.mode === "phase0_mock" ||
-    Boolean(status?.subscription.providerCustomerId?.trim()) ||
-    setupChecks.some((check) => check.id === "stripe_test_customer" && check.status === "working");
-  const portalDisabled = !client || portalMutation.isPending || status?.mode === "live" || !portalReady;
+    status?.mode !== "phase0_mock" && (
+      Boolean(status?.subscription.providerCustomerId?.trim()) ||
+      setupChecks.some((check) => check.id === "stripe_test_customer" && check.status === "working")
+    );
+  const portalCanOpen = Boolean(client && status?.mode !== "live" && portalReady);
   const accountLinkage = status?.accountLinkage;
   const subscriptionCopy = subscriptionPeriodCopy(status?.subscription);
   const subscriptionLabel = status ? subscriptionStatusLabel(status.subscription.status) : null;
   const pendingCheckoutExpiryCopy = formatBillingDate(status?.pendingCheckout?.expiresAt);
+  const pendingCheckoutCopy = status?.pendingCheckout
+    ? status.pendingCheckout.mode === "stripe_test"
+      ? `The plan changes after the Stripe test webhook confirms it${pendingCheckoutExpiryCopy ? `, or expires ${pendingCheckoutExpiryCopy}` : ""}.`
+      : `This is a local preview and does not change plan access${pendingCheckoutExpiryCopy ? `; it expires ${pendingCheckoutExpiryCopy}` : ""}.`
+    : null;
 
   const usageItems = useMemo(() => {
     if (!status) return [];
@@ -419,7 +575,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
 
   return (
     <SettingsStack>
-      <SettingsInset className="rounded-lg bg-dls-surface-muted/10">
+      <SettingsInset className="rounded-lg bg-dls-surface-muted/[0.08]">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
             <div className="flex flex-col gap-0.5">
@@ -444,8 +600,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
             {status?.pendingCheckout ? (
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs leading-5 text-amber-200">
                 <span>
-                  Checkout pending for {pendingPlan?.name ?? billingPlanDisplayName(status.pendingCheckout.planId)}. The plan changes after the
-                  Stripe test webhook confirms it{pendingCheckoutExpiryCopy ? `, or expires ${pendingCheckoutExpiryCopy}` : ""}.
+                  Checkout pending for {pendingPlan?.name ?? billingPlanDisplayName(status.pendingCheckout.planId)}. {pendingCheckoutCopy}
                 </span>
                 {workspaceId ? (
                   <Button
@@ -463,23 +618,35 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
             ) : null}
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <SettingsPill>
+            <SettingsPill className="bg-dls-surface-muted/[0.13] text-dls-secondary">
               <ShieldCheck size={12} />
               {billingModeLabel(status)}
             </SettingsPill>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1 text-xs"
-              disabled={portalDisabled}
-              title={portalReady ? undefined : "Billing portal needs setup before it can open."}
-              onClick={() => portalMutation.mutate()}
-            >
-              {portalMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <ExternalLink size={12} />}
-              {portalReady ? "Manage billing" : "Portal setup needed"}
-            </Button>
+            {portalCanOpen ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 border-0 bg-dls-surface-muted/[0.13] px-2 text-xs text-dls-secondary shadow-none hover:bg-dls-surface-muted/[0.2] hover:text-dls-text"
+                disabled={portalMutation.isPending}
+                onClick={() => portalMutation.mutate()}
+              >
+                {portalMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <ExternalLink size={12} />}
+                {billingPortalActionLabel(status, portalReady)}
+              </Button>
+            ) : (
+              <span className="text-xs text-dls-secondary">
+                {billingPortalActionLabel(status, portalReady)}
+              </span>
+            )}
           </div>
         </div>
+        <PaymentReadinessSummary
+          status={status}
+          checkoutReady={checkoutReady}
+          portalReady={portalReady}
+          hasClient={Boolean(client)}
+          hasWorkspace={Boolean(workspaceId)}
+        />
       </SettingsInset>
 
       <SettingsSection>
@@ -491,7 +658,13 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
             </p>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {usingLocalPlanCatalog ? (
+          <div className="rounded-lg bg-dls-surface-muted/[0.08] px-3 py-2 text-xs leading-5 text-muted-foreground">
+            Showing the local Matterhorn plan catalog. Connect the Matterhorn Work engine to open checkout,
+            refresh usage, or manage a subscription.
+          </div>
+        ) : null}
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {plans.map((plan) => (
             <PlanCard
               key={plan.id}
@@ -503,7 +676,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               busy={checkoutMutation.isPending}
             />
           ))}
-          {plans.length === 0 ? (
+          {!plans.length ? (
             <ErrorState
               className="sm:col-span-2 lg:col-span-3"
               error={billingLoadError ?? "Billing plans are not available."}
@@ -545,13 +718,19 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               <div>
                 <h3 className="text-sm font-medium text-dls-text">Billing readiness</h3>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Test checkout is safe; live payments remain disabled.
+                  {status?.mode === "phase0_mock"
+                    ? "Local plan previews work now. Matterhorn must connect Stripe before checkout is available."
+                    : "Stripe test checkout is safe; live payments remain disabled."}
                 </p>
               </div>
               <CollapsibleTrigger
                 render={(
                   <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs text-muted-foreground">
-                    {status?.setup.readyForTestCheckout ? "Test checkout ready" : "Needs setup"}
+                    {status?.mode === "phase0_mock"
+                      ? "Local preview"
+                      : status?.setup.readyForTestCheckout
+                        ? "Stripe test ready"
+                        : "Platform setup"}
                     <ChevronDown
                       size={13}
                       className={cn("transition-transform", readinessOpen && "rotate-180")}
@@ -582,11 +761,12 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
       ) : null}
 
       {status?.mode !== "live" ? (
-        <div className="flex items-start gap-2 rounded-lg bg-dls-hover/20 px-3 py-2 text-xs leading-5 text-muted-foreground">
+        <div className="flex items-start gap-2 rounded-lg bg-dls-hover/15 px-3 py-2 text-xs leading-5 text-muted-foreground">
           <Info size={13} className="mt-0.5 shrink-0" />
           <span>
-            Billing is running in {status?.mode === "phase1_stripe_test" ? "Stripe test" : "test"} mode. No real
-            charges will be processed.
+            {status?.mode === "phase1_stripe_test"
+              ? "Stripe test mode is active. Test cards only; no real charges are processed."
+              : "Local billing preview is active. No checkout, payment account, or real charge is involved."}
           </span>
         </div>
       ) : null}

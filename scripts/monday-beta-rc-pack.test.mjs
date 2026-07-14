@@ -13,11 +13,13 @@ assert.equal(packageJson.scripts?.["test:monday-beta-rc-pack"], "node scripts/mo
 
 const docs = readFileSync("docs/monday-beta-rc-pack.md", "utf8");
 for (const phrase of [
-  "Matterhorn Work Monday Beta RC Pack",
+  "Matterhorn Work Launch RC Pack",
   "pnpm --silent beta:monday-rc",
   "matterhorn-monday-beta-rc.json",
   "matterhorn-monday-beta-rc.md",
   "matterhorn-monday-beta-rc.sha256",
+  "--release-profile controlled-beta",
+  "production services remain disabled",
   "Can submit: No",
   "Live submission: Off",
   "Do not put any of the following into command flags",
@@ -27,9 +29,10 @@ for (const phrase of [
 
 const script = readFileSync("scripts/monday-beta-rc-pack.mjs", "utf8");
 for (const phrase of [
-  "matterhorn.monday-beta-rc-pack.v1",
+  "matterhorn.launch-rc-pack.v3",
   "electron:tester-artifact",
   "desktop:beta-doctor",
+  "smoke:desktop-packaged-clean-profile",
   "smoke:customer-ready-crypto",
   "test:market-execution-safety-gate",
   "test:matterhorn-customer-onboarding-ui",
@@ -38,6 +41,21 @@ for (const phrase of [
   "test:wellness-creator-workflow",
   "customer-demo-evidence-pack.mjs",
   "bittensor-beta-customer-packet.mjs",
+  "test:matterhorn-platform-safety",
+  "product-readiness-smoke.mjs",
+  "matterhorn-product-browser-smoke.mjs",
+  "--require-production",
+  "--include-generated-media-flow",
+  "--workspace-id",
+  "--app-url",
+  "missingConfiguration",
+  "--bittensor-beta-gate",
+  "--customer-ready-smoke",
+  "--bittensor-evidence-verify",
+  "--bittensor-browser-qa",
+  "controlled_beta_exclusions",
+  "CONTROLLED_BETA_BLOCKER_IDS",
+  "--require-desk-results",
   "Can submit: No",
   "Live submission: Off",
   "planned hooks only",
@@ -67,6 +85,14 @@ const result = spawnSync("node", [
   "scripts/monday-beta-rc-pack.mjs",
   "--output-dir",
   outputDir,
+  "--server-url",
+  "https://backend.example.test",
+  "--token",
+  "rc-pack-test-token",
+  "--workspace-id",
+  "ws_release_test",
+  "--app-url",
+  "https://app.example.test/workspace/ws_release_test/session",
   "--dry-run",
   "--skip-electron-build",
   "--json",
@@ -74,9 +100,14 @@ const result = spawnSync("node", [
 
 assert.equal(result.status, 0, result.stderr || result.stdout);
 const report = JSON.parse(result.stdout);
-assert.equal(report.version, "matterhorn.monday-beta-rc-pack.v1");
+assert.equal(report.version, "matterhorn.launch-rc-pack.v3");
 assert.equal(report.dryRun, true);
-assert.equal(report.ready, true);
+assert.equal(report.releaseProfile, "production");
+assert.equal(report.ready, false);
+assert.equal(report.automationPassed, true);
+assert.equal(report.productionEvidence.backendProbeConfigured, true);
+assert.equal(report.productionEvidence.browserProbeConfigured, true);
+assert.equal(report.productionEvidence.complete, false);
 assert.equal(report.safety.nonCustodial, true);
 assert.equal(report.safety.marketCanSubmit, false);
 assert.equal(report.safety.marketLiveSubmissionEnabled, false);
@@ -89,6 +120,7 @@ assert.equal(report.betaScope.wellness, "workflow_ready_educational");
 assert.equal(report.betaScope.decentralizedServices, "planned_not_live");
 
 for (const id of [
+  "platform.safety",
   "ui.onboarding",
   "ui.protocol_panel",
   "ui.customer_readiness",
@@ -98,8 +130,11 @@ for (const id of [
   "wellness.workflow",
   "customer.demo_evidence",
   "bittensor.beta_packet",
+  "production.product_readiness",
+  "browser.product_smoke",
   "desktop.artifact",
   "desktop.doctor",
+  "desktop.clean_profile",
 ]) {
   assert.ok(report.stages.some((stage) => stage.id === id), `RC pack should include stage ${id}`);
 }
@@ -113,7 +148,8 @@ assert.ok(existsSync(shaPath), "RC pack should write SHA evidence");
 
 const markdown = readFileSync(mdPath, "utf8");
 for (const phrase of [
-  "# Matterhorn Work Monday Beta Release Candidate Pack",
+  "# Matterhorn Work Launch Release Candidate Pack",
+  "Production evidence complete: `false`",
   "Bittensor: beta-ready",
   "Hyperliquid: preview/external-signer/public-receipt only",
   "Polymarket: preview/external-signer/public-receipt only",
@@ -122,6 +158,17 @@ for (const phrase of [
 ]) {
   assert.ok(markdown.includes(phrase), `RC Markdown should include ${phrase}`);
 }
+
+const productReadinessStage = report.stages.find((stage) => stage.id === "production.product_readiness");
+assert.ok(productReadinessStage, "RC pack should include production product readiness");
+assert.ok(productReadinessStage.command.includes("--require-production"));
+assert.ok(productReadinessStage.command.includes("--include-generated-media-flow"));
+assert.ok(productReadinessStage.command.includes("ws_release_test"));
+assert.ok(!productReadinessStage.command.includes("rc-pack-test-token"), "RC report must redact the client token");
+
+const productBrowserStage = report.stages.find((stage) => stage.id === "browser.product_smoke");
+assert.ok(productBrowserStage, "RC pack should include deployed product browser smoke");
+assert.ok(productBrowserStage.command.includes("https://app.example.test/workspace/ws_release_test/session"));
 
 const combined = `${result.stdout}\n${markdown}\n${readFileSync(jsonPath, "utf8")}`;
 for (const forbidden of [
@@ -133,5 +180,55 @@ for (const forbidden of [
 ]) {
   assert.equal(combined.includes(forbidden), false, `RC pack output must not include ${forbidden}`);
 }
+
+assert.ok(
+  script.includes("requireReadyOutput") && script.includes("semanticReady"),
+  "RC pack must treat a child evidence report with ready=false as a failed stage",
+);
+
+const controlledBetaResult = spawnSync("node", [
+  "scripts/monday-beta-rc-pack.mjs",
+  "--output-dir",
+  `${outputDir}-controlled-beta`,
+  "--release-profile",
+  "controlled-beta",
+  "--server-url",
+  "https://backend.example.test",
+  "--token",
+  "rc-pack-test-token",
+  "--workspace-id",
+  "ws_release_test",
+  "--app-url",
+  "https://app.example.test/workspace/ws_release_test/session",
+  "--dry-run",
+  "--skip-electron-build",
+  "--json",
+], { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 });
+assert.equal(controlledBetaResult.status, 0, controlledBetaResult.stderr || controlledBetaResult.stdout);
+const controlledBetaReport = JSON.parse(controlledBetaResult.stdout);
+assert.equal(controlledBetaReport.releaseProfile, "controlled-beta");
+assert.ok(
+  controlledBetaReport.stages.find((stage) => stage.id === "browser.product_smoke")?.command.includes("--require-desk-results"),
+  "Controlled beta must require completed desk results in the browser smoke",
+);
+assert.ok(
+  script.indexOf("parseJsonOutput(result.stdout)") < script.indexOf("const stdout = redact(result.stdout, config)"),
+  "RC pack must parse complete child JSON before redacting and truncating report output",
+);
+
+const partialEvidenceResult = spawnSync("node", [
+  "scripts/monday-beta-rc-pack.mjs",
+  "--output-dir",
+  `${outputDir}-partial-evidence`,
+  "--dry-run",
+  "--bittensor-beta-gate",
+  "/tmp/beta.json",
+  "--json",
+], { encoding: "utf8" });
+assert.notEqual(partialEvidenceResult.status, 0, "Partial real Bittensor evidence must be rejected");
+assert.ok(
+  partialEvidenceResult.stderr.includes("requires --bittensor-beta-gate"),
+  "Partial evidence failure should name the required input group",
+);
 
 console.log("Monday beta RC pack static/dry-run check passed.");

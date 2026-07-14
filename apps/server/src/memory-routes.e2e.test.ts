@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { createMatterhornMemoryVault } from "@matterhorn-work/memory-vault";
+import type { MatterhornMemoryRecord } from "@matterhorn-work/types/memory";
 
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
@@ -414,6 +418,51 @@ describe("Matterhorn memory API routes", () => {
     const otherWorkspace = await jsonFetch(base, "/workspace/ws_other/memory/entities?tags=bittensor&limit=10");
     expect(otherWorkspace.response.status).toBe(200);
     expect(otherWorkspace.payload.records.map((item: { id: string }) => item.id)).not.toContain("mem_workspace_local_vault");
+  });
+
+  test("workspace memory export includes all matching records beyond the UI list cap", async () => {
+    const { base, dir } = await boot();
+    const workspaceMemoryRoot = join(dir, ".matterhorn-work", "memory");
+    const bulkVault = createMatterhornMemoryVault(workspaceMemoryRoot);
+
+    try {
+      for (let index = 0; index < 205; index += 1) {
+        await bulkVault.captureRecord(record({
+          id: `mem_workspace_bulk_${String(index).padStart(3, "0")}`,
+          title: `Workspace bulk memory ${index}`,
+          summary: `Workspace bulk memory ${index} should not be omitted by export pagination.`,
+          scope: "workspace",
+          tags: ["bittensor", "workspace:ws_memory"],
+        }) as MatterhornMemoryRecord);
+      }
+    } finally {
+      bulkVault.close();
+    }
+
+    const exported = await jsonFetch(base, "/workspace/ws_memory/memory/export", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    expect(exported.response.status).toBe(200);
+    expect(exported.payload.export.recordCount).toBe(205);
+  });
+
+  test("workspace memory routes return a safe error when vault metadata is corrupt", async () => {
+    const { base, dir } = await boot();
+    const workspaceMemoryRoot = join(dir, ".matterhorn-work", "memory");
+    const corruptVault = createMatterhornMemoryVault(workspaceMemoryRoot);
+    try {
+      await corruptVault.initialize();
+    } finally {
+      corruptVault.close();
+    }
+    await writeFile(join(workspaceMemoryRoot, "memory-index.json"), "{ not valid json", "utf8");
+
+    const listed = await jsonFetch(base, "/workspace/ws_memory/memory/entities?limit=5");
+    expect(listed.response.status).toBe(503);
+    expect(listed.payload.code).toBe("memory_store_unavailable");
+    expect(listed.payload.message).toBe("Memory store could not be loaded. Check the local vault files and retry.");
+    expect(JSON.stringify(listed.payload)).not.toContain("not valid json");
   });
 
   test("workspace memory can opt into tagged global machine-vault storage", async () => {

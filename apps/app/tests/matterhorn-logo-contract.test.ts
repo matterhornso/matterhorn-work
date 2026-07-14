@@ -13,9 +13,9 @@ describe("Matterhorn logo asset contract", () => {
   test("web tabs prefer the Matterhorn logo asset before legacy favicons", () => {
     const index = readRepoFile("apps/app/index.html");
 
-    const fullMatterhornIconIndex = index.indexOf('href="/matterhorn-logo.png"');
-    const matterhornIconIndex = index.indexOf('href="/matterhorn-logo-square.svg"');
-    const legacyFaviconIndex = index.indexOf('href="/favicon-32x32.png"');
+    const fullMatterhornIconIndex = index.indexOf('href="/matterhorn-logo.png?v=20260712b"');
+    const matterhornIconIndex = index.indexOf('href="/matterhorn-logo-square.svg?v=20260712b"');
+    const legacyFaviconIndex = index.indexOf('href="/favicon-32x32.png?v=20260712b"');
 
     expect(index).toContain('<link rel="manifest" href="/site.webmanifest" />');
     expect(fullMatterhornIconIndex).toBeGreaterThan(0);
@@ -35,12 +35,12 @@ describe("Matterhorn logo asset contract", () => {
     expect(manifest.name).toBe("Matterhorn Work");
     expect(manifest.short_name).toBe("Matterhorn");
     expect(manifest.icons).toContainEqual({
-      src: "/matterhorn-logo.png",
+      src: "/matterhorn-logo.png?v=20260712b",
       sizes: "512x512",
       type: "image/png",
       purpose: "any maskable",
     });
-    expect(manifest.icons.some((icon) => icon.src === "/favicon-32x32.png")).toBe(true);
+    expect(manifest.icons.some((icon) => icon.src === "/favicon-32x32.png?v=20260712b")).toBe(true);
   });
 
   test("desktop packaging points to Matterhorn icon assets", () => {

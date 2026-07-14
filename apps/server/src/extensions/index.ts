@@ -40,7 +40,7 @@ export async function callExperimentalExtensionAction(config: ServerConfig, inpu
   }
   const registered = OPENWORK_EXPERIMENTAL_EXTENSION_ACTIONS.find((item) => item.extensionId === extensionId && item.action === action);
   if (!registered) {
-    throw new ApiError(404, "extension_action_not_found", "OpenWork extension action not found");
+    throw new ApiError(404, "extension_action_not_found", "Matterhorn extension action not found");
   }
 
   if (extensionId === GOOGLE_WORKSPACE_EXTENSION_ID) {
@@ -48,5 +48,5 @@ export async function callExperimentalExtensionAction(config: ServerConfig, inpu
     if (result) return result;
   }
 
-  throw new ApiError(501, "extension_action_not_implemented", `${registered.title} is registered but not implemented on openwork-server yet.`, { extensionId, action, args });
+  throw new ApiError(501, "extension_action_not_implemented", `${registered.title} is registered but not implemented by the Matterhorn server yet.`, { extensionId, action, args });
 }

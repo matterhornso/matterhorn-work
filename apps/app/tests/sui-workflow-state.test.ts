@@ -52,11 +52,11 @@ describe("Sui workflow state", () => {
     expect(result.canPreparePreview).toBe(true);
     expect(result.preparePreviewReason).toBeNull();
     expect(result.canSignPreview).toBe(false);
-    expect(result.signPreviewReason).toBe("Prepare a Sui preview before signing.");
+    expect(result.signPreviewReason).toBe("Prepare a Sui handoff before signing.");
     expect(result.nextAction).toBe("prepare_preview");
   });
 
-  test("requires the connected Sui wallet to match the preview sender", () => {
+  test("requires the connected Sui wallet to match the handoff sender", () => {
     const result = getSuiWorkflowAvailability({
       ...READY_INPUT,
       previewReady: true,
@@ -65,11 +65,11 @@ describe("Sui workflow state", () => {
     });
 
     expect(result.canSignPreview).toBe(false);
-    expect(result.signPreviewReason).toBe("The connected Sui wallet does not match the preview sender.");
+    expect(result.signPreviewReason).toBe("The connected Sui wallet does not match the handoff sender.");
     expect(result.nextAction).toBe("connect_sender_wallet");
   });
 
-  test("enables wallet signing when the preview sender matches", () => {
+  test("enables wallet signing when the handoff sender matches", () => {
     const result = getSuiWorkflowAvailability({
       ...READY_INPUT,
       previewReady: true,

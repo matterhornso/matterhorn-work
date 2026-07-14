@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { StaticMeshGradient } from "@paper-design/shaders-react";
+import { PaperMeshGradient } from "@matterhorn-work/ui/react";
 
 type ExtensionMeshAvatarProps = {
   name: string;
@@ -46,21 +46,16 @@ export function ExtensionMeshAvatar({ name, className }: ExtensionMeshAvatarProp
       className={`relative isolate overflow-hidden ${className ?? ""}`}
       style={{ background: fallbackBackground(colors) }}
     >
-      <StaticMeshGradient
+      <PaperMeshGradient
         className="absolute -inset-2 h-[calc(100%+1rem)] w-[calc(100%+1rem)]"
         width={96}
         height={96}
         colors={[...colors]}
-        positions={4}
-        waveX={0.36}
-        waveY={0.42}
-        waveXShift={0.18}
-        waveYShift={0.12}
-        mixing={0.72}
+        distortion={0.62}
+        swirl={0.18}
         grainMixer={0}
         grainOverlay={0}
         speed={0}
-        maxPixelCount={9216}
       />
       <div className="absolute inset-0 flex items-center justify-center bg-black/5 text-white drop-shadow-sm">
         {extensionMeshAvatarText(name)}

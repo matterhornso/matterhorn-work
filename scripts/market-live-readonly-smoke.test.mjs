@@ -74,6 +74,12 @@ await withServer({}, async (mock) => {
   assert.equal(response.ok, false, "secret-shaped handoff input rejected");
   const payload = await response.json();
   assert.equal(payload.error, "market_secret_rejected");
+  const signatureResponse = await fetch(mock.url + "/api/hyperliquid/orders/handoff", {
+    method: "POST",
+    headers: { authorization: "Bearer " + TOKEN, "content-type": "application/json" },
+    body: JSON.stringify({ asset: "BTC", side: "buy", size: 0.001, signature: "nope" }),
+  });
+  assert.equal(signatureResponse.ok, false, "an actual signature field is rejected");
   console.log("PASS secret-shaped input rejected");
 });
 

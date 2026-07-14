@@ -25,7 +25,7 @@ import {
 } from "../../../app/lib/den-session-events";
 import {
   deepLinkBridgeEvent,
-  drainPendingDeepLinks,
+  takePendingDeepLinks,
   type DeepLinkBridgeDetail,
 } from "../../../app/lib/deep-link-bridge";
 import { parseDenAuthDeepLink } from "../../../app/lib/matterhorn-links";
@@ -170,9 +170,13 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
       }
     };
 
-    handleUrls(drainPendingDeepLinks(window));
+    const takeAuthLinks = () =>
+      takePendingDeepLinks(window, (url) => Boolean(parseDenAuthDeepLink(url)));
+
+    handleUrls(takeAuthLinks());
     const handleDeepLink = (event: Event) => {
-      handleUrls(((event as CustomEvent<DeepLinkBridgeDetail>).detail?.urls ?? []) as string[]);
+      const eventUrls = ((event as CustomEvent<DeepLinkBridgeDetail>).detail?.urls ?? []) as string[];
+      handleUrls([...new Set([...takeAuthLinks(), ...eventUrls])]);
     };
 
     window.addEventListener(deepLinkBridgeEvent, handleDeepLink);

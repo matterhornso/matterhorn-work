@@ -19,6 +19,10 @@ export function workspaceNotesRoute(workspaceId: string) {
   return `${workspaceSessionRoute(workspaceId)}?panel=notes`;
 }
 
+export function workspaceMemoryRoute(workspaceId: string) {
+  return `${workspaceSessionRoute(workspaceId)}?panel=memory`;
+}
+
 export function workspaceRunHistoryRoute(workspaceId: string) {
   return `/workspace/${encodeURIComponent(workspaceId.trim())}/history`;
 }

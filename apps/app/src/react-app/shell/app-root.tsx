@@ -18,6 +18,8 @@ import { MatterhornControlProvider, MatterhornRouteControlActions } from "./cont
 import { ShellConfigProvider } from "./shell-config";
 import { QuickJotProvider, QuickJotGlobal } from "../domains/notes";
 import { workspaceSessionRoute } from "./workspace-routes";
+import { AppErrorBoundary } from "./app-error-boundary";
+import { RemoteConnectDeepLinkHandler } from "./remote-connect-deep-links";
 
 const OrgOnboardingPageRoute = lazy(() => import("../domains/cloud/org-onboarding-page").then((module) => ({
   default: module.OrgOnboardingPage,
@@ -166,6 +168,7 @@ function DenSigninGate({ children }: DenSigninGateProps) {
 
 export function AppRoot() {
   useDesktopFontZoomBehavior();
+  const location = useLocation();
 
   return (
     <>
@@ -174,8 +177,10 @@ export function AppRoot() {
         <AppMenuProvider>
         <MatterhornControlProvider>
           <MatterhornRouteControlActions />
+          <RemoteConnectDeepLinkHandler />
           <DenSigninGate>
             <QuickJotProvider>
+            <AppErrorBoundary resetKey={`${location.pathname}${location.search}`}>
             <Routes>
               <Route
                 path="/signin"
@@ -288,6 +293,7 @@ export function AppRoot() {
               <Route path="/" element={<Navigate to="/session" replace />} />
               <Route path="*" element={<Navigate to="/session" replace />} />
             </Routes>
+            </AppErrorBoundary>
             <QuickJotGlobal />
             </QuickJotProvider>
           </DenSigninGate>

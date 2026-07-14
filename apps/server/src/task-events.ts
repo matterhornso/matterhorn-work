@@ -106,13 +106,17 @@ export async function deriveTaskRuns(
     taskEvents.sort((a, b) => b.timestamp - a.timestamp);
     const latest = taskEvents[0];
     if (!latest) continue;
-    const terminal = latest.type === "completed"
+    const status: MatterhornTaskRun["status"] = latest.type === "completed"
       ? "completed"
       : latest.type === "failed"
         ? "failed"
         : latest.type === "cancelled"
           ? "cancelled"
-          : "running";
+          : latest.type === "workflow_staged"
+            ? "staged"
+            : latest.type === "waiting_for_user"
+              ? "waiting"
+              : "running";
 
     const oldest = taskEvents[taskEvents.length - 1] ?? latest;
     const artifactPaths = taskEvents
@@ -125,7 +129,7 @@ export async function deriveTaskRuns(
       workspaceId: latest.workspaceId,
       desk,
       sessionSlug,
-      status: terminal,
+      status,
       createdAt: oldest.timestamp,
       updatedAt: latest.timestamp,
       outcomeSummary: latest.summary,

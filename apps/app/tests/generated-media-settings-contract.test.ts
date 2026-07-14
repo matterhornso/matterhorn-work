@@ -38,6 +38,8 @@ describe("Generated media settings surface", () => {
     expect(route).toContain('navigateSettingsPath("extensions/mcp")');
     expect(route).toContain("detailEntryRequest={extensionDetailRequest}");
     expect(route).toContain("onDetailEntryRequestHandled");
+    expect(route).toContain('route.tab === "generated-media" ? null : notFoundRouteError');
+    expect(route).toContain("error={surfacedRouteError}");
   });
 
   test("generated media settings page reads live backend contracts", () => {
@@ -67,6 +69,12 @@ describe("Generated media settings surface", () => {
     expect(source).toContain("Open billing");
     expect(source).toContain("Plan limits apply to image generation and public NFT publishing");
     expect(source).toContain("Local drafts remain available");
+    expect(source).toContain("<SettingsSectionHeaderTitle>Media library</SettingsSectionHeaderTitle>");
+    expect(source).toContain('useState<"images" | "drafts">("images")');
+    expect(source).toContain("Diagnostics and readiness report");
+    expect(source).toContain('needsSetupLabel="Platform setup"');
+    expect(source).toContain("Storage and data controls");
+    expect(source).toContain("<details");
     expect(source).toContain("OPENAI_API_KEY");
     expect(source).toContain("MATTERHORN_IMAGE_PROVIDER");
     expect(source).toContain("Delete local generated image");
@@ -110,10 +118,11 @@ describe("Generated media settings surface", () => {
         ),
       ),
     );
-    expect(html).toContain("Production readiness");
-    expect(html).toContain("Open a connected workspace");
-    expect(html).toContain("Recent media");
-    expect(html).toContain("Data controls");
+    expect(html).toContain("Generated media is unavailable");
+    expect(html).toContain("Reconnect the Matterhorn Work engine");
+    expect(html).toContain("Generated media is workspace-scoped");
+    expect(html).not.toContain("Loading publishing readiness");
+    expect(html).not.toContain("Loading generated media");
   });
 
   test("missing production image provider renders a direct setup action", () => {

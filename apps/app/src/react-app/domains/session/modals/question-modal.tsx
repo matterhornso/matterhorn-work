@@ -91,17 +91,18 @@ export function QuestionPanel(props: QuestionPanelProps) {
 
   const currentQuestion = props.questions[state.currentIndex];
   const options = currentQuestion?.options ?? [];
+  const acceptsCustomInput = Boolean(currentQuestion?.custom) || options.length === 0;
   const isLastQuestion = state.currentIndex === props.questions.length - 1;
   const canProceed = (() => {
     if (!currentQuestion) return false;
-    if (currentQuestion.custom && state.customInput.trim().length > 0) return true;
+    if (acceptsCustomInput && state.customInput.trim().length > 0) return true;
     return state.currentSelection.length > 0;
   })();
 
   const handleNext = () => {
     if (!canProceed || !currentQuestion) return;
     const nextAnswer = [...state.currentSelection];
-    if (currentQuestion.custom && state.customInput.trim()) {
+    if (acceptsCustomInput && state.customInput.trim()) {
       nextAnswer.push(state.customInput.trim());
     }
     const newAnswers = [...state.answers];
@@ -121,7 +122,7 @@ export function QuestionPanel(props: QuestionPanelProps) {
       return;
     }
     dispatch({ type: "selectOption", option });
-    if (!currentQuestion.custom) {
+    if (!acceptsCustomInput) {
       setTimeout(() => {
         const newAnswers = [...state.answers];
         newAnswers[state.currentIndex] = [option];
@@ -138,7 +139,12 @@ export function QuestionPanel(props: QuestionPanelProps) {
   if (!currentQuestion) return null;
 
   return (
-    <div className="overflow-hidden border-b border-dls-border bg-transparent">
+    <div
+      data-testid="question-panel"
+      role="region"
+      aria-label="Agent needs input"
+      className="overflow-hidden border-b border-dls-border bg-transparent"
+    >
       <div className="border-b border-dls-border px-4 py-3">
         <div className="flex items-start gap-2.5">
           <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-blue-7/30 bg-blue-3/20 text-blue-11">
@@ -204,13 +210,16 @@ export function QuestionPanel(props: QuestionPanelProps) {
           </div>
         ) : null}
 
-          {currentQuestion.custom ? (
+          {acceptsCustomInput ? (
             <div className="border-t border-dls-border pt-3">
-              <label className="block text-xs font-semibold text-dls-secondary mb-2 uppercase tracking-wide">
-                {t("question_modal.custom_answer_label")}
-              </label>
+              {options.length > 0 ? (
+                <label className="mb-2 block text-xs font-medium text-dls-secondary">
+                  {t("question_modal.custom_answer_label")}
+                </label>
+              ) : null}
               <input
                 type="text"
+                aria-label={currentQuestion.header || t("common.question")}
                 value={state.customInput}
                 onChange={(event) =>
                   dispatch({
@@ -239,7 +248,7 @@ export function QuestionPanel(props: QuestionPanelProps) {
           </div>
 
           <div className="flex gap-2">
-            {currentQuestion.multiple || currentQuestion.custom ? (
+            {currentQuestion.multiple || acceptsCustomInput ? (
               <Button
                 onClick={handleNext}
                 disabled={!canProceed || props.busy}

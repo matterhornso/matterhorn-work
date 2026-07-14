@@ -1517,6 +1517,9 @@ export async function startBridge(config: Config, logger: Logger, reporter?: Bri
           };
         },
       },
+      {
+        writeToken: config.healthToken,
+      },
     );
   }
 

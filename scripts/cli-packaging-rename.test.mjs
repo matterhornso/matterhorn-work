@@ -28,7 +28,8 @@ assert.match(serverLegacy, /matterhorn-work-server\.mjs/);
 const orchestratorPkg = readJson("apps/orchestrator/package.json");
 assert.equal(orchestratorPkg.name, "matterhorn-work-orchestrator");
 assert.match(orchestratorPkg.scripts["build:bin"], /--filename matterhorn-work/);
-assert.equal(orchestratorPkg.dependencies["matterhorn-work-server"], "0.13.12");
+assert.equal(orchestratorPkg.dependencies["matterhorn-work-server"], orchestratorPkg.version);
+assert.equal(orchestratorPkg.dependencies["opencode-router"], orchestratorPkg.version);
 assert.equal(orchestratorPkg.dependencies["openwork-server"], undefined);
 
 const orchestratorBuild = readText("apps/orchestrator/script/build.ts");

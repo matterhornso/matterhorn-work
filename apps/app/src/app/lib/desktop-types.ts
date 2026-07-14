@@ -66,6 +66,18 @@ export type WorkspaceInfo = {
   matterhornHostToken?: string | null;
   matterhornWorkspaceId?: string | null;
   matterhornWorkspaceName?: string | null;
+  /** @deprecated Legacy desktop state alias. Use matterhornHostUrl. */
+  openworkHostUrl?: string | null;
+  /** @deprecated Legacy desktop state alias. Use matterhornToken. */
+  openworkToken?: string | null;
+  /** @deprecated Legacy desktop state alias. Use matterhornClientToken. */
+  openworkClientToken?: string | null;
+  /** @deprecated Legacy desktop state alias. Use matterhornHostToken. */
+  openworkHostToken?: string | null;
+  /** @deprecated Legacy desktop state alias. Use matterhornWorkspaceId. */
+  openworkWorkspaceId?: string | null;
+  /** @deprecated Legacy desktop state alias. Use matterhornWorkspaceName. */
+  openworkWorkspaceName?: string | null;
   sandboxBackend?: "docker" | "microsandbox" | null;
   sandboxRunId?: string | null;
   sandboxContainerName?: string | null;

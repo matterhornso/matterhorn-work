@@ -35,6 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SUI_NETWORKS, suiDAppKit, type SuiMatterhornNetwork } from "../../infra/sui-dapp-kit";
 import { getSuiWorkflowAvailability } from "./sui-workflow-state";
+import { usePhantomSui } from "./phantom-sui-provider";
 
 function truncateAddress(address: string): string {
   return `${address.slice(0, 8)}...${address.slice(-6)}`;
@@ -61,9 +62,9 @@ function fieldId(name: string) {
   return `matterhorn-sui-workflow-${name}`;
 }
 
-const SUI_PANEL_SECTION_CLASS = "grid gap-3 rounded-lg bg-dls-surface-muted/[0.055] px-3 py-3";
-const SUI_PANEL_INPUT_CLASS = "h-9 rounded-lg border border-transparent bg-dls-surface-muted/[0.10] px-3 text-sm text-dls-text shadow-none outline-none placeholder:text-dls-muted transition-colors dark:bg-dls-surface-muted/[0.12] focus-visible:border-[rgba(var(--dls-accent-rgb),0.34)] focus-visible:bg-dls-surface-muted/[0.16] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.16)] dark:focus-visible:bg-dls-surface-muted/[0.18]";
-const SUI_PANEL_TEXTAREA_CLASS = "min-h-[5.25rem] rounded-lg border border-transparent bg-dls-surface-muted/[0.10] px-3 py-2.5 text-sm leading-6 text-dls-text shadow-none outline-none placeholder:text-dls-muted transition-colors dark:bg-dls-surface-muted/[0.12] focus-visible:border-[rgba(var(--dls-accent-rgb),0.34)] focus-visible:bg-dls-surface-muted/[0.16] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.16)] dark:focus-visible:bg-dls-surface-muted/[0.18]";
+const SUI_PANEL_SECTION_CLASS = "matterhorn-rail-section grid gap-3 py-2";
+const SUI_PANEL_INPUT_CLASS = "h-8 rounded-md border-0 bg-dls-surface-muted/[0.10] px-2.5 text-sm text-dls-text shadow-none outline-none placeholder:text-dls-muted transition-colors dark:bg-dls-surface-muted/[0.12] focus-visible:bg-dls-surface-muted/[0.16] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.22)] dark:focus-visible:bg-dls-surface-muted/[0.18]";
+const SUI_PANEL_TEXTAREA_CLASS = "min-h-[4.5rem] rounded-md border-0 bg-dls-surface-muted/[0.10] px-2.5 py-2 text-sm leading-6 text-dls-text shadow-none outline-none placeholder:text-dls-muted transition-colors dark:bg-dls-surface-muted/[0.12] focus-visible:bg-dls-surface-muted/[0.16] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.22)] dark:focus-visible:bg-dls-surface-muted/[0.18]";
 
 export type SuiWorkflowRuntime = "web" | "desktop" | "electron" | "unknown";
 
@@ -89,7 +90,7 @@ function WorkflowField(props: {
     <label className="grid min-w-0 gap-1.5 text-[11px] font-medium text-dls-secondary" htmlFor={props.htmlFor}>
       <span className="text-xs font-medium text-dls-text">{props.label}</span>
       {props.children}
-      {props.help ? <span className="text-[11px] font-normal leading-4 text-dls-secondary">{props.help}</span> : null}
+      {props.help ? <span className="text-[11px] font-normal leading-4 text-dls-muted">{props.help}</span> : null}
     </label>
   );
 }
@@ -110,12 +111,14 @@ export function SuiWorkflowPanel(props: {
   sessionId?: string | null;
   runtime?: SuiWorkflowRuntime;
   compact?: boolean;
+  embedded?: boolean;
   onEvidenceSaved?: (path: string) => void;
 }) {
   const connection = useWalletConnection();
   const wallets = useWallets();
   const account = useCurrentAccount();
   const wallet = useCurrentWallet();
+  const phantomSui = usePhantomSui();
   const reportedNetwork = useCurrentNetwork();
   const [network, setNetwork] = useState<MatterhornSuiNetwork>(
     isSuiMatterhornNetwork(reportedNetwork) ? reportedNetwork : "testnet",
@@ -137,16 +140,21 @@ export function SuiWorkflowPanel(props: {
     if (isSuiMatterhornNetwork(reportedNetwork)) setNetwork(reportedNetwork);
   }, [reportedNetwork]);
 
-  useEffect(() => {
-    if (account?.address && !sender.trim()) setSender(account.address);
-  }, [account?.address, sender]);
-
-  const effectiveSender = sender.trim() || account?.address || "";
   const workspaceId = props.workspaceId?.trim() ?? "";
   const client = props.matterhornServerClient ?? null;
   const onEvidenceSaved = props.onEvidenceSaved;
   const runtime = resolveSuiWorkflowRuntime(props.runtime);
   const directWalletAvailable = supportsDirectSuiWallet(runtime);
+  const connectedAddress = directWalletAvailable ? account?.address ?? phantomSui.address : null;
+  const hasWalletStandardPhantom = wallets.some((availableWallet) =>
+    availableWallet.name.toLowerCase().includes("phantom"),
+  );
+
+  useEffect(() => {
+    if (connectedAddress && !sender.trim()) setSender(connectedAddress);
+  }, [connectedAddress, sender]);
+
+  const effectiveSender = sender.trim() || connectedAddress || "";
 
   const accountQuery = useQuery({
     queryKey: ["sui-workflow-account", network, effectiveSender, Boolean(client)] as const,
@@ -174,13 +182,17 @@ export function SuiWorkflowPanel(props: {
     setError(null);
     setBusyAction("disconnect");
     try {
-      await suiDAppKit.disconnectWallet();
+      if (account?.address) {
+        await suiDAppKit.disconnectWallet();
+      } else {
+        await phantomSui.disconnect();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not disconnect Sui wallet.");
     } finally {
       setBusyAction(null);
     }
-  }, []);
+  }, [account?.address, phantomSui]);
 
   const copyText = useCallback(async (label: string, text: string) => {
     try {
@@ -228,7 +240,7 @@ export function SuiWorkflowPanel(props: {
       setReceiptResponse(null);
       emitEvidenceSaved(response.evidence?.outputPath);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not prepare Sui preview.");
+      setError(err instanceof Error ? err.message : "Could not prepare Sui handoff.");
     } finally {
       setBusyAction(null);
     }
@@ -291,7 +303,7 @@ export function SuiWorkflowPanel(props: {
       return;
     }
     if (!previewResponse?.preview) {
-      setError("Prepare a Sui preview before signing.");
+      setError("Prepare a Sui handoff before signing.");
       return;
     }
     if (!account?.address) {
@@ -300,7 +312,7 @@ export function SuiWorkflowPanel(props: {
     }
     const preview = previewResponse.preview;
     if (account.address.toLowerCase() !== preview.sender.toLowerCase()) {
-      setError("The connected Sui wallet does not match the preview sender.");
+      setError("The connected Sui wallet does not match the handoff sender.");
       return;
     }
 
@@ -352,7 +364,6 @@ export function SuiWorkflowPanel(props: {
 
   const preview = previewResponse?.preview ?? null;
   const receipt = receiptResponse?.receipt ?? null;
-  const connectedAddress = directWalletAvailable ? account?.address ?? null : null;
   const senderMatchesConnectedWallet = Boolean(
     connectedAddress && effectiveSender && connectedAddress.toLowerCase() === effectiveSender.toLowerCase(),
   );
@@ -372,15 +383,15 @@ export function SuiWorkflowPanel(props: {
     digest: digest.trim(),
   });
   const canPreview = availability.canPreparePreview;
-  const canSignPreview = directWalletAvailable && availability.canSignPreview;
+  const canSignPreview = Boolean(account?.address) && directWalletAvailable && availability.canSignPreview;
   const canImportReceipt = availability.canImportReceipt;
   const accountBalance = accountQuery.data?.account.balance.balanceMist;
   const connectedWalletLabel = !directWalletAvailable
     ? effectiveSender
       ? `Sender ${truncateAddress(effectiveSender)}`
       : "External Sui wallet handoff"
-    : account?.address
-    ? `${wallet?.name ?? "Sui wallet"} · ${truncateAddress(account.address)}`
+    : connectedAddress
+    ? `${account?.address ? wallet?.name ?? "Sui wallet" : "Phantom"} · ${truncateAddress(connectedAddress)}`
     : "No Sui wallet connected";
 
   const handoffText = useMemo(() => (
@@ -402,29 +413,28 @@ export function SuiWorkflowPanel(props: {
 
   return (
     <section className={cn(
-      "grid gap-4",
-      props.compact ? "px-3 py-3" : "px-4 py-4",
+      "grid gap-3",
+      props.embedded ? "pt-1" : props.compact ? "px-3 py-3" : "px-4 py-4",
     )}>
-      <div className="flex items-start justify-between gap-3">
+      {!props.embedded ? <div className="flex min-w-0 items-start gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Waves className="size-4 text-dls-secondary" aria-hidden="true" />
-            <h4 className="text-sm font-semibold text-dls-text">Sui wallet workflow</h4>
+            <h4 className="text-sm font-semibold text-dls-text">Sui wallet</h4>
           </div>
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
             {directWalletAvailable
-              ? "Prepare a transfer preview, sign in your wallet, and save the public receipt."
-              : "Prepare a transfer preview, sign externally, then import the public receipt as project evidence."}
+              ? "Connect to view your balance and prepare transfers."
+              : "Prepare a transfer handoff, sign externally, then import the public receipt as project evidence."}
           </p>
         </div>
-        <span className="shrink-0 text-[11px] font-medium text-dls-secondary">No custody</span>
-      </div>
+      </div> : null}
 
-      <div className={SUI_PANEL_SECTION_CLASS}>
+      {!props.embedded ? <div className={SUI_PANEL_SECTION_CLASS}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="truncate text-xs font-medium text-dls-text">{connectedWalletLabel}</p>
-            <p className="mt-0.5 text-[11px] text-dls-secondary">
+            <p className="mt-0.5 text-[11px] leading-4 text-dls-secondary">
               {accountQuery.isError
                 ? "Account read unavailable"
                 : accountQuery.isLoading
@@ -444,7 +454,7 @@ export function SuiWorkflowPanel(props: {
             >
               <RefreshCw className={cn("size-3", accountQuery.isFetching && "animate-spin")} />
             </Button>
-            {directWalletAvailable && account?.address ? (
+            {directWalletAvailable && connectedAddress ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -462,10 +472,21 @@ export function SuiWorkflowPanel(props: {
         {!directWalletAvailable ? (
           <div className="text-xs leading-5 text-dls-secondary">
             <span className="font-medium text-dls-text">Desktop handoff:</span>{" "}
-            copy the preview handoff, sign in your Sui wallet or protocol client, then paste the public digest below.
+            copy the handoff, sign in your Sui wallet or protocol client, then paste the public digest below.
           </div>
-        ) : !account?.address && wallets.length > 0 ? (
+        ) : !connectedAddress && (wallets.length > 0 || phantomSui.detected) ? (
           <div className="grid gap-2">
+            {phantomSui.detected && !hasWalletStandardPhantom ? (
+              <Button
+                variant="outline"
+                className="h-auto justify-start gap-2 rounded-lg border-0 bg-dls-surface-muted/[0.1] px-3 py-2 text-xs text-dls-text shadow-none hover:bg-dls-surface-muted/[0.16]"
+                disabled={busyAction === "connect" || phantomSui.connecting}
+                onClick={() => void phantomSui.connect()}
+              >
+                <Wallet className="size-3.5 shrink-0 text-[#ab9ff2]" />
+                <span className="min-w-0 truncate">Phantom</span>
+              </Button>
+            ) : null}
             {wallets.slice(0, 3).map((availableWallet) => (
               <Button
                 key={`${availableWallet.name}-${availableWallet.version}`}
@@ -484,8 +505,14 @@ export function SuiWorkflowPanel(props: {
             ))}
           </div>
         ) : null}
-      </div>
+        {phantomSui.address && !account?.address ? (
+          <p className="text-[11px] leading-4 text-dls-secondary">
+            Phantom Sui is connected for public reads and transfer previews. Use the prepared handoff in Phantom for final signing.
+          </p>
+        ) : null}
+      </div> : null}
 
+      {!directWalletAvailable || connectedAddress ? <>
       <div className={SUI_PANEL_SECTION_CLASS}>
         <div className={networkSenderGridClass}>
           <WorkflowField label="Network" htmlFor={fieldId("network")}>
@@ -545,7 +572,7 @@ export function SuiWorkflowPanel(props: {
           </WorkflowField>
         </div>
 
-        <WorkflowField label="Memo" htmlFor={fieldId("memo")} help="Optional. Saved with the preview evidence, not signed by Matterhorn.">
+        <WorkflowField label="Memo" htmlFor={fieldId("memo")} help="Optional. Saved with the handoff evidence, not signed by Matterhorn.">
           <Textarea
             id={fieldId("memo")}
             className={SUI_PANEL_TEXTAREA_CLASS}
@@ -561,10 +588,10 @@ export function SuiWorkflowPanel(props: {
           className="w-fit rounded-lg"
           disabled={!canPreview || busyAction === "preview"}
           onClick={preparePreview}
-          title={availability.preparePreviewReason ?? "Prepare a non-custodial Sui preview"}
+          title={availability.preparePreviewReason ?? "Prepare a non-custodial Sui handoff"}
         >
           {busyAction === "preview" ? <RefreshCw className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-          Prepare preview
+          Prepare handoff
         </Button>
       </div>
 
@@ -572,7 +599,7 @@ export function SuiWorkflowPanel(props: {
         <div className={SUI_PANEL_SECTION_CLASS}>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-dls-text">Preview ready</p>
+              <p className="text-sm font-semibold text-dls-text">Handoff ready</p>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
                 {preview.amountSui} SUI to {truncateAddress(preview.recipient)}
               </p>
@@ -580,7 +607,7 @@ export function SuiWorkflowPanel(props: {
             <ShieldCheck className="size-4 text-emerald-300" aria-hidden="true" />
           </div>
           <div className="grid gap-1 text-xs leading-5 text-dls-secondary">
-            <p><span className="font-medium text-dls-text">Preview hash:</span> <span className="font-mono">{preview.previewSha256.slice(0, 18)}...</span></p>
+            <p><span className="font-medium text-dls-text">Handoff hash:</span> <span className="font-mono">{preview.previewSha256.slice(0, 18)}...</span></p>
             <p><span className="font-medium text-dls-text">Execution:</span> wallet-only. Matterhorn does not hold keys or submit directly.</p>
           </div>
           <EvidencePath path={previewResponse?.evidence?.outputPath} />
@@ -610,7 +637,7 @@ export function SuiWorkflowPanel(props: {
             ) : null}
             <Button variant="ghost" size="sm" onClick={() => copyText("hash", preview.previewSha256)}>
               <Copy className="size-3" />
-              {copyLabel === "hash" ? "Copied" : "Copy preview hash"}
+              {copyLabel === "hash" ? "Copied" : "Copy handoff hash"}
             </Button>
           </div>
         </div>
@@ -695,10 +722,11 @@ export function SuiWorkflowPanel(props: {
           <EvidencePath path={receiptResponse?.evidence?.outputPath} />
         </div>
       ) : null}
+      </> : null}
 
-      {error ? (
+      {error || phantomSui.error ? (
         <div className="rounded-lg bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-300">
-          {error}
+          {error ?? phantomSui.error}
         </div>
       ) : null}
     </section>

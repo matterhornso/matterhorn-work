@@ -1,5 +1,19 @@
 # Matterhorn Chat — Perspectives & Response Modes
 
+## Current Implementation
+
+The production chat currently implements **one response at a time** with a per-session perspective selector:
+
+- **Cautious** - risk-first framing;
+- **Balanced** - factual default;
+- **Optimistic** - opportunity-forward framing.
+
+The selector is rendered beside the `Perspective` label in the composer. The value is stored per workspace/session and injected into system context. It changes framing only; all wallet, financial, compliance, privacy, and wellness safety requirements remain identical.
+
+The parallel three-card comparison layouts described later in this document are prototype exploration and are not the current product. `Non-optimistic` and `Neutral` were renamed to `Cautious` and `Balanced` in production.
+
+Source: `apps/app/src/react-app/domains/session/perspectives/response-perspective.ts`.
+
 **Recommended feature name:** **Matterhorn Perspectives**
 
 **Why "Matterhorn Perspectives"?**

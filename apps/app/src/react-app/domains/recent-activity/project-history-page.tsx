@@ -3,7 +3,7 @@ import { useMemo, useState, type ElementType } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  BrainCircuit,
+  Archive,
   CalendarClock,
   Clock3,
   CreditCard,
@@ -65,7 +65,7 @@ export const PROJECT_HISTORY_FILTERS: Array<{
 
 const KIND_META: Record<MatterhornProjectDataLedgerKind, { icon: ElementType; tone: string }> = {
   note: { icon: FileText, tone: "text-sky-300" },
-  memory_suggestion: { icon: BrainCircuit, tone: "text-amber-300" },
+  memory_suggestion: { icon: Archive, tone: "text-amber-300" },
   team_access: { icon: Users, tone: "text-indigo-300" },
   wallet: { icon: WalletCards, tone: "text-cyan-300" },
   chat: { icon: MessageSquareText, tone: "text-blue-300" },
@@ -137,8 +137,8 @@ function titleForEntry(entry: MatterhornProjectDataLedgerEntry) {
 
 function nftPreviewTitle(entry: MatterhornProjectDataLedgerEntry) {
   const outputKind = typeof entry.metadata?.nftOutputKind === "string" ? entry.metadata.nftOutputKind : "";
-  if (outputKind === "mint_preview") return "Mint preview ready";
-  if (outputKind === "listing_preview") return "Listing preview ready";
+  if (outputKind === "mint_preview") return "Mint handoff ready";
+  if (outputKind === "listing_preview") return "Listing handoff ready";
   return null;
 }
 

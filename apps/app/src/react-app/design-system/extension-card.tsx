@@ -29,6 +29,8 @@ export type ExtensionCardProps = {
   connecting?: boolean;
   /** Whether interaction is disabled. */
   disabled?: boolean;
+  /** Whether the item should remain visible as a quiet, non-interactive availability preview. */
+  muted?: boolean;
   /** Whether this item is hidden from the normal catalog view. */
   hidden?: boolean;
   /** Whether this extension is still in preview. */
@@ -80,6 +82,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
     enablement,
     connecting = false,
     disabled = false,
+    muted = false,
     hidden = false,
     preview = false,
     statusHint,
@@ -95,12 +98,16 @@ export function ExtensionCard(props: ExtensionCardProps) {
   const connected = allMet;
   const resolvedIconSrc = iconSrc ? resolveExtensionIconSrc(iconSrc) : undefined;
   const isStream = presentation === "stream";
-  const stateTone = connected
+  const stateTone = muted
+    ? "border-dls-border/30 bg-dls-surface-muted/16"
+    : connected
     ? "border-green-6 bg-green-2"
     : someMet
     ? "border-amber-6 bg-amber-2"
     : "border-dls-border bg-dls-surface hover:bg-dls-hover";
-  const streamStateTone = connected
+  const streamStateTone = muted
+    ? "bg-dls-surface-muted/18"
+    : connected
     ? "bg-green-3/55"
     : someMet
     ? "bg-amber-3/55"
@@ -112,7 +119,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
       disabled={disabled || connecting}
       onClick={onClick}
       className={isStream
-        ? `group w-full border-b border-dls-border/30 px-1 py-3 text-left transition-colors last:border-b-0 hover:bg-dls-hover/35 disabled:cursor-not-allowed disabled:opacity-60 ${hidden ? "opacity-70" : ""}`
+        ? `group w-full border-b border-dls-border/30 px-1 py-3 text-left transition-colors last:border-b-0 disabled:cursor-not-allowed ${muted ? "cursor-default opacity-55" : "hover:bg-dls-hover/35 disabled:opacity-60"} ${hidden ? "opacity-70" : ""}`
         : `group w-full rounded-xl border p-4 text-left transition-all ${stateTone} ${hidden ? "border-dashed opacity-70" : ""}`
       }
     >
@@ -132,7 +139,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
                 {iconNode}
               </div>
             ) : resolvedIconSrc ? (
-              <div className="flex size-8 items-center justify-center rounded-md bg-white/95">
+              <div className={`flex size-8 items-center justify-center rounded-md ${muted ? "bg-dls-hover/55 grayscale opacity-70" : "bg-white/95"}`}>
                 <img src={resolvedIconSrc} alt="" width={24} height={24} loading="lazy" style={{ display: "block" }} />
               </div>
             ) : iconSlug ? (
@@ -160,7 +167,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
         <div className={isStream ? "min-w-0 flex-1 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-4" : "min-w-0 flex-1"}>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
-              <h4 className="min-w-0 break-words text-sm font-semibold text-dls-text">{name}</h4>
+              <h4 className={`min-w-0 break-words text-sm font-semibold ${muted ? "text-dls-secondary" : "text-dls-text"}`}>{name}</h4>
               {connected ? (
                 <span className="shrink-0 rounded-md bg-green-3 px-1.5 py-0.5 text-[10px] font-medium text-green-11">
                   {connectedLabel}
@@ -170,7 +177,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
                   Partially set up
                 </span>
               ) : (
-                <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${kindStyle[kind]}`}>
+                <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${muted ? "bg-dls-hover/45 text-dls-secondary/80" : kindStyle[kind]}`}>
                   {kindLabel[kind]}
                 </span>
               )}
@@ -185,7 +192,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
                 </span>
               ) : null}
               {statusHint ? (
-                <span className="shrink-0 rounded-md bg-dls-hover px-1.5 py-0.5 text-[10px] font-medium text-dls-secondary">
+                <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${muted ? "bg-dls-hover/35 text-dls-secondary/75" : "bg-dls-hover text-dls-secondary"}`}>
                   {statusHint}
                 </span>
               ) : null}
@@ -195,7 +202,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
                 </span>
               ) : null}
             </div>
-            <p className={isStream ? "mt-0.5 line-clamp-2 max-w-[64ch] text-xs leading-5 text-dls-secondary" : "mt-0.5 line-clamp-2 text-xs text-dls-secondary"}>{description}</p>
+            <p className={`${isStream ? "mt-0.5 line-clamp-2 max-w-[64ch] text-xs leading-5" : "mt-0.5 line-clamp-2 text-xs"} ${muted ? "text-dls-secondary/70" : "text-dls-secondary"}`}>{description}</p>
             {disabledReason ? (
               <div className="mt-2 text-[11px] font-medium text-amber-11">
                 {disabledReason}

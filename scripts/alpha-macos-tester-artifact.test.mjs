@@ -51,6 +51,14 @@ assert.ok(
   "unsigned tester artifact packaging must explicitly disable notarization so the afterSign hook does not require a Developer ID signature",
 );
 assert.ok(
+  unsignedPackageBlock.includes("if: steps.alpha-signing.outputs.configured != 'true'"),
+  "unsigned tester packaging should run whenever signing secrets are unavailable",
+);
+assert.ok(
+  !unsignedPackageBlock.includes("if: env.MACOS_NOTARIZE == 'true'"),
+  "unsigned tester packaging must not gate on the step-level MACOS_NOTARIZE=false override",
+);
+assert.ok(
   !unsignedPackageBlock.includes("MACOS_NOTARIZE: true"),
   "unsigned tester artifact packaging must not pass MACOS_NOTARIZE=true",
 );

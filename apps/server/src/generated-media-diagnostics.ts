@@ -7,6 +7,7 @@ import type {
   MatterhornImageSetupRequirement,
   MatterhornNftSetupRequirement,
 } from "@matterhorn-work/types/generated-media";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
 import {
   buildImageGenerationCapability,
   buildNftMarketplaceListingCapability,
@@ -23,7 +24,11 @@ import {
   buildWalrusBlobReadUrl,
   buildWalrusBlobUploadUrl,
 } from "./walrus-storage.js";
-import { normalizeMatterhornSuiAddress } from "./tools/sui.js";
+import {
+  normalizeMatterhornSuiAddress,
+  SUI_GRPC_URLS,
+  type SuiNetwork,
+} from "./tools/sui.js";
 
 type DiagnosticEnv = typeof process.env;
 
@@ -31,8 +36,17 @@ export interface GeneratedMediaDiagnosticsOptions {
   workspaceId: string;
   env?: DiagnosticEnv;
   fetchImpl?: typeof fetch;
+  suiPackageVerifier?: SuiPackageVerifier;
   now?: () => Date;
   timeoutMs?: number;
+}
+
+export interface SuiPackageVerifier {
+  verifyPackage(input: {
+    network: "sui-testnet" | "sui-mainnet";
+    packageId: string;
+    signal: AbortSignal;
+  }): Promise<{ status: "deployed" | "not_found" | "not_package" }>;
 }
 
 export interface GeneratedMediaReadinessMarkdownOptions {
@@ -46,17 +60,31 @@ interface ProbeResult {
   durationMs: number;
 }
 
+type SuiPackageVerificationStatus =
+  | "not_checked"
+  | "deployed"
+  | "not_found"
+  | "not_package"
+  | "unavailable";
+
+interface SuiPackageVerificationResult {
+  status: SuiPackageVerificationStatus;
+  durationMs: number;
+}
+
 export async function buildGeneratedMediaDiagnostics(
   options: GeneratedMediaDiagnosticsOptions,
 ): Promise<MatterhornGeneratedMediaDiagnosticsResponse> {
   const env = options.env ?? process.env;
   const now = options.now ?? (() => new Date());
   const nftEnv = resolveNftEnvironmentConfig(env);
+  const timeoutMs = options.timeoutMs ?? 2_500;
+  const suiPackageVerifier = options.suiPackageVerifier ?? createSuiPackageVerifier();
   const checks = await Promise.all([
     imageProviderDiagnostic(env),
-    walrusDiagnostic(nftEnv, options.fetchImpl ?? fetch, options.timeoutMs ?? 2_500),
-    suiMintingDiagnostic(nftEnv),
-    suiListingDiagnostic(nftEnv),
+    walrusDiagnostic(nftEnv, options.fetchImpl ?? fetch, timeoutMs),
+    suiMintingDiagnostic(nftEnv, suiPackageVerifier, timeoutMs),
+    suiListingDiagnostic(nftEnv, suiPackageVerifier, timeoutMs),
     nonCustodySafetyDiagnostic(),
   ]);
   const status = rollupStatus(checks.map((check) => check.status));
@@ -179,7 +207,11 @@ async function walrusDiagnostic(
   };
 }
 
-function suiMintingDiagnostic(config: NftEnvironmentConfig): MatterhornGeneratedMediaDiagnosticCheck {
+async function suiMintingDiagnostic(
+  config: NftEnvironmentConfig,
+  verifier: SuiPackageVerifier,
+  timeoutMs: number,
+): Promise<MatterhornGeneratedMediaDiagnosticCheck> {
   const startedAt = Date.now();
   const capability = buildNftMintingCapability(config);
   const setupStatus = capability.status === "preview"
@@ -191,10 +223,18 @@ function suiMintingDiagnostic(config: NftEnvironmentConfig): MatterhornGenerated
     ...validateOptionalSuiObjectId("Sui NFT package", config.suiNftPackageId),
     ...validateSuiModuleName(config.suiNftModuleName || "matterhorn_nft"),
   ];
-  const status = setupStatus === "pass" && shapeIssues.length ? "fail" : setupStatus;
+  const packageVerification = shapeIssues.length === 0
+    ? await verifyConfiguredSuiPackage(config, config.suiNftPackageId, verifier, timeoutMs)
+    : notCheckedSuiPackage();
+  const status = suiDiagnosticStatus(setupStatus, shapeIssues, [packageVerification]);
   const summary = shapeIssues.length
     ? shapeIssues.join(" ")
-    : capability.description ?? "Sui NFT minting readiness was checked.";
+    : suiPackageSummary(
+      "Sui NFT package",
+      config.suiNetwork,
+      packageVerification,
+      capability.description ?? "Sui NFT minting readiness was checked.",
+    );
 
   return {
     id: "sui_nft_minting",
@@ -205,6 +245,10 @@ function suiMintingDiagnostic(config: NftEnvironmentConfig): MatterhornGenerated
     details: {
       network: config.suiNetwork ?? "sui-testnet",
       packageConfigured: Boolean(config.suiNftPackageId?.trim()),
+      packagePlaceholder: isPlaceholderSuiObjectId(config.suiNftPackageId),
+      packageDeploymentStatus: packageVerification.status,
+      packageDeploymentVerified: packageVerification.status === "deployed",
+      packageVerificationMs: packageVerification.durationMs,
       moduleName: config.suiNftModuleName || "matterhorn_nft",
       custody: false,
       canSubmit: false,
@@ -222,7 +266,11 @@ function suiMintingDiagnostic(config: NftEnvironmentConfig): MatterhornGenerated
   };
 }
 
-function suiListingDiagnostic(config: NftEnvironmentConfig): MatterhornGeneratedMediaDiagnosticCheck {
+async function suiListingDiagnostic(
+  config: NftEnvironmentConfig,
+  verifier: SuiPackageVerifier,
+  timeoutMs: number,
+): Promise<MatterhornGeneratedMediaDiagnosticCheck> {
   const startedAt = Date.now();
   const capability = buildNftMarketplaceListingCapability(config);
   const setupStatus = capability.status === "preview"
@@ -237,10 +285,25 @@ function suiListingDiagnostic(config: NftEnvironmentConfig): MatterhornGenerated
     ...validateOptionalSuiObjectId("Sui Kiosk owner cap", config.suiKioskOwnerCapId),
     ...validateOptionalSuiObjectId("Sui TransferPolicy", config.suiTransferPolicyId),
   ];
-  const status = setupStatus === "pass" && shapeIssues.length ? "fail" : setupStatus;
+  const [kioskPackageVerification, transferPolicyPackageVerification] = shapeIssues.length === 0
+    ? await Promise.all([
+      verifyConfiguredSuiPackage(config, config.suiKioskPackageId, verifier, timeoutMs),
+      verifyConfiguredSuiPackage(config, config.suiTransferPolicyPackageId, verifier, timeoutMs),
+    ])
+    : [notCheckedSuiPackage(), notCheckedSuiPackage()];
+  const status = suiDiagnosticStatus(
+    setupStatus,
+    shapeIssues,
+    [kioskPackageVerification, transferPolicyPackageVerification],
+  );
   const summary = shapeIssues.length
     ? shapeIssues.join(" ")
-    : capability.description ?? "Sui marketplace listing readiness was checked.";
+    : suiListingPackageSummary(
+      config,
+      kioskPackageVerification,
+      transferPolicyPackageVerification,
+      capability.description ?? "Sui marketplace listing readiness was checked.",
+    );
 
   return {
     id: "sui_marketplace_listing",
@@ -251,7 +314,15 @@ function suiListingDiagnostic(config: NftEnvironmentConfig): MatterhornGenerated
     details: {
       network: config.suiNetwork ?? "sui-testnet",
       kioskPackageConfigured: Boolean(config.suiKioskPackageId?.trim()),
+      kioskPackagePlaceholder: isPlaceholderSuiObjectId(config.suiKioskPackageId),
+      kioskPackageDeploymentStatus: kioskPackageVerification.status,
+      kioskPackageDeploymentVerified: kioskPackageVerification.status === "deployed",
+      kioskPackageVerificationMs: kioskPackageVerification.durationMs,
       transferPolicyPackageConfigured: Boolean(config.suiTransferPolicyPackageId?.trim()),
+      transferPolicyPackagePlaceholder: isPlaceholderSuiObjectId(config.suiTransferPolicyPackageId),
+      transferPolicyPackageDeploymentStatus: transferPolicyPackageVerification.status,
+      transferPolicyPackageDeploymentVerified: transferPolicyPackageVerification.status === "deployed",
+      transferPolicyPackageVerificationMs: transferPolicyPackageVerification.durationMs,
       defaultKioskInputsConfigured: Boolean(
         config.suiKioskId?.trim()
           && config.suiKioskOwnerCapId?.trim()
@@ -262,6 +333,150 @@ function suiListingDiagnostic(config: NftEnvironmentConfig): MatterhornGenerated
     },
     setupRequirements: capability.setupRequirements,
   };
+}
+
+function createSuiPackageVerifier(): SuiPackageVerifier {
+  const clients = new Map<SuiNetwork, SuiGrpcClient>();
+  return {
+    async verifyPackage(input) {
+      const network: SuiNetwork = input.network === "sui-mainnet" ? "mainnet" : "testnet";
+      let client = clients.get(network);
+      if (!client) {
+        client = new SuiGrpcClient({
+          network,
+          baseUrl: SUI_GRPC_URLS[network],
+        });
+        clients.set(network, client);
+      }
+
+      try {
+        const { object } = await client.getObject({
+          objectId: normalizeMatterhornSuiAddress(input.packageId),
+          signal: input.signal,
+        });
+        return { status: object.type === "package" ? "deployed" : "not_package" };
+      } catch (error) {
+        if (isSuiNotFoundError(error)) return { status: "not_found" };
+        throw error;
+      }
+    },
+  };
+}
+
+async function verifyConfiguredSuiPackage(
+  config: NftEnvironmentConfig,
+  packageId: string | undefined,
+  verifier: SuiPackageVerifier,
+  timeoutMs: number,
+): Promise<SuiPackageVerificationResult> {
+  if (!packageId?.trim() || isPlaceholderSuiObjectId(packageId)) return notCheckedSuiPackage();
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      verifier.verifyPackage({
+        network: config.suiNetwork ?? "sui-testnet",
+        packageId,
+        signal: controller.signal,
+      }),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error("Sui package verification timed out."));
+        }, timeoutMs);
+      }),
+    ]);
+    return {
+      status: result.status,
+      durationMs: Date.now() - startedAt,
+    };
+  } catch {
+    return {
+      status: "unavailable",
+      durationMs: Date.now() - startedAt,
+    };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function notCheckedSuiPackage(): SuiPackageVerificationResult {
+  return { status: "not_checked", durationMs: 0 };
+}
+
+function suiDiagnosticStatus(
+  setupStatus: MatterhornGeneratedMediaDiagnosticStatus,
+  shapeIssues: string[],
+  verifications: SuiPackageVerificationResult[],
+): MatterhornGeneratedMediaDiagnosticStatus {
+  if (setupStatus === "fail" || shapeIssues.length > 0) return "fail";
+  if (verifications.some((verification) => (
+    verification.status === "not_found" || verification.status === "not_package"
+  ))) {
+    return "fail";
+  }
+  if (
+    setupStatus === "warning"
+    || verifications.some((verification) => verification.status === "unavailable")
+  ) {
+    return "warning";
+  }
+  return "pass";
+}
+
+function suiPackageSummary(
+  label: string,
+  network: NftEnvironmentConfig["suiNetwork"],
+  verification: SuiPackageVerificationResult,
+  fallback: string,
+): string {
+  const networkLabel = network === "sui-mainnet" ? "Sui mainnet" : "Sui testnet";
+  if (verification.status === "deployed") {
+    return `${label} is deployed on ${networkLabel}. No transaction was prepared or submitted.`;
+  }
+  if (verification.status === "not_found") return `${label} was not found on ${networkLabel}.`;
+  if (verification.status === "not_package") {
+    return `${label} exists on ${networkLabel}, but it is not a Move package.`;
+  }
+  if (verification.status === "unavailable") {
+    return `${label} could not be verified on ${networkLabel}. No transaction was prepared or submitted.`;
+  }
+  return fallback;
+}
+
+function suiListingPackageSummary(
+  config: NftEnvironmentConfig,
+  kiosk: SuiPackageVerificationResult,
+  transferPolicy: SuiPackageVerificationResult,
+  fallback: string,
+): string {
+  if (kiosk.status === "not_checked" && transferPolicy.status === "not_checked") return fallback;
+  if (kiosk.status === "deployed" && transferPolicy.status === "deployed") {
+    return `Sui Kiosk and TransferPolicy packages are deployed on ${config.suiNetwork === "sui-mainnet" ? "Sui mainnet" : "Sui testnet"}. No transaction was prepared or submitted.`;
+  }
+  const issues = [
+    suiPackageIssueLabel("Sui Kiosk package", kiosk.status),
+    suiPackageIssueLabel("Sui TransferPolicy package", transferPolicy.status),
+  ].filter((issue): issue is string => Boolean(issue));
+  if (issues.length === 0) return fallback;
+  return `${issues.join(" ")} No transaction was prepared or submitted.`;
+}
+
+function suiPackageIssueLabel(label: string, status: SuiPackageVerificationStatus): string | null {
+  if (status === "not_found") return `${label} was not found on the selected Sui network.`;
+  if (status === "not_package") return `${label} exists, but it is not a Move package.`;
+  if (status === "unavailable") return `${label} could not be verified on the selected Sui network.`;
+  return null;
+}
+
+function isSuiNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as Error & { code?: unknown }).code;
+  return code === 5
+    || code === "5"
+    || String(code ?? "").toLowerCase() === "not_found"
+    || /^Object 0x[0-9a-f]+ not found$/i.test(error.message.trim());
 }
 
 function nonCustodySafetyDiagnostic(): MatterhornGeneratedMediaDiagnosticCheck {
@@ -318,10 +533,57 @@ async function probeEndpoint(input: {
 function walrusDetails(config: NftEnvironmentConfig): Record<string, string | number | boolean | null> {
   return {
     publisherConfigured: Boolean(config.walrusPublisherUrl?.trim()),
+    publisherProductionEndpoint: isProductionHttpsUrl(config.walrusPublisherUrl),
     relayConfigured: Boolean(config.walrusRelayUrl?.trim()),
+    relayProductionEndpoint: isProductionHttpsUrl(config.walrusRelayUrl),
     storageEpochs: config.walrusStorageEpochs ?? 1,
     publisherAuthConfigured: Boolean(config.walrusPublisherBearerToken?.trim()),
   };
+}
+
+function isProductionHttpsUrl(value: string | undefined): boolean {
+  if (!value?.trim()) return false;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (
+      hostname === "localhost"
+      || hostname.endsWith(".localhost")
+      || hostname === "::"
+      || hostname === "::1"
+      || hostname === "0.0.0.0"
+      || hostname.startsWith("127.")
+      || hostname.startsWith("10.")
+      || hostname.startsWith("192.168.")
+      || hostname.startsWith("169.254.")
+    ) {
+      return false;
+    }
+    const ipv4Parts = hostname.split(".").map(Number);
+    if (
+      ipv4Parts.length === 4
+      && ipv4Parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)
+      && ipv4Parts[0] === 172
+      && ipv4Parts[1] >= 16
+      && ipv4Parts[1] <= 31
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isPlaceholderSuiObjectId(value: string | undefined): boolean {
+  if (!value?.trim()) return false;
+  try {
+    const normalized = normalizeMatterhornSuiAddress(value).slice(2).toLowerCase();
+    return /^([0-9a-f])\1{63}$/.test(normalized);
+  } catch {
+    return false;
+  }
 }
 
 function validateOptionalSuiObjectId(label: string, value: string | undefined): string[] {
@@ -363,6 +625,56 @@ function buildProductionSmokePlan(
   const imageProviderName = stringDetail(imageProvider, "provider");
   const isProductionImageProvider = imageProvider.status === "pass" && imageProviderName === "openai";
   const productionImageRequirement = isProductionImageProvider ? [] : [openAiProductionRequirement(imageProviderName)];
+  const isProductionWalrus = walrusStorage.status === "pass"
+    && booleanDetail(walrusStorage, "publisherProductionEndpoint")
+    && booleanDetail(walrusStorage, "relayProductionEndpoint");
+  const isProductionSuiMinting = suiMinting.status === "pass"
+    && booleanDetail(suiMinting, "packageDeploymentVerified");
+  const isProductionSuiListing = suiListing.status === "pass"
+    && booleanDetail(suiListing, "kioskPackageDeploymentVerified")
+    && booleanDetail(suiListing, "transferPolicyPackageDeploymentVerified");
+  const productionWalrusRequirements = [
+    ...productionEndpointRequirement(
+      "walrus_publisher",
+      "Production Walrus publisher",
+      "MATTERHORN_WALRUS_PUBLISHER_URL",
+      booleanDetail(walrusStorage, "publisherConfigured"),
+      booleanDetail(walrusStorage, "publisherProductionEndpoint"),
+    ),
+    ...productionEndpointRequirement(
+      "walrus_relay",
+      "Production Walrus relay",
+      "MATTERHORN_WALRUS_RELAY_URL",
+      booleanDetail(walrusStorage, "relayConfigured"),
+      booleanDetail(walrusStorage, "relayProductionEndpoint"),
+    ),
+  ];
+  const productionMintRequirements = productionSuiPackageRequirement(
+    "sui_nft_package",
+    "Production Sui NFT package",
+    "MATTERHORN_SUI_NFT_PACKAGE_ID",
+    booleanDetail(suiMinting, "packageConfigured"),
+    booleanDetail(suiMinting, "packagePlaceholder"),
+    stringDetail(suiMinting, "packageDeploymentStatus"),
+  );
+  const productionListingRequirements = [
+    ...productionSuiPackageRequirement(
+      "sui_kiosk_package",
+      "Production Sui Kiosk package",
+      "MATTERHORN_SUI_KIOSK_PACKAGE_ID",
+      booleanDetail(suiListing, "kioskPackageConfigured"),
+      booleanDetail(suiListing, "kioskPackagePlaceholder"),
+      stringDetail(suiListing, "kioskPackageDeploymentStatus"),
+    ),
+    ...productionSuiPackageRequirement(
+      "sui_transfer_policy",
+      "Production Sui TransferPolicy package",
+      "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID",
+      booleanDetail(suiListing, "transferPolicyPackageConfigured"),
+      booleanDetail(suiListing, "transferPolicyPackagePlaceholder"),
+      stringDetail(suiListing, "transferPolicyPackageDeploymentStatus"),
+    ),
+  ];
 
   const stages: MatterhornGeneratedMediaProductionSmokeStage[] = [
     {
@@ -393,38 +705,53 @@ function buildProductionSmokePlan(
     {
       id: "walrus_public_upload",
       label: "Upload media to Walrus",
-      status: walrusStorage.status === "pass" ? "manual" : "blocked",
+      status: isProductionWalrus ? "manual" : "blocked",
       writeScope: "public_storage",
       requiresWallet: false,
       requiresPublicWrite: true,
-      summary: walrusStorage.status === "pass"
+      summary: isProductionWalrus
         ? "Walrus endpoints responded. Uploading image bytes is a public storage action and still requires explicit user confirmation."
-        : "Walrus upload is blocked until publisher and relay setup pass diagnostics.",
-      setupRequirements: unresolvedRequirements(walrusStorage.setupRequirements),
+        : walrusStorage.status === "pass"
+          ? "Local Walrus endpoints passed safe diagnostics, but production evidence requires public HTTPS publisher and relay endpoints."
+          : "Walrus upload is blocked until publisher and relay setup pass diagnostics.",
+      setupRequirements: [
+        ...unresolvedRequirements(walrusStorage.setupRequirements),
+        ...productionWalrusRequirements,
+      ],
     },
     {
       id: "sui_wallet_mint",
       label: "Sign Sui mint transaction",
-      status: suiMinting.status === "pass" ? "manual" : "blocked",
+      status: isProductionSuiMinting ? "manual" : "blocked",
       writeScope: "wallet_signed_transaction",
       requiresWallet: true,
       requiresPublicWrite: true,
-      summary: suiMinting.status === "pass"
+      summary: isProductionSuiMinting
         ? "Mint preview can be prepared; the user must review and sign with a Sui wallet."
-        : "Minting is blocked until the Sui NFT package setup passes diagnostics.",
-      setupRequirements: unresolvedRequirements(suiMinting.setupRequirements),
+        : suiMinting.status === "pass"
+          ? "Local mint previews work, but production evidence requires a Sui NFT package verified on the selected network."
+          : "Minting is blocked until the Sui NFT package is configured and verified on the selected network.",
+      setupRequirements: [
+        ...unresolvedRequirements(suiMinting.setupRequirements),
+        ...productionMintRequirements,
+      ],
     },
     {
       id: "sui_kiosk_listing",
       label: "Sign marketplace listing transaction",
-      status: suiListing.status === "pass" ? "manual" : "blocked",
+      status: isProductionSuiListing ? "manual" : "blocked",
       writeScope: "wallet_signed_transaction",
       requiresWallet: true,
       requiresPublicWrite: true,
-      summary: suiListing.status === "pass"
+      summary: isProductionSuiListing
         ? "Kiosk listing preview can be prepared; the user must review and sign with a Sui wallet."
-        : "Marketplace listing is blocked until Kiosk and TransferPolicy setup passes diagnostics.",
-      setupRequirements: unresolvedRequirements(suiListing.setupRequirements),
+        : suiListing.status === "pass"
+          ? "Local listing previews work, but production evidence requires Kiosk and TransferPolicy packages verified on the selected network."
+          : "Marketplace listing is blocked until the Kiosk and TransferPolicy packages are configured and verified on the selected network.",
+      setupRequirements: [
+        ...unresolvedRequirements(suiListing.setupRequirements),
+        ...productionListingRequirements,
+      ],
     },
   ];
 
@@ -465,6 +792,10 @@ function stringDetail(check: MatterhornGeneratedMediaDiagnosticCheck, key: strin
   return typeof value === "string" ? value : null;
 }
 
+function booleanDetail(check: MatterhornGeneratedMediaDiagnosticCheck, key: string): boolean {
+  return check.details?.[key] === true;
+}
+
 function openAiProductionRequirement(provider: string | null): MatterhornImageSetupRequirement {
   return {
     key: provider === "mock" ? "openai_api_key" : "image_provider",
@@ -475,6 +806,48 @@ function openAiProductionRequirement(provider: string | null): MatterhornImageSe
       ? "Local mock image generation is ready, but production smoke requires MATTERHORN_IMAGE_PROVIDER=openai and OPENAI_API_KEY."
       : "Production smoke requires a configured OpenAI image provider.",
   };
+}
+
+function productionEndpointRequirement(
+  key: "walrus_publisher" | "walrus_relay",
+  label: string,
+  envVar: "MATTERHORN_WALRUS_PUBLISHER_URL" | "MATTERHORN_WALRUS_RELAY_URL",
+  configured: boolean,
+  productionEndpoint: boolean,
+): MatterhornNftSetupRequirement[] {
+  if (!configured || productionEndpoint) return [];
+  return [{
+    key,
+    label,
+    status: "invalid",
+    envVar,
+    description: "Production readiness requires a public HTTPS endpoint; loopback, private-network, and HTTP endpoints remain local QA only.",
+  }];
+}
+
+function productionSuiPackageRequirement(
+  key: "sui_nft_package" | "sui_kiosk_package" | "sui_transfer_policy",
+  label: string,
+  envVar: "MATTERHORN_SUI_NFT_PACKAGE_ID" | "MATTERHORN_SUI_KIOSK_PACKAGE_ID" | "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID",
+  configured: boolean,
+  placeholder: boolean,
+  deploymentStatus: string | null,
+): MatterhornNftSetupRequirement[] {
+  if (!configured || deploymentStatus === "deployed") return [];
+  const description = placeholder
+    ? "Production readiness requires a package verified on the selected Sui network; repeated-character smoke placeholders remain local QA only."
+    : deploymentStatus === "not_found"
+      ? "The configured package id was not found on the selected Sui network."
+      : deploymentStatus === "not_package"
+        ? "The configured object exists on the selected Sui network, but it is not a Move package."
+        : "Matterhorn could not verify this package on the selected Sui network. Check network access and retry diagnostics.";
+  return [{
+    key,
+    label,
+    status: "invalid",
+    envVar,
+    description,
+  }];
 }
 
 function unresolvedRequirements(

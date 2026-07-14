@@ -96,8 +96,8 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("onOpenOutputPath");
       expect(source).toContain("NFT receipt");
       expect(source).toContain("NFT preview");
-      expect(source).toContain("Mint preview ready");
-      expect(source).toContain("Listing preview ready");
+      expect(source).toContain("Mint handoff ready");
+      expect(source).toContain("Listing handoff ready");
       expect(source).toContain("Saved to Outputs for wallet review.");
       expect(source).toContain("compactNftReceiptValue");
       expect(source).toContain("Not stored");
@@ -105,13 +105,22 @@ describe("Project Activity contract tests", () => {
 
     test("RecentActivitySection supports a collapsed run-history summary", () => {
       const source = readAppSource("domains/recent-activity/recent-activity-section.tsx");
-      expect(source).toContain("defaultExpanded = true");
+      expect(source).toContain("defaultExpanded = false");
       expect(source).toContain("historyOpen");
-      expect(source).toContain("Project history");
+      expect(source).toContain("Run history");
       expect(source).toContain("LatestActivitySummary");
       expect(source).toContain("setHistoryOpen(true)");
       expect(source).toContain("onOpenHistory");
       expect(source).toContain("!onOpenHistory ? (");
+    });
+
+    test("RecentActivitySection keeps Home summary compact without a visible bounded event count", () => {
+      const source = readAppSource("domains/recent-activity/recent-activity-section.tsx");
+      expect(source).toContain("LatestActivityPreview");
+      expect(source).toContain("LatestActivitySummary");
+      expect(source).toContain("Run history");
+      expect(source).not.toContain("items.length} recent");
+      expect(source).not.toContain("countLabel");
     });
 
     test("ActivityDetailSheet does not expose raw prompt fields", () => {
@@ -129,6 +138,19 @@ describe("Project Activity contract tests", () => {
   });
 
   describe("Home wiring", () => {
+    test("workspace home header names the current location and groups project paths with their actions", () => {
+      const source = readAppSource("domains/session/chat/session-page.tsx");
+
+      expect(source).toContain('? "Project home"');
+      expect(source).toContain("Chats, desks, notes, and saved outputs for this project.");
+      expect(source).toContain("Project folder");
+      expect(source).toContain("Saved outputs");
+      expect(source).toContain("grid-cols-[auto_minmax(0,1fr)_auto]");
+      expect(source).toContain("New note");
+      expect(source).not.toContain("Start a desk task, continue a chat, or collect notes and outputs for this workspace.");
+      expect(source).not.toContain("Jot note");
+    });
+
     test("session-page imports RecentActivitySection", () => {
       const source = readAppSource("domains/session/chat/session-page.tsx");
       expect(source).toContain("RecentActivitySection");
@@ -196,8 +218,8 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("entryDisplaySummary");
       expect(source).toContain("Actual local event recorded when the desk task started.");
       expect(source).toContain("actual event");
-      expect(source).toContain("Mint preview ready");
-      expect(source).toContain("Listing preview ready");
+      expect(source).toContain("Mint handoff ready");
+      expect(source).toContain("Listing handoff ready");
       expect(source).toContain("data.summary.images");
       expect(source).toContain("data.summary.nfts");
       expect(source).toContain("sourceLabel");

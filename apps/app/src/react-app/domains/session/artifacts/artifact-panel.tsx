@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, ExternalLink, FolderOpen, NotebookPen, Trash2, X } from "lucide-react";
+import { ChevronRight, Copy, Download, ExternalLink, FolderOpen, NotebookPen, Pencil, Trash2, X } from "lucide-react";
 
 import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
 import { openDesktopPath } from "@/app/lib/desktop";
@@ -9,17 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, formatFileSize } from "@/lib/utils";
 import { ConfirmModal } from "../../../design-system/modals/confirm-modal";
-import {
-  compactNftReceiptValue,
-  nftReceiptKindLabel,
-} from "../../project-evidence/nft-receipt-metadata";
 import { getArtifactNoteContext } from "./artifact-note-context";
 import { ArtifactIcon } from "./artifact-icon";
 import type { BinaryData, Data, OpenTarget, TextData } from "./open-target";
 import { outputDescriptorFromOpenTarget, type OutputDescriptor } from "./output-descriptor";
 import { OutputList } from "./output-list";
 import { normalizeOutputReceiptPath, type WorkflowOutputReceipt } from "./output-receipts";
-import { HTMLPreview, ImagePreview, MarkdownPreview, PlainText, PreviewError, PreviewLoading, PreviewUnavailable } from "./preview";
+import { HTMLPreview, ImagePreview, MarkdownPreview, PlainText, PreviewError, PreviewLoading, PreviewUnavailable, StructuredJsonPreview } from "./preview";
 
 const ArtifactTextEditor = lazy(() =>
   import("./artifact-text-editor").then((module) => ({ default: module.ArtifactTextEditor })),
@@ -49,12 +45,6 @@ type ArtifactQueryState =
   | (BinaryData & { contentType: string | null; updatedAt: number | null });
 
 type SaveArtifactInput = Data & { baseUpdatedAt: number | null };
-
-function outputReceiptKindLabel(kind: OutputDescriptor["receiptKind"]): string {
-  if (kind === "image") return "Image receipt";
-  if (kind === "nft") return "NFT receipt";
-  return "Workflow receipt";
-}
 
 function absoluteWorkspacePath(root: string, path: string) {
   const cleanRoot = root.trim().replace(/[/\\]+$/, "");
@@ -307,7 +297,11 @@ export function ArtifactPanel({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div
+      role="region"
+      aria-label="Output preview"
+      className="matterhorn-rail-content @container/artifact flex h-full min-h-0 min-w-0 flex-col bg-dls-background"
+    >
       {targets.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
           <div className="flex size-10 items-center justify-center rounded-lg bg-dls-surface-muted/25">
@@ -331,16 +325,35 @@ export function ArtifactPanel({
         </div>
       ) : (
         <>
-          <div className="shrink-0 border-b border-border bg-background mac:bg-background/80 mac:backdrop-blur-2xl mac:backdrop-saturate-150">
-            <div className="flex h-10 items-center gap-2 pe-2 ps-4">
-              <div className="min-w-0 flex-1 flex items-center gap-1.5">
-                <h3 className="text-sm font-medium text-foreground">
-                  <span className="truncate">{target.name}</span>
+          <div className="shrink-0 bg-background px-3 pb-3 pt-2">
+            <div className="flex min-h-10 min-w-0 items-start gap-2">
+              <div className="min-w-0 flex-1 pt-0.5">
+                <h3 className="truncate text-sm font-semibold text-foreground">
+                  {selectedOutput?.receiptTitle ?? selectedOutput?.title ?? target.name}
                 </h3>
-                <span className="truncate text-xs text-muted-foreground">
-                  {target.exists === false ? "missing" : target.size !== undefined ? `${formatFileSize(target.size)}` : ""}
-                </span>
+                <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                  <span className="truncate">{target.name}</span>
+                  {target.exists === false ? <span>Missing</span> : null}
+                  {target.size !== undefined ? <span>{formatFileSize(target.size)}</span> : null}
+                  {selectedOutput?.receiptStatus ? <span>{selectedOutput.receiptStatus}</span> : null}
+                </div>
               </div>
+              <Tooltip>
+                <TooltipTrigger
+                  render={(
+                    <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close output">
+                      <X />
+                    </Button>
+                  )}
+                />
+                <TooltipContent>Close output</TooltipContent>
+              </Tooltip>
+            </div>
+            <div
+              role="toolbar"
+              aria-label="Selected output actions"
+              className="mt-2 flex min-w-0 flex-wrap items-center gap-0.5 rounded-lg bg-dls-surface-muted/[0.14] p-1"
+            >
               {isTextContent(target) && data?.kind === "text" ? (
                 editing || isDirectTextEdit ? (
                   <>
@@ -377,7 +390,9 @@ export function ArtifactPanel({
                   <Tooltip>
                     <TooltipTrigger
                       render={(
-                        <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>Edit</Button>
+                        <Button variant="ghost" size="icon-sm" onClick={() => setEditing(true)} aria-label="Edit output">
+                          <Pencil className="size-3.5" />
+                        </Button>
                       )}
                     />
                     <TooltipContent>Edit output</TooltipContent>
@@ -465,87 +480,47 @@ export function ArtifactPanel({
                 />
                 <TooltipContent>{isRemoteWorkspace ? "Download output" : "Open externally"}</TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger
-                  render={(
-                    <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close output">
-                      <X />
-                    </Button>
-                  )}
-                />
-                <TooltipContent>Close output</TooltipContent>
-              </Tooltip>
             </div>
-            {target.kind === "file" && (
-              <div className="flex items-center gap-2 border-b border-border/60 px-4 py-1.5">
-                {workspaceName && (
-                  <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
-                    <FolderOpen className="size-2.5" />
-                    {workspaceName}
-                  </span>
-                )}
-                {noteContext.desk && (
-                  <span className="text-[10px] font-medium text-muted-foreground">
-                    {noteContext.desk}
-                  </span>
-                )}
-                {noteContext.sessionSlug && (
-                  <span className="text-[10px] font-medium text-muted-foreground">
-                    {noteContext.sessionSlug}
-                  </span>
-                )}
-                <span className="truncate text-[11px] text-muted-foreground" title={target.value}>{target.value}</span>
-                {noteContext.isLegacy ? (
-                  <span className="ml-auto shrink-0 text-[10px] font-medium text-amber-300">
-                    Legacy location
-                  </span>
-                ) : (
-                  <span className="ml-auto shrink-0 text-[10px] font-medium text-emerald-300">
-                    Saved in this project
-                  </span>
-                )}
-              </div>
-            )}
-            {selectedOutput?.receiptTitle ? (
-              <div className="flex min-w-0 items-center gap-2 border-b border-border/60 px-4 py-1.5 text-[11px]">
-                <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
-                  {outputReceiptKindLabel(selectedOutput.receiptKind)}
-                </span>
-                <span className="truncate text-muted-foreground" title={selectedOutput.receiptSummary ?? selectedOutput.receiptTitle}>
-                  {selectedOutput.receiptTitle}
-                </span>
-              </div>
-            ) : null}
-            {selectedOutput?.nftReceipt ? (
-              <div className="flex min-w-0 items-center gap-2 border-b border-border/60 px-4 py-1.5 text-[11px] text-muted-foreground">
-                <span className="shrink-0 text-[10px] font-medium">
-                  {nftReceiptKindLabel(selectedOutput.nftReceipt.kind)}
-                </span>
-                <span className="truncate" title={selectedOutput.nftReceipt.transactionDigest ?? selectedOutput.nftReceipt.objectId}>
-                  {[
-                    selectedOutput.nftReceipt.network,
-                    compactNftReceiptValue(selectedOutput.nftReceipt.objectId),
-                    compactNftReceiptValue(selectedOutput.nftReceipt.transactionDigest),
-                  ].filter(Boolean).join(" · ")}
-                </span>
-              </div>
+            {target.kind === "file" ? (
+              <details className="group mt-2 text-xs text-muted-foreground">
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md px-1 py-1 font-medium hover:text-foreground">
+                  <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
+                  File details
+                </summary>
+                <div className="mt-1 grid min-w-0 gap-1 rounded-lg bg-dls-surface-muted/[0.10] px-3 py-2.5">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+                    {workspaceName ? <span className="truncate font-medium text-foreground">{workspaceName}</span> : null}
+                    {noteContext.desk ? <span>{noteContext.desk}</span> : null}
+                    {noteContext.sessionSlug ? <span className="max-w-full truncate">{noteContext.sessionSlug}</span> : null}
+                    {noteContext.isLegacy ? <span className="font-medium text-amber-300">Legacy location</span> : null}
+                  </div>
+                  <span className="line-clamp-2 min-w-0 break-all text-[11px] leading-4" title={target.value}>{target.value}</span>
+                </div>
+              </details>
             ) : null}
             {outputs.length > 1 ? (
-              <OutputList
-                outputs={outputs}
-                selectedId={selectedOutput?.id}
-                onSelect={handleSelectOutput}
-                onOpen={handleOpenOutput}
-                onCopyPath={(output) => {
-                  void navigator.clipboard.writeText(output.path);
-                }}
-                onAddNote={onAddNote ? (output) => onAddNote(output.path, output.desk, output.sessionSlug) : undefined}
-                onReveal={!isRemoteWorkspace ? (output) => {
-                  const match = targets.find((item) => item.id === output.id);
-                  if (match) void reveal(match);
-                } : undefined}
-                onDelete={handleDeleteOutput}
-              />
+              <details className="group mt-1 text-xs">
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md px-1 py-1 font-medium text-muted-foreground hover:text-foreground">
+                  <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
+                  Browse outputs
+                  <span className="text-[11px] font-normal">{outputs.length}</span>
+                </summary>
+                <OutputList
+                  outputs={outputs}
+                  selectedId={selectedOutput?.id}
+                  onSelect={handleSelectOutput}
+                  onOpen={handleOpenOutput}
+                  onCopyPath={(output) => {
+                    void navigator.clipboard.writeText(output.path);
+                  }}
+                  onAddNote={onAddNote ? (output) => onAddNote(output.path, output.desk, output.sessionSlug) : undefined}
+                  onReveal={!isRemoteWorkspace ? (output) => {
+                    const match = targets.find((item) => item.id === output.id);
+                    if (match) void reveal(match);
+                  } : undefined}
+                  onDelete={handleDeleteOutput}
+                />
+              </details>
             ) : null}
           </div>
           <div className="min-h-0 flex-1 overflow-hidden">
@@ -570,6 +545,11 @@ export function ArtifactPanel({
               <ImagePreview src={binaryObjectUrl} alt={target.name} />
             ) : data?.kind === "binary" && binaryObjectUrl && (target.preview === "pdf" || target.preview === "html") ? (
               <HTMLPreview type="binary" title={target.name} url={binaryObjectUrl} />
+            ) : data?.kind === "text" && /\.jsonc?$/i.test(target.name) ? (
+              <StructuredJsonPreview
+                content={data.data}
+                receipt={selectedOutput?.receiptKind === "nft" || /(?:receipt|listing-preview)\.json$/i.test(target.name)}
+              />
             ) : data?.kind === "text" ? (
               <PlainText content={data.data} />
             ) : (

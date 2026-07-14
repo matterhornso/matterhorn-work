@@ -178,6 +178,7 @@ import {
   findForbiddenUnifiedCryptoCredentialInput,
   type UnifiedCryptoChatInput,
 } from "./tools/crypto-chat.js";
+import { simulateTransaction } from "./tools/transaction-simulation.js";
 import {
   buildDecentralizedServicesCapabilityCatalog,
   findForbiddenDecentralizedServiceInput,
@@ -314,13 +315,13 @@ import type {
   MatterhornTeamShareableTokenScope,
 } from "@matterhorn-work/types/backend-team-access";
 import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
-import type { ApprovalRequest, Capabilities, ServerConfig, WorkspaceInfo, Actor, ReloadReason, ReloadTrigger, TokenScope, MatterhornTaskEventType } from "./types.js";
+import type { ApprovalRequest, Capabilities, ServerConfig, WorkspaceInfo, Actor, ReloadReason, ReloadTrigger, TokenScope, MatterhornTaskEventType, RequestRateLimitConfig } from "./types.js";
 import { ApprovalService } from "./approvals.js";
 import { addPlugin, listPlugins, normalizePluginSpec, removePlugin } from "./plugins.js";
 import { sanitizePortableOpencodeConfig } from "./portable-opencode.js";
@@ -361,6 +362,12 @@ import {
   workspaceDataPolicyPath,
   writeWorkspaceDataPolicy,
 } from "./backend-data-policy.js";
+import {
+  buildWalletSafetyPolicyResponse,
+  coerceWalletSafetyPolicyUpdate,
+  walletSafetyPolicyPath,
+  writeWorkspaceWalletSafetyPolicy,
+} from "./wallet-safety-policy.js";
 import { backendControlPlaneExportSnapshot, buildBackendSupportReport } from "./backend-support-report.js";
 import { buildBackendTeamAccess, buildBackendTeamAccessConnection, buildBackendTeamAccessSummary } from "./backend-team-access.js";
 import { deleteAllProjectFeedbackEntries, deleteProjectFeedbackEntry, projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
@@ -429,19 +436,19 @@ const OPENWORK_VOICE_REALTIME_TOOLS = [
   {
     type: "function",
     name: "openwork_snapshot",
-    description: "Read the current OpenWork UI control snapshot: route, status, narration, and visible action metadata.",
+    description: "Read the current Matterhorn Work UI control snapshot: route, status, narration, and visible action metadata.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     type: "function",
     name: "openwork_list_actions",
-    description: "List semantic OpenWork UI actions. Call this before openwork_execute_action when you do not know the exact action id.",
+    description: "List semantic Matterhorn Work UI actions. Call this before openwork_execute_action when you do not know the exact action id.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     type: "function",
     name: "openwork_execute_action",
-    description: "Execute a semantic OpenWork UI action by id. Prefer this over screen coordinates or DOM guessing.",
+    description: "Execute a semantic Matterhorn Work UI action by id. Prefer this over screen coordinates or DOM guessing.",
     parameters: {
       type: "object",
       properties: {
@@ -481,12 +488,12 @@ async function resolveOpenAiRealtimeApiKey(env: EnvService): Promise<string> {
 function openworkVoiceRealtimeInstructions() {
   return `# Role and Objective
 
-You are OpenWork Voice Mode, a voice-first control layer inside OpenWork.
-Help the user control OpenWork by using the semantic OpenWork UI tools.
+You are Matterhorn Work Voice Mode, a voice-first control layer inside Matterhorn Work.
+Help the user control Matterhorn Work by using the semantic Matterhorn Work UI tools.
 
 # Tool Policy
 
-- Prefer openwork_snapshot, openwork_list_actions, and openwork_execute_action over visual guessing.
+- Prefer openwork_snapshot, openwork_list_actions, and openwork_execute_action over visual guessing. These compatibility tool IDs control Matterhorn Work.
 - If the user asks to write or draft something, use composer.set_text.
 - If the user asks to send or run the current prompt, use composer.send.
 - For navigation, settings, session, transcript, and composer work, inspect the action list first if the action id is unknown.
@@ -497,7 +504,7 @@ Help the user control OpenWork by using the semantic OpenWork UI tools.
 
 - Be concise, calm, and direct.
 - If audio is unclear, ask the user to repeat it instead of guessing.
-- Ignore background speech that is not addressed to OpenWork.
+- Ignore background speech that is not addressed to Matterhorn Work.
 - Summarize tool results briefly and offer the next useful step.`;
 }
 
@@ -520,7 +527,7 @@ async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown)
     throw new ApiError(
       400,
       "openai_api_key_missing",
-      "OpenAI API key missing. Save OPENAI_API_KEY in OpenWork Environment Variables or configure the Voice Mode extension.",
+      "OpenAI API key missing. Save OPENAI_API_KEY in Matterhorn Work environment variables or configure the Voice Mode extension.",
     );
   }
 
@@ -678,6 +685,51 @@ function logRequest(input: {
   logger.log(level, message, attributes);
 }
 
+const DEFAULT_RATE_LIMIT_WINDOW_MS = 60_000;
+const DEFAULT_RATE_LIMIT_MAX_REQUESTS = 1_200;
+
+type RequestRateLimiter = {
+  check: (request: Request, url: URL) => { allowed: true } | { allowed: false; retryAfterSeconds: number };
+};
+
+function createRequestRateLimiter(config: RequestRateLimitConfig | undefined): RequestRateLimiter {
+  const enabled = config?.enabled !== false;
+  const windowMs = Math.max(1_000, Math.floor(config?.windowMs ?? DEFAULT_RATE_LIMIT_WINDOW_MS));
+  const maxRequests = Math.max(1, Math.floor(config?.maxRequests ?? DEFAULT_RATE_LIMIT_MAX_REQUESTS));
+  const buckets = new Map<string, { resetAt: number; count: number }>();
+
+  return {
+    check(request: Request, url: URL) {
+      if (!enabled || request.method === "OPTIONS") return { allowed: true };
+      const now = Date.now();
+      const client =
+        request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        request.headers.get("x-real-ip")?.trim() ||
+        "loopback";
+      // UI polling and session hydration can be read-heavy. Keep those reads
+      // from exhausting the budget used by user-triggered writes such as
+      // image generation, notes, approvals, and wallet evidence.
+      const requestClass = request.method === "GET" || request.method === "HEAD" ? "read" : "write";
+      const key = `${client}:${url.origin}:${requestClass}`;
+      let bucket = buckets.get(key);
+      if (!bucket || now >= bucket.resetAt) {
+        bucket = { resetAt: now + windowMs, count: 0 };
+        buckets.set(key, bucket);
+      }
+      bucket.count += 1;
+      if (bucket.count <= maxRequests) return { allowed: true };
+
+      for (const [bucketKey, staleBucket] of buckets.entries()) {
+        if (now >= staleBucket.resetAt) buckets.delete(bucketKey);
+      }
+      return {
+        allowed: false,
+        retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
+      };
+    },
+  };
+}
+
 type AuthMode = "none" | "client" | "host" | "host-token";
 
 function parseWorkspaceMount(pathname: string): { workspaceId: string; restPath: string } | null {
@@ -761,15 +813,22 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const tokens = new TokenService(config);
   const env = new EnvService();
   const logger = createServerLogger(config);
-  let watcherHandle = startReloadWatchers({ config, reloadEvents, logger });
+  const createWatcherHandle = () => config.reloadWatchers === false
+    ? {
+      close: () => undefined,
+      refreshWorkspace: async () => undefined,
+    }
+    : startReloadWatchers({ config, reloadEvents, logger });
+  let watcherHandle = createWatcherHandle();
   const refreshWorkspaceReloadBaseline = (workspaceId: string, reasons?: ReloadReason[]) =>
     watcherHandle.refreshWorkspace(workspaceId, reasons);
   reloadBaselineRefreshers.set(config, refreshWorkspaceReloadBaseline);
   const restartReloadWatchers = () => {
     watcherHandle.close();
-    watcherHandle = startReloadWatchers({ config, reloadEvents, logger });
+    watcherHandle = createWatcherHandle();
   };
   const routes = createRoutes(config, approvals, tokens, env, restartReloadWatchers);
+  const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit);
 
   const serverOptions: {
     hostname: string;
@@ -824,6 +883,21 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
 
       if (request.method === "OPTIONS") {
         return finalize(new Response(null, { status: 204 }));
+      }
+
+      const rateLimit = requestRateLimiter.check(request, url);
+      if (!rateLimit.allowed) {
+        errorMessage = "rate_limited";
+        return finalize(new Response(
+          JSON.stringify({ code: "rate_limited", message: "Too many requests. Try again shortly." }),
+          {
+            status: 429,
+            headers: {
+              "content-type": "application/json",
+              "Retry-After": String(rateLimit.retryAfterSeconds),
+            },
+          },
+        ));
       }
 
       const canonicalOpencodeMount = parseWorkspaceOpencodeMount(url.pathname);
@@ -918,10 +992,10 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
 
   return {
     ...server,
-    stop: async () => {
+    stop: async (closeActiveConnections?: boolean) => {
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);
-      await server.stop();
+      await (server.stop as unknown as (closeActiveConnections?: boolean) => void | Promise<void>)(closeActiveConnections);
     },
   };
 }
@@ -1006,8 +1080,9 @@ function unwrapOpencodeResult<T, E>(result: OpencodeClientResult<T, E>, path: st
   if (result.error === undefined) {
     throw new ApiError(502, "opencode_empty_response", "OpenCode returned an empty response", { path });
   }
+  const response = result.response;
   throw new ApiError(502, "opencode_request_failed", "OpenCode request failed", {
-    status: result.response.status,
+    status: response?.status ?? 502,
     body: result.error,
     path,
   });
@@ -1195,13 +1270,22 @@ async function proxyOpencodeRequest(input: {
     });
     return jsonResponse({ ok: true, accepted: true });
   }
-  const response = await fetch(targetUrl, {
-    method,
-    headers,
-    body,
-  });
+  const upstreamController = new AbortController();
+  const abortUpstreamConnect = () => upstreamController.abort();
+  input.request.signal.addEventListener("abort", abortUpstreamConnect, { once: true });
+  let response: Response;
+  try {
+    response = await fetch(targetUrl, {
+      method,
+      headers,
+      body,
+      signal: upstreamController.signal,
+    });
+  } finally {
+    input.request.signal.removeEventListener("abort", abortUpstreamConnect);
+  }
 
-  return sanitizeProxyResponse(response);
+  return sanitizeProxyResponse(response, input.request.signal, upstreamController);
 }
 
 /**
@@ -1211,12 +1295,81 @@ async function proxyOpencodeRequest(input: {
  * payload and bails out with ERR_CONTENT_DECODING_FAILED, breaking any UI
  * code that reaches through /opencode/* (including session.create).
  */
-function sanitizeProxyResponse(response: Response): Response {
+function sanitizeProxyResponse(
+  response: Response,
+  downstreamSignal?: AbortSignal,
+  upstreamController?: AbortController,
+): Response {
   const headers = new Headers(response.headers);
   headers.delete("content-encoding");
   headers.delete("transfer-encoding");
   headers.delete("content-length");
-  return new Response(response.body, {
+  if (!response.body) {
+    return new Response(null, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  }
+
+  const reader = response.body.getReader();
+  let closed = false;
+  let abortDownstream: (() => void) | null = null;
+  const closeReader = async (reason?: unknown) => {
+    if (closed) return;
+    closed = true;
+    upstreamController?.abort();
+    if (downstreamSignal && abortDownstream) {
+      downstreamSignal.removeEventListener("abort", abortDownstream);
+    }
+    await reader.cancel(reason).catch(() => undefined);
+  };
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      if (!downstreamSignal) return;
+      abortDownstream = () => {
+        void closeReader("downstream disconnected").finally(() => {
+          try {
+            controller.close();
+          } catch {
+            // The response may already be closed by the downstream runtime.
+          }
+        });
+      };
+      if (downstreamSignal.aborted) abortDownstream();
+      else downstreamSignal.addEventListener("abort", abortDownstream, { once: true });
+    },
+    async pull(controller) {
+      if (closed) return;
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          closed = true;
+          if (downstreamSignal && abortDownstream) {
+            downstreamSignal.removeEventListener("abort", abortDownstream);
+          }
+          controller.close();
+          return;
+        }
+        if (value) controller.enqueue(value);
+      } catch (error) {
+        if (closed || downstreamSignal?.aborted) {
+          try {
+            controller.close();
+          } catch {
+            // The downstream already closed the stream.
+          }
+          return;
+        }
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      await closeReader(reason);
+    },
+  });
+
+  return new Response(body, {
     status: response.status,
     statusText: response.statusText,
     headers,
@@ -1462,10 +1615,9 @@ async function exportWorkspaceMemoryRecords(
   const outputRelativePath = workspaceMemoryExportRelativePath(workspace, outputDirInput);
   const outputDir = resolveSafeChildPath(workspace.path, outputRelativePath);
   await mkdir(outputDir, { recursive: true });
-  const records = (await memoryVault.listRecords({
+  const records = (await memoryVault.listAllRecords({
     scope: "workspace",
     tags: [workspaceMemoryTag(workspace.id)],
-    limit: 500,
   })).filter((record) => record.canExport && record.sensitivity !== "forbidden_secret");
 
   const recordsPath = join(outputDir, "matterhorn-memory-records.json");
@@ -1861,8 +2013,18 @@ function buildNoteMemorySuggestion(
 
 function memoryApiError(error: unknown): ApiError {
   const message = error instanceof Error ? error.message : String(error);
+  if (/Could not read Matterhorn memory (index|suggestion inbox)/i.test(message)) {
+    return new ApiError(
+      503,
+      "memory_store_unavailable",
+      "Memory store could not be loaded. Check the local vault files and retry.",
+    );
+  }
   if (/not found/i.test(message)) {
     return new ApiError(404, "memory_not_found", message);
+  }
+  if (/Invalid memory record id/i.test(message)) {
+    return new ApiError(400, "invalid_memory_id", "Memory record id contains unsupported characters.");
   }
   if (/forbidden secret|safety validation|desk policy|policy forbids|less restrictive|not allowed for desk|forbidden_secret|live submission|private key|seed phrase|signed payload|raw signature|wallet export|api secret/i.test(message)) {
     return new ApiError(400, "memory_safety_rejected", message);
@@ -2398,7 +2560,7 @@ function backendSettingsSections(input: {
   });
   return [
     base("overview", capability("working", "Overview", "Workspace overview is available from local server state.")),
-    base("profile", capability("preview", "Profile", "Profile preferences are local/cloud mixed and should use backend capability statuses.")),
+    base("profile", capability("working", "Local profile", "Local profile preferences and workspace access are available from this Matterhorn Work engine.")),
     base("models", capability(input.modelStatus, "Models", "Models are selected through local engine provider discovery.")),
     base("providers", capability(input.providerStatus, "Providers", "Provider setup is managed by the local engine and optional Matterhorn Cloud imports.")),
     base("wallet", capability(input.walletStatus, "Wallet", "EVM and Sui can connect in web; Bittensor uses public reads and external signing.")),
@@ -2536,8 +2698,8 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     family: "sui",
     ...capability(
       "preview",
-      "Sui wallet preview",
-      "Sui wallet-standard connect is wired through the current Mysten dApp Kit React packages for account reads; signing stays in the user's wallet.",
+      "Sui wallet",
+      "Sui wallet-standard connect is wired through the current Mysten dApp Kit React packages for account reads and handoffs; signing stays in the user's wallet.",
       {
         recommendedPackages: ["@mysten/dapp-kit-react", "@mysten/dapp-kit-core", "@mysten/sui"],
         configuredNetworks: ["sui-testnet", "sui-mainnet"],
@@ -2585,9 +2747,23 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
     },
   });
+  const bittensorSidecarConfigured = Boolean(process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL?.trim());
+  const bittensorCapabilityStatus: MatterhornCapabilityStatus = bittensorSidecarConfigured ? "working" : "preview";
+  const bittensorCapabilityDescription = bittensorSidecarConfigured
+    ? "Bittensor uses live provider-backed public SS58 reads, unsigned previews, and external-signer handoffs."
+    : "Bittensor public workflows are available with clearly labeled fallback data. Configure the Subtensor sidecar for live-chain reads.";
   const bittensor = walletFamily({
     family: "bittensor",
-    ...capability("working", "Bittensor", "Bittensor uses public SS58 reads, unsigned previews, and external-signer handoffs."),
+    ...capability(
+      bittensorCapabilityStatus,
+      "Bittensor",
+      bittensorCapabilityDescription,
+      {
+        dataMode: bittensorSidecarConfigured ? "live_provider" : "curated_fallback",
+        liveProviderConfigured: bittensorSidecarConfigured,
+        providerSetup: "BITTENSOR_SUBTENSOR_SIDECAR_URL",
+      },
+    ),
     custody: false,
     directConnect: false,
     publicRead: true,
@@ -2596,7 +2772,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     runtimeSupport: {
       web: {
         runtime: "web",
-        ...capability("working", "Web external signer", "Public SS58 reads and unsigned previews are available. Signing happens in an external Bittensor-compatible signer."),
+        ...capability(bittensorCapabilityStatus, "Web external signer", bittensorCapabilityDescription),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -2605,7 +2781,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       desktop: {
         runtime: "desktop",
-        ...capability("working", "Desktop external signer", "Public SS58 reads and unsigned previews are available. Signing happens in an external Bittensor-compatible signer."),
+        ...capability(bittensorCapabilityStatus, "Desktop external signer", bittensorCapabilityDescription),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -2614,7 +2790,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       electron: {
         runtime: "electron",
-        ...capability("working", "Electron external signer", "Public SS58 reads and unsigned previews are available. Signing happens in an external Bittensor-compatible signer."),
+        ...capability(bittensorCapabilityStatus, "Electron external signer", bittensorCapabilityDescription),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -2729,6 +2905,14 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       ...capability(notesStatus, "Workspace notes", "Notes are workspace-local markdown plus a Matterhorn notes index."),
       scope: "workspace",
     },
+    outputs: capability(
+      writeEnabled ? "working" : "preview",
+      "Workspace outputs",
+      writeEnabled
+        ? "The engine can read and save user-visible deliverables in workspace output stores."
+        : "Workspace outputs can be read, but this server is read-only and cannot save new deliverables.",
+      { readable: true, writable: writeEnabled },
+    ),
     evidence: {
       ...capability(evidenceStatus, "Project evidence", "Project Activity is derived from notes, memory suggestions, task events, task runs, outputs, and workflow run receipts."),
       sources: ["notes", "memory", "task_events", "task_runs", "outputs", "workflow_runs"],
@@ -3804,14 +3988,17 @@ function readinessActionForCheck(
       ? details.setupCommands.filter((command): command is string => typeof command === "string" && command.trim().length > 0)
       : [];
     const managedEngineSupported = details.managedEngineSupported === true;
+    const configuredButUnavailable = details.baseUrlConfigured === true && details.reachable === false;
     return {
       ...base,
       actionId: "connect-local-engine",
       kind: "connect_local_engine",
-      label: "Connect the local agent engine",
-      description: managedEngineSupported
-        ? "Start the local stack with a managed agent engine, or attach an existing engine URL in AI settings."
-        : "Attach an existing local agent engine URL in AI settings before starting chats or desk tasks.",
+      label: configuredButUnavailable ? "Restart or reconnect the agent engine" : "Connect the local agent engine",
+      description: configuredButUnavailable
+        ? "The configured agent engine did not answer its readiness probe. Restart it or attach a reachable engine URL in AI settings."
+        : managedEngineSupported
+          ? "Start the local stack with a managed agent engine, or attach an existing engine URL in AI settings."
+          : "Attach an existing local agent engine URL in AI settings before starting chats or desk tasks.",
       surface: managedEngineSupported ? "terminal" : "settings",
       ...(managedEngineSupported && setupCommands[0] ? { command: setupCommands[0] } : {}),
       href: "settings:ai",
@@ -3858,15 +4045,55 @@ function readinessActionForCheck(
   };
 }
 
-function buildWorkspaceReadiness(
+const OPENCODE_READINESS_TIMEOUT_MS = 1_500;
+
+async function probeWorkspaceOpencodeReadiness(
+  config: ServerConfig,
+  workspace: WorkspaceInfo,
+): Promise<{ configured: boolean; reachable: boolean; probeStatus: "not_configured" | "working" | "unavailable"; latencyMs: number | null }> {
+  const connection = resolveWorkspaceOpencodeConnection(config, workspace);
+  const baseUrl = connection.baseUrl?.trim() ?? "";
+  if (!baseUrl) {
+    return { configured: false, reachable: false, probeStatus: "not_configured", latencyMs: null };
+  }
+
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OPENCODE_READINESS_TIMEOUT_MS);
+  try {
+    const headers = new Headers();
+    if (connection.authHeader) headers.set("Authorization", connection.authHeader);
+    const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/global/health`, {
+      method: "GET",
+      headers,
+      signal: controller.signal,
+    });
+    return {
+      configured: true,
+      reachable: response.ok,
+      probeStatus: response.ok ? "working" : "unavailable",
+      latencyMs: Date.now() - startedAt,
+    };
+  } catch {
+    return {
+      configured: true,
+      reachable: false,
+      probeStatus: "unavailable",
+      latencyMs: Date.now() - startedAt,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function buildWorkspaceReadiness(
   config: ServerConfig,
   workspace: WorkspaceInfo,
   memoryVault: MatterhornMemoryVault,
-): MatterhornBackendReadinessResponse {
+): Promise<MatterhornBackendReadinessResponse> {
   const dataMap = buildWorkspaceDataMap(workspace, memoryVault);
-  const connection = resolveWorkspaceOpencodeConnection(config, workspace);
-  const opencodeBaseUrl = connection.baseUrl?.trim() ?? "";
-  const opencodeConfigured = Boolean(opencodeBaseUrl);
+  const opencodeProbe = await probeWorkspaceOpencodeReadiness(config, workspace);
+  const opencodeConfigured = opencodeProbe.configured;
   const opencodeDirectory = resolveOpencodeDirectory(workspace);
   const opencodeDirectoryConfigured = Boolean(opencodeDirectory?.trim());
   const managedEngineSupported = !config.readOnly && opencodeDirectoryConfigured;
@@ -3896,15 +4123,25 @@ function buildWorkspaceReadiness(
     }),
     opencode_connection: readinessCheck({
       checkId: "opencode_connection",
-      status: opencodeConfigured ? "working" : "needs_setup",
-      label: opencodeConfigured ? "Agent engine connected" : "Agent engine not connected",
-      description: opencodeConfigured
-        ? "This workspace has a local agent engine URL configured. Credentials are not exposed in this response."
+      status: opencodeProbe.reachable ? "working" : opencodeConfigured ? "error" : "needs_setup",
+      label: opencodeProbe.reachable
+        ? "Agent engine connected"
+        : opencodeConfigured
+          ? "Agent engine unavailable"
+          : "Agent engine not connected",
+      description: opencodeProbe.reachable
+        ? "The configured local agent engine answered a bounded readiness probe. Credentials are not exposed in this response."
+        : opencodeConfigured
+          ? "This workspace has an agent engine URL configured, but the engine did not answer its bounded readiness probe. Restart or reconnect it before starting chats or desk tasks."
         : opencodeDirectoryConfigured
           ? "The workspace directory is known, but no local agent engine URL is attached. Start the local stack with managed engine, or attach an existing engine URL."
           : "Attach a local agent engine URL before starting chats or desk tasks.",
       details: {
         baseUrlConfigured: opencodeConfigured,
+        reachable: opencodeProbe.reachable,
+        probeStatus: opencodeProbe.probeStatus,
+        probeTimeoutMs: OPENCODE_READINESS_TIMEOUT_MS,
+        probeLatencyMs: opencodeProbe.latencyMs,
         directoryConfigured: opencodeDirectoryConfigured,
         managedEngineSupported,
         setupCommands: managedEngineSupported
@@ -3998,7 +4235,7 @@ async function buildWorkspaceBackendControlPlane(
     buildBackendCapabilities(config, memoryVault),
     buildWorkspaceBackendModels(config, workspace),
   ]);
-  const readiness = buildWorkspaceReadiness(config, workspace, memoryVault);
+  const readiness = await buildWorkspaceReadiness(config, workspace, memoryVault);
   const dataMap = buildWorkspaceDataMap(workspace, memoryVault);
   const dataControls = buildWorkspaceDataControls(workspace, memoryVault);
   const dataPolicy = buildWorkspaceDataPolicyResponse(workspace);
@@ -4035,6 +4272,7 @@ async function buildWorkspaceBackendControlPlane(
     capabilities.providers.status,
     capabilities.memory.status,
     capabilities.notes.status,
+    capabilities.outputs.status,
     capabilities.evidence.status,
     capabilities.wallets.status,
     capabilities.teams.status,
@@ -4194,6 +4432,72 @@ function resolveToyUiEnabled(): boolean {
 function resolveDevLogPath(): string | null {
   const raw = (process.env.OPENWORK_DEV_LOG_FILE ?? "").trim();
   return raw.length > 0 ? raw : null;
+}
+
+const DEV_LOG_REDACTED = "[redacted]";
+const DEV_LOG_MAX_PAYLOAD_BYTES = 128_000;
+const DEV_LOG_SENSITIVE_FIELD_PATTERN = /(^|[_-])(authorization|auth|api[_-]?key|api[_-]?secret|bearer|jwt|mnemonic|password|passphrase|private[_-]?key|raw[_-]?signature|secret|seed|signed[_-]?payload|token|wallet[_-]?export)($|[_-])/i;
+const DEV_LOG_SECRET_ASSIGNMENT_PATTERN = /\b((?:api[_-]?key|api[_-]?secret|authorization|bearer|mnemonic|password|passphrase|private[_-]?key|raw[_-]?signature|secret|seed(?:\s+phrase)?|signed[_-]?payload|token|wallet[_-]?export)\s*[:=]\s*)(["']?)[^\s"',;}]+(\2)/gi;
+const DEV_LOG_BEARER_PATTERN = /\b(bearer\s+)[a-z0-9._~+/=-]+/gi;
+const DEV_LOG_PRIVATE_KEY_CONTEXT_PATTERN = /\b(private\s+key|mnemonic|seed\s+phrase|wallet\s+export)\b[\s:=]+[a-z0-9\s._~+/=-]{16,}/gi;
+
+async function readDevLogPayloadText(request: Request): Promise<string> {
+  const contentLength = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(contentLength) && contentLength > DEV_LOG_MAX_PAYLOAD_BYTES) {
+    throw new ApiError(413, "payload_too_large", "Dev log payload is too large");
+  }
+
+  const body = request.body;
+  if (!body) return "";
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      bytes += value.byteLength;
+      if (bytes > DEV_LOG_MAX_PAYLOAD_BYTES) {
+        await reader.cancel();
+        throw new ApiError(413, "payload_too_large", "Dev log payload is too large");
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return text + decoder.decode();
+}
+
+function redactDevLogText(value: string): string {
+  return value
+    .replace(DEV_LOG_BEARER_PATTERN, `$1${DEV_LOG_REDACTED}`)
+    .replace(DEV_LOG_SECRET_ASSIGNMENT_PATTERN, `$1${DEV_LOG_REDACTED}`)
+    .replace(DEV_LOG_PRIVATE_KEY_CONTEXT_PATTERN, (_match, label: string) => `${label} ${DEV_LOG_REDACTED}`);
+}
+
+function redactDevLogValue(value: unknown, depth = 0): unknown {
+  if (depth > 4) return "[truncated]";
+  if (typeof value === "string") return redactDevLogText(value);
+  if (value === null || value === undefined) return value;
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "bigint") return value.toString();
+  if (Array.isArray(value)) {
+    return value.slice(0, 100).map((item) => redactDevLogValue(item, depth + 1));
+  }
+  if (typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      output[key] = DEV_LOG_SENSITIVE_FIELD_PATTERN.test(key)
+        ? DEV_LOG_REDACTED
+        : redactDevLogValue(item, depth + 1);
+    }
+    return output;
+  }
+  return String(value);
 }
 
 function resolveBrowserProvider(): Capabilities["toolProviders"]["browser"] {
@@ -4806,6 +5110,326 @@ async function recordSuiWorkspaceEvidence(input: SuiWorkspaceEvidenceInput): Pro
   });
 }
 
+type BittensorWorkspaceEvidenceInput = {
+  workspace: WorkspaceInfo;
+  ctx: RequestContext;
+  taskId: string;
+  sessionSlug: string;
+  outputPath: string;
+  outputPayload: Record<string, unknown>;
+  summary: string;
+  auditAction: string;
+  evidenceKind: string;
+  workflowId?: string;
+  metadata?: Record<string, string | number | boolean | null>;
+};
+
+async function recordBittensorWorkspaceEvidence(input: BittensorWorkspaceEvidenceInput): Promise<void> {
+  const timestamp = Date.now();
+  const absPath = resolveSafeChildPath(input.workspace.path, input.outputPath);
+  await ensureDir(dirname(absPath));
+  await writeFile(absPath, JSON.stringify(input.outputPayload, null, 2) + "\n", "utf8");
+
+  const detail = `bittensor;${input.sessionSlug};${input.workflowId ?? "bittensor_workspace_evidence"};outputs/bittensor`;
+  const metadata = {
+    evidenceKind: input.evidenceKind,
+    custody: false,
+    signingInMatterhorn: false,
+    ...(input.metadata ?? {}),
+  };
+  await recordTaskEvent({
+    id: `task_evt_${shortId()}`,
+    workspaceId: input.workspace.id,
+    taskId: input.taskId,
+    type: "artifact_saved",
+    timestamp,
+    summary: input.summary,
+    detail,
+    artifactPath: input.outputPath,
+    stageName: "bittensor_workspace_evidence",
+    metadata,
+  });
+  await recordTaskEvent({
+    id: `task_evt_${shortId()}`,
+    workspaceId: input.workspace.id,
+    taskId: input.taskId,
+    type: "completed",
+    timestamp: timestamp + 1,
+    summary: input.summary,
+    detail,
+    stageName: "bittensor_workspace_evidence",
+    metadata,
+  });
+
+  await recordAudit(input.workspace.path, {
+    id: shortId(),
+    workspaceId: input.workspace.id,
+    actor: input.ctx.actor ?? { type: "remote" },
+    action: input.auditAction,
+    target: absPath,
+    summary: input.summary,
+    timestamp,
+    metadata: {
+      evidenceKind: input.evidenceKind,
+      outputPath: input.outputPath,
+      taskId: input.taskId,
+      sessionSlug: input.sessionSlug,
+      ...(input.metadata ?? {}),
+    },
+  });
+}
+
+const WALLET_SAFETY_EVENT_ACTIONS = new Set([
+  "tx_proposed",
+  "tx_approved",
+  "tx_rejected",
+  "chain_mismatch",
+  "mainnet_blocked",
+  "wallet_unavailable",
+  "limit_hit",
+  "whitelist_denied",
+  "rate_limit_hit",
+  "simulation_failed",
+  "countdown_expired",
+]);
+
+const WALLET_SAFETY_RISK_LEVELS = new Set(["low", "medium", "high"]);
+const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+const EVM_HEX_RE = /^0x(?:[a-fA-F0-9]{2})*$/;
+
+function compactWalletSafetyText(value: unknown, fallback: string, limit: number): string {
+  if (typeof value !== "string") return fallback;
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (!compact) return fallback;
+  return compact.length > limit ? `${compact.slice(0, limit - 3).trimEnd()}...` : compact;
+}
+
+function optionalWalletSafetyString(value: unknown, limit: number): string | null {
+  if (typeof value !== "string") return null;
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (!compact) return null;
+  return compact.length > limit ? compact.slice(0, limit).trimEnd() : compact;
+}
+
+function walletSafetySelector(value: unknown): string | null {
+  const compact = optionalWalletSafetyString(value, 10);
+  if (!compact) return null;
+  if (!/^0x[a-fA-F0-9]{0,8}$/.test(compact)) return null;
+  return compact;
+}
+
+function parseWalletSafetyChainId(value: unknown): number | null {
+  const numeric = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isSafeInteger(numeric) || numeric <= 0) return null;
+  return numeric;
+}
+
+function parseWalletSafetyValueUsd(value: unknown): number {
+  const numeric = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isFinite(numeric) || numeric < 0) return 0;
+  return Math.round(numeric * 100) / 100;
+}
+
+function coerceWalletSafetyReview(value: unknown): {
+  reviewed: {
+    chainId: number;
+    to: string;
+    value: string;
+    valueUSD: number;
+    dataSelector: string | null;
+    displayValue: string | null;
+    proposedBy: string | null;
+  };
+  submitted: {
+    chainId: number;
+    to: string;
+    value: string;
+    dataSelector: string | null;
+    txHash: string | null;
+  } | null;
+} | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const review = value as Record<string, unknown>;
+  if (!review.reviewed || typeof review.reviewed !== "object" || Array.isArray(review.reviewed)) return null;
+  const reviewed = review.reviewed as Record<string, unknown>;
+  const reviewedChainId = parseWalletSafetyChainId(reviewed.chainId);
+  if (!reviewedChainId) return null;
+
+  const submitted = review.submitted && typeof review.submitted === "object" && !Array.isArray(review.submitted)
+    ? review.submitted as Record<string, unknown>
+    : null;
+  const submittedChainId = submitted ? parseWalletSafetyChainId(submitted.chainId) : null;
+
+  return {
+    reviewed: {
+      chainId: reviewedChainId,
+      to: compactWalletSafetyText(reviewed.to, "unknown", 96),
+      value: compactWalletSafetyText(reviewed.value, "0", 48),
+      valueUSD: parseWalletSafetyValueUsd(reviewed.valueUSD),
+      dataSelector: walletSafetySelector(reviewed.dataSelector),
+      displayValue: optionalWalletSafetyString(reviewed.displayValue, 80),
+      proposedBy: optionalWalletSafetyString(reviewed.proposedBy, 80),
+    },
+    submitted: submitted && submittedChainId
+      ? {
+        chainId: submittedChainId,
+        to: compactWalletSafetyText(submitted.to, "unknown", 96),
+        value: compactWalletSafetyText(submitted.value, "0", 48),
+        dataSelector: walletSafetySelector(submitted.dataSelector),
+        txHash: optionalWalletSafetyString(submitted.txHash, 120),
+      }
+      : null,
+  };
+}
+
+function walletSafetyTextEquals(left: string | null | undefined, right: string | null | undefined): boolean {
+  return String(left ?? "").trim().toLowerCase() === String(right ?? "").trim().toLowerCase();
+}
+
+function assertWalletSafetyReviewConsistency(input: {
+  safetyAction: string;
+  chainId: number;
+  to: string;
+  txHash: string | null;
+  review: ReturnType<typeof coerceWalletSafetyReview>;
+}): void {
+  const review = input.review;
+  if (!review) return;
+
+  if (review.reviewed.chainId !== input.chainId || !walletSafetyTextEquals(review.reviewed.to, input.to)) {
+    throw new ApiError(400, "wallet_safety_review_mismatch", "Wallet safety review does not match the event being recorded.");
+  }
+
+  if (input.safetyAction !== "tx_approved") {
+    if (review.submitted) {
+      throw new ApiError(400, "wallet_safety_review_mismatch", "Only approved wallet events may include submitted transaction details.");
+    }
+    return;
+  }
+
+  if (!review.submitted) {
+    throw new ApiError(400, "wallet_safety_review_mismatch", "Approved wallet events require submitted transaction details.");
+  }
+
+  const submitted = review.submitted;
+  const mismatch =
+    submitted.chainId !== review.reviewed.chainId
+    || !walletSafetyTextEquals(submitted.to, review.reviewed.to)
+    || submitted.value !== review.reviewed.value
+    || submitted.dataSelector !== review.reviewed.dataSelector;
+
+  if (mismatch) {
+    throw new ApiError(400, "wallet_safety_review_mismatch", "Submitted wallet details must match the reviewed transaction.");
+  }
+
+  if (input.txHash && submitted.txHash && input.txHash !== submitted.txHash) {
+    throw new ApiError(400, "wallet_safety_review_mismatch", "Submitted wallet transaction hash does not match the recorded event.");
+  }
+}
+
+function coerceWalletSafetyEvent(body: Record<string, unknown>): {
+  safetyAction: string;
+  chainId: number;
+  to: string;
+  valueUSD: number;
+  riskLevel: "low" | "medium" | "high";
+  reason: string;
+  sessionId: string | null;
+  txHash: string | null;
+  review: ReturnType<typeof coerceWalletSafetyReview>;
+} {
+  const forbidden = findForbiddenUnifiedCryptoCredentialInput(body);
+  if (forbidden) {
+    throw new ApiError(400, "wallet_safety_secret_rejected", `Wallet safety events must not contain secrets or signing payloads (${forbidden}).`);
+  }
+
+  const safetyAction = typeof body.action === "string" ? body.action.trim() : "";
+  if (!WALLET_SAFETY_EVENT_ACTIONS.has(safetyAction)) {
+    throw new ApiError(400, "invalid_wallet_safety_action", "Wallet safety action is not recognized.");
+  }
+
+  const chainId = parseWalletSafetyChainId(body.chainId);
+  if (!chainId) {
+    throw new ApiError(400, "invalid_wallet_safety_chain", "Wallet safety events require a positive chainId.");
+  }
+
+  const to = compactWalletSafetyText(body.to, "unknown", 96);
+  const riskLevel = WALLET_SAFETY_RISK_LEVELS.has(String(body.riskLevel))
+    ? String(body.riskLevel) as "low" | "medium" | "high"
+    : "medium";
+  const reason = compactWalletSafetyText(body.reason, "Wallet action recorded.", 280);
+  const sessionId = optionalWalletSafetyString(body.sessionId, 120);
+  const txHash = optionalWalletSafetyString(body.txHash, 120);
+  const review = coerceWalletSafetyReview(body.review);
+  assertWalletSafetyReviewConsistency({ safetyAction, chainId, to, txHash, review });
+
+  return {
+    safetyAction,
+    chainId,
+    to,
+    valueUSD: parseWalletSafetyValueUsd(body.valueUSD),
+    riskLevel,
+    reason,
+    sessionId,
+    txHash,
+    review,
+  };
+}
+
+function compactWalletSimulationString(value: unknown, fallback: string, limit: number): string {
+  if (typeof value !== "string") return fallback;
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (!compact) return fallback;
+  return compact.length > limit ? compact.slice(0, limit).trimEnd() : compact;
+}
+
+function coerceWalletSimulationInput(body: Record<string, unknown>): {
+  chainId: number;
+  to: `0x${string}`;
+  data: `0x${string}`;
+  value: string;
+  from: `0x${string}`;
+  sessionId: string | null;
+} {
+  const forbidden = findForbiddenUnifiedCryptoCredentialInput(body);
+  if (forbidden) {
+    throw new ApiError(400, "wallet_simulation_secret_rejected", `Wallet simulation must not contain secrets or signing payloads (${forbidden}).`);
+  }
+
+  const chainId = parseWalletSafetyChainId(body.chainId);
+  if (!chainId) {
+    throw new ApiError(400, "invalid_wallet_simulation_chain", "Wallet simulation requires a positive chainId.");
+  }
+
+  const to = typeof body.to === "string" ? body.to.trim() : "";
+  const from = typeof body.from === "string" ? body.from.trim() : "";
+  if (!EVM_ADDRESS_RE.test(to)) {
+    throw new ApiError(400, "invalid_wallet_simulation_to", "Wallet simulation requires a valid EVM recipient address.");
+  }
+  if (!EVM_ADDRESS_RE.test(from)) {
+    throw new ApiError(400, "invalid_wallet_simulation_from", "Wallet simulation requires a valid EVM sender address.");
+  }
+
+  const data = typeof body.data === "string" && body.data.trim() ? body.data.trim() : "0x";
+  if (!EVM_HEX_RE.test(data)) {
+    throw new ApiError(400, "invalid_wallet_simulation_data", "Wallet simulation calldata must be hex.");
+  }
+
+  const value = typeof body.value === "string" ? body.value.trim() : typeof body.value === "number" ? String(body.value) : "0";
+  if (!/^\d+$/.test(value)) {
+    throw new ApiError(400, "invalid_wallet_simulation_value", "Wallet simulation value must be a non-negative wei string.");
+  }
+
+  return {
+    chainId,
+    to: to as `0x${string}`,
+    data: data as `0x${string}`,
+    value,
+    from: from as `0x${string}`,
+    sessionId: optionalWalletSafetyString(body.sessionId, 120),
+  };
+}
+
 function createRoutes(
   config: ServerConfig,
   approvals: ApprovalService,
@@ -4886,8 +5510,10 @@ function createRoutes(
     }
     let payload: unknown = null;
     try {
-      payload = await ctx.request.json();
-    } catch {
+      const raw = await readDevLogPayloadText(ctx.request);
+      payload = JSON.parse(raw || "null");
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
       return jsonResponse({ ok: false, reason: "invalid_json" }, 400);
     }
     const entries = Array.isArray(payload) ? payload : [payload];
@@ -4896,10 +5522,11 @@ function createRoutes(
       const lines = entries
         .map((entry) => {
           try {
-            const stamped = { at: new Date().toISOString(), ...(entry as Record<string, unknown>) };
+            const safeEntry = redactDevLogValue(entry) as Record<string, unknown>;
+            const stamped = { at: new Date().toISOString(), ...safeEntry };
             return JSON.stringify(stamped);
           } catch {
-            return JSON.stringify({ at: new Date().toISOString(), raw: String(entry) });
+            return JSON.stringify({ at: new Date().toISOString(), raw: redactDevLogText(String(entry)) });
           }
         })
         .join("\n");
@@ -5024,7 +5651,7 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/runtime/upgrade", "host", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Runtime upgrade");
     const result = await fetchRuntimeControl("/runtime/upgrade", { method: "POST", body });
     return jsonResponse(result, 202);
   });
@@ -5035,7 +5662,7 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/w/:id/runtime/upgrade", "host", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Runtime upgrade");
     const result = await fetchRuntimeControl("/runtime/upgrade", { method: "POST", body });
     return jsonResponse(result, 202);
   });
@@ -5076,7 +5703,11 @@ function createRoutes(
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    const body = await readJsonBody(ctx.request) as Partial<MatterhornBackendModelSelectionRequest>;
+    const body = await readJsonBody(
+      ctx.request,
+      CONTROL_PLANE_JSON_BODY_MAX_BYTES,
+      "Backend model selection",
+    ) as Partial<MatterhornBackendModelSelectionRequest>;
     let requestSelection;
     try {
       requestSelection = normalizeModelSelectionRequest({
@@ -5146,7 +5777,7 @@ function createRoutes(
 
   addRoute(routes, "GET", "/workspace/:id/backend/readiness", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    return jsonResponse(buildWorkspaceReadiness(config, workspace, memoryVault));
+    return jsonResponse(await buildWorkspaceReadiness(config, workspace, memoryVault));
   });
 
   addRoute(routes, "GET", "/workspace/:id/backend/control-plane", "client", async (ctx) => {
@@ -5174,7 +5805,7 @@ function createRoutes(
   addRoute(routes, "POST", "/workspace/:id/backend/team-access/tokens", "host", async (ctx) => {
     ensureWritable(config);
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Team access token");
     const scopeRaw = typeof body.scope === "string" ? body.scope.trim() : "";
     const scope = scopeRaw === "collaborator" || scopeRaw === "viewer" ? scopeRaw as MatterhornTeamShareableTokenScope : null;
     if (!scope) {
@@ -5182,7 +5813,7 @@ function createRoutes(
     }
     const label = typeof body.label === "string" ? body.label.trim().slice(0, 80) : undefined;
     const existingTokens = await tokens.list();
-    const billingConfig = resolveBillingProviderConfigFromEnv(process.env);
+    const billingConfig = billingRouteContext.provider.config;
     const account = await new MatterhornBillingAccountStore({
       workspaceRoot: workspace.path,
       workspaceId: workspace.id,
@@ -5316,7 +5947,7 @@ function createRoutes(
     if (ctx.actor?.scope === "viewer") {
       throw new ApiError(403, "forbidden", "Viewer tokens cannot call extension actions");
     }
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Host token");
     return jsonResponse(await callExperimentalExtensionAction(config, body));
   });
 
@@ -5359,7 +5990,7 @@ function createRoutes(
 
   addRoute(routes, "POST", "/tokens", "host", async (ctx) => {
     ensureWritable(config);
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Host token");
     const scopeRaw = typeof body.scope === "string" ? body.scope.trim() : "";
     const scope = scopeRaw === "owner" || scopeRaw === "collaborator" || scopeRaw === "viewer" ? scopeRaw : null;
     if (!scope) {
@@ -5407,7 +6038,7 @@ function createRoutes(
 
   addRoute(routes, "PUT", "/env", "host-token", async (ctx) => {
     ensureWritable(config);
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Environment update");
     const rawEntries = Array.isArray(body.entries)
       ? body.entries
       : [{ key: body.key, value: body.value }];
@@ -5461,13 +6092,13 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/voice/realtime/session", "host", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Realtime voice session");
     return jsonResponse(await createOpenAiRealtimeVoiceSession(env, body));
   });
 
   addRoute(routes, "POST", "/workspaces/local", "host", async (ctx) => {
     ensureWritable(config);
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Local workspace");
     const folderPath = typeof body.folderPath === "string" ? body.folderPath.trim() : "";
     const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : basename(folderPath || "Workspace");
     const preset = typeof body.preset === "string" && body.preset.trim() ? body.preset.trim() : "starter";
@@ -5516,7 +6147,7 @@ function createRoutes(
   addRoute(routes, "PATCH", "/workspaces/:id/display-name", "host", async (ctx) => {
     ensureWritable(config);
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Workspace display name");
     const nextDisplayName = typeof body.displayName === "string" && body.displayName.trim()
       ? body.displayName.trim()
       : undefined;
@@ -5738,6 +6369,121 @@ function createRoutes(
     }));
   });
 
+  addRoute(routes, "GET", "/workspace/:id/wallet/safety-policy", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(buildWalletSafetyPolicyResponse(workspace, { writable: !config.readOnly }));
+  });
+
+  addRoute(routes, "PATCH", "/workspace/:id/wallet/safety-policy", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    let update;
+    try {
+      update = coerceWalletSafetyPolicyUpdate(await readJsonBody(
+        ctx.request,
+        CONTROL_PLANE_JSON_BODY_MAX_BYTES,
+        "Wallet safety policy",
+      ));
+    } catch (error) {
+      throw new ApiError(
+        400,
+        "wallet_safety_policy_secret_rejected",
+        error instanceof Error ? error.message : "Wallet safety policy update contains forbidden material.",
+      );
+    }
+    const response = await writeWorkspaceWalletSafetyPolicy(
+      workspace,
+      update,
+      ctx.actor?.scope ?? ctx.actor?.type,
+    );
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.wallet.safety_policy.update",
+      target: walletSafetyPolicyPath(workspace),
+      summary: "Updated wallet safety policy.",
+      timestamp: Date.now(),
+      metadata: {
+        maxPerTransactionUSD: response.policy.maxPerTransactionUSD,
+        maxDailySpendUSD: response.policy.maxDailySpendUSD,
+        mainnetEnabled: response.policy.mainnetEnabled,
+        maxSlippageBps: response.policy.maxSlippageBps,
+        preferredNetwork: response.policy.preferredNetwork,
+      },
+    });
+    return jsonResponse(response);
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/wallet/safety-events", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const event = coerceWalletSafetyEvent(await readJsonBody(
+      ctx.request,
+      CONTROL_PLANE_JSON_BODY_MAX_BYTES,
+      "Wallet safety event",
+    ));
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.wallet.safety_event",
+      target: `wallet:${event.to}`,
+      summary: event.reason,
+      timestamp: Date.now(),
+      metadata: {
+        safetyAction: event.safetyAction,
+        chainId: event.chainId,
+        to: event.to,
+        valueUSD: event.valueUSD,
+        riskLevel: event.riskLevel,
+        sessionId: event.sessionId,
+        txHash: event.txHash,
+        reviewedChainId: event.review?.reviewed.chainId ?? null,
+        reviewedTo: event.review?.reviewed.to ?? null,
+        reviewedValue: event.review?.reviewed.value ?? null,
+        reviewedValueUSD: event.review?.reviewed.valueUSD ?? null,
+        reviewedDataSelector: event.review?.reviewed.dataSelector ?? null,
+        reviewedDisplayValue: event.review?.reviewed.displayValue ?? null,
+        reviewedProposedBy: event.review?.reviewed.proposedBy ?? null,
+        submittedChainId: event.review?.submitted?.chainId ?? null,
+        submittedTo: event.review?.submitted?.to ?? null,
+        submittedValue: event.review?.submitted?.value ?? null,
+        submittedDataSelector: event.review?.submitted?.dataSelector ?? null,
+        submittedTxHash: event.review?.submitted?.txHash ?? null,
+      },
+    });
+    return jsonResponse({ success: true, event });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/wallet/simulate-transaction", "client", async (ctx) => {
+    requireClientScope(ctx, "collaborator");
+    await resolveWorkspace(config, ctx.params.id);
+    const input = coerceWalletSimulationInput(await readJsonBody(
+      ctx.request,
+      CONTROL_PLANE_JSON_BODY_MAX_BYTES,
+      "Wallet simulation",
+    ));
+    const result = await simulateTransaction(input);
+    const unsupported = !result.success && /^Unsupported chainId:/i.test(result.error ?? "");
+    return jsonResponse({
+      success: true,
+      simulation: {
+        status: result.success ? "passed" : unsupported ? "unavailable" : "failed",
+        chainId: input.chainId,
+        to: input.to,
+        from: input.from,
+        value: input.value,
+        dataSelector: input.data.length >= 10 ? input.data.slice(0, 10) : input.data,
+        sessionId: input.sessionId,
+        checkedAt: Date.now(),
+        error: result.success ? null : compactWalletSimulationString(result.error, "Simulation failed before approval.", 220),
+      },
+    });
+  });
+
   addRoute(routes, "GET", "/workspace/:id/backend/data-policy", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     return jsonResponse(buildWorkspaceDataPolicyResponse(workspace));
@@ -5747,7 +6493,11 @@ function createRoutes(
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    const update = coerceWorkspaceDataPolicyUpdate(await readJsonBody(ctx.request));
+    const update = coerceWorkspaceDataPolicyUpdate(await readJsonBody(
+      ctx.request,
+      CONTROL_PLANE_JSON_BODY_MAX_BYTES,
+      "Workspace data policy",
+    ));
     const actorLabel = ctx.actor ? `${ctx.actor.type}:${"scope" in ctx.actor ? ctx.actor.scope : "unknown"}` : "remote";
     const response = await writeWorkspaceDataPolicy(workspace, update, actorLabel);
     await recordAudit(workspace.path, {
@@ -5771,7 +6521,7 @@ function createRoutes(
     if (dataPolicy.feedbackUse === "disabled") {
       throw new ApiError(403, "feedback_disabled", "Feedback collection is disabled for this workspace.");
     }
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, FEEDBACK_JSON_BODY_MAX_BYTES, "Workspace feedback");
     const requestBody = body.feedback && typeof body.feedback === "object" && !Array.isArray(body.feedback)
       ? body.feedback
       : body;
@@ -6048,7 +6798,7 @@ function createRoutes(
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Session create");
     const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : undefined;
     const directory = resolveOpencodeDirectory(workspace) ?? undefined;
     const opencode = createWorkspaceOpencodeClient(config, workspace);
@@ -6463,14 +7213,14 @@ function createRoutes(
 
   addRoute(routes, "POST", "/workspace/:id/artifacts/resolve", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "Artifact resolve");
     const items = await resolveWorkspaceArtifactTargets(workspace.path, (body as Record<string, unknown>).targets);
     return jsonResponse({ items });
   });
 
   addRoute(routes, "POST", "/workspace/:id/files/sessions", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "File session create");
     const ttlMs = parseFileSessionTtlMs((body as Record<string, unknown>).ttlSeconds);
     const requestWrite = (body as Record<string, unknown>).write !== false;
     const canWrite =
@@ -6491,7 +7241,7 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/files/sessions/:sessionId/renew", "client", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "File session renew");
     const ttlMs = parseFileSessionTtlMs((body as Record<string, unknown>).ttlSeconds);
     const { session } = resolveFileSession(ctx, ctx.params.sessionId);
     const renewed = fileSessions.renew(session.id, ttlMs);
@@ -7254,7 +8004,7 @@ function createRoutes(
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "MCP config");
     const name = String(body.name ?? "");
     const configPayload = body.config as Record<string, unknown> | undefined;
     if (!configPayload) {
@@ -7324,7 +8074,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const name = ctx.params.name ?? "";
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(ctx.request, CONTROL_PLANE_JSON_BODY_MAX_BYTES, "MCP toggle");
     if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.enabled !== "boolean") {
       throw new ApiError(400, "invalid_payload", "enabled must be a boolean");
     }
@@ -10259,6 +11009,37 @@ function createRoutes(
 
   const BITTENSOR_RECEIPT_FORBIDDEN_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri)/i;
   const BITTENSOR_RECEIPT_RAW_SIGNATURE_KEY_RE = /^(signature|signedPayload|signedPayloadHex|signedExtrinsic)$/i;
+  const BITTENSOR_SECRET_SHAPED_VALUE_RE = /\b(seed phrase|mnemonic|private key|wallet export|raw signature|signed payload|api secret|bearer token)\b/i;
+  const BITTENSOR_PUBLIC_EVIDENCE_KINDS = new Set([
+    "public_read",
+    "wallet_snapshot",
+    "subnet_context",
+    "validator_comparison",
+    "watch_digest",
+    "chat_result",
+    "readiness_report",
+  ]);
+
+  function compactBittensorEvidenceText(value: unknown, fallback: string, limit: number): string {
+    const text = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+    if (!text) return fallback;
+    return text.length > limit ? `${text.slice(0, limit - 3).trimEnd()}...` : text;
+  }
+
+  function bittensorFileStem(value: string): string {
+    const stem = value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80);
+    return stem || "artifact";
+  }
+
+  function normalizeBittensorEvidenceKind(value: unknown): string {
+    const kind = typeof value === "string" ? value.trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_") : "";
+    return BITTENSOR_PUBLIC_EVIDENCE_KINDS.has(kind) ? kind : "public_read";
+  }
 
   function findForbiddenBittensorReceiptInput(value: unknown, path: string[] = []): string | null {
     if (Array.isArray(value)) {
@@ -10274,6 +11055,28 @@ function createRoutes(
         return [...path, key].join(".");
       }
       const nested = findForbiddenBittensorReceiptInput(child, [...path, key]);
+      if (nested) return nested;
+    }
+    return null;
+  }
+
+  function findForbiddenBittensorEvidenceInput(value: unknown, path: string[] = []): string | null {
+    if (Array.isArray(value)) {
+      for (let index = 0; index < value.length; index += 1) {
+        const nested = findForbiddenBittensorEvidenceInput(value[index], [...path, String(index)]);
+        if (nested) return nested;
+      }
+      return null;
+    }
+    if (typeof value === "string") {
+      return BITTENSOR_SECRET_SHAPED_VALUE_RE.test(value) ? (path.join(".") || "value") : null;
+    }
+    if (!value || typeof value !== "object") return null;
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (BITTENSOR_RECEIPT_FORBIDDEN_KEY_RE.test(key) || BITTENSOR_RECEIPT_RAW_SIGNATURE_KEY_RE.test(key)) {
+        return [...path, key].join(".");
+      }
+      const nested = findForbiddenBittensorEvidenceInput(child, [...path, key]);
       if (nested) return nested;
     }
     return null;
@@ -10328,6 +11131,170 @@ function createRoutes(
       signerAddress: typeof body.signerAddress === "string" ? body.signerAddress : null,
     });
     return jsonResponse({ success: true, receipt, cards: [buildBittensorSigningReceiptCard(receipt)] });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/bittensor/evidence/public-read", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenBittensorEvidenceInput(body);
+    if (forbidden) {
+      throw new ApiError(
+        400,
+        "bittensor_evidence_secret_rejected",
+        `Bittensor evidence must contain only public read metadata (${forbidden}). Do not submit seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports.`,
+      );
+    }
+
+    const kind = normalizeBittensorEvidenceKind(body.kind);
+    const requestedSessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const sessionSlug = normalizeSessionSlug(requestedSessionId || `bittensor_${kind}`);
+    const taskId = compactBittensorEvidenceText(body.taskId, `bittensor_${kind}_${shortId()}`, 96);
+    const title = compactBittensorEvidenceText(body.title, "Bittensor public-read evidence saved", 120);
+    const summary = compactBittensorEvidenceText(body.summary, "Saved a public Bittensor read result for this workspace.", 240);
+    const payload = body.payload && typeof body.payload === "object" && !Array.isArray(body.payload)
+      ? body.payload as Record<string, unknown>
+      : {};
+    const cards = Array.isArray(body.cards) ? body.cards : [];
+    const outputPath = `outputs/bittensor/${sessionSlug}/${bittensorFileStem(kind)}-${shortId()}.json`;
+
+    await recordBittensorWorkspaceEvidence({
+      workspace,
+      ctx,
+      taskId,
+      sessionSlug,
+      outputPath,
+      summary: title,
+      auditAction: "workspace.bittensor.public_read.save",
+      evidenceKind: kind,
+      workflowId: "bittensor_public_read",
+      metadata: {
+        publicReadOnly: true,
+        canSubmit: false,
+      },
+      outputPayload: {
+        version: "matterhorn.bittensor.workspace-evidence.v1",
+        kind,
+        workspaceId: workspace.id,
+        outputPath,
+        title,
+        summary,
+        payload,
+        cards,
+        safety: {
+          custody: false,
+          publicReadOnly: true,
+          canSubmit: false,
+          liveSubmissionEnabled: false,
+          signingInMatterhorn: false,
+          containsSignatureMaterial: false,
+        },
+      },
+    });
+
+    return jsonResponse({
+      success: true,
+      evidence: {
+        workspaceId: workspace.id,
+        outputPath,
+        taskId,
+        sessionSlug,
+        source: "task_events",
+      },
+    }, 201);
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/bittensor/extrinsics/receipt", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const payload = body && typeof body === "object" && !Array.isArray(body) && "payload" in body
+      ? (body as Record<string, unknown>).payload
+      : body;
+    const forbidden = findForbiddenBittensorEvidenceInput(payload);
+    if (forbidden) {
+      throw new ApiError(
+        400,
+        "bittensor_receipt_secret_rejected",
+        `Bittensor receipt evidence must contain only public hashes and routing metadata (${forbidden}). Do not submit seed phrases, private keys, raw signatures, signed payloads, or wallet exports.`,
+      );
+    }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload) || !("preview" in payload) || typeof (payload as Record<string, unknown>).preview !== "object") {
+      throw new ApiError(400, "invalid_preview", "preview is required");
+    }
+
+    const payloadRecord = payload as Record<string, unknown>;
+    const signatureSha256 = normalizeBittensorReceiptHash(payloadRecord.signatureSha256);
+    if (payloadRecord.signatureSha256 !== undefined && !signatureSha256) {
+      throw new ApiError(400, "invalid_signature_hash", "signatureSha256 must be a 64-character SHA-256 hex digest");
+    }
+    const preview = payloadRecord.preview as BittensorExtrinsicPreview;
+    const handoff = payloadRecord.handoff && typeof payloadRecord.handoff === "object" && !Array.isArray(payloadRecord.handoff)
+      ? payloadRecord.handoff as BittensorSigningHandoff
+      : null;
+    const result = normalizeBittensorReceiptResult(payloadRecord.result);
+    const receipt = createBittensorSigningReceipt({
+      preview,
+      handoff,
+      result,
+      signatureSha256,
+      signerAddress: typeof payloadRecord.signerAddress === "string" ? payloadRecord.signerAddress : null,
+    });
+    const cards = [buildBittensorSigningReceiptCard(receipt)];
+    const bodyRecord = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {};
+    const requestedSessionId = typeof bodyRecord.sessionId === "string" ? bodyRecord.sessionId.trim() : "";
+    const sessionSlug = normalizeSessionSlug(requestedSessionId || `bittensor_${receipt.id}`);
+    const taskId = `bittensor_receipt_${receipt.id.replace(/[^a-z0-9_-]/gi, "_").slice(0, 48)}`;
+    const outputPath = `outputs/bittensor/${sessionSlug}/signing-receipt-${bittensorFileStem(receipt.id)}.json`;
+
+    await recordBittensorWorkspaceEvidence({
+      workspace,
+      ctx,
+      taskId,
+      sessionSlug,
+      outputPath,
+      summary: "Bittensor external-signer receipt saved",
+      auditAction: "workspace.bittensor.receipt.import",
+      evidenceKind: "external_signer_receipt",
+      workflowId: "bittensor_external_signer",
+      metadata: {
+        receiptStatus: receipt.status,
+        network: receipt.network,
+        action: receipt.action,
+        netuid: receipt.netuid,
+        containsSignatureMaterial: false,
+        canSubmit: false,
+      },
+      outputPayload: {
+        version: "matterhorn.bittensor.workspace-evidence.v1",
+        kind: "external_signer_receipt",
+        workspaceId: workspace.id,
+        outputPath,
+        receipt,
+        cards,
+        safety: {
+          custody: false,
+          containsSignatureMaterial: false,
+          liveSubmissionByMatterhorn: false,
+          signingInMatterhorn: false,
+        },
+      },
+    });
+
+    return jsonResponse({
+      success: true,
+      receipt,
+      cards,
+      evidence: {
+        workspaceId: workspace.id,
+        outputPath,
+        taskId,
+        sessionSlug,
+        source: "task_events",
+      },
+    }, 201);
   });
 
   addRoute(routes, "POST", "/api/bittensor/extrinsics/submit", "client", async (ctx) => {
@@ -10908,11 +11875,60 @@ function requireClientScope(ctx: RequestContext, required: TokenScope): void {
   }
 }
 
-async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
+const DEFAULT_JSON_BODY_MAX_BYTES = 1_048_576;
+const CONTROL_PLANE_JSON_BODY_MAX_BYTES = 65_536;
+const FEEDBACK_JSON_BODY_MAX_BYTES = 131_072;
+
+async function readBodyTextLimited(
+  request: Request,
+  maxBytes: number,
+  label = "Request",
+): Promise<string> {
+  const contentLength = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    throw new ApiError(413, "payload_too_large", `${label} payload is too large`);
+  }
+
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
   try {
-    const json = await request.json();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new ApiError(413, "payload_too_large", `${label} payload is too large`);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+async function readJsonBody(
+  request: Request,
+  maxBytes = DEFAULT_JSON_BODY_MAX_BYTES,
+  label = "Request",
+): Promise<Record<string, unknown>> {
+  try {
+    const json = JSON.parse(await readBodyTextLimited(request, maxBytes, label));
     return json as Record<string, unknown>;
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw new ApiError(400, "invalid_json", "Invalid JSON body");
   }
 }
@@ -11094,7 +12110,15 @@ function normalizeOpencodeDirectory(directory: string): string {
   if (process.platform === "win32") {
     return directory.replace(/^\\\\\?\\/, "").replace(/^\/\/\?\//, "");
   }
-  return directory;
+
+  // OpenCode stores session directories as canonical paths. On macOS, for
+  // example, `/tmp` resolves to `/private/tmp`; sending the alias back as the
+  // workspace filter makes a valid session list appear empty after reload.
+  try {
+    return realpathSync.native(directory);
+  } catch {
+    return directory;
+  }
 }
 
 function buildOpencodeReloadUrl(baseUrl: string, directory?: string | null): string {

@@ -59,7 +59,8 @@ for (const phrase of [
   "never holds your keys, signs silently, or moves funds",
   "external Bittensor-compatible signer",
   "Live submission is off",
-  "does not submit live market trades",
+  "reads and external handoffs only",
+  "your own eligible client executes trades",
   "never asks for or stores seed phrases, private keys, or API secrets",
   "stored",
 ]) {
@@ -71,13 +72,16 @@ for (const phrase of ["setThemeMode", "Matterhorn accent", "matterhorn-blue", "V
   assert.ok(view.includes(phrase), `Settings overview should include: ${phrase}`);
 }
 
-// 5b. Settings directory tells the truth about readiness instead of implying
-// every scaffolded surface is production-ready.
-for (const status of ["Ready", "Needs setup", "Preview", "Desktop only", "Cloud only", "Developer"]) {
-  assert.ok(settingsPage.includes(status), `Settings navigation should include status badge: ${status}`);
-  assert.ok(generalView.includes(status), `Settings hub should include status badge: ${status}`);
+// 5b. Settings directory tells the truth about readiness. Healthy and
+// informational navigation states remain quiet; actionable gaps name the
+// operation that needs attention.
+for (const status of ["Connect wallet", "Connect provider", "Platform setup", "Configure cloud"]) {
+  assert.ok(settingsPage.includes(status), `Settings navigation should include actionable status: ${status}`);
 }
-assert.ok(settingsShell.includes("getSettingsTabStatus"), "Compact settings menu should show readiness badges");
+assert.ok(settingsPage.includes("shouldDisplaySettingsReadinessStatus"), "Settings navigation should centralize quiet-state behavior");
+assert.ok(settingsShell.includes("shouldDisplaySettingsReadinessStatus"), "Compact settings menu should use the same quiet-state behavior");
+assert.ok(generalView.includes('tab: "wallet"'), "Settings hub should include Wallet");
+assert.ok(generalView.includes('tab: "billing"'), "Settings hub should include Billing");
 assert.ok(settingsPage.includes("getWorkspaceSettingsTabs(developerMode = false)"), "Workspace settings should be gated by developer mode");
 assert.ok(settingsPage.includes('if (developerMode) tabs.push("marketplace", "advanced");'), "Agent templates and Advanced should be developer-gated");
 assert.ok(settingsPage.includes('return developerMode ? ["cloud-account", "cloud-workers"] : ["cloud-account"];'), "Cloud Workers should be developer-gated");
@@ -92,9 +96,10 @@ assert.ok(settingsPage.includes('return "Developer";'), "Developer-only surfaces
 assert.ok(!settingsPage.includes('Agent Marketplace"'), "Customer-facing settings nav should not advertise Agent Marketplace as live");
 assert.ok(generalView.includes('desc: "Model and reasoning controls."'), "Settings hub copy should be short and direct");
 assert.ok(generalView.includes('text-[12px] leading-5 text-dls-text'), "Settings hub descriptions should be readable, not tiny muted text");
-assert.equal(generalView.includes("text-[11px] text-dls-secondary"), false, "Settings hub descriptions should not use low-contrast 11px text");
-assert.ok(settingsPanel.includes("text-sm leading-5 text-dls-text"), "Settings panel subtitles should use readable text color");
-assert.ok(settingsShell.includes("text-[13px] font-medium text-dls-text"), "Settings header workspace label should be readable");
+const settingsCardSource = generalView.slice(generalView.indexOf("function SettingsCard"), generalView.indexOf("function ProjectSurfaceRow"));
+assert.equal(settingsCardSource.includes("text-[11px] text-dls-secondary"), false, "Settings hub descriptions should not use low-contrast 11px text");
+assert.ok(settingsPanel.includes("text-sm leading-5 text-dls-secondary"), "Settings panel subtitles should use the readable secondary text token");
+assert.ok(settingsPage.includes('<span className="truncate">{props.selectedWorkspaceName}</span>'), "Settings workspace switcher should retain a readable text label");
 assert.ok(locale.includes('"settings.feedback_desc": "Tell us what worked or felt rough."'), "Feedback copy should stay succinct");
 
 // 5c. Environment and Recovery should be honest about token/desktop/preview limits.
@@ -130,10 +135,11 @@ for (const forbidden of [
   assert.equal(view.toLowerCase().includes(forbidden), false, `Settings overview must not claim: "${forbidden}"`);
 }
 
-// 7. No OpenWork/OpenCode visible copy (the OPENWORK env-var identifier is not visible copy).
+// 7. No OpenWork/OpenCode visible copy (legacy env and backend enum identifiers
+// are implementation details and map to Matterhorn-owned labels).
 const visibleCopy = view
   .split("\n")
-  .filter((line) => !line.includes("VITE_OPENWORK_APP_VERSION"))
+  .filter((line) => !line.includes("VITE_OPENWORK_APP_VERSION") && !line.includes('value === "opencode_runtime"'))
   .join("\n");
 for (const forbidden of ["openwork", "opencode"]) {
   assert.equal(visibleCopy.toLowerCase().includes(forbidden), false, `Settings overview must not show ${forbidden} copy`);

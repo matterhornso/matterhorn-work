@@ -52,14 +52,19 @@ const ORG_PROXY_HEADER = "x-matterhorn-legacy-org-id";
 const DEFAULT_DEN_TIMEOUT_MS = 12_000;
 
 export const DEFAULT_DEN_AUTH_NAME = "Matterhorn Work User";
-const BUILD_DEN_BASE_URL =
+const EXPLICIT_DEN_BASE_URL =
   (typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_MATTERHORN_CLOUD_URL === "string"
     ? import.meta.env.VITE_MATTERHORN_CLOUD_URL
     : typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_MATTERHORN_DEN_BASE_URL === "string"
       ? import.meta.env.VITE_MATTERHORN_DEN_BASE_URL
       : typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_DEN_BASE_URL === "string"
         ? import.meta.env.VITE_DEN_BASE_URL
-        : "").trim() || "https://app.matterhorn.work";
+        : "").trim();
+const BUILD_DEN_BASE_URL = EXPLICIT_DEN_BASE_URL || "https://app.matterhorn.work";
+const BUILD_DEN_CLOUD_ENABLED =
+  typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_MATTERHORN_CLOUD_ENABLED === "string"
+    ? /^(1|true|yes|on)$/i.test(import.meta.env.VITE_MATTERHORN_CLOUD_ENABLED.trim())
+    : Boolean(EXPLICIT_DEN_BASE_URL);
 const BUILD_DEN_API_BASE_URL =
   (typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_MATTERHORN_CLOUD_API_URL === "string"
     ? import.meta.env.VITE_MATTERHORN_CLOUD_API_URL
@@ -76,6 +81,7 @@ const BUILD_DEN_REQUIRE_SIGNIN =
       : false);
 
 export const DEFAULT_DEN_BASE_URL = BUILD_DEN_BASE_URL;
+export const MATTERHORN_CLOUD_ENABLED = BUILD_DEN_CLOUD_ENABLED;
 export const DEN_INFERENCE_PATH = "/dashboard/inference";
 
 export type DenSettings = {

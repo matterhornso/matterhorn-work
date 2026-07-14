@@ -85,13 +85,13 @@ function DeployTerminal({ log }: { log: string[] }) {
   }, [log])
 
   return (
-    <div className="rounded-lg border border-gray-4 bg-gray-1 p-4 font-mono text-xs text-emerald-400 h-64 overflow-y-auto">
+    <div className="rounded-lg border border-transparent bg-dls-surface-muted/[0.045] p-4 font-mono text-xs text-emerald-400 h-64 overflow-y-auto">
       {log.length === 0 ? (
-        <p className="text-gray-9">Awaiting preview command...</p>
+        <p className="text-dls-muted">Awaiting preview command...</p>
       ) : (
         log.map((line, i) => (
           <div key={i} className="flex gap-2">
-            <span className="text-gray-9 shrink-0">[{i + 1}]</span>
+            <span className="text-dls-muted shrink-0">[{i + 1}]</span>
             <span>{line}</span>
           </div>
         ))
@@ -115,23 +115,17 @@ function AgentCard({
   return (
     <div
       className={cn(
-        "group relative rounded-lg border border-gray-4 bg-gray-2 p-5 cursor-pointer",
-        "hover:border-gray-6 hover:bg-gray-3 transition-all duration-200",
+        "group relative rounded-lg border border-transparent bg-dls-surface-muted/[0.055] p-5 cursor-pointer",
+        "hover:border-transparent hover:bg-dls-surface-muted/[0.10] transition-all duration-200",
       )}
       onClick={() => onSelect(agent.id)}
     >
-      {/* Accent strip */}
-      <div
-        className="absolute top-0 left-4 right-4 h-[2px] rounded-b opacity-60"
-        style={{ background: agent.accentColor }}
-      />
-
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h3 className="font-semibold text-gray-12 text-sm leading-tight">
+          <h3 className="font-semibold text-dls-text text-sm leading-tight">
             {agent.name}
           </h3>
-          <p className="text-xs text-gray-10 mt-0.5">{agent.tagline}</p>
+          <p className="text-xs text-dls-secondary mt-0.5">{agent.tagline}</p>
         </div>
         <div className="flex items-center gap-1 shrink-0 ml-3">
           <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
@@ -141,7 +135,7 @@ function AgentCard({
         </div>
       </div>
 
-      <p className="text-xs text-gray-10 leading-relaxed line-clamp-2 mb-3">
+      <p className="text-xs text-dls-secondary leading-relaxed line-clamp-2 mb-3">
         {agent.description}
       </p>
 
@@ -149,7 +143,7 @@ function AgentCard({
         {agent.tags.map((tag) => (
           <span
             key={tag}
-            className="text-[10px] px-2 py-0.5 rounded-full bg-gray-3 text-gray-11 border border-gray-5"
+            className="text-[10px] px-2 py-0.5 rounded-full bg-dls-surface-muted/[0.10] text-dls-secondary border border-transparent"
           >
             {tag}
           </span>
@@ -161,7 +155,7 @@ function AgentCard({
           <span
             className={cn(
               "text-[10px] px-2 py-0.5 rounded-full border",
-              CATEGORY_COLORS[agent.category] || "bg-gray-3 text-gray-11 border-gray-5",
+              CATEGORY_COLORS[agent.category] || "bg-dls-surface-muted/[0.10] text-dls-secondary border-transparent",
             )}
           >
             {CATEGORY_LABELS[agent.category] || agent.category}
@@ -169,16 +163,16 @@ function AgentCard({
           <span
             className={cn(
               "text-[10px]",
-              DIFFICULTY_COLORS[agent.difficulty] || "text-gray-10",
+              DIFFICULTY_COLORS[agent.difficulty] || "text-dls-secondary",
             )}
           >
             {DIFFICULTY_LABELS[agent.difficulty] || agent.difficulty}
           </span>
         </div>
-        <div className="flex items-center gap-0.5 text-xs font-medium text-gray-12">
+        <div className="flex items-center gap-0.5 text-xs font-medium text-dls-text">
           <DollarSign className="w-3 h-3 text-emerald-400" />
           {agent.dailyCost}
-          <span className="text-gray-9">/day</span>
+          <span className="text-dls-muted">/day</span>
         </div>
       </div>
 
@@ -208,7 +202,7 @@ function MyAgentRow({
   blueprint: AgentBlueprint | null
 }) {
   return (
-    <div className="flex items-center justify-between py-3 px-1 border-b border-gray-3 last:border-0">
+    <div className="flex items-center justify-between rounded-md px-2 py-3 transition-colors hover:bg-dls-surface-muted/[0.08]">
       <div className="flex items-center gap-3 min-w-0">
         <div
           className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center"
@@ -216,13 +210,13 @@ function MyAgentRow({
             background: blueprint?.bgGradient ?? "#333",
           }}
         >
-          <Bot className="w-4 h-4 text-gray-12" />
+          <Bot className="w-4 h-4 text-dls-text" />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-12 truncate">
+          <p className="text-sm font-medium text-dls-text truncate">
             {agent.name}
           </p>
-          <p className="text-xs text-gray-10">{agent.provider}</p>
+          <p className="text-xs text-dls-secondary">{agent.provider}</p>
         </div>
       </div>
 
@@ -232,7 +226,7 @@ function MyAgentRow({
         >
           Preview
         </span>
-        <span className="text-xs text-gray-11 w-16 text-right font-mono">
+        <span className="text-xs text-dls-secondary w-16 text-right font-mono">
           ${agent.revenue.toFixed(2)}
         </span>
         <Button
@@ -362,13 +356,12 @@ export default function MarketplaceView() {
     const agent = agentBlueprints.find((a) => a.id === snapshot.selectedAgentId)
     if (!agent) return null
     return (
-      <div className="mt-6 rounded-lg border border-gray-4 bg-gray-2 overflow-hidden">
-        <div className="h-1" style={{ background: agent.bgGradient }} />
+      <div className="mt-6 rounded-lg border border-transparent bg-dls-surface-muted/[0.055] overflow-hidden">
         <div className="p-5">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h3 className="text-base font-semibold text-gray-12">{agent.name}</h3>
-              <p className="text-sm text-gray-11 mt-0.5">{agent.tagline}</p>
+              <h3 className="text-base font-semibold text-dls-text">{agent.name}</h3>
+              <p className="text-sm text-dls-secondary mt-0.5">{agent.tagline}</p>
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1">
@@ -378,50 +371,50 @@ export default function MarketplaceView() {
               <div className="flex items-center gap-0.5">
                 <DollarSign className="w-4 h-4 text-emerald-400" />
                 <span className="text-sm font-medium text-emerald-400">{agent.dailyCost}</span>
-                <span className="text-xs text-gray-9">/day</span>
+                <span className="text-xs text-dls-muted">/day</span>
               </div>
             </div>
           </div>
-          <p className="text-sm text-gray-11 leading-relaxed mb-4">{agent.description}</p>
+          <p className="text-sm text-dls-secondary leading-relaxed mb-4">{agent.description}</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-gray-9 mb-1">Category</p>
-              <span className={cn("text-xs px-2 py-0.5 rounded-full border", CATEGORY_COLORS[agent.category] || "bg-gray-3 text-gray-11 border-gray-5")}>
+              <p className="text-[11px] font-medium text-dls-muted mb-1">Category</p>
+              <span className={cn("text-xs px-2 py-0.5 rounded-full border", CATEGORY_COLORS[agent.category] || "bg-dls-surface-muted/[0.10] text-dls-secondary border-transparent")}>
                 {CATEGORY_LABELS[agent.category]}
               </span>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-gray-9 mb-1">Difficulty</p>
-              <span className={cn("text-xs", DIFFICULTY_COLORS[agent.difficulty] || "text-gray-10")}>
+              <p className="text-[11px] font-medium text-dls-muted mb-1">Difficulty</p>
+              <span className={cn("text-xs", DIFFICULTY_COLORS[agent.difficulty] || "text-dls-secondary")}>
                 {DIFFICULTY_LABELS[agent.difficulty]}
               </span>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-gray-9 mb-1">Estimated Return</p>
-              <span className="text-xs text-gray-12">{agent.estimatedReturn}</span>
+              <p className="text-[11px] font-medium text-dls-muted mb-1">Estimated return</p>
+              <span className="text-xs text-dls-text">{agent.estimatedReturn}</span>
             </div>
           </div>
           <div className="mb-4">
-            <p className="text-[10px] uppercase tracking-wider text-gray-9 mb-2">Required Skills</p>
+            <p className="text-[11px] font-medium text-dls-muted mb-2">Required skills</p>
             <div className="flex flex-wrap gap-1.5">
               {agent.requiredSkillIds.map((sid) => (
-                <span key={sid} className="text-[10px] px-2 py-1 rounded bg-gray-3 border border-gray-5 text-gray-11 font-mono">
+                <span key={sid} className="text-[10px] px-2 py-1 rounded bg-dls-surface-muted/[0.10] border border-transparent text-dls-secondary font-mono">
                   {sid}
                 </span>
               ))}
             </div>
           </div>
           <div className="mb-4">
-            <p className="text-[10px] uppercase tracking-wider text-gray-9 mb-2">Tags</p>
+            <p className="text-[11px] font-medium text-dls-muted mb-2">Tags</p>
             <div className="flex flex-wrap gap-1.5">
               {agent.tags.map((tag) => (
-                <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-gray-3 text-gray-11 border border-gray-5">
+                <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-dls-surface-muted/[0.10] text-dls-secondary border border-transparent">
                   {tag}
                 </span>
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-3 pt-2 border-t border-gray-3">
+          <div className="flex items-center gap-3 pt-2">
             <Button size="sm" className="gap-1.5" onClick={() => handleHire(agent)}>
               <Plus className="w-3.5 h-3.5" />
               Save preview
@@ -442,8 +435,8 @@ export default function MarketplaceView() {
     return (
       <div
         className={cn(
-          "rounded-lg border border-gray-4 bg-gray-2 p-5 space-y-4",
-          snapshot.isDeploying && "border-purple-500/30",
+          "rounded-lg border border-transparent bg-dls-surface-muted/[0.055] p-5 space-y-4",
+          snapshot.isDeploying && "bg-dls-surface-muted/[0.075]",
         )}
       >
         <div className="flex items-center gap-2">
@@ -451,9 +444,9 @@ export default function MarketplaceView() {
             className="w-6 h-6 rounded flex items-center justify-center"
             style={{ background: selectedBp.accentColor }}
           >
-            <Bot className="w-3.5 h-3.5 text-gray-12" />
+            <Bot className="w-3.5 h-3.5 text-dls-text" />
           </div>
-          <h3 className="text-sm font-medium text-gray-12">
+          <h3 className="text-sm font-medium text-dls-text">
             Configure: {selectedBp.name}
           </h3>
         </div>
@@ -461,25 +454,25 @@ export default function MarketplaceView() {
         {!snapshot.isDeploying && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-gray-9 mb-1.5">
-                Agent Name
+              <label className="block text-[11px] font-medium text-dls-muted mb-1.5">
+                Agent name
               </label>
               <input
                 type="text"
                 value={deployName}
                 onChange={(e) => setDeployName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-4 bg-gray-1 text-xs text-gray-12 placeholder-gray-9 focus:outline-none focus:border-gray-6"
+                className="w-full px-3 py-2 rounded-lg border border-transparent bg-dls-surface-muted/[0.045] text-xs text-dls-text placeholder:text-dls-muted focus:outline-none focus:bg-dls-surface-muted/[0.12]"
                 placeholder="My agent name"
               />
             </div>
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-gray-9 mb-1.5">
-                AI Provider
+              <label className="block text-[11px] font-medium text-dls-muted mb-1.5">
+                AI provider
               </label>
               <select
                 value={deployProvider}
                 onChange={(e) => setDeployProvider(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-4 bg-gray-1 text-xs text-gray-12 focus:outline-none focus:border-gray-6"
+                className="w-full px-3 py-2 rounded-lg border border-transparent bg-dls-surface-muted/[0.045] text-xs text-dls-text focus:outline-none focus:bg-dls-surface-muted/[0.12]"
               >
                 {PROVIDERS.map((p) => (
                   <option key={p.value} value={p.value}>
@@ -489,8 +482,8 @@ export default function MarketplaceView() {
               </select>
             </div>
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-gray-9 mb-1.5">
-                Daily Budget ($)
+              <label className="block text-[11px] font-medium text-dls-muted mb-1.5">
+                Daily budget ($)
               </label>
               <input
                 type="number"
@@ -498,7 +491,7 @@ export default function MarketplaceView() {
                 onChange={(e) => setDeployBudget(e.target.value)}
                 min="0"
                 step="0.5"
-                className="w-full px-3 py-2 rounded-lg border border-gray-4 bg-gray-1 text-xs text-gray-12 placeholder-gray-9 focus:outline-none focus:border-gray-6"
+                className="w-full px-3 py-2 rounded-lg border border-transparent bg-dls-surface-muted/[0.045] text-xs text-dls-text placeholder:text-dls-muted focus:outline-none focus:bg-dls-surface-muted/[0.12]"
               />
             </div>
           </div>
@@ -545,8 +538,8 @@ export default function MarketplaceView() {
 
           {snapshot.isDeploying && (
             <div className="flex items-center gap-2 ml-auto">
-              <div className="w-4 h-4 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
-              <span className="text-[10px] text-purple-400">Generating preview...</span>
+              <div className="w-4 h-4 rounded-full border-2 border-dls-accent border-t-transparent animate-spin" />
+              <span className="text-[10px] text-dls-secondary">Generating preview...</span>
             </div>
           )}
         </div>
@@ -565,10 +558,10 @@ export default function MarketplaceView() {
             <Bot className="size-4" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-gray-12">
+            <h1 className="text-lg font-semibold text-dls-text">
               Agent Marketplace Preview
             </h1>
-            <p className="text-xs text-gray-10">
+            <p className="text-xs text-dls-secondary">
               Browse future agent templates. Hiring, payment, and deployment are not live in this beta.
             </p>
           </div>
@@ -576,15 +569,15 @@ export default function MarketplaceView() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex border-b border-gray-4 px-6 gap-0">
+      <div className="flex flex-wrap items-center gap-1 px-6">
         {TABS.map((tab) => (
           <button
             key={tab}
             className={cn(
-              "px-4 py-2.5 text-xs font-medium border-b-2 -mb-[1px] transition-colors",
+              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.18)]",
               activeTab === tab
-                ? "border-purple-500 text-purple-300"
-                : "border-transparent text-gray-10 hover:text-gray-11",
+                ? "bg-dls-surface-muted/[0.12] text-dls-text"
+                : "text-dls-secondary hover:bg-dls-surface-muted/[0.07] hover:text-dls-text",
             )}
             onClick={() => setActiveTab(tab)}
           >
@@ -592,7 +585,7 @@ export default function MarketplaceView() {
           </button>
         ))}
         <div className="flex-1" />
-        <div className="text-[10px] text-gray-9 self-center mb-1">
+        <div className="text-[10px] text-dls-muted self-center">
           Preview-only in this beta. No wallet, payment, or live deployment.
         </div>
       </div>
@@ -605,13 +598,13 @@ export default function MarketplaceView() {
             {/* Search + filters */}
             <div className="flex items-center gap-3 flex-wrap">
               <div className="relative flex-1 min-w-[200px] max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-9" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-dls-muted" />
                 <input
                   type="text"
                   placeholder="Search agents..."
                   value={searchValue}
                   onChange={(e) => handleSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-4 bg-gray-1 text-xs text-gray-12 placeholder-gray-9 focus:outline-none focus:border-gray-6"
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-transparent bg-dls-surface-muted/[0.045] text-xs text-dls-text placeholder:text-dls-muted focus:outline-none focus:bg-dls-surface-muted/[0.12]"
                 />
               </div>
 
@@ -620,7 +613,7 @@ export default function MarketplaceView() {
                 onChange={(e) =>
                   handleCategoryChange(e.target.value || null)
                 }
-                className="rounded-lg border border-gray-4 bg-gray-1 text-xs text-gray-12 px-3 py-2 focus:outline-none focus:border-gray-6"
+                className="rounded-lg border border-transparent bg-dls-surface-muted/[0.045] text-xs text-dls-text px-3 py-2 focus:outline-none focus:bg-dls-surface-muted/[0.12]"
               >
                 <option value="">All Categories</option>
                 <option value="defi">DeFi</option>
@@ -632,7 +625,7 @@ export default function MarketplaceView() {
               <select
                 value={minRepFilter}
                 onChange={(e) => handleMinRepChange(Number(e.target.value))}
-                className="rounded-lg border border-gray-4 bg-gray-1 text-xs text-gray-12 px-3 py-2 focus:outline-none focus:border-gray-6"
+                className="rounded-lg border border-transparent bg-dls-surface-muted/[0.045] text-xs text-dls-text px-3 py-2 focus:outline-none focus:bg-dls-surface-muted/[0.12]"
               >
                 <option value={0}>Any Reputation</option>
                 <option value={90}>90+</option>
@@ -641,7 +634,7 @@ export default function MarketplaceView() {
               </select>
 
               {filteredAgents.length > 0 && (
-                <span className="text-[10px] text-gray-9">
+                <span className="text-[10px] text-dls-muted">
                   {filteredAgents.length} agent
                   {filteredAgents.length !== 1 ? "s" : ""}
                 </span>
@@ -650,7 +643,7 @@ export default function MarketplaceView() {
 
             {/* Agent grid */}
             {filteredAgents.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-gray-9">
+              <div className="flex flex-col items-center justify-center py-20 text-dls-muted">
                 <Bot className="w-10 h-10 mb-3 opacity-30" />
                 <p className="text-sm">No agents match your filters</p>
                 <p className="text-xs mt-1">Try adjusting your search or category</p>
@@ -674,7 +667,7 @@ export default function MarketplaceView() {
         {activeTab === "My Agents" && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-gray-12">
+              <h2 className="text-sm font-medium text-dls-text">
                 Saved Agent Previews
               </h2>
               <Button
@@ -689,7 +682,7 @@ export default function MarketplaceView() {
             </div>
 
             {snapshot.myAgents.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-gray-9">
+              <div className="flex flex-col items-center justify-center py-16 text-dls-muted">
                 <Clock className="w-10 h-10 mb-3 opacity-30" />
                 <p className="text-sm">No saved previews yet</p>
                 <p className="text-xs mt-1">
@@ -706,9 +699,9 @@ export default function MarketplaceView() {
                 </Button>
               </div>
             ) : (
-              <div className="rounded-lg border border-gray-4 bg-gray-2 divide-y divide-gray-3">
+              <div className="space-y-1 rounded-lg border border-transparent bg-dls-surface-muted/[0.055] p-2">
                 {/* Header row */}
-                <div className="flex items-center justify-between py-2 px-4 text-[10px] uppercase tracking-wider text-gray-9">
+                <div className="flex items-center justify-between px-2 py-1 text-[11px] font-medium text-dls-muted">
                   <span>Agent</span>
                   <div className="flex items-center gap-4">
                     <span className="w-16 text-center">State</span>
@@ -721,7 +714,7 @@ export default function MarketplaceView() {
                     (a) => a.id === deployed.blueprintId,
                   )
                   return (
-                    <div key={deployed.id} className="px-4">
+                    <div key={deployed.id}>
                       <MyAgentRow agent={deployed} blueprint={blueprint ?? null} />
                     </div>
                   )
@@ -738,10 +731,10 @@ export default function MarketplaceView() {
             {!snapshot.isDeploying && (
               <>
                 <div>
-                  <h2 className="text-sm font-medium text-gray-12 mb-1">
+                  <h2 className="text-sm font-medium text-dls-text mb-1">
                     Choose a Blueprint
                   </h2>
-                  <p className="text-xs text-gray-10">
+                  <p className="text-xs text-dls-secondary">
                     Select an agent template to generate a local preview. Deployment is not live in this beta.
                   </p>
                 </div>
@@ -755,8 +748,8 @@ export default function MarketplaceView() {
                         className={cn(
                           "relative text-left rounded-lg border p-4 transition-all duration-200",
                           isSelected
-                            ? "border-purple-500/50 bg-purple-500/5"
-                            : "border-gray-4 bg-gray-2 hover:border-gray-6",
+                            ? "border-transparent bg-dls-surface-muted/[0.12]"
+                            : "border-transparent bg-dls-surface-muted/[0.055] hover:border-transparent hover:bg-dls-surface-muted/[0.10]",
                         )}
                         onClick={() => {
                           setDeployTargetId(bp.id)
@@ -764,28 +757,24 @@ export default function MarketplaceView() {
                           setDeployBudget(bp.dailyCost.toFixed(0))
                         }}
                       >
-                        <div
-                          className="absolute top-0 left-3 right-3 h-[2px] rounded-b opacity-50"
-                          style={{ background: bp.accentColor }}
-                        />
                         <div className="flex items-start justify-between mb-2">
-                          <span className="text-xs font-medium text-gray-12 leading-snug pr-2">
+                          <span className="text-xs font-medium text-dls-text leading-snug pr-2">
                             {bp.name}
                           </span>
                           <span
                             className={cn(
                               "text-[9px] px-1.5 py-0.5 rounded-full border shrink-0",
-                              CATEGORY_COLORS[bp.category] || "bg-gray-3 text-gray-11 border-gray-5",
+                              CATEGORY_COLORS[bp.category] || "bg-dls-surface-muted/[0.10] text-dls-secondary border-transparent",
                             )}
                           >
                             {CATEGORY_LABELS[bp.category]}
                           </span>
                         </div>
-                        <p className="text-[11px] text-gray-10 leading-relaxed line-clamp-2 mb-2">
+                        <p className="text-[11px] text-dls-secondary leading-relaxed line-clamp-2 mb-2">
                           {bp.tagline}
                         </p>
                         <div className="flex items-center justify-between text-[10px]">
-                          <span className="text-gray-9">
+                          <span className="text-dls-muted">
                             {DIFFICULTY_LABELS[bp.difficulty]}
                           </span>
                           <span className="text-emerald-400 font-medium">
@@ -793,8 +782,8 @@ export default function MarketplaceView() {
                           </span>
                         </div>
                         {isSelected && (
-                          <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-purple-500 flex items-center justify-center">
-                            <span className="text-[9px] text-gray-12 font-bold">
+                          <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-dls-accent flex items-center justify-center">
+                            <span className="text-[9px] text-dls-text font-bold">
                               &#10003;
                             </span>
                           </div>

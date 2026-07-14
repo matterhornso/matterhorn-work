@@ -20,8 +20,10 @@ const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 const FORBIDDEN_ARG_RE =
   /^--(?:api[-_]?secret|private[-_]?key|seed(?:[-_]?phrase)?|mnemonic|raw[-_]?signature|signed[-_]?payload|signed[-_]?order|wallet[-_]?export|keyfile|suri|password|passphrase)$/i;
-const FORBIDDEN_PAYLOAD_RE =
-  /(apiSecret|api_secret|privateKey|private_key|seedPhrase|seed_phrase|mnemonic|rawSignature|raw_signature|signedPayload|signed_payload|signedOrder|signed_order|walletExport|wallet_export|"signature"\s*:)/i;
+const FORBIDDEN_PAYLOAD_KEY_RE =
+  /^(apiSecret|api_secret|privateKey|private_key|seedPhrase|seed_phrase|mnemonic|rawSignature|raw_signature|signedPayload|signed_payload|signedOrder|signed_order|walletExport|wallet_export|signature)$/i;
+const FORBIDDEN_PAYLOAD_ASSIGNMENT_RE =
+  /\b(apiSecret|api_secret|privateKey|private_key|seedPhrase|seed_phrase|mnemonic|rawSignature|raw_signature|signedPayload|signed_payload|signedOrder|signed_order|walletExport|wallet_export|signature)\b[ \t]*[:=][ \t]*\S+/i;
 
 function readArg(name, fallback = undefined) {
   const index = args.indexOf(name);
@@ -76,10 +78,32 @@ function assertNoForbiddenArgs() {
   }
 }
 
-function assertNoForbiddenPayload(value, label) {
-  const serialized = typeof value === "string" ? value : JSON.stringify(value);
-  if (FORBIDDEN_PAYLOAD_RE.test(serialized || "")) {
-    throw new Error(`${label} contained secret-shaped fields or signing material.`);
+function assertNoForbiddenPayload(value, label, path = []) {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        assertNoForbiddenPayload(JSON.parse(trimmed), label, path);
+        return;
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("contained secret-shaped")) throw error;
+      }
+    }
+    if (FORBIDDEN_PAYLOAD_ASSIGNMENT_RE.test(value)) {
+      throw new Error(`${label} contained secret-shaped fields or signing material.`);
+    }
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((child, index) => assertNoForbiddenPayload(child, label, [...path, String(index)]));
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (FORBIDDEN_PAYLOAD_KEY_RE.test(key)) {
+      throw new Error(`${label} contained secret-shaped field: ${[...path, key].join(".")}.`);
+    }
+    assertNoForbiddenPayload(child, label, [...path, key]);
   }
 }
 

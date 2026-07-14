@@ -26,16 +26,24 @@ const result = run();
 assert.equal(result.status, 0, `launch readiness should exit 0. stderr=${result.stderr}`);
 const summary = JSON.parse(result.stdout);
 assert.equal(summary.ok, true);
+assert.equal(summary.scope, "contract_only");
+assert.equal(summary.productionAssessed, false);
+assert.equal(summary.launchReady, null);
 assert.ok(summary.outputPath, "summary should include outputPath");
 assert.equal(summary.failed, 0, "no findings should fail");
 
 const report = readFileSync(summary.outputPath, "utf8");
-assert.ok(report.startsWith("# Monday Beta Launch Readiness Audit"));
-assert.ok(report.includes("**Overall:** ✅ READY"));
+assert.ok(report.startsWith("# Monday Beta Contract Readiness Audit"));
+assert.ok(report.includes("**Contract result:** ✅ READY"));
+assert.ok(report.includes("**Launch decision:** NOT ASSESSED"));
+assert.ok(report.includes("This is not production go-live approval."));
+assert.ok(report.includes("product-readiness-smoke.mjs"));
+assert.ok(report.includes("pnpm test:matterhorn-platform-safety"));
+assert.ok(!report.includes("**Overall:** ✅ READY"));
 
 // 3. Report proves the four required areas.
 for (const section of [
-  "## Stale PR audit",
+  "## Repository follow-up",
   "### Protocol/Workflow manifests",
   "### Market safety",
   "### Wellness safety",
@@ -76,6 +84,9 @@ const jsonResult = run(["--json"]);
 assert.equal(jsonResult.status, 0, `json mode should exit 0. stderr=${jsonResult.stderr}`);
 const json = JSON.parse(jsonResult.stdout);
 assert.equal(json.ok, true);
+assert.equal(json.scope, "contract_only");
+assert.equal(json.productionAssessed, false);
+assert.equal(json.launchReady, null);
 assert.ok(Array.isArray(json.findings));
 assert.ok(json.findings.length > 0);
 
@@ -84,7 +95,7 @@ const tmpDir = mkdtempSync(join(tmpdir(), "monday-beta-readiness-"));
 const customResult = run(["--output", join(tmpDir, "report.md")]);
 assert.equal(customResult.status, 0, `custom output should exit 0. stderr=${customResult.stderr}`);
 const customReport = readFileSync(join(tmpDir, "report.md"), "utf8");
-assert.ok(customReport.includes("Monday Beta Launch Readiness Audit"));
+assert.ok(customReport.includes("Monday Beta Contract Readiness Audit"));
 
 // 7. Credential-shaped flags are rejected.
 const reject = spawnSync(

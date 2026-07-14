@@ -248,7 +248,7 @@ const sessionPage = readFileSync("apps/app/src/react-app/domains/session/chat/se
 for (const phrase of [
   'data-testid="protocol-side-panel-scroll-root"',
   "flex h-full min-h-0 max-h-full flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain",
-  "hidden h-full min-h-0 overflow-hidden lg:flex lg:flex-col",
+  "matterhorn-side-panel hidden h-full min-h-0 overflow-hidden bg-dls-background lg:flex lg:flex-col",
 ]) {
   assert.ok(sessionPage.includes(phrase), `Session page should keep protocol rail scroll bounded: ${phrase}`);
 }

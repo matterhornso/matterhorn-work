@@ -28,7 +28,8 @@ for (const phrase of [
   "--dls-app-bg: #f6f9ff",
   "--dls-canvas: #eef7ff",
   "--dls-border: #b9dceb",
-  "--dls-text-secondary: #555c6d",
+  "--dls-text-secondary: #41495a",
+  "--muted-foreground: #4c5566",
   "--dls-hover: rgba(56, 189, 248, 0.12)",
 ]) {
   assert.ok(css.includes(phrase), `light theme should avoid a flat grayscale shell: ${phrase}`);
@@ -36,11 +37,14 @@ for (const phrase of [
 
 for (const phrase of [
   '[data-theme="dark"]',
-  "--dls-app-bg: #070a10",
-  "--dls-canvas: #111827",
-  "--dls-surface-muted: #182033",
+  "--dls-app-bg: #05070b",
+  "--dls-surface: #0b0f14",
+  "--dls-sidebar: #17202a",
+  "--dls-canvas: #1b2530",
+  "--dls-surface-muted: #263442",
   "--dls-text-primary: #fafcff",
-  "--dls-text-secondary: #b4bdca",
+  "--dls-text-secondary: #d0dae5",
+  "--muted-foreground: #c4ceda",
   "--dls-hover: rgba(56, 189, 248, 0.13)",
 ]) {
   assert.ok(css.includes(phrase), `dark theme should be brighter and more legible: ${phrase}`);

@@ -71,6 +71,12 @@ export interface ApprovalConfig {
   timeoutMs: number;
 }
 
+export interface RequestRateLimitConfig {
+  enabled?: boolean;
+  windowMs?: number;
+  maxRequests?: number;
+}
+
 export interface ServerConfig {
   host: string;
   port: number;
@@ -91,6 +97,8 @@ export interface ServerConfig {
   hostTokenSource: "cli" | "env" | "file" | "generated";
   logFormat: LogFormat;
   logRequests: boolean;
+  requestRateLimit?: RequestRateLimitConfig;
+  reloadWatchers?: boolean;
 }
 
 export interface Capabilities {
@@ -274,7 +282,7 @@ export interface MatterhornTaskRun {
   workspaceId: string;
   desk: string;
   sessionSlug: string;
-  status: "running" | "completed" | "failed" | "cancelled";
+  status: "staged" | "running" | "waiting" | "completed" | "failed" | "cancelled";
   createdAt: number;
   updatedAt: number;
   /** Summary of the final outcome. Failed runs include a safe error reason — never raw stack traces or secret payloads */

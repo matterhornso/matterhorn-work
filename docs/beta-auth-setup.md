@@ -37,6 +37,9 @@ The beta auth layer does not require Clerk packages, but it documents the standa
 
 | Variable | Required? | Purpose |
 |---|---|---|
+| `VITE_MATTERHORN_CLOUD_ENABLED` | No | Explicitly enables Matterhorn Cloud account actions. Local builds default to disabled so they never send users to an undeployed hostname. |
+| `VITE_MATTERHORN_CLOUD_URL` | Required when Cloud is enabled | Browser sign-in and account control-plane URL. |
+| `VITE_MATTERHORN_CLOUD_API_URL` | No | Optional separate API base URL for Matterhorn Cloud. |
 | `VITE_MATTERHORN_WORK_URL` / `VITE_OPENWORK_URL` | No | Base URL of the Matterhorn Cloud control plane. Defaults to the desktop local server in desktop builds. |
 | `VITE_OPENCODE_URL` | No | OpenCode engine URL. Defaults to `http://127.0.0.1:4096`. |
 
@@ -45,6 +48,7 @@ The beta auth layer does not require Clerk packages, but it documents the standa
 The beta auth layer is designed so desktop/web testers can use local workspaces without signing in:
 
 - The `BetaAuthProvider` reports `status: "signed_out"` when no Den session exists.
+- Without an explicit Cloud URL or `VITE_MATTERHORN_CLOUD_ENABLED=1`, Account shows Cloud as unavailable and hides sign-in, account creation, and manual handoff-code controls.
 - The status-bar profile menu shows **Continue offline — local workspaces stay available** when signed out.
 - Signing out only clears the Cloud session; local workspaces and their data are untouched.
 - The forced-signin gate (`DenSigninGate`) only redirects to `/signin` when the desktop bootstrap config has `requireSignin: true`. For local testing, leave that flag `false`.

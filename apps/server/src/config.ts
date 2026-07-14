@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
-import type { ApprovalMode, ApprovalConfig, ServerConfig, WorkspaceConfig, LogFormat } from "./types.js";
+import type { ApprovalMode, ApprovalConfig, ServerConfig, WorkspaceConfig, LogFormat, RequestRateLimitConfig } from "./types.js";
 import { buildWorkspaceInfos } from "./workspaces.js";
 import { parseList, readJsonFile, shortId } from "./utils.js";
 
@@ -42,6 +42,7 @@ interface FileConfig {
   opencodePassword?: string;
   logFormat?: LogFormat;
   logRequests?: boolean;
+  requestRateLimit?: RequestRateLimitConfig;
 }
 
 const DEFAULT_PORT = 8787;
@@ -70,6 +71,12 @@ function parseBoolean(value: string | undefined): boolean | undefined {
   if (["true", "1", "yes", "on"].includes(normalized)) return true;
   if (["false", "0", "no", "off"].includes(normalized)) return false;
   return undefined;
+}
+
+function parsePositiveNumber(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 export function parseCliArgs(argv: string[]): CliArgs {
@@ -310,6 +317,18 @@ export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
 
   const envLogRequests = parseBoolean(process.env.OPENWORK_LOG_REQUESTS);
   const logRequests = cli.logRequests ?? envLogRequests ?? fileConfig.logRequests ?? DEFAULT_LOG_REQUESTS;
+  const requestRateLimit: RequestRateLimitConfig = {
+    ...(fileConfig.requestRateLimit ?? {}),
+    ...(parseBoolean(readMatterhornEnv("REQUEST_RATE_LIMIT_ENABLED")) !== undefined
+      ? { enabled: parseBoolean(readMatterhornEnv("REQUEST_RATE_LIMIT_ENABLED")) }
+      : {}),
+    ...(parsePositiveNumber(readMatterhornEnv("REQUEST_RATE_LIMIT_WINDOW_MS")) !== undefined
+      ? { windowMs: parsePositiveNumber(readMatterhornEnv("REQUEST_RATE_LIMIT_WINDOW_MS")) }
+      : {}),
+    ...(parsePositiveNumber(readMatterhornEnv("REQUEST_RATE_LIMIT_MAX")) !== undefined
+      ? { maxRequests: parsePositiveNumber(readMatterhornEnv("REQUEST_RATE_LIMIT_MAX")) }
+      : {}),
+  };
 
   const authorizedRoots =
     fileConfig.authorizedRoots?.length
@@ -339,5 +358,6 @@ export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
     hostTokenSource,
     logFormat,
     logRequests,
+    requestRateLimit,
   };
 }

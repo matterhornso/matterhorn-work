@@ -3,11 +3,11 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
+  ChevronDown,
   Clock3,
   Copy,
   Database,
   Download,
-  ExternalLink,
   FileText,
   Image as ImageIcon,
   ShieldCheck,
@@ -41,7 +41,6 @@ import {
   rollUpNftPublishingReadinessStatus,
 } from "../../session/media";
 import {
-  SettingsInset,
   SettingsNotice,
   RefreshButton,
   SettingsSection,
@@ -81,9 +80,11 @@ function StatusText(props: { status: MatterhornCapabilityStatus | "unavailable" 
   const label =
     props.label ??
     (props.status === "unavailable"
-      ? "Unavailable"
+      ? "Workspace unavailable"
       : props.status === "local"
         ? "Local"
+        : props.status === "needs_setup"
+          ? "Platform setup"
         : backendCapabilityLabel(props.status));
   return (
     <span className={cn("inline-flex w-fit items-center rounded-md px-2 py-0.5 text-[11px] font-medium", statusToneClass(props.status))}>
@@ -110,7 +111,7 @@ function DiagnosticStatusText(props: { status: MatterhornGeneratedMediaDiagnosti
 function productionModeLabel(mode: MatterhornGeneratedMediaProductionSmokePlan["mode"]) {
   if (mode === "production_candidate") return "Production candidate";
   if (mode === "local_test") return "Local test";
-  return "Needs setup";
+  return "Platform setup";
 }
 
 function productionStageLabel(status: MatterhornGeneratedMediaProductionSmokeStage["status"]) {
@@ -145,7 +146,7 @@ function CountStrip(props: {
     ["Listed", props.listed],
   ] as const;
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-dls-surface-muted/12 px-3 py-2">
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 py-1">
       {items.map(([label, value]) => (
         <span key={label} className="inline-flex items-baseline gap-1.5 text-xs text-dls-secondary">
           <span className="font-semibold tabular-nums text-dls-text">{value}</span>
@@ -187,7 +188,7 @@ function downloadMarkdownFile(filename: string, data: ArrayBuffer, contentType: 
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
 function isPublicDraft(draft: MatterhornImageNftDraft) {
@@ -213,18 +214,18 @@ function RecentMediaRows(props: {
   onDeleteImage: (item: MatterhornGeneratedMediaHistoryItem) => void;
 }) {
   if (props.loading) {
-    return <SettingsInset className="text-sm text-dls-secondary">Loading generated media...</SettingsInset>;
+    return <p className="py-4 text-sm text-dls-secondary">Loading generated media...</p>;
   }
   if (!props.items.length) {
     return (
-      <SettingsInset className="text-sm leading-6 text-dls-secondary">
+      <div className="py-6 text-sm leading-6 text-dls-secondary">
         No generated images yet. Create one from chat and it will appear here with its output and NFT draft state.
-      </SettingsInset>
+      </div>
     );
   }
 
   return (
-    <div className="divide-y divide-dls-border/40">
+    <div className="grid gap-1">
       {props.items.slice(0, 6).map((item) => (
         <RecentMediaRow
           key={item.id}
@@ -263,12 +264,13 @@ function RecentMediaRow(props: { item: MatterhornGeneratedMediaHistoryItem; dele
             type="button"
             variant="ghost"
             size="sm"
+            aria-label={`Delete local generated image ${image.id}`}
             className="h-7 gap-1 px-2 text-[11px] text-red-300 hover:text-red-200"
             onClick={props.onDelete}
             disabled={props.deleting}
           >
             <Trash2 className="size-3" />
-            {props.deleting ? "Deleting" : "Delete"}
+            {props.deleting ? "Deleting" : "Delete local"}
           </Button>
         ) : null}
       </div>
@@ -282,26 +284,26 @@ function DiagnosticsRows(props: {
   error?: string | null;
 }) {
   if (props.loading) {
-    return <SettingsInset className="text-sm text-dls-secondary">Running generated media diagnostics...</SettingsInset>;
+    return <p className="py-3 text-sm text-dls-secondary">Running generated media diagnostics...</p>;
   }
   if (props.error) {
     return <SettingsNotice tone="error">{props.error}</SettingsNotice>;
   }
   if (!props.diagnostics) {
     return (
-      <SettingsInset className="text-sm leading-6 text-dls-secondary">
+      <p className="py-2 text-sm leading-6 text-dls-secondary">
         Run diagnostics to safely check provider setup, Walrus reachability, Sui publishing config, and non-custody guarantees.
-      </SettingsInset>
+      </p>
     );
   }
   return (
-    <div className="divide-y divide-dls-border/40">
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
+    <div className="grid gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-dls-surface-muted/[0.045] px-3 py-2.5">
         <p className="text-sm text-dls-secondary">{props.diagnostics.summary}</p>
         <DiagnosticStatusText status={props.diagnostics.status} />
       </div>
       {props.diagnostics.checks.map((check) => (
-        <div key={check.id} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <div key={check.id} className="grid gap-2 rounded-lg bg-dls-surface-muted/[0.045] px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-dls-text">
               <ShieldCheck className="size-4 shrink-0 text-dls-secondary" />
@@ -382,19 +384,19 @@ function DraftRows(props: {
   onDeleteDraft: (draft: MatterhornImageNftDraft) => void;
 }) {
   if (props.loading) {
-    return <SettingsInset className="text-sm text-dls-secondary">Loading NFT drafts...</SettingsInset>;
+    return <p className="py-4 text-sm text-dls-secondary">Loading NFT drafts...</p>;
   }
   if (!props.drafts.length) {
-    return <SettingsInset className="text-sm text-dls-secondary">No NFT drafts yet.</SettingsInset>;
+    return <p className="py-6 text-sm text-dls-secondary">No NFT drafts yet.</p>;
   }
 
   return (
-    <div className="divide-y divide-dls-border/40">
+    <div className="grid gap-1">
       {props.drafts.slice(0, 5).map((draft) => {
         const showDelete = canDeleteDraft(draft);
         const deleting = props.deletingDraftId === draft.id;
         return (
-          <div key={draft.id} className="grid gap-2 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+          <div key={draft.id} className="grid gap-2 rounded-lg bg-dls-surface-muted/[0.045] px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-dls-text">
                 <Store className="size-4 shrink-0 text-dls-secondary" />
@@ -414,12 +416,13 @@ function DraftRows(props: {
                   type="button"
                   variant="ghost"
                   size="sm"
+                  aria-label={`Delete local NFT draft ${draft.id}`}
                   className="h-7 gap-1 px-2 text-[11px] text-red-300 hover:text-red-200"
                   onClick={() => props.onDeleteDraft(draft)}
                   disabled={deleting}
                 >
                   <Trash2 className="size-3" />
-                  {deleting ? "Deleting" : "Delete"}
+                  {deleting ? "Deleting" : "Delete local"}
                 </Button>
               ) : null}
             </div>
@@ -464,18 +467,18 @@ function DataControlActionChips(props: { label: string; actions: MatterhornDataC
 
 function DataControlRows(props: { stores: MatterhornDataControlStore[]; loading: boolean }) {
   if (props.loading) {
-    return <SettingsInset className="text-sm text-dls-secondary">Loading data controls...</SettingsInset>;
+    return <p className="py-3 text-sm text-dls-secondary">Loading data controls...</p>;
   }
   if (!props.stores.length) {
-    return <SettingsInset className="text-sm text-dls-secondary">Generated media data controls are unavailable.</SettingsInset>;
+    return <p className="py-3 text-sm text-dls-secondary">Generated media data controls are unavailable.</p>;
   }
   return (
-    <div className="divide-y divide-dls-border/40">
+    <div className="grid gap-1">
       {props.stores.map((store) => {
         const exportActions = store.export.actions;
         const deleteActions = store.deletion.actions;
         return (
-          <div key={store.storeId} className="grid gap-2 py-3 first:pt-0 last:pb-0">
+          <div key={store.storeId} className="grid gap-2 rounded-lg bg-dls-surface-muted/[0.045] px-3 py-2.5">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-dls-text">
@@ -503,6 +506,27 @@ function DataControlRows(props: { stores: MatterhornDataControlStore[]; loading:
   );
 }
 
+function GeneratedMediaWorkspaceState(props: { engineConnected: boolean }) {
+  return (
+    <div className="flex max-w-xl flex-col items-start py-10">
+      <span className="mb-4 flex size-9 items-center justify-center rounded-md bg-dls-surface-muted/[0.12] text-dls-secondary">
+        <ImageIcon className="size-4" aria-hidden="true" />
+      </span>
+      <h3 className="text-base font-semibold text-dls-text">
+        {props.engineConnected ? "Select a workspace" : "Generated media is unavailable"}
+      </h3>
+      <p className="mt-2 text-sm leading-6 text-dls-secondary">
+        {props.engineConnected
+          ? "Choose a workspace from the sidebar to review its images, NFT drafts, publishing readiness, and data controls."
+          : "Reconnect the Matterhorn Work engine, then open a workspace to manage generated media."}
+      </p>
+      <p className="mt-3 text-xs leading-5 text-dls-muted">
+        Generated media is workspace-scoped so files, receipts, and deletion controls stay attached to the correct project.
+      </p>
+    </div>
+  );
+}
+
 export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProps) {
   const queryClient = useQueryClient();
   const { showToast } = useStatusToasts();
@@ -512,6 +536,7 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
   const [readinessReportBusy, setReadinessReportBusy] = useState<"copy" | "download" | null>(null);
   const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
   const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
+  const [libraryView, setLibraryView] = useState<"images" | "drafts">("images");
   const workspaceId = props.runtimeWorkspaceId?.trim() ?? "";
   const enabled = Boolean(props.matterhornServerClient && workspaceId);
 
@@ -760,14 +785,16 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
     void dataControlsQuery.refetch();
   };
 
+  if (!enabled) {
+    return (
+      <SettingsStack>
+        <GeneratedMediaWorkspaceState engineConnected={Boolean(props.matterhornServerClient)} />
+      </SettingsStack>
+    );
+  }
+
   return (
     <SettingsStack>
-      {!enabled ? (
-        <SettingsNotice tone="error">
-          Open a connected workspace to review generated media readiness, NFT drafts, and data controls.
-        </SettingsNotice>
-      ) : null}
-
       <SettingsSection>
         <SettingsSectionHeader>
           <SettingsSectionHeaderContent>
@@ -795,30 +822,32 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
               title="Publishing path"
               description="Image creation can work before public storage or NFT publishing is configured."
               surface
+              needsSetupLabel="Platform setup"
             />
             <NftPublishingSetupRows
               requirements={publishingSetupRequirements}
-              description="Local backend values needed before public publishing actions are available."
+              title="Platform setup"
+              description="These services are configured by the Matterhorn platform operator, not by an end user."
             />
             {imageProviderSetupRequired && props.onOpenImageProviderSetup ? (
-              <SettingsNotice className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
                 <span>
                   Add an OpenAI image provider to generate real images from chat.
                 </span>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="w-fit gap-1.5 text-xs"
+                  className="w-fit gap-1.5 border-0 bg-dls-surface-muted/[0.12] text-xs shadow-none hover:bg-dls-surface-muted/[0.18]"
                   onClick={props.onOpenImageProviderSetup}
                 >
                   <ImageIcon className="size-3.5" />
                   Open image provider setup
                 </Button>
-              </SettingsNotice>
+              </div>
             ) : null}
-            {props.onOpenBilling ? (
-              <SettingsNotice className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            {props.onOpenBilling && capabilities ? (
+              <div className="flex flex-col gap-2 py-2 text-sm text-dls-secondary sm:flex-row sm:items-center sm:justify-between">
                 <span>
                   Plan limits apply to image generation and public NFT publishing. Local drafts remain available.
                 </span>
@@ -832,134 +861,131 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
                   <Store className="size-3.5" />
                   Open billing
                 </Button>
-              </SettingsNotice>
+              </div>
             ) : null}
           </>
         ) : (
-          <SettingsInset className="text-sm text-dls-secondary">
-            Loading publishing readiness...
-          </SettingsInset>
+          <p className="py-4 text-sm text-dls-secondary">Loading publishing readiness...</p>
         )}
       </SettingsSection>
 
       <SettingsSection>
         <SettingsSectionHeader>
           <SettingsSectionHeaderContent>
-            <SettingsSectionHeaderTitle>Setup diagnostics</SettingsSectionHeaderTitle>
+            <SettingsSectionHeaderTitle>Media library</SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Safe checks only. Diagnostics do not generate images, upload media, sign, or submit transactions.
+              Generated images and local NFT drafts for this workspace.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeaderContent>
           <SettingsSectionHeaderActions>
             <Button
               variant="ghost"
               size="sm"
-              className="gap-1.5 text-xs"
-              onClick={() => void copyReadinessReport()}
-              disabled={!enabled || readinessReportBusy !== null}
+              className={cn("h-8 px-2 text-xs", libraryView === "images" ? "bg-dls-surface-muted/[0.12] text-dls-text" : "bg-transparent text-dls-secondary")}
+              aria-pressed={libraryView === "images"}
+              onClick={() => setLibraryView("images")}
             >
-              <Copy className="size-3.5" />
-              {readinessReportBusy === "copy" ? "Copying" : "Copy report"}
+              Images
             </Button>
             <Button
               variant="ghost"
               size="sm"
-              className="gap-1.5 text-xs"
-              onClick={() => void downloadReadinessReport()}
-              disabled={!enabled || readinessReportBusy !== null}
+              className={cn("h-8 px-2 text-xs", libraryView === "drafts" ? "bg-dls-surface-muted/[0.12] text-dls-text" : "bg-transparent text-dls-secondary")}
+              aria-pressed={libraryView === "drafts"}
+              onClick={() => setLibraryView("drafts")}
             >
-              <Download className="size-3.5" />
-              {readinessReportBusy === "download" ? "Downloading" : "Download report"}
+              NFT drafts
             </Button>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="gap-1.5 text-xs"
-              onClick={() => diagnosticsMutation.mutate()}
-              disabled={!enabled || diagnosticsMutation.isPending}
+              className="gap-1.5 border-0 bg-dls-surface-muted/[0.12] text-xs shadow-none hover:bg-dls-surface-muted/[0.18]"
+              onClick={props.onOpenWorkspaceChat}
             >
-              <ShieldCheck className="size-3.5" />
-              {diagnosticsMutation.isPending ? "Checking" : "Run diagnostics"}
-            </Button>
-          </SettingsSectionHeaderActions>
-        </SettingsSectionHeader>
-        <DiagnosticsRows
-          diagnostics={diagnosticsMutation.data}
-          loading={diagnosticsMutation.isPending}
-          error={diagnosticsError}
-        />
-        {readinessReportStatus ? <SettingsNotice>{readinessReportStatus}</SettingsNotice> : null}
-      </SettingsSection>
-
-      <SettingsSection>
-        <SettingsSectionHeader>
-          <SettingsSectionHeaderContent>
-            <SettingsSectionHeaderTitle>Recent media</SettingsSectionHeaderTitle>
-            <SettingsSectionHeaderDescription>
-              Generated images, output files, and local NFT draft state for this workspace.
-            </SettingsSectionHeaderDescription>
-          </SettingsSectionHeaderContent>
-          <SettingsSectionHeaderActions>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={props.onOpenWorkspaceChat}>
-              <ExternalLink className="size-3.5" />
-              Open workspace chat
-            </Button>
-            <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={props.onOpenRunHistory}>
-              <Clock3 className="size-3.5" />
-              Run history
+              <ImageIcon className="size-3.5" />
+              Generate image
             </Button>
           </SettingsSectionHeaderActions>
         </SettingsSectionHeader>
 
         <CountStrip images={counts.images} drafts={counts.drafts} minted={counts.minted} listed={counts.listed} />
         {deleteStatus ? <SettingsNotice>{deleteStatus}</SettingsNotice> : null}
-        {historyQuery.isError ? (
+        {libraryView === "images" && historyQuery.isError ? (
           <SettingsNotice tone="error">Generated media history could not load.</SettingsNotice>
         ) : null}
-        <RecentMediaRows
-          items={historyQuery.data?.items ?? []}
-          loading={historyQuery.isLoading}
-          deletingImageId={deletingImageId}
-          onDeleteImage={deleteImage}
-        />
+        {libraryView === "images" ? (
+          <RecentMediaRows
+            items={historyQuery.data?.items ?? []}
+            loading={historyQuery.isLoading}
+            deletingImageId={deletingImageId}
+            onDeleteImage={deleteImage}
+          />
+        ) : (
+          <>
+            {draftsQuery.isError ? <SettingsNotice tone="error">NFT drafts could not load.</SettingsNotice> : null}
+            <DraftRows
+              drafts={draftsQuery.data?.drafts ?? []}
+              loading={draftsQuery.isLoading}
+              deletingDraftId={deletingDraftId}
+              onDeleteDraft={deleteDraft}
+            />
+          </>
+        )}
+        <Button variant="ghost" size="sm" className="w-fit gap-1.5 px-0 text-xs text-dls-secondary hover:bg-transparent hover:text-dls-text" onClick={props.onOpenRunHistory}>
+          <Clock3 className="size-3.5" />
+          View run history
+        </Button>
       </SettingsSection>
 
       <SettingsSection>
-        <SettingsSectionHeader>
-          <SettingsSectionHeaderContent>
-            <SettingsSectionHeaderTitle>NFT drafts</SettingsSectionHeaderTitle>
-            <SettingsSectionHeaderDescription>
-              Draft rows show local storage state, public mint receipts, and listing receipt state without exposing wallet signatures.
-            </SettingsSectionHeaderDescription>
-          </SettingsSectionHeaderContent>
-        </SettingsSectionHeader>
-        {draftsQuery.isError ? <SettingsNotice tone="error">NFT drafts could not load.</SettingsNotice> : null}
-        <DraftRows
-          drafts={draftsQuery.data?.drafts ?? []}
-          loading={draftsQuery.isLoading}
-          deletingDraftId={deletingDraftId}
-          onDeleteDraft={deleteDraft}
-        />
+        <details className="group">
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-3 py-2">
+            <span>
+              <span className="block text-sm font-medium text-dls-text">Diagnostics and readiness report</span>
+              <span className="mt-1 block text-xs leading-5 text-dls-secondary">Diagnostics do not generate images, upload media, sign, or submit transactions.</span>
+            </span>
+            <ChevronDown className="mt-0.5 size-4 shrink-0 text-dls-secondary transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="grid gap-3 pt-3">
+            <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" size="sm" className="gap-1.5 bg-dls-surface-muted/[0.12] text-xs" onClick={() => diagnosticsMutation.mutate()} disabled={diagnosticsMutation.isPending}>
+                <ShieldCheck className="size-3.5" />
+                {diagnosticsMutation.isPending ? "Checking" : "Run diagnostics"}
+              </Button>
+              <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => void copyReadinessReport()} disabled={readinessReportBusy !== null}>
+                <Copy className="size-3.5" />
+                {readinessReportBusy === "copy" ? "Copying" : "Copy report"}
+              </Button>
+              <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => void downloadReadinessReport()} disabled={readinessReportBusy !== null}>
+                <Download className="size-3.5" />
+                {readinessReportBusy === "download" ? "Downloading" : "Download report"}
+              </Button>
+            </div>
+            <DiagnosticsRows diagnostics={diagnosticsMutation.data} loading={diagnosticsMutation.isPending} error={diagnosticsError} />
+            {readinessReportStatus ? <SettingsNotice>{readinessReportStatus}</SettingsNotice> : null}
+          </div>
+        </details>
       </SettingsSection>
 
       <SettingsSection>
-        <SettingsSectionHeader>
-          <SettingsSectionHeaderContent>
-            <SettingsSectionHeaderTitle>Data controls</SettingsSectionHeaderTitle>
-            <SettingsSectionHeaderDescription>
-              Review where generated media lives and which export or deletion controls are available.
-            </SettingsSectionHeaderDescription>
-          </SettingsSectionHeaderContent>
-          <SettingsSectionHeaderActions>
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={props.onOpenRunHistory}>
+        <details className="group">
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-3 py-2">
+            <span>
+              <span className="block text-sm font-medium text-dls-text">Storage and data controls</span>
+              <span className="mt-1 block text-xs leading-5 text-dls-secondary">Review retention, exports, deletion controls, and saved evidence.</span>
+            </span>
+            <ChevronDown className="mt-0.5 size-4 shrink-0 text-dls-secondary transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="grid gap-3 pt-3">
+            <Button variant="ghost" size="sm" className="w-fit gap-1.5 px-0 text-xs text-dls-secondary hover:bg-transparent hover:text-dls-text" onClick={props.onOpenRunHistory}>
               <FileText className="size-3.5" />
               Review evidence
               <ArrowRight className="size-3.5" />
             </Button>
-          </SettingsSectionHeaderActions>
-        </SettingsSectionHeader>
-        {dataControlsQuery.isError ? <SettingsNotice tone="error">Generated media data controls could not load.</SettingsNotice> : null}
-        <DataControlRows stores={dataControlStores} loading={dataControlsQuery.isLoading} />
+            {dataControlsQuery.isError ? <SettingsNotice tone="error">Generated media data controls could not load.</SettingsNotice> : null}
+            <DataControlRows stores={dataControlStores} loading={dataControlsQuery.isLoading} />
+          </div>
+        </details>
       </SettingsSection>
     </SettingsStack>
   );

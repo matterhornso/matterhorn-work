@@ -2,9 +2,11 @@
 import {
   ArrowRight,
   ArrowUpRight,
-  BrainCircuit,
+  Archive,
   Cloud,
   Cog,
+  CreditCard,
+  Cpu,
   FileText,
   FolderLock,
   Image as ImageIcon,
@@ -19,6 +21,7 @@ import {
   Sparkles,
   Terminal,
   Wrench,
+  Wallet as WalletIcon,
 } from "lucide-react";
 
 import { t } from "../../../../i18n";
@@ -28,10 +31,10 @@ import type {
   MatterhornCapabilityStatus,
   MatterhornSettingsSectionCapability,
 } from "@matterhorn-work/types/backend-capabilities";
-import { getSessionActivityStatusLabel, type SessionActivityStatus } from "../../session/status/session-activity-store";
-import { useWorkflowTaskLog, type TaskLogSource } from "./use-workflow-task-log";
+import { getTaskLogStatusLabel, useWorkflowTaskLog, type TaskLogSource } from "./use-workflow-task-log";
 import {
   getSettingsTabStatus,
+  settingsReadinessStatusLabel,
   type SettingsReadinessStatus,
 } from "../shell/settings-page";
 
@@ -59,7 +62,7 @@ type SettingsHubCard = {
 };
 
 type ProjectSurfaceSection = "memory" | "notes" | "outputs" | "feedback";
-type ProjectSurfaceStatus = SettingsReadinessStatus | "Unavailable";
+type ProjectSurfaceStatus = SettingsReadinessStatus | "Engine offline";
 
 type ProjectSurfaceCard = {
   section: ProjectSurfaceSection;
@@ -72,16 +75,18 @@ type ProjectSurfaceCard = {
 const workspaceCards: SettingsHubCard[] = [
   { tab: "preferences", icon: Cog, title: "Preferences", desc: "Model and reasoning controls.", status: "Working" },
   { tab: "permissions", icon: FolderLock, title: "Permissions", desc: "Folders the agent can use.", status: "Working" },
-  { tab: "generated-media", icon: ImageIcon, title: "Generated media", desc: "Image and NFT publishing readiness.", status: "Needs setup" },
+  { tab: "wallet", icon: WalletIcon, title: "Wallet", desc: "Wallet connections and signing boundaries.", status: "Preview" },
+  { tab: "generated-media", icon: ImageIcon, title: "Generated media", desc: "Image and NFT publishing readiness.", status: "Platform setup" },
   { tab: "extensions", icon: Puzzle, title: "MCPs & Tools", desc: "MCP servers and connectors.", status: "Working" },
   { tab: "advanced", icon: Wrench, title: "Advanced", desc: "Runtime and developer options.", status: "Developer", developerOnly: true },
 ];
 
 const globalCards: SettingsHubCard[] = [
-  { tab: "ai", icon: Sparkles, title: "AI Providers", desc: "Connect model providers.", status: "Needs setup" },
-  { tab: "cloud-account", icon: Cloud, title: "Matterhorn Cloud", desc: "Account and organization.", status: "Needs setup" },
+  { tab: "ai", icon: Cpu, title: "AI Providers", desc: "Connect model providers.", status: "Connect provider" },
+  { tab: "cloud-account", icon: Cloud, title: "Matterhorn Cloud", desc: "Account and organization.", status: "Configure cloud" },
   { tab: "appearance", icon: Paintbrush, title: "Appearance", desc: "Theme and text size.", status: "Working" },
   { tab: "updates", icon: RefreshCcw, title: "Updates", desc: "Version and update channel.", status: "Desktop only" },
+  { tab: "billing", icon: CreditCard, title: "Billing", desc: "Plans, checkout, and charging status.", status: "Preview" },
   { tab: "cloud-workers", icon: Cloud, title: "Cloud Workers Preview", desc: "Cloud worker instances.", status: "Cloud only", developerOnly: true },
   { tab: "environment", icon: Terminal, title: "Environment", desc: "Local runtime variables.", status: "Developer", developerOnly: true },
   { tab: "recovery", icon: ShieldCheck, title: "Recovery", desc: "Reset and repair diagnostics.", status: "Preview", developerOnly: true },
@@ -90,7 +95,7 @@ const globalCards: SettingsHubCard[] = [
 const projectSurfaceCards: ProjectSurfaceCard[] = [
   {
     section: "memory",
-    icon: BrainCircuit,
+    icon: Archive,
     title: "Memory review",
     desc: "Review suggestions before saving.",
     actionLabel: "Open",
@@ -121,11 +126,11 @@ const projectSurfaceCards: ProjectSurfaceCard[] = [
 const FEEDBACK_ACTION_CLASS =
   "matterhorn-feedback-action inline-flex items-center gap-1.5 rounded-md px-0.5 py-1 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--matterhorn-blue-rgb),0.28)]";
 const SETTINGS_HUB_SECTION_CLASS = "rounded-lg bg-dls-surface-muted/[0.06] p-3";
-const SETTINGS_HUB_GRID_CLASS = "grid grid-cols-[repeat(auto-fit,minmax(min(100%,21rem),1fr))] gap-1";
+const SETTINGS_HUB_GRID_CLASS = "grid grid-cols-1 gap-1 @lg/settings-general:grid-cols-2";
 
 function capabilityStatusToSettingsStatus(status: MatterhornCapabilityStatus): SettingsReadinessStatus {
   if (status === "working") return "Working";
-  if (status === "needs_setup") return "Needs setup";
+  if (status === "needs_setup") return "Review access";
   if (status === "preview") return "Preview";
   return "Not supported here";
 }
@@ -134,9 +139,13 @@ function getSectionStatus(
   sectionId: ProjectSurfaceSection,
   sections?: MatterhornSettingsSectionCapability[] | null,
 ) {
-  if (!sections?.length) return "Unavailable";
+  if (!sections?.length) return "Engine offline";
   const section = sections?.find((item) => item.section === sectionId);
   return section ? capabilityStatusToSettingsStatus(section.status) : "Not supported here";
+}
+
+function shouldShowSettingsStatus(status: SettingsReadinessStatus | ProjectSurfaceStatus) {
+  return String(status).toLowerCase() !== "working";
 }
 
 function SettingsCard(props: {
@@ -146,34 +155,41 @@ function SettingsCard(props: {
   status: SettingsHubCard["status"];
   onClick: () => void;
 }) {
+  const showStatus = shouldShowSettingsStatus(props.status);
+  const statusLabel = showStatus ? settingsReadinessStatusLabel(props.status) : null;
   const statusClass =
-    props.status === "Working"
-      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-      : props.status === "Needs setup"
-        ? "border-sky-500/30 bg-sky-500/10 text-sky-300"
-        : props.status === "Preview"
-          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+    props.status === "Connect wallet" ||
+    props.status === "Connect provider" ||
+    props.status === "Configure MCP" ||
+    props.status === "Review access" ||
+    props.status === "Platform setup" ||
+    props.status === "Configure cloud"
+        ? "text-sky-300"
+        : props.status === "Preview" || props.status === "Preview only"
+          ? "text-amber-300"
           : props.status === "Developer"
-            ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
-          : "border-slate-500/40 bg-slate-500/10 text-slate-300";
+            ? "text-violet-300"
+          : "text-dls-secondary";
 
   return (
     <button
       type="button"
       onClick={props.onClick}
-      className="group flex min-w-0 items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-dls-hover/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.34)]"
+      className="group grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-dls-surface-muted/[0.065] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.12] focus:outline-none focus-visible:bg-dls-surface-muted/[0.12] focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text transition-colors group-hover:bg-[rgba(var(--dls-accent-rgb),0.18)]">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.10)] text-dls-text transition-colors group-hover:bg-[rgba(var(--dls-accent-rgb),0.16)]">
         <props.icon size={16} />
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <div className="min-w-0 text-[13px] font-medium leading-5 text-dls-text">{props.title}</div>
-          <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-medium tracking-normal ${statusClass}`}>
-            {props.status}
-          </span>
+          {statusLabel ? (
+            <span className={`shrink-0 text-[11px] font-medium ${statusClass}`}>
+              {statusLabel}
+            </span>
+          ) : null}
         </div>
-        <div className="mt-0.5 text-[12px] leading-5 text-dls-text">{props.desc}</div>
+        <div className="mt-0.5 text-[12px] leading-5 text-dls-secondary">{props.desc}</div>
       </div>
       <ArrowRight size={14} className="shrink-0 text-dls-secondary" />
     </button>
@@ -186,16 +202,33 @@ function ProjectSurfaceRow(props: {
   desc: string;
   status: ProjectSurfaceStatus;
   actionLabel: string;
+  requiresWorkspace?: boolean;
+  workspaceReady?: boolean;
   onClick: () => void;
 }) {
+  const missingWorkspace = Boolean(props.requiresWorkspace && !props.workspaceReady);
+  const actionLabel = missingWorkspace ? "Create workspace" : props.actionLabel;
+  const showStatus = missingWorkspace || shouldShowSettingsStatus(props.status);
+  const statusLabel = showStatus
+    ? missingWorkspace
+      ? "Workspace needed"
+      : props.status === "Engine offline"
+        ? props.status
+        : settingsReadinessStatusLabel(props.status)
+    : null;
   const statusClass =
-    props.status === "Working"
-      ? "text-emerald-300"
-      : props.status === "Needs setup"
-        ? "text-sky-300"
-        : props.status === "Preview"
-          ? "text-amber-300"
-          : props.status === "Unavailable"
+    missingWorkspace
+      ? "text-dls-muted"
+      : props.status === "Connect wallet" ||
+          props.status === "Connect provider" ||
+          props.status === "Configure MCP" ||
+          props.status === "Review access" ||
+          props.status === "Platform setup" ||
+          props.status === "Configure cloud"
+            ? "text-sky-300"
+            : props.status === "Preview" || props.status === "Preview only"
+              ? "text-amber-300"
+          : props.status === "Engine offline"
             ? "text-red-300"
           : "text-dls-secondary";
 
@@ -203,7 +236,7 @@ function ProjectSurfaceRow(props: {
     <button
       type="button"
       onClick={props.onClick}
-      className="group flex min-w-0 items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-dls-hover/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.34)]"
+      className="group flex min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/[0.065] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.12] focus:outline-none focus-visible:bg-dls-surface-muted/[0.12] focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.34)]"
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-dls-hover/55 text-dls-text transition-colors group-hover:bg-dls-hover">
         <props.icon size={16} />
@@ -211,12 +244,16 @@ function ProjectSurfaceRow(props: {
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <div className="min-w-0 text-[13px] font-medium leading-5 text-dls-text">{props.title}</div>
-          <span className={`shrink-0 text-[11px] font-medium ${statusClass}`}>{props.status}</span>
+          {statusLabel ? (
+            <span className={`shrink-0 text-[11px] font-medium ${statusClass}`}>{statusLabel}</span>
+          ) : null}
         </div>
-        <div className="mt-0.5 text-[12px] leading-5 text-dls-secondary">{props.desc}</div>
+        <div className="mt-0.5 text-[12px] leading-5 text-dls-secondary">
+          {missingWorkspace ? "Create or connect a workspace first." : props.desc}
+        </div>
       </div>
       <div className="flex shrink-0 items-center gap-1 self-center text-[12px] font-medium text-dls-accent">
-        <span>{props.actionLabel}</span>
+        <span>{actionLabel}</span>
         <ArrowRight size={13} />
       </div>
     </button>
@@ -296,7 +333,7 @@ function TaskLogsSection(props: {
               </div>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] leading-4 text-dls-secondary">
                 <span>{formatTaskDesk(log.deskId)}</span>
-                <span>{getSessionActivityStatusLabel(log.status as SessionActivityStatus)}</span>
+                <span>{getTaskLogStatusLabel(log)}</span>
                 {log.waitingCount ? <span>{log.waitingCount} waiting</span> : null}
                 <span>{formatTaskSource(log.source)}</span>
               </div>
@@ -324,7 +361,7 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
   };
 
   return (
-    <div className="w-full max-w-4xl space-y-6">
+    <div className="@container/settings-general w-full max-w-4xl space-y-6">
       {/* Workspace settings */}
       <section className={SETTINGS_HUB_SECTION_CLASS}>
         <div className="px-2 pb-2 text-sm font-semibold text-dls-text">Workspace</div>
@@ -384,6 +421,8 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
               desc={card.desc}
               status={getSectionStatus(card.section, props.backendSettingsSections)}
               actionLabel={card.actionLabel}
+              requiresWorkspace={card.section !== "feedback"}
+              workspaceReady={Boolean(props.runtimeWorkspaceId)}
               onClick={projectSurfaceActions[card.section]}
             />
           ))}
@@ -397,7 +436,7 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
 
       {/* Feedback */}
       <section className="rounded-lg bg-dls-surface-muted/[0.08] p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-3 @lg/settings-general:flex-row @lg/settings-general:items-end @lg/settings-general:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <LifeBuoy size={14} className="text-dls-secondary" />
@@ -405,7 +444,7 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
             </div>
             <div className="mt-1 max-w-[58ch] text-[12px] leading-5 text-dls-secondary">{t("settings.feedback_desc")}</div>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5">
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5 @lg/settings-general:w-auto @lg/settings-general:shrink-0">
             <button
               type="button"
               className={FEEDBACK_ACTION_CLASS}

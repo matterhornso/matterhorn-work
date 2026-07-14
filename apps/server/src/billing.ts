@@ -170,7 +170,7 @@ export function activeMatterhornBillingPendingCheckout(
   if (!pendingCheckout) return null;
   if (!pendingCheckout.expiresAt) return pendingCheckout;
   const expiresAt = validDate(pendingCheckout.expiresAt);
-  if (!expiresAt) return pendingCheckout;
+  if (!expiresAt) return null;
   return expiresAt.getTime() > now.getTime() ? pendingCheckout : null;
 }
 
@@ -218,15 +218,68 @@ export function buildMatterhornBillingSetup(config: BillingProviderConfig): Matt
     return {
       mode: config.mode,
       provider: config.provider,
-      readyForTestCheckout: true,
+      readyForTestCheckout: false,
       readyForWebhooks: false,
       livePaymentsEnabled: false,
       checks: [
         setupCheck({
           id: "mock_mode",
-          label: "Mock checkout",
+          label: "Local plan preview",
           status: "preview",
-          description: "Plan changes are local test state only. No payment provider is contacted.",
+          description: "You can preview plan choices in this workspace. No checkout opens and no payment provider is contacted.",
+        }),
+        setupCheck({
+          id: "live_payments_disabled",
+          label: "Live payments",
+          status: "working",
+          description: "Live payments are disabled in this build.",
+        }),
+      ],
+    };
+  }
+
+  if (config.mode === "live") {
+    const hasLiveSecretKey = Boolean(config.stripeSecretKey?.trim().startsWith("sk_live_"));
+    const hasWebhookSecret = Boolean(config.stripeWebhookSecret?.trim());
+    const hasLivePrices = Boolean(config.stripePriceIds?.plus?.trim() && config.stripePriceIds?.max?.trim());
+    return {
+      mode: config.mode,
+      provider: config.provider,
+      readyForTestCheckout: false,
+      readyForWebhooks: false,
+      livePaymentsEnabled: false,
+      checks: [
+        setupCheck({
+          id: "live_mode_blocked",
+          label: "Live payment mode",
+          status: "needs_setup",
+          description: "Matterhorn must complete the billing integrity checklist before live payment mode can be enabled.",
+        }),
+        setupCheck({
+          id: "stripe_live_key_rejected",
+          label: "Live Stripe key",
+          status: hasLiveSecretKey ? "error" : "needs_setup",
+          description: hasLiveSecretKey
+            ? "A live Stripe key is present, but this build will not process live charges."
+            : "Live Stripe keys are not accepted in this build.",
+        }),
+        setupCheck({
+          id: "stripe_live_webhook_missing",
+          label: "Live webhook verification",
+          status: hasWebhookSecret ? "needs_setup" : "needs_setup",
+          description: "Live webhook handling requires a separate reviewed rollout with replay protection and account reconciliation.",
+        }),
+        setupCheck({
+          id: "stripe_live_prices_missing",
+          label: "Live price mapping",
+          status: hasLivePrices ? "needs_setup" : "needs_setup",
+          description: "Live price IDs are not used until live billing has a reviewed migration and rollback plan.",
+        }),
+        setupCheck({
+          id: "billing_integrity_review_required",
+          label: "Billing integrity review",
+          status: "needs_setup",
+          description: "Live billing requires audited checkout, webhook, entitlement, refund, export, and support workflows.",
         }),
         setupCheck({
           id: "live_payments_disabled",
@@ -261,25 +314,25 @@ export function buildMatterhornBillingSetup(config: BillingProviderConfig): Matt
           ? secretKeyIsTest
             ? "Configured for test-mode billing calls."
             : "Use a Stripe test secret key. Live keys are not accepted in this build."
-          : "Set MATTERHORN_STRIPE_SECRET_KEY for Stripe test checkout.",
+          : "A Matterhorn operator must add the Stripe test secret key before test checkout can open.",
       }),
       setupCheck({
         id: "stripe_webhook_secret",
         label: "Stripe webhook secret",
         status: hasWebhookSecret ? "working" : "needs_setup",
-        description: hasWebhookSecret ? "Configured for test webhook verification." : "Set MATTERHORN_STRIPE_WEBHOOK_SECRET before syncing subscription webhooks.",
+        description: hasWebhookSecret ? "Configured for test webhook verification." : "A Matterhorn operator must add the Stripe test webhook secret before subscriptions can sync.",
       }),
       setupCheck({
         id: "stripe_plus_price",
         label: "Plus price",
         status: hasPlusPrice ? "working" : "needs_setup",
-        description: hasPlusPrice ? "Stripe test price is configured for Matterhorn Plus." : "Set MATTERHORN_STRIPE_PRICE_ID_PLUS.",
+        description: hasPlusPrice ? "Stripe test price is configured for Matterhorn Plus." : "A Matterhorn operator must map a Stripe test price to Matterhorn Plus.",
       }),
       setupCheck({
         id: "stripe_max_price",
         label: "Max price",
         status: hasMaxPrice ? "working" : "needs_setup",
-        description: hasMaxPrice ? "Stripe test price is configured for Matterhorn Max." : "Set MATTERHORN_STRIPE_PRICE_ID_MAX.",
+        description: hasMaxPrice ? "Stripe test price is configured for Matterhorn Max." : "A Matterhorn operator must map a Stripe test price to Matterhorn Max.",
       }),
       setupCheck({
         id: "stripe_test_customer",
@@ -287,7 +340,7 @@ export function buildMatterhornBillingSetup(config: BillingProviderConfig): Matt
         status: hasTestCustomer ? "working" : "needs_setup",
         description: hasTestCustomer
           ? "Stripe test customer is configured for Customer Portal sessions."
-          : "Set MATTERHORN_STRIPE_TEST_CUSTOMER_ID to open Customer Portal sessions in test mode.",
+          : "A Matterhorn operator must add a Stripe test customer before the test billing portal can open.",
       }),
       setupCheck({
         id: "live_payments_disabled",
@@ -334,7 +387,7 @@ export function buildMatterhornBillingPlans(): MatterhornBillingPlan[] {
     {
       id: "max",
       name: "Matterhorn Max",
-      tagline: "Unlimited creation, cloud sync, and teams.",
+      tagline: "Unlimited creation and publishing allowances, plus expanded team limits.",
       price: { amountCents: 8999, currency: "USD", interval: "month" },
       ctaLabel: "Upgrade to Max",
       entitlements: buildPlanEntitlements("max"),
@@ -349,6 +402,32 @@ export function buildMatterhornBillingSubscription(planId: MatterhornBillingPlan
     interval: "month",
     cancelAtPeriodEnd: false,
   };
+}
+
+export function effectiveMatterhornBillingSubscription(
+  subscription: MatterhornBillingSubscription | null | undefined,
+  now = new Date(),
+): MatterhornBillingSubscription {
+  if (!subscription) return buildMatterhornBillingSubscription("free");
+
+  const statusCanGrantAccess = subscription.status === "active" || subscription.status === "trialing";
+  const periodEnd = validDate(subscription.currentPeriodEnd);
+  const periodExpired = Boolean(periodEnd && periodEnd.getTime() <= now.getTime());
+
+  if (subscription.planId === "free" || !statusCanGrantAccess || periodExpired) {
+    return {
+      ...subscription,
+      planId: "free",
+      status: subscription.status === "canceled" || subscription.status === "paused" || subscription.status === "past_due"
+        ? subscription.status
+        : "none",
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+    };
+  }
+
+  return subscription;
 }
 
 export function buildMatterhornBillingUsageSnapshot(): MatterhornBillingUsageSnapshot {
@@ -434,9 +513,11 @@ function buildMatterhornBillingAccountLinkage(input: {
   if (input.source === "mock_checkout") {
     return {
       source: input.source,
-      label: "Local test subscription",
+      label: pendingCheckout ? "Local checkout preview" : "Local checkout preview expired",
       status: "preview",
-      description: "The workspace plan is local test state. No live payment provider is linked.",
+      description: pendingCheckout
+        ? "A local checkout preview was started. It does not change plan access."
+        : "The prior local checkout preview is no longer pending. No live payment provider is linked.",
       hasProviderCustomer,
       hasProviderSubscription,
       pendingCheckout,
@@ -583,6 +664,14 @@ export function resolveBillingProviderConfigFromEnv(env: NodeJS.ProcessEnv): Bil
       mode: "live",
       provider: "stripe",
       currentPlanId,
+      stripeWebhookSecret: env.MATTERHORN_STRIPE_WEBHOOK_SECRET,
+      stripeSecretKey: env.MATTERHORN_STRIPE_SECRET_KEY,
+      stripeApiBaseUrl: env.MATTERHORN_STRIPE_API_BASE_URL,
+      stripeTestCustomerId: env.MATTERHORN_STRIPE_TEST_CUSTOMER_ID,
+      stripePriceIds: {
+        plus: env.MATTERHORN_STRIPE_PRICE_ID_PLUS,
+        max: env.MATTERHORN_STRIPE_PRICE_ID_MAX,
+      },
       livePaymentsEnabled: false,
     };
   }
@@ -679,9 +768,28 @@ function stripePriceId(config: BillingProviderConfig, planId: MatterhornBillingP
   return priceId;
 }
 
+function isLoopbackBillingHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
+}
+
+function isMatterhornBillingHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === "matterhorn.work" || normalized.endsWith(".matterhorn.work");
+}
+
 function safeStripeReturnUrl(value: string | undefined, fallbackPath: string): string {
   const trimmed = value?.trim();
-  if (trimmed && /^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed) {
+    try {
+      const parsed = new URL(trimmed);
+      const safeLocalDev = (parsed.protocol === "http:" || parsed.protocol === "https:") && isLoopbackBillingHost(parsed.hostname);
+      const safeMatterhorn = parsed.protocol === "https:" && isMatterhornBillingHost(parsed.hostname);
+      if (safeLocalDev || safeMatterhorn) return trimmed;
+    } catch {
+      // Fall through to the product-owned default.
+    }
+  }
   return `https://matterhorn.work${fallbackPath}`;
 }
 
@@ -702,6 +810,10 @@ function stringValue(value: unknown): string | null {
 
 function booleanValue(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function planIdValue(value: unknown): MatterhornBillingPlanId | null {
@@ -769,6 +881,12 @@ function isoFromStripeSeconds(value: unknown): string | null {
   return new Date(value * 1000).toISOString();
 }
 
+function checkoutPaymentStatusAllowsSync(value: unknown): boolean {
+  const status = stringValue(value);
+  if (!status) return true;
+  return status === "paid" || status === "no_payment_required";
+}
+
 function stripeMetadata(object: Record<string, unknown>): Record<string, unknown> {
   return objectValue(object.metadata) ?? {};
 }
@@ -782,6 +900,7 @@ async function postStripeForm(config: BillingProviderConfig, path: string, param
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: params,
+    signal: AbortSignal.timeout(30_000),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -799,6 +918,8 @@ async function postStripeForm(config: BillingProviderConfig, path: string, param
   return payload as Record<string, unknown>;
 }
 
+const STRIPE_WEBHOOK_SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
+
 function verifyStripeSignature(input: MatterhornBillingWebhookStripeRequest, secret: string): boolean {
   const raw = input.rawPayload;
   const signature = input.signature;
@@ -807,6 +928,10 @@ function verifyStripeSignature(input: MatterhornBillingWebhookStripeRequest, sec
   const timestamp = parts.find((part) => part.startsWith("t="))?.slice(2);
   const signatures = parts.filter((part) => part.startsWith("v1=")).map((part) => part.slice(3));
   if (!timestamp || signatures.length === 0) return false;
+  const timestampSeconds = Number(timestamp);
+  if (!Number.isFinite(timestampSeconds)) return false;
+  const ageSeconds = Math.abs(Math.floor(Date.now() / 1000) - timestampSeconds);
+  if (ageSeconds > STRIPE_WEBHOOK_SIGNATURE_TOLERANCE_SECONDS) return false;
   const expected = createHmac("sha256", secret).update(`${timestamp}.${raw}`).digest("hex");
   const expectedBuffer = Buffer.from(expected, "hex");
   return signatures.some((candidate) => {
@@ -886,6 +1011,7 @@ export function createStripeTestBillingProvider(config: BillingProviderConfig): 
       const eventIsLive = payload.livemode === true;
       const eventId = stringValue(payload.id);
       const eventType = stringValue(payload.type);
+      const eventCreatedAt = isoFromStripeSeconds(numberValue(payload.created));
       const dataObject = objectValue(objectValue(payload.data)?.object);
       const base = {
         success: true as const,
@@ -894,6 +1020,7 @@ export function createStripeTestBillingProvider(config: BillingProviderConfig): 
         livemode: false as const,
         eventId,
         eventType,
+        eventCreatedAt,
       };
       if (!verified || eventIsLive || !dataObject || !eventType) {
         return { ...base, handled: false };
@@ -910,17 +1037,20 @@ export function createStripeTestBillingProvider(config: BillingProviderConfig): 
         planIdValue(subscriptionDetailsMetadata.plan_id) ??
         reference.planId ??
         planIdFromStripeSubscriptionItems(config, dataObject);
+      const providerCheckoutSessionId = stringValue(dataObject.id);
       const providerCustomerId = stringValue(dataObject.customer);
       const providerSubscriptionId =
         stringValue(dataObject.subscription) ??
         stringValue(dataObject.id);
       if (eventType === "checkout.session.completed") {
+        const paymentSettled = checkoutPaymentStatusAllowsSync(dataObject.payment_status);
         return {
           ...base,
-          handled: Boolean(workspaceId && metadataPlanId),
+          handled: Boolean(workspaceId && metadataPlanId && paymentSettled),
           workspaceId,
           planId: metadataPlanId,
           subscriptionStatus: "active",
+          providerCheckoutSessionId,
           providerCustomerId,
           providerSubscriptionId,
           currentPeriodStart: null,

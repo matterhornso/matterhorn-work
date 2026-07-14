@@ -33,7 +33,8 @@ function classifyError(error: unknown): "connection" | "server" | "unknown" {
     msg.includes("503") ||
     msg.includes("504") ||
     msg.includes("server error") ||
-    msg.includes("internal error")
+    msg.includes("internal error") ||
+    msg.includes("unreadable response")
   ) {
     return "server";
   }
@@ -103,12 +104,9 @@ export function ErrorState({
     : detail ?? copy.detail;
   const showDetail = Boolean(effectiveDetail);
 
-  // When a title override is given and the error is classified as
-  // connection, prefer the more specific title from COPY so the user
-  // sees the canonical "engine offline" wording.
-  const effectiveTitle = title != null && kind !== "connection"
-    ? title
-    : title ?? copy.title;
+  // Explicit titles come from the surface that knows what failed. Keep the
+  // classifier copy for generic load errors only.
+  const effectiveTitle = title ?? copy.title;
 
   const iconClass = tone === "memory" ? "text-amber-400" : "text-amber-400";
   const textClass = tone === "memory" ? "text-amber-100" : "text-dls-text";

@@ -6,6 +6,18 @@ The default setup uses local stdio MCP servers launched by the client. The serve
 
 After setup, use [Matterhorn Work Agent Operator Workflow](./agent-operator-workflow.md) for the copy-paste Codex/Claude loop: doctor, session, prompt, event watch, file reads/writes, approvals, and Bittensor chat.
 
+## What “Connected” Means
+
+Matterhorn distinguishes configuration from a live MCP runtime:
+
+- **Configured:** an MCP entry exists in project or global OpenCode configuration.
+- **Connected:** the managed OpenCode runtime initialized that MCP process and can list its tools.
+- **Needs auth / failed / disabled:** the runtime cannot currently provide tools for the stated reason.
+
+A connected MCP is not proof that a browser wallet, OAuth account, paid provider, or every upstream API is available. For example, the local wallet MCP can be connected while the Wallet rail still reports that no browser wallet is connected.
+
+The product UI should say **MCP server active** rather than **app connected** when it is reporting OpenCode MCP status.
+
 ## Prerequisites
 
 Start Matterhorn Work locally and copy the client and host tokens from the startup output:
@@ -46,11 +58,19 @@ Targets:
 
 - `json`, `claude`, `claude-desktop`, and `cursor` print the common `mcpServers` JSON shape.
 - `env` prints shell exports.
-- `codex` currently prints the common JSON shape for review, but Codex itself is best configured with `codex mcp add` or `~/.codex/config.toml`.
+- `codex` prints native `mcp_servers` TOML sections for `~/.codex/config.toml`.
 
 ## Codex
 
 Codex supports local stdio MCP servers with environment variables through `codex mcp add` or `~/.codex/config.toml`.
+
+Generate the complete Codex TOML profile:
+
+```bash
+matterhorn-work mcp config --target codex --profile full
+```
+
+Append the generated sections to `~/.codex/config.toml`, then restart or refresh Codex.
 
 Add the server-control MCP:
 

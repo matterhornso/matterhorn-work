@@ -39,7 +39,7 @@ export function StatusToast(props: StatusToastProps) {
 
   return (
     <div
-      className="w-full max-w-[23rem] overflow-hidden rounded-lg border border-dls-border/45 bg-dls-surface shadow-[var(--dls-shell-shadow)] animate-in fade-in slide-in-from-top-2 duration-200"
+      className="relative isolate w-full max-w-[23rem] overflow-hidden rounded-lg bg-dls-canvas shadow-[0_4px_8px_rgba(0,0,0,0.18)] ring-1 ring-dls-border/45 animate-in fade-in slide-in-from-top-2 duration-200"
       role={liveRole}
       aria-live={liveRole === "alert" ? "assertive" : "polite"}
     >

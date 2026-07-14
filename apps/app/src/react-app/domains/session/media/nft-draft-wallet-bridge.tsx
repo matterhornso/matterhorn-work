@@ -75,7 +75,7 @@ export function NftDraftWalletBridge(props: NftDraftWalletBridgeProps) {
     const preview = props.mintPreview;
     const transactionPlan = preview?.transactionPlan;
     if (!transactionPlan) {
-      setWalletError("Prepare a mint preview before signing.");
+      setWalletError("Prepare a mint handoff before signing.");
       return;
     }
     if (!account?.address) {
@@ -83,7 +83,7 @@ export function NftDraftWalletBridge(props: NftDraftWalletBridgeProps) {
       return;
     }
     if (transactionPlan.sender && transactionPlan.sender.toLowerCase() !== account.address.toLowerCase()) {
-      setWalletError("The connected Sui wallet does not match the mint preview sender.");
+      setWalletError("The connected Sui wallet does not match the mint handoff sender.");
       return;
     }
 
@@ -126,7 +126,7 @@ export function NftDraftWalletBridge(props: NftDraftWalletBridgeProps) {
     const preview = props.listingPreview;
     const transactionPlan = preview?.transactionPlan;
     if (!transactionPlan) {
-      setWalletError("Prepare a listing preview before signing.");
+      setWalletError("Prepare a listing handoff before signing.");
       return;
     }
     if (!account?.address) {
@@ -134,7 +134,7 @@ export function NftDraftWalletBridge(props: NftDraftWalletBridgeProps) {
       return;
     }
     if (transactionPlan.sender && transactionPlan.sender.toLowerCase() !== account.address.toLowerCase()) {
-      setWalletError("The connected Sui wallet does not match the listing preview sender.");
+      setWalletError("The connected Sui wallet does not match the listing handoff sender.");
       return;
     }
 

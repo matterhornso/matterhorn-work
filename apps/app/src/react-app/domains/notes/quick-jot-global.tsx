@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useLocation } from "react-router-dom";
 
 import { ACTIVE_WORKSPACE_CHANGED_EVENT, readActiveWorkspaceId } from "../../shell/session-memory";
 import { useQuickJotContext } from "./quick-jot-provider";
@@ -22,11 +23,22 @@ function readWorkspaceSnapshot() {
 
 export function QuickJotGlobal() {
   const { open, closeQuickJot } = useQuickJotContext();
-  const workspaceId = useSyncExternalStore(
+  const location = useLocation();
+  const storedWorkspaceId = useSyncExternalStore(
     subscribeToStorage,
     readWorkspaceSnapshot,
     readWorkspaceSnapshot,
   );
+  const routeWorkspaceId = useMemo(() => {
+    const match = location.pathname.match(/^\/workspace\/([^/]+)(?:\/|$)/);
+    if (!match) return "";
+    try {
+      return decodeURIComponent(match[1] ?? "").trim();
+    } catch {
+      return "";
+    }
+  }, [location.pathname]);
+  const workspaceId = routeWorkspaceId && routeWorkspaceId === storedWorkspaceId ? routeWorkspaceId : "";
 
   useEffect(() => {
     if (!workspaceId.trim() && open) closeQuickJot();

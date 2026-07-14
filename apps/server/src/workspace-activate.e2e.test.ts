@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -108,8 +108,7 @@ describe("workspace activation", () => {
       (request) => request.pathname === "/instance/dispose",
     );
     expect(reloadRequest).toBeDefined();
-    expect(reloadRequest?.search).toContain(
-      `directory=${encodeURIComponent(workspaceRoot)}`,
-    );
+    const reloadDirectory = new URLSearchParams(reloadRequest?.search).get("directory");
+    expect(reloadDirectory).toBe(await realpath(workspaceRoot));
   });
 });

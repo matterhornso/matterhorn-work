@@ -119,6 +119,7 @@ export type MatterhornWorkflowPromptPack = {
 type MatterhornCustomerWorkflowCategory =
   | "bittensor"
   | "markets"
+  | "web3"
   | "wellness"
   | "decentralized_services"
   | "future";
@@ -182,13 +183,13 @@ type MatterhornCustomerWorkflowTemplate = {
     recommendedSurface: "protocol_desk" | "workflow_chat" | "future_service";
   };
   ui: {
-    iconHint: "bittensor" | "hyperliquid" | "polymarket" | "wellness" | "services" | "blank";
+    iconHint: "bittensor" | "hyperliquid" | "polymarket" | "sui" | "wellness" | "services" | "blank";
     accent: "matterhorn_blue" | "neutral" | "caution";
     shortDescription: string;
   };
   routing: {
-    chatMode: "bittensor" | "hyperliquid" | "polymarket" | "wellness" | "services" | "general";
-    opensPanel?: "bittensor" | "hyperliquid" | "polymarket";
+    chatMode: "bittensor" | "hyperliquid" | "polymarket" | "sui" | "wellness" | "services" | "general";
+    opensPanel?: "bittensor" | "hyperliquid" | "polymarket" | "sui";
     startsSession: true;
   };
   recommendedCommands?: {
@@ -246,8 +247,8 @@ const COMMON_SAFETY = {
 } as const;
 
 const WELLNESS_PROMPTS = [
-  "Stage 1 — Intake: capture audience, level, constraints, public context, and redacted client goals. Output: intake_summary.md",
-  "Stage 2 — Goals & constraints: define outcomes, duration, equipment, schedule limits, and non-medical boundaries. Output: goals_constraints.md",
+  "Stage 1 — Intake: capture audience, level, constraints, public context, and redacted client goals. When asking Program Goal, include Improve VO2 max and Train for endurance as separate options alongside body composition, strength, mobility, and general wellness. Allow a custom goal. Output: intake_summary.md",
+  "Stage 2 — Goals & constraints: define outcomes, duration, equipment, schedule limits, and non-medical boundaries. Preserve VO2 max and endurance as distinct training outcomes when selected. Output: goals_constraints.md",
   "Stage 3 — Movement plan: draft educational training, mobility, or yoga sessions by level and available equipment. Output: program_design_plan.md",
   "Stage 4 — Nutrition education: build general habits, grocery ideas, and meal structure without prescribing. Output: nutrition_education_plan.md",
   "Stage 5 — Weekly schedule & check-ins: build the weekly calendar, check-in cadence, review questions, and progress tracker. Output: weekly_schedule.md + progress_tracker.md",
@@ -639,6 +640,67 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     recommendedCommands: {
       cli: ['matterhorn-work crypto chat --message "preview Polymarket market" --json'],
       mcp: ["matterhorn_polymarket_prepare_handoff"],
+    },
+  },
+  {
+    id: "sui_wallet_workflow",
+    name: "Use Sui",
+    summary: "Read public Sui account context, prepare transfer previews, and save public transaction receipts.",
+    promise: "Sui signing stays in your wallet. Matterhorn never asks for seed phrases, private keys, raw signatures, signed payloads, or wallet exports.",
+    category: "web3",
+    examplePrompts: ["Show my Sui wallet", "Prepare a Sui transfer preview", "Import a Sui transaction receipt"],
+    expectedArtifacts: [
+      { id: "wallet_card", name: "Sui Wallet Card", mimeType: "application/json", public: true },
+      { id: "transfer_preview", name: "Transfer Preview", mimeType: "application/json", public: true },
+      { id: "receipt_evidence", name: "Receipt Evidence", mimeType: "application/json", public: true },
+    ],
+    requiredContext: [
+      {
+        id: "wallet_address",
+        label: "Public Sui address",
+        required: true,
+        type: "text",
+        helpText: "Public Sui address only. Never provide a seed phrase, private key, or wallet export.",
+      },
+    ],
+    optionalContext: [
+      { id: "recipient_address", label: "Recipient public Sui address", required: false, type: "text" },
+      { id: "amount_mist", label: "Transfer amount in MIST", required: false, type: "number" },
+    ],
+    status: "preview_only",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: ["private key", "seed phrase", "mnemonic", "raw signature", "signed payload", "wallet export"],
+    handoffReceiptSupport: {
+      supported: true,
+      types: ["transfer_preview", "receipt_evidence"],
+      description: "Produces a non-custodial transfer preview and stores only public receipt evidence after wallet submission.",
+    },
+    serviceHooks: [{ hook: "sui", status: "preview_only" }],
+    chatMode: "crypto chat",
+    launch: {
+      primaryCta: "Open Sui desk",
+      secondaryCta: "Preview transfer",
+      defaultPrompt: "Show my Sui wallet",
+      handoffContextLabel: "Public Sui address",
+      recommendedSurface: "protocol_desk",
+    },
+    ui: {
+      iconHint: "sui",
+      accent: "matterhorn_blue",
+      shortDescription: "Read Sui accounts, preview transfers, and import receipts. Signing stays in your wallet.",
+    },
+    routing: {
+      chatMode: "sui",
+      opensPanel: "sui",
+      startsSession: true,
+    },
+    recommendedCommands: {
+      cli: ['matterhorn-work sui account "<public Sui address>" --json'],
     },
   },
   {

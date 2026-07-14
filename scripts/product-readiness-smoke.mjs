@@ -33,6 +33,7 @@ function parseArgs(argv) {
       process.env.MATTERHORN_MEDIA_SMOKE_WORKSPACE_ID ||
       "",
     includeGeneratedMediaFlow: false,
+    requireProduction: false,
     strict: false,
     dryRun: false,
     json: false,
@@ -65,6 +66,9 @@ function parseArgs(argv) {
         break;
       case "--skip-generated-media-flow":
         config.includeGeneratedMediaFlow = false;
+        break;
+      case "--require-production":
+        config.requireProduction = true;
         break;
       case "--timeout-ms":
         config.timeoutMs = Number(next());
@@ -113,15 +117,18 @@ function help() {
     "- team access summary",
     "- project data ledger and redacted export",
     "- generated media history",
+    "- billing provider and checkout/webhook readiness",
     "",
     "Usage:",
     "  pnpm dev:generated-media-smoke",
     "  pnpm smoke:product-readiness",
     "  node scripts/product-readiness-smoke.mjs --server-url <url> --token <token> --strict",
+    "  node scripts/product-readiness-smoke.mjs --server-url <url> --token <token> --require-production --json",
     "  node scripts/product-readiness-smoke.mjs --dry-run --json",
     "  node scripts/product-readiness-smoke.mjs --dry-run --markdown-output product-readiness.md",
     "",
     "Add --include-generated-media-flow to also run the full image -> Walrus -> Sui NFT receipt flow.",
+    "Add --require-production to reject mock billing and local/mock generated-media readiness.",
   ].join("\n");
 }
 
@@ -138,6 +145,7 @@ function buildPlannedStages(config) {
     ["team.access_summary", "Read local team access summary"],
     ["ledger.project", "Read project data ledger"],
     ["ledger.export", "Read redacted data ledger export"],
+    ["billing.production_readiness", "Read billing production readiness"],
     ["generated_media.production_readiness", "Read generated media production readiness"],
     ["generated_media.history", "Read generated media history"],
   ].map(([id, label]) => ({ id, label }));
@@ -265,6 +273,7 @@ function runGeneratedMediaProductionReadiness(config) {
       "--json",
     ];
     if (config.workspaceId) args.push("--workspace-id", config.workspaceId);
+    if (config.requireProduction) args.push("--require-production");
     const child = spawn("node", args, { stdio: ["ignore", "pipe", "pipe"], env: process.env });
     let stdout = "";
     let stderr = "";
@@ -326,6 +335,116 @@ function runProductionCorsReadiness(config) {
   });
 }
 
+function billingProductionReadinessFailure(status) {
+  const checks = Array.isArray(status?.setup?.checks) ? status.setup.checks : [];
+  const error = new Error("production readiness requires verified Stripe test checkout and webhooks");
+  error.payload = {
+    mode: status?.mode ?? "unknown",
+    provider: status?.provider ?? "unknown",
+    readyForTestCheckout: status?.setup?.readyForTestCheckout === true,
+    readyForWebhooks: status?.setup?.readyForWebhooks === true,
+    livePaymentsEnabled: status?.setup?.livePaymentsEnabled === true,
+    checks: checks.map((check) => ({
+      id: check.id,
+      status: check.status,
+    })),
+  };
+  return error;
+}
+
+function generatedMediaReadinessFailure(result) {
+  const blockers = Array.isArray(result.payload?.blockers) ? result.payload.blockers : [];
+  const error = new Error(
+    `generated media production readiness is blocked by ${blockers.length || "unreported"} setup requirement${blockers.length === 1 ? "" : "s"}`,
+  );
+  error.payload = {
+    mode: result.payload?.mode ?? "unknown",
+    status: result.payload?.status ?? "unknown",
+    ready: result.payload?.ready === true,
+    blockerCount: blockers.length,
+    blockers: blockers.map((blocker) => ({
+      key: blocker.key,
+      label: blocker.label,
+      status: blocker.status,
+    })),
+  };
+  return error;
+}
+
+function deriveLaunchBlockers(stages) {
+  return stages
+    .filter((stage) => stage.status === "fail")
+    .map((stage) => {
+      if (stage.id === "billing.production_readiness") {
+        return {
+          id: "billing.stripe_test",
+          stageId: stage.id,
+          owner: "Matterhorn operator",
+          label: "Stripe test billing",
+          action: "Configure Stripe test checkout and signed webhooks, then verify both paths while live charging stays disabled.",
+          checks: Array.isArray(stage.details?.checks) ? stage.details.checks : [],
+        };
+      }
+      if (stage.id === "generated_media.production_readiness") {
+        const requirements = Array.isArray(stage.details?.blockers)
+          ? stage.details.blockers.map((blocker) => ({ label: blocker.label, status: blocker.status }))
+          : [];
+        return {
+          id: "generated_media.platform_setup",
+          stageId: stage.id,
+          owner: "Matterhorn operator",
+          label: "Generated-media production services",
+          action: requirements.length > 0
+            ? `Configure and verify: ${requirements.map((item) => item.label).join(", ")}.`
+            : "Configure and verify the production image, storage, and Sui publishing services.",
+          requirements,
+        };
+      }
+      if (stage.id === "generated_media.flow" && stage.details?.code === "billing_entitlement_limit_reached") {
+        return {
+          id: "generated_media.entitlement",
+          stageId: stage.id,
+          owner: "Workspace billing owner",
+          label: "Generated-image allowance",
+          action: stage.details?.resetsAt
+            ? `Use a legitimate Plus or Max test entitlement, or wait for the allowance to reset at ${stage.details.resetsAt}.`
+            : "Use a legitimate Plus or Max test entitlement, or wait for the workspace allowance to reset.",
+          used: stage.details?.used ?? null,
+          limit: stage.details?.limit ?? null,
+          resetsAt: stage.details?.resetsAt ?? null,
+        };
+      }
+      return {
+        id: stage.id,
+        stageId: stage.id,
+        owner: "Matterhorn operator",
+        label: stage.label,
+        action: stage.error || "Review and resolve this failed launch check.",
+      };
+    });
+}
+
+function generatedMediaFlowFailure(result) {
+  const stages = Array.isArray(result.payload?.stages) ? result.payload.stages : [];
+  const failedStage = stages.find((stage) => stage.status === "fail");
+  const details = failedStage?.details?.details && typeof failedStage.details.details === "object"
+    ? failedStage.details.details
+    : {};
+  const error = new Error(
+    `generated media flow stopped at ${failedStage?.id ?? "unknown stage"}: ${failedStage?.details?.message ?? failedStage?.error ?? "flow did not report ready"}`,
+  );
+  error.payload = {
+    failedStage: failedStage?.id ?? null,
+    code: failedStage?.details?.code ?? null,
+    entitlementKey: details.entitlementKey ?? null,
+    currentPlanId: details.currentPlanId ?? null,
+    used: details.used ?? null,
+    limit: details.limit ?? null,
+    resetsAt: details.resetsAt ?? null,
+  };
+  return error;
+}
+
 function markdownEscape(value) {
   return String(value ?? "")
     .replace(/\\/g, "\\\\")
@@ -357,6 +476,7 @@ async function runProductReadinessSmoke(config) {
       generatedAt: new Date().toISOString(),
       serverUrl: config.serverUrl,
       workspaceId: "",
+      requireProduction: config.requireProduction,
     },
     safety: {
       nonCustodial: true,
@@ -369,6 +489,7 @@ async function runProductReadinessSmoke(config) {
       fail: 0,
       skip: 0,
     },
+    launchBlockers: [],
     artifacts: {},
     stages: [],
   };
@@ -380,8 +501,15 @@ async function runProductReadinessSmoke(config) {
       status: "planned",
       command: stage.id === "generated_media.flow"
         ? ["node", "scripts/generated-media-flow-smoke.mjs", "--strict"]
+        : stage.id === "billing.production_readiness"
+          ? ["GET", "<server>", "/workspace/<id>/billing/status"]
         : stage.id === "generated_media.production_readiness"
-          ? ["node", "scripts/generated-media-production-readiness.mjs", "--json"]
+          ? [
+              "node",
+              "scripts/generated-media-production-readiness.mjs",
+              ...(config.requireProduction ? ["--require-production"] : []),
+              "--json",
+            ]
         : stage.id === "production.cors_readiness"
           ? ["node", "scripts/production-cors-readiness.mjs", "--require-production"]
         : ["GET", "<server>", stage.id],
@@ -407,14 +535,16 @@ async function runProductReadinessSmoke(config) {
         details: error?.payload,
       });
       report.summary.fail += 1;
-      if (config.strict) throw error;
       return null;
     }
   }
 
   try {
     const workspaceId = await stage("workspace.resolve", "Resolve active workspace", () => resolveWorkspaceId(config));
-    if (!workspaceId) return report;
+    if (!workspaceId) {
+      report.launchBlockers = deriveLaunchBlockers(report.stages);
+      return report;
+    }
     report.metadata.workspaceId = workspaceId;
 
     await stage("production.cors_readiness", "Check production CORS readiness", async () => {
@@ -556,9 +686,35 @@ async function runProductReadinessSmoke(config) {
       return payload;
     });
 
+    await stage("billing.production_readiness", "Read billing production readiness", async () => {
+      const payload = unwrap(await fetchJson(config, `/workspace/${encodeURIComponent(workspaceId)}/billing/status`));
+      assert(payload.version === "matterhorn.billing.v1", "billing status version mismatch");
+      const status = payload.status;
+      assert(status?.setup, "billing status missing setup readiness");
+      assert(status.setup.livePaymentsEnabled === false, "product readiness must not enable live charges");
+      if (config.requireProduction) {
+        const readyForProductionProbe = status.mode === "phase1_stripe_test" &&
+          status.provider === "stripe" &&
+          status.setup.readyForTestCheckout === true &&
+          status.setup.readyForWebhooks === true;
+        if (!readyForProductionProbe) throw billingProductionReadinessFailure(status);
+      }
+      report.artifacts.billingProductionReadiness = {
+        mode: status.mode,
+        provider: status.provider,
+        readyForTestCheckout: status.setup.readyForTestCheckout,
+        readyForWebhooks: status.setup.readyForWebhooks,
+        livePaymentsEnabled: status.setup.livePaymentsEnabled,
+        checks: Array.isArray(status.setup.checks)
+          ? status.setup.checks.map((check) => ({ id: check.id, status: check.status }))
+          : [],
+      };
+      return report.artifacts.billingProductionReadiness;
+    });
+
     await stage("generated_media.production_readiness", "Read generated media production readiness", async () => {
       const result = await runGeneratedMediaProductionReadiness({ ...config, workspaceId });
-      assert(result.code === 0, result.stderr || result.stdout || "generated media production readiness failed");
+      if (result.code !== 0) throw generatedMediaReadinessFailure(result);
       assert(result.payload?.version === "matterhorn.generated-media-production-readiness.v1", "generated media production readiness version mismatch");
       assert(result.payload?.ok === true, "generated media production readiness safety checks failed");
       assert(result.payload?.safety?.publicWritesDuringDiagnostics === false, "generated media production readiness performed public writes");
@@ -593,7 +749,7 @@ async function runProductReadinessSmoke(config) {
     if (config.includeGeneratedMediaFlow) {
       await stage("generated_media.flow", "Run image to Sui NFT receipt flow smoke", async () => {
         const result = await runGeneratedMediaFlow({ ...config, workspaceId });
-        assert(result.code === 0, result.stderr || result.stdout || "generated media flow failed");
+        if (result.code !== 0) throw generatedMediaFlowFailure(result);
         assert(result.payload?.ready === true, "generated media flow did not report ready");
         assert(result.payload?.safety?.nonCustodial === true, "generated media flow lost non-custodial safety");
         assert(result.payload?.safety?.liveSubmissionEnabled === false, "generated media flow must not enable live submission");
@@ -620,6 +776,8 @@ async function runProductReadinessSmoke(config) {
     report.error = error instanceof Error ? error.message : String(error);
   }
 
+  report.launchBlockers = deriveLaunchBlockers(report.stages);
+
   return report;
 }
 
@@ -637,6 +795,9 @@ function emitReport(report, config) {
     const reason = stage.reason ? ` (${stage.reason})` : "";
     const error = stage.error ? ` (${stage.error})` : "";
     process.stdout.write(`- ${String(stage.status).toUpperCase()} ${stage.id}: ${stage.label}${reason}${error}\n`);
+  }
+  for (const blocker of report.launchBlockers ?? []) {
+    process.stdout.write(`- BLOCKED ${blocker.label} [${blocker.owner}]: ${blocker.action}\n`);
   }
   if (config.jsonOutput) process.stdout.write(`JSON report: ${config.jsonOutput}\n`);
   if (config.markdownOutput) process.stdout.write(`Markdown report: ${config.markdownOutput}\n`);
@@ -665,11 +826,27 @@ function buildMarkdownReport(report) {
     `- Failed: ${Number(report.summary.fail ?? 0)}`,
     `- Skipped: ${Number(report.summary.skip ?? 0)}`,
     "",
+    "## Launch blockers",
+    "",
+  ];
+
+  if ((report.launchBlockers ?? []).length === 0) {
+    lines.push("None.", "");
+  } else {
+    for (const blocker of report.launchBlockers) {
+      lines.push(
+        `- **${markdownEscape(blocker.label)}** (${markdownEscape(blocker.owner)}): ${redactMarkdownText(blocker.action)}`,
+      );
+    }
+    lines.push("");
+  }
+
+  lines.push(
     "## Stages",
     "",
     "| Stage | Status | Label | Detail |",
     "| --- | --- | --- | --- |",
-  ];
+  );
 
   for (const stage of report.stages) {
     const detail = stage.reason || stage.error || (Array.isArray(stage.command) ? stage.command.join(" ") : "");
@@ -703,7 +880,7 @@ async function main() {
   }
   const report = await runProductReadinessSmoke(config);
   emitReport(report, config);
-  if (config.strict && !report.ready) process.exit(1);
+  if ((config.strict || config.requireProduction) && !report.ready) process.exit(1);
 }
 
 main().catch((error) => {

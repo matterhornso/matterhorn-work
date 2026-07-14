@@ -24,6 +24,7 @@ const priorEnv = {
   tokenStore: process.env.OPENWORK_TOKEN_STORE,
   memoryRoot: process.env.MATTERHORN_WORK_MEMORY_ROOT,
   opencodeDb: process.env.OPENCODE_DB,
+  billingCurrentPlan: process.env.MATTERHORN_BILLING_CURRENT_PLAN,
 };
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
@@ -196,6 +197,7 @@ afterEach(async () => {
   restoreEnv("tokenStore", "OPENWORK_TOKEN_STORE");
   restoreEnv("memoryRoot", "MATTERHORN_WORK_MEMORY_ROOT");
   restoreEnv("opencodeDb", "OPENCODE_DB");
+  restoreEnv("billingCurrentPlan", "MATTERHORN_BILLING_CURRENT_PLAN");
 });
 
 describe("project data ledger routes", () => {
@@ -614,13 +616,8 @@ describe("project data ledger routes", () => {
   });
 
   test("team access token changes appear as redacted access ledger rows", async () => {
+    process.env.MATTERHORN_BILLING_CURRENT_PLAN = "max";
     const { base } = await boot();
-
-    const upgraded = await jsonFetch(base, "/workspace/ws_ledger/billing/checkout", {
-      method: "POST",
-      body: JSON.stringify({ planId: "max" }),
-    });
-    expect(upgraded.response.status).toBe(200);
 
     const created = await hostFetch(base, "/workspace/ws_ledger/backend/team-access/tokens", {
       method: "POST",

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -21,6 +21,24 @@ const MAX_NOTE_BODY_BYTES = 500_000;
 const MAX_NOTE_TITLE_LENGTH = 160;
 const MAX_NOTE_TAGS = 24;
 const MAX_NOTE_LINKS = 24;
+const noteMutationQueues = new Map<string, Promise<void>>();
+
+async function withNoteMutationLock<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const previous = noteMutationQueues.get(key) ?? Promise.resolve();
+  let release = () => {};
+  const ticket = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.catch(() => undefined).then(() => ticket);
+  noteMutationQueues.set(key, queued);
+  await previous.catch(() => undefined);
+  try {
+    return await task();
+  } finally {
+    release();
+    if (noteMutationQueues.get(key) === queued) noteMutationQueues.delete(key);
+  }
+}
 
 interface MatterhornNoteIndex {
   version: typeof MATTERHORN_NOTES_INDEX_VERSION;
@@ -44,6 +62,10 @@ export class MatterhornNotesStore {
   }
 
   async initialize(): Promise<void> {
+    await withNoteMutationLock(this.indexPath, () => this.initializeUnlocked());
+  }
+
+  private async initializeUnlocked(): Promise<void> {
     await mkdir(this.notesDir, { recursive: true });
     await mkdir(this.indexDir, { recursive: true });
     try {
@@ -84,40 +106,43 @@ export class MatterhornNotesStore {
   }
 
   async createNote(input: MatterhornNoteCreateRequest): Promise<MatterhornNote> {
-    await this.initialize();
-    const now = new Date().toISOString();
-    const body = normalizeBody(input.body);
-    const title = normalizeTitle(input.title, body);
-    if (!title && !body) {
-      throw new Error("A note needs a title or body.");
-    }
-    const note: MatterhornNote = {
-      version: MATTERHORN_NOTE_VERSION,
-      id: `note_${randomUUID().replace(/-/g, "").slice(0, 18)}`,
-      workspaceId: this.workspaceId,
-      title: title || "Untitled note",
-      body,
-      tags: normalizeTags(input.tags),
-      links: normalizeLinks(input.links),
-      ...(normalizeDesk(input.desk) ? { desk: normalizeDesk(input.desk)! } : {}),
-      ...(normalizeOptionalId(input.sessionId) ? { sessionId: normalizeOptionalId(input.sessionId)! } : {}),
-      ...(normalizeOptionalId(input.taskId) ? { taskId: normalizeOptionalId(input.taskId)! } : {}),
-      ...(input.outputPath ? { outputPath: normalizePathLike(input.outputPath) } : {}),
-      source: normalizeSource(input.source),
-      filePath: noteFilePathForDay(dayFromIso(now)),
-      createdAt: now,
-      updatedAt: now,
-    };
-    const withDerivedLinks = { ...note, links: deriveLinks(note) };
-    const index = await this.readIndex();
-    index.entries[withDerivedLinks.id] = withDerivedLinks;
-    await this.writeIndex(index);
-    await this.renderDay(dayFromIso(withDerivedLinks.createdAt));
-    return withDerivedLinks;
+    return withNoteMutationLock(this.indexPath, async () => {
+      await this.initializeUnlocked();
+      const now = new Date().toISOString();
+      const body = normalizeBody(input.body);
+      const title = normalizeTitle(input.title, body);
+      if (!title && !body) {
+        throw new Error("A note needs a title or body.");
+      }
+      const note: MatterhornNote = {
+        version: MATTERHORN_NOTE_VERSION,
+        id: `note_${randomUUID().replace(/-/g, "").slice(0, 18)}`,
+        workspaceId: this.workspaceId,
+        title: title || "Untitled note",
+        body,
+        tags: normalizeTags(input.tags),
+        links: normalizeLinks(input.links),
+        ...(normalizeDesk(input.desk) ? { desk: normalizeDesk(input.desk)! } : {}),
+        ...(normalizeOptionalId(input.sessionId) ? { sessionId: normalizeOptionalId(input.sessionId)! } : {}),
+        ...(normalizeOptionalId(input.taskId) ? { taskId: normalizeOptionalId(input.taskId)! } : {}),
+        ...(input.outputPath ? { outputPath: normalizePathLike(input.outputPath) } : {}),
+        source: normalizeSource(input.source),
+        filePath: noteFilePathForDay(dayFromIso(now)),
+        createdAt: now,
+        updatedAt: now,
+      };
+      const withDerivedLinks = { ...note, links: deriveLinks(note) };
+      const index = await this.readIndex();
+      index.entries[withDerivedLinks.id] = withDerivedLinks;
+      await this.writeIndex(index);
+      await this.renderDay(dayFromIso(withDerivedLinks.createdAt));
+      return withDerivedLinks;
+    });
   }
 
   async updateNote(id: string, patch: MatterhornNoteUpdateRequest): Promise<MatterhornNote> {
-    await this.initialize();
+    return withNoteMutationLock(this.indexPath, async () => {
+    await this.initializeUnlocked();
     const index = await this.readIndex();
     const existing = index.entries[id];
     if (!existing || existing.deletedAt) {
@@ -171,13 +196,15 @@ export class MatterhornNotesStore {
     await this.writeIndex(index);
     await this.renderDay(dayFromIso(withDerivedLinks.createdAt));
     return withDerivedLinks;
+    });
   }
 
   async markMemorySuggestion(
     id: string,
     suggestion: { id: string; status?: MatterhornNote["memorySuggestionStatus"] },
   ): Promise<MatterhornNote> {
-    await this.initialize();
+    return withNoteMutationLock(this.indexPath, async () => {
+    await this.initializeUnlocked();
     const index = await this.readIndex();
     const existing = index.entries[id];
     if (!existing || existing.deletedAt) {
@@ -193,10 +220,12 @@ export class MatterhornNotesStore {
     await this.writeIndex(index);
     await this.renderDay(dayFromIso(next.createdAt));
     return next;
+    });
   }
 
   async deleteNote(id: string): Promise<MatterhornNote> {
-    await this.initialize();
+    return withNoteMutationLock(this.indexPath, async () => {
+    await this.initializeUnlocked();
     const index = await this.readIndex();
     const existing = index.entries[id];
     if (!existing || existing.deletedAt) {
@@ -207,6 +236,7 @@ export class MatterhornNotesStore {
     await this.writeIndex(index);
     await this.renderDay(dayFromIso(next.createdAt));
     return next;
+    });
   }
 
   private async renderDay(day: string): Promise<void> {
@@ -235,7 +265,13 @@ export class MatterhornNotesStore {
   private async writeIndex(index: MatterhornNoteIndex): Promise<void> {
     index.updatedAt = new Date().toISOString();
     await mkdir(path.dirname(this.indexPath), { recursive: true });
-    await writeFile(this.indexPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+    const temporaryPath = `${this.indexPath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporaryPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+      await rename(temporaryPath, this.indexPath);
+    } finally {
+      await rm(temporaryPath, { force: true });
+    }
   }
 }
 

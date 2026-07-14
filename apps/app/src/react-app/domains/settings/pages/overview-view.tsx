@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
+  Archive,
   Ban,
   Boxes,
   BrainCircuit,
@@ -86,11 +87,10 @@ import {
   workspaceDataPolicySummary,
   type BackendCapabilityTone,
 } from "../backend-capability-status";
-import { GLOBAL_HOME_SIDE_PANEL_KEY, useUiStateStore } from "../../../shell/ui-state-store";
 import {
+  workspaceMemoryRoute,
   workspaceNotesRoute,
   workspaceRunHistoryRoute,
-  workspaceSessionRoute,
 } from "../../../shell/workspace-routes";
 import type { SettingsTab } from "../../../../app/types";
 import {
@@ -143,7 +143,7 @@ function downloadJsonFile(filename: string, content: string) {
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
 async function writeClipboardText(content: string) {
@@ -184,7 +184,7 @@ function InlineActionStatus(props: { status: ExportActionStatus | null }) {
 function exportErrorMessage(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback;
   if (/clipboard|document is not focused|writeText/i.test(error.message)) {
-    return "The browser blocked clipboard access. Click the page and try again, or use Download report.";
+    return "The browser blocked clipboard access. Click the page and try again, or use Support report.";
   }
   return error.message || fallback;
 }
@@ -197,30 +197,32 @@ function SettingsCard(props: {
   children?: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-4 px-3 py-5 first:pt-3 last:pb-3">
-      <div className="flex items-start gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text">
-          {props.icon}
+    <section className="@container/settings-overview-card flex flex-col gap-4 px-3 py-5 first:pt-3 last:pb-3">
+      <div className="flex flex-col gap-3 @lg/settings-overview-card:flex-row @lg/settings-overview-card:items-start">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text">
+            {props.icon}
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold leading-6 text-dls-text">{props.title}</h2>
+            <p className="mt-0.5 text-sm leading-5 text-dls-secondary">{props.description}</p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold leading-6 text-dls-text">{props.title}</h2>
-          <p className="mt-0.5 text-sm leading-5 text-dls-secondary">{props.description}</p>
-        </div>
-        {props.status ? <div className="ml-auto shrink-0">{props.status}</div> : null}
+        {props.status ? <div className="pl-12 @lg/settings-overview-card:ml-auto @lg/settings-overview-card:pl-0">{props.status}</div> : null}
       </div>
-      {props.children ? <div className="flex flex-col gap-1 pl-12">{props.children}</div> : null}
+      {props.children ? <div className="flex flex-col gap-1 pl-0 @lg/settings-overview-card:pl-12">{props.children}</div> : null}
     </section>
   );
 }
 
 function Row(props: { label: string; value: ReactNode; hint?: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-md px-2.5 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+    <div className="flex flex-col gap-1 rounded-md px-2.5 py-2.5 @lg/settings-overview-card:flex-row @lg/settings-overview-card:items-center @lg/settings-overview-card:justify-between @lg/settings-overview-card:gap-3">
       <div className="min-w-0">
         <p className="text-sm font-medium text-dls-text">{props.label}</p>
         {props.hint ? <p className="mt-0.5 break-words text-xs leading-5 text-dls-secondary">{props.hint}</p> : null}
       </div>
-      <div className="shrink-0 text-sm text-dls-secondary">{props.value}</div>
+      <div className="max-w-full text-sm text-dls-secondary @lg/settings-overview-card:shrink-0">{props.value}</div>
     </div>
   );
 }
@@ -241,6 +243,15 @@ function StatusBadge(props: { children: ReactNode; tone?: BackendCapabilityTone 
   return (
     <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${tone}`}>
       {props.children}
+    </span>
+  );
+}
+
+function UnavailableStatus(props: { label?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-10" role="status">
+      <span className="size-1.5 rounded-full bg-red-9" aria-hidden="true" />
+      {props.label ?? "Engine offline"}
     </span>
   );
 }
@@ -270,7 +281,7 @@ function ProjectLedgerControlSummary(props: {
 }) {
   const ledger = props.ledger;
   if (!ledger) {
-    return props.loading ? <StatusBadge>Loading</StatusBadge> : <StatusBadge tone="error">Unavailable</StatusBadge>;
+    return props.loading ? <StatusBadge>Loading</StatusBadge> : <UnavailableStatus label="Workspace unavailable" />;
   }
   const exportable = ledger.items.filter((item) => item.exportable).length;
   const deletable = ledger.items.filter((item) => item.deletable).length;
@@ -444,6 +455,12 @@ function feedbackIdFromEntry(entry: MatterhornProjectDataLedgerEntry) {
 // ---------------------------------------------------------------------------
 
 function taskStatusMeta(status: MatterhornTaskRun["status"]) {
+  if (status === "staged") {
+    return { icon: Circle, label: "Prepared", tone: "slate", bg: "bg-dls-surface", border: "border-dls-border", text: "text-muted-foreground" };
+  }
+  if (status === "waiting") {
+    return { icon: Clock3, label: "Waiting", tone: "amber", bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-300" };
+  }
   if (status === "completed") {
     return { icon: CheckCircle2, label: "Completed", tone: "emerald", bg: "bg-emerald-500/10", border: "border-emerald-500/30", text: "text-emerald-300" };
   }
@@ -701,16 +718,16 @@ function DataPolicySection(props: {
                   const appRoute = controlAppRoute(control);
                   return (
                     <tr key={store.id} className="align-top">
-                      <td className="border-t border-dls-border/45 py-2 pr-4">
+                      <td className="border-t border-dls-border/15 py-2 pr-4">
                         <p className="font-medium text-dls-text">{store.label}</p>
                         <p className="mt-0.5 text-[11px] text-dls-secondary">{scopeLabel(store.scope)}</p>
                       </td>
-                      <td className="max-w-[220px] border-t border-dls-border/45 py-2 pr-4">
+                      <td className="max-w-[220px] border-t border-dls-border/15 py-2 pr-4">
                         <span className="block truncate font-mono text-[11px] text-dls-secondary" title={storageLocationLabel(store)}>
                           {storageLocationLabel(store)}
                         </span>
                       </td>
-                      <td className="border-t border-dls-border/45 py-2 pr-4">
+                      <td className="border-t border-dls-border/15 py-2 pr-4">
                         {appRoute?.href ? (
                           <button
                             type="button"
@@ -723,14 +740,14 @@ function DataPolicySection(props: {
                           <span className="text-dls-secondary">-</span>
                         )}
                       </td>
-                      <td className="border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">{retentionLabel(store.retention)}</td>
-                      <td className="max-w-[190px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
+                      <td className="border-t border-dls-border/15 py-2 pr-4 text-dls-secondary">{retentionLabel(store.retention)}</td>
+                      <td className="max-w-[190px] border-t border-dls-border/15 py-2 pr-4 text-dls-secondary">
                         {controlSummary(props.controls, store, "export")}
                       </td>
-                      <td className="max-w-[190px] border-t border-dls-border/45 py-2 pr-4 text-dls-secondary">
+                      <td className="max-w-[190px] border-t border-dls-border/15 py-2 pr-4 text-dls-secondary">
                         {controlSummary(props.controls, store, "deletion")}
                       </td>
-                      <td className="border-t border-dls-border/45 py-2 text-dls-secondary">{secretsLabel(store.containsSecrets)}</td>
+                      <td className="border-t border-dls-border/15 py-2 text-dls-secondary">{secretsLabel(store.containsSecrets)}</td>
                     </tr>
                   );
                 })}
@@ -838,15 +855,17 @@ function FeedbackReviewSection(props: {
             </Button>
           ))}
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-fit px-2 text-xs text-dls-secondary hover:text-dls-text"
-          disabled={feedbackCount <= 0 || deleteAllBusy}
-          onClick={() => void deleteAllFeedback()}
-        >
-          {deleteAllBusy ? "Deleting" : "Delete all"}
-        </Button>
+        {feedbackCount > 0 || deleteAllBusy ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-fit px-2 text-xs text-dls-secondary hover:text-dls-text"
+            disabled={deleteAllBusy}
+            onClick={() => void deleteAllFeedback()}
+          >
+            {deleteAllBusy ? "Deleting" : "Delete all"}
+          </Button>
+        ) : null}
       </div>
 
       {isLoading ? (
@@ -1268,13 +1287,13 @@ export function SettingsOverviewView(props: {
   const queryClient = useQueryClient();
   const { showToast } = useStatusToasts();
   const { openQuickJot } = useQuickJot();
-  const setSidePanelState = useUiStateStore((state) => state.setSidePanelState);
   const [theme, setTheme] = useState<ThemeMode>(getInitialThemeMode());
   const [density, setDensity] = useState<Density>(readDensity());
   const [memoryExportStatus, setMemoryExportStatus] = useState<string | null>(null);
   const [ledgerExportStatus, setLedgerExportStatus] = useState<ExportActionStatus | null>(null);
   const [supportReportStatus, setSupportReportStatus] = useState<ExportActionStatus | null>(null);
   const notesWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
+  const notesReady = Boolean(props.matterhornServerClient && notesWorkspaceId);
   const backendWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
 
   useEffect(() => subscribeToTheme(() => setTheme(getInitialThemeMode())), []);
@@ -1553,9 +1572,8 @@ export function SettingsOverviewView(props: {
 
   const openMemoryReview = useCallback(() => {
     if (!notesWorkspaceId) return;
-    setSidePanelState(GLOBAL_HOME_SIDE_PANEL_KEY, "memory");
-    navigate(workspaceSessionRoute(notesWorkspaceId));
-  }, [navigate, notesWorkspaceId, setSidePanelState]);
+    navigate(workspaceMemoryRoute(notesWorkspaceId));
+  }, [navigate, notesWorkspaceId]);
 
   const openRunHistory = useCallback(() => {
     if (!backendWorkspaceId) return;
@@ -1604,7 +1622,7 @@ export function SettingsOverviewView(props: {
             ) : backendCapabilitiesLoading ? (
               <StatusBadge>Loading</StatusBadge>
             ) : (
-              <StatusBadge tone="error">Unavailable</StatusBadge>
+              <UnavailableStatus />
             )
           }
         >
@@ -1617,7 +1635,7 @@ export function SettingsOverviewView(props: {
               ) : backendCapabilitiesLoading ? (
                 <StatusBadge>Loading</StatusBadge>
               ) : (
-                <StatusBadge tone="error">Unavailable</StatusBadge>
+                <UnavailableStatus />
               )
             }
           />
@@ -1639,7 +1657,7 @@ export function SettingsOverviewView(props: {
             ) : backendCapabilitiesLoading ? (
               <StatusBadge>Loading</StatusBadge>
             ) : (
-              <StatusBadge tone="error">Unavailable</StatusBadge>
+              <UnavailableStatus />
             )
           }
         >
@@ -1669,7 +1687,7 @@ export function SettingsOverviewView(props: {
                   ) : workspaceReadinessLoading ? (
                     <StatusBadge>Loading</StatusBadge>
                   ) : (
-                    <StatusBadge tone="error">Unavailable</StatusBadge>
+                    <UnavailableStatus label="Workspace unavailable" />
                   )
                 }
               />
@@ -1753,7 +1771,7 @@ export function SettingsOverviewView(props: {
                     size="sm"
                     className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
                     onClick={() => void copySupportReport()}
-                    disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId || workspaceBackendControlPlaneQuery.isLoading}
+                    disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId}
                   >
                     <Copy className="size-3.5" />
                     Copy report
@@ -1763,10 +1781,10 @@ export function SettingsOverviewView(props: {
                     size="sm"
                     className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
                     onClick={() => void exportSupportReport()}
-                    disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId || workspaceBackendControlPlaneQuery.isLoading}
+                    disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId}
                   >
                     <Download className="size-3.5" />
-                    Download report
+                    Support report
                   </Button>
                   <Button
                     variant="ghost"
@@ -1838,7 +1856,7 @@ export function SettingsOverviewView(props: {
             ) : workspaceDataMapLoading ? (
               <StatusBadge>Loading</StatusBadge>
             ) : (
-              <StatusBadge tone="error">Unavailable</StatusBadge>
+              <UnavailableStatus label="Workspace unavailable" />
             )
           }
         >
@@ -1944,7 +1962,7 @@ export function SettingsOverviewView(props: {
 
         {/* Memory */}
         <SettingsCard
-          icon={<BrainCircuit size={18} />}
+          icon={<Archive size={18} />}
           title="Memory"
           description="Review pending suggestions and manage saved memories."
           status={<StatusBadge tone={memoryOverviewQuery.data?.pending ? "setup" : "ready"}>Memory review</StatusBadge>}
@@ -1995,12 +2013,39 @@ export function SettingsOverviewView(props: {
               variant="outline"
               size="sm"
               className="gap-1.5 text-xs"
-              onClick={() => navigate(notesWorkspaceId ? workspaceNotesRoute(notesWorkspaceId) : "/notes")}
+              disabled={!notesReady}
+              onClick={() => {
+                if (!notesReady) {
+                  showToast({
+                    title: "Create a workspace before opening notes",
+                    description: "Notes are stored as project evidence inside a Matterhorn workspace.",
+                    tone: "warning",
+                  });
+                  return;
+                }
+                navigate(workspaceNotesRoute(notesWorkspaceId));
+              }}
             >
               <NotebookPen size={14} />
               {t("notes.open_notes")}
             </Button>
-            <Button variant="secondary" size="sm" className="gap-1.5 text-xs" onClick={() => openQuickJot()}>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-1.5 text-xs"
+              disabled={!notesReady}
+              onClick={() => {
+                if (!notesReady) {
+                  showToast({
+                    title: "Create a workspace before saving notes",
+                    description: "Notes are stored as project evidence inside a Matterhorn workspace.",
+                    tone: "warning",
+                  });
+                  return;
+                }
+                openQuickJot();
+              }}
+            >
               {t("notes.quick_jot_title")}
             </Button>
           </div>

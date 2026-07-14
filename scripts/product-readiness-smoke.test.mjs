@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -46,6 +47,7 @@ for (const id of [
   "team.access_summary",
   "ledger.project",
   "ledger.export",
+  "billing.production_readiness",
   "generated_media.production_readiness",
   "generated_media.history",
   "generated_media.flow",
@@ -57,6 +59,8 @@ const generatedMediaStage = report.stages.find((stage) => stage.id === "generate
 assert.deepEqual(generatedMediaStage.command, ["node", "scripts/generated-media-flow-smoke.mjs", "--strict"]);
 const generatedMediaProductionStage = report.stages.find((stage) => stage.id === "generated_media.production_readiness");
 assert.deepEqual(generatedMediaProductionStage.command, ["node", "scripts/generated-media-production-readiness.mjs", "--json"]);
+const billingProductionStage = report.stages.find((stage) => stage.id === "billing.production_readiness");
+assert.deepEqual(billingProductionStage.command, ["GET", "<server>", "/workspace/<id>/billing/status"]);
 const corsStage = report.stages.find((stage) => stage.id === "production.cors_readiness");
 assert.deepEqual(corsStage.command, ["node", "scripts/production-cors-readiness.mjs", "--require-production"]);
 
@@ -95,6 +99,7 @@ for (const endpoint of [
   "/backend/team-access/summary",
   "/data-ledger?limit=20",
   "/data-ledger/export?limit=20",
+  "/billing/status",
   "/generated-media/history?limit=20",
   "scripts/production-cors-readiness.mjs",
   "scripts/generated-media-production-readiness.mjs",
@@ -118,12 +123,18 @@ for (const required of [
   "scripts/generated-media-flow-smoke.mjs",
   "matterhorn.generated-media-production-readiness.v1",
   "generated_media.production_readiness",
+  "billing.production_readiness",
+  "billingProductionReadiness",
+  "generatedMediaReadinessFailure",
+  "generatedMediaFlowFailure",
   "generatedMediaProductionReadiness",
   "publicWritesDuringDiagnostics",
   "production.cors_readiness",
   "--include-generated-media-flow",
+  "--require-production",
   "--markdown-output",
   "Markdown report",
+  "config.strict || config.requireProduction",
 ]) {
   assert.ok(source.includes(required), `product readiness smoke missing contract ${required}`);
 }
@@ -152,9 +163,55 @@ for (const text of [
   "pnpm dev:generated-media-smoke",
   "pnpm smoke:product-readiness",
   "--include-generated-media-flow",
+  "--require-production",
   "--markdown-output",
 ]) {
   assert.ok(help.stdout.includes(text), `help missing ${text}`);
+}
+
+const productionDryRun = await run(["--dry-run", "--require-production", "--json"]);
+assert.equal(productionDryRun.code, 0, productionDryRun.stderr || productionDryRun.stdout);
+const productionReport = JSON.parse(productionDryRun.stdout);
+assert.equal(productionReport.metadata.requireProduction, true);
+assert.deepEqual(
+  productionReport.stages.find((stage) => stage.id === "generated_media.production_readiness")?.command,
+  ["node", "scripts/generated-media-production-readiness.mjs", "--require-production", "--json"],
+);
+
+const failingServer = createServer((request, response) => {
+  response.setHeader("Content-Type", "application/json");
+  if (request.url === "/workspaces") {
+    response.end(JSON.stringify({ activeId: "ws_strict_inventory" }));
+    return;
+  }
+  response.statusCode = 503;
+  response.end(JSON.stringify({ error: "fixture unavailable" }));
+});
+await new Promise((resolve, reject) => {
+  failingServer.once("error", reject);
+  failingServer.listen(0, "127.0.0.1", resolve);
+});
+try {
+  const address = failingServer.address();
+  assert.ok(address && typeof address === "object");
+  const strictInventory = await run([
+    "--server-url",
+    `http://127.0.0.1:${address.port}`,
+    "--token",
+    "readiness-test-token",
+    "--workspace-id",
+    "ws_strict_inventory",
+    "--strict",
+    "--json",
+  ]);
+  assert.equal(strictInventory.code, 1, strictInventory.stderr || strictInventory.stdout);
+  const strictReport = JSON.parse(strictInventory.stdout);
+  assert.ok(strictReport.summary.fail > 2, "strict mode should inventory more than the first failure");
+  assert.ok(strictReport.stages.some((stage) => stage.id === "backend.capabilities" && stage.status === "fail"));
+  assert.ok(strictReport.stages.some((stage) => stage.id === "generated_media.history"), "strict mode should reach the final read-only stage");
+  assert.equal(strictReport.launchBlockers.length, strictReport.summary.fail);
+} finally {
+  await new Promise((resolve) => failingServer.close(resolve));
 }
 
 console.log("Product-readiness smoke contract passed.");

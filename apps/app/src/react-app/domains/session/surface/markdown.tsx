@@ -36,6 +36,37 @@ import go from "shiki/langs/go.mjs";
 
 import { applyTextHighlights } from "./text-highlights";
 
+type MarkedParser = {
+  parseInline(tokens: unknown[]): string;
+  parse(tokens: unknown[]): string;
+};
+
+type MarkedRendererThis = {
+  parser: MarkedParser;
+  listitem(item: Tokens.ListItem): string;
+  tablecell(cell: Tokens.TableCell & { header?: boolean }): string;
+  tablerow(row: { text: string }): string;
+};
+
+type MarkedCompatibleParser = {
+  use(...extensions: unknown[]): MarkedCompatibleParser;
+  parse(markdown: string, options?: { async?: false }): string;
+  parse(markdown: string, options: { async: true }): Promise<string>;
+};
+
+type MarkedCompatibleOptions = {
+  async: boolean;
+  breaks: boolean;
+  gfm: boolean;
+  pedantic: boolean;
+  silent: boolean;
+  renderer: Record<string, unknown> & ThisType<MarkedRendererThis>;
+};
+
+const MarkedCompatible = Marked as unknown as {
+  new(options?: MarkedCompatibleOptions): MarkedCompatibleParser;
+};
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -127,7 +158,7 @@ function hasFencedCodeBlock(text: string) {
   return /(^|\n)```/.test(text);
 }
 
-const baseMarkedOptions = {
+const baseMarkedOptions: MarkedCompatibleOptions = {
   async: false,
   breaks: false,
   gfm: true,
@@ -137,10 +168,10 @@ const baseMarkedOptions = {
     html() {
       return "";
     },
-    paragraph({ tokens }) {
+    paragraph(this: MarkedRendererThis, { tokens }: Tokens.Paragraph) {
       return `<p class="my-3 leading-relaxed">${this.parser.parseInline(tokens)}</p>`;
     },
-    heading({ tokens, depth }) {
+    heading(this: MarkedRendererThis, { tokens, depth }: Tokens.Heading) {
       const className = depth === 1
         ? "my-5 text-xl font-semibold"
         : depth === 2
@@ -148,7 +179,7 @@ const baseMarkedOptions = {
           : "my-3 text-base font-semibold";
       return `<h${depth} class="${className}">${this.parser.parseInline(tokens)}</h${depth}>`;
     },
-    list(token) {
+    list(this: MarkedRendererThis, token: Tokens.List) {
       const tag = token.ordered ? "ol" : "ul";
       const className = token.ordered ? "my-3 list-decimal pl-6" : "my-3 list-disc pl-6";
       const start = token.ordered && typeof token.start === "number" && token.start !== 1
@@ -156,44 +187,44 @@ const baseMarkedOptions = {
         : "";
       return `<${tag}${start} class="${className}">${token.items.map((item) => this.listitem(item)).join("")}</${tag}>`;
     },
-    listitem(item) {
+    listitem(this: MarkedRendererThis, item: Tokens.ListItem) {
       const checkbox = item.task
         ? `<input disabled="" type="checkbox"${item.checked ? " checked=\"\"" : ""}> `
         : "";
       return `<li class="my-1">${checkbox}${this.parser.parse(item.tokens)}</li>`;
     },
-    blockquote({ tokens }) {
+    blockquote(this: MarkedRendererThis, { tokens }: Tokens.Blockquote) {
       return `<blockquote class="my-4 rounded-r-lg border-l border-dls-border bg-dls-hover/40 pl-4 italic text-muted-foreground">${this.parser.parse(tokens)}</blockquote>`;
     },
-    code({ text, lang }) {
+    code({ text, lang }: Tokens.Code) {
       return `<pre class="my-4 overflow-x-auto rounded-lg bg-dls-surface-muted/20 px-4 py-3 text-xs leading-6 text-dls-secondary"><code${codeLanguageClass(lang)}>${escapeHtml(text)}</code></pre>`;
     },
-    codespan({ text }) {
+    codespan({ text }: Tokens.Codespan) {
       return `<code class="rounded-md bg-gray-2/70 px-1.5 py-0.5 font-mono text-sm text-foreground">${escapeHtml(text)}</code>`;
     },
-    del({ raw, tokens }) {
+    del(this: MarkedRendererThis, { raw, tokens }: Tokens.Del) {
       if (!raw.startsWith("~~")) return escapeHtml(raw);
       return `<del>${this.parser.parseInline(tokens)}</del>`;
     },
-    link({ href, title, tokens }) {
+    link(this: MarkedRendererThis, { href, title, tokens }: Tokens.Link) {
       const safe = escapeAttribute(safeHref(href));
       const titleAttr = title ? ` title="${escapeAttribute(title)}"` : "";
       return `<a href="${safe}"${titleAttr} target="_blank" rel="noreferrer noopener" class="text-indigo-10 underline underline-offset-2 transition-colors hover:text-indigo-8">${this.parser.parseInline(tokens)}</a>`;
     },
-    image({ href, title, text }) {
+    image({ href, title, text }: Tokens.Image) {
       const safe = escapeAttribute(safeHref(href));
       const titleAttr = title ? ` title="${escapeAttribute(title)}"` : "";
       return `<img src="${safe}" alt="${escapeAttribute(text)}"${titleAttr} loading="lazy" decoding="async" class="my-4 max-w-full rounded-lg border border-dls-border/70">`;
     },
-    table(token) {
+    table(this: MarkedRendererThis, token: Tokens.Table) {
       const header = token.header.map((cell) => this.tablecell({ ...cell, header: true })).join("");
       const body = token.rows.map((row) => this.tablerow({ text: row.map((cell) => this.tablecell(cell)).join("") })).join("");
       return `<table class="my-4 w-full border-collapse"><thead>${this.tablerow({ text: header })}</thead><tbody>${body}</tbody></table>`;
     },
-    tablerow({ text }) {
+    tablerow({ text }: { text: string }) {
       return `<tr>${text}</tr>`;
     },
-    tablecell({ tokens, header, align }) {
+    tablecell(this: MarkedRendererThis, { tokens, header, align }: Tokens.TableCell & { header?: boolean }) {
       const tag = header ? "th" : "td";
       const className = header
         ? "border border-dls-border bg-dls-hover p-2 text-left"
@@ -204,23 +235,23 @@ const baseMarkedOptions = {
       return `<hr class="my-6 border-none h-px bg-gray-4">`;
     },
   },
-} satisfies ConstructorParameters<typeof Marked<string, string>>[0];
+};
 
-const markdownParser = new Marked<string, string>(baseMarkedOptions).use(
+const markdownParser = new MarkedCompatible(baseMarkedOptions).use(
   markedEmoji({
     emojis: emojiAliases,
     renderer: (token) => escapeHtml(token.emoji),
-  }),
+  }) as unknown,
 );
 
-const highlightedMarkdownParser = new Marked<string, string>({
+const highlightedMarkdownParser = new MarkedCompatible({
   ...baseMarkedOptions,
   async: true,
 }).use(
   markedEmoji({
     emojis: emojiAliases,
     renderer: (token) => escapeHtml(token.emoji),
-  }),
+  }) as unknown,
   markedShiki({
     async highlight(code, lang, props) {
       const language = normalizeShikiLanguage(lang);
@@ -241,7 +272,7 @@ const highlightedMarkdownParser = new Marked<string, string>({
       });
     },
     container: `<div data-matterhorn-shiki="true" class="my-4 overflow-hidden rounded-lg bg-dls-surface-muted/20 p-4 text-xs leading-6">%s</div>`,
-  }),
+  }) as unknown,
 );
 
 function MarkdownBlockInner(props: {

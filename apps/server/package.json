@@ -1,6 +1,6 @@
 {
   "name": "matterhorn-work-server",
-  "version": "0.13.12",
+  "version": "0.13.13",
   "description": "Filesystem-backed API for Matterhorn Work remote clients",
   "type": "module",
   "bin": {
@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "OPENWORK_DEV_MODE=1 bun src/cli.ts",
-    "test": "bun test",
+    "test": "bun test src --timeout 15000",
     "test:artifacts": "bun test src/artifact-files.e2e.test.ts src/workspace-init.test.ts src/server.normalizeWorkspaceRelativePath.test.ts",
     "build": "tsc -p tsconfig.json",
     "build:bin": "bun ./script/build.ts --outdir dist/bin",

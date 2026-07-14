@@ -5,6 +5,9 @@ temperature: 0.2
 matterhorn_desk_agent: v1
 matterhorn_desk_id: memory
 agent_id: matterhorn-memory
+workflow_id: matterhorn_memory_review
+workflow_manifest_ref: matterhorn.workflow.manifest.v1/memory_review
+output_desk_id: memory
 ---
 
 # Memory Agent

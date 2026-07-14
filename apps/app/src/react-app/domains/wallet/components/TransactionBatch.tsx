@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { analyzeWalletTransaction } from "../state/wallet-store";
+import { sanitizeGasEstimateError } from "../lib/gas-estimate";
 
 export type BatchStepView = {
   id: string;
@@ -44,14 +46,25 @@ export type BatchExecutionStateView = {
   allDone: boolean;
 };
 
+export type BatchStepGuardView = {
+  stepId: string;
+  displayValue: string;
+  valueUSD: number;
+  warnings: string[];
+  blockers: string[];
+  chainName: string;
+};
+
 export type TransactionBatchProps = {
   plan: BatchPlanView;
+  stepGuards?: BatchStepGuardView[];
   onExecute: (stepIndex: number) => Promise<string>;
   onDismiss: () => void;
 };
 
 export function TransactionBatch({
   plan,
+  stepGuards = [],
   onExecute,
   onDismiss,
 }: TransactionBatchProps) {
@@ -79,6 +92,8 @@ export function TransactionBatch({
   async function handleExecuteCurrent() {
     const next = getNextStep(plan, state);
     if (!next || busy) return;
+    const guard = stepGuards.find((candidate) => candidate.stepId === next.step.id);
+    if (guard?.blockers.length) return;
 
     setBusy(true);
     try {
@@ -88,7 +103,7 @@ export function TransactionBatch({
       addResult({
         status: "failed",
         stepId: next.step.id,
-        error: err instanceof Error ? err.message : "Unknown error",
+        error: sanitizeGasEstimateError(err),
       });
     } finally {
       setBusy(false);
@@ -120,9 +135,18 @@ export function TransactionBatch({
   const failedCount = state.results.filter(
     (r) => "status" in r && r.status === "failed",
   ).length;
+  const guardsByStepId = new Map(stepGuards.map((guard) => [guard.stepId, guard]));
+  const nextStep = getNextStep(plan, state);
+  const nextStepGuard = nextStep ? guardsByStepId.get(nextStep.step.id) : undefined;
+  const nextStepBlocked = Boolean(nextStepGuard?.blockers.length);
 
   return (
-    <div className="mx-auto w-full max-w-lg rounded-lg border border-dls-border bg-dls-sidebar p-6 shadow-sm">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="matterhorn-batch-approval-title"
+      className="mx-auto w-full max-w-lg rounded-lg bg-dls-sidebar p-6 shadow-sm ring-1 ring-dls-border/35"
+    >
       {/* Header */}
       <div className="mb-5 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
@@ -130,7 +154,7 @@ export function TransactionBatch({
             <ArrowRightLeft className="size-5 text-violet-500" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-dls-text">
+            <h2 id="matterhorn-batch-approval-title" className="text-base font-semibold text-dls-text">
               Transaction Batch
             </h2>
             <p className="text-xs text-dls-secondary">
@@ -148,11 +172,9 @@ export function TransactionBatch({
       </div>
 
       {/* Summary bar */}
-      <div className="mb-5 flex items-center gap-3 rounded-lg bg-dls-surface px-3 py-2.5">
+      <div className="mb-5 flex items-center gap-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
         <div className="flex-1">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">
-            Total Steps
-          </div>
+          <div className="text-xs text-dls-secondary">Progress</div>
           <div className="font-mono text-sm text-dls-text">
             {completedCount}/{plan.steps.length} complete
             {failedCount > 0 && (
@@ -162,15 +184,20 @@ export function TransactionBatch({
         </div>
         {plan.totalEstimatedCostEth && (
           <div className="text-right">
-            <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">
-              Est. Cost
-            </div>
+            <div className="text-xs text-dls-secondary">Estimated cost</div>
             <div className="font-mono text-sm text-dls-text">
               {Number(plan.totalEstimatedCostEth).toFixed(6)} ETH
             </div>
           </div>
         )}
       </div>
+
+      {nextStepBlocked && nextStepGuard ? (
+        <div className="mb-5 rounded-md bg-red-500/10 px-3 py-2.5 text-xs leading-5 text-red-200">
+          <div className="font-medium text-red-200">Step blocked</div>
+          <div>{nextStepGuard.blockers[0]}</div>
+        </div>
+      ) : null}
 
       {/* Steps list */}
       <div className="mb-6 space-y-2">
@@ -183,6 +210,8 @@ export function TransactionBatch({
               key={step.id}
               index={idx + 1}
               step={step}
+              chainId={plan.chainId}
+              guard={guardsByStepId.get(step.id)}
               result={result}
               isActive={idx === state.currentStepIndex && !state.allDone}
             />
@@ -196,15 +225,15 @@ export function TransactionBatch({
           <>
             <Button
               variant="outline"
-              className="flex-1 gap-1.5 h-11"
+              className="flex-1 gap-1.5 h-10"
               onClick={onDismiss}
               disabled={busy}
             >
               Cancel Remaining
             </Button>
             <Button
-              className="flex-1 gap-1.5 h-11 bg-violet-500 hover:bg-violet-600 text-white shadow-lg shadow-violet-500/20"
-              disabled={busy || getNextStep(plan, state) === null}
+              className="flex-1 gap-1.5 h-10 bg-violet-500 text-white hover:bg-violet-500/90"
+              disabled={busy || nextStep === null || nextStepBlocked}
               onClick={handleExecuteCurrent}
             >
               {busy ? (
@@ -214,7 +243,9 @@ export function TransactionBatch({
               )}
               {busy
                 ? "Submitting..."
-                : `Execute Step ${getNextStep(plan, state)?.index ?? 0 + 1}`}
+                : nextStepBlocked
+                  ? "Blocked"
+                  : `Execute Step ${((nextStep?.index ?? 0) + 1)}`}
             </Button>
           </>
         ) : (
@@ -222,7 +253,7 @@ export function TransactionBatch({
             {failedCount > 0 && (
               <Button
                 variant="outline"
-                className="flex-1 gap-1.5 h-11"
+                className="flex-1 gap-1.5 h-10"
                 onClick={handleRetryFailed}
               >
                 <RotateCcw className="size-4" />
@@ -230,7 +261,7 @@ export function TransactionBatch({
               </Button>
             )}
             <Button
-              className="flex-1 gap-1.5 h-11 bg-violet-500 hover:bg-violet-600 text-white shadow-lg shadow-violet-500/20"
+              className="flex-1 gap-1.5 h-10 bg-violet-500 text-white hover:bg-violet-500/90"
               onClick={onDismiss}
             >
               <CheckCircle2 className="size-4" />
@@ -246,27 +277,37 @@ export function TransactionBatch({
 function BatchStepCard({
   index,
   step,
+  chainId,
+  guard,
   result,
   isActive,
 }: {
   index: number;
   step: BatchPlanView["steps"][number];
+  chainId: number;
+  guard?: BatchStepGuardView;
   result: BatchResultView | undefined;
   isActive: boolean;
 }) {
   const isSuccess = result && "status" in result && result.status === "success";
   const isFailed = result && "status" in result && result.status === "failed";
-  const isPending = !result;
+  const analysis = analyzeWalletTransaction({
+    chainId,
+    to: step.to,
+    value: step.value ?? "0",
+    data: step.data,
+  });
+  const selector = step.data && step.data !== "0x" ? step.data.slice(0, 10) : null;
 
   return (
     <div
       className={cn(
-        "rounded-lg border p-3 transition-colors",
+        "rounded-md p-3 transition-colors",
         isActive
-          ? "border-violet-500/40 bg-violet-500/5"
-          : "border-transparent bg-dls-surface",
-        isSuccess && "border-green-500/30 bg-green-500/5",
-        isFailed && "border-red-500/30 bg-red-500/5",
+          ? "bg-violet-500/10"
+          : "bg-dls-surface-muted/[0.07]",
+        isSuccess && "bg-green-500/10",
+        isFailed && "bg-red-500/10",
       )}
     >
       <div className="flex items-center gap-3">
@@ -275,12 +316,12 @@ function BatchStepCard({
           className={cn(
             "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
             isSuccess
-              ? "bg-green-500/20 text-green-400"
+              ? "bg-green-500/20 text-green-300"
               : isFailed
-                ? "bg-red-500/20 text-red-400"
+                ? "bg-red-500/20 text-red-300"
                 : isActive
-                  ? "bg-violet-500/20 text-violet-400"
-                  : "bg-dls-hover text-dls-secondary",
+                  ? "bg-violet-500/20 text-violet-300"
+                  : "bg-dls-hover/55 text-dls-secondary",
           )}
         >
           {isSuccess ? (
@@ -303,6 +344,12 @@ function BatchStepCard({
               <span className="text-dls-muted">→ after {step.dependsOn}</span>
             )}
           </div>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-dls-secondary">
+            <span className="font-mono">To {step.to.slice(0, 6)}...{step.to.slice(-4)}</span>
+            <span>{guard?.displayValue ?? analysis.displayValue}</span>
+            {selector && <span className="font-mono">Call {selector}</span>}
+            {guard?.valueUSD ? <span>~${guard.valueUSD.toFixed(2)} USD</span> : null}
+          </div>
         </div>
 
         {/* Right */}
@@ -311,9 +358,23 @@ function BatchStepCard({
         )}
       </div>
 
+      {guard?.warnings.map((warning) => (
+        <div key={warning} className="mt-2 flex items-start gap-1.5 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-200">
+          <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+          {warning}
+        </div>
+      ))}
+
+      {guard?.blockers.map((blocker) => (
+        <div key={blocker} className="mt-2 flex items-start gap-1.5 rounded-md bg-red-500/10 px-2.5 py-1.5 text-xs text-red-200">
+          <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+          {blocker}
+        </div>
+      ))}
+
       {/* Error detail */}
       {isFailed && "error" in result && result.error && (
-        <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300">
+        <div className="mt-2 flex items-start gap-1.5 rounded-md bg-red-500/10 px-2.5 py-1.5 text-xs text-red-200">
           <AlertTriangle className="mt-0.5 size-3 shrink-0" />
           {result.error}
         </div>

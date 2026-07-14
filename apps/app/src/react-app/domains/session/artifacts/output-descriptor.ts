@@ -48,8 +48,7 @@ export type OutputDescriptor = {
 };
 
 function legacyOriginLabel(kind: "opencode" | "openwork" | "outbox" | null | undefined): string {
-  if (kind === "opencode") return "OpenCode import";
-  if (kind === "openwork") return "OpenWork import";
+  if (kind === "opencode" || kind === "openwork") return "Legacy engine import";
   if (kind === "outbox") return "Legacy outbox";
   return "Imported";
 }
@@ -57,7 +56,7 @@ function legacyOriginLabel(kind: "opencode" | "openwork" | "outbox" | null | und
 function friendlyTitleFromOutputPath(context: ReturnType<typeof getArtifactNoteContext>): string | null {
   if (context.path.startsWith(".matterhorn-work/outputs/images/")) return "Generated image";
   if (context.desk !== "sui") return null;
-  if (/^transfer-preview-[a-f0-9]+\.json$/i.test(context.fileName)) return "Sui transfer preview";
+  if (/^transfer-preview-[a-f0-9]+\.json$/i.test(context.fileName)) return "Sui transfer handoff";
   if (/^transaction-receipt-[a-z0-9]+\.json$/i.test(context.fileName)) return "Sui transaction receipt";
   return null;
 }

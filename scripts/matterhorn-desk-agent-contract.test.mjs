@@ -29,6 +29,9 @@ const [
   watchAutopilot,
   watchScheduler,
   mcpBundle,
+  activeLongevityAgent,
+  activePolymarketAgent,
+  activeBittensorAgent,
 ] = await Promise.all([
   read("package.json"),
   read("packages/types/src/desk-agents.ts"),
@@ -46,6 +49,9 @@ const [
   read("scripts/bittensor-watch-autopilot.mjs"),
   read("scripts/bittensor-watch-autopilot-scheduler.mjs"),
   read("packages/matterhorn-work-mcp/index.mjs"),
+  read(".opencode/agents/matterhorn-longevity.md"),
+  read(".opencode/agents/matterhorn-polymarket.md"),
+  read(".opencode/agents/matterhorn-bittensor.md"),
 ]);
 
 const pkg = JSON.parse(packageJson);
@@ -60,6 +66,27 @@ assertIncludes(deskAgents, "export const MATTERHORN_DESK_AGENT_MANIFESTS", "desk
 assertIncludes(deskAgents, "not a generic chat persona", "desk agent manifest");
 assertIncludes(deskAgents, "outputs/<desk>/<session-slug>/", "desk agent output convention");
 assertIncludes(deskAgents, "Never ask for seed phrases, private keys, API secrets", "desk agent secret boundary");
+assertIncludes(deskAgents, "LONGEVITY_PRIMARY_GOAL_OPTIONS", "Longevity goal intake catalog");
+assertIncludes(deskAgents, 'label: "Improve VO2 max"', "Longevity VO2 max goal");
+assertIncludes(deskAgents, 'label: "Train for endurance"', "Longevity endurance goal");
+assertIncludes(deskAgents, "Keep Improve VO2 max and Train for endurance as separate choices", "Longevity goal distinction");
+assertIncludes(activeLongevityAgent, "Improve VO2 max", "active Longevity agent VO2 max goal");
+assertIncludes(activeLongevityAgent, "Train for endurance", "active Longevity agent endurance goal");
+assertIncludes(deskAgents, "do not delegate to subagents", "Polymarket bounded lookup guidance");
+assertIncludes(deskAgents, "Bound exact-market discovery to two Polymarket tool calls", "Polymarket bounded search guidance");
+assertIncludes(deskAgents, 'runtimePermissions: {', "desk agent runtime permission manifest");
+assertIncludes(deskAgents, 'websearch: "deny"', "desk agent web search runtime denial");
+assertIncludes(activePolymarketAgent, "do not delegate to subagents", "active Polymarket bounded lookup guidance");
+assertIncludes(activePolymarketAgent, "Bound exact-market discovery to two Polymarket tool calls", "active Polymarket bounded search guidance");
+assertIncludes(deskAgents, "If an event or market reports restricted: true or compliance_blocked", "Polymarket compliance stop guidance");
+assertIncludes(activePolymarketAgent, "If an event or market reports restricted: true or compliance_blocked", "active Polymarket compliance stop guidance");
+assertIncludes(activePolymarketAgent, "websearch: deny", "active Polymarket web search runtime denial");
+assertIncludes(deskAgents, "For a simple subnet discovery or comparison, do not delegate to subagents", "Bittensor bounded discovery guidance");
+assertIncludes(deskAgents, "make at most one public web search for current context", "Bittensor bounded search guidance");
+assertIncludes(deskAgents, "skip additional subnet-list and per-subnet explain calls", "Bittensor fallback latency guidance");
+assertIncludes(activeBittensorAgent, "For a simple subnet discovery or comparison, do not delegate to subagents", "active Bittensor bounded discovery guidance");
+assertIncludes(activeBittensorAgent, "make at most one public web search for current context", "active Bittensor bounded search guidance");
+assertIncludes(activeBittensorAgent, "skip additional subnet-list and per-subnet explain calls", "active Bittensor fallback latency guidance");
 assertIncludes(deskAgents, "getMatterhornDeskAgentById", "desk agent manifest");
 
 for (const [deskId, agentId] of [
@@ -77,6 +104,7 @@ for (const [deskId, agentId] of [
 
 assertIncludes(workspaceInit, "MATTERHORN_DESK_AGENT_MANIFESTS", "workspace init");
 assertIncludes(workspaceInit, "renderDeskAgentTemplate", "workspace init");
+assertIncludes(workspaceInit, "renderDeskAgentRuntimePermissions", "workspace init runtime permissions");
 assertIncludes(workspaceInit, "ensureMatterhornDeskAgents", "workspace init");
 assertIncludes(workspaceInit, "matterhorn_desk_agent: v1", "workspace init desk agent frontmatter");
 assertIncludes(workspaceInit, "matterhorn_desk_id: ${agent.deskId}", "workspace init desk agent frontmatter");

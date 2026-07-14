@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Monday Beta Launch Readiness Audit
+ * Monday Beta Contract Readiness Audit
  *
- * Produces a consolidated readiness report proving that the Monday beta
+ * Produces a consolidated contract report proving that the Monday beta
  * contract layer has the required protocol/workflow manifests, market safety
  * posture, wellness safety posture, and services planned-not-live state.
  *
@@ -289,43 +289,45 @@ record(
   universalSafetyOk ? "all invariants hold" : "at least one scenario violates invariants",
 );
 
-// 7. Stale PR #2 audit
-const pr2 = { number: 2, state: "OPEN", title: "feat: add Bittensor workspace MVP" };
+// 7. Historical repository follow-up. This fixture audit does not query GitHub.
 record(
-  "Stale PR audit",
-  "PR #2 is tracked as stale/open",
-  pr2.state === "OPEN",
-  `PR #2 (${pr2.title}) is still open and targets an old base; its app/server/MCP changes have been superseded by later PRs on dev.`,
+  "Repository follow-up",
+  "Legacy PR #2 cleanup note is present",
+  true,
+  "Historical note only; verify current GitHub state before taking action.",
 );
 
 const allOk = findings.every((f) => f.ok);
 
 const reportDate = new Date(0).toISOString();
-const reportTitle = "Monday Beta Launch Readiness Audit";
+const reportTitle = "Monday Beta Contract Readiness Audit";
 
 function markdownReport() {
   const lines = [
     `# ${reportTitle}`,
     "",
     `**Generated:** ${reportDate}`,
-    `**Mode:** fixture/offline — no provider calls`,
-    `**Overall:** ${allOk ? "✅ READY" : "❌ BLOCKED"}`,
+    `**Mode:** fixture/offline — production is not assessed`,
+    `**Contract result:** ${allOk ? "✅ READY" : "❌ BLOCKED"}`,
+    `**Launch decision:** NOT ASSESSED`,
     "",
     "## Executive summary",
     "",
     allOk
-      ? "All audited contract layers required for the Monday beta are present and enforce the expected safety posture."
+      ? "All audited contract fixtures are present and enforce the expected safety posture. This is not production go-live approval."
       : "One or more readiness checks failed. Review the findings below.",
     "",
-    "## Stale PR audit",
+    "Production readiness requires a running deployed stack, real provider and billing configuration, browser acceptance evidence, and the full platform safety gate.",
+    "",
+    "## Repository follow-up",
     "",
     "| Item | Status | Detail |",
     "|---|---|---|",
     ...findings
-      .filter((f) => f.area === "Stale PR audit")
+      .filter((f) => f.area === "Repository follow-up")
       .map((f) => `| ${f.check} | ${f.ok ? "✅" : "❌"} | ${f.detail} |`),
     "",
-    "PR #2 (`feat: add Bittensor workspace MVP`) is still open against an old `dev` base. Its `apps/app`, `apps/server`, and crypto-MCP surface has been superseded by subsequent PRs including the protocol workspace shell, customer workflow templates, and Monday beta scenario/registry work. It should be closed before beta launch to avoid confusion.",
+    "This fixture report does not query GitHub. Verify the current PR state before closing or changing any branch.",
     "",
     "## Findings by area",
     "",
@@ -363,6 +365,15 @@ function markdownReport() {
   lines.push("pnpm test:customer-demo-evidence-pack");
   lines.push("```");
   lines.push("");
+  lines.push("## Required production decision checks");
+  lines.push("");
+  lines.push("```bash");
+  lines.push("node scripts/product-readiness-smoke.mjs --server-url <url> --token <token> --workspace-id <id> --require-production --strict --json");
+  lines.push("pnpm test:matterhorn-platform-safety");
+  lines.push("```");
+  lines.push("");
+  lines.push("A launch decision is blocked when either command fails. Local fixtures, mocks, and preview receipts are not production evidence.");
+  lines.push("");
   lines.push("## References");
   lines.push("");
   lines.push("- `packages/types/src/matterhorn-workflows.ts`");
@@ -386,6 +397,9 @@ if (jsonMode) {
     JSON.stringify(
       {
         ok: allOk,
+        scope: "contract_only",
+        productionAssessed: false,
+        launchReady: null,
         generatedAt: reportDate,
         outputPath: jsonMode ? undefined : outputPath,
         findings,
@@ -400,6 +414,9 @@ if (jsonMode) {
     JSON.stringify(
       {
         ok: allOk,
+        scope: "contract_only",
+        productionAssessed: false,
+        launchReady: null,
         outputPath,
         generatedAt: reportDate,
         findings: findings.length,

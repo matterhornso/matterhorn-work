@@ -70,12 +70,17 @@ function providerListLabel(
   if (routing?.registry.source === "opencode_provider_list" || catalog?.source === "opencode_provider_list") {
     return "Local provider list";
   }
-  return routing?.registry.label ?? "Provider source unavailable";
+  return routing?.registry.label ?? "Connect an agent engine";
 }
 
 function providerCatalogDetail(catalog: MatterhornBackendModelCatalogSnapshot | undefined): string {
   if (!catalog) return "Using the app provider list until the engine reports a workspace catalog.";
-  if (catalog.serverFetched) return "Fetched from the local workspace engine.";
+  if (catalog.serverFetched) {
+    const availableProviderCount = Math.max(0, catalog.providerCount - catalog.connectedProviderCount);
+    return availableProviderCount > 0
+      ? `Fetched from the local workspace engine. ${availableProviderCount} more provider${availableProviderCount === 1 ? " is" : "s are"} available through Connect provider.`
+      : "Fetched from the local workspace engine.";
+  }
   if (catalog.errorCode === "opencode_unconfigured") {
     return "The local engine is reachable, but this workspace is not connected to an agent engine yet.";
   }
@@ -86,11 +91,11 @@ function statusForCatalog(
   catalog: MatterhornBackendModelCatalogSnapshot | undefined,
   catalogQueryFailed: boolean | undefined,
 ): { label: string; tone: ModelReadinessTone } {
-  if (catalogQueryFailed) return { label: "Needs engine", tone: "warning" };
+  if (catalogQueryFailed) return { label: "Start engine", tone: "warning" };
   if (catalog?.status === "working") return { label: "Working", tone: "ready" };
-  if (catalog?.status === "needs_setup") return { label: "Needs setup", tone: "warning" };
+  if (catalog?.status === "needs_setup") return { label: "Connect provider", tone: "warning" };
   if (catalog?.status === "preview") return { label: "Preview", tone: "neutral" };
-  return { label: "Unknown", tone: "neutral" };
+  return { label: "Provider status unavailable", tone: "neutral" };
 }
 
 function sourceLabel(source: string | undefined): string {
@@ -98,7 +103,7 @@ function sourceLabel(source: string | undefined): string {
   if (source === "env") return "Environment";
   if (source === "config") return "Config";
   if (source === "custom") return "Custom";
-  return "Unknown source";
+  return "Provider-defined";
 }
 
 function formatModelCount(count: number): string {
@@ -114,10 +119,13 @@ function sampleModelList(modelIds: string[], modelCount: number): string {
 
 export function buildModelCatalogRows(
   catalog: MatterhornBackendModelCatalogSnapshot | undefined,
+  options: { connectedOnly?: boolean } = {},
 ): ModelCatalogRow[] {
   if (!catalog?.providers.length) return [];
 
-  return catalog.providers.map((provider) => {
+  return catalog.providers
+    .filter((provider) => !options.connectedOnly || provider.connected)
+    .map((provider) => {
     const samples = provider.sampleModels.length ? provider.sampleModels : provider.modelIds;
     return {
       providerId: provider.id,
@@ -128,7 +136,16 @@ export function buildModelCatalogRows(
       defaultModel: catalog.defaultModels[provider.id] ?? "Not set",
       sampleModels: sampleModelList(samples, provider.modelCount),
     };
-  });
+    });
+}
+
+export function countConnectedCatalogModels(
+  catalog: MatterhornBackendModelCatalogSnapshot | undefined,
+): number {
+  if (!catalog?.providers.length) return 0;
+  return catalog.providers
+    .filter((provider) => provider.connected)
+    .reduce((total, provider) => total + provider.modelCount, 0);
 }
 
 export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInput): ModelReadinessSummary {
@@ -139,7 +156,7 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
   const effectiveModel = input.effectiveWorkspaceModel ?? backendModels?.defaultModel ?? null;
   const status = statusForCatalog(catalog, input.catalogQueryFailed);
   const providerCount = catalog?.serverFetched ? catalog.connectedProviderCount : input.connectedProviderCount;
-  const modelCount = catalog?.serverFetched ? catalog.modelCount : input.connectedModelCount;
+  const modelCount = catalog?.serverFetched ? countConnectedCatalogModels(catalog) : input.connectedModelCount;
   const currentModelRef = input.currentModelRef.trim();
   const hasLocalModelOverride =
     input.hasLocalModelOverride ??
@@ -196,7 +213,7 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
     },
     providerCatalog: {
       label: "Connected catalog",
-      value: `${providerCount} providers · ${modelCount} models`,
+      value: `${providerCount} provider${providerCount === 1 ? "" : "s"} · ${modelCount} model${modelCount === 1 ? "" : "s"}`,
       detail: providerCatalogDetail(catalog),
     },
     selectionPolicy: {
@@ -209,14 +226,14 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
     trainingPolicy:
       backendModels?.privacy.trainingUse === "none_by_default"
         ? "No model training by default. Feedback is kept only for eval, routing, and product quality review."
-        : "Training policy is unavailable.",
-    catalogRows: buildModelCatalogRows(catalog),
+        : "The agent engine did not report a training policy.",
+    catalogRows: buildModelCatalogRows(catalog, { connectedOnly: true }),
     details: [
       {
         label: "Request field",
         value: routing?.answerPath.requestModelField === "model.providerID_modelID"
           ? "model.providerID + model.modelID"
-          : "Unavailable",
+          : "Engine did not report",
       },
       {
         label: "Provider import",

@@ -8,7 +8,7 @@ const cardVariants = cva(
   {
     variants: {
       variant: {
-        default: "border border-border bg-card shadow-none",
+        default: "border border-border/45 bg-card shadow-[var(--dls-card-shadow)] transition-[background-color,box-shadow,transform] duration-150 ease-out motion-reduce:transition-none",
         outline: "border border-border bg-transparent shadow-none",
       },
       size: {

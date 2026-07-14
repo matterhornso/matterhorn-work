@@ -6,11 +6,11 @@ import type { CapabilityUiStatus, CapabilityUiTone } from "./backend-capability-
 import { capabilityStatusLabel, capabilityStatusTone } from "./backend-capability-helpers";
 
 const toneClasses: Record<CapabilityUiTone, string> = {
-  ready: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-  setup: "border-sky-500/30 bg-sky-500/10 text-sky-300",
-  preview: "border-amber-500/30 bg-amber-500/10 text-amber-300",
-  neutral: "border-dls-border bg-background text-dls-secondary",
-  error: "border-red-500/30 bg-red-500/10 text-red-300",
+  ready: "text-emerald-300",
+  setup: "text-sky-300",
+  preview: "text-amber-300",
+  neutral: "text-dls-secondary",
+  error: "text-red-300",
 };
 
 function StatusIcon(props: { status: CapabilityUiStatus; className?: string }) {
@@ -43,13 +43,13 @@ export function BackendCapabilityStatusBadge(props: BackendCapabilityStatusBadge
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium",
+        "inline-flex min-w-0 items-center gap-1.5 text-xs font-medium",
         toneClasses[tone],
         props.className,
       )}
     >
       <StatusIcon status={props.status} />
-      {props.label ?? capabilityStatusLabel(props.status)}
+      <span className="min-w-0 break-words">{props.label ?? capabilityStatusLabel(props.status)}</span>
     </span>
   );
 }
@@ -63,12 +63,12 @@ export interface BackendCapabilityStatusRowProps {
 
 export function BackendCapabilityStatusRow(props: BackendCapabilityStatusRowProps) {
   return (
-    <div className="flex flex-col gap-1 rounded-md px-2.5 py-2.5 transition-colors sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+    <div className="grid gap-2 rounded-lg bg-dls-surface-muted/[0.045] px-3 py-2.5 transition-colors">
       <div className="min-w-0">
         <p className="text-sm font-medium text-dls-text">{props.label}</p>
         {props.hint ? <p className="mt-0.5 break-words text-xs leading-5 text-dls-secondary">{props.hint}</p> : null}
       </div>
-      <div className="shrink-0">
+      <div className="min-w-0 max-w-full text-xs text-dls-secondary">
         {props.value ?? <BackendCapabilityStatusBadge status={props.status} />}
       </div>
     </div>

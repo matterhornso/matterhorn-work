@@ -33,6 +33,14 @@ function parseArgs(argv = process.argv.slice(2)) {
     headed: flags.has("--headed") || process.env.MATTERHORN_PRODUCT_BROWSER_HEADED === "1",
     json: flags.has("--json"),
     strict: flags.has("--strict") || process.env.MATTERHORN_PRODUCT_BROWSER_STRICT === "1",
+    requireDeskResults:
+      flags.has("--require-desk-results") ||
+      process.env.MATTERHORN_PRODUCT_BROWSER_REQUIRE_DESK_RESULTS === "1",
+    deskResultTimeoutMs: Number(
+      values.get("--desk-result-timeout-ms") ||
+      process.env.MATTERHORN_PRODUCT_BROWSER_DESK_RESULT_TIMEOUT_MS ||
+      120_000,
+    ),
     url: values.get("--url") || process.env.MATTERHORN_PRODUCT_BROWSER_URL || DEFAULT_URL,
     outputDir: resolve(repoRoot, values.get("--output-dir") || process.env.MATTERHORN_PRODUCT_BROWSER_OUTPUT_DIR || DEFAULT_OUTPUT_DIR),
   };
@@ -50,6 +58,11 @@ Options:
   --url <url>          Matterhorn app URL. Defaults to the dev-generated-media-smoke app URL.
   --output-dir <dir>   Evidence directory. Default: ${DEFAULT_OUTPUT_DIR}
   --strict             Exit nonzero on smoke failure or browser console/page errors.
+  --require-desk-results
+                       Wait for every desk task to finish with assistant output.
+                       Use this against a real managed-engine stack, not the fixture stack.
+  --desk-result-timeout-ms <ms>
+                       Per-desk completion timeout. Default: 120000.
   --json               Print the full JSON report.
   --headed             Show the Chromium window while running.
   --help               Show this message.
@@ -115,6 +128,17 @@ function workspaceUrl(appUrl, pathSuffix = "session") {
   return url.toString();
 }
 
+function isWorkspaceSessionDetailUrl(appUrl) {
+  try {
+    const workspaceId = workspaceIdFromUrl(appUrl);
+    if (!workspaceId) return false;
+    const pathname = new URL(appUrl).pathname;
+    return new RegExp(`^/workspace/${workspaceId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/session/[^/]+$`).test(pathname);
+  } catch {
+    return false;
+  }
+}
+
 async function clickFirstVisible(locator, label) {
   const count = await locator.count();
   if (count < 1) throw new Error(`Could not find ${label}.`);
@@ -128,6 +152,15 @@ async function clickFirstVisible(locator, label) {
   throw new Error(`${label} exists but is not visible.`);
 }
 
+async function firstVisible(locator) {
+  const count = await locator.count();
+  for (let index = 0; index < count; index += 1) {
+    const candidate = locator.nth(index);
+    if (await candidate.isVisible()) return candidate;
+  }
+  return null;
+}
+
 async function waitForAnyVisible(page, locators, label, timeoutMs = 20_000) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -139,6 +172,106 @@ async function waitForAnyVisible(page, locators, label, timeoutMs = 20_000) {
     await new Promise((resolveWait) => setTimeout(resolveWait, 250));
   }
   throw new Error(`Could not find ${label}.`);
+}
+
+async function assertNoVisible(locator, label) {
+  const count = await locator.count();
+  for (let index = 0; index < count; index += 1) {
+    if (await locator.nth(index).isVisible()) {
+      throw new Error(`${label} should not be visible by default.`);
+    }
+  }
+}
+
+async function ensureWorkspaceHomeVisible(page, timeoutMs = 20_000) {
+  const home = page.getByLabel("Workspace home");
+  try {
+    await home.waitFor({ state: "visible", timeout: 3_000 });
+    return;
+  } catch {
+    // A slow local engine can leave the focused desk mounted after navigation.
+  }
+
+  const backHome = page.getByRole("button", { name: "Back to Home", exact: true });
+  if ((await backHome.count()) > 0 && await backHome.first().isVisible()) {
+    await backHome.first().click();
+  }
+  await home.waitFor({ state: "visible", timeout: timeoutMs });
+}
+
+async function waitForDeskPromptSentEvent(page, taskTitle, timeoutMs = 30_000) {
+  const eventHandle = await page.waitForFunction(
+    (title) => {
+      const api = window.__matterhorn ?? window.__openwork;
+      const events = typeof api?.events === "function" ? api.events(120) : [];
+      return events.find((entry) =>
+        entry?.name === "desk.task_launch.prompt_sent" &&
+        entry?.data &&
+        typeof entry.data === "object" &&
+        entry.data.title === title &&
+        typeof entry.data.sessionId === "string" &&
+        entry.data.sessionId.length > 0
+      ) ?? null;
+    },
+    taskTitle,
+    { timeout: timeoutMs },
+  );
+  return await eventHandle.jsonValue();
+}
+
+async function stopVerifiedDeskRun(page) {
+  const stop = page.getByRole("button", { name: "Stop generating", exact: true });
+  if ((await stop.count()) < 1 || !(await stop.first().isVisible())) return false;
+  await stop.first().click();
+  await stop.first().waitFor({ state: "hidden", timeout: 15_000 }).catch(() => undefined);
+  return true;
+}
+
+async function waitForCompletedDeskResult(page, deskName, timeoutMs) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error(`Invalid desk result timeout: ${timeoutMs}`);
+  }
+  const startedAt = Date.now();
+  const assistantMessages = page.locator('[data-message-role="assistant"]');
+  const stop = page.getByRole("button", { name: "Stop generating", exact: true });
+  const questionPanel = page.getByTestId("question-panel");
+  const questionCounter = page.getByText(/^Question \d+ of \d+$/);
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const visibleQuestionPanel = await firstVisible(questionPanel);
+    const visibleQuestionCounter = await firstVisible(questionCounter);
+    const actionableQuestionInput = visibleQuestionPanel
+      ? await firstVisible(visibleQuestionPanel.locator('input[type="text"]:not([disabled])'))
+      : null;
+    const actionableQuestionButton = visibleQuestionPanel
+      ? await firstVisible(visibleQuestionPanel.locator("button:not([disabled])"))
+      : null;
+    if (visibleQuestionPanel && visibleQuestionCounter && (actionableQuestionInput || actionableQuestionButton)) {
+      return {
+        outcome: "waiting_for_user",
+        checkpoint: (await visibleQuestionCounter.textContent())?.trim() || "Question",
+        durationMs: Date.now() - startedAt,
+      };
+    }
+    const stopVisible = (await stop.count()) > 0 && await stop.first().isVisible();
+    const messageCount = await assistantMessages.count();
+    const messageText = messageCount > 0
+      ? (await assistantMessages.allInnerTexts()).join("\n").trim()
+      : "";
+    if (!stopVisible && messageText.length > 0) {
+      if (/\bfetch failed\b/i.test(messageText)) {
+        throw new Error(`${deskName} completed with a backend transport failure.`);
+      }
+      return {
+        outcome: "completed",
+        assistantMessageCount: messageCount,
+        assistantTextLength: messageText.length,
+        durationMs: Date.now() - startedAt,
+      };
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 500));
+  }
+  throw new Error(`${deskName} did not finish an assistant response within ${timeoutMs}ms.`);
 }
 
 function isStaticMissingResource(url) {
@@ -167,7 +300,6 @@ function isWorkspaceOrApiRequest(url) {
 function isOptionalDevWorkspace404(url) {
   try {
     const parsed = new URL(url);
-    if (/^\/workspace\/[^/]+\/opencode\/mcp$/.test(parsed.pathname)) return true;
     if (
       /^\/workspace\/[^/]+\/files\/content$/.test(parsed.pathname) &&
       parsed.searchParams.get("path") === ".opencode/agents/opencode-router.md"
@@ -189,6 +321,103 @@ function shouldFailOnNetworkResponse(failure) {
   if (failure.status === 404 && isStaticMissingResource(failure.url)) return false;
   if (failure.status === 404 && isOptionalDevWorkspace404(failure.url)) return false;
   return isWorkspaceOrApiRequest(failure.url) || failure.status >= 500;
+}
+
+const primaryDeskSmokeScenarios = [
+  {
+    id: "bittensor",
+    name: "Bittensor",
+    openLabel: "Open Bittensor",
+    heading: "Bittensor desk",
+    expectedTask: "Find useful subnets",
+  },
+  {
+    id: "hyperliquid",
+    name: "Hyperliquid",
+    openLabel: "Open Hyperliquid",
+    heading: "Hyperliquid desk",
+    expectedTask: "Show market context",
+  },
+  {
+    id: "polymarket",
+    name: "Polymarket",
+    openLabel: "Open Polymarket",
+    heading: "Polymarket desk",
+    expectedTask: "Check compliance",
+    inputFixture: {
+      actionLabel: "Add market",
+      fieldLabel: "Market URL or slug",
+      value: "what-price-will-bitcoin-hit-before-2027",
+    },
+  },
+  {
+    id: "sui",
+    name: "Sui",
+    openLabel: "Open Sui",
+    heading: "Sui desk",
+    expectedTask: "Prepare transfer preview",
+  },
+];
+
+const primaryDeskSmokeStageIds = [
+  "desk_bittensor_task_start",
+  "desk_hyperliquid_task_start",
+  "desk_polymarket_task_start",
+  "desk_sui_task_start",
+];
+
+async function startPrimaryDeskTask(page, config, desk) {
+  await page.goto(workspaceUrl(config.url, "session"), { waitUntil: "load", timeout: 30_000 });
+  await ensureWorkspaceHomeVisible(page);
+  await page.getByText("Open a desk", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+  await clickFirstVisible(page.getByRole("button", { name: desk.openLabel, exact: true }), `${desk.openLabel} desk card`);
+  await page.getByText(desk.heading, { exact: true }).waitFor({ state: "visible", timeout: 15_000 });
+  await assertNoVisible(page.getByText("Show technical prompt", { exact: false }), `${desk.name} technical prompt disclosure`);
+  await assertNoVisible(page.getByText("Boundary:", { exact: false }), `${desk.name} boundary copy`);
+  await assertNoVisible(page.getByText(/Can submit:/), `${desk.name} submit-policy copy`);
+  const agentTasks = page.getByLabel("Agent tasks");
+  await agentTasks.waitFor({ state: "visible", timeout: 15_000 });
+  const taskGroup = agentTasks
+    .locator("[data-workflow-stage]")
+    .filter({ has: page.getByText(desk.expectedTask, { exact: true }) })
+    .first();
+  await taskGroup.waitFor({ state: "visible", timeout: 15_000 });
+  if (desk.inputFixture) {
+    await clickFirstVisible(
+      taskGroup.getByRole("button", { name: desk.inputFixture.actionLabel, exact: true }),
+      `${desk.name} ${desk.inputFixture.actionLabel} button`,
+    );
+    const input = page.getByLabel(desk.inputFixture.fieldLabel, { exact: true });
+    await input.waitFor({ state: "visible", timeout: 10_000 });
+    await input.fill(desk.inputFixture.value);
+    const inputForm = input.locator("xpath=ancestor::form");
+    await inputForm.getByRole("button", { name: "Start task", exact: true }).click();
+  } else {
+    await clickFirstVisible(taskGroup.getByRole("button", { name: /^Start task/ }), `${desk.name} Start task button`);
+  }
+  await page.waitForURL((url) => isWorkspaceSessionDetailUrl(url.toString()), { timeout: 30_000 });
+  await waitForAnyVisible(page, [
+    page.getByTestId("session-composer-shell"),
+    page.getByRole("button", { name: /Stop generating|Ask/i }),
+    page.getByText(`${desk.expectedTask} started`, { exact: false }),
+    page.getByText("The agent is working in this session.", { exact: false }),
+  ], `active ${desk.name} desk session`, 30_000);
+  const perspectiveSelector = page.getByRole("radiogroup", { name: "Response perspective" });
+  await perspectiveSelector.waitFor({ state: "visible", timeout: 15_000 });
+  await perspectiveSelector.getByRole("radio", { name: "Cautious", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  await perspectiveSelector.getByRole("radio", { name: "Balanced", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  await perspectiveSelector.getByRole("radio", { name: "Optimistic", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  const launchEvent = await waitForDeskPromptSentEvent(page, desk.expectedTask);
+  if (!isWorkspaceSessionDetailUrl(page.url())) {
+    throw new Error(`${desk.name} did not navigate into a concrete chat session after Start task.`);
+  }
+  const result = config.requireDeskResults
+    ? await waitForCompletedDeskResult(page, desk.name, config.deskResultTimeoutMs)
+    : null;
+  const stoppedAfterVerification = !result || result.outcome === "waiting_for_user"
+    ? await stopVerifiedDeskRun(page)
+    : false;
+  return { sessionUrl: page.url(), launchEvent, result, stoppedAfterVerification };
 }
 
 async function runSmoke(config) {
@@ -252,10 +481,10 @@ async function runSmoke(config) {
     });
 
     await stage(report, "home_shell", "Check workspace home shell", async () => {
-      await page.getByText("Start a desk task, continue a chat, or collect notes and outputs for this workspace.", { exact: true })
+      await page.getByText("Chats, desks, notes, and saved outputs for this project.", { exact: true })
         .waitFor({ state: "visible", timeout: 15_000 });
       await page.getByRole("button", { name: "New chat", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
-      await page.getByRole("button", { name: "Jot note", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
+      await page.getByRole("button", { name: "New note", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
       await page.getByText("Open a desk", { exact: true }).waitFor({ state: "visible", timeout: 15_000 });
       await page.getByLabel("Copy project path").waitFor({ state: "visible", timeout: 15_000 });
       await page.getByLabel("Open outputs folder").waitFor({ state: "visible", timeout: 15_000 });
@@ -263,7 +492,7 @@ async function runSmoke(config) {
 
     await stage(report, "wallet_readiness", "Check compact wallet readiness", async () => {
       await page.getByText("Wallet readiness", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText(/Sui: (Working|Preview|Needs setup|Not supported here)/).waitFor({
+      await page.getByText(/Sui: (Working|Early access|Needs setup|Not supported here)/).waitFor({
         state: "visible",
         timeout: 20_000,
       });
@@ -273,24 +502,78 @@ async function runSmoke(config) {
       await page.getByRole("button", { name: "Open wallet", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     });
 
-    await stage(report, "desk_task_start", "Start a Bittensor desk task", async () => {
-      await clickFirstVisible(page.getByRole("button", { name: "Open Bittensor" }), "Open Bittensor desk card");
-      await page.getByText("Bittensor desk", { exact: true }).waitFor({ state: "visible", timeout: 15_000 });
-      await page.getByLabel("Agent tasks").waitFor({ state: "visible", timeout: 15_000 });
-      await clickFirstVisible(page.getByRole("button", { name: /^Start task/ }), "Start task button");
+    for (const desk of primaryDeskSmokeScenarios) {
+      await stage(report, `desk_${desk.id}_task_start`, `Start a ${desk.name} desk task`, async () => {
+        const { sessionUrl, launchEvent, result, stoppedAfterVerification } = await startPrimaryDeskTask(page, config, desk);
+        report.artifacts.startedDeskTasks = [
+          ...(report.artifacts.startedDeskTasks ?? []),
+          desk.name,
+        ];
+        report.artifacts.startedDeskTaskSessions = {
+          ...(report.artifacts.startedDeskTaskSessions ?? {}),
+          [desk.name]: sessionUrl,
+        };
+        report.artifacts.startedDeskTaskEvents = {
+          ...(report.artifacts.startedDeskTaskEvents ?? {}),
+          [desk.name]: launchEvent,
+        };
+        report.artifacts.stoppedDeskTasks = {
+          ...(report.artifacts.stoppedDeskTasks ?? {}),
+          [desk.name]: stoppedAfterVerification,
+        };
+        if (result) {
+          report.artifacts.completedDeskTasks = [
+            ...(report.artifacts.completedDeskTasks ?? []),
+            desk.name,
+          ];
+          report.artifacts.deskTaskResults = {
+            ...(report.artifacts.deskTaskResults ?? {}),
+            [desk.name]: result,
+          };
+        }
+      });
+    }
+
+    await stage(report, "session_direct_link_reload", "Open a persisted chat in a fresh browser context", async () => {
+      const directSessionUrl = report.artifacts.startedDeskTaskSessions?.Bittensor;
+      if (typeof directSessionUrl !== "string") throw new Error("No current Bittensor session URL was available for direct-link verification.");
+      const refreshContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      try {
+        const refreshPage = await refreshContext.newPage();
+        await refreshPage.goto(directSessionUrl, { waitUntil: "load", timeout: 30_000 });
+        await refreshPage.getByTestId("session-composer-shell").waitFor({ state: "visible", timeout: 20_000 });
+        await refreshPage.getByRole("radiogroup", { name: "Response perspective" }).waitFor({ state: "visible", timeout: 20_000 });
+        if (refreshPage.url() !== directSessionUrl) {
+          throw new Error(`Persisted chat redirected to ${refreshPage.url()} instead of remaining on its direct URL.`);
+        }
+        report.artifacts.directSessionReloadUrl = refreshPage.url();
+      } finally {
+        await refreshContext.close();
+      }
+    });
+
+    await stage(report, "desk_longevity_workflow_start", "Start the Longevity workflow desk", async () => {
+      await page.goto(workspaceUrl(config.url, "session"), { waitUntil: "load", timeout: 30_000 });
+      await ensureWorkspaceHomeVisible(page);
+      await page.getByText("Open a desk", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await clickFirstVisible(page.getByRole("button", { name: "Open Longevity", exact: true }), "Open Longevity desk card");
+      await page.getByText("Longevity Agent", { exact: true }).first().waitFor({ state: "visible", timeout: 20_000 });
       await waitForAnyVisible(page, [
-        page.getByText("Starting Show my TAO balance", { exact: false }),
-        page.getByTestId("session-image-generation-panel"),
-        page.getByText("Show my TAO balance", { exact: false }),
-      ], "started Bittensor task", 30_000);
-      report.artifacts.startedDeskTask = "Bittensor";
+        page.getByText("7 stages", { exact: true }),
+        page.getByText("Run in chat", { exact: true }),
+        page.getByText("Ready. Stage outputs will save under outputs/longevity/", { exact: false }),
+      ], "Longevity workflow stages", 30_000);
+      report.artifacts.startedDeskTasks = [
+        ...(report.artifacts.startedDeskTasks ?? []),
+        "Longevity",
+      ];
     });
 
     await stage(report, "activity_summary", "Check compact Project Activity", async () => {
       await page.goto(workspaceUrl(config.url, "session"), { waitUntil: "load", timeout: 30_000 });
       await page.getByText("Project Activity", { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
       await waitForAnyVisible(page, [
-        page.getByText("Project history", { exact: true }),
+        page.getByText("Run history", { exact: true }),
         page.getByText("Run started", { exact: false }),
         page.getByText("Bittensor", { exact: false }),
       ], "compact project activity", 30_000);
@@ -312,10 +595,22 @@ async function runSmoke(config) {
 
     await stage(report, "notes_panel", "Open Notes inside session shell", async () => {
       await page.goto(`${workspaceUrl(config.url, "session")}?panel=notes`, { waitUntil: "load", timeout: 30_000 });
-      await page.getByRole("heading", { name: "Notes", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByRole("button", { name: "New note", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByRole("button", { name: "All notes", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByRole("button", { name: "Memory suggested", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      const notesPanel = page.getByRole("region", { name: "Notes panel" });
+      await notesPanel.waitFor({ state: "visible", timeout: 20_000 });
+      await notesPanel.getByRole("heading", { name: "Notes", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await notesPanel.getByRole("button", { name: "New note", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      const notesSearch = notesPanel.getByPlaceholder(/Search notes/);
+      if (!(await notesSearch.isVisible().catch(() => false))) {
+        const createFirstNote = notesPanel.getByRole("button", { name: "Create first note", exact: true });
+        await createFirstNote.waitFor({ state: "visible", timeout: 20_000 });
+        await createFirstNote.click();
+        const notesEditor = page.getByRole("region", { name: "Notes editor" });
+        await notesEditor.waitFor({ state: "visible", timeout: 20_000 });
+        await notesEditor.getByRole("button", { name: "Back to notes", exact: true }).click();
+        report.artifacts.createdFirstNote = true;
+      }
+      await notesSearch.waitFor({ state: "visible", timeout: 20_000 });
+      await notesPanel.getByRole("combobox", { name: "Filter notes", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByLabel("Back to chat").waitFor({ state: "visible", timeout: 20_000 });
       report.artifacts.notesPanelUrl = page.url();
     });
@@ -334,10 +629,14 @@ async function runSmoke(config) {
       await page.goto(`${workspaceUrl(config.url, "session")}?panel=wallet`, { waitUntil: "load", timeout: 30_000 });
       await waitForAnyVisible(page, [
         page.getByRole("heading", { name: "Sui wallet preview", exact: true }),
-        page.getByText("Sui wallet workflow", { exact: true }),
+        page.getByText("Sui wallet", { exact: true }),
         page.getByText("Matterhorn Wallet", { exact: true }),
       ], "wallet panel", 20_000);
-      await page.getByText(/Signing stays in your wallet/).first().waitFor({ state: "visible", timeout: 20_000 });
+      await waitForAnyVisible(page, [
+        page.getByText("Install or enable Phantom for Sui", { exact: true }),
+        page.getByText("Connect Phantom for Sui", { exact: true }),
+        page.getByText("Connected wallet", { exact: true }),
+      ], "Sui wallet connection action or connected state", 20_000);
       report.artifacts.walletPanelUrl = page.url();
     });
 
@@ -345,35 +644,122 @@ async function runSmoke(config) {
       await page.goto(workspaceUrl(config.url, "settings/overview"), { waitUntil: "load", timeout: 30_000 });
       await page.getByRole("heading", { name: "Settings", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText("Backend status", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("Image and NFT publishing", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Data policy", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Task History", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText("Project Activity", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      const supportButton = page.getByRole("button", { name: "Support report", exact: true });
-      await supportButton.scrollIntoViewIfNeeded();
-      const downloadPromise = page.waitForEvent("download", { timeout: 15_000 });
-      await supportButton.click();
-      const download = await downloadPromise;
-      const suggestedFilename = download.suggestedFilename();
-      if (!/matterhorn-backend-support.*\.json$/i.test(suggestedFilename)) {
-        throw new Error(`Unexpected support report filename: ${suggestedFilename}`);
+      const supportButtons = [
+        page.getByRole("button", { name: "Support report", exact: true }),
+        page.getByRole("button", { name: "Download report", exact: true }),
+      ];
+      await waitForAnyVisible(page, [
+        ...supportButtons,
+        page.getByRole("button", { name: "Copy command", exact: true }),
+      ], "Support report or offline diagnostics button");
+
+      const supportButton =
+        await firstVisible(supportButtons[0]) ??
+        await firstVisible(supportButtons[1]);
+      if (supportButton) {
+        await supportButton.scrollIntoViewIfNeeded();
+        await supportButton.waitFor({ state: "visible", timeout: 10_000 });
+        const handle = await supportButton.elementHandle();
+        if (!handle) throw new Error("Support report button disappeared before click.");
+        await page.waitForFunction((element) => !(element instanceof HTMLButtonElement) || !element.disabled, handle, { timeout: 15_000 });
+        const downloadPromise = page.waitForEvent("download", { timeout: 15_000 });
+        await supportButton.click();
+        const download = await downloadPromise;
+        const suggestedFilename = download.suggestedFilename();
+        if (!/matterhorn-backend-support.*\.json$/i.test(suggestedFilename)) {
+          throw new Error(`Unexpected support report filename: ${suggestedFilename}`);
+        }
+        report.artifacts.supportReport = { suggestedFilename };
+      } else {
+        const copyCommand = await firstVisible(page.getByRole("button", { name: "Copy command", exact: true }));
+        if (!copyCommand) throw new Error("Could not find support report download or offline copy command.");
+        await copyCommand.scrollIntoViewIfNeeded();
+        await page.getByText("Copy and run this in your terminal to capture a redacted readiness report.", { exact: true })
+          .waitFor({ state: "visible", timeout: 10_000 });
+        report.artifacts.supportReport = { offlineDiagnostics: true };
       }
-      report.artifacts.supportReport = { suggestedFilename };
     });
 
     await stage(report, "settings_wallet", "Check Wallet settings Sui copy", async () => {
       await page.goto(workspaceUrl(config.url, "settings/wallet"), { waitUntil: "load", timeout: 30_000 });
-      await page.getByText("Sui wallet preview", { exact: true }).first().waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("Connect a Sui wallet-standard wallet for account reads. Signing remains in your wallet.", { exact: true })
-        .first()
-        .waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Sui wallet", { exact: true }).first().waitFor({ state: "visible", timeout: 20_000 });
+      await waitForAnyVisible(page, [
+        page.getByText("Install or enable Phantom for Sui", { exact: true }),
+        page.getByText("Connect Phantom for Sui", { exact: true }),
+        page.getByText("Connected wallet", { exact: true }),
+      ], "wallet settings Sui connection action or connected state", 20_000);
       report.artifacts.walletSettingsUrl = page.url();
+    });
+
+    await stage(report, "settings_ai_models", "Check AI provider and model picker", async () => {
+      await page.goto(workspaceUrl(config.url, "settings/ai"), { waitUntil: "load", timeout: 30_000 });
+      await page.getByRole("heading", { name: "Agent model", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("opencode/big-pickle", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      const providersSection = page.locator("[data-section]", {
+        has: page.getByRole("heading", { name: "Providers", exact: true }),
+      });
+      await providersSection.getByText(/1 provider connected/).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByRole("button", { name: "Change model", exact: true }).click();
+      const modelDialog = page.getByRole("dialog", { name: "Models" });
+      await modelDialog.waitFor({ state: "visible", timeout: 20_000 });
+      const openCodeProvider = modelDialog.getByRole("button", { name: /^OpenCode/i }).first();
+      await openCodeProvider.waitFor({ state: "visible", timeout: 20_000 });
+      await openCodeProvider.click();
+      await modelDialog.getByRole("button", { name: /Big Pickle/ }).waitFor({ state: "visible", timeout: 20_000 });
+      await modelDialog.getByRole("button", { name: "Close", exact: true }).click();
+      report.artifacts.aiSettingsUrl = page.url();
+    });
+
+    await stage(report, "settings_mcp_connections", "Check live MCP connection names", async () => {
+      await page.goto(workspaceUrl(config.url, "settings/extensions/mcp"), { waitUntil: "load", timeout: 30_000 });
+      await page.getByRole("heading", { name: "MCPs & Tools", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      const connectedSummary = page.getByText(/\d+ MCP servers? active/, { exact: true });
+      const emptySummary = page.getByText("No external MCPs connected.", { exact: true });
+      await waitForAnyVisible(page, [connectedSummary, emptySummary], "connected MCP summary or explicit empty state", 20_000);
+      if (await connectedSummary.isVisible().catch(() => false)) {
+        const connectedNames = page.getByLabel(/Connected MCP servers:/, { exact: false });
+        await connectedNames.waitFor({ state: "visible", timeout: 20_000 });
+        const connectedLabel = (await connectedNames.getAttribute("aria-label")) ?? "";
+        report.artifacts.connectedMcpServers = connectedLabel
+          .replace(/^Connected MCP servers:\s*/, "")
+          .split(",")
+          .map((name) => name.trim())
+          .filter(Boolean);
+      } else {
+        await page.getByText("No apps connected yet", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+        await page.getByText("Bittensor MCP", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+        await page.getByText("Hyperliquid MCP", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+        report.artifacts.connectedMcpServers = [];
+      }
+      report.artifacts.mcpSettingsUrl = page.url();
+    });
+
+    await stage(report, "settings_billing", "Check Billing settings payment flow copy", async () => {
+      await page.goto(workspaceUrl(config.url, "settings/billing"), { waitUntil: "load", timeout: 30_000 });
+      await page.locator("main").getByRole("heading", { name: "Billing", exact: true }).last().waitFor({ state: "visible", timeout: 20_000 });
+      await page.locator("main").getByRole("heading", { name: "Matterhorn Plus", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.locator("main").getByRole("heading", { name: "Matterhorn Max", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("$9.99/month", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("$89.99/month", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await waitForAnyVisible(page, [
+        page.getByText("Live charges off", { exact: true }),
+        page.getByText("Live payments disabled", { exact: true }),
+      ], "billing live-payment safety state", 20_000);
+      await page.getByText("What billing changes", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      report.artifacts.billingSettingsUrl = page.url();
     });
 
     await stage(report, "settings_generated_media", "Check Generated media settings surface", async () => {
       await page.goto(workspaceUrl(config.url, "settings/generated-media"), { waitUntil: "load", timeout: 30_000 });
       await page.getByText("Production readiness", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("Setup diagnostics", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("Recent media", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("Data controls", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Media library", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByRole("button", { name: "Generate image", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Diagnostics and readiness report", { exact: true }).click();
+      await page.getByRole("button", { name: "Run diagnostics", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Storage and data controls", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       report.artifacts.generatedMediaSettingsUrl = page.url();
     });
 

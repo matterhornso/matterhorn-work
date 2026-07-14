@@ -47,39 +47,50 @@ for (const stageId of [
 ]) {
   assert.ok(script.includes(stageId), `generated-media browser smoke should report stage ${stageId}`);
 }
+assert.ok(
+  script.includes("generationResponsePromise") &&
+    script.includes("Image generation request failed (${generationResponse.status()}): ${detail}"),
+  "generated-media browser smoke should fail immediately with backend response detail instead of timing out after an HTTP error",
+);
 for (const visibleText of [
   "Wallet readiness",
+  "Early access",
   "Sui signing stays in your wallet; desktop uses external handoff.",
   "Open wallet",
   "Generate image",
-  "Describe an image to generate...",
-  "Image saved to outputs",
+  "Describe the image...",
+  "Create image",
+  "Saved to Outputs",
   "Make NFT",
-  "Create local draft",
-  "Prepare upload",
-  "Upload",
-  "Preview mint",
+  "generated-image-card",
+  "Publishing path",
+  "NFT marketplace listing",
+  "Create draft",
+  "Prepare",
+  "Upload to Walrus",
+  "Prepare mint handoff",
   "Mint digest",
   "Minted object id",
-  "Record mint receipt",
+  "Save mint receipt",
   "Mint receipt recorded",
-  "Preview listing",
+  "Listing inputs",
+  "Prepare listing handoff",
   "Listing plan ready",
   "Listing transaction digest",
-  "Record listing receipt",
+  "Save listing receipt",
   "Listing receipt recorded",
   "Generated media history",
   "Listed",
   "Production readiness",
-  "Setup diagnostics",
+  "Diagnostics and readiness report",
   "Run diagnostics",
   "Generated media setup passed all safe diagnostics.",
   "Production smoke plan",
   "Local test",
   "Public writes require user action",
-  "Recent media",
+  "Media library",
   "NFT drafts",
-  "Data controls",
+  "Storage and data controls",
   "Local generated media delete",
   "Delete generated image",
   "Delete NFT draft",
@@ -121,8 +132,16 @@ assert.ok(
 );
 assert.ok(
   script.includes('[role="dialog"]') &&
-    script.includes('filter({ hasText: "Make NFT" })'),
-  "generated-media browser smoke should scope NFT readiness checks to the Make NFT dialog",
+    script.includes('filter({ hasText: "Publish as NFT" })') &&
+    script.includes('getByText("NFT marketplace listing", { exact: true })'),
+  "generated-media browser smoke should scope NFT readiness checks to the opened NFT publishing sheet with exact row labels",
+);
+assert.ok(
+  script.includes("DEFAULT_PROMPT_BASE") &&
+    script.includes("Date.now().toString(36)") &&
+    script.includes('page.getByTestId("generated-image-card").filter({ hasText: prompt })') &&
+    script.includes("createdCard.getByText(config.prompt, { exact: true })"),
+  "generated-media browser smoke should prove a fresh image was created before opening the NFT draft",
 );
 assert.ok(
   script.includes("generated-media-browser-smoke.png") &&

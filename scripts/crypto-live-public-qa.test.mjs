@@ -98,6 +98,21 @@ const smokeStage = attachedPayload.stages.find((stage) => stage.id === "customer
 assert(smokeStage?.status === "pass", "expected customer smoke attachment to pass");
 assert(typeof smokeStage.evidenceSha256 === "string" && smokeStage.evidenceSha256.length === 64, "expected attached smoke SHA-256");
 
+const safePolicyPath = join(outputDir, "safe-policy.json");
+writeFileSync(safePolicyPath, JSON.stringify({
+  ready: true,
+  safety: { acceptsSignedPayloads: false, acceptsRawSignatures: false },
+  warnings: ["Never attach raw signatures or signed payloads."],
+}) + "\n");
+const safePolicy = run(["--output-dir", outputDir, "--bittensor-evidence-verify", safePolicyPath, "--json"]);
+assert(safePolicy.status === 0, `negative safety assertions should be accepted. stderr=${safePolicy.stderr}`);
+
+const unsafeEvidencePath = join(outputDir, "unsafe-evidence.json");
+writeFileSync(unsafeEvidencePath, JSON.stringify({ ready: true, privateKey: "never-accept" }) + "\n");
+const unsafeEvidence = run(["--output-dir", outputDir, "--bittensor-evidence-verify", unsafeEvidencePath, "--json"]);
+assert(unsafeEvidence.status !== 0, "expected exact secret-shaped evidence fields to be rejected");
+assert(/secret-shaped field/i.test(unsafeEvidence.stderr), "expected structured secret field rejection");
+
 const secretResult = run(["--output-dir", outputDir, "--private-key", "do-not-accept", "--json"]);
 assert(secretResult.status !== 0, "expected credential-shaped flag to be rejected");
 assert(/Forbidden credential-shaped flag/i.test(secretResult.stderr), "expected credential rejection error");

@@ -37,7 +37,7 @@ function requireOpenWorkServer(): { url: string; token: string } {
   const url = serverUrl();
   const token = serverToken();
   if (!url || !token) {
-    throw new Error("OpenWork extension tools are only available when OpenCode is launched by OpenWork.");
+    throw new Error("Matterhorn extension tools are only available when the Matterhorn engine launches the runtime.");
   }
   return { url, token };
 }
@@ -82,7 +82,7 @@ async function postJson(path: string, body: ExtensionActionPayload): Promise<unk
   });
   const payload = await parseResponse(response);
   if (!response.ok) {
-    throw new Error(errorMessage(payload, "OpenWork extension call failed"));
+    throw new Error(errorMessage(payload, "Matterhorn extension call failed"));
   }
   return payload;
 }
@@ -100,7 +100,7 @@ function contextPayload(context: OpenCodeContext) {
 export const OpenWorkExtensionsPreview = async () => ({
   tool: {
     openwork_extension_list_actions: {
-      description: "List extension actions currently exposed by OpenWork, including Google Workspace preview actions.",
+      description: "List extension actions currently exposed by Matterhorn, including Google Workspace preview actions.",
       args: listActionsArgsSchema.shape,
       async execute(rawArgs: unknown, context: OpenCodeContext) {
         const args = listActionsArgsSchema.parse(rawArgs);
@@ -110,12 +110,12 @@ export const OpenWorkExtensionsPreview = async () => ({
           headers: { Authorization: `Bearer ${token}` },
         });
         const payload = await parseResponse(response);
-        if (!response.ok) throw new Error(errorMessage(payload, "OpenWork extension action listing failed"));
+        if (!response.ok) throw new Error(errorMessage(payload, "Matterhorn extension action listing failed"));
         return JSON.stringify(addContext(payload, context), null, 2);
       },
     },
     openwork_extension_call: {
-      description: "Call an OpenWork extension action. Use openwork_extension_list_actions first to inspect available actions and schemas.",
+      description: "Call a Matterhorn extension action. Use openwork_extension_list_actions first to inspect available actions and schemas.",
       args: callArgsSchema.shape,
       async execute(rawArgs: unknown, context: OpenCodeContext) {
         const args = callArgsSchema.parse(rawArgs);

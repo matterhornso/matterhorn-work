@@ -146,12 +146,20 @@ function resolveAgentTemplate(): string {
   return MATTERHORN_AGENT.replace("{{BROWSER_CDP_PORT}}", cdpPort);
 }
 
+function renderDeskAgentRuntimePermissions(
+  agent: (typeof MATTERHORN_DESK_AGENT_MANIFESTS)[keyof typeof MATTERHORN_DESK_AGENT_MANIFESTS],
+): string {
+  const entries = Object.entries(agent.runtimePermissions ?? {});
+  if (entries.length === 0) return "";
+  return `permission:\n${entries.map(([permission, action]) => `  ${permission}: ${action}`).join("\n")}\n`;
+}
+
 function renderDeskAgentTemplate(agent: (typeof MATTERHORN_DESK_AGENT_MANIFESTS)[keyof typeof MATTERHORN_DESK_AGENT_MANIFESTS]): string {
   return `---
 description: ${agent.description}
 mode: primary
 temperature: 0.2
-matterhorn_desk_agent: v1
+${renderDeskAgentRuntimePermissions(agent)}matterhorn_desk_agent: v1
 matterhorn_desk_id: ${agent.deskId}
 agent_id: ${agent.agentId}
 workflow_id: ${agent.workflowId}
@@ -222,9 +230,13 @@ async function ensureMatterhornDeskAgents(workspaceRoot: string): Promise<boolea
   let changed = false;
   for (const agent of Object.values(MATTERHORN_DESK_AGENT_MANIFESTS)) {
     const agentPath = join(agentsDir, `${agent.agentId}.md`);
-    if (await exists(agentPath)) continue;
     const content = renderDeskAgentTemplate(agent);
-    await writeFile(agentPath, content.endsWith("\n") ? content : `${content}\n`, "utf8");
+    const normalizedContent = content.endsWith("\n") ? content : `${content}\n`;
+    if (await exists(agentPath)) {
+      const current = await readFile(agentPath, "utf8");
+      if (!current.includes("matterhorn_desk_agent: v1") || current === normalizedContent) continue;
+    }
+    await writeFile(agentPath, normalizedContent, "utf8");
     changed = true;
   }
   return changed;

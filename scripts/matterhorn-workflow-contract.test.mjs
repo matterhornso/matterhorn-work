@@ -100,7 +100,11 @@ function extractManifestBlocks(text) {
 }
 
 const blocks = extractManifestBlocks(types);
-assert.equal(Object.keys(blocks).length, fixtureIds.length, `expected ${fixtureIds.length} fixture blocks`);
+for (const id of fixtureIds) {
+  const constantName = id.toUpperCase();
+  assert.ok(blocks[constantName], `expected baseline fixture block: ${constantName}_WORKFLOW`);
+}
+assert.ok(Object.keys(blocks).length >= fixtureIds.length, `expected at least ${fixtureIds.length} fixture blocks`);
 
 // 5. Every fixture has at least one prompt, artifact, service hook, and QA checklist.
 for (const [name, block] of Object.entries(blocks)) {
@@ -222,7 +226,11 @@ function extractProtocolWorkspaceBlocks(text) {
 }
 
 const protocolBlocks = extractProtocolWorkspaceBlocks(types);
-assert.equal(Object.keys(protocolBlocks).length, protocolWorkspaceIds.length, `expected ${protocolWorkspaceIds.length} protocol workspace manifest blocks`);
+for (const id of protocolWorkspaceIds) {
+  const constantName = id.toUpperCase();
+  assert.ok(protocolBlocks[constantName], `expected baseline protocol workspace block: ${constantName}_PROTOCOL_WORKSPACE_MANIFEST`);
+}
+assert.ok(Object.keys(protocolBlocks).length >= protocolWorkspaceIds.length, `expected at least ${protocolWorkspaceIds.length} protocol workspace manifest blocks`);
 
 for (const [name, block] of Object.entries(protocolBlocks)) {
   assert.ok(block.includes('version: "matterhorn.protocol.workspace.manifest.v1"'), `${name} must use protocol workspace manifest version`);
@@ -337,7 +345,11 @@ function extractEvidenceBundleBlocks(text) {
 }
 
 const evidenceBlocks = extractEvidenceBundleBlocks(types);
-assert.equal(Object.keys(evidenceBlocks).length, evidenceBundleIds.length, `expected ${evidenceBundleIds.length} evidence bundle blocks`);
+for (const id of evidenceBundleIds) {
+  const constantName = id.toUpperCase();
+  assert.ok(evidenceBlocks[constantName], `expected baseline evidence bundle block: ${constantName}_EVIDENCE_BUNDLE`);
+}
+assert.ok(Object.keys(evidenceBlocks).length >= evidenceBundleIds.length, `expected at least ${evidenceBundleIds.length} evidence bundle blocks`);
 
 for (const [name, block] of Object.entries(evidenceBlocks)) {
   assert.ok(block.includes('version: "matterhorn.workflow.evidence-bundle.v1"'), `${name} must use evidence bundle version`);

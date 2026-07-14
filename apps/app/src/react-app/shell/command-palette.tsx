@@ -90,6 +90,7 @@ export type CommandPaletteProps = {
   onOpenNotes?: () => void;
   onQuickJot?: () => void;
   notesEnabled?: boolean;
+  workspaceReady?: boolean;
   onSendFeedback?: () => void;
   /** Optional — open a URL in the user's browser. Falls back to window.open. */
   onOpenUrl?: (url: string) => void;
@@ -116,6 +117,7 @@ export type CommandPaletteProps = {
  */
 export function CommandPalette(props: CommandPaletteProps) {
   const [mode, setMode] = useState<PaletteMode>("root");
+  const workspaceReady = props.workspaceReady ?? true;
 
   useEffect(() => {
     if (!props.open) {
@@ -167,13 +169,23 @@ export function CommandPalette(props: CommandPaletteProps) {
       {
         id: "new-session",
         title: "New chat",
-        detail: t("session.cmd_new_session_detail"),
-        meta: t("session.cmd_new_session_meta"),
+        detail: workspaceReady
+          ? t("session.cmd_new_session_detail")
+          : t("session.cmd_new_session_workspace_required_detail"),
+        meta: workspaceReady
+          ? t("session.cmd_new_session_meta")
+          : t("session.cmd_new_session_workspace_required_meta"),
         icon: <MessageSquarePlus className="size-4 text-primary" />,
-        searchText: "new chat new session task",
+        searchText: workspaceReady
+          ? "new chat new session task"
+          : "new chat workspace required create project",
         action: () => {
           props.onClose();
-          props.onCreateNewSession();
+          if (workspaceReady) {
+            props.onCreateNewSession();
+            return;
+          }
+          props.onCreateNewProject?.();
         },
       },
       {

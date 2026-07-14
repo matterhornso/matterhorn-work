@@ -424,6 +424,67 @@ const CUSTOMER_TEMPLATES = [
     },
   },
   {
+    id: "sui_wallet_workflow",
+    name: "Use Sui",
+    summary: "Read public Sui account context, prepare transfer previews, and save public transaction receipts.",
+    promise: "Sui signing stays in your wallet. Matterhorn never asks for seed phrases, private keys, raw signatures, signed payloads, or wallet exports.",
+    category: "web3",
+    examplePrompts: ["Show my Sui wallet", "Prepare a Sui transfer preview", "Import a Sui transaction receipt"],
+    expectedArtifacts: [
+      { id: "wallet_card", name: "Sui Wallet Card", mimeType: "application/json", public: true },
+      { id: "transfer_preview", name: "Transfer Preview", mimeType: "application/json", public: true },
+      { id: "receipt_evidence", name: "Receipt Evidence", mimeType: "application/json", public: true },
+    ],
+    requiredContext: [
+      {
+        id: "wallet_address",
+        label: "Public Sui address",
+        required: true,
+        type: "text",
+        helpText: "Public Sui address only. Never provide a seed phrase, private key, or wallet export.",
+      },
+    ],
+    optionalContext: [
+      { id: "recipient_address", label: "Recipient public Sui address", required: false, type: "text" },
+      { id: "amount_mist", label: "Transfer amount in MIST", required: false, type: "number" },
+    ],
+    status: "preview_only",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: ["private key", "seed phrase", "mnemonic", "raw signature", "signed payload", "wallet export"],
+    handoffReceiptSupport: {
+      supported: true,
+      types: ["transfer_preview", "receipt_evidence"],
+      description: "Produces a non-custodial transfer preview and stores only public receipt evidence after wallet submission.",
+    },
+    serviceHooks: [{ hook: "sui", status: "preview_only" }],
+    chatMode: "crypto chat",
+    launch: {
+      primaryCta: "Open Sui desk",
+      secondaryCta: "Preview transfer",
+      defaultPrompt: "Show my Sui wallet",
+      handoffContextLabel: "Public Sui address",
+      recommendedSurface: "protocol_desk",
+    },
+    ui: {
+      iconHint: "sui",
+      accent: "matterhorn_blue",
+      shortDescription: "Read Sui accounts, preview transfers, and import receipts. Signing stays in your wallet.",
+    },
+    routing: {
+      chatMode: "sui",
+      opensPanel: "sui",
+      startsSession: true,
+    },
+    recommendedCommands: {
+      cli: ['matterhorn-work sui account "<public Sui address>" --json'],
+    },
+  },
+  {
     id: "wellness_creator_workflow",
     name: "Build a Longevity Creator business workflow",
     summary:

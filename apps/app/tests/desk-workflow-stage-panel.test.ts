@@ -118,9 +118,11 @@ describe("desk workflow stage panel metadata", () => {
     const source = await Bun.file("apps/app/src/react-app/domains/session/workflows/desk-workflow-stage-panel.tsx").text();
 
     expect(source).toContain("stageActionDisabled?: boolean");
+    expect(source).toContain("stageActionLabel?: string");
     expect(source).toContain("stageActionTitle?: string");
     expect(source).toContain("actionDisabled={stageActionDisabled}");
     expect(source).toContain("actionTitle={stageActionTitle}");
-    expect(source).toContain('stageActionDisabled ? "Needs setup"');
+    expect(source).toContain('stageActionDisabled ? stageActionLabel');
+    expect(source).toContain('stageActionLabel = "Task unavailable"');
   });
 });

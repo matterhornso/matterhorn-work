@@ -18,7 +18,10 @@ import {
   walletFamilySigningCopy,
 } from "../src/react-app/domains/settings/backend-capabilities";
 import { ProfileCapabilityStatus } from "../src/react-app/domains/profile/profile-capability-status";
-import { getSettingsTabStatus } from "../src/react-app/domains/settings/shell/settings-page";
+import {
+  getSettingsTabStatus,
+  shouldDisplaySettingsReadinessStatus,
+} from "../src/react-app/domains/settings/shell/settings-page";
 
 function renderCapabilitiesSection(capabilities: MatterhornBackendCapabilitiesResponse | null, error?: Error | null) {
   return renderToStaticMarkup(
@@ -26,9 +29,20 @@ function renderCapabilitiesSection(capabilities: MatterhornBackendCapabilitiesRe
   );
 }
 
-function renderProfile(capabilities: MatterhornBackendCapabilitiesResponse | null, error?: Error | null) {
+function renderProfile(
+  capabilities: MatterhornBackendCapabilitiesResponse | null,
+  error?: Error | null,
+  cloudAvailable?: boolean,
+  compact?: boolean,
+) {
   return renderToStaticMarkup(
-    React.createElement(ProfileCapabilityStatus, { capabilities, error: error ?? null, isLoading: false }),
+    React.createElement(ProfileCapabilityStatus, {
+      capabilities,
+      cloudAvailable,
+      compact,
+      error: error ?? null,
+      isLoading: false,
+    }),
   );
 }
 
@@ -36,7 +50,7 @@ describe("Backend capability status helpers", () => {
   test("maps statuses to truthful UI labels", () => {
     expect(capabilityStatusLabel("working")).toBe("Working");
     expect(capabilityStatusLabel("needs_setup")).toBe("Needs setup");
-    expect(capabilityStatusLabel("preview")).toBe("Preview");
+    expect(capabilityStatusLabel("preview")).toBe("Early access");
     expect(capabilityStatusLabel("unsupported")).toBe("Not supported here");
     expect(capabilityStatusLabel("error")).toBe("Unavailable");
     expect(capabilityStatusLabel("unavailable")).toBe("Unavailable");
@@ -60,7 +74,7 @@ describe("Backend capability status helpers", () => {
 
     expect(copy.label).toBe("Not supported here");
     expect(copy.hint).toContain("Sui direct wallet connect is not available in this runtime.");
-    expect(copy.hint).toContain("Backend previews, handoffs, and receipt evidence remain available");
+    expect(copy.hint).toContain("Backend handoffs and receipt evidence remain available");
     expect(copy.hint).not.toContain("not implemented");
   });
 });
@@ -118,11 +132,21 @@ describe("Backend capability fixtures", () => {
 });
 
 describe("Settings tab capability status mapping", () => {
+  test("uses truthful fallback states while live capabilities are loading", () => {
+    expect(getSettingsTabStatus("ai")).toBe("Working");
+    expect(getSettingsTabStatus("wallet")).toBe("Preview");
+    expect(getSettingsTabStatus("generated-media")).toBe("Preview");
+    expect(getSettingsTabStatus("cloud-account")).toBe("Local only");
+    expect(getSettingsTabStatus("billing")).toBe("Preview only");
+  });
+
   test("uses backend settings sections instead of static readiness labels", () => {
     const sections = backendCapabilitiesNeedsSetupFixture.settings;
 
-    expect(getSettingsTabStatus("wallet", sections)).toBe("Needs setup");
-    expect(getSettingsTabStatus("cloud-account", sections)).toBe("Needs setup");
+    expect(getSettingsTabStatus("wallet", sections)).toBe("Connect wallet");
+    expect(getSettingsTabStatus("generated-media", sections)).toBe("Platform setup");
+    expect(getSettingsTabStatus("billing", sections)).toBe("Preview only");
+    expect(getSettingsTabStatus("cloud-account", sections)).toBe("Configure cloud");
     expect(getSettingsTabStatus("permissions", sections)).toBe("Working");
     expect(getSettingsTabStatus("extensions", sections)).toBe("Working");
     expect(getSettingsTabStatus("appearance", sections)).toBe("Working");
@@ -133,11 +157,37 @@ describe("Settings tab capability status mapping", () => {
       if (section.section === "models") return { ...section, status: "needs_setup" as const };
       if (section.section === "providers") return { ...section, status: "working" as const };
       if (section.section === "wallet") return { ...section, status: "preview" as const };
+      if (section.section === "billing") return { ...section, status: "needs_setup" as const };
       return section;
     });
 
-    expect(getSettingsTabStatus("ai", sections)).toBe("Needs setup");
+    expect(getSettingsTabStatus("ai", sections)).toBe("Connect provider");
     expect(getSettingsTabStatus("wallet", sections)).toBe("Preview");
+    expect(getSettingsTabStatus("billing", sections)).toBe("Platform setup");
+  });
+
+  test("distinguishes functional local settings from operator-owned preview surfaces", () => {
+    const sections = backendCapabilitiesWorkingFixture.settings.map((section) => {
+      if (section.section === "security") return { ...section, status: "preview" as const };
+      if (section.section === "teams") return { ...section, status: "preview" as const };
+      if (section.section === "billing") return { ...section, status: "preview" as const };
+      return section;
+    });
+
+    expect(getSettingsTabStatus("permissions", sections)).toBe("Working");
+    expect(getSettingsTabStatus("cloud-account", sections)).toBe("Local only");
+    expect(getSettingsTabStatus("billing", sections)).toBe("Preview only");
+  });
+
+  test("keeps healthy and informational states silent in settings navigation", () => {
+    expect(shouldDisplaySettingsReadinessStatus("Working")).toBe(false);
+    expect(shouldDisplaySettingsReadinessStatus("Preview")).toBe(false);
+    expect(shouldDisplaySettingsReadinessStatus("Desktop only")).toBe(false);
+    expect(shouldDisplaySettingsReadinessStatus("Connect provider")).toBe(true);
+    expect(shouldDisplaySettingsReadinessStatus("Platform setup")).toBe(true);
+    expect(shouldDisplaySettingsReadinessStatus("Local only")).toBe(true);
+    expect(shouldDisplaySettingsReadinessStatus("Preview only")).toBe(true);
+    expect(shouldDisplaySettingsReadinessStatus("Not supported here")).toBe(true);
   });
 });
 
@@ -145,7 +195,7 @@ describe("Backend capability status badge", () => {
   test.each([
     ["working", "Working"],
     ["needs_setup", "Needs setup"],
-    ["preview", "Preview"],
+    ["preview", "Early access"],
     ["unsupported", "Not supported here"],
     ["error", "Unavailable"],
     ["unavailable", "Unavailable"],
@@ -176,7 +226,7 @@ describe("Backend capabilities section renders all capability states", () => {
     expect(html).toContain("MATTERHORN_SUI_KIOSK_PACKAGE_ID");
     expect(html).toContain("Direct connect");
     expect(html).toContain("Public read / external signer");
-    expect(html).toContain("Wallet-standard preview");
+    expect(html).toContain("Wallet-standard connect");
     expect(html).toContain("Machine / global");
     expect(html).toContain("Structured feedback is stored locally for evaluation, routing, and product quality only.");
     expect(html).toContain("Route: /settings/wallet");
@@ -193,7 +243,7 @@ describe("Backend capabilities section renders all capability states", () => {
 
   test("preview state", () => {
     const html = renderCapabilitiesSection(backendCapabilitiesPreviewFixture);
-    expect(html).toContain("Preview");
+    expect(html).toContain("Early access");
     expect(html).toContain("Cloud teams");
     expect(html).toContain("Sui wallet");
     expect(html).toContain("Structured feedback is in preview.");
@@ -236,9 +286,39 @@ describe("Profile capability status renders all states", () => {
     expect(html).toContain(backendCapabilitiesWorkingFixture.server.version);
   });
 
+  test("disabled Cloud is distinct from the working local profile", () => {
+    const html = renderProfile(backendCapabilitiesWorkingFixture, null, false);
+    expect(html).toContain("Not available in this build");
+    expect(html).toContain("Matterhorn Cloud is disabled in this build. Local use needs no account.");
+    expect(html).toContain("Local teammate access");
+    expect(html).toContain("Working");
+    expect(html).not.toContain("Platform setup");
+  });
+
+  test("compact profile prioritizes local capability and hides technical state", () => {
+    const html = renderProfile(backendCapabilitiesWorkingFixture, null, false, true);
+    expect(html).toContain("Local profile");
+    expect(html).toContain("No account is required");
+    expect(html).toContain("Preferences and workspace access");
+    expect(html).toContain("Local teammate access");
+    expect(html).toContain("Technical details");
+    expect(html).toContain("Not included");
+    expect(html).not.toContain("Cloud account");
+  });
+
   test("needs_setup profile", () => {
-    const html = renderProfile(backendCapabilitiesNeedsSetupFixture);
+    const html = renderProfile({
+      ...backendCapabilitiesNeedsSetupFixture,
+      teams: {
+        ...backendCapabilitiesNeedsSetupFixture.teams,
+        cloudTeams: {
+          ...backendCapabilitiesNeedsSetupFixture.teams.cloudTeams,
+          status: "needs_setup",
+        },
+      },
+    });
     expect(html).toContain("Needs setup");
+    expect(html).toContain("Platform setup");
   });
 
   test("unavailable profile", () => {

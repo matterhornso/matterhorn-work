@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import type { CSSProperties } from "react";
+import { resolveExtensionIconSrc } from "../../../design-system/extension-icon-src";
 import { getCustomerProtocolDeskVisual, type CustomerProtocolDeskId, type CustomerProtocolDeskVisual } from "./protocol-desk-ui";
 
 type ProtocolBrandLogoProps = {
@@ -24,7 +25,8 @@ export function ProtocolBrandLogo({
   if (!visual) return null;
 
   if (asset?.darkAssetPath || asset?.lightAssetPath) {
-    const src = asset.lightAssetPath || asset.darkAssetPath;
+    const src = resolveExtensionIconSrc(asset.lightAssetPath || asset.darkAssetPath || "");
+    const darkSrc = asset.darkAssetPath ? resolveExtensionIconSrc(asset.darkAssetPath) : null;
     const img = (
       <img
         alt={`${visual.displayName} logo`}
@@ -45,7 +47,7 @@ export function ProtocolBrandLogo({
     if (asset.darkAssetPath && asset.lightAssetPath) {
       return (
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcSet={asset.darkAssetPath} />
+          <source media="(prefers-color-scheme: dark)" srcSet={darkSrc ?? src} />
           {img}
         </picture>
       );

@@ -38,4 +38,34 @@ describe("image generation provider config", () => {
     expect(status.status).toBe("error");
     expect(status.message).toContain("MATTERHORN_IMAGE_SIZE");
   });
+
+  test("OpenAI image generation uses a bounded provider timeout", async () => {
+    const priorFetch = globalThis.fetch;
+    let observedSignal: AbortSignal | null = null;
+    globalThis.fetch = (async (_input, init) => {
+      observedSignal = init?.signal instanceof AbortSignal ? init.signal : null;
+      return Response.json({ error: { message: "provider temporarily unavailable" } }, { status: 503 });
+    }) as typeof fetch;
+    try {
+      const provider = createImageGenerationProvider({
+        provider: "openai",
+        apiKey: "sk-test-not-real",
+      });
+      const result = await provider.generate({
+        prompt: "a calm mountain workspace",
+        workspaceId: "ws_test",
+        storageDir: "/tmp/matterhorn-no-write",
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.code).toBe("image_provider_error");
+      }
+      const signal = observedSignal as AbortSignal | null;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      if (signal) expect(signal.aborted).toBe(false);
+    } finally {
+      globalThis.fetch = priorFetch;
+    }
+  });
 });

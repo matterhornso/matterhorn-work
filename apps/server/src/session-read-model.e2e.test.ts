@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -28,7 +28,7 @@ async function createWorkspaceRoot(folderName?: string) {
   const workspaceRoot = folderName ? join(root, folderName) : root;
   await mkdir(join(workspaceRoot, ".opencode"), { recursive: true });
   roots.push(root);
-  return workspaceRoot;
+  return realpath(workspaceRoot);
 }
 
 function auth(token: string) {
@@ -37,6 +37,7 @@ function auth(token: string) {
 
 function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promise<void> }) {
   const requests: Array<{ pathname: string; search: string; directory: string | null; method: string; body: unknown }> = [];
+  const streamAborts = { count: 0 };
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -108,6 +109,28 @@ function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promis
         return Response.json({ ses_1: { type: "busy" } });
       }
 
+      if (url.pathname === "/event") {
+        let interval: ReturnType<typeof setInterval> | null = null;
+        const close = () => {
+          if (interval) clearInterval(interval);
+          interval = null;
+          streamAborts.count += 1;
+        };
+        request.signal.addEventListener("abort", close, { once: true });
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("data: connected\n\n"));
+            interval = setInterval(() => {
+              controller.enqueue(new TextEncoder().encode("data: heartbeat\n\n"));
+            }, 25);
+          },
+          cancel() {
+            close();
+          },
+        });
+        return new Response(stream, { headers: { "content-type": "text/event-stream" } });
+      }
+
       if (url.pathname === "/session/ses_1") {
         return Response.json({
           id: "ses_1",
@@ -173,7 +196,7 @@ function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promis
     },
   }) as Served;
   stops.push(() => server.stop(true));
-  return { server, requests };
+  return { server, requests, streamAborts };
 }
 
 async function startOpenworkServer(input: { workspaceRoot: string; opencodeBaseUrl?: string; readOnly?: boolean }) {
@@ -201,6 +224,7 @@ async function startOpenworkServer(input: { workspaceRoot: string; opencodeBaseU
     hostTokenSource: "cli",
     logFormat: "pretty",
     logRequests: false,
+    reloadWatchers: false,
   };
   const server = await startServer(config) as Served;
   stops.push(() => server.stop(true));
@@ -319,6 +343,31 @@ describe("workspace session read APIs", () => {
     expect(listRequest?.search).toContain("search=host");
     expect(listRequest?.search).toContain("start=10");
 
+  });
+
+  test("uses the canonical workspace directory when OpenCode filters sessions", async () => {
+    const root = await mkdtemp(join(tmpdir(), "openwork-session-canonical-"));
+    roots.push(root);
+    const actualWorkspaceRoot = join(root, "actual");
+    const aliasedWorkspaceRoot = join(root, "alias");
+    await mkdir(join(actualWorkspaceRoot, ".opencode"), { recursive: true });
+    await symlink(actualWorkspaceRoot, aliasedWorkspaceRoot, process.platform === "win32" ? "junction" : "dir");
+    const canonicalWorkspaceRoot = await realpath(aliasedWorkspaceRoot);
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot: aliasedWorkspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+
+    const response = await fetch(`http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions`, {
+      headers: auth(openwork.token),
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.items[0]?.directory).toBe(canonicalWorkspaceRoot);
+    const listRequest = mock.requests.find((request) => request.pathname === "/session");
+    expect(listRequest?.directory).toBe(canonicalWorkspaceRoot);
   });
 
   test("streams bounded session events with snapshot and status frames", async () => {
@@ -762,6 +811,35 @@ describe("workspace session read APIs", () => {
     const proxyRequest = mock.requests.find((request) => request.pathname === "/session");
     expect(proxyRequest?.directory).toBe(encodeURIComponent(workspaceRoot));
   });
+
+  test("cancels the upstream OpenCode stream when a proxied client disconnects", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+    const controller = new AbortController();
+    const response = await fetch(
+      `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/event`,
+      { headers: auth(openwork.token), signal: controller.signal },
+    );
+
+    expect(response.status).toBe(200);
+    const reader = response.body?.getReader();
+    expect((await reader?.read())?.done).toBe(false);
+    controller.abort();
+    await reader?.cancel().catch(() => undefined);
+
+    const upstreamClosed = await (async () => {
+      for (let index = 0; index < 100; index += 1) {
+        if (mock.streamAborts.count > 0) return true;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      return mock.streamAborts.count > 0;
+    })();
+    expect(upstreamClosed).toBe(true);
+  }, 15_000);
 
   test("returns 404 when the upstream session is missing", async () => {
     const workspaceRoot = await createWorkspaceRoot();

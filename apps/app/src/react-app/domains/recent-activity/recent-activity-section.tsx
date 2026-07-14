@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState, type ElementType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
+  Archive,
   ArrowRight,
-  BrainCircuit,
   CalendarClock,
   CheckCircle2,
   ChevronDown,
@@ -46,7 +46,7 @@ import {
 /** Icon + colour tokens for each activity kind. */
 const KIND_META: Record<RecentActivityKind, { icon: ElementType; tone: string }> = {
   note_created: { icon: FileText, tone: "text-sky-300" },
-  memory_suggested: { icon: BrainCircuit, tone: "text-amber-300" },
+  memory_suggested: { icon: Archive, tone: "text-amber-300" },
   task_started: { icon: Play, tone: "text-sky-300" },
   task_stage_started: { icon: Play, tone: "text-violet-300" },
   task_output_saved: { icon: Save, tone: "text-emerald-300" },
@@ -132,8 +132,8 @@ function isNftPreview(kind: string | undefined) {
 }
 
 function nftPreviewTitle(kind: string | undefined) {
-  if (kind === "mint_preview") return "Mint preview ready";
-  if (kind === "listing_preview") return "Listing preview ready";
+  if (kind === "mint_preview") return "Mint handoff ready";
+  if (kind === "listing_preview") return "Listing handoff ready";
   return null;
 }
 
@@ -236,16 +236,14 @@ function LatestActivitySummary({ item }: { item: RecentActivityItem }) {
 
 function LatestActivityPreview(props: {
   item: RecentActivityItem;
-  count: number;
   onSelect: () => void;
   onOpenHistory: () => void;
 }) {
   const meta = KIND_META[props.item.kind];
   const Icon = meta.icon;
-  const countLabel = `${props.count} recent ${props.count === 1 ? "event" : "events"}`;
 
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-2">
+    <div className="flex min-w-0 items-center gap-3 rounded-md bg-dls-canvas/55 px-3 py-2">
       <button
         type="button"
         className="group flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border/70"
@@ -257,15 +255,12 @@ function LatestActivityPreview(props: {
         </span>
         <LatestActivitySummary item={props.item} />
       </button>
-      <span className="hidden shrink-0 text-xs leading-5 text-dls-secondary/75 md:inline">
-        {countLabel}
-      </span>
       <button
         type="button"
         className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover/25 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border/70"
         onClick={props.onOpenHistory}
       >
-        History
+        Run history
         <ArrowRight className="size-3" aria-hidden="true" />
       </button>
     </div>
@@ -439,7 +434,7 @@ export function RecentActivitySection({
   limit = 10,
   title,
   description,
-  defaultExpanded = true,
+  defaultExpanded = false,
   onOpenOutputPath,
   onOpenHistory,
 }: RecentActivitySectionProps) {
@@ -477,7 +472,7 @@ export function RecentActivitySection({
   }, [defaultExpanded, runtimeWorkspaceId]);
 
   return (
-    <section className="space-y-3" aria-label={title ?? "Project activity"}>
+    <section className="space-y-3 rounded-lg bg-dls-canvas/30 px-4 py-3.5" aria-label={title ?? "Project activity"}>
       {title ? (
         <div className="flex items-end justify-between gap-3">
           <div>
@@ -486,9 +481,8 @@ export function RecentActivitySection({
               <p className="mt-0.5 text-xs leading-5 text-dls-secondary">{description}</p>
             ) : null}
           </div>
-          {!isLoading && !isError && latestItem && !hasHistoryRoute ? (
+          {!isLoading && !isError && latestItem ? (
             <div className="flex shrink-0 items-center gap-3">
-              <span className="hidden text-xs text-dls-secondary sm:inline">{items.length} recent</span>
               <button
                 type="button"
                 className="inline-flex items-center gap-1.5 text-xs font-medium text-dls-text transition-colors hover:text-dls-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border"
@@ -502,7 +496,7 @@ export function RecentActivitySection({
                 }}
               >
                 <History className="size-3.5" aria-hidden="true" />
-                {onOpenHistory ? "Project history" : historyOpen ? "Hide recent" : "Project history"}
+                {onOpenHistory ? "Run history" : historyOpen ? "Hide recent" : "Run history"}
                 {!onOpenHistory ? (
                   <ChevronDown
                     className={cn("size-3 transition-transform", historyOpen && "rotate-180")}
@@ -535,14 +529,13 @@ export function RecentActivitySection({
       ) : hasHistoryRoute && latestItem && onOpenHistory ? (
         <LatestActivityPreview
           item={latestItem}
-          count={items.length}
           onSelect={() => setSelectedItemId(latestItem.id)}
           onOpenHistory={onOpenHistory}
         />
       ) : !historyOpen && latestItem ? (
         <button
           type="button"
-          className="flex w-full min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-2 text-left transition-colors hover:bg-dls-hover/25 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border/70"
+          className="flex w-full min-w-0 items-center gap-3 rounded-md bg-dls-canvas/55 px-3 py-2 text-left transition-colors hover:bg-dls-hover/25 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border/70"
           aria-expanded={historyOpen}
           onClick={() => {
             if (onOpenHistory) {

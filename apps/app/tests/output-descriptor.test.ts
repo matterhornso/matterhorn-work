@@ -53,7 +53,7 @@ describe("output descriptor", () => {
     const descriptor = outputDescriptorFromOpenTarget(target);
 
     expect(descriptor.isLegacy).toBe(true);
-    expect(descriptor.originLabel).toBe("OpenCode import");
+    expect(descriptor.originLabel).toBe("Legacy engine import");
   });
 
   test("builds a descriptor from a note output attachment", () => {
@@ -209,7 +209,7 @@ describe("output descriptor", () => {
     });
   });
 
-  test("uses readable titles for Sui preview and receipt output filenames", () => {
+  test("uses readable titles for Sui handoff and receipt output filenames", () => {
     const previewTarget: OpenTarget = {
       id: "file:outputs/sui/sess_sui/transfer-preview-abc123def456.json",
       kind: "file",
@@ -217,7 +217,7 @@ describe("output descriptor", () => {
       name: "transfer-preview-abc123def456.json",
       preview: "json",
       confidence: 95,
-      reason: "Sui preview evidence",
+      reason: "Sui handoff evidence",
       exists: true,
     };
     const receiptAttachment: NoteOutputAttachment = {
@@ -227,7 +227,7 @@ describe("output descriptor", () => {
     };
 
     expect(outputDescriptorFromOpenTarget(previewTarget)).toMatchObject({
-      title: "Sui transfer preview",
+      title: "Sui transfer handoff",
       desk: "sui",
       sessionSlug: "sess_sui",
       originLabel: "Sui",

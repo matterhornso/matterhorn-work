@@ -1,6 +1,6 @@
 # Matterhorn Workflow Contract
 
-> Status: **contract and fixtures only**. This document defines a generic, reusable workflow layer for Matterhorn Work. It does not implement live provider execution, signing, submission, custody, or secrets handling.
+> Status: **contract plus local workflow runtime**. Matterhorn Work can stage and track local workflow runs, link them to chat sessions, and persist customer-safe artifacts. It does not perform provider signing, transaction submission, custody, or secrets handling.
 
 ## Purpose
 
@@ -22,6 +22,29 @@ This contract provides one shared schema so all workflows can be discovered, val
 4. **External signer or provider handoff.** Where on-chain signing or third-party authorization is required, the user performs the action outside Matterhorn Work.
 5. **Public receipts only.** Generated artifacts contain public metadata, links, or hashes. No secret material is returned.
 6. **Status-driven.** A workflow explicitly declares its maturity: `live_local`, `planned_not_live`, `preview_only`, `external_handoff_required`, or `blocked_by_policy`.
+
+## Local Run Lifecycle
+
+Launching a workflow task from a desk creates a chat session and one linked backend run. Passive desk navigation does not create a run. The backend lifecycle is:
+
+| Status | UI label | Meaning |
+| --- | --- | --- |
+| `staged` | Prepared | The run record exists but model work has not started. |
+| `running` | Running | The linked chat is actively processing the workflow. |
+| `waiting` | Waiting | The linked chat is waiting for a user answer or approval. |
+| `completed` | Completed | The linked chat produced its final visible result. |
+| `failed` | Failed | The run ended with a display-safe failure reason. |
+| `cancelled` | Cancelled | The user or system stopped the run. |
+
+Question and approval requests move the run to `waiting`; resumed model streaming returns it to `running`. Reloading the linked chat restores its desk agent from the run record.
+
+Each run owns one canonical workspace-relative output directory:
+
+```text
+outputs/<desk>/<sessionId>/
+```
+
+The session system context supplies this exact path to the desk agent. Every workflow artifact must be saved beneath it; agents must not create a second descriptive or custom session folder.
 
 ## Shared Schema
 
@@ -385,8 +408,8 @@ interface MatterhornCustomerWorkflowTemplate {
     shortDescription: string; // max 90 chars
   };
   routing: {
-    chatMode: "bittensor" | "hyperliquid" | "polymarket" | "wellness" | "services" | "general";
-    opensPanel?: "bittensor" | "hyperliquid" | "polymarket";
+    chatMode: "bittensor" | "hyperliquid" | "polymarket" | "sui" | "wellness" | "services" | "general";
+    opensPanel?: "bittensor" | "hyperliquid" | "polymarket" | "sui";
     startsSession: boolean;
   };
   recommendedCommands?: {
@@ -403,6 +426,7 @@ interface MatterhornCustomerWorkflowTemplate {
 | `bittensor_operator` | bittensor | `beta_ready` | `protocol_desk` | `bittensor` | Read-only previews + external-signer handoffs. |
 | `hyperliquid_trader` | markets | `preview_only` | `protocol_desk` | `hyperliquid` | Read-only Hyperliquid previews. |
 | `polymarket_researcher` | markets | `preview_only` | `protocol_desk` | `polymarket` | Read-only Polymarket previews. |
+| `sui_wallet_workflow` | web3 | `preview_only` | `protocol_desk` | `sui` | Public reads, wallet-signed transfer previews, and public receipt evidence. |
 | `wellness_creator_workflow` | wellness | `workflow_ready` | `workflow_chat` | — | Plans services/content; hooks remain planned_not_live. |
 | `decentralized_services_operator` | decentralized_services | `planned_not_live` | `future_service` | — | Future-contract planning only. |
 | `blank_chat_workflow` | future | `blank` | `workflow_chat` | — | Open-ended chat with baseline safety boundaries. |

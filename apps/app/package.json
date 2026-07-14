@@ -1,7 +1,7 @@
 {
   "name": "@matterhorn-work/app",
   "private": true,
-  "version": "0.13.12",
+  "version": "0.13.13",
   "type": "module",
   "scripts": {
     "dev": "OPENWORK_DEV_MODE=1 vite",
@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "pretypecheck": "pnpm --dir ../../packages/ui build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "cd ../.. && bun test apps/app/tests",
     "test:health": "node scripts/health.mjs",
     "test:mention-send": "node scripts/mention-send.mjs",
     "test:sessions": "node scripts/sessions.mjs",

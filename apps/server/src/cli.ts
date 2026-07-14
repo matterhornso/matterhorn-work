@@ -3,7 +3,11 @@
 import { mkdir } from "node:fs/promises";
 
 import { parseCliArgs, printHelp, resolveServerConfig } from "./config.js";
-import { createManagedOpencodeServer, type ManagedOpencodeServer } from "./managed-opencode.js";
+import {
+  createManagedOpencodeServer,
+  type ManagedOpencodeEvent,
+  type ManagedOpencodeServer,
+} from "./managed-opencode.js";
 import { createServerLogger, startServer } from "./server.js";
 import { ensureWorkspaceFiles } from "./workspace-init.js";
 import { openworkExtensionsPreviewPluginPath } from "./openwork-extensions-plugin-path.js";
@@ -25,6 +29,23 @@ const config = await resolveServerConfig(args);
 const logger = createServerLogger(config);
 const serverUrl = `http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${config.port}`;
 let managedOpencode: ManagedOpencodeServer | null = null;
+
+function logManagedOpencodeEvent(event: ManagedOpencodeEvent) {
+  if (event.type === "health_failure" && event.consecutiveFailures < event.threshold) return;
+  if (event.type === "health_failure") {
+    logger.log("warn", `Managed OpenCode failed ${event.consecutiveFailures} consecutive health checks`);
+    return;
+  }
+  if (event.type === "restarted") {
+    logger.log("info", `Managed OpenCode recovered after ${event.reason} (restart ${event.restartCount})`);
+    return;
+  }
+  if (event.type === "restart_scheduled") {
+    logger.log("warn", `Managed OpenCode restart scheduled after ${event.reason} in ${event.delayMs}ms`);
+    return;
+  }
+  logger.log("warn", `Managed OpenCode restart failed after ${event.reason}; retrying`);
+}
 
 if (!config.readOnly) {
   for (const workspace of config.workspaces) {
@@ -52,6 +73,7 @@ if (!config.opencodeBaseUrl && process.env.OPENWORK_MANAGE_OPENCODE === "1") {
         OPENWORK_SERVER_TOKEN: config.token,
         OPENCODE_CONFIG_CONTENT: openworkExtensionsPreviewConfig,
       },
+      onEvent: logManagedOpencodeEvent,
     });
     config.opencodeBaseUrl = managedOpencode.url;
     config.opencodeUsername = managedOpencode.username;

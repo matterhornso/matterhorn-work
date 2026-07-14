@@ -355,7 +355,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={() => void props.onPreviewMint()} disabled={!canMint || draft.storage.status !== "uploaded" || props.isLoading}>
-                    Preview
+                    Prepare mint handoff
                   </Button>
                   <Button
                     size="sm"
@@ -413,7 +413,7 @@ export function NftDraftPanel(props: NftDraftPanelProps) {
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={handlePreviewListing} disabled={!canList || props.isLoading}>
-                    Preview
+                    Prepare listing handoff
                   </Button>
                   {props.listingPreview ? (
                     <Button size="sm" variant="ghost" onClick={() => void copyPlan("listing", props.listingPreview?.transactionPlan)}>
@@ -483,7 +483,7 @@ export function buildNftDraftPreviewSummaries(input: {
       "Wallet signing only",
     ],
   } : draft?.mint.status === "preview_ready" ? {
-    title: "Mint preview ready",
+    title: "Mint handoff ready",
     lines: [
       `Network ${draft.network}`,
       `Package ${draft.mint.packageId ?? "configured"}`,
@@ -499,7 +499,7 @@ export function buildNftDraftPreviewSummaries(input: {
       `Price ${listingPreview.transactionPlan.priceMist} MIST`,
     ],
   } : draft?.listing.status === "preview_ready" ? {
-    title: "Listing preview ready",
+    title: "Listing handoff ready",
     lines: [
       `Network ${draft.network}`,
       "Marketplace Sui Kiosk",
@@ -528,12 +528,14 @@ export function NftSetupRequirements(props: { requirements: MatterhornNftSetupRe
 
   return (
     <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2.5">
-      <div className="mb-2 text-xs font-medium text-dls-text">Setup needed</div>
+      <div className="text-xs font-medium text-dls-text">Matterhorn setup</div>
+      <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+        Public publishing is not enabled yet. Matterhorn must finish the platform configuration below.
+      </p>
       <div className="space-y-2">
         {unresolved.map((requirement) => (
-          <div key={requirement.key} className="text-xs leading-5 text-muted-foreground">
+          <div key={requirement.key} className="mt-2 text-xs leading-5 text-muted-foreground">
             <span className="text-dls-text">{requirement.label}</span>
-            {requirement.envVar ? <span className="ml-1 font-mono text-[11px]">{requirement.envVar}</span> : null}
             <div>{requirement.description}</div>
           </div>
         ))}

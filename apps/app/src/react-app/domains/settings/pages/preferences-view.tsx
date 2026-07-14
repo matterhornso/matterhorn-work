@@ -21,6 +21,8 @@ export type PreferencesViewProps = {
   onToggleShowThinking: () => void;
   autoCompactContext: boolean;
   autoCompactContextBusy: boolean;
+  autoCompactContextReady: boolean;
+  autoCompactContextError: string | null;
   onToggleAutoCompactContext: () => void;
 };
 
@@ -53,14 +55,40 @@ export function PreferencesView(props: PreferencesViewProps) {
         <LayoutSectionItem>
           <LayoutSectionItemHeader>
             <LayoutSectionItemTitle>{t("settings.auto_compact")}</LayoutSectionItemTitle>
-            <LayoutSectionItemDescription>{t("settings.auto_compact_desc")}</LayoutSectionItemDescription>
+            <LayoutSectionItemDescription>
+              {props.autoCompactContextError
+                ?? (props.autoCompactContextReady
+                  ? t("settings.auto_compact_desc")
+                  : "Loading workspace setting...")}
+            </LayoutSectionItemDescription>
             <LayoutSectionItemHeaderActions>
-              <Switch
-                aria-label={t("settings.auto_compact")}
-                checked={props.autoCompactContext}
-                disabled={props.busy || props.autoCompactContextBusy}
-                onCheckedChange={props.onToggleAutoCompactContext}
-              />
+              {props.autoCompactContextReady ? (
+                <Switch
+                  aria-label={t("settings.auto_compact")}
+                  checked={props.autoCompactContext}
+                  disabled={props.busy || props.autoCompactContextBusy}
+                  onCheckedChange={props.onToggleAutoCompactContext}
+                />
+              ) : props.autoCompactContextError ? (
+                <span
+                  role="status"
+                  aria-label="Auto context compaction unavailable"
+                  className="text-xs text-red-300"
+                >
+                  Unavailable
+                </span>
+              ) : (
+                <span
+                  role="status"
+                  aria-label="Loading auto context compaction setting"
+                  className="relative h-5 w-9 overflow-hidden rounded-full bg-dls-surface-muted/[0.18]"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-0.5 top-0.5 size-4 animate-pulse rounded-full bg-dls-secondary/45"
+                  />
+                </span>
+              )}
             </LayoutSectionItemHeaderActions>
           </LayoutSectionItemHeader>
         </LayoutSectionItem>

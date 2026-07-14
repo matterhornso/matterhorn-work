@@ -20,7 +20,7 @@ function fallbackCatalog(catalog?: MatterhornBackendModelCatalogSnapshot): Matte
     ...capability(
       "preview",
       "Client provider list",
-      "The global backend contract is available, but a workspace must be selected before Matterhorn can ask OpenCode for the live provider catalog.",
+      "The global backend contract is available, but a workspace must be selected before Matterhorn can ask the engine runtime for the live provider catalog.",
     ),
     source: "opencode_provider_list",
     serverFetched: false,

@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import type { ReactNode } from "react";
 import {
+  Archive,
   Boxes,
   BrainCircuit,
   CircleUser,
@@ -42,7 +43,7 @@ function SectionCard(props: {
 }) {
   return (
     <section className="flex flex-col gap-4 px-3 py-5 first:pt-3 last:pb-3">
-      <div className="flex items-start gap-3">
+      <div className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text">
           {props.icon}
         </div>
@@ -50,9 +51,9 @@ function SectionCard(props: {
           <h2 className="text-base font-semibold leading-6 text-dls-text">{props.title}</h2>
           <p className="mt-0.5 text-sm leading-5 text-dls-secondary">{props.description}</p>
         </div>
-        {props.status ? <div className="ml-auto shrink-0">{props.status}</div> : null}
+        {props.status ? <div className="col-start-2 w-fit">{props.status}</div> : null}
       </div>
-      {props.children ? <div className="flex flex-col gap-1 pl-12">{props.children}</div> : null}
+      {props.children ? <div className="flex flex-col gap-1">{props.children}</div> : null}
     </section>
   );
 }
@@ -63,7 +64,7 @@ const sectionIcons: Record<string, LucideIcon> = {
   models: BrainCircuit,
   providers: Boxes,
   wallet: Wallet,
-  memory: BrainCircuit,
+  memory: Archive,
   notes: NotebookPen,
   outputs: FolderCog,
   teams: CircleUser,
@@ -176,7 +177,7 @@ export function BackendCapabilitiesSection(props: BackendCapabilitiesSectionProp
 
       {/* Memory */}
       <SectionCard
-        icon={<BrainCircuit size={18} />}
+        icon={<Archive size={18} />}
         title="Memory"
         description={capabilitySummary(caps.memory)}
         status={<BackendCapabilityStatusBadge status={caps.memory.status} label={memory.label} />}

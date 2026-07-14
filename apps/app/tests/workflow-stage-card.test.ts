@@ -89,6 +89,15 @@ describe("WorkflowStageCard — render contract", () => {
     expect(source).toContain('if (status === "idle") return null;');
   });
 
+  test("keeps task actions visually distinct before hover", () => {
+    const source = readAppSource("domains/session/workflows/workflow-stage-card.tsx");
+    expect(source).toContain("bg-dls-surface-muted/[0.20]");
+    expect(source).toContain("hover:bg-dls-surface-muted/[0.30]");
+    expect(source).toContain("bg-dls-surface-muted/[0.38]");
+    expect(source).toContain("hover:bg-dls-surface-muted/[0.52]");
+    expect(source).not.toContain("h-6 gap-1 bg-transparent");
+  });
+
   test("keeps idle task launch cards free of repetitive evidence disclosures", () => {
     const source = readAppSource("domains/session/workflows/workflow-stage-card.tsx");
     expect(source).toContain('hasHints && status !== "idle"');
@@ -219,6 +228,8 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
 
     expect(src).toContain("sendImmediately: true");
     expect(src).toContain("setCurrentSidePanel(null)");
+    expect(src).toContain("onSessionCreated: () =>");
+    expect(src).toContain("if (started === false && !taskSessionCreated) setCurrentSidePanel(focusedProtocolPanel)");
     expect(src).toContain("launchingTaskTitle");
     expect(src).toContain("Starting {launchingTaskTitle} in a new chat.");
     expect(src).toContain('actionLabel={isLaunching ? "Starting..."');
@@ -227,19 +238,49 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).not.toContain("Draft ready");
     expect(surfaceSrc).toContain("Choose a starter below to run");
     expect(surfaceSrc).toContain("DeskSafetyInfoButton");
+    expect(surfaceSrc).toContain('.filter((card) => card.id !== "blank_chat_workflow")');
+    expect(surfaceSrc).toContain("Choose a desk task. Matterhorn starts it in a new chat.");
+    expect(surfaceSrc).not.toContain("Every prompt stays editable before sending.");
+    expect(surfaceSrc).not.toContain("Choose a desk or start a blank chat.");
     expect(surfaceSrc).not.toContain("Ready in composer");
     expect(surfaceSrc).not.toContain("Composer handoff");
     expect(surfaceSrc).not.toContain("starters fill the composer");
   });
 
-  test("rail and home workflow launchers create running tasks", () => {
+  test("focused desk close cannot overwrite a newly opened task session", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(src).toContain('const currentLocation = typeof window !== "undefined" ? window.location : location');
+    expect(src).toContain("new URLSearchParams(currentLocation.search)");
+    expect(src).toContain("pathname: currentLocation.pathname");
+    expect(src).toContain("hash: currentLocation.hash");
+  });
+
+  test("desk launchers run tasks while Home New chat stays blank", () => {
     const src = readAppSource("domains/session/chat/session-page.tsx");
 
     expect(src).toContain("primeProtocolRailPrompt");
     expect(src).toContain("agent: agentIdForDesk(panel)");
     expect(src).toContain("sendImmediately: true");
-    expect(src).toContain("blankWorkflowLauncher.prompt");
+    expect(src).toContain('onClick={() => props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId)}');
+    expect(src).not.toContain("blankWorkflowLauncher");
     expect(src).not.toContain('new CustomEvent("matterhorn:crypto-chat-handoff"');
+  });
+
+  test("workflow desk stages launch a real agent chat instead of stopping at a run record", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+    const panelSrc = readAppSource("domains/session/workflows/desk-workflow-stage-panel.tsx");
+
+    expect(src).toContain("launchAgent?: boolean");
+    expect(src).toContain("if (!options?.launchAgent)");
+    expect(src).toContain("props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, visibleUserIntent");
+    expect(src).toContain("agent: agentIdForDesk(deskId)");
+    expect(src).toContain("launchAgent: true");
+    expect(src).toContain('status: props.matterhornServerClient ? "ready" : "failed"');
+    expect(src).toContain("Choose a stage to begin. Outputs will save under");
+    expect(src).toContain('status: "launching"');
+    expect(src).not.toContain("Started. Outputs will save under");
+    expect(panelSrc).toContain('actionLabel={stageActionDisabled ? stageActionLabel : "Run in chat"}');
   });
 
   test("focused desk task cards show readiness blockers before launch", () => {
@@ -248,7 +289,10 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("protocol-desk-readiness");
     expect(src).toContain("matterhornServerClient.workspaceReadiness(readinessWorkspaceId)");
     expect(src).toContain("features.start_desk_task");
-    expect(src).toContain(': startTaskBlocked ? "Needs setup"');
+    expect(src).toContain(': startTaskBlocked ? startTaskActionLabel');
+    expect(src).toContain('? "Engine offline"');
+    expect(src).toContain('? "Open workspace"');
+    expect(src).toContain(': "Platform setup"');
     expect(src).toContain("actionDisabled={startTaskBlocked || Boolean(launchingTaskTitle)}");
     expect(src).toContain("actionTitle={startTaskBlocker ?? inputRequirement?.helpText ?? undefined}");
     expect(src).toContain("getDeskTaskInputRequirement(item.prompt)");
@@ -280,9 +324,59 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
 
     expect(launcherBlock).toContain('title: "Could not start task"');
     expect(launcherBlock).toContain('title: "Matterhorn Work engine is offline"');
+    expect(launcherBlock).toContain("selectedModelUnavailable");
+    expect(launcherBlock).toContain("setModelPickerOpen(true)");
+    expect(launcherBlock).toContain("Connect or pick an available model, then start the task again.");
     expect(launcherBlock).toContain('title: `Starting ${title || "desk task"}`');
+    expect(launcherBlock).toContain('title: `${title || "Desk task"} started`');
+    expect(launcherBlock).toContain('title: "Task needs review before sending"');
+    expect(launcherBlock).toContain('recordInspectorEvent("desk.task_launch.requested"');
+    expect(launcherBlock).toContain('recordInspectorEvent("desk.task_launch.session_created"');
+    expect(launcherBlock).toContain('recordInspectorEvent("desk.task_launch.prompt_send_started"');
+    expect(launcherBlock).toContain('recordInspectorEvent("desk.task_launch.prompt_sent"');
+    expect(launcherBlock).toContain('recordInspectorEvent("desk.task_launch.fallback_saved"');
+    expect(launcherBlock).toContain('recordInspectorEvent("desk.task_launch.failed"');
+    expect(launcherBlock).not.toContain("The task is ready in the composer.");
+    expect(launcherBlock).not.toContain("void handleCreateTaskInWorkspace(workspaceId);");
     expect(launcherBlock).not.toContain("if (!workspace) return;");
     expect(launcherBlock).not.toContain("if (!endpoint?.token) return;");
+  });
+
+  test("task launch observability never records raw prompt text", () => {
+    const routeSrc = readShellSource("session-route.tsx");
+    const launcherBlock = routeSrc.slice(
+      routeSrc.indexOf("onCreateTaskWithPrompt:"),
+      routeSrc.indexOf("onOpenRenameWorkspace:"),
+    );
+    const taskLaunchEventBlock = launcherBlock.slice(
+      launcherBlock.indexOf("const taskLaunchEvent ="),
+      launcherBlock.indexOf('recordInspectorEvent("desk.task_launch.requested"'),
+    );
+
+    expect(launcherBlock).toContain("promptLength: prompt.length");
+    expect(launcherBlock).toContain("taskLaunchEvent");
+    expect(taskLaunchEventBlock).toContain("promptLength: prompt.length");
+    expect(taskLaunchEventBlock).not.toContain("text: prompt");
+    expect(taskLaunchEventBlock).not.toContain("prompt:");
+  });
+
+  test("task launcher returns a result so desk UI can recover from failed starts", () => {
+    const pageSrc = readAppSource("domains/session/chat/session-page.tsx");
+    const routeSrc = readShellSource("session-route.tsx");
+    const launcherBlock = routeSrc.slice(
+      routeSrc.indexOf("onCreateTaskWithPrompt:"),
+      routeSrc.indexOf("onOpenRenameWorkspace:"),
+    );
+
+    expect(pageSrc).toContain("Promise<boolean | void>");
+    expect(pageSrc).toContain("if (started === false)");
+    expect(pageSrc).toContain("setLaunchingTaskTitle((current) => current === title ? null : current)");
+    expect(pageSrc).toContain("const startResult = props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt");
+    expect(pageSrc).toContain("return Promise.resolve(startResult).then((started) =>");
+    expect(launcherBlock).toContain("return (async () => {");
+    expect(launcherBlock).toContain("return false;");
+    expect(launcherBlock).toContain("return true;");
+    expect(launcherBlock).not.toContain("void (async () => {");
   });
 
   test("workflow desk stage cards reuse backend readiness blockers", () => {
@@ -308,7 +402,67 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("model: selectedPromptModel ?? undefined");
     expect(src).toContain("current={selectedPromptModel");
     expect(src).toContain("agent: agent || undefined");
-    expect(src).toContain("buildSessionSystemContext(prompt, session.id)");
+    expect(src).toContain("buildSessionSystemContext(prompt, session.id, agent)");
+    expect(src).toContain("getMatterhornDeskAgentById(agentId)?.instructions");
+    expect(src).toContain("startOptimisticRun(workspaceId, session.id");
+    expect(src).toContain("setRunStatus(workspaceId, session.id, { type: \"idle\" })");
+  });
+
+  test("task launcher exposes an immediate in-session activity state", () => {
+    const routeSrc = readAppSource("shell/session-route.tsx");
+    const surfaceSrc = readAppSource("domains/session/surface/session-surface.tsx");
+    const storeSrc = readAppSource("domains/session/status/session-activity-store.ts");
+
+    expect(storeSrc).toContain("startOptimisticRun:");
+    expect(storeSrc).toContain("optimisticRunTitle");
+    expect(storeSrc).toContain("runStartedAt");
+    expect(routeSrc).toContain("startOptimisticRun(workspaceId, session.id");
+    expect(surfaceSrc).toContain("assistantActivityLabel");
+    expect(surfaceSrc).toContain("Working on ${optimisticRunTitle}");
+    expect(surfaceSrc).toContain("formatAssistantRunElapsed");
+    expect(surfaceSrc).toContain("elapsedSeconds >= 10");
+    expect(surfaceSrc).toContain("Taking longer than usual. You can stop this run at any time.");
+    expect(surfaceSrc).toContain("latestSessionSnapshotFailure");
+    expect(surfaceSrc).toContain("snapshotQuery.refetch()");
+    expect(surfaceSrc).toContain("Matterhorn did not receive a model response. Your prompt is ready to retry.");
+    expect(surfaceSrc).toContain("suppressNextAbortFailureRef");
+    expect(surfaceSrc).not.toContain("(!chatStreaming && awaitingAssistantBaseline === null)");
+    expect(surfaceSrc).toContain("isError: snapshotQuery.isError,");
+    expect(surfaceSrc).not.toContain("isError: snapshotQuery.isError || Boolean(error)");
+    expect(surfaceSrc).not.toContain("Starting ${optimisticRunTitle}");
+  });
+
+  test("session route defers selected agent updates from child surfaces", () => {
+    const src = readAppSource("shell/session-route.tsx");
+
+    expect(src).toContain("pendingSelectedAgentRef");
+    expect(src).toContain("window.setTimeout(commit, 0)");
+    expect(src).toContain("onSelectAgent: handleSelectAgent");
+    expect(src).not.toContain("onSelectAgent: (agent: string | null) => setSelectedAgent(agent)");
+  });
+
+  test("ordinary assistant prose cannot switch the active desk", () => {
+    const src = readAppSource("domains/session/surface/session-surface.tsx");
+
+    expect(src).toContain('.filter((message) => message.role === "user")');
+    expect(src).not.toContain("renderedMessages.map(messageToReadableText)");
+  });
+
+  test("stopping a response returns the local activity state to idle", () => {
+    const src = readAppSource("domains/session/surface/session-surface.tsx");
+    const abortBlock = src.slice(src.indexOf("const handleAbort"), src.indexOf("const handleDismissError"));
+
+    expect(abortBlock).toContain("setSending(false)");
+    expect(abortBlock).toContain("setAwaitingAssistantBaseline(null)");
+    expect(abortBlock).toContain('activity.setRunStatus(props.workspaceId, props.sessionId, { type: "idle" })');
+    expect(abortBlock).toContain("activity.clearError(props.workspaceId, props.sessionId)");
+  });
+
+  test("completed responses cannot leave a stale responding footer", () => {
+    const src = readAppSource("domains/session/surface/session-surface.tsx");
+
+    expect(src).toContain('if (sessionActivityStatus !== "thinking" && sessionActivityStatus !== "responding") return;');
+    expect(src).toContain('setRunStatus(props.workspaceId, props.sessionId, { type: "idle" })');
   });
 });
 

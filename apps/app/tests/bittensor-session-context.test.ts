@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import {
@@ -15,8 +16,40 @@ const VALID_SS58 = "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF";
 const VALID_HOTKEY = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspKqjH8dY4zNnVJX";
 const SESSION_ID = "session-bittensor-context-test";
 
+function readReactSource(path: string) {
+  return readFileSync(new URL(`../src/react-app/${path}`, import.meta.url), "utf8");
+}
+
 afterEach(() => {
   useBittensorSessionContextStore.getState().clearContext(SESSION_ID);
+});
+
+describe("Bittensor evidence UI contract", () => {
+  test("visible Bittensor cards can be saved as explicit public project evidence", () => {
+    const messageList = readReactSource("domains/session/surface/message-list.tsx");
+    const surface = readReactSource("domains/session/surface/session-surface.tsx");
+
+    expect(messageList).toContain("export type BittensorPublicEvidenceCard");
+    expect(messageList).toContain("BittensorEvidenceSaveButton");
+    expect(messageList).toContain("Save output");
+    expect(messageList).toContain("onSaveBittensorEvidence");
+    expect(messageList).toContain("onSaveEvidence={props.onSaveBittensorEvidence}");
+    expect(surface).toContain("handleSaveBittensorEvidence");
+    expect(surface).toContain("workspaceBittensorPublicReadEvidence");
+    expect(surface).toContain("matterhorn:project-evidence-updated");
+    expect(surface).toContain("matterhorn:task-log-updated");
+    expect(surface).toContain("bittensor.evidence.saved");
+  });
+
+  test("Bittensor evidence save stores public card fields rather than raw tool internals", () => {
+    const surface = readReactSource("domains/session/surface/session-surface.tsx");
+
+    expect(surface).toContain("publicBittensorEvidenceCard");
+    expect(surface).toContain('source: "visible_bittensor_card"');
+    expect(surface).toContain("cards: [publicCard]");
+    expect(surface).not.toContain("data: card.data");
+    expect(surface).not.toContain("source: card.source");
+  });
 });
 
 describe("Bittensor session context", () => {

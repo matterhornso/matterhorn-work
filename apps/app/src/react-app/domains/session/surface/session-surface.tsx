@@ -24,9 +24,11 @@ import { createClient, unwrap } from "../../../../app/lib/opencode";
 import { abortSessionSafe } from "../../../../app/lib/opencode-session";
 import { t } from "../../../../i18n";
 import { readWorkspaceCloudImports, type CloudImportedPlugin } from "../../../../app/cloud/import-state";
-import type {
-  MatterhornServerClient,
-  MatterhornSessionSnapshot,
+import {
+  MatterhornServerError,
+  type MatterhornBittensorPublicReadEvidenceInput,
+  type MatterhornServerClient,
+  type MatterhornSessionSnapshot,
 } from "../../../../app/lib/matterhorn-server";
 import type {
   ComposerAttachment,
@@ -46,6 +48,7 @@ import {
 } from "../../../shell/app-inspector";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 import { ReactSessionComposer } from "./composer/composer";
+import type { ResponsePerspective } from "../perspectives/response-perspective";
 import { decodeComposerMentionValue, encodeComposerMentionValue } from "./composer/mention-encoding";
 import { DevProfiler } from "../../../shell/dev-profiler";
 import { OwDotTicker } from "../../../shell/dot-ticker";
@@ -99,6 +102,7 @@ import {
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
 import { SessionImageGenerationPanel } from "../media/session-image-generation-panel";
 import { useQuickJot } from "../../notes";
+import type { BittensorPublicEvidenceCard } from "./message-list";
 
 const SessionTranscript = lazy(() => import("./message-list").then((module) => ({
   default: module.SessionTranscript,
@@ -128,6 +132,34 @@ import {
 import { WELLNESS_CREATOR_SERVICES_WORKFLOW } from "@matterhorn-work/types/matterhorn-workflows";
 
 const EMPTY_TRANSCRIPT: UIMessage[] = [];
+
+function bittensorEvidenceKindForCard(
+  card: BittensorPublicEvidenceCard,
+): NonNullable<MatterhornBittensorPublicReadEvidenceInput["kind"]> {
+  const kind = `${card.kind ?? ""}`.toLowerCase();
+  if (kind.includes("wallet") || kind.includes("balance")) return "wallet_snapshot";
+  if (kind.includes("validator") || kind.includes("comparison")) return "validator_comparison";
+  if (kind.includes("watch")) return "watch_digest";
+  if (kind.includes("readiness") || kind.includes("adapter") || kind.includes("gate")) return "readiness_report";
+  if (kind.includes("subnet") || kind.includes("discovery") || kind.includes("capability")) return "subnet_context";
+  return "chat_result";
+}
+
+function publicBittensorEvidenceCard(card: BittensorPublicEvidenceCard): Record<string, unknown> {
+  return Object.fromEntries(Object.entries({
+    version: card.version,
+    kind: card.kind,
+    venue: card.venue,
+    status: card.status,
+    title: card.title,
+    subtitle: card.subtitle,
+    summary: card.summary,
+    tone: card.tone,
+    items: card.items,
+    warnings: card.warnings,
+    safety: card.safety,
+  }).filter(([, value]) => value !== undefined && value !== null));
+}
 const IDLE_STATUS: SessionStatus = { type: "idle" };
 const DEFAULT_COMPOSER_CONTROL_TEXT = "Help me outline the next Matterhorn task.";
 
@@ -204,7 +236,7 @@ const MATTERHORN_DESK_EMPTY_PROMPTS: Record<MatterhornDeskMode, MatterhornDeskPr
     {
       title: "Check compliance",
       detail: "If blocked, do not expose executable price, size, share, or order fields.",
-      prompt: "Check whether this Polymarket market is eligible for a handoff. If compliance blocks the flow, do not show executable price, size, share, or order fields.",
+      prompt: "Check whether this Polymarket market is eligible for a handoff: <paste market URL or slug>. If compliance blocks the flow, do not show executable price, size, share, or order fields.",
     },
     {
       title: "Prepare trade handoff",
@@ -635,6 +667,8 @@ export type SessionSurfaceProps = {
   modelVariant: string | null;
   modelBehaviorOptions?: { value: string | null; label: string }[];
   onModelVariantChange: (value: string | null) => void;
+  responsePerspective: ResponsePerspective;
+  onResponsePerspectiveChange: (perspective: ResponsePerspective) => void;
   agentLabel: string;
   selectedAgent: string | null;
   listAgents: () => Promise<import("@opencode-ai/sdk/v2/client").Agent[]>;
@@ -660,6 +694,7 @@ export type SessionSurfaceProps = {
   onOpenTarget?: (target: OpenTarget, options?: { auto?: boolean }) => void;
   onOpenTargetsChange?: (targets: OpenTarget[]) => void;
   onCreateDeskTask?: (prompt: string, options?: { title?: string; agent?: string; sendImmediately?: boolean }) => void;
+  onSessionMissing?: () => void;
 };
 
 function messageToReadableText(message: UIMessage) {
@@ -764,29 +799,73 @@ function assistantFallbackText(messages: UIMessage[], baseline: number) {
     .trim();
 }
 
-function AssistantWaitingCard({ label = t("session.assistant_thinking"), collapseLayout = false }: { label?: string; collapseLayout?: boolean }) {
+function formatAssistantRunElapsed(seconds: number) {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = String(seconds % 60).padStart(2, "0");
+  return `${minutes}:${remainder}`;
+}
+
+function AssistantWaitingCard({
+  label = t("session.assistant_thinking"),
+  collapseLayout = false,
+  startedAt,
+  trackElapsed = true,
+}: {
+  label?: string;
+  collapseLayout?: boolean;
+  startedAt?: number;
+  trackElapsed?: boolean;
+}) {
+  const mountedAtRef = useRef(Date.now());
+  const resolvedStartedAt = startedAt ?? mountedAtRef.current;
+  const [now, setNow] = useState(() => Date.now());
+  const elapsedSeconds = trackElapsed
+    ? Math.max(0, Math.floor((now - resolvedStartedAt) / 1000))
+    : 0;
+
+  useEffect(() => {
+    if (!trackElapsed) return;
+    setNow(Date.now());
+    const interval = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(interval);
+  }, [resolvedStartedAt, trackElapsed]);
+
   const content = (
     <div
-      className="flex justify-start"
+      className="space-y-0.5"
       role="status"
       aria-live="polite"
       aria-label={`${t("composer.assistant_identity")} ${label}`}
     >
-      <div className="inline-flex items-center gap-1.5 px-1 py-1 text-[12px] text-dls-secondary">
-        <span
-          className="inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-dls-surface ring-1 ring-dls-border/60"
-          aria-hidden="true"
-        >
-          <img
-            src="/matterhorn-mark.svg"
-            alt=""
-            draggable={false}
-            className="size-4 select-none object-contain animate-spin motion-reduce:animate-none"
-          />
-        </span>
-        <span className="font-medium text-dls-text">{t("composer.assistant_identity")}</span>
-        <span>{label}</span>
+      <div className="flex justify-start">
+        <div className="inline-flex items-center gap-1.5 px-1 py-1 text-[12px] text-dls-secondary">
+          <span
+            className="relative inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-dls-surface ring-1 ring-dls-border/60"
+            aria-hidden="true"
+          >
+            <img
+              src="/matterhorn-mark.svg"
+              alt=""
+              draggable={false}
+              className="size-4 select-none object-contain"
+            />
+            <span className="absolute bottom-0 right-0 size-1.5 rounded-full bg-[var(--dls-accent)] ring-1 ring-dls-surface animate-pulse motion-reduce:animate-none" />
+          </span>
+          <span className="font-medium text-dls-text">{t("composer.assistant_identity")}</span>
+          <span>{label}</span>
+          {elapsedSeconds >= 10 ? (
+            <span className="tabular-nums text-dls-secondary/75" aria-hidden="true">
+              · {formatAssistantRunElapsed(elapsedSeconds)}
+            </span>
+          ) : null}
+        </div>
       </div>
+      {elapsedSeconds >= 30 ? (
+        <div className="ml-[26px] text-[11px] leading-4 text-dls-secondary/80">
+          Taking longer than usual. You can stop this run at any time.
+        </div>
+      ) : null}
     </div>
   );
 
@@ -812,7 +891,7 @@ function AssistantNoVisibleOutputCard(props: { text: string }) {
 function AssistantStatusSpacer() {
   return (
     <div className="invisible" aria-hidden="true">
-      <AssistantWaitingCard label={t("session.assistant_responding")} collapseLayout />
+      <AssistantWaitingCard label={t("session.assistant_responding")} collapseLayout trackElapsed={false} />
     </div>
   );
 }
@@ -897,6 +976,37 @@ function parseSessionError(thrown: unknown): SessionError {
     return { message: raw, kind: "model-not-found" };
   }
   return { message: raw || "Failed to send prompt." };
+}
+
+export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot | null) {
+  if (!snapshot) return null;
+  const assistantMessage = [...snapshot.messages]
+    .reverse()
+    .find((message) => message.info.role === "assistant");
+  if (!assistantMessage || assistantMessage.info.role !== "assistant" || !assistantMessage.info.error) return null;
+
+  const rawError = assistantMessage.info.error as unknown as {
+    name?: unknown;
+    data?: { message?: unknown };
+  };
+  const name = typeof rawError.name === "string" ? rawError.name : "AssistantResponseError";
+  const detail = typeof rawError.data?.message === "string" ? rawError.data.message.trim() : "";
+  const retryMessage = [...snapshot.messages]
+    .reverse()
+    .find((message) => message.info.role === "user")
+    ?.parts.flatMap((part) => part.type === "text" ? [part.text] : [])
+    .join("\n")
+    .trim() ?? "";
+
+  return {
+    id: assistantMessage.info.id,
+    name,
+    completedAt: assistantMessage.info.time.completed ?? assistantMessage.info.time.created,
+    retryMessage,
+    error: name === "MessageAbortedError"
+      ? { message: "Matterhorn did not receive a model response. Your prompt is ready to retry." } satisfies SessionError
+      : { message: detail || "Matterhorn could not complete this response. Your prompt is ready to retry." } satisfies SessionError,
+  };
 }
 
 function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker }: {
@@ -1026,6 +1136,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const sessionActivityStatus = useSessionActivityStore(
     (state) => state.statusesByWorkspaceId[props.workspaceId]?.[props.sessionId] ?? "idle",
   );
+  const sessionActivityRecord = useSessionActivityStore(
+    (state) => state.recordsByWorkspaceId[props.workspaceId]?.[props.sessionId] ?? null,
+  );
   const draft = useComposerStateStore((state) => getComposerDraft(state, props.sessionId));
   const savedSessionDraft = useSessionDraftSnapshot(props.workspaceId, props.sessionId);
   const attachments = useComposerStateStore((state) => getComposerAttachments(state, props.sessionId));
@@ -1060,6 +1173,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const hydratedSavedDraftKeyRef = useRef<string | null>(null);
   const autoOpenedTargetRef = useRef<string | null>(null);
   const initializedAutoOpenSessionRef = useRef<string | null>(null);
+  const handledTerminalFailureRef = useRef<string | null>(null);
+  const suppressNextAbortFailureRef = useRef(false);
   const opencodeClient = useMemo(
     () => createClient(props.opencodeBaseUrl, undefined, { token: props.matterhornToken, mode: "matterhorn" }),
     [props.opencodeBaseUrl, props.matterhornToken],
@@ -1081,14 +1196,20 @@ export function SessionSurface(props: SessionSurfaceProps) {
     queryKey: snapshotQueryKey,
     queryFn: async () => (await props.client.getSessionSnapshot(props.workspaceId, props.sessionId, { limit: 140 })).item,
     staleTime: 500,
+    retry: (failureCount, error) => !(error instanceof MatterhornServerError && error.status === 404) && failureCount < 2,
   });
+  const sessionMissing = snapshotQuery.error instanceof MatterhornServerError && snapshotQuery.error.status === 404;
+  useEffect(() => {
+    if (sessionMissing) props.onSessionMissing?.();
+  }, [props.onSessionMissing, sessionMissing]);
   const customerWorkflowTemplatesQuery = useQuery({
     queryKey: ["matterhorn-customer-workflow-templates"],
     queryFn: fetchCustomerWorkflowTemplates,
     staleTime: 60_000,
   });
   const customerWorkflowStarterCards = useMemo(
-    () => buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data),
+    () => buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data)
+      .filter((card) => card.id !== "blank_chat_workflow"),
     [customerWorkflowTemplatesQuery.data],
   );
 
@@ -1114,6 +1235,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
     setNotice(null);
     autoOpenedTargetRef.current = null;
     initializedAutoOpenSessionRef.current = null;
+    handledTerminalFailureRef.current = null;
+    suppressNextAbortFailureRef.current = false;
     setVerifiedOpenTargets([]);
   }, [props.sessionId]);
 
@@ -1170,15 +1293,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   useEffect(() => {
     if (!currentSnapshot) return;
-    seedSessionState(props.workspaceId, currentSnapshot);
-  }, [currentSnapshot, props.sessionId, props.workspaceId]);
-
-  useEffect(() => {
-    if (!currentSnapshot) return;
     const key = `${props.sessionId}:${currentSnapshot.session.time?.updated ?? currentSnapshot.session.time?.created ?? 0}:${currentSnapshot.messages.length}`;
     if (hydratedKeyRef.current === key) return;
     hydratedKeyRef.current = key;
-    seedSessionState(props.workspaceId, currentSnapshot);
+    const id = window.setTimeout(() => {
+      seedSessionState(props.workspaceId, currentSnapshot);
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [props.sessionId, currentSnapshot, props.workspaceId]);
 
   const snapshot = resolveRenderedSessionSnapshot({
@@ -1187,19 +1308,99 @@ export function SessionSurface(props: SessionSurfaceProps) {
     cachedRendered: rendered,
   });
   const liveStatus = statusState ?? snapshot?.status ?? IDLE_STATUS;
-  const chatStreaming = sending || liveStatus.type === "busy" || liveStatus.type === "retry";
+  const waitingForUser = Boolean(props.activeQuestion || props.activePermission);
+  const chatStreaming = !waitingForUser && (
+    sending || liveStatus.type === "busy" || liveStatus.type === "retry"
+  );
+
+  useEffect(() => {
+    if (!chatStreaming) return;
+    const id = window.setInterval(() => {
+      void snapshotQuery.refetch();
+    }, 2_000);
+    return () => window.clearInterval(id);
+  }, [chatStreaming, snapshotQuery.refetch]);
   const renderedMessages = useMemo(
     () => deriveRenderedSessionMessages({ transcriptState, snapshot }),
     [snapshot, transcriptState],
   );
+  const linkedWorkflowRunQuery = useQuery({
+    queryKey: ["session-workflow-run", props.workspaceId, props.sessionId],
+    enabled: Boolean(props.workspaceId && props.sessionId),
+    staleTime: 500,
+    queryFn: async () => (
+      await props.client.listWorkflowRuns({
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        limit: 1,
+      })
+    ).items[0] ?? null,
+  });
+  const linkedWorkflowRun = linkedWorkflowRunQuery.data ?? null;
+  const workflowLifecycleMutationRef = useRef<string | null>(null);
+  const hasVisibleAssistantMessage = useMemo(
+    () => renderedMessages.some((message) => message.role === "assistant" && messageHasVisibleAssistantOutput(message)),
+    [renderedMessages],
+  );
+  useEffect(() => {
+    if (!linkedWorkflowRun) return;
+    let target: "waiting" | "running" | "completed" | null = null;
+    let operation: (() => Promise<unknown>) | null = null;
+
+    if (waitingForUser && linkedWorkflowRun.status === "running") {
+      target = "waiting";
+      operation = () => props.client.setWorkflowRunWaiting(
+        linkedWorkflowRun.workflowRunId,
+        props.activeQuestion ? "Waiting for answers" : "Waiting for approval",
+      );
+    } else if (!waitingForUser && chatStreaming && linkedWorkflowRun.status === "waiting") {
+      target = "running";
+      operation = () => props.client.startWorkflowRun(linkedWorkflowRun.workflowRunId);
+    } else if (
+      !waitingForUser &&
+      !chatStreaming &&
+      linkedWorkflowRun.status === "running" &&
+      hasVisibleAssistantMessage
+    ) {
+      target = "completed";
+      operation = () => props.client.completeWorkflowRun(linkedWorkflowRun.workflowRunId);
+    }
+
+    if (!target || !operation) return;
+    const mutationKey = `${linkedWorkflowRun.workflowRunId}:${target}`;
+    if (workflowLifecycleMutationRef.current === mutationKey) return;
+    workflowLifecycleMutationRef.current = mutationKey;
+    void operation()
+      .then(() => linkedWorkflowRunQuery.refetch())
+      .catch(() => undefined)
+      .finally(() => {
+        if (workflowLifecycleMutationRef.current === mutationKey) {
+          workflowLifecycleMutationRef.current = null;
+        }
+      });
+  }, [
+    chatStreaming,
+    hasVisibleAssistantMessage,
+    linkedWorkflowRun,
+    linkedWorkflowRunQuery,
+    props.activePermission,
+    props.activeQuestion,
+    props.client,
+  ]);
   const activeDeskMode = useMemo(
-    () => deriveMatterhornDeskMode([draft, ...renderedMessages.map(messageToReadableText)]),
+    () => deriveMatterhornDeskMode([
+      draft,
+      ...renderedMessages
+        .filter((message) => message.role === "user")
+        .map(messageToReadableText),
+    ]),
     [draft, renderedMessages],
   );
   const activeWorkflowDeskAgent = useMemo(() => {
+    if (linkedWorkflowRun?.agentId) return getMatterhornDeskAgentById(linkedWorkflowRun.agentId);
     if (activeDeskMode) return getMatterhornDeskAgent(activeDeskMode);
     return getMatterhornDeskAgentById(props.selectedAgent);
-  }, [activeDeskMode, props.selectedAgent]);
+  }, [activeDeskMode, linkedWorkflowRun?.agentId, props.selectedAgent]);
   const activeDeskReadinessQuery = useQuery({
     queryKey: ["session-desk-readiness", props.workspaceId, activeDeskMode],
     enabled: Boolean(activeDeskMode && props.workspaceId),
@@ -1214,11 +1415,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
       .join(", ")}.`
     : null;
   useEffect(() => {
-    const deskAgentId = matterhornDeskAgentIdForDesk(activeDeskMode);
-    if (deskAgentId && props.selectedAgent !== deskAgentId) {
+    const deskAgentId = linkedWorkflowRun?.agentId ?? matterhornDeskAgentIdForDesk(activeDeskMode);
+    if (!deskAgentId || props.selectedAgent === deskAgentId) return undefined;
+    const id = window.setTimeout(() => {
       props.onSelectAgent(deskAgentId);
-    }
-  }, [activeDeskMode, props.onSelectAgent, props.selectedAgent]);
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [activeDeskMode, linkedWorkflowRun?.agentId, props.onSelectAgent, props.selectedAgent]);
   const openTargets = useMemo(() => deriveOpenTargets(renderedMessages), [renderedMessages]);
   const openTargetsFingerprint = useMemo(
     () => openTargets.map((target) => `${target.kind}:${target.value}:${target.confidence}`).join("|"),
@@ -1251,10 +1454,14 @@ export function SessionSurface(props: SessionSurfaceProps) {
       : showAssistantRespondingState
         ? "responding"
         : "idle";
+  const optimisticRunTitle = sessionActivityRecord?.optimisticRunTitle?.trim();
+  const assistantActivityLabel = optimisticRunTitle && effectiveActivityStatus === "thinking"
+    ? `Working on ${optimisticRunTitle}`
+    : getSessionActivityStatusLabel(effectiveActivityStatus);
   const showNoVisibleAssistantOutput = noVisibleAssistantOutputBaseline !== null && !assistantOutputAfterNoVisibleFallback;
   const reserveAssistantStatusSpace = effectiveActivityStatus === "idle" && awaitingAssistantBaseline !== null && assistantOutputAfterAwaitStart && !chatStreaming;
-  const assistantStatusFooter = effectiveActivityStatus !== "idle" ? (
-    <AssistantWaitingCard label={getSessionActivityStatusLabel(effectiveActivityStatus)} collapseLayout />
+  const assistantStatusFooter = effectiveActivityStatus !== "idle" && effectiveActivityStatus !== "error" ? (
+    <AssistantWaitingCard label={assistantActivityLabel} collapseLayout startedAt={sessionActivityRecord?.runStartedAt} />
   ) : showNoVisibleAssistantOutput ? (
     <AssistantNoVisibleOutputCard text={noVisibleAssistantOutputText} />
   ) : reserveAssistantStatusSpace ? (
@@ -1344,7 +1551,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     renderedSessionId: renderedMessages.length > 0 || snapshot ? props.sessionId : null,
     hasSnapshot: Boolean(snapshot) || renderedMessages.length > 0,
     isFetching: snapshotQuery.isFetching,
-    isError: snapshotQuery.isError || Boolean(error),
+    isError: snapshotQuery.isError,
   });
 
   const buildDraft = useCallback((
@@ -1394,6 +1601,45 @@ export function SessionSurface(props: SessionSurfaceProps) {
   }, [props.sessionId, setComposerDraft]);
 
   useEffect(() => {
+    if (!currentSnapshot) return;
+    const failure = latestSessionSnapshotFailure(currentSnapshot);
+    if (!failure || handledTerminalFailureRef.current === failure.id) return;
+    const runStartedAt = sessionActivityRecord?.runStartedAt;
+    if (runStartedAt && failure.completedAt < runStartedAt - 500) return;
+
+    handledTerminalFailureRef.current = failure.id;
+    setSending(false);
+    setAwaitingAssistantBaseline(null);
+    setNoVisibleAssistantOutputBaseline(null);
+    const activity = useSessionActivityStore.getState();
+    activity.setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
+
+    if (failure.name === "MessageAbortedError" && suppressNextAbortFailureRef.current) {
+      suppressNextAbortFailureRef.current = false;
+      activity.clearError(props.workspaceId, props.sessionId);
+      return;
+    }
+
+    setError(failure.error);
+    activity.setError(props.workspaceId, props.sessionId);
+    if (failure.retryMessage && !draft.trim()) {
+      setComposerDraft(props.sessionId, failure.retryMessage);
+      props.onDraftChange(buildDraft(failure.retryMessage, []));
+    }
+  }, [
+    awaitingAssistantBaseline,
+    buildDraft,
+    chatStreaming,
+    currentSnapshot,
+    draft,
+    props.onDraftChange,
+    props.sessionId,
+    props.workspaceId,
+    sessionActivityRecord?.runStartedAt,
+    setComposerDraft,
+  ]);
+
+  useEffect(() => {
     const text = savedSessionDraft?.text?.trim();
     if (!text) return;
     if (draft.trim()) return;
@@ -1430,6 +1676,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     // backend can't accept the follow-up it'll surface an error via the
     // catch below. This restores the "append a prompt while it's still
     // talking" behavior that the Solid composer had.
+    suppressNextAbortFailureRef.current = false;
     setError(null);
     useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "busy" });
     setSending(true);
@@ -1488,14 +1735,22 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   const handleAbort = useCallback(async () => {
     if (!chatStreaming) return;
+    suppressNextAbortFailureRef.current = true;
     setError(null);
     try {
       await abortSessionSafe(opencodeClient, props.sessionId);
       await snapshotQuery.refetch();
+      setSending(false);
+      setAwaitingAssistantBaseline(null);
+      setNoVisibleAssistantOutputBaseline(null);
+      const activity = useSessionActivityStore.getState();
+      activity.setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
+      activity.clearError(props.workspaceId, props.sessionId);
     } catch (nextError) {
+      suppressNextAbortFailureRef.current = false;
       setError({ message: nextError instanceof Error ? nextError.message : "Failed to stop run." });
     }
-  }, [chatStreaming, opencodeClient, props.sessionId, snapshotQuery.refetch]);
+  }, [chatStreaming, opencodeClient, props.sessionId, props.workspaceId, snapshotQuery.refetch]);
 
   const handleDismissError = useCallback(() => {
     setError(null);
@@ -1507,6 +1762,12 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setSending(false);
     }
   }, [liveStatus.type]);
+
+  useEffect(() => {
+    if (sending || liveStatus.type !== "idle") return;
+    if (sessionActivityStatus !== "thinking" && sessionActivityStatus !== "responding") return;
+    useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
+  }, [liveStatus.type, props.sessionId, props.workspaceId, sending, sessionActivityStatus]);
 
   useEffect(() => {
     props.onDraftChange(buildDraft(draft, attachments));
@@ -1777,6 +2038,78 @@ export function SessionSurface(props: SessionSurfaceProps) {
     setBittensorContext,
     typeComposerText,
   ]);
+
+  const handleSaveBittensorEvidence = useCallback(async (card: BittensorPublicEvidenceCard) => {
+    const publicCard = publicBittensorEvidenceCard(card);
+    const title = typeof publicCard.title === "string" && publicCard.title.trim()
+      ? publicCard.title.trim()
+      : "Bittensor output";
+    const summary = typeof publicCard.summary === "string" && publicCard.summary.trim()
+      ? publicCard.summary.trim()
+      : typeof publicCard.subtitle === "string" && publicCard.subtitle.trim()
+        ? publicCard.subtitle.trim()
+        : "Public Bittensor result saved from chat.";
+    const publicContext = bittensorContext
+      ? Object.fromEntries(Object.entries({
+          contextId: bittensorContext.id,
+          ss58Address: bittensorContext.ss58Address,
+          netuid: bittensorContext.netuid,
+          amountTao: bittensorContext.amountTao,
+          validatorHotkey: bittensorContext.validatorHotkey,
+          coldkey: bittensorContext.coldkey,
+          recipient: bittensorContext.recipient,
+          destination: bittensorContext.destination,
+          lastIntent: bittensorContext.lastIntent,
+          lastExecution: bittensorContext.lastExecution,
+        }).filter(([, value]) => value !== undefined && value !== null && value !== ""))
+      : null;
+
+    recordInspectorEvent("bittensor.evidence.save_requested", {
+      workspaceId: props.workspaceId,
+      sessionId: props.sessionId,
+      kind: publicCard.kind ?? "chat_result",
+      title,
+    });
+
+    try {
+      const response = await props.client.workspaceBittensorPublicReadEvidence(props.workspaceId, {
+        kind: bittensorEvidenceKindForCard(card),
+        title,
+        summary,
+        payload: {
+          source: "visible_bittensor_card",
+          card: publicCard,
+          context: publicContext,
+        },
+        cards: [publicCard],
+      }, { sessionId: props.sessionId });
+
+      window.dispatchEvent(new Event("matterhorn:project-evidence-updated"));
+      window.dispatchEvent(new Event("matterhorn:task-log-updated"));
+      setNotice({
+        title: "Bittensor output saved",
+        description: "Saved to Outputs and Project Activity.",
+        tone: "success",
+      });
+      recordInspectorEvent("bittensor.evidence.saved", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        outputPath: response.evidence.outputPath,
+      });
+    } catch (error) {
+      setNotice({
+        title: "Could not save Bittensor output",
+        description: error instanceof Error ? error.message : "Try again after the Matterhorn Work engine is available.",
+        tone: "warning",
+      });
+      recordInspectorEvent("bittensor.evidence.save_failed", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        reason: error instanceof Error ? error.message.slice(0, 160) : "unknown",
+      });
+      throw error;
+    }
+  }, [bittensorContext, props.client, props.sessionId, props.workspaceId]);
 
   useEffect(() => {
     const handleVoiceTranscript = (event: Event) => {
@@ -2052,6 +2385,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     onChangeModel={props.onChangeModel}
                     onOpenModelPicker={props.onModelClick}
                   />
+                ) : sessionMissing ? (
+                  <div className="mx-auto flex max-w-sm items-center justify-center gap-2 rounded-lg bg-dls-canvas/45 px-6 py-5 text-sm text-dls-secondary">
+                    <OwDotTicker size="sm" />
+                    Returning to project Home…
+                  </div>
                 ) : (
                   <div className="mx-auto max-w-xl rounded-lg bg-red-3/20 px-6 py-5 text-sm text-red-11 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.22)]">
                     {snapshotQuery.error instanceof Error ? snapshotQuery.error.message : "Failed to load session."}
@@ -2060,7 +2398,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
               </div>
             ) : renderedMessages.length === 0 && effectiveActivityStatus !== "idle" ? (
               <div className="px-6 py-12">
-                <AssistantWaitingCard label={getSessionActivityStatusLabel(effectiveActivityStatus)} />
+                <AssistantWaitingCard label={assistantActivityLabel} startedAt={sessionActivityRecord?.runStartedAt} />
               </div>
             ) : renderedMessages.length === 0 && snapshot && snapshot.messages.length === 0 ? (
               error ? (
@@ -2082,6 +2420,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     deskId={activeDeskMode}
                     taskStatus={effectiveActivityStatus === "idle" ? "idle" : effectiveActivityStatus === "waiting" ? "waiting" : "running"}
                     stageActionDisabled={activeDeskStartBlocked}
+                    stageActionLabel="Platform setup"
                     stageActionTitle={activeDeskStartBlocker ?? undefined}
                     onStartStage={(_, prompt) => startDeskTask(activeDeskMode, prompt)}
                     onJotNote={() => {
@@ -2100,7 +2439,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                       <div>
                         <p className="text-base font-semibold tracking-[-0.01em] text-dls-text">Start with a Matterhorn workflow</p>
-                        <p className="text-xs leading-5 text-dls-secondary">Choose a desk or start a blank chat. Every prompt stays editable before sending.</p>
+                        <p className="text-xs leading-5 text-dls-secondary">Choose a desk task. Matterhorn starts it in a new chat.</p>
                       </div>
                     </div>
                     <div className="matterhorn-session-start-list grid grid-cols-1 gap-1.5 lg:grid-cols-2">
@@ -2131,9 +2470,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
                               </span>
                               <span className="line-clamp-1 text-[12px] leading-5 text-dls-secondary">{item.description}</span>
                               <span className="hidden truncate text-[11px] leading-4 text-dls-muted sm:block">{capabilitySummary}</span>
-                              <span className="text-[11px] font-semibold leading-4 text-[var(--matterhorn-desk-color)]">
-                                Stage agent task
-                              </span>
                             </span>
                             <span className="sr-only">{item.safetySummary}</span>
                           </button>
@@ -2156,6 +2492,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     onForkAtMessage={props.onForkAtMessage}
                     openTargets={verifiedOpenTargets}
                     onOpenTarget={props.onOpenTarget}
+                    onSaveBittensorEvidence={handleSaveBittensorEvidence}
                     footer={assistantStatusFooter}
                   />
                   {error ? (
@@ -2219,6 +2556,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         disabled={model.transitionState !== "idle" || Boolean(props.modelUnavailable)}
         modelUnavailable={Boolean(props.modelUnavailable)}
         statusLabel={statusLabel(snapshot ?? undefined, chatStreaming)}
+        showModelPicker={shellConfig.modelPicker}
         modelPickerOpen={props.modelPickerOpen}
         selectedModel={props.selectedModel}
         onModelPickerOpenChange={props.onModelPickerOpenChange}
@@ -2232,6 +2570,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
         modelVariant={props.modelVariant}
         modelBehaviorOptions={props.modelBehaviorOptions}
         onModelVariantChange={props.onModelVariantChange}
+        responsePerspective={props.responsePerspective}
+        onResponsePerspectiveChange={props.onResponsePerspectiveChange}
         agentLabel={props.agentLabel}
         selectedAgent={props.selectedAgent}
         listAgents={props.listAgents}
@@ -2324,6 +2664,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     workspaceId={props.workspaceId}
                     sessionId={props.sessionId}
                     onNotice={setNotice}
+                    suggestedPrompt={draft}
                   />
                 ) : null}
               </div>

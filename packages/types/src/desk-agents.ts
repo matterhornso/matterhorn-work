@@ -18,10 +18,49 @@ export interface MatterhornDeskAgentManifest {
   defaultStageId?: string;
   defaultActionId?: string;
   toolAllowlist: string[];
+  runtimePermissions?: Partial<Record<"task" | "webfetch" | "websearch", "allow" | "ask" | "deny">>;
   displayName: string;
   description: string;
   instructions: string;
 }
+
+export const LONGEVITY_PRIMARY_GOAL_OPTIONS = [
+  {
+    id: "fat_loss_body_composition",
+    label: "Fat loss / body composition",
+    description: "Support sustainable body-composition goals through training and general nutrition education.",
+  },
+  {
+    id: "strength_muscle_building",
+    label: "Strength & muscle building",
+    description: "Build strength and muscle with progressive resistance training.",
+  },
+  {
+    id: "mobility_pain_free_movement",
+    label: "Mobility & pain-free movement",
+    description: "Improve flexibility, joint health, and movement quality without medical claims.",
+  },
+  {
+    id: "improve_vo2_max",
+    label: "Improve VO2 max",
+    description: "Improve aerobic capacity and cardiorespiratory fitness with progressive, measurable training.",
+  },
+  {
+    id: "train_for_endurance",
+    label: "Train for endurance",
+    description: "Build sustainable stamina for longer sessions and endurance events.",
+  },
+  {
+    id: "general_longevity_wellness",
+    label: "General longevity & wellness",
+    description: "Build sustainable movement, recovery, sleep, and lifestyle habits.",
+  },
+] as const;
+
+const LONGEVITY_PRIMARY_GOAL_INSTRUCTION =
+  `- When asking Program Goal, always offer these distinct options: ${LONGEVITY_PRIMARY_GOAL_OPTIONS
+    .map((option) => `${option.label} — ${option.description}`)
+    .join("; ")}. Also allow the user to enter a custom goal.`;
 
 const AGENT_SHARED_BOUNDARY = [
   "You are a dedicated Matterhorn Work desk agent, not a generic chat persona.",
@@ -58,6 +97,9 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "- Prepare unsigned previews and external Bittensor-compatible signer handoffs. Matterhorn does not sign or broadcast.",
       "- Explain Bittensor concepts in beginner language before exposing raw chain details.",
       "- If required public context is missing, ask one concise question for the public value only.",
+      "- For a simple subnet discovery or comparison, do not delegate to subagents and do not create files unless the user requests a saved report.",
+      "- Start with the most specific Bittensor desk tool. If its result is fallback or stale, make at most one public web search for current context, skip additional subnet-list and per-subnet explain calls, and synthesize immediately.",
+      "- Return at most five relevant subnets and keep the default answer concise while always naming the data source and freshness.",
     ].join("\n"),
   },
   hyperliquid: {
@@ -105,6 +147,11 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "matterhorn_read_files",
       "matterhorn_write_files",
     ],
+    runtimePermissions: {
+      task: "deny",
+      webfetch: "deny",
+      websearch: "deny",
+    },
     displayName: "Polymarket Agent",
     description: "Polymarket research, liquidity, compliance, watch, receipt, and compliance-gated handoff agent.",
     instructions: [
@@ -116,6 +163,10 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "- If compliance blocks a flow, do not expose executable price, size, share, or order fields.",
       "- Do not request wallet secrets, API secrets, raw signatures, signed payloads, or custody.",
       "- Research first, show source/freshness, then prepare a compliance-gated handoff only when safe.",
+      "- For a simple market lookup or compliance check, do not delegate to subagents and do not create files unless the user asks for a saved report.",
+      "- Bound exact-market discovery to two Polymarket tool calls. Do not use generic web search, web fetch, or subagents. If the market is still not found, say so and stop.",
+      "- If an event or market reports restricted: true or compliance_blocked, stop after explaining the compliance block. Do not query orderbooks or expose executable fields.",
+      "- Once the available evidence answers the question, return the result immediately instead of continuing exploratory searches.",
     ].join("\n"),
   },
   sui: {
@@ -134,6 +185,11 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "matterhorn_read_files",
       "matterhorn_write_files",
     ],
+    runtimePermissions: {
+      task: "deny",
+      webfetch: "deny",
+      websearch: "deny",
+    },
     displayName: "Sui Agent",
     description: "Sui wallet-standard account reads, transfer previews, wallet signing handoffs, and public receipt evidence.",
     instructions: [
@@ -170,6 +226,9 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "Desk scope:",
       "- All user-facing labels should say Longevity, even if internal ids still say wellness.",
       "- Build a visible 7-stage workflow: intake, goals and constraints, training/mobility/yoga, nutrition education, weekly schedule/check-ins, client artifacts, and service package handoff.",
+      "- Intake may collect audience, experience level, schedule, equipment, public context, movement preferences, accessibility constraints the user chooses to share, and redacted goals only. Never ask for injuries, pain, health status, medical history, diagnoses, prescriptions, protected health information, or hidden clinical records.",
+      LONGEVITY_PRIMARY_GOAL_INSTRUCTION,
+      "- Keep Improve VO2 max and Train for endurance as separate choices; do not collapse them into general wellness.",
       "- Keep this separate from Web3, markets, wallets, and protocol trading.",
       "- Stay educational and non-medical. Do not diagnose, prescribe, treat, or claim guaranteed outcomes.",
       "- Payments, email, hosting, storage, and identity hooks are planned unless the app explicitly exposes them as live.",

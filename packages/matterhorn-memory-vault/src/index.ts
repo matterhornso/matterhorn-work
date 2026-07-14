@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import path from "node:path"
 import {
@@ -26,6 +26,7 @@ import {
 export const MATTERHORN_MEMORY_VAULT_VERSION = "matterhorn.memory.vault.v1" as const
 export const MATTERHORN_MEMORY_INDEX_VERSION = "matterhorn.memory.index.v1" as const
 export const MATTERHORN_MEMORY_SUGGESTION_INBOX_VERSION = "matterhorn.memory.suggestion-inbox.v1" as const
+const SAFE_MEMORY_ID_PATTERN = /^[A-Za-z0-9._-]+$/
 
 export interface MatterhornMemoryVaultOptions {
   rootDir: string
@@ -211,12 +212,18 @@ export class MatterhornMemoryVault {
 
     try {
       await readFile(this.indexPath, "utf8")
-    } catch {
+    } catch (error) {
+      if (!isNotFoundError(error)) {
+        throw error
+      }
       await this.writeIndex(emptyIndex())
     }
     try {
       await readFile(this.suggestionInboxPath, "utf8")
-    } catch {
+    } catch (error) {
+      if (!isNotFoundError(error)) {
+        throw error
+      }
       await this.writeSuggestionInbox(emptySuggestionInbox())
     }
   }
@@ -429,6 +436,7 @@ export class MatterhornMemoryVault {
 
   async getRecord(id: string): Promise<MatterhornMemoryRecord | null> {
     await this.initialize()
+    assertSafeMemoryId(id)
     const entry = (await this.readIndex()).entries[id]
     return entry && !entry.deleted ? entry.record : null
   }
@@ -437,12 +445,9 @@ export class MatterhornMemoryVault {
     return this.searchRecords(options)
   }
 
-  async searchRecords(options: MatterhornMemorySearchOptions = {}): Promise<MatterhornMemoryRecord[]> {
+  async listAllRecords(options: Omit<MatterhornMemorySearchOptions, "query" | "limit"> = {}): Promise<MatterhornMemoryRecord[]> {
     await this.initialize()
-    const limit = Math.max(1, Math.min(options.limit ?? 50, 200))
-    const query = options.query?.trim().toLowerCase()
-    const tokens = query?.split(/\s+/).filter(Boolean) ?? []
-    const records = Object.values((await this.readIndex()).entries)
+    return Object.values((await this.readIndex()).entries)
       .filter((entry) => (options.includeDeleted ? true : !entry.deleted))
       .map((entry) => entry.record)
       .filter((record) => (options.kind ? record.kind === options.kind : true))
@@ -452,6 +457,20 @@ export class MatterhornMemoryVault {
         const recordTags = new Set(record.tags.map((tag) => tag.toLowerCase()))
         return options.tags.every((tag) => recordTags.has(tag.toLowerCase()))
       })
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  }
+
+  async searchRecords(options: MatterhornMemorySearchOptions = {}): Promise<MatterhornMemoryRecord[]> {
+    await this.initialize()
+    const limit = Math.max(1, Math.min(options.limit ?? 50, 200))
+    const query = options.query?.trim().toLowerCase()
+    const tokens = query?.split(/\s+/).filter(Boolean) ?? []
+    const records = (await this.listAllRecords({
+      kind: options.kind,
+      scope: options.scope,
+      tags: options.tags,
+      includeDeleted: options.includeDeleted,
+    }))
       .filter((record) => {
         if (!tokens.length) return true
         const haystack = [
@@ -478,6 +497,7 @@ export class MatterhornMemoryVault {
     patch: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>,
   ): Promise<MatterhornMemoryRecord> {
     await this.initialize()
+    assertSafeMemoryId(id)
     const index = await this.readIndex()
     const existing = index.entries[id]
     if (!existing || existing.deleted) {
@@ -511,6 +531,7 @@ export class MatterhornMemoryVault {
 
   async forgetRecord(id: string, reason = "User requested deletion."): Promise<MatterhornMemoryForgetResult> {
     await this.initialize()
+    assertSafeMemoryId(id)
     const index = await this.readIndex()
     const entry = index.entries[id]
     if (!entry) {
@@ -527,7 +548,7 @@ export class MatterhornMemoryVault {
   async exportBundle(outputDir: string): Promise<MatterhornMemoryExportResult> {
     await this.initialize()
     await mkdir(outputDir, { recursive: true })
-    const records = (await this.listRecords({ limit: 500 })).filter((record) => recordCanExportByDeskPolicy(record))
+    const records = (await this.listAllRecords()).filter((record) => recordCanExportByDeskPolicy(record))
     const manifest = {
       version: MATTERHORN_MEMORY_VAULT_VERSION,
       exportedAt: new Date().toISOString(),
@@ -563,6 +584,7 @@ export class MatterhornMemoryVault {
   }
 
   private assertSafe(record: MatterhornMemoryRecord): void {
+    assertSafeMemoryId(record.id)
     const redaction = redactForbiddenMemorySecrets(record)
     if (redaction.redacted) {
       throw new Error(redaction.reason)
@@ -578,35 +600,87 @@ export class MatterhornMemoryVault {
   }
 
   private markdownPathForRecord(record: MatterhornMemoryRecord): string {
+    assertSafeMemoryId(record.id)
     return path.join(this.rootDir, folderForRecord(record), `${record.id}-${slugify(record.title)}.md`)
   }
 
   private async readIndex(): Promise<MatterhornMemoryIndex> {
+    let raw: string
     try {
-      const parsed = JSON.parse(await readFile(this.indexPath, "utf8")) as MatterhornMemoryIndex
-      return parsed.version === MATTERHORN_MEMORY_INDEX_VERSION ? parsed : emptyIndex()
-    } catch {
+      raw = await readFile(this.indexPath, "utf8")
+    } catch (error) {
+      if (!isNotFoundError(error)) {
+        throw new Error(`Could not read Matterhorn memory index: ${formatError(error)}`)
+      }
       return emptyIndex()
     }
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch (error) {
+      throw new Error(`Could not read Matterhorn memory index: JSON is corrupt. ${formatError(error)}`)
+    }
+
+    if (!isPlainObject(parsed)) {
+      throw new Error("Could not read Matterhorn memory index: expected a JSON object.")
+    }
+    const index = parsed as unknown as MatterhornMemoryIndex
+    if (index.version !== MATTERHORN_MEMORY_INDEX_VERSION) {
+      throw new Error(`Could not read Matterhorn memory index: unsupported version ${String(index.version)}`)
+    }
+    if (!isPlainObject(index.entries)) {
+      throw new Error("Could not read Matterhorn memory index: entries must be a JSON object.")
+    }
+    for (const [id, entry] of Object.entries(index.entries)) {
+      assertSafeMemoryId(id)
+      if (!isPlainObject(entry) || !isPlainObject(entry.record)) {
+        throw new Error(`Could not read Matterhorn memory index: malformed entry ${id}.`)
+      }
+      assertSafeMemoryId(entry.record.id)
+    }
+    return index
   }
 
   private async writeIndex(index: MatterhornMemoryIndex): Promise<void> {
     index.updatedAt = new Date().toISOString()
-    await writeFile(this.indexPath, `${JSON.stringify(index, null, 2)}\n`, "utf8")
+    await writeJsonAtomic(this.indexPath, index)
   }
 
   private async readSuggestionInbox(): Promise<MatterhornMemorySuggestionInbox> {
+    let raw: string
     try {
-      const parsed = JSON.parse(await readFile(this.suggestionInboxPath, "utf8")) as MatterhornMemorySuggestionInbox
-      return parsed.version === MATTERHORN_MEMORY_SUGGESTION_INBOX_VERSION ? parsed : emptySuggestionInbox()
-    } catch {
+      raw = await readFile(this.suggestionInboxPath, "utf8")
+    } catch (error) {
+      if (!isNotFoundError(error)) {
+        throw new Error(`Could not read Matterhorn memory suggestion inbox: ${formatError(error)}`)
+      }
       return emptySuggestionInbox()
     }
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch (error) {
+      throw new Error(`Could not read Matterhorn memory suggestion inbox: JSON is corrupt. ${formatError(error)}`)
+    }
+
+    if (!isPlainObject(parsed)) {
+      throw new Error("Could not read Matterhorn memory suggestion inbox: expected a JSON object.")
+    }
+    const inbox = parsed as unknown as MatterhornMemorySuggestionInbox
+    if (inbox.version !== MATTERHORN_MEMORY_SUGGESTION_INBOX_VERSION) {
+      throw new Error(`Could not read Matterhorn memory suggestion inbox: unsupported version ${String(inbox.version)}`)
+    }
+    if (!isPlainObject(inbox.entries)) {
+      throw new Error("Could not read Matterhorn memory suggestion inbox: entries must be a JSON object.")
+    }
+    return inbox
   }
 
   private async writeSuggestionInbox(inbox: MatterhornMemorySuggestionInbox): Promise<void> {
     inbox.updatedAt = new Date().toISOString()
-    await writeFile(this.suggestionInboxPath, `${JSON.stringify(inbox, null, 2)}\n`, "utf8")
+    await writeJsonAtomic(this.suggestionInboxPath, inbox)
   }
 
   private async appendLog(action: MemoryLogAction, id: string, details: Record<string, unknown>): Promise<void> {
@@ -751,6 +825,40 @@ function emptySuggestionInbox(): MatterhornMemorySuggestionInbox {
     updatedAt: new Date().toISOString(),
     entries: {},
   }
+}
+
+function assertSafeMemoryId(id: string): void {
+  if (
+    typeof id !== "string" ||
+    !id ||
+    id === "." ||
+    id === ".." ||
+    !SAFE_MEMORY_ID_PATTERN.test(id)
+  ) {
+    throw new Error("Invalid memory record id. Use only letters, numbers, periods, underscores, and dashes.")
+  }
+}
+
+async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`
+  await writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, "utf8")
+  await rename(tempPath, filePath)
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return isNodeError(error) && error.code === "ENOENT"
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === "object" && error !== null && "code" in error
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function folderForRecord(record: MatterhornMemoryRecord): string {

@@ -83,8 +83,7 @@ describe("Settings overview memory contract", () => {
   test("mirrors Memory review counts and actions", () => {
     const source = readAppSource("domains/settings/pages/overview-view.tsx");
 
-    expect(source).toContain("GLOBAL_HOME_SIDE_PANEL_KEY");
-    expect(source).toContain("workspaceSessionRoute");
+    expect(source).toContain("workspaceMemoryRoute");
     expect(source).toContain("listWorkspaceMemorySuggestions");
     expect(source).toContain("listWorkspaceMemory");
     expect(source).toContain("exportWorkspaceMemory");

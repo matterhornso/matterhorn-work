@@ -82,10 +82,14 @@ await writeFile(livePath, JSON.stringify({
 }), "utf8");
 await writeFile(browserPath, [
   "# Bittensor Browser QA",
-  "- Bittensor Demo tab checked.",
-  "- show my TAO checked.",
-  "- where am I staked checked.",
+  "- Bittensor desk checked.",
+  "- Show my TAO balance checked with public SS58 address intake.",
+  "- Find useful subnets checked.",
+  "- Compare validators checked.",
+  "- Prepare staking preview checked.",
+  "- degraded provider state checked.",
   "- external signer handoff checked.",
+  "- launched session stayed visible.",
   "- mobile viewport checked.",
   "- tablet viewport checked.",
   "- desktop viewport checked.",

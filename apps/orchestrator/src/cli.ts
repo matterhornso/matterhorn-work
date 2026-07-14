@@ -137,6 +137,14 @@ const DEFAULT_OPENCODE_HOT_RELOAD_DEBOUNCE_MS = 700;
 const DEFAULT_OPENCODE_HOT_RELOAD_COOLDOWN_MS = 1500;
 const DEFAULT_ACTIVITY_WINDOW_MS = 5 * 60_000;
 const DEFAULT_ACTIVITY_HEARTBEAT_INTERVAL_MS = 5 * 60_000;
+const ROUTER_DAEMON_MAX_BODY_BYTES = 64 * 1024;
+const DEFAULT_ORCHESTRATOR_CORS_ORIGINS = Object.freeze([
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "tauri://localhost",
+  "http://tauri.localhost",
+]);
+const DEFAULT_ORCHESTRATOR_CORS_VALUE = DEFAULT_ORCHESTRATOR_CORS_ORIGINS.join(",");
 
 const SANDBOX_INTERNAL_OPENCODE_PORT = 4096;
 const SANDBOX_INTERNAL_OPENWORK_PORT = DEFAULT_OPENWORK_PORT;
@@ -153,6 +161,10 @@ const SANDBOX_OPENCODE_GLOBAL_DATA_IMPORT_CONTAINER_PATH =
 const CLI_SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const ORCHESTRATOR_ROOT_DIR = resolve(CLI_SOURCE_DIR, "..");
 const REPO_ROOT_DIR = resolve(ORCHESTRATOR_ROOT_DIR, "..", "..");
+
+function effectiveCorsOrigins(origins: string[]): string[] {
+  return origins.length ? origins : Array.from(DEFAULT_ORCHESTRATOR_CORS_ORIGINS);
+}
 
 type ParsedArgs = {
   positionals: string[];
@@ -298,6 +310,7 @@ type RouterDaemonState = {
   port: number;
   baseUrl: string;
   startedAt: number;
+  token?: string;
 };
 
 type RouterOpencodeState = {
@@ -3171,6 +3184,55 @@ function nowMs(): number {
   return Date.now();
 }
 
+function generateRouterDaemonToken(): string {
+  return `owd_${randomBytes(32).toString("base64url")}`;
+}
+
+function isLoopbackDaemonHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
+}
+
+function allowedRouterDaemonCorsOrigin(origin: string | undefined): string | null {
+  if (!origin) return null;
+  if (origin === "null") return null;
+  try {
+    const parsed = new URL(origin);
+    if ((parsed.protocol === "http:" || parsed.protocol === "https:") && isLoopbackDaemonHost(parsed.hostname)) {
+      return origin;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function requestRouterDaemonToken(headers: Record<string, string | string[] | undefined>): string {
+  const authorization = Array.isArray(headers.authorization)
+    ? headers.authorization[0]
+    : headers.authorization;
+  const bearer = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (bearer) return bearer;
+  const matterhornHeader = headers["x-matterhorn-daemon-token"];
+  if (Array.isArray(matterhornHeader)) return matterhornHeader[0]?.trim() ?? "";
+  if (matterhornHeader) return matterhornHeader.trim();
+  const openworkHeader = headers["x-openwork-daemon-token"];
+  if (Array.isArray(openworkHeader)) return openworkHeader[0]?.trim() ?? "";
+  return openworkHeader?.trim() ?? "";
+}
+
+function publicRouterDaemonState(
+  daemon: RouterDaemonState | undefined,
+): Omit<RouterDaemonState, "token"> | null {
+  if (!daemon) return null;
+  return {
+    pid: daemon.pid,
+    port: daemon.port,
+    baseUrl: daemon.baseUrl,
+    startedAt: daemon.startedAt,
+  };
+}
+
 async function loadRouterState(path: string): Promise<RouterState> {
   try {
     const raw = await readFile(path, "utf8");
@@ -3954,7 +4016,7 @@ function printHelp(): void {
     "  --openwork-server-bin <p> Legacy alias for --matterhorn-work-server-bin",
     "  --opencode-router-bin <path>     Path to opencodeRouter binary (requires --allow-external)",
     "  --opencode-router-health-port <p> Health server port for opencodeRouter (default: random)",
-    "  --target <name>          MCP config target: codex | claude | cursor | json | env",
+    "  --target <name>          MCP config target: codex | claude | claude-desktop | cursor | json | env",
     "  --profile <name>         MCP config profile: server | full (default: full)",
     "  --server-url <url>       Matterhorn Work server URL for MCP config",
     "  --token <token>          Matterhorn Work client token for MCP config",
@@ -5938,7 +6000,7 @@ async function spawnRouterDaemon(
 async function ensureRouterDaemon(
   args: ParsedArgs,
   autoStart = true,
-): Promise<{ baseUrl: string; dataDir: string }> {
+): Promise<{ baseUrl: string; dataDir: string; token: string }> {
   const dataDir = resolveRouterDataDir(args.flags);
   const statePath = routerStatePath(dataDir);
   const state = await loadRouterState(statePath);
@@ -5946,7 +6008,7 @@ async function ensureRouterDaemon(
   if (existing && existing.baseUrl && isProcessAlive(existing.pid)) {
     try {
       await waitForRouterHealthy(existing.baseUrl, 1500, 150);
-      return { baseUrl: existing.baseUrl, dataDir };
+      return { baseUrl: existing.baseUrl, dataDir, token: existing.token ?? "" };
     } catch {
       // fallthrough
     }
@@ -5964,7 +6026,8 @@ async function ensureRouterDaemon(
   const baseUrl = `http://${host}:${port}`;
   await spawnRouterDaemon(args, dataDir, host, port);
   await waitForRouterHealthy(baseUrl, 10_000, 250);
-  return { baseUrl, dataDir };
+  const updated = await loadRouterState(statePath);
+  return { baseUrl, dataDir, token: updated.daemon?.token ?? "" };
 }
 
 async function requestRouter(
@@ -5974,9 +6037,12 @@ async function requestRouter(
   body?: unknown,
   autoStart = true,
 ) {
-  const { baseUrl } = await ensureRouterDaemon(args, autoStart);
+  const { baseUrl, token } = await ensureRouterDaemon(args, autoStart);
   const url = `${baseUrl.replace(/\/$/, "")}${path}`;
   const headers: Record<string, string> = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
   let payload: string | undefined;
   if (body !== undefined) {
     payload = JSON.stringify(body);
@@ -6011,9 +6077,10 @@ async function runDaemonCommand(args: ParsedArgs) {
       return;
     }
     if (subcommand === "stop") {
-      const { baseUrl } = await ensureRouterDaemon(args, false);
+      const { baseUrl, token } = await ensureRouterDaemon(args, false);
       await fetchJson(`${baseUrl.replace(/\/$/, "")}/shutdown`, {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       outputResult({ ok: true }, outputJson);
       return;
@@ -6269,6 +6336,7 @@ async function runRouterDaemon(args: ParsedArgs) {
   logVerbose(`opencode bin: ${opencodeBinary.bin} (${opencodeBinary.source})`);
 
   let opencodeChild: ReturnType<typeof spawn> | null = null;
+  const daemonToken = state.daemon?.token ?? generateRouterDaemonToken();
 
   const updateDiagnostics = (actualVersion?: string) => {
     state.cliVersion = cliVersion;
@@ -6326,7 +6394,7 @@ async function runRouterDaemon(args: ParsedArgs) {
       port: opencodePort,
       username: opencodeCredentials.username,
       password: opencodeCredentials.password,
-      corsOrigins: corsOrigins.length ? corsOrigins : ["*"],
+      corsOrigins: effectiveCorsOrigins(corsOrigins),
       logger,
       runId,
       logFormat,
@@ -6373,13 +6441,29 @@ async function runRouterDaemon(args: ParsedArgs) {
         "openwork-orchestrator-router",
       );
     });
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    const requestOrigin = Array.isArray(req.headers.origin)
+      ? req.headers.origin[0]
+      : req.headers.origin;
+    const corsOrigin = allowedRouterDaemonCorsOrigin(requestOrigin);
+    if (corsOrigin) {
+      res.setHeader("Access-Control-Allow-Origin", corsOrigin);
+    }
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, X-Matterhorn-Daemon-Token, X-OpenWork-Daemon-Token",
+    );
+    res.setHeader("Vary", "Origin");
 
     if (req.method === "OPTIONS") {
       res.statusCode = 204;
       res.end();
+      return;
+    }
+    if (url.pathname !== "/health" && requestRouterDaemonToken(req.headers) !== daemonToken) {
+      res.statusCode = 401;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ ok: false, error: "unauthorized" }));
       return;
     }
     const parts = url.pathname.split("/").filter(Boolean);
@@ -6392,8 +6476,16 @@ async function runRouterDaemon(args: ParsedArgs) {
 
     const readBody = async () => {
       const chunks: Buffer[] = [];
+      let bytes = 0;
       for await (const chunk of req) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        bytes += buffer.byteLength;
+        if (bytes > ROUTER_DAEMON_MAX_BODY_BYTES) {
+          const error = new Error("payload_too_large");
+          (error as Error & { statusCode?: number }).statusCode = 413;
+          throw error;
+        }
+        chunks.push(buffer);
       }
       if (!chunks.length) return null;
       const raw = Buffer.concat(chunks).toString("utf8");
@@ -6405,7 +6497,7 @@ async function runRouterDaemon(args: ParsedArgs) {
       if (req.method === "GET" && url.pathname === "/health") {
         send(200, {
           ok: true,
-          daemon: state.daemon ?? null,
+          daemon: publicRouterDaemonState(state.daemon),
           opencode: state.opencode ?? null,
           activeId: state.activeId,
           workspaceCount: state.workspaces.length,
@@ -6608,8 +6700,17 @@ async function runRouterDaemon(args: ParsedArgs) {
 
       send(404, { error: "not found" });
     } catch (error) {
-      send(500, {
-        error: error instanceof Error ? error.message : String(error),
+      const statusCode =
+        typeof (error as { statusCode?: unknown })?.statusCode === "number"
+          ? (error as { statusCode: number }).statusCode
+          : 500;
+      send(statusCode, {
+        error:
+          statusCode === 413
+            ? "payload_too_large"
+            : error instanceof Error
+              ? error.message
+              : String(error),
       });
     }
   });
@@ -6645,10 +6746,11 @@ async function runRouterDaemon(args: ParsedArgs) {
       port,
       baseUrl: `http://${host}:${port}`,
       startedAt: nowMs(),
+      token: daemonToken,
     };
     await saveRouterState(statePath, state);
     if (outputJson) {
-      outputResult({ ok: true, daemon: state.daemon }, true);
+      outputResult({ ok: true, daemon: publicRouterDaemonState(state.daemon) }, true);
     } else {
       if (logFormat === "json") {
         logger.info(
@@ -10132,6 +10234,29 @@ function printMcpEnv(args: ParsedArgs) {
   ].join("\n"));
 }
 
+function renderCodexMcpConfig(mcpServers: Record<string, McpConfigEntry>): string {
+  const lines: string[] = [];
+
+  for (const [name, server] of Object.entries(mcpServers)) {
+    lines.push(
+      `[mcp_servers.${name}]`,
+      `command = ${JSON.stringify(server.command)}`,
+      `args = ${JSON.stringify(server.args)}`,
+    );
+
+    if (server.env && Object.keys(server.env).length > 0) {
+      lines.push("", `[mcp_servers.${name}.env]`);
+      for (const [key, value] of Object.entries(server.env)) {
+        lines.push(`${key} = ${JSON.stringify(value)}`);
+      }
+    }
+
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
 function printMcpConfig(args: ParsedArgs) {
   const target = (readFlag(args.flags, "target") ?? "json").trim().toLowerCase();
   if (target === "env") {
@@ -10143,6 +10268,10 @@ function printMcpConfig(args: ParsedArgs) {
   }
 
   const mcpServers = buildMcpServersConfig(args);
+  if (target === "codex") {
+    console.log(renderCodexMcpConfig(mcpServers));
+    return;
+  }
   console.log(JSON.stringify({ mcpServers }, null, 2));
 }
 
@@ -10443,7 +10572,7 @@ async function runStart(args: ParsedArgs) {
     "OPENWORK_READONLY",
   );
   const corsValue =
-    readFlag(args.flags, "cors") ?? process.env.OPENWORK_CORS_ORIGINS ?? "*";
+    readFlag(args.flags, "cors") ?? process.env.OPENWORK_CORS_ORIGINS ?? DEFAULT_ORCHESTRATOR_CORS_VALUE;
   const corsOrigins = parseList(corsValue);
   const connectHost = readFlag(args.flags, "connect-host");
 
@@ -10730,7 +10859,7 @@ async function runStart(args: ParsedArgs) {
       port: opencodePort,
       username: opencodeUsername,
       password: opencodePassword,
-      corsOrigins: corsOrigins.length ? corsOrigins : ["*"],
+      corsOrigins: effectiveCorsOrigins(corsOrigins),
       logger,
       runId,
       logFormat,
@@ -10783,7 +10912,7 @@ async function runStart(args: ParsedArgs) {
       approvalMode: approvalMode === "auto" ? "auto" : "manual",
       approvalTimeoutMs,
       readOnly,
-      corsOrigins: corsOrigins.length ? corsOrigins : ["*"],
+      corsOrigins: effectiveCorsOrigins(corsOrigins),
       opencodeBaseUrl: opencodeConnectUrl,
       opencodeDirectory: resolvedWorkspace,
       opencodeUsername,
@@ -11390,7 +11519,7 @@ async function runStart(args: ParsedArgs) {
                 opencodeRouterHealth: null,
               },
               opencode: {
-                corsOrigins: corsOrigins.length ? corsOrigins : ["*"],
+                corsOrigins: effectiveCorsOrigins(corsOrigins),
                 username: opencodeUsername,
                 password: opencodePassword,
                 hotReload: opencodeHotReload,
@@ -11402,7 +11531,7 @@ async function runStart(args: ParsedArgs) {
                 approvalMode: approvalMode === "auto" ? "auto" : "manual",
                 approvalTimeoutMs,
                 readOnly,
-                corsOrigins: corsOrigins.length ? corsOrigins : ["*"],
+                corsOrigins: effectiveCorsOrigins(corsOrigins),
                 opencodeUsername,
                 opencodePassword,
                 logFormat,
@@ -11434,7 +11563,7 @@ async function runStart(args: ParsedArgs) {
                 opencodeRouterHealth: null,
               },
               opencode: {
-                corsOrigins: corsOrigins.length ? corsOrigins : ["*"],
+                corsOrigins: effectiveCorsOrigins(corsOrigins),
                 username: opencodeUsername,
                 password: opencodePassword,
                 hotReload: opencodeHotReload,
@@ -11446,7 +11575,7 @@ async function runStart(args: ParsedArgs) {
                 approvalMode: approvalMode === "auto" ? "auto" : "manual",
                 approvalTimeoutMs,
                 readOnly,
-                corsOrigins: corsOrigins.length ? corsOrigins : ["*"],
+                corsOrigins: effectiveCorsOrigins(corsOrigins),
                 opencodeUsername,
                 opencodePassword,
                 logFormat,
@@ -11565,7 +11694,7 @@ async function runStart(args: ParsedArgs) {
         port: opencodePort,
         username: opencodeUsername,
         password: opencodePassword,
-        corsOrigins: corsOrigins.length ? corsOrigins : ["*"],
+        corsOrigins: effectiveCorsOrigins(corsOrigins),
         logger,
         runId,
         logFormat,
@@ -11731,7 +11860,7 @@ async function runStart(args: ParsedArgs) {
         approvalMode: approvalMode === "auto" ? "auto" : "manual",
         approvalTimeoutMs,
         readOnly,
-        corsOrigins: corsOrigins.length ? corsOrigins : ["*"],
+        corsOrigins: effectiveCorsOrigins(corsOrigins),
         opencodeBaseUrl: opencodeConnectUrl,
         opencodeDirectory: resolvedWorkspace,
         opencodeUsername,

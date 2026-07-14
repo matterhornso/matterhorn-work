@@ -6,6 +6,17 @@ These docs describe the built-in Matterhorn Work MCP groups shown in Settings ->
 - `packages/matterhorn-work-mcp/index.mjs`
 - `packages/types/src/matterhorn-workflows.ts`
 
+## Runtime Status vs. Product Catalog
+
+The Settings surface combines two different data sets:
+
+1. **Configured MCP runtime entries** from project/global OpenCode config and their live OpenCode status.
+2. **Matterhorn MCP product cards** that generate installation commands for supported coding-agent clients.
+
+Do not count catalog cards as connected. The live count includes only configured entries whose OpenCode status is exactly `connected`.
+
+`Connected` means the MCP process completed initialization and exposes its tool catalog over MCP. It does not mean that a wallet, OAuth account, paid provider, or every upstream network dependency is connected. Customer copy should use `MCP server active` for this state.
+
 ## Built-in MCPs
 
 | MCP | Doc | Boundary |

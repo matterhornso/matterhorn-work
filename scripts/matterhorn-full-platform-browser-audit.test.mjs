@@ -1,0 +1,95 @@
+#!/usr/bin/env node
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+const source = readFileSync("scripts/matterhorn-full-platform-browser-audit.mjs", "utf8");
+
+assert.equal(
+  packageJson.scripts?.["test:matterhorn-full-platform-browser-audit"],
+  "node scripts/matterhorn-full-platform-browser-audit.test.mjs",
+);
+
+for (const surface of [
+  "workspace-home",
+  "project-history",
+  "settings-general",
+  "settings-overview",
+  "settings-preferences",
+  "settings-permissions",
+  "settings-wallet",
+  "settings-generated-media",
+  "settings-extensions",
+  "settings-ai",
+  "settings-customization",
+  "settings-appearance",
+  "settings-updates",
+  "settings-billing",
+  "settings-cloud-account",
+  "panel-profile",
+  "panel-wallet",
+  "panel-outputs",
+  "panel-extensions",
+  "panel-memory",
+  "panel-notes",
+  "desk-bittensor",
+  "desk-hyperliquid",
+  "desk-polymarket",
+  "desk-sui",
+  "desk-chat",
+]) {
+  assert.ok(source.includes(`"${surface}"`), `full platform audit missing ${surface}`);
+}
+
+for (const signal of [
+  "horizontalOverflow",
+  "waitForVisualSettle",
+  "document.getAnimations()",
+  "Number.isFinite(endTime)",
+  "consoleErrors",
+  "pageErrors",
+  "networkFailures",
+  'button.textContent?.trim() === "Quick Jot" && !button.disabled',
+  'id.endsWith("settings-overview")',
+  'id.endsWith("settings-wallet")',
+  'button.textContent?.trim() === "Save policy" && !button.disabled',
+  'id.endsWith("settings-preferences")',
+  'element.getAttribute("aria-label") === "Auto context compaction"',
+  'element.getAttribute("aria-hidden") === "true"',
+  'id.endsWith("panel-memory")',
+  '["Refresh saved memories", "Refresh memory review"].every',
+  "await page.waitForTimeout(250)",
+  "settings-overview-quick-jot",
+  "settings-overview-evidence-navigation",
+  "customization-visibility-controls",
+  "Model picker did not return after restoring defaults.",
+  "New project sidebar action did not return after restoring defaults.",
+  "mcp-rail-availability-and-disclosure",
+  "Local-only build exposed an unavailable Marketplace tab.",
+  "19 tools for chat, wallet reads, readiness, subnets, watches, and receipts.",
+  "stale-session-recovery",
+  "Chat no longer available",
+  "Recovered stale chat reopened the previously focused desk instead of Project Home.",
+  "response-perspective-controls",
+  "generate-image-panel",
+  "MATTERHORN_FULL_AUDIT_CHAT_URL",
+  "MATTERHORN_FULL_AUDIT_PRODUCT_REPORT",
+  "discoverProductSmokeReports",
+  "report?.ready !== true",
+  "entry.name.startsWith(\"matterhorn-product-browser-smoke\")",
+  "inspectResponsiveSurfaceCatalog",
+  '{ prefix: "compact-", name: "compact-laptop", width: 1280, height: 800 }',
+  '{ prefix: "tablet-", name: "tablet", width: 820, height: 1180 }',
+  '{ prefix: "mobile-", name: "mobile", width: 390, height: 844 }',
+  "responsiveViewports",
+  "MATTERHORN_FULL_AUDIT_RESPONSIVE_VIEWPORTS",
+  "MATTERHORN_FULL_AUDIT_SURFACE_PACE_MS",
+  "surfacePaceMs",
+  "rootText:",
+  "failure.png",
+  "activeBrowser?.close()",
+]) {
+  assert.ok(source.includes(signal), `full platform audit missing ${signal}`);
+}
+
+console.log("Matterhorn full platform browser audit contract passed.");

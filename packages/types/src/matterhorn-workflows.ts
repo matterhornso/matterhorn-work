@@ -139,7 +139,7 @@ export const WELLNESS_CREATOR_SERVICES_WORKFLOW: MatterhornWorkflowManifest = {
       label: "What is the primary goal?",
       required: true,
       type: "text",
-      helpText: "Keep goals general and non-medical, e.g. move better, build habits, learn nutrition basics.",
+      helpText: "Keep goals general and non-medical. Include improving VO2 max and training for endurance as separate choices alongside body composition, strength, mobility, and general wellness.",
     },
     {
       id: "duration_weeks",
@@ -2457,6 +2457,117 @@ export const POLYMARKET_RESEARCHER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflow
   },
 };
 
+export const SUI_WALLET_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTemplate = {
+  version: "matterhorn.customer.workflow.template.v1",
+  id: "sui_wallet_workflow",
+  name: "Use Sui",
+  summary:
+    "Read public Sui account context, prepare transfer previews, and save public transaction receipts.",
+  promise:
+    "Sui signing stays in your wallet. Matterhorn never asks for seed phrases, private keys, raw signatures, signed payloads, or wallet exports.",
+  category: "web3",
+  examplePrompts: [
+    "Show my Sui wallet",
+    "Prepare a Sui transfer preview",
+    "Import a Sui transaction receipt",
+  ],
+  expectedArtifacts: [
+    {
+      id: "wallet_card",
+      name: "Sui Wallet Card",
+      mimeType: "application/json",
+      public: true,
+      description: "Public Sui account and balance context.",
+    },
+    {
+      id: "transfer_preview",
+      name: "Transfer Preview",
+      mimeType: "application/json",
+      public: true,
+      description: "Non-custodial transfer preview for review in the user's wallet.",
+    },
+    {
+      id: "receipt_evidence",
+      name: "Receipt Evidence",
+      mimeType: "application/json",
+      public: true,
+      description: "Public transaction digest and explorer evidence after wallet submission.",
+    },
+  ],
+  requiredContext: [
+    {
+      id: "wallet_address",
+      label: "Public Sui address",
+      required: true,
+      type: "text",
+      helpText: "Public Sui address only. Never provide a seed phrase, private key, or wallet export.",
+    },
+  ],
+  optionalContext: [
+    {
+      id: "recipient_address",
+      label: "Recipient public Sui address",
+      required: false,
+      type: "text",
+    },
+    {
+      id: "amount_mist",
+      label: "Transfer amount in MIST",
+      required: false,
+      type: "number",
+    },
+  ],
+  status: "preview_only",
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  forbiddenInputs: [
+    "private key",
+    "seed phrase",
+    "mnemonic",
+    "raw signature",
+    "signed payload",
+    "wallet export",
+  ],
+  handoffReceiptSupport: {
+    supported: true,
+    types: ["transfer_preview", "receipt_evidence"],
+    description:
+      "Produces a non-custodial transfer preview and stores only public receipt evidence after wallet submission.",
+  },
+  serviceHooks: [{ hook: "sui", status: "preview_only" }],
+  chatMode: "crypto chat",
+  launch: {
+    primaryCta: "Open Sui desk",
+    secondaryCta: "Preview transfer",
+    defaultPrompt: "Show my Sui wallet",
+    handoffContextLabel: "Public Sui address",
+    recommendedSurface: "protocol_desk",
+  },
+  ui: {
+    iconHint: "sui",
+    accent: "matterhorn_blue",
+    shortDescription:
+      "Read Sui accounts, preview transfers, and import receipts. Signing stays in your wallet.",
+  },
+  routing: {
+    chatMode: "sui",
+    opensPanel: "sui",
+    startsSession: true,
+  },
+  recommendedCommands: {
+    cli: ['matterhorn-work sui account "<public Sui address>" --json'],
+  },
+};
+
 export const WELLNESS_CREATOR_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTemplate = {
   version: "matterhorn.customer.workflow.template.v1",
   id: "wellness_creator_workflow",
@@ -2782,6 +2893,7 @@ export const MATTERHORN_CUSTOMER_WORKFLOW_TEMPLATE_REGISTRY: Record<
   bittensor_operator: BITTENSOR_OPERATOR_CUSTOMER_TEMPLATE,
   hyperliquid_trader: HYPERLIQUID_TRADER_CUSTOMER_TEMPLATE,
   polymarket_researcher: POLYMARKET_RESEARCHER_CUSTOMER_TEMPLATE,
+  sui_wallet_workflow: SUI_WALLET_WORKFLOW_CUSTOMER_TEMPLATE,
   wellness_creator_workflow: WELLNESS_CREATOR_WORKFLOW_CUSTOMER_TEMPLATE,
   decentralized_services_operator: DECENTRALIZED_SERVICES_OPERATOR_CUSTOMER_TEMPLATE,
   blank_chat_workflow: BLANK_CHAT_WORKFLOW_CUSTOMER_TEMPLATE,
@@ -3720,10 +3832,10 @@ export const WELLNESS_DESK_MANIFEST: MatterhornDeskManifest = {
   deskId: "wellness",
   deskDisplayName: "Longevity",
   deskShortName: "Longevity",
-  deskDescription: "Workflow-ready longevity program builder for creators and coaches. Educational and non-medical.",
+  deskDescription: "Longevity program builder for creators and coaches. Educational and non-medical.",
   deskAccent: "matterhorn_blue",
   customerPrimaryAction: "Build a longevity program packet",
-  customerSafetyStrip: "Workflow-ready. Educational content only. Not medical advice. No live payments, no live email, no live hosting, and no live data access.",
+  customerSafetyStrip: "Educational content only. Not medical advice. No live payments, no live email, no live hosting, and no live data access.",
   status: "workflow_ready",
   allowedSurfaces: ["workflow_chat", "evidence_packet"],
   liveSubmissionEnabled: false,
@@ -4522,11 +4634,11 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   version: "matterhorn.protocol.desk.manifest.v1",
   id: "wellness",
   displayName: "Longevity",
-  shortDescription: "Workflow-ready longevity program builder for creators and coaches.",
+  shortDescription: "Longevity program builder for creators and coaches.",
   launcherTitle: "Longevity Creator",
   launcherDescription: "Build educational, non-medical longevity programs and service packages through chat.",
   launcherPrompt: "Create a 4-week beginner strength plan",
-  rightRailSummary: "Workflow-ready desk. No account or keys required. Generates educational content only, not medical advice.",
+  rightRailSummary: "No account or keys required. Generates educational content only, not medical advice.",
   logoAssetId: "wellness-logo",
   officialLogoAssetId: "wellness-logo",
   logoAlt: "Longevity Creator logo",

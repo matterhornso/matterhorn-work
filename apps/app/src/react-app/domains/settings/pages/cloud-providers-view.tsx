@@ -2,7 +2,7 @@
 import * as React from "react";
 
 import type { CloudImportedProvider } from "../../../../app/cloud/import-state";
-import type { DenOrgLlmProvider } from "../../../../app/lib/den";
+import { MATTERHORN_CLOUD_ENABLED, type DenOrgLlmProvider } from "../../../../app/lib/den";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { t } from "@/i18n";
@@ -209,6 +209,20 @@ export function CloudProvidersView({
   );
 
   if (!isSignedIn) {
+    if (!MATTERHORN_CLOUD_ENABLED) {
+      const unavailableNotice = (
+        <SettingsNotice>
+          Matterhorn Cloud provider sharing is not available in this build. Local providers remain available from the model picker.
+        </SettingsNotice>
+      );
+      return embedded ? unavailableNotice : (
+        <SettingsStack>
+          <Separator />
+          {unavailableNotice}
+        </SettingsStack>
+      );
+    }
+
     const notice = (
       <SettingsNotice>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

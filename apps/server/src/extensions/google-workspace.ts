@@ -30,7 +30,7 @@ export const GOOGLE_WORKSPACE_EXTENSION_ACTIONS = [
     extensionId: GOOGLE_WORKSPACE_EXTENSION_ID,
     action: "status",
     title: "Google Workspace status",
-    description: "Check whether Google Workspace is connected and ready for OpenWork extension actions.",
+    description: "Check whether Google Workspace is connected and ready for Matterhorn extension actions.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -71,7 +71,7 @@ export const GOOGLE_WORKSPACE_EXTENSION_ACTIONS = [
     extensionId: GOOGLE_WORKSPACE_EXTENSION_ID,
     action: "drive_search_files",
     title: "Search Drive files",
-    description: "Search files available to OpenWork through the connected Google Drive scope.",
+    description: "Search files available to Matterhorn through the connected Google Drive scope.",
     inputSchema: {
       type: "object",
       properties: {
@@ -86,7 +86,7 @@ export const GOOGLE_WORKSPACE_EXTENSION_ACTIONS = [
     extensionId: GOOGLE_WORKSPACE_EXTENSION_ID,
     action: "drive_read_file",
     title: "Read Drive file",
-    description: "Read a Drive file available to OpenWork by file id.",
+    description: "Read a Drive file available to Matterhorn by file id.",
     inputSchema: {
       type: "object",
       properties: {
@@ -370,7 +370,7 @@ async function refreshGoogleWorkspaceVault(config: ServerConfig, record: Record<
 
 async function googleWorkspaceAccessToken(config: ServerConfig): Promise<{ record: Record<string, unknown>; accessToken: string }> {
   const record = await readGoogleWorkspaceVault(config);
-  if (!record) throw new ApiError(400, "google_workspace_not_connected", "Connect Google Workspace in OpenWork Settings to use this tool.");
+  if (!record) throw new ApiError(400, "google_workspace_not_connected", "Connect Google Workspace in Matterhorn Settings to use this tool.");
   const refreshed = await refreshGoogleWorkspaceVault(config, record);
   const token = isRecord(refreshed.token) ? refreshed.token : null;
   const accessToken = typeof token?.accessToken === "string" ? token.accessToken : "";
@@ -513,7 +513,7 @@ export async function googleWorkspaceRunScopeSmokeTest(config: ServerConfig) {
   const driveFile = await fetchGoogleJson("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink", {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": `multipart/related; boundary=${driveBoundary}` },
-    body: multipartRelatedBody({ name: "OpenWork Google Workspace smoke test.txt", mimeType: "text/plain" }, `OpenWork Google Workspace smoke test created at ${createdAt}.`, driveBoundary),
+    body: multipartRelatedBody({ name: "Matterhorn Google Workspace smoke test.txt", mimeType: "text/plain" }, `Matterhorn Google Workspace smoke test created at ${createdAt}.`, driveBoundary),
   });
   if (isRecord(driveFile) && typeof driveFile.id === "string") {
     const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFile.id)}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -522,7 +522,7 @@ export async function googleWorkspaceRunScopeSmokeTest(config: ServerConfig) {
   const draft = await fetchGoogleJson("https://gmail.googleapis.com/gmail/v1/users/me/drafts", {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ message: { raw: base64UrlString(gmailRawMessage({ to: [email], subject: "OpenWork Google Workspace smoke test draft", body: `This draft was created by OpenWork to verify Gmail draft access at ${createdAt}.\nOpenWork does not send this email automatically.` })) } }),
+    body: JSON.stringify({ message: { raw: base64UrlString(gmailRawMessage({ to: [email], subject: "Matterhorn Google Workspace smoke test draft", body: `This draft was created by Matterhorn to verify Gmail draft access at ${createdAt}.\nMatterhorn does not send this email automatically.` })) } }),
   });
   return googleWorkspaceStatusPayload(record, {
     testStatus: "Calendar read, Drive file create/read, and Gmail draft creation verified.",
@@ -596,7 +596,7 @@ export function createGoogleWorkspaceConnectFlowManager(config: ServerConfig) {
         try {
           const flow = flows.get(flowId);
           if (!flow) {
-            await finish(googleWorkspaceCallbackPage(410, "Google Workspace connection expired", "Return to OpenWork and start connection again."));
+            await finish(googleWorkspaceCallbackPage(410, "Google Workspace connection expired", "Return to Matterhorn and start connection again."));
             return;
           }
           const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -620,7 +620,7 @@ export function createGoogleWorkspaceConnectFlowManager(config: ServerConfig) {
             await finish(googleWorkspaceCallbackPage(400, "Google Workspace connection failed", "Invalid OAuth callback."));
             return;
           }
-          await finish(googleWorkspaceCallbackPage(200, "Google Workspace authorization received", "You can return to OpenWork while it finishes connecting."));
+          await finish(googleWorkspaceCallbackPage(200, "Google Workspace authorization received", "You can return to Matterhorn while it finishes connecting."));
           try {
             const token = await exchangeGoogleWorkspaceCode({ code, redirectUri: flow.redirectUri, verifier: flow.verifier });
             if (!isRecord(token) || typeof token.access_token !== "string") throw new Error("Google OAuth response did not include an access token.");

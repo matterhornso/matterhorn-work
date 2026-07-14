@@ -151,20 +151,59 @@ export type HealthHandlers = {
   sendMessage?: (input: SendMessageInput) => Promise<SendMessageResult>;
 };
 
+export type HealthServerOptions = {
+  writeToken?: string;
+};
+
+function isLoopbackHost(hostname: string): boolean {
+  const value = hostname.toLowerCase();
+  return value === "localhost" || value === "127.0.0.1" || value === "::1" || value === "[::1]";
+}
+
+function allowedCorsOrigin(origin: string | undefined): string | null {
+  if (!origin) return null;
+  if (origin === "null") return null;
+  try {
+    const parsed = new URL(origin);
+    if ((parsed.protocol === "http:" || parsed.protocol === "https:") && isLoopbackHost(parsed.hostname)) {
+      return origin;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function extractWriteToken(req: http.IncomingMessage): string {
+  const auth = req.headers.authorization;
+  if (typeof auth === "string" && auth.toLowerCase().startsWith("bearer ")) {
+    return auth.slice("bearer ".length).trim();
+  }
+  const header = req.headers["x-opencode-router-token"];
+  if (Array.isArray(header)) return header[0]?.trim() ?? "";
+  return typeof header === "string" ? header.trim() : "";
+}
+
+function writeAuthorized(req: http.IncomingMessage, expectedToken: string | undefined): boolean {
+  const token = expectedToken?.trim();
+  if (!token) return false;
+  return extractWriteToken(req) === token;
+}
+
 export async function startHealthServer(
   port: number,
   getStatus: () => HealthSnapshot,
   logger: Logger,
   handlers: HealthHandlers = {},
+  options: HealthServerOptions = {},
 ) {
   const server = http.createServer((req, res) => {
     void (async () => {
       const requestOrigin = req.headers.origin;
-      if (requestOrigin) {
-        res.setHeader("Access-Control-Allow-Origin", requestOrigin);
+      const corsOrigin = allowedCorsOrigin(requestOrigin);
+      if (corsOrigin) {
+        res.setHeader("Access-Control-Allow-Origin", corsOrigin);
         res.setHeader("Vary", "Origin");
-      } else {
-        res.setHeader("Access-Control-Allow-Origin", "*");
       }
       res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
 
@@ -174,10 +213,13 @@ export async function startHealthServer(
       } else if (typeof requestHeaders === "string" && requestHeaders.trim()) {
         res.setHeader("Access-Control-Allow-Headers", requestHeaders);
       } else {
-        res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-OpenCode-Router-Token");
       }
 
-      if (req.headers["access-control-request-private-network"] === "true") {
+      if (
+        corsOrigin &&
+        req.headers["access-control-request-private-network"] === "true"
+      ) {
         res.setHeader("Access-Control-Allow-Private-Network", "true");
       }
 
@@ -195,6 +237,21 @@ export async function startHealthServer(
           "Content-Type": "application/json",
         });
         res.end(JSON.stringify(snapshot));
+        return;
+      }
+
+      if (!writeAuthorized(req, options.writeToken)) {
+        const configured = Boolean(options.writeToken?.trim());
+        res.writeHead(configured ? 401 : 403, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: configured ? "Unauthorized" : "Write token required",
+            message: configured
+              ? "A valid router token is required."
+              : "Set OPENCODE_ROUTER_HEALTH_TOKEN to enable local health-server control routes.",
+          }),
+        );
         return;
       }
 

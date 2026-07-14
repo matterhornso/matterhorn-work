@@ -136,7 +136,7 @@ import { ensureDesktopLocalMatterhornConnection } from "./desktop-local-matterho
 import { resolveMatterhornConnection } from "./matterhorn-connection";
 import { abortSessionSafe } from "../../app/lib/opencode-session";
 import { useReloadCoordinator } from "./reload-coordinator";
-import { getDenInferenceUrl } from "../../app/lib/den";
+import { getDenInferenceUrl, MATTERHORN_CLOUD_ENABLED } from "../../app/lib/den";
 import { readActiveWorkspaceId, writeActiveWorkspaceId } from "./session-memory";
 import { workspaceRunHistoryRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
 import { getReactQueryClient } from "../infra/query-client";
@@ -530,7 +530,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const [themeMode, setThemeModeState] = useState<ThemeMode>(getInitialThemeMode);
   const [hideTitlebar, setHideTitlebar] = useState(() => readStoredBoolean(SETTINGS_HIDE_TITLEBAR_KEY, false));
   const [updateAutoCheck, setUpdateAutoCheck] = useState(() =>
-    readStoredBoolean(SETTINGS_UPDATE_AUTO_CHECK_KEY, true),
+    readStoredBoolean(SETTINGS_UPDATE_AUTO_CHECK_KEY, false),
   );
   const [updateAutoDownload, setUpdateAutoDownload] = useState(() =>
     readStoredBoolean(SETTINGS_UPDATE_AUTO_DOWNLOAD_KEY, false),
@@ -550,10 +550,12 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const [autoCompactContext, setAutoCompactContext] = useState(true);
   const [autoCompactContextBusy, setAutoCompactContextBusy] = useState(false);
   const [autoCompactContextLoaded, setAutoCompactContextLoaded] = useState(false);
+  const [autoCompactContextError, setAutoCompactContextError] = useState<string | null>(null);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   // initialTab removed — model picker no longer has tabs
   const [modelPickerQuery, setModelPickerQuery] = useState("");
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [modelOptionsLoading, setModelOptionsLoading] = useState(false);
   const [localProviderBusy, setLocalProviderBusy] = useState(false);
   const [localProviderStatus, setLocalProviderStatus] = useState<string | null>(null);
   const [localProviderError, setLocalProviderError] = useState<string | null>(null);
@@ -831,7 +833,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       Object.values(providerAuthSnapshot.importedCloudProviders ?? {}).some(isOpenWorkCloudProvider),
     [providerAuthSnapshot.cloudOrgProviders, providerAuthSnapshot.importedCloudProviders],
   );
-  const showOpenWorkModelsSubscribe = !cloudSession.isSignedIn || !hasOpenWorkCloudProvider;
+  const showOpenWorkModelsSubscribe =
+    MATTERHORN_CLOUD_ENABLED && (!cloudSession.isSignedIn || !hasOpenWorkCloudProvider);
 
   const subscribeToOpenWorkModels = useCallback(() => {
     providerAuthStore.closeProviderAuthModal();
@@ -1200,6 +1203,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     const openFromPending = (raw: string | null) => {
       if (!raw) return false;
       setModelPickerQuery("");
+      setModelOptionsLoading(true);
       setModelPickerOpen(true);
       return true;
     };
@@ -1215,6 +1219,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
 
     const handler = () => {
       setModelPickerQuery("");
+      setModelOptionsLoading(true);
       setModelPickerOpen(true);
       try {
         window.localStorage.removeItem(pendingModelPickerProviderIdsKey);
@@ -1225,8 +1230,14 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   }, []);
 
   useEffect(() => {
-    if (!modelPickerOpen || !opencodeClient) return;
+    if (!modelPickerOpen) return;
+    if (!opencodeClient) {
+      setModelOptions([]);
+      setModelOptionsLoading(false);
+      return;
+    }
     let cancelled = false;
+    setModelOptionsLoading(true);
     void providerAuthStore.refreshProviders();
     void (async () => {
       try {
@@ -1272,6 +1283,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             ? error.message
             : t("app.unknown_error"),
         );
+      } finally {
+        if (!cancelled) setModelOptionsLoading(false);
       }
     })();
     return () => {
@@ -1360,12 +1373,10 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           }
           try {
             const response = await client.listSessions(workspace.id, { limit: 200 });
-            const workspaceRoot = normalizeDirectoryPath(workspace.path ?? "");
-            const items = workspaceRoot
-              ? (response.items ?? []).filter((session: any) =>
-                  normalizeDirectoryPath(session?.directory ?? "") === workspaceRoot,
-                )
-              : (response.items ?? []);
+            // The workspace-scoped endpoint owns directory filtering. Keep its
+            // canonical results so /tmp workspaces also match /private/tmp
+            // session realpaths on macOS.
+            const items = response.items ?? [];
             return {
               workspaceId: workspace.id,
               sessions: items,
@@ -1589,6 +1600,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
 
   // Load auto-compaction state from OpenCode config on workspace change.
   useEffect(() => {
+    setAutoCompactContextLoaded(false);
+    setAutoCompactContextError(null);
     if (!matterhornClient || !selectedWorkspaceId) return;
     const workspaceId = routeStateRef.current.runtimeWorkspaceId?.trim() || selectedWorkspaceId;
     let cancelled = false;
@@ -1603,17 +1616,20 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         setAutoCompactContext(auto !== false);
         setAutoCompactContextLoaded(true);
       } catch {
-        if (!cancelled) setAutoCompactContextLoaded(true);
+        if (!cancelled) {
+          setAutoCompactContextError("Could not read this setting from the workspace engine. Reconnect the workspace and try again.");
+        }
       }
     })();
     return () => { cancelled = true; };
   }, [matterhornClient, selectedWorkspaceId]);
 
   const toggleAutoCompactContext = useCallback(async () => {
-    if (autoCompactContextBusy) return;
+    if (autoCompactContextBusy || !autoCompactContextLoaded) return;
     const workspaceId = routeStateRef.current.runtimeWorkspaceId?.trim() || selectedWorkspaceId;
     if (!matterhornClient || !workspaceId) return;
     const next = !autoCompactContext;
+    setAutoCompactContextError(null);
     setAutoCompactContext(next);
     setAutoCompactContextBusy(true);
     try {
@@ -1627,10 +1643,11 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       });
     } catch {
       setAutoCompactContext(!next);
+      setAutoCompactContextError("Could not save this setting. Check the workspace connection and try again.");
     } finally {
       setAutoCompactContextBusy(false);
     }
-  }, [autoCompactContext, autoCompactContextBusy, matterhornClient, reloadCoordinator, selectedWorkspaceId]);
+  }, [autoCompactContext, autoCompactContextBusy, autoCompactContextLoaded, matterhornClient, reloadCoordinator, selectedWorkspaceId]);
 
   useEffect(() => {
     matterhornServerStore.start();
@@ -1684,6 +1701,11 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     void connectionsStore.refreshMcpServers();
   }, [activeClient, connectionsStore, providerAuthStore, selectedWorkspace?.id]);
 
+  useEffect(() => {
+    if (matterhornServerSnapshot.matterhornServerStatus !== "connected" || !runtimeWorkspaceId) return;
+    void connectionsStore.refreshMcpServers();
+  }, [connectionsStore, matterhornServerSnapshot.matterhornServerStatus, runtimeWorkspaceId]);
+
   const selectedWorkspaceName = selectedWorkspace?.displayNameResolved ?? t("session.workspace_fallback");
   const workspaceOptions = workspaces.map((workspace) => ({
     id: workspace.id,
@@ -1733,7 +1755,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       : [],
   );
   const connectedModelCount = connectedProviders.reduce((total, provider) => total + (provider.modelCount ?? 0), 0);
-  const mcpConnectedAppsCount = connectionsSnapshot.mcpServers.length;
+  const mcpConnectedAppNames = connectionsSnapshot.mcpServers
+    .filter((server) => connectionsSnapshot.mcpStatuses[server.name]?.status === "connected")
+    .map((server) => server.name);
 
   // Build enablement context from all available runtime state.
   const enablementContext = useMemo<EnablementContext>(() => {
@@ -1765,11 +1789,12 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       },
     };
   }, [connectionsSnapshot, providerConnectedIds, userEnvKeys, imageExtensionInstalled]);
-  const routeOpenworkStatus = matterhornClient ? "connected" : "disconnected";
+  const routeOpenworkStatus = settingsCapabilityClient ? "connected" : "disconnected";
   const notFoundRouteError = !loading && routeWorkspaceId && !selectedWorkspace
     ? "Workspace was not found. Select a new workspace from the sidebar."
     : null;
-  const routeOpenworkCapabilities: MatterhornServerCapabilities | null = matterhornClient
+  const surfacedRouteError = routeError ?? (route.tab === "generated-media" ? null : notFoundRouteError);
+  const routeOpenworkCapabilities: MatterhornServerCapabilities | null = settingsCapabilityClient
     ? ROUTE_OPENWORK_CAPABILITIES
     : null;
   const environmentRuntimeKey = buildMatterhornEnvRuntimeKey({
@@ -2045,18 +2070,28 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     navigateSettingsPath("cloud-account");
   };
 
-  const openWorkspaceSurfacePanel = (panel: "memory" | "notes") => {
+  const requireWorkspaceForEvidenceSurface = (surface: "memory" | "notes" | "outputs") => {
     const workspaceId = runtimeWorkspaceId?.trim() || selectedWorkspaceId?.trim();
-    navigate(workspaceId ? `${workspaceSessionRoute(workspaceId)}?panel=${panel}` : `/session?panel=${panel}`);
+    if (workspaceId) return workspaceId;
+    showToast({
+      title: "Create a workspace first",
+      description: `${surface === "outputs" ? "Outputs" : surface === "memory" ? "Memory review" : "Notes"} are stored inside a Matterhorn workspace.`,
+      tone: "warning",
+    });
+    handleOpenCreateWorkspace();
+    return null;
+  };
+
+  const openWorkspaceSurfacePanel = (panel: "memory" | "notes") => {
+    const workspaceId = requireWorkspaceForEvidenceSurface(panel);
+    if (!workspaceId) return;
+    navigate(`${workspaceSessionRoute(workspaceId)}?panel=${panel}`);
   };
 
   const openWorkspaceOutputs = () => {
-    const workspaceId = runtimeWorkspaceId?.trim() || selectedWorkspaceId?.trim();
-    if (workspaceId) {
-      navigate(workspaceRunHistoryRoute(workspaceId));
-      return;
-    }
-    navigateSettingsPath("overview");
+    const workspaceId = requireWorkspaceForEvidenceSurface("outputs");
+    if (!workspaceId) return;
+    navigate(workspaceRunHistoryRoute(workspaceId));
   };
 
   const openWorkspaceChat = () => {
@@ -2075,14 +2110,14 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const settingsView = (() => {
     switch (route.tab) {
       case "overview":
-        return <SettingsOverviewView onSelectTab={(tab) => navigateSettingsPath(tab)} matterhornServerClient={matterhornClient} runtimeWorkspaceId={runtimeWorkspaceId ?? undefined} />;
+        return <SettingsOverviewView onSelectTab={(tab) => navigateSettingsPath(tab)} matterhornServerClient={settingsCapabilityClient} runtimeWorkspaceId={runtimeWorkspaceId ?? undefined} />;
       case "general":
         return (
           <GeneralSettingsView
             onNavigateTab={(tab) => navigateSettingsPath(tab)}
             developerMode={developerMode}
             runtimeWorkspaceId={runtimeWorkspaceId ?? undefined}
-            matterhornServerClient={matterhornClient}
+            matterhornServerClient={settingsCapabilityClient}
             backendSettingsSections={settingsCapabilitySectionsQuery.data ?? null}
             onOpenMemoryReview={() => openWorkspaceSurfacePanel("memory")}
             onOpenNotes={() => openWorkspaceSurfacePanel("notes")}
@@ -2096,7 +2131,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         return (
           <SettingsStack>
             <AuthorizedFoldersPanel
-              matterhornServerClient={matterhornClient}
+              matterhornServerClient={settingsCapabilityClient}
               matterhornServerStatus={routeOpenworkStatus}
               matterhornServerCapabilities={routeOpenworkCapabilities}
               runtimeWorkspaceId={runtimeWorkspaceId}
@@ -2115,7 +2150,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           <AiSettingsView
             busy={busy}
             providerAuthBusy={providerAuthSnapshot.providerAuthBusy}
-            matterhornServerClient={matterhornClient}
+            matterhornServerClient={settingsCapabilityClient}
             runtimeWorkspaceId={runtimeWorkspaceId}
             defaultModelLabel={defaultModelLabel}
             defaultModelRef={defaultModelRef}
@@ -2133,6 +2168,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             providerDisconnectError={null}
             onOpenModelPicker={() => {
               setModelPickerQuery("");
+              setModelOptionsLoading(true);
               setModelPickerOpen(true);
             }}
             onUseWorkspaceDefault={() => {
@@ -2176,6 +2212,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             }}
             autoCompactContext={autoCompactContext}
             autoCompactContextBusy={autoCompactContextBusy}
+            autoCompactContextReady={autoCompactContextLoaded}
+            autoCompactContextError={autoCompactContextError}
             onToggleAutoCompactContext={toggleAutoCompactContext}
           />
         );
@@ -2209,7 +2247,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             accessHint={pluginsAccessHint}
             suggestedPlugins={SUGGESTED_PLUGINS}
             extensions={extensionsStore}
-            mcpConnectedAppsCount={mcpConnectedAppsCount}
+            mcpConnectedAppNames={mcpConnectedAppNames}
             initialSection={route.extensionsSection}
             compact={props.embedded}
             setSectionRoute={(section) => {
@@ -2322,14 +2360,14 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
               />
             }
 
-            cloudMarketplaceView={
+            cloudMarketplaceView={MATTERHORN_CLOUD_ENABLED ? (
               <CloudMarketplacesView
                 embedded
                 extensions={extensionsStore}
                 session={denSession}
                 onOpenAccount={openCloudAccountSettings}
               />
-            }
+            ) : undefined}
           />
         );
       case "cloud-account":
@@ -2339,7 +2377,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             developerMode={developerMode}
             session={denSession}
             workspaceId={selectedWorkspaceId}
-            matterhornServerClient={matterhornClient}
+            matterhornServerClient={settingsCapabilityClient}
             onSendFeedback={() => setFeedbackDialogOpen(true)}
           />
         );
@@ -2496,7 +2534,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           <WalletSettingsView
             compact={props.embedded}
             store={walletProvider.store}
-            matterhornServerClient={matterhornClient}
+            matterhornServerClient={settingsCapabilityClient}
             runtimeWorkspaceId={runtimeWorkspaceId}
             onTxApprove={() => {}}
             onTxReject={() => {}}
@@ -2505,7 +2543,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "generated-media":
         return (
           <GeneratedMediaSettingsView
-            matterhornServerClient={matterhornClient}
+            matterhornServerClient={settingsCapabilityClient}
             runtimeWorkspaceId={runtimeWorkspaceId}
             onOpenWorkspaceChat={openWorkspaceChat}
             onOpenRunHistory={openWorkspaceOutputs}
@@ -2516,7 +2554,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "marketplace":
         return <MarketplaceView />;
       case "billing":
-        return <BillingSettingsView matterhornServerClient={matterhornClient} runtimeWorkspaceId={runtimeWorkspaceId} />;
+        return <BillingSettingsView matterhornServerClient={settingsCapabilityClient} runtimeWorkspaceId={runtimeWorkspaceId} />;
       default:
         return null;
     }
@@ -2537,7 +2575,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         headerStatus={routeOpenworkStatus}
         busyHint={loading ? t("session.loading_detail") : busyLabel}
         onClose={props.onClose ?? (() => navigate(selectedWorkspaceId ? workspaceSessionRoute(selectedWorkspaceId) : "/session"))}
-        error={routeError ?? notFoundRouteError}
+        error={surfacedRouteError}
         compact={props.embedded}
         backendSettingsSections={settingsCapabilitySectionsQuery.data ?? null}
       >
@@ -2665,7 +2703,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         projectDir={selectedWorkspaceRoot}
         reloadBlocked={activeReloadBlockingSessions.length > 0}
         activeSessions={activeReloadBlockingSessions}
-        isRemoteWorkspace={selectedWorkspace?.workspaceType === "remote"}
+        isRemoteWorkspace={isRemoteWorkspace || !isDesktopRuntime()}
         onForceStopSession={(sessionId) => {
           if (!activeClient) return undefined;
           return abortSessionSafe(activeClient, sessionId);
@@ -2681,6 +2719,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       />
       <ModelPickerModal
         open={modelPickerOpen}
+        loading={modelOptionsLoading}
         options={modelOptions}
         query={modelPickerQuery}
         setQuery={setModelPickerQuery}
@@ -2699,7 +2738,10 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           setModelPickerOpen(false);
         }}
         onBehaviorChange={() => {}}
-        onOpenSettings={() => {}}
+        onOpenSettings={() => {
+          setModelPickerOpen(false);
+          handleOpenProviderAuth();
+        }}
         onClose={() => setModelPickerOpen(false)}
       />
     </>

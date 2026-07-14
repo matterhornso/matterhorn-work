@@ -88,6 +88,12 @@ import { useCheckDesktopRestriction } from "../domains/cloud/desktop-config-prov
 import { useRestrictionNotice } from "../domains/cloud/restriction-notice-provider";
 import { ReactSessionRuntime } from "../domains/session/sync/runtime-sync";
 import { useSessionActivityStore } from "../domains/session/status/session-activity-store";
+import {
+  buildResponsePerspectiveSystemPrompt,
+  readResponsePerspective,
+  writeResponsePerspective,
+  type ResponsePerspective,
+} from "../domains/session/perspectives/response-perspective";
 import { buildOpenworkEnvSystemContext } from "../domains/session/sync/env-context";
 import {
   permissionKey as reactPermissionKey,
@@ -157,6 +163,7 @@ import {
   type WorkspaceModelSelectionChangedDetail,
 } from "../domains/settings/model-selection-events";
 import { legacySessionRoute, workspaceNotesRoute, workspaceRunHistoryRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
+import { GLOBAL_HOME_SIDE_PANEL_KEY, useUiStateStore } from "./ui-state-store";
 import { WorkspaceProvider } from "./workspace-provider";
 import type { OpenTarget } from "../domains/session/artifacts/open-target";
 import type { SettingsSurfaceProps } from "./settings-route";
@@ -352,7 +359,29 @@ const emptyModelBehaviorOptions: { value: string | null; label: string }[] = [];
 function useQueryCacheState<T>(queryKey: readonly unknown[] | null, fallback: T): T {
   const queryClient = getReactQueryClient();
   return useSyncExternalStore(
-    (callback) => (queryKey ? queryClient.getQueryCache().subscribe(callback) : () => {}),
+    (callback) => {
+      if (!queryKey) return () => {};
+      let active = true;
+      let queued = false;
+      const flush = () => {
+        queued = false;
+        if (active) callback();
+      };
+      const enqueueCallback = () => {
+        if (queued) return;
+        queued = true;
+        if (typeof queueMicrotask === "function") {
+          queueMicrotask(flush);
+        } else {
+          window.setTimeout(flush, 0);
+        }
+      };
+      const unsubscribe = queryClient.getQueryCache().subscribe(enqueueCallback);
+      return () => {
+        active = false;
+        unsubscribe();
+      };
+    },
     () => (queryKey ? queryClient.getQueryData<T>(queryKey) ?? fallback : fallback),
     () => fallback,
   );
@@ -602,6 +631,7 @@ export function SessionRoute() {
     [],
   );
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [responsePerspective, setResponsePerspective] = useState<ResponsePerspective>("balanced");
   // One-way latch for "a refreshRouteState is currently running"; prevents
   // overlapping route refreshes from queueing up when the user clicks fast.
   const refreshInFlightRef = useRef(false);
@@ -612,6 +642,7 @@ export function SessionRoute() {
   const remoteWorkspaceCheckRunCounterRef = useRef(0);
   const sessionsByWorkspaceIdRef = useRef<Record<string, any[]>>({});
   const pendingCreatedSessionIdsRef = useRef<Record<string, Record<string, number>>>({});
+  const staleSessionRecoveryRef = useRef("");
   const startupRetryTimerRef = useRef<number | null>(null);
   const [retryingWorkspaceIds, setRetryingWorkspaceIds] = useState<string[]>([]);
   const launchActivatedWorkspaceIdsRef = useRef(new Set<string>());
@@ -683,6 +714,13 @@ export function SessionRoute() {
   }, []);
   useEffect(() => {
     setPaletteAccessibleTargets([]);
+  }, [selectedSessionId, selectedWorkspaceId]);
+  useEffect(() => {
+    setResponsePerspective(readResponsePerspective(selectedWorkspaceId, selectedSessionId));
+  }, [selectedSessionId, selectedWorkspaceId]);
+  const handleResponsePerspectiveChange = useCallback((perspective: ResponsePerspective) => {
+    setResponsePerspective(perspective);
+    writeResponsePerspective(selectedWorkspaceId, selectedSessionId, perspective);
   }, [selectedSessionId, selectedWorkspaceId]);
 
   const [permissionReplyBusy, setPermissionReplyBusy] = useState(false);
@@ -832,13 +870,10 @@ export function SessionRoute() {
         }
         try {
           const response = await endpoint.client.listSessions(endpoint.workspaceId, { limit: 200 });
-          const fetchedItems = response.items ?? [];
-          const workspaceRoot = normalizeDirectoryPath(workspace.path ?? "");
-          const items = workspaceRoot && !isRemoteOpenworkWorkspace
-            ? fetchedItems.filter((session: any) =>
-                normalizeDirectoryPath(session?.directory ?? "") === workspaceRoot,
-              )
-            : fetchedItems;
+          // The workspace endpoint already scopes sessions to this workspace.
+          // Re-filtering by the browser-visible path breaks valid macOS aliases
+          // such as /tmp and its canonical /private/tmp realpath.
+          const items = response.items ?? [];
           setSessionsByWorkspaceId((current) => {
             const nextItems = mergeFetchedSessionsWithPending(workspace.id, items, current[workspace.id] ?? []);
             const next = { ...current, [workspace.id]: nextItems };
@@ -1080,6 +1115,26 @@ export function SessionRoute() {
       }
     } catch (error) {
       const message = describeRouteError(error);
+      if (isTransientStartupError(message) && desktopWorkspaces.length > 0) {
+        recordInspectorEvent("route.refresh.transient", {
+          route: "session",
+          message,
+          preservedWorkspaceCount: desktopWorkspaces.length,
+        });
+        const orderedDesktopWorkspaces = orderRouteWorkspaces(desktopWorkspaces, workspaceOrderIdsRef.current);
+        setWorkspaces(orderedDesktopWorkspaces);
+        setLegacySelectedWorkspaceId((current) =>
+          current || resolveWorkspaceListSelectedId(desktopList) || orderedDesktopWorkspaces[0]?.id || "",
+        );
+        if (startupRetryTimerRef.current === null) {
+          startupRetryTimerRef.current = window.setTimeout(() => {
+            startupRetryTimerRef.current = null;
+            refreshInFlightRef.current = false;
+            void refreshRouteState();
+          }, 1_000);
+        }
+        return;
+      }
       console.error("[session-route] refreshRouteState failed", error);
       recordInspectorEvent("route.refresh.error", {
         route: "session",
@@ -1557,6 +1612,42 @@ export function SessionRoute() {
     selectedSessionId &&
       (sessionsByWorkspaceId[selectedWorkspaceId] ?? []).some((session: any) => session?.id === selectedSessionId),
   );
+  const selectedSessionPending = Boolean(
+    selectedSessionId && pendingCreatedSessionIdsRef.current[selectedWorkspaceId]?.[selectedSessionId],
+  );
+  const recoverMissingSession = useCallback(() => {
+    if (!selectedSessionId || !selectedWorkspaceId) return;
+    const recoveryKey = `${selectedWorkspaceId}:${selectedSessionId}`;
+    if (staleSessionRecoveryRef.current === recoveryKey) return;
+    staleSessionRecoveryRef.current = recoveryKey;
+    writeLastSessionFor(selectedWorkspaceId, null);
+    const uiState = useUiStateStore.getState();
+    uiState.setSidePanelState(selectedSessionId, null);
+    uiState.setSidePanelState(GLOBAL_HOME_SIDE_PANEL_KEY, null);
+    navigateToWorkspaceSession(selectedWorkspaceId, null, { replace: true });
+    showToast({
+      title: "Chat no longer available",
+      description: "Returned to project Home. Start a new chat or open one from the sidebar.",
+      tone: "warning",
+      durationMs: 3600,
+    });
+  }, [navigateToWorkspaceSession, selectedSessionId, selectedWorkspaceId, showToast]);
+  useEffect(() => {
+    if (!selectedSessionId) {
+      staleSessionRecoveryRef.current = "";
+      return;
+    }
+    if (loading || selectedWorkspaceIsLoading || !selectedWorkspace || selectedSessionKnown || selectedSessionPending) return;
+    recoverMissingSession();
+  }, [
+    loading,
+    recoverMissingSession,
+    selectedSessionId,
+    selectedSessionKnown,
+    selectedSessionPending,
+    selectedWorkspace,
+    selectedWorkspaceIsLoading,
+  ]);
   const routeNotFoundMessage = (() => {
     if (loading) return null;
     if (routeError && !client && routeWorkspaceId) {
@@ -1568,11 +1659,16 @@ export function SessionRoute() {
     if (routeWorkspaceId && !selectedWorkspace) {
       return "Workspace was not found. Select a new workspace from the sidebar.";
     }
-    if (selectedSessionId && !selectedWorkspaceIsLoading && !selectedSessionKnown) {
-      return "Session was not found. Select a new session from the sidebar.";
-    }
     return null;
   })();
+
+  useEffect(() => {
+    if (loading || !routeWorkspaceId || selectedWorkspace) return;
+    if (readActiveWorkspaceId() === routeWorkspaceId) {
+      writeActiveWorkspaceId(null);
+    }
+  }, [loading, routeWorkspaceId, selectedWorkspace]);
+
   // Boot-level loading blocks the whole UI. Session-list retries only fill the
   // sidebar; they must not gate the composer/New task.
   const effectiveLoading = loading;
@@ -2106,7 +2202,11 @@ export function SessionRoute() {
     navigate(target, { state: { workspaceId, sessionId } });
   }, [navigate, selectedSessionId, sidebarActiveWorkspaceId]);
 
-  const buildSessionSystemContext = useCallback(async (text: string, sessionId: string) => {
+  const buildSessionSystemContext = useCallback(async (
+    text: string,
+    sessionId: string,
+    agentId?: string | null,
+  ) => {
     const envRuntimeKey = buildMatterhornEnvRuntimeKey({
       baseUrl: client?.baseUrl ?? null,
       pid: matterhornServerHostInfoState?.pid ?? null,
@@ -2140,11 +2240,60 @@ export function SessionRoute() {
           )
         : "";
 
-    return [envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt].filter(Boolean).join("\n") || undefined;
-  }, [client, matterhornServerHostInfoState?.pid, matterhornServerHostInfoState?.port, wallet.snapshot]);
+    const responsePerspectivePrompt = buildResponsePerspectiveSystemPrompt(responsePerspective);
+    const deskAgentInstructions = getMatterhornDeskAgentById(agentId)?.instructions ?? "";
+    let workflowRunPrompt = "";
+    if (client && selectedWorkspaceId && agentId) {
+      try {
+        const linkedRun = (await client.listWorkflowRuns({
+          workspaceId: selectedWorkspaceId,
+          sessionId,
+          limit: 1,
+        })).items[0];
+        if (linkedRun) {
+          workflowRunPrompt = [
+            "## Active Matterhorn Workflow Run",
+            `Workflow run: ${linkedRun.workflowRunId}`,
+            `Canonical output directory: ${linkedRun.outputBasePath}`,
+            "Save every artifact for this workflow under exactly that directory. Do not create a parallel descriptive or custom session folder.",
+          ].join("\n");
+        }
+      } catch {
+        // Prompting still works when the optional workflow lookup is unavailable.
+      }
+    }
+
+    return [envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt, deskAgentInstructions, workflowRunPrompt, responsePerspectivePrompt].filter(Boolean).join("\n") || undefined;
+  }, [client, matterhornServerHostInfoState?.pid, matterhornServerHostInfoState?.port, responsePerspective, selectedWorkspaceId, wallet.snapshot]);
+
+  const selectedAgentRef = useRef<string | null>(selectedAgent);
+  const pendingSelectedAgentRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    selectedAgentRef.current = selectedAgent;
+  }, [selectedAgent]);
+
+  const handleSelectAgent = useCallback((agent: string | null) => {
+    if (selectedAgentRef.current === agent || pendingSelectedAgentRef.current === agent) return;
+    pendingSelectedAgentRef.current = agent;
+    const commit = () => {
+      pendingSelectedAgentRef.current = undefined;
+      if (selectedAgentRef.current === agent) return;
+      selectedAgentRef.current = agent;
+      setSelectedAgent(agent);
+    };
+    if (typeof window === "undefined") {
+      commit();
+      return;
+    }
+    window.setTimeout(commit, 0);
+  }, []);
 
   const surfaceProps = useMemo(() => {
     if (!client || !selectedWorkspaceId || !selectedSessionId || !opencodeBaseUrl || !token || !opencodeClient) {
+      return null;
+    }
+    if (!selectedSessionKnown && !selectedSessionPending) {
       return null;
     }
 
@@ -2221,7 +2370,7 @@ export function SessionRoute() {
         }
 
         const parts = await draftToParts(draft, selectedWorkspaceRoot);
-        const systemContext = await buildSessionSystemContext(text, selectedSessionId);
+        const systemContext = await buildSessionSystemContext(text, selectedSessionId, selectedAgent);
 
         const result = await opencodeClient.session.promptAsync({
           sessionID: selectedSessionId,
@@ -2238,6 +2387,7 @@ export function SessionRoute() {
       onDraftChange: () => {
         // Draft persistence will be wired once the full React shell owns session state.
       },
+      onSessionMissing: recoverMissingSession,
       attachmentsEnabled: true,
       attachmentsDisabledReason: null,
       modelVariantLabel,
@@ -2246,13 +2396,15 @@ export function SessionRoute() {
       onModelVariantChange: (value: string | null) => {
         local.setPrefs((previous) => ({ ...previous, modelVariant: value }));
       },
+      responsePerspective,
+      onResponsePerspectiveChange: handleResponsePerspectiveChange,
       agentLabel: formatAgentDisplayName(selectedAgent),
       selectedAgent,
       listAgents: async () => {
         const list = unwrap(await opencodeClient.app.agents());
         return list.filter((agent) => !agent.hidden && agent.mode !== "subagent");
       },
-      onSelectAgent: (agent: string | null) => setSelectedAgent(agent),
+      onSelectAgent: handleSelectAgent,
       listCommands: listSlashCommands,
       recentFiles: [],
       searchFiles: async (query: string) => {
@@ -2316,6 +2468,8 @@ export function SessionRoute() {
     client,
     compactModelPickerOpen,
     handleOpenSettings,
+    handleResponsePerspectiveChange,
+    handleSelectAgent,
     local,
     listSlashCommands,
     modelBehaviorOptions,
@@ -2325,8 +2479,12 @@ export function SessionRoute() {
     navigate,
     opencodeBaseUrl,
     opencodeClient,
+    recoverMissingSession,
+    responsePerspective,
     selectedAgent,
     selectedSessionId,
+    selectedSessionKnown,
+    selectedSessionPending,
     selectedModelUnavailable,
     selectedPromptModel,
     selectedWorkspace,
@@ -3002,32 +3160,62 @@ export function SessionRoute() {
           void handleCreateTaskInWorkspace(workspaceId);
         },
         onCreateTaskWithPrompt: (workspaceId, prompt, options) => {
-          void (async () => {
+          return (async () => {
             const workspace = workspaces.find((item) => item.id === workspaceId);
             const title = options?.title?.trim();
             const agent = options?.agent?.trim();
+            const taskLaunchEvent = {
+              workspaceId,
+              title: title || "desk task",
+              agent: agent || null,
+              sendImmediately: Boolean(options?.sendImmediately),
+              promptLength: prompt.length,
+            };
+            recordInspectorEvent("desk.task_launch.requested", taskLaunchEvent);
             if (!workspace) {
+              recordInspectorEvent("desk.task_launch.failed", {
+                ...taskLaunchEvent,
+                reason: "workspace_not_found",
+              });
               showToast({
                 title: "Could not start task",
                 description: "The workspace could not be found. Return Home and try again.",
                 tone: "error",
                 durationMs: 3600,
               });
-              return;
+              return false;
             }
             const endpoint = resolveWorkspaceEndpoint(workspace, { baseUrl, token });
             if (!endpoint?.token) {
+              recordInspectorEvent("desk.task_launch.failed", {
+                ...taskLaunchEvent,
+                reason: "engine_offline",
+              });
               showToast({
                 title: "Matterhorn Work engine is offline",
                 description: "The task could not start because this workspace is not connected to a local engine.",
                 tone: "error",
                 durationMs: 4200,
               });
-              void handleCreateTaskInWorkspace(workspaceId);
-              return;
+              return false;
+            }
+            if (options?.sendImmediately && selectedModelUnavailable) {
+              recordInspectorEvent("desk.task_launch.failed", {
+                ...taskLaunchEvent,
+                reason: "model_unavailable",
+              });
+              setModelPickerQuery("");
+              setModelPickerOpen(true);
+              showToast({
+                title: "Choose a model to start the task",
+                description: "Connect or pick an available model, then start the task again.",
+                tone: "warning",
+                durationMs: 5200,
+              });
+              return false;
             }
             const workspacePath = workspace.path?.trim() || undefined;
-            const sendImmediately = Boolean(options?.sendImmediately && !selectedModelUnavailable);
+            const sendImmediately = Boolean(options?.sendImmediately);
             const workspaceClient = createClient(
               endpoint.opencodeBaseUrl,
               workspacePath,
@@ -3045,6 +3233,11 @@ export function SessionRoute() {
                   directory: workspacePath,
                 }).catch(() => undefined);
               }
+              recordInspectorEvent("desk.task_launch.session_created", {
+                ...taskLaunchEvent,
+                sessionId: session.id,
+              });
+              await options?.onSessionCreated?.(session.id);
               if (!sendImmediately) {
                 saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
               }
@@ -3058,28 +3251,32 @@ export function SessionRoute() {
               }));
               navigateToWorkspaceSession(workspaceId, session.id);
               if (sendImmediately) {
+                useSessionActivityStore.getState().startOptimisticRun(workspaceId, session.id, {
+                  title: title || "desk task",
+                  agent: agent || undefined,
+                });
                 showToast({
                   title: `Starting ${title || "desk task"}`,
-                  description: "Opening the agent session now.",
-                  tone: "success",
-                  durationMs: 1800,
+                  description: "Sending the task to the agent.",
+                  tone: "info",
+                  durationMs: 1600,
                 });
               }
               if (!sendImmediately) {
                 focusPromptSoon();
-                if (options?.sendImmediately && selectedModelUnavailable) {
-                  showToast({
-                    title: "Choose a model to start the task",
-                    description: "The task is ready in the composer.",
-                    tone: "warning",
-                    durationMs: 3200,
-                  });
-                }
-                return;
+                recordInspectorEvent("desk.task_launch.draft_saved", {
+                  ...taskLaunchEvent,
+                  sessionId: session.id,
+                });
+                return true;
               }
 
               try {
-                const systemContext = await buildSessionSystemContext(prompt, session.id);
+                const systemContext = await buildSessionSystemContext(prompt, session.id, agent);
+                recordInspectorEvent("desk.task_launch.prompt_send_started", {
+                  ...taskLaunchEvent,
+                  sessionId: session.id,
+                });
                 const result = await workspaceClient.session.promptAsync({
                   sessionID: session.id,
                   parts: [{ type: "text", text: prompt }],
@@ -3092,19 +3289,47 @@ export function SessionRoute() {
                   throw new Error(serializeSDKError(result.error));
                 }
                 saveSessionDraft(workspaceId, session.id, { text: "", mode: "prompt" });
-              } catch {
+                recordInspectorEvent("desk.task_launch.prompt_sent", {
+                  ...taskLaunchEvent,
+                  sessionId: session.id,
+                });
+                showToast({
+                  title: `${title || "Desk task"} started`,
+                  description: "The agent is working in this session.",
+                  tone: "success",
+                  durationMs: 2400,
+                });
+                return true;
+              } catch (error) {
+                const message = describeTaskCreateError(error);
+                useSessionActivityStore.getState().setRunStatus(workspaceId, session.id, { type: "idle" });
                 saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
                 focusPromptSoon();
-                showToast({
-                  title: "Task is ready to send",
-                  description: "The agent did not start automatically. Review the draft and press Ask.",
-                  tone: "warning",
-                  durationMs: 3600,
+                recordInspectorEvent("desk.task_launch.fallback_saved", {
+                  ...taskLaunchEvent,
+                  sessionId: session.id,
+                  reason: message,
                 });
+                showToast({
+                  title: "Task needs review before sending",
+                  description: `${message} The prompt is saved in the composer.`,
+                  tone: "warning",
+                  durationMs: 5200,
+                });
+                return false;
               }
-            } catch {
-              // Fall back to normal task creation without prompt
-              void handleCreateTaskInWorkspace(workspaceId);
+            } catch (error) {
+              recordInspectorEvent("desk.task_launch.failed", {
+                ...taskLaunchEvent,
+                reason: describeTaskCreateError(error),
+              });
+              showToast({
+                title: "Could not start task",
+                description: describeTaskCreateError(error),
+                tone: "error",
+                durationMs: 5200,
+              });
+              return false;
             }
           })();
         },
@@ -3252,13 +3477,18 @@ export function SessionRoute() {
       onCreateNewSession={() => {
         if (selectedWorkspaceId) {
           void handleCreateTaskInWorkspace(selectedWorkspaceId);
+          return;
         }
+        setCreateWorkspaceError(null);
+        setCreateWorkspaceRemoteError(null);
+        setCreateWorkspaceOpen(true);
       }}
       onOpenSession={(workspaceId, sessionId) => navigateToWorkspaceSession(workspaceId, sessionId)}
       onOpenSettings={(route) => handleOpenSettings(route ?? "/settings/general")}
       onSendFeedback={() => setFeedbackDialogOpen(true)}
       onOpenNotes={() => {
-        if (!selectedWorkspace?.id) {
+        const runtimeWorkspaceId = selectedWorkspaceEndpoint?.workspaceId?.trim() || "";
+        if (!runtimeWorkspaceId || !selectedWorkspace?.id) {
           setCreateWorkspaceError(null);
           setCreateWorkspaceRemoteError(null);
           setCreateWorkspaceOpen(true);
@@ -3267,7 +3497,8 @@ export function SessionRoute() {
         navigate(workspaceNotesRoute(selectedWorkspace.id));
       }}
       onQuickJot={() => {
-        if (!selectedWorkspace?.id) {
+        const runtimeWorkspaceId = selectedWorkspaceEndpoint?.workspaceId?.trim() || "";
+        if (!runtimeWorkspaceId) {
           setCreateWorkspaceError(null);
           setCreateWorkspaceRemoteError(null);
           setCreateWorkspaceOpen(true);
@@ -3275,7 +3506,8 @@ export function SessionRoute() {
         }
         openQuickJot();
       }}
-      notesEnabled={Boolean(selectedWorkspace?.id)}
+      notesEnabled={Boolean(selectedWorkspaceEndpoint?.workspaceId?.trim())}
+      workspaceReady={Boolean(selectedWorkspaceEndpoint?.workspaceId?.trim())}
       accessibleTargets={paletteAccessibleTargets}
       onOpenAccessibleTarget={(target) => {
         try {

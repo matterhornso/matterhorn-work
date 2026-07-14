@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 
 const types = readFileSync("packages/types/src/matterhorn-workflows.ts", "utf8");
+const protocolBrandLogo = readFileSync(
+  "apps/app/src/react-app/domains/session/workflows/protocol-brand-logo.tsx",
+  "utf8",
+);
 const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
 
 // 1. Root package exposes the test script.
@@ -303,6 +307,12 @@ assert.ok(types.includes("export function getDeskLauncherPrompt"), "getDeskLaunc
 assert.ok(types.includes("export function getDeskSafetySummary"), "getDeskSafetySummary must be exported");
 assert.ok(types.includes("export function getDeskWalletRequirementSummary"), "getDeskWalletRequirementSummary must be exported");
 assert.ok(types.includes("export function getDeskLogoFallback"), "getDeskLogoFallback must be exported");
+assert.ok(
+  protocolBrandLogo.includes("resolveExtensionIconSrc") &&
+    protocolBrandLogo.includes("resolveExtensionIconSrc(asset.lightAssetPath") &&
+    protocolBrandLogo.includes("resolveExtensionIconSrc(asset.darkAssetPath)"),
+  "protocol desk logos must resolve public asset paths against the Vite base for packaged file URLs",
+);
 
 // 16. Wallet rail modes match desk posture.
 assert.ok(deskBlocks.bittensor.includes('walletRailMode: "external_signer"'), "Bittensor walletRailMode must be external_signer");

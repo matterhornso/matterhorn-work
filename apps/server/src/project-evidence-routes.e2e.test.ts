@@ -14,6 +14,8 @@ type Served = {
 
 const TOKEN = "owt_project_evidence_routes_token";
 const HOST_TOKEN = "owt_project_evidence_routes_host_token";
+const VALID_SS58 = "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF";
+const HOTKEY = "5FHneW46xGXgs5mUiveU4sbTyGBzmtoW4h4KYxqsdXw4nq8Z";
 const priorEnv = {
   envStore: process.env.OPENWORK_ENV_STORE,
   openworkDataDir: process.env.OPENWORK_DATA_DIR,
@@ -246,6 +248,132 @@ describe("project evidence routes", () => {
       ]),
     );
     expect(JSON.stringify(ledger.payload.items)).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
+  });
+
+  test("workspace Bittensor public-read and receipt routes save output evidence", async () => {
+    const { base, dir } = await boot();
+
+    const publicRead = await jsonFetch(base, "/workspace/ws_evidence/bittensor/evidence/public-read", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_bittensor_evidence",
+        kind: "wallet_snapshot",
+        title: "Bittensor wallet snapshot saved",
+        summary: "Watch-only public balance context for a Bittensor task.",
+        payload: {
+          ss58Address: VALID_SS58,
+          netuid: 14,
+          taoBalance: "4.0",
+          source: "public-read-test",
+        },
+      }),
+    });
+
+    expect(publicRead.response.status).toBe(201);
+    expect(publicRead.payload.success).toBe(true);
+    expect(publicRead.payload.evidence).toMatchObject({
+      workspaceId: "ws_evidence",
+      sessionSlug: "sess_bittensor_evidence",
+      source: "task_events",
+    });
+    expect(publicRead.payload.evidence.outputPath).toContain("outputs/bittensor/sess_bittensor_evidence/wallet_snapshot-");
+    expect(existsSync(join(dir, publicRead.payload.evidence.outputPath))).toBe(true);
+
+    const publicReadFile = JSON.parse(readFileSync(join(dir, publicRead.payload.evidence.outputPath), "utf8"));
+    expect(publicReadFile).toMatchObject({
+      version: "matterhorn.bittensor.workspace-evidence.v1",
+      kind: "wallet_snapshot",
+      workspaceId: "ws_evidence",
+      safety: {
+        custody: false,
+        publicReadOnly: true,
+        canSubmit: false,
+        signingInMatterhorn: false,
+      },
+    });
+
+    const prepared = await jsonFetch(base, "/api/bittensor/extrinsics/prepare", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "transfer",
+        coldkey: VALID_SS58,
+        destination: HOTKEY,
+        amountTao: "0.1",
+      }),
+    });
+    expect(prepared.response.status).toBe(200);
+    expect(prepared.payload.success).toBe(true);
+
+    const receipt = await jsonFetch(base, "/workspace/ws_evidence/bittensor/extrinsics/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_bittensor_evidence",
+        payload: {
+          preview: prepared.payload.preview,
+          signatureSha256: "a".repeat(64),
+          signerAddress: VALID_SS58,
+          result: {
+            status: "sidecar_unavailable",
+            message: "Signed externally; sidecar unavailable in test.",
+          },
+        },
+      }),
+    });
+
+    expect(receipt.response.status).toBe(201);
+    expect(receipt.payload.success).toBe(true);
+    expect(receipt.payload.evidence.outputPath).toContain("outputs/bittensor/sess_bittensor_evidence/signing-receipt-");
+    expect(existsSync(join(dir, receipt.payload.evidence.outputPath))).toBe(true);
+
+    const receiptFile = JSON.parse(readFileSync(join(dir, receipt.payload.evidence.outputPath), "utf8"));
+    expect(receiptFile).toMatchObject({
+      version: "matterhorn.bittensor.workspace-evidence.v1",
+      kind: "external_signer_receipt",
+      workspaceId: "ws_evidence",
+      safety: {
+        custody: false,
+        containsSignatureMaterial: false,
+        signingInMatterhorn: false,
+      },
+    });
+    expect(JSON.stringify(receiptFile)).not.toMatch(/signedPayload|signedExtrinsic|raw signature|seed phrase|private key|mnemonic/i);
+
+    const evidence = await jsonFetch(base, "/workspace/ws_evidence/evidence?desk=bittensor&limit=20");
+    expect(evidence.response.status).toBe(200);
+    expect(evidence.payload.summary.outputs).toBeGreaterThanOrEqual(2);
+    const outputPaths = evidence.payload.items
+      .filter((item: { type: string }) => item.type === "task.output_saved")
+      .map((item: { outputPath?: string }) => item.outputPath);
+    expect(outputPaths).toContain(publicRead.payload.evidence.outputPath);
+    expect(outputPaths).toContain(receipt.payload.evidence.outputPath);
+
+    const ledger = await jsonFetch(base, "/workspace/ws_evidence/data-ledger?kind=output&desk=bittensor&limit=20");
+    expect(ledger.response.status).toBe(200);
+    expect(ledger.payload.items.map((item: { outputPath?: string }) => item.outputPath)).toEqual(
+      expect.arrayContaining([
+        publicRead.payload.evidence.outputPath,
+        receipt.payload.evidence.outputPath,
+      ]),
+    );
+    expect(JSON.stringify(ledger.payload.items)).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
+  });
+
+  test("workspace Bittensor evidence rejects signing secrets before storage", async () => {
+    const { base } = await boot();
+
+    const rejected = await jsonFetch(base, "/workspace/ws_evidence/bittensor/evidence/public-read", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_bittensor_secret",
+        kind: "wallet_snapshot",
+        payload: {
+          privateKey: "never-store-this",
+        },
+      }),
+    });
+
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.payload.code).toBe("bittensor_evidence_secret_rejected");
   });
 
   test("GET /workspace/:id/evidence rejects unknown source filters", async () => {

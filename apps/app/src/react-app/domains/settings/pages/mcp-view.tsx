@@ -40,6 +40,7 @@ import {
   revealDesktopItemInDir,
   type OpencodeConfigFile,
 } from "../../../../app/lib/desktop";
+import { MATTERHORN_CLOUD_ENABLED } from "../../../../app/lib/den";
 import {
   getMcpIdentityKey,
   normalizeMcpSlug,
@@ -48,6 +49,7 @@ import type { McpServerEntry, McpStatusMap } from "../../../../app/types";
 import { formatRelativeTime, isDesktopRuntime, isWindowsPlatform } from "../../../../app/utils";
 import { t } from "../../../../i18n";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { ConfirmModal } from "../../../design-system/modals/confirm-modal";
 import { AddMcpModal } from "../../connections/modals/add-mcp-modal";
 import {
@@ -82,6 +84,16 @@ export type SkillItem = {
 };
 
 const getSkillHiddenId = (skill: SkillItem) => `skill:${skill.name}`;
+
+function fallbackMcpDisplayName(name: string) {
+  const words = name
+    .trim()
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1));
+  const label = words.join(" ") || "MCP";
+  return /\bmcp\b/i.test(label) ? label : `${label} MCP`;
+}
 
 export type McpViewProps = {
   busy: boolean;
@@ -243,7 +255,7 @@ function protocolDeskLogoNode(entry: McpDirectoryInfo, size = 24) {
 }
 
 function availabilityLabelForEntry(entry: McpDirectoryInfo, configured: boolean, disabledReason: string | null) {
-  if (disabledReason) return "Unavailable";
+  if (disabledReason) return "Blocked by platform";
   const id = entry.id ?? entry.serverName ?? getMcpServerName(entry);
   if (id === "bittensor") return "Built-in beta";
   if (id === "hyperliquid" || id === "polymarket") return "Built-in preview";
@@ -324,11 +336,11 @@ const MATTERHORN_MCP_CLIENT_INSTALL_GUIDES: MatterhornMcpClientInstallGuide[] = 
     id: "codex",
     label: "Codex",
     command: "matterhorn-work mcp config --target codex --profile full",
-    configSurface: "Codex MCP profile",
+    configSurface: "~/.codex/config.toml",
     summary:
-      "Adds Matterhorn protocol, memory, workflow, and UI tools to Codex.",
+      "Generates Codex-native TOML for Matterhorn protocol, memory, workflow, and UI tools.",
     steps: [
-      "Run the command where matterhorn-work is available.",
+      "Run the command and add its TOML output to ~/.codex/config.toml.",
       "Restart or refresh Codex.",
       "Confirm Matterhorn tools are listed.",
     ],
@@ -340,11 +352,11 @@ const MATTERHORN_MCP_CLIENT_INSTALL_GUIDES: MatterhornMcpClientInstallGuide[] = 
     id: "claude-code",
     label: "Claude Code",
     command: "matterhorn-work mcp config --target claude --profile full",
-    configSurface: "Claude Code MCP config",
+    configSurface: "Project .mcp.json",
     summary:
-      "Adds protocol reads, memory, workflow, and evidence tools to Claude Code.",
+      "Generates MCP JSON for protocol reads, memory, workflow, and evidence tools.",
     steps: [
-      "Run the command in your Claude Code shell.",
+      "Run the command and save its JSON output as .mcp.json.",
       "Restart Claude Code.",
       "Confirm Matterhorn tools appear.",
     ],
@@ -356,11 +368,11 @@ const MATTERHORN_MCP_CLIENT_INSTALL_GUIDES: MatterhornMcpClientInstallGuide[] = 
     id: "claude-desktop",
     label: "Claude Desktop",
     command: "matterhorn-work mcp config --target claude-desktop --profile full",
-    configSurface: "Claude Desktop MCP config JSON",
+    configSurface: "claude_desktop_config.json",
     summary:
-      "Adds the Matterhorn MCP server to Claude Desktop.",
+      "Generates Matterhorn MCP JSON for Claude Desktop.",
     steps: [
-      "Run the command.",
+      "Run the command and merge its output into claude_desktop_config.json.",
       "Quit and reopen Claude Desktop.",
       "Test one public Matterhorn tool.",
     ],
@@ -376,11 +388,11 @@ const MATTERHORN_MCP_CLIENT_INSTALL_GUIDES: MatterhornMcpClientInstallGuide[] = 
     id: "cursor",
     label: "Cursor",
     command: "matterhorn-work mcp config --target cursor --profile full",
-    configSurface: "Cursor MCP settings",
+    configSurface: ".cursor/mcp.json",
     summary:
-      "Adds protocol, workflow, memory, and UI tools to Cursor.",
+      "Generates MCP JSON for protocol, workflow, memory, and UI tools in Cursor.",
     steps: [
-      "Run the command from your repo shell.",
+      "Run the command and save its JSON output as .cursor/mcp.json.",
       "Restart Cursor and reopen the project.",
       "Confirm the Matterhorn server is active.",
     ],
@@ -895,7 +907,7 @@ export function McpView(props: McpViewProps) {
   const [matterhornUiMcpEnvironment, setOpenworkUiMcpEnvironment] = useState<Record<string, string> | null>(null);
   const [computerUseMcpCommand, setComputerUseMcpCommand] = useState<string[] | null>(null);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<ExtensionFilter>("all");
+  const [filter, setFilter] = useState<ExtensionFilter>("mcp");
   const [showHidden, setShowHidden] = useState(false);
   const [, setExtensionStateVersion] = useState(0);
 
@@ -1099,10 +1111,17 @@ export function McpView(props: McpViewProps) {
     return resolved?.status ?? "disconnected";
   };
 
-  const connectedCount = props.mcpServers.filter(
+  const connectedServers = props.mcpServers.filter(
     (entry) => resolveStatus(entry) === "connected",
-  ).length;
-  const customerQuickConnectList = quickConnectList.filter((entry) => isCustomerFacingMatterhornExtension(entry));
+  );
+  const connectedNames = connectedServers.map((entry) => {
+    const resolvedName = displayName(entry.name);
+    return resolvedName === entry.name ? fallbackMcpDisplayName(entry.name) : resolvedName;
+  });
+  const customerQuickConnectList = quickConnectList.filter((entry) =>
+    isCustomerFacingMatterhornExtension(entry) &&
+    (MATTERHORN_CLOUD_ENABLED || getMcpServerName(entry) !== "matterhorn-cloud")
+  );
   const hiddenCount = customerQuickConnectList.filter((entry) => isMatterhornExtensionHidden(entry)).length +
     (props.installedSkills ?? []).filter((skill) => isMatterhornExtensionHidden(getSkillHiddenId(skill))).length +
     (props.installedPlugins ?? []).filter((plugin) => isMatterhornExtensionHidden(`plugin:${plugin.pluginId}`)).length;
@@ -1173,11 +1192,16 @@ export function McpView(props: McpViewProps) {
   return (
     <section className={`${props.compact ? "space-y-5" : "space-y-6 max-w-3xl"} w-full animate-in fade-in duration-300`}>
       {showHeader ? (
-        <McpViewHeader connectedCount={connectedCount} />
+        <McpViewHeader connectedNames={connectedNames} />
       ) : null}
 
       {props.mcpStatus ? (
-        <div className="break-words rounded-lg border border-dls-border bg-dls-hover px-4 py-3 text-xs text-dls-secondary">
+        <div className={props.compact
+          ? "flex items-start gap-2 break-words text-xs leading-5 text-dls-secondary"
+          : "break-words rounded-lg border border-dls-border bg-dls-hover px-4 py-3 text-xs text-dls-secondary"
+        }>
+          {props.compact ? <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-dls-muted" /> : null}
+          <div>
           <div className="font-medium text-dls-text">
             {mcpStatusIsEmpty ? "No external MCPs connected." : props.mcpStatus}
           </div>
@@ -1187,6 +1211,7 @@ export function McpView(props: McpViewProps) {
               Claude Code, Claude Desktop, or Cursor.
             </p>
           ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -1196,10 +1221,34 @@ export function McpView(props: McpViewProps) {
         </div>
       ) : null}
 
+      <McpConfiguredServersSection
+        compact={props.compact}
+        servers={props.mcpServers}
+        statuses={props.mcpStatuses}
+        lastUpdatedAt={props.mcpLastUpdatedAt}
+        selectedMcp={props.selectedMcp}
+        busy={props.busy}
+        logoutBusy={logoutBusy}
+        logoutTarget={logoutTarget}
+        togglingMcp={togglingMcp}
+        displayName={displayName}
+        resolveStatus={resolveStatus}
+        supportsOauth={supportsOauth}
+        onSelect={props.setSelectedMcp}
+        onAuthorize={props.authorizeMcp}
+        onRequestLogout={requestLogout}
+        onRemove={(name) => {
+          setRemoveTarget(name);
+          setRemoveOpen(true);
+        }}
+        onToggleEnabled={props.setMcpEnabled}
+        onToggleBusy={setTogglingMcp}
+      />
+
       <MatterhornMcpProductSection
         cards={MATTERHORN_MCP_PRODUCT_CARDS}
         onCopyCommand={copyMatterhornMcpCommand}
-        compact={props.compact}
+        compact
       />
 
       <McpCustomAppCard compact={props.compact} onOpen={() => setAddMcpModalOpen(true)} />
@@ -1303,29 +1352,6 @@ export function McpView(props: McpViewProps) {
           }
         }}
         onPluginDetail={setDetailPlugin}
-      />
-
-      <McpConfiguredServersSection
-        servers={props.mcpServers}
-        statuses={props.mcpStatuses}
-        lastUpdatedAt={props.mcpLastUpdatedAt}
-        selectedMcp={props.selectedMcp}
-        busy={props.busy}
-        logoutBusy={logoutBusy}
-        logoutTarget={logoutTarget}
-        togglingMcp={togglingMcp}
-        displayName={displayName}
-        resolveStatus={resolveStatus}
-        supportsOauth={supportsOauth}
-        onSelect={props.setSelectedMcp}
-        onAuthorize={props.authorizeMcp}
-        onRequestLogout={requestLogout}
-        onRemove={(name) => {
-          setRemoveTarget(name);
-          setRemoveOpen(true);
-        }}
-        onToggleEnabled={props.setMcpEnabled}
-        onToggleBusy={setTogglingMcp}
       />
 
       <ConfirmModal
@@ -1495,16 +1521,21 @@ export function McpView(props: McpViewProps) {
   );
 }
 
-function McpViewHeader(props: { connectedCount: number }) {
+function McpViewHeader(props: { connectedNames: string[] }) {
+  const connectedCount = props.connectedNames.length;
+
   return (
     <div>
       <h2 className="text-3xl font-semibold text-dls-text">{t("mcp.apps_title")}</h2>
       <p className="mt-1.5 text-sm text-dls-secondary">{t("mcp.apps_subtitle")}</p>
-      {props.connectedCount > 0 ? (
-        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-green-3 px-3 py-1">
-          <div className="size-2 rounded-full bg-green-9" />
-          <span className="text-xs font-medium text-green-11">
-            {props.connectedCount} {props.connectedCount === 1 ? t("mcp.app_connected") : t("mcp.apps_connected")}
+      {connectedCount > 0 ? (
+        <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+          <span className="inline-flex items-center gap-2 font-medium text-green-11">
+            <span className="size-2 rounded-full bg-green-9" />
+            {connectedCount} {connectedCount === 1 ? t("mcp.app_connected") : t("mcp.apps_connected")}
+          </span>
+          <span className="min-w-0 text-dls-secondary" aria-label={`Connected MCP servers: ${props.connectedNames.join(", ")}`}>
+            {props.connectedNames.join(" · ")}
           </span>
         </div>
       ) : null}
@@ -1598,10 +1629,122 @@ function MatterhornMcpProductSection(props: {
   const [selectedClientId, setSelectedClientId] = useState<MatterhornMcpClientId>(
     DEFAULT_MATTERHORN_MCP_CLIENT_ID,
   );
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const selectedClient =
     MATTERHORN_MCP_CLIENT_INSTALL_GUIDES.find((client) => client.id === selectedClientId) ??
     MATTERHORN_MCP_CLIENT_INSTALL_GUIDES[0]!;
   const selectedInstallCommand = selectedClient.command;
+
+  if (props.compact) {
+    return (
+      <section className="@container/matterhorn-mcps grid gap-3">
+        <div className="grid gap-1">
+          <h3 className="text-base font-semibold text-dls-text">Matterhorn MCPs</h3>
+          <p className="text-xs leading-5 text-dls-secondary">Generate config for your coding agent.</p>
+        </div>
+
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+          <label className="grid min-w-0 gap-1 text-[11px] font-medium text-dls-secondary">
+            Client
+            <select
+              aria-label="MCP client"
+              value={selectedClientId}
+              onChange={(event) => setSelectedClientId(event.target.value as MatterhornMcpClientId)}
+              className="h-8 min-w-0 rounded-md border-0 bg-dls-surface-muted/[0.22] px-2.5 text-xs text-dls-text outline-none transition-colors hover:bg-dls-surface-muted/[0.28] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+            >
+              {MATTERHORN_MCP_CLIENT_INSTALL_GUIDES.map((client) => (
+                <option key={client.id} value={client.id}>{client.label}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="inline-flex size-8 items-center justify-center rounded-md bg-dls-surface-muted/[0.10] text-dls-secondary transition-colors hover:bg-dls-surface-muted/[0.24] hover:text-dls-text focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+            onClick={() => props.onCopyCommand(selectedInstallCommand)}
+            aria-label={`Copy ${selectedClient.label} config command`}
+            title="Copy config command"
+          >
+            <Copy size={14} />
+          </button>
+        </div>
+
+        <details className="group text-[11px] leading-4 text-dls-secondary">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 font-medium text-dls-secondary hover:text-dls-text">
+            Setup details
+            <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="mt-2 grid gap-2 rounded-md bg-dls-surface-muted/[0.16] px-3 py-2.5">
+            <code className="max-w-full break-words font-mono text-[10px] leading-4 text-dls-text">{selectedInstallCommand}</code>
+            <ol className="grid gap-1.5">
+              {selectedClient.steps.map((step, index) => (
+                <li key={step} className="grid grid-cols-[1rem_minmax(0,1fr)] gap-1.5">
+                  <span className="font-mono text-[10px] text-dls-muted">{index + 1}.</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </details>
+
+        <div className="matterhorn-mcp-stream grid min-w-0 gap-1">
+          {props.cards.map((card) => {
+            const expanded = selectedCardId === card.id;
+            return (
+              <article
+                key={card.id}
+                className={cn(
+                  "rounded-md bg-transparent transition-colors hover:bg-dls-surface-muted/[0.08]",
+                  expanded && "bg-dls-surface-muted/[0.12]",
+                )}
+              >
+                <button
+                  type="button"
+                  className="grid w-full min-w-0 grid-cols-[32px_minmax(0,1fr)_16px] items-center gap-2.5 px-2 py-2.5 text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                  onClick={() => setSelectedCardId(expanded ? null : card.id)}
+                  aria-expanded={expanded}
+                  aria-controls={`matterhorn-mcp-detail-${card.id}`}
+                >
+                  <span className="flex size-8 items-center justify-center rounded-md bg-dls-surface/55">
+                    {card.protocolDeskId ? <ProtocolBrandLogo id={card.protocolDeskId} size={25} /> : <Code2 size={15} className="text-dls-text" />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-dls-text">{card.name}</span>
+                    <span className="mt-0.5 block line-clamp-1 text-[11px] leading-4 text-dls-secondary">{card.description}</span>
+                  </span>
+                  <ChevronDown size={14} className={`text-dls-muted transition-transform ${expanded ? "rotate-180" : ""}`} />
+                </button>
+
+                {expanded ? (
+                  <div id={`matterhorn-mcp-detail-${card.id}`} className="grid gap-2 px-3 pb-3 ps-[3.125rem] text-[11px] leading-4 text-dls-secondary">
+                    <p>{card.toolSummary ?? `${card.tools.length} tools available.`}</p>
+                    <p><span className="font-medium text-dls-text">Works with:</span> {card.worksWith.join(", ")}</p>
+                    {card.setupNote ? <p>{card.setupNote}</p> : null}
+                    <div className="flex flex-wrap items-center gap-3 pt-0.5">
+                      <a
+                        href={card.docs.githubUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 font-medium text-dls-text hover:text-[rgb(var(--dls-accent-rgb))]"
+                      >
+                        <BookOpen size={12} />
+                        Docs
+                        <ExternalLink size={11} />
+                      </a>
+                      <details>
+                        <summary className="cursor-pointer list-none font-medium text-dls-text">Safety</summary>
+                        <p className="mt-1.5">{card.boundary}</p>
+                      </details>
+                    </div>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className={`@container/matterhorn-mcps ${props.compact ? "space-y-4" : "space-y-5"}`}>
       <div className="flex flex-col gap-2">
@@ -1685,7 +1828,7 @@ function MatterhornMcpProductSection(props: {
           <summary className="cursor-pointer list-none font-medium text-dls-text">
             Setup and verify
           </summary>
-          <div className="mt-3 min-w-0 border-l border-dls-border/30 pl-3">
+          <div className="mt-3 min-w-0 rounded-lg bg-dls-surface-muted/18 px-3 py-2">
             <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">Install command</div>
             <code className={props.compact
               ? "mt-2 block max-w-full break-words rounded-lg bg-dls-surface/45 px-3 py-2 font-mono text-[10px] leading-4 text-dls-text"
@@ -1725,7 +1868,7 @@ function MatterhornMcpProductSection(props: {
         </details>
       </section>
 
-      <div className="matterhorn-mcp-stream min-w-0 overflow-hidden rounded-lg bg-dls-surface-muted/18">
+      <div className="matterhorn-mcp-stream min-w-0 overflow-hidden rounded-lg bg-dls-surface-muted/18 p-1">
         {props.cards.map((card) => {
           const visibleTools = card.tools.slice(0, visibleToolCount);
           const hiddenToolCount = Math.max(card.tools.length - visibleTools.length, 0);
@@ -1734,8 +1877,8 @@ function MatterhornMcpProductSection(props: {
             <article
               key={card.id}
               className={props.compact
-                ? "grid min-w-0 grid-cols-[34px_minmax(0,1fr)] gap-3 border-b border-dls-border/25 px-1 py-3 last:border-b-0"
-                : "grid min-w-0 grid-cols-[44px_minmax(0,1fr)] gap-4 border-b border-dls-border/25 px-3 py-4 last:border-b-0"
+                ? "grid min-w-0 grid-cols-[34px_minmax(0,1fr)] gap-3 rounded-lg px-1 py-3 transition-colors hover:bg-dls-surface-muted/[0.08]"
+                : "grid min-w-0 grid-cols-[44px_minmax(0,1fr)] gap-4 rounded-lg px-3 py-4 transition-colors hover:bg-dls-surface-muted/[0.08]"
               }
             >
               <div className={props.compact ? "flex size-8 shrink-0 items-center justify-center rounded-lg bg-dls-surface/55" : "flex size-11 shrink-0 items-center justify-center rounded-lg bg-dls-surface/55"}>
@@ -1754,7 +1897,7 @@ function MatterhornMcpProductSection(props: {
                 <MatterhornMcpReadinessFacts card={card} compact={props.compact} />
 
                 <div className={props.compact ? "mt-3 space-y-2" : "mt-4 grid gap-3 @lg/matterhorn-mcps:grid-cols-[minmax(0,1fr)_auto]"}>
-                  <div className={props.compact ? "min-w-0 border-l border-dls-border/30 pl-3" : "min-w-0 border-l border-dls-border/30 pl-3"}>
+                  <div className={props.compact ? "min-w-0 rounded-lg bg-dls-surface-muted/18 px-3 py-2" : "min-w-0 rounded-lg bg-dls-surface-muted/18 px-3 py-2"}>
                     <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">Install command</div>
                     <code className={props.compact
                       ? "mt-1 block max-w-full break-words font-mono text-[10px] leading-4 text-dls-text"
@@ -1819,7 +1962,7 @@ function McpCustomAppCard(props: { compact?: boolean; onOpen: () => void }) {
   return (
     <div
       className={props.compact
-        ? "rounded-lg bg-dls-surface-muted/22 p-3"
+        ? "px-1 py-2"
         : "rounded-lg bg-dls-surface-muted/24 p-5 sm:px-6"
       }
     >
@@ -1864,7 +2007,7 @@ function McpQuickConnectSection(props: {
         <span className="text-xs text-dls-secondary">{t("mcp.one_click_connect")}</span>
       </div>
 
-      <div className="mcp-marketplace-stream min-w-0 overflow-hidden rounded-[18px] bg-dls-surface-muted/18 px-3 py-1">
+      <div className="mcp-marketplace-stream min-w-0 overflow-hidden rounded-lg bg-dls-surface-muted/18 px-3 py-1">
         {/* MCP entries */}
         {props.entries.map((entry) => {
           const configured = props.isConfigured(entry);
@@ -1873,12 +2016,16 @@ function McpQuickConnectSection(props: {
           const FallbackIcon = serviceIcon(entry.name);
           const hidden = props.isEntryHidden(entry);
           const disabledReason = props.disabledReasonForEntry(entry);
+          const webSupportComingSoon = getMcpServerName(entry) === "matterhorn-ui" && !isDesktopRuntime();
 
           return (
             <ExtensionCard
               key={getMcpIdentityKey(entry)}
               name={entry.name}
-              description={entry.description}
+              description={webSupportComingSoon
+                ? "Available in the Matterhorn Work desktop app. Web connection is coming soon."
+                : entry.description
+              }
               iconSlug={entry.iconSlug}
               iconSrc={entry.iconSrc}
               iconNode={protocolDeskLogoNode(entry)}
@@ -1888,12 +2035,13 @@ function McpQuickConnectSection(props: {
               connected={configured}
               enablement={enablement?.results}
               connecting={connecting}
+              muted={webSupportComingSoon}
               hidden={hidden}
               preview={entry.preview}
-              statusHint={availabilityLabelForEntry(entry, configured, disabledReason)}
+              statusHint={webSupportComingSoon ? "Coming soon" : availabilityLabelForEntry(entry, configured, disabledReason)}
               disabledReason={disabledReason}
-              disabled={props.busy}
-              actionLabel={actionLabelForEntry(entry, configured, disabledReason)}
+              disabled={props.busy || webSupportComingSoon}
+              actionLabel={webSupportComingSoon ? undefined : actionLabelForEntry(entry, configured, disabledReason)}
               onClick={() => props.onDetail(entry)}
             />
           );
@@ -1950,6 +2098,7 @@ function McpQuickConnectSection(props: {
 }
 
 function McpConfiguredServersSection(props: {
+  compact?: boolean;
   servers: McpServerEntry[];
   statuses: McpStatusMap;
   lastUpdatedAt: number | null;
@@ -1969,9 +2118,9 @@ function McpConfiguredServersSection(props: {
   onToggleBusy: (value: SetStateAction<string | null>) => void;
 }) {
   return (
-    <div className="space-y-4">
+    <div className={props.compact ? "space-y-2.5" : "space-y-4"}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-widest text-dls-secondary">
+        <h3 className="text-xs font-medium text-dls-secondary">
           {t("mcp.your_apps")}
         </h3>
         {props.lastUpdatedAt ? (
@@ -1982,11 +2131,17 @@ function McpConfiguredServersSection(props: {
       </div>
 
       {props.servers.length ? (
-        <div className="space-y-2">
+        <div
+          className={props.compact
+            ? "grid gap-1"
+            : "space-y-2"
+          }
+        >
           {props.servers.map((entry) => (
             <McpConfiguredServerRow
               key={entry.name}
               entry={entry}
+              compact={props.compact}
               status={props.resolveStatus(entry)}
               errorInfo={readMcpErrorInfo(props.statuses[entry.name])}
               selected={props.selectedMcp === entry.name}
@@ -2006,10 +2161,15 @@ function McpConfiguredServersSection(props: {
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-dls-border px-5 py-10 text-center">
-          <Unplug size={24} className="mx-auto mb-3 text-dls-secondary/30" />
-          <div className="text-sm font-medium text-dls-secondary">{t("mcp.no_apps_yet")}</div>
-          <div className="mt-1 text-xs text-dls-secondary/60">{t("mcp.no_apps_hint")}</div>
+        <div className={props.compact
+          ? "flex items-start gap-2 py-1 text-xs leading-5 text-dls-secondary"
+          : "rounded-lg border border-dashed border-dls-border px-5 py-10 text-center"
+        }>
+          <Unplug size={props.compact ? 14 : 24} className={props.compact ? "mt-0.5 shrink-0 text-dls-muted" : "mx-auto mb-3 text-dls-secondary/30"} />
+          <div>
+            <div className={props.compact ? "font-medium text-dls-text" : "text-sm font-medium text-dls-secondary"}>{t("mcp.no_apps_yet")}</div>
+            <div className={props.compact ? "text-dls-secondary" : "mt-1 text-xs text-dls-secondary/60"}>{t("mcp.no_apps_hint")}</div>
+          </div>
         </div>
       )}
     </div>
@@ -2022,6 +2182,7 @@ function readMcpErrorInfo(status: McpStatusMap[string] | undefined) {
 }
 
 function McpConfiguredServerRow(props: {
+  compact?: boolean;
   entry: McpServerEntry;
   status: ReactMcpStatus;
   errorInfo: string | null;
@@ -2041,10 +2202,16 @@ function McpConfiguredServerRow(props: {
 }) {
   const Icon = serviceIcon(props.entry.name);
   return (
-    <div className={`rounded-lg border transition-all ${props.selected ? "border-blue-7 bg-blue-2 shadow-sm" : "border-dls-border bg-dls-surface hover:bg-dls-hover"}`}>
-      <button type="button" className="w-full px-4 py-3.5 text-left" onClick={() => props.onSelect(props.selected ? null : props.entry.name)}>
+    <div className={props.compact
+      ? cn("rounded-md bg-transparent transition-colors", props.selected ? "bg-dls-surface-muted/[0.12]" : "hover:bg-dls-surface-muted/[0.08]")
+      : `rounded-lg border transition-all ${props.selected ? "border-blue-7 bg-blue-2 shadow-sm" : "border-dls-border bg-dls-surface hover:bg-dls-hover"}`
+    }>
+      <button type="button" className={props.compact ? "w-full px-2.5 py-2.5 text-left" : "w-full px-4 py-3.5 text-left"} onClick={() => props.onSelect(props.selected ? null : props.entry.name)}>
         <div className="flex items-center gap-3">
-          <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg border ${props.status === "connected" ? "border-green-6 bg-green-3" : serviceIconBg(props.entry.name)}`}>
+          <div className={props.compact
+            ? cn("flex size-7 shrink-0 items-center justify-center rounded-md", props.status === "connected" ? "bg-green-3" : "bg-dls-surface-muted/[0.2]")
+            : `flex size-8 shrink-0 items-center justify-center rounded-lg border ${props.status === "connected" ? "border-green-6 bg-green-3" : serviceIconBg(props.entry.name)}`
+          }>
             <Icon size={15} className={props.status === "connected" ? "text-green-11" : serviceColor(props.entry.name)} />
           </div>
           <div className="min-w-0 flex-1">
@@ -2067,7 +2234,10 @@ function McpConfiguredServerRow(props: {
 
 function McpConfiguredServerDetails(props: Parameters<typeof McpConfiguredServerRow>[0]) {
   return (
-    <div className="animate-in fade-in slide-in-from-top-1 space-y-3 border-t border-blue-6/20 px-4 py-3 duration-200">
+    <div className={props.compact
+      ? "animate-in fade-in slide-in-from-top-1 space-y-3 px-3 pb-3 ps-[3.25rem] duration-200"
+      : "animate-in fade-in slide-in-from-top-1 space-y-3 border-t border-blue-6/20 px-4 py-3 duration-200"
+    }>
       <div className="flex items-center gap-4 text-xs">
         <span className="text-dls-secondary">{t("mcp.connection_type")}</span>
         <span className="text-dls-text">{props.entry.config.type === "remote" ? t("mcp.type_cloud") : t("mcp.type_local")}</span>

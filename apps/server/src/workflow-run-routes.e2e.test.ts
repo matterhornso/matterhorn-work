@@ -216,6 +216,35 @@ describe("workflow run routes", () => {
     expect(items.length).toBeGreaterThan(0);
   });
 
+  test("task run summaries preserve prepared, running, and waiting states", async () => {
+    const { base } = await boot();
+    const { payload: stagedPayload } = await jsonFetch(base, "/api/workflows/runs/stage", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: "ws_longevity",
+        sessionId: "sess_task_state_truth",
+        deskId: "wellness",
+        visibleUserIntent: "Build a safe endurance program",
+      }),
+    });
+    const runId = ((stagedPayload as Record<string, unknown>)?.run as Record<string, unknown>)?.workflowRunId as string;
+
+    const taskStatus = async () => {
+      const { payload } = await jsonFetch(base, "/workspace/ws_longevity/task-runs?limit=10");
+      const runs = ((payload as Record<string, unknown>)?.runs ?? []) as Array<{ taskId: string; status: string }>;
+      return runs.find((run) => run.taskId === runId)?.status;
+    };
+
+    expect(await taskStatus()).toBe("staged");
+    await jsonFetch(base, `/api/workflows/runs/${runId}/start`, { method: "POST" });
+    expect(await taskStatus()).toBe("running");
+    await jsonFetch(base, `/api/workflows/runs/${runId}/waiting`, {
+      method: "POST",
+      body: JSON.stringify({ reason: "Waiting for goals" }),
+    });
+    expect(await taskStatus()).toBe("waiting");
+  });
+
   test("workflow event mutation routes append durable events", async () => {
     const { base } = await boot();
     const { payload: stagedPayload } = await jsonFetch(base, "/api/workflows/runs/stage", {

@@ -39,18 +39,33 @@ async function getMainnetClient() {
   return mainnetClient;
 }
 
-// Server proxy for tools that live in apps/server
-const SERVER = process.env.MATTERHORN_SERVER_URL || "http://localhost:8787";
+// Server proxy for tools that live in apps/server. Managed OpenCode launches MCPs
+// with the OPENWORK_* names; retain MATTERHORN_* for standalone compatibility.
+const SERVER = process.env.MATTERHORN_SERVER_URL
+  || process.env.OPENWORK_SERVER_URL
+  || "http://localhost:8787";
+const SERVER_TOKEN = process.env.MATTERHORN_SERVER_TOKEN
+  || process.env.OPENWORK_SERVER_TOKEN
+  || "";
 async function callServer(path, method = "GET", body = null) {
   const url = `${SERVER}${path}`;
   const opts = { method, headers: {} };
+  if (SERVER_TOKEN) {
+    opts.headers.Authorization = `Bearer ${SERVER_TOKEN}`;
+  }
   if (body) {
     opts.headers["Content-Type"] = "application/json";
     opts.body = JSON.stringify(body);
   }
-  const res = await fetch(url, opts);
-  if (!res.ok) throw new Error(`Server HTTP ${res.status}`);
-  return res.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const res = await fetch(url, { ...opts, signal: controller.signal });
+    if (!res.ok) throw new Error(`Server HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // =========================================================
@@ -599,21 +614,186 @@ async function submitOrder({ signedOrder, signature, publicAddress }) {
 // =========================================================
 // Polymarket Research
 // =========================================================
+const POLYMARKET_GAMMA_BASE_URL = (
+  process.env.POLYMARKET_GAMMA_URL
+  || process.env.POLYMARKET_GAMMA_BASE_URL
+  || "https://gamma-api.polymarket.com"
+).replace(/\/+$/, "");
+const POLYMARKET_CLOB_BASE_URL = (
+  process.env.POLYMARKET_CLOB_URL
+  || process.env.POLYMARKET_CLOB_BASE_URL
+  || "https://clob.polymarket.com"
+).replace(/\/+$/, "");
+
+function pmBoolean(value) {
+  return value === true || value === "true";
+}
+
+function pmNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function pmStringArray(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item));
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function pmBoundedLimit(limit, fallback = 5, maximum = 20) {
+  const number = Number(limit);
+  return Number.isFinite(number) ? Math.min(Math.max(Math.floor(number), 1), maximum) : fallback;
+}
+
+function pmMarketSummary(market) {
+  return {
+    id: market.id,
+    question: market.question,
+    slug: market.slug,
+    active: pmBoolean(market.active),
+    closed: pmBoolean(market.closed),
+    restricted: pmBoolean(market.restricted),
+    enableOrderBook: pmBoolean(market.enableOrderBook),
+    endDate: market.endDate,
+    volume: pmNumber(market.volume),
+    liquidity: pmNumber(market.liquidity),
+    openInterest: pmNumber(market.openInterest),
+  };
+}
+
+function pmEventSlug(query) {
+  const raw = String(query || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    const parts = url.pathname.split("/").filter(Boolean);
+    const eventIndex = parts.indexOf("event");
+    if (eventIndex >= 0 && parts[eventIndex + 1]) return parts[eventIndex + 1].toLowerCase();
+  } catch {
+    // Plain slugs are handled below.
+  }
+  return /^[a-z0-9]+(?:-[a-z0-9]+)+$/i.test(raw) ? raw.toLowerCase() : "";
+}
+
+function pmEventSummary(event) {
+  return {
+    id: event.id,
+    title: event.title,
+    slug: event.slug,
+    description: event.description,
+    endDate: event.endDate,
+    volume: event.volume,
+    marketCount: Array.isArray(event.markets) ? event.markets.length : undefined,
+  };
+}
+
 async function pm_searchEvents(query, limit = 10) {
-  const data = await fetchJson(`https://gamma-api.polymarket.com/events?closed=false&active=true&_q=${encodeURIComponent(query)}&limit=${limit}`);
+  const boundedLimit = pmBoundedLimit(limit, 10);
+  const slug = pmEventSlug(query);
+  if (slug) {
+    const exact = await fetchJson(`${POLYMARKET_GAMMA_BASE_URL}/events?closed=false&active=true&slug=${encodeURIComponent(slug)}&limit=${boundedLimit}`);
+    const exactEvents = Array.isArray(exact) ? exact : (exact.events || []);
+    if (exactEvents.length > 0) return exactEvents.map(pmEventSummary);
+  }
+  const data = await fetchJson(`${POLYMARKET_GAMMA_BASE_URL}/events?closed=false&active=true&_q=${encodeURIComponent(query)}&limit=${boundedLimit}`);
   const events = Array.isArray(data) ? data : (data.events || []);
-  return events.map(e => ({ id: e.id, title: e.title, description: e.description, endDate: e.endDate, volume: e.volume }));
+  return events.map(pmEventSummary);
 }
 
 async function pm_getEvent(eventId) {
-  return await fetchJson(`https://gamma-api.polymarket.com/events/${eventId}`);
+  const event = await fetchJson(`${POLYMARKET_GAMMA_BASE_URL}/events/${encodeURIComponent(eventId)}`);
+  const markets = Array.isArray(event.markets) ? event.markets : [];
+  const activeMarkets = markets.filter((market) => pmBoolean(market.active) && !pmBoolean(market.closed));
+  const restrictedMarketCount = markets.filter((market) => pmBoolean(market.restricted)).length;
+  const representativeMarkets = [...markets]
+    .sort((left, right) => {
+      const leftActive = pmBoolean(left.active) && !pmBoolean(left.closed) ? 1 : 0;
+      const rightActive = pmBoolean(right.active) && !pmBoolean(right.closed) ? 1 : 0;
+      return rightActive - leftActive || (pmNumber(right.volume) || 0) - (pmNumber(left.volume) || 0);
+    })
+    .slice(0, 5)
+    .map(pmMarketSummary);
+
+  return {
+    id: event.id,
+    title: event.title,
+    slug: event.slug,
+    active: pmBoolean(event.active),
+    closed: pmBoolean(event.closed),
+    restricted: pmBoolean(event.restricted) || restrictedMarketCount > 0,
+    enableOrderBook: pmBoolean(event.enableOrderBook) || markets.some((market) => pmBoolean(market.enableOrderBook)),
+    endDate: event.endDate,
+    volume: pmNumber(event.volume),
+    liquidity: pmNumber(event.liquidity),
+    openInterest: pmNumber(event.openInterest),
+    marketCount: markets.length,
+    activeMarketCount: activeMarkets.length,
+    restrictedMarketCount,
+    orderBookEnabledMarketCount: markets.filter((market) => pmBoolean(market.enableOrderBook)).length,
+    markets: representativeMarkets,
+    source: "Polymarket Gamma",
+    fetchedAt: new Date().toISOString(),
+  };
 }
 
 async function pm_getOrderbook(marketId, limit = 5) {
-  const data = await fetchJson(`https://gamma-api.polymarket.com/markets/${marketId}/orderbook?limit=${limit}`);
+  const boundedLimit = pmBoundedLimit(limit, 5);
+  const market = await fetchJson(`${POLYMARKET_GAMMA_BASE_URL}/markets/${encodeURIComponent(marketId)}`);
+  const marketSummary = pmMarketSummary(market);
+
+  if (marketSummary.restricted) {
+    return {
+      status: "compliance_blocked",
+      market: marketSummary,
+      message: "Orderbook details are withheld because this market is restricted. No executable price, size, share, or order fields are returned.",
+      source: "Polymarket Gamma",
+      fetchedAt: new Date().toISOString(),
+    };
+  }
+
+  if (!marketSummary.enableOrderBook) {
+    return {
+      status: "unavailable",
+      market: marketSummary,
+      message: "Polymarket does not currently expose an orderbook for this market.",
+      source: "Polymarket Gamma",
+      fetchedAt: new Date().toISOString(),
+    };
+  }
+
+  const outcomes = pmStringArray(market.outcomes);
+  const tokenIds = pmStringArray(market.clobTokenIds);
+  const outcomeBooks = await Promise.all(tokenIds.slice(0, 2).map(async (tokenId, index) => {
+    const data = await fetchJson(`${POLYMARKET_CLOB_BASE_URL}/book?token_id=${encodeURIComponent(tokenId)}`);
+    const levels = (entries, side) => (Array.isArray(entries) ? entries : [])
+      .map((entry) => ({ price: pmNumber(entry?.price), size: pmNumber(entry?.size) }))
+      .filter((entry) => entry.price !== undefined && entry.size !== undefined && entry.price > 0 && entry.size > 0)
+      .sort((left, right) => side === "bid" ? right.price - left.price : left.price - right.price)
+      .slice(0, boundedLimit);
+    const bids = levels(data.bids, "bid");
+    const asks = levels(data.asks, "ask");
+    return {
+      outcome: outcomes[index] || `Outcome ${index + 1}`,
+      tokenId,
+      bids,
+      asks,
+      bestBid: bids[0]?.price ?? null,
+      bestAsk: asks[0]?.price ?? null,
+    };
+  }));
+
   return {
-    bids: (data.bids || []).map(b => ({ price: Number(b.price), size: Number(b.size) })),
-    asks: (data.asks || []).map(a => ({ price: Number(a.price), size: Number(a.size) })),
+    status: outcomeBooks.length > 0 ? "available" : "unavailable",
+    market: marketSummary,
+    outcomes: outcomeBooks,
+    message: outcomeBooks.length > 0 ? undefined : "No CLOB token IDs were available for this market.",
+    source: "Polymarket Gamma and CLOB",
+    fetchedAt: new Date().toISOString(),
   };
 }
 
@@ -1211,8 +1391,8 @@ const tools = [
 
   // -- polymarket --
   { name: "pm_searchEvents", description: "Search Polymarket events by keyword", inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" } }, required: ["query"] } },
-  { name: "pm_getEvent", description: "Get full Polymarket event details", inputSchema: { type: "object", properties: { eventId: { type: "string" } }, required: ["eventId"] } },
-  { name: "pm_getOrderbook", description: "Get orderbook for a Polymarket market", inputSchema: { type: "object", properties: { marketId: { type: "string" }, limit: { type: "number" } }, required: ["marketId"] } },
+  { name: "pm_getEvent", description: "Get compact Polymarket event, compliance, and representative-market details", inputSchema: { type: "object", properties: { eventId: { type: "string" } }, required: ["eventId"] } },
+  { name: "pm_getOrderbook", description: "Get a bounded Polymarket CLOB orderbook when compliance allows it; restricted markets return no executable fields", inputSchema: { type: "object", properties: { marketId: { type: "string" }, limit: { type: "number" } }, required: ["marketId"] } },
 
   // -- bittensor --
   { name: "bittensor_list_subnets", description: "List Bittensor subnets with plain-English utility summaries.", inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" } } } },

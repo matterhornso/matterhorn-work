@@ -1,12 +1,10 @@
 /** @jsxImportSource react */
 
 import { useEffect, useMemo, useState } from "react";
-import { NotebookPen, Sparkles } from "lucide-react";
+import { Brain, NotebookPen, Tag, X } from "lucide-react";
 
 import { t } from "@/i18n";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetContent,
@@ -134,71 +132,94 @@ export function QuickJotSheet({ workspaceId, client, onSaved }: QuickJotSheetPro
     <Sheet open={open} onOpenChange={(value) => {
       if (!value) handleClose();
     }}>
-      <SheetContent side="bottom" className="h-auto max-h-[85vh] rounded-t-2xl px-4 pb-6 pt-5 sm:px-6">
-        <SheetHeader className="gap-1 px-0 pb-2">
-          <SheetTitle className="flex items-center gap-2 text-base font-semibold">
-            <NotebookPen className="size-4 text-primary" />
-            {t("notes.quick_jot_title")}
-          </SheetTitle>
-          <SheetDescription className="text-xs">
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className="!w-[min(100vw,420px)] border-0 bg-dls-background p-0 shadow-[-18px_0_48px_rgba(0,0,0,0.16)] sm:!max-w-[420px]"
+      >
+        <SheetHeader className="gap-2 px-5 pb-4 pt-5">
+          <div className="flex items-center justify-between gap-3">
+            <SheetTitle className="flex min-w-0 items-center gap-2.5 text-base font-semibold">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-dls-surface-muted/[0.24] text-primary">
+                <NotebookPen className="size-4" />
+              </span>
+              {t("notes.quick_jot_title")}
+            </SheetTitle>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0 bg-dls-surface-muted/[0.18] text-dls-secondary shadow-none hover:bg-dls-surface-muted/[0.30] hover:text-dls-text"
+              onClick={handleClose}
+              disabled={busy}
+              aria-label="Close Quick Jot"
+              title="Close Quick Jot"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+          <SheetDescription className="max-w-[38ch] text-xs leading-5">
             {t("notes.quick_jot_description")}
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex flex-col gap-3 py-2">
-          <Input
-            placeholder={t("notes.note_title_placeholder")}
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            disabled={busy}
-            className="h-10"
-          />
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">
+          <div className="flex min-h-full flex-col rounded-lg bg-dls-surface-muted/[0.14] p-1.5">
+            <input
+              placeholder={t("notes.note_title_placeholder")}
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              disabled={busy}
+              className="h-12 w-full min-w-0 rounded-md bg-transparent px-3 text-lg font-medium text-dls-text outline-none transition-colors placeholder:text-dls-muted focus:bg-dls-surface-muted/[0.16] disabled:cursor-not-allowed disabled:opacity-50"
+            />
 
-          <Textarea
-            placeholder={t("notes.write_placeholder")}
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            disabled={busy}
-            className="min-h-32"
-          />
+            <textarea
+              placeholder={t("notes.write_placeholder")}
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              disabled={busy}
+              className="min-h-[min(42vh,20rem)] w-full flex-1 resize-none rounded-md bg-transparent px-3 py-2 text-sm leading-6 text-dls-text outline-none transition-colors placeholder:text-dls-muted focus:bg-dls-surface-muted/[0.12] disabled:cursor-not-allowed disabled:opacity-50"
+            />
 
-          <Input
-            placeholder={t("notes.tags_placeholder")}
-            value={tags}
-            onChange={(event) => setTags(event.target.value)}
-            disabled={busy}
-          />
-
-          {tagChips.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {tagChips.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[11px] text-dls-secondary"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
-          {currentAttachment ? (
-            <div className="flex items-center gap-2">
-              <NoteAttachmentChip
-                attachment={currentAttachment}
-                onRemove={() => setCurrentAttachment(undefined)}
+            <div className="flex min-w-0 items-center gap-2 rounded-md bg-dls-surface-muted/[0.18] px-3 py-2 transition-colors focus-within:bg-dls-surface-muted/[0.28]">
+              <Tag className="size-3.5 shrink-0 text-dls-muted" />
+              <input
+                placeholder={t("notes.tags_placeholder")}
+                value={tags}
+                onChange={(event) => setTags(event.target.value)}
+                disabled={busy}
+                className="h-7 min-w-0 flex-1 bg-transparent text-xs text-dls-text outline-none placeholder:text-dls-muted disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
-          ) : null}
+
+            {tagChips.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 px-3 pb-2 pt-2">
+                {tagChips.map((tag) => (
+                  <span key={tag} className="text-[11px] font-medium text-dls-secondary">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            {currentAttachment ? (
+              <div className="px-3 pb-2 pt-2">
+                <NoteAttachmentChip
+                  attachment={currentAttachment}
+                  onRemove={() => setCurrentAttachment(undefined)}
+                />
+              </div>
+            ) : null}
+          </div>
         </div>
 
-        <SheetFooter className="flex-col-reverse gap-2 px-0 pt-2 sm:flex-row sm:justify-end">
+        <SheetFooter className="mt-auto flex-row items-center gap-2 px-5 pb-5 pt-2">
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             onClick={handleClose}
             disabled={busy}
-            className="w-full sm:w-auto"
+            className="mr-auto bg-transparent px-2 text-dls-secondary shadow-none hover:bg-dls-surface-muted/[0.18] hover:text-dls-text"
           >
             {t("notes.cancel")}
           </Button>
@@ -207,16 +228,16 @@ export function QuickJotSheet({ workspaceId, client, onSaved }: QuickJotSheetPro
             variant="secondary"
             onClick={() => void handleSave(true)}
             disabled={!canSave || busy}
-            className="w-full gap-1.5 sm:w-auto"
+            className="gap-1.5 bg-dls-surface-muted/[0.24] shadow-none hover:bg-dls-surface-muted/[0.36]"
           >
-            <Sparkles className="size-3.5" />
+            <Brain className="size-3.5" />
             {t("notes.quick_jot_save_and_suggest")}
           </Button>
           <Button
             type="button"
             onClick={() => void handleSave(false)}
             disabled={!canSave || busy}
-            className="w-full sm:w-auto"
+            className="shadow-none"
           >
             {busy ? t("notes.quick_jot_saving") : t("notes.quick_jot_save")}
           </Button>

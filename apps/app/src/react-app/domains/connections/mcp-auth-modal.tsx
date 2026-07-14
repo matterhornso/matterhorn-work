@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { McpDirectoryInfo } from "@/app/constants";
+import { getMcpServerName, type McpDirectoryInfo } from "@/app/constants";
 import { openDesktopUrl, opencodeMcpAuth } from "@/app/lib/desktop";
 import { unwrap } from "@/app/lib/opencode";
 import { validateMcpServerName } from "@/app/mcp";
@@ -194,7 +194,7 @@ export function McpAuthModal(props: McpAuthModalProps) {
 
     let slug = "";
     try {
-      slug = resolveSlug(props.entry.name);
+      slug = resolveSlug(getMcpServerName(props.entry));
     } catch (err) {
       const message = err instanceof Error ? err.message : t("mcp.auth.failed_to_start_oauth");
       setError(message);
@@ -502,7 +502,7 @@ export function McpAuthModal(props: McpAuthModalProps) {
 
     let slug = "";
     try {
-      slug = resolveSlug(props.entry.name);
+      slug = resolveSlug(getMcpServerName(props.entry));
     } catch (err) {
       const message = err instanceof Error ? err.message : t("mcp.auth.failed_to_start_oauth");
       setError(message);
@@ -564,7 +564,7 @@ export function McpAuthModal(props: McpAuthModalProps) {
 
     let slug = "";
     try {
-      slug = resolveSlug(props.entry.name);
+      slug = resolveSlug(getMcpServerName(props.entry));
     } catch (err) {
       const message = err instanceof Error ? err.message : t("mcp.auth.failed_to_start_oauth");
       setError(message);

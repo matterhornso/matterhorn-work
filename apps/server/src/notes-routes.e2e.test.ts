@@ -60,22 +60,37 @@ async function getFreePort(): Promise<number> {
   });
 }
 
-async function boot() {
+async function boot(options: { readOnly?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "matterhorn-notes-routes-"));
   dirs.push(dir);
   process.env.OPENWORK_ENV_STORE = join(dir, "env.json");
   process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
   process.env.MATTERHORN_WORK_MEMORY_ROOT = join(dir, "memory");
-  const server = await startServer(baseConfig(await getFreePort(), dir)) as Served;
+  const config = baseConfig(await getFreePort(), dir);
+  config.readOnly = options.readOnly ?? false;
+  const server = await startServer(config) as Served;
   stops.push(() => server.stop(true));
   return { base: `http://127.0.0.1:${server.port}`, dir };
 }
 
-async function jsonFetch(base: string, path: string, init: RequestInit = {}) {
+async function jsonFetch(base: string, path: string, init: RequestInit = {}, token = TOKEN) {
   const response = await fetch(`${base}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${TOKEN}`,
+      Authorization: `Bearer ${token}`,
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      ...(init.headers ?? {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
+}
+
+async function hostJsonFetch(base: string, path: string, init: RequestInit = {}) {
+  const response = await fetch(`${base}${path}`, {
+    ...init,
+    headers: {
+      "X-OpenWork-Host-Token": HOST_TOKEN,
       ...(init.body ? { "Content-Type": "application/json" } : {}),
       ...(init.headers ?? {}),
     },
@@ -208,4 +223,70 @@ describe("Matterhorn notes API routes", () => {
     expect(memorySearch.response.status).toBe(200);
     expect(memorySearch.payload.count).toBe(0);
   });
+
+  test("serializes concurrent note patches without losing fields", async () => {
+    const { base } = await boot();
+    const created = await jsonFetch(base, "/workspace/ws_notes/notes", {
+      method: "POST",
+      body: JSON.stringify({ title: "Draft title", body: "Draft body" }),
+    });
+    expect(created.response.status).toBe(201);
+    const noteId = String(created.payload.note.id);
+
+    const [titleUpdate, bodyUpdate] = await Promise.all([
+      jsonFetch(base, `/workspace/ws_notes/notes/${noteId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ title: "Final title" }),
+      }),
+      jsonFetch(base, `/workspace/ws_notes/notes/${noteId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ body: "Final body" }),
+      }),
+    ]);
+    expect(titleUpdate.response.status).toBe(200);
+    expect(bodyUpdate.response.status).toBe(200);
+
+    const fetched = await jsonFetch(base, `/workspace/ws_notes/notes/${noteId}`);
+    expect(fetched.response.status).toBe(200);
+    expect(fetched.payload.note.title).toBe("Final title");
+    expect(fetched.payload.note.body).toBe("Final body");
+  });
+
+  test("blocks notes writes without a writable collaborator workspace", async () => {
+    const readOnly = await boot({ readOnly: true });
+    const blockedReadOnly = await jsonFetch(readOnly.base, "/workspace/ws_notes/notes", {
+      method: "POST",
+      body: JSON.stringify({ title: "Read-only note", body: "Should not save." }),
+    });
+    expect(blockedReadOnly.response.status).toBe(403);
+    expect(blockedReadOnly.payload.code).toBe("read_only");
+
+    const writable = await boot();
+    const issued = await hostJsonFetch(writable.base, "/tokens", {
+      method: "POST",
+      body: JSON.stringify({ scope: "viewer", label: "notes viewer" }),
+    });
+    expect(issued.response.status).toBe(201);
+    const viewerToken = String(issued.payload.token ?? "");
+    expect(viewerToken).toStartWith("owt_");
+
+    const blockedViewer = await jsonFetch(
+      writable.base,
+      "/workspace/ws_notes/notes",
+      {
+        method: "POST",
+        body: JSON.stringify({ title: "Viewer note", body: "Should not save." }),
+      },
+      viewerToken,
+    );
+    expect(blockedViewer.response.status).toBe(403);
+    expect(blockedViewer.payload.code).toBe("forbidden");
+
+    const missingWorkspace = await jsonFetch(writable.base, "/workspace/ws_missing/notes", {
+      method: "POST",
+      body: JSON.stringify({ title: "Missing workspace", body: "Should not save." }),
+    });
+    expect(missingWorkspace.response.status).toBe(404);
+    expect(missingWorkspace.payload.code).toBe("workspace_not_found");
+  }, 15_000);
 });

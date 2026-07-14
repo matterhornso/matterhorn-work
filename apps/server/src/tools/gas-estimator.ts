@@ -4,6 +4,7 @@
  */
 
 import { getClient } from "../infra/chain-client.js";
+import { sanitizeTransactionSimulationError } from "./transaction-simulation.js";
 import type { Address, Hex } from "viem";
 
 const GAS_PRICE_KEY = "matterhorn:wallet:gasPrice";
@@ -84,7 +85,7 @@ export async function estimateGasFormatted({
   } catch (err) {
     return {
       success: false,
-      error: err instanceof Error ? err.message : "Gas estimation failed",
+      error: sanitizeTransactionSimulationError(err, "Gas estimation failed before approval."),
     };
   }
 }

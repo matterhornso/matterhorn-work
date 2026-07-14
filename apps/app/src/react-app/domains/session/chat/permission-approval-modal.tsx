@@ -321,7 +321,7 @@ export function PermissionApprovalModal(props: PermissionApprovalModalProps) {
           ) : null}
 
           {hasMetadata ? (
-            <details className="group rounded-[18px] border border-dls-border bg-dls-surface px-4 py-3">
+            <details className="group rounded-lg bg-dls-surface-muted/[0.08] px-4 py-3">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-medium text-dls-text">
                 <span>{t("session.details_label")}</span>
                 <ChevronRight size={15} className="text-dls-secondary transition-transform group-open:rotate-90" />

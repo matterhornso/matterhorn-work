@@ -168,7 +168,7 @@ function ControlModeSpotlight({ spotlight }: { spotlight: SpotlightState }) {
   const pad = spotlight.phase === "press" ? 8 : 12;
   return (
     <div
-      className="pointer-events-none fixed z-[9998] rounded-[18px] bg-[rgba(var(--dls-accent-rgb),0.1)] shadow-[0_0_0_9999px_rgba(7,10,18,0.08),0_0_36px_rgba(var(--dls-accent-rgb),0.32),inset_0_0_0_1px_rgba(var(--dls-accent-rgb),0.24)] transition-all duration-200 ease-out"
+      className="pointer-events-none fixed z-[9998] rounded-lg bg-[rgba(var(--dls-accent-rgb),0.1)] shadow-[0_0_0_9999px_rgba(7,10,18,0.08),0_0_24px_rgba(var(--dls-accent-rgb),0.24),inset_0_0_0_1px_rgba(var(--dls-accent-rgb),0.18)] transition-all duration-200 ease-out"
       style={{
         left: `${rect.x - pad}px`,
         top: `${rect.y - pad}px`,

@@ -97,6 +97,11 @@ function installIfNeeded() {
     },
   };
 
+  Object.defineProperty(window, "__openwork", {
+    value: api,
+    configurable: true,
+    writable: false,
+  });
   Object.defineProperty(window, "__matterhorn", {
     value: api,
     configurable: true,

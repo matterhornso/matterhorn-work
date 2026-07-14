@@ -5,6 +5,9 @@ temperature: 0.2
 matterhorn_desk_agent: v1
 matterhorn_desk_id: hyperliquid
 agent_id: matterhorn-hyperliquid
+workflow_id: hyperliquid_preview
+workflow_manifest_ref: matterhorn.workflow.manifest.v1/hyperliquid_preview
+output_desk_id: hyperliquid
 ---
 
 # Hyperliquid Agent

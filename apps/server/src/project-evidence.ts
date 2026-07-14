@@ -100,7 +100,7 @@ function taskEventToEvidence(event: MatterhornTaskEvent): MatterhornProjectEvide
 }
 
 function taskRunToEvidence(run: MatterhornTaskRun): MatterhornProjectEvidenceEvent | null {
-  if (run.status === "running") return null;
+  if (run.status === "staged" || run.status === "running" || run.status === "waiting") return null;
   const type: MatterhornProjectEvidenceEvent["type"] =
     run.status === "completed" ? "task.completed" : run.status === "failed" ? "task.failed" : "task.cancelled";
   return {

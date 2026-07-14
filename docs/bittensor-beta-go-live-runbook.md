@@ -105,15 +105,15 @@ matterhorn-work crypto live-public-qa \
 Create `/tmp/matterhorn-bittensor-browser-qa.md` with evidence from desktop,
 tablet, and mobile checks. It must mention:
 
-- Bittensor Demo tab;
-- `show my TAO`;
-- `where am I staked?`;
+- Bittensor desk;
+- `Show my TAO balance` with public SS58 address intake;
 - subnet discovery;
 - validator comparison;
 - staking preview;
 - external signer handoff;
 - no-wallet state;
 - degraded-provider state;
+- launched session remains visible after task start;
 - mobile viewport;
 - tablet viewport;
 - desktop viewport.
@@ -126,8 +126,8 @@ VITE_MATTERHORN_BITTENSOR_BETA=1 pnpm dev:headless-web
 
 Then use Playwright or the in-app browser to verify:
 
-- Demo tab says Bittensor Beta;
-- market demo prompts are hidden in beta mode;
+- the Bittensor desk shows balance, subnet, validator, and staking-preview tasks;
+- public-address intake rejects invalid SS58 values and never asks for secrets;
 - market copy says preview/R&D-only;
 - no buttons imply custody, signing, or live market submission;
 - prompt handoff inserts context into chat without auto-sending;

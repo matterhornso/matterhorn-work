@@ -108,12 +108,14 @@ The router can expose a small local HTTP server for health/config and simple mes
 - `OPENCODE_ROUTER_HEALTH_PORT` controls the port (OpenWork defaults to a random free port when using `openwork`).
 - `PORT` is also accepted as a convenience if the above are unset.
 - `OPENCODE_ROUTER_HEALTH_HOST` controls bind host (default: `127.0.0.1`).
+- `OPENCODE_ROUTER_HEALTH_TOKEN` enables write routes such as `/send` and config updates. Without it, `/health` remains readable and writes return `403`.
 
 Send a message to all peers bound to a directory:
 
 ```bash
 curl -sS "http://127.0.0.1:${OPENCODE_ROUTER_HEALTH_PORT:-3005}/send" \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer ${OPENCODE_ROUTER_HEALTH_TOKEN}" \
   -d '{"channel":"telegram","directory":"/path/to/workdir","text":"hello"}'
 ```
 
@@ -122,6 +124,7 @@ Send text + media in one request:
 ```bash
 curl -sS "http://127.0.0.1:${OPENCODE_ROUTER_HEALTH_PORT:-3005}/send" \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer ${OPENCODE_ROUTER_HEALTH_TOKEN}" \
   -d '{
     "channel":"slack",
     "peerId":"D12345678",

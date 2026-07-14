@@ -35,13 +35,13 @@ export function walletFamilySigningCopy(family: MatterhornWalletFamilyCapability
   if (family.family === "sui") {
     if (family.status === "preview" || family.status === "working") {
       return {
-        label: "Wallet-standard preview",
-        hint: "Sui wallet connection uses Mysten dApp Kit. Account reads are available; signing stays in the user's wallet.",
+        label: "Wallet-standard connect",
+        hint: "Sui wallet connection uses Mysten dApp Kit. Account reads and handoffs are available; signing stays in the user's wallet.",
       };
     }
     return {
       label: "Not supported here",
-      hint: "Sui direct wallet connect is not available in this runtime. Backend previews, handoffs, and receipt evidence remain available when the workspace engine supports them.",
+      hint: "Sui direct wallet connect is not available in this runtime. Backend handoffs and receipt evidence remain available when the workspace engine supports them.",
     };
   }
 
@@ -120,7 +120,7 @@ export function feedbackCapabilityCopy(capability: MatterhornCapability | undefi
   }
   if (capability.status === "preview") {
     return {
-      label: "Preview",
+      label: "Early access",
       hint: capability.description || "Structured feedback is stored locally for product quality and routing. No training by default.",
     };
   }

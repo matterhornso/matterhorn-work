@@ -168,7 +168,7 @@ export function ToolCallView(props: { part: DynamicToolUIPart; developerMode: bo
                   Copy
                 </button>
               </div>
-              <pre className="overflow-x-auto rounded-[16px] border border-dls-border/70 bg-dls-surface px-4 py-3 text-[12px] leading-6 text-gray-10">
+              <pre className="overflow-x-auto rounded-lg border border-transparent bg-dls-surface-muted/[0.08] px-4 py-3 text-[12px] leading-6 text-gray-10">
                 {formatStructuredValue(input)}
               </pre>
             </div>
@@ -186,7 +186,7 @@ export function ToolCallView(props: { part: DynamicToolUIPart; developerMode: bo
                   Copy
                 </button>
               </div>
-              <pre className="overflow-x-auto rounded-[16px] border border-dls-border/70 bg-dls-surface px-4 py-3 text-[12px] leading-6 text-gray-10">
+              <pre className="overflow-x-auto rounded-lg border border-transparent bg-dls-surface-muted/[0.08] px-4 py-3 text-[12px] leading-6 text-gray-10">
                 {formatStructuredValue(output)}
               </pre>
             </div>
@@ -195,7 +195,7 @@ export function ToolCallView(props: { part: DynamicToolUIPart; developerMode: bo
           {error ? <div className="rounded-lg bg-red-1/40 p-2 text-xs text-red-12">{error}</div> : null}
 
           {props.developerMode && !expandable ? (
-            <pre className="overflow-x-auto rounded-[16px] border border-dls-border/70 bg-dls-surface px-4 py-3 text-[12px] leading-6 text-gray-10">
+            <pre className="overflow-x-auto rounded-lg border border-transparent bg-dls-surface-muted/[0.08] px-4 py-3 text-[12px] leading-6 text-gray-10">
               {safeStringify({ input, output, error, state: props.part.state })}
             </pre>
           ) : null}
