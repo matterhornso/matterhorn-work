@@ -2459,3 +2459,13 @@ The durable final QA report is
 GO for a controlled local beta and NO-GO for public macOS distribution, live
 charging, production image-to-Sui publishing, Matterhorn Cloud, claims of live
 Bittensor provider coverage, or claims of real wallet-extension acceptance.
+
+The final beta.2 internal-tester artifact is source-bound to `79da1e4b` in
+`/Users/abhinavramesh/Desktop/matterhorn-work-controlled-beta-79da1e4b`.
+The DMG hash is
+`f7519835b76c86d5e0279115a12b6bada1a4eab4134f1f196af65098c315a4ed`
+and the ZIP hash is
+`fd7a6e667be0576ffd5e306bcaaf5c519ffc308b393a4e1b00c122653d8932f4`.
+DMG and ZIP integrity passed, desktop doctor is ready with 9 passes and one
+expected server-health skip, and the packaged clean-profile smoke passed 11/11.
+The artifact remains unsigned, unnotarized, and unpublished.

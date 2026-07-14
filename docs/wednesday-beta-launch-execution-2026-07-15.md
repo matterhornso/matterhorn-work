@@ -139,7 +139,7 @@ external-signer boundaries, and execution blocks remain unchanged.
 | Generated Media local test flow | GO for local test only | Mock image history and local draft surfaces work. Production provider, Walrus, and Sui publishing inputs are absent. |
 | Billing local test UI | GO for truthful test-mode UI only | The UI exposes test mode and limitations. Live charging and paid entitlement activation remain disabled. |
 | Matterhorn Cloud | NOT INCLUDED | Account, cross-device sync, shared Cloud teammates, and Cloud workers are disabled in this build. Local work requires no Cloud account. |
-| Internal unsigned macOS tester artifact | GO for named internal testers with warning | Built from `19ca5c5d`; DMG and ZIP integrity pass, desktop doctor passes 11/11, and packaged clean-profile smoke passes 16/16. |
+| Internal unsigned macOS tester artifact | GO for named internal testers with warning | Beta.2 is built from `79da1e4b`; DMG and ZIP integrity pass, desktop doctor is ready with 9 pass and one expected server-health skip, and packaged clean-profile smoke passes 11/11. |
 | Public macOS distribution | NO-GO | No Developer ID identity, notarization credentials, clean-Mac Gatekeeper pass, or signed updater metadata is available. |
 | Production Billing | NO-GO | Stripe test checkout, portal, signed webhook, prices, and reconciliation are not configured. |
 | Production image-to-Sui publishing | NO-GO | Image provider, Walrus publisher/relay, Sui NFT package, Kiosk package, and TransferPolicy are not configured. |
@@ -211,24 +211,28 @@ remain outside the controlled beta promise.
 
 ## Final Artifact Record
 
-The final private artifact is hash-bound to the frozen source candidate. The
-first artifact from `07a9c82a` remains diagnostic evidence only and must not be
-distributed as the final Wednesday build.
+The final private artifact is hash-bound to the verified source candidate.
+Earlier artifacts, including beta.1, remain diagnostic evidence only and must
+not be distributed as the final Wednesday build.
 
-- frozen source candidate: `19ca5c5d`;
-- evidence-ledger release ref: `v0.13.13-beta.1`;
+- frozen source candidate: `79da1e4b`;
+- evidence-ledger release ref: `v0.13.13-beta.2`;
 - artifact directory:
-  `/Users/abhinavramesh/Desktop/matterhorn-work-controlled-beta-19ca5c5d`;
-- DMG: `Matterhorn-Work-19ca5c5d-arm64-unsigned.dmg`;
+  `/Users/abhinavramesh/Desktop/matterhorn-work-controlled-beta-79da1e4b`;
+- DMG: `Matterhorn-Work-79da1e4b-arm64-unsigned.dmg`;
 - DMG SHA-256:
-  `4f168ca1221f65dc21e97371f5cb65664205fff012a7c600c4b6f3d41e4c06f6`;
-- ZIP: `Matterhorn-Work-19ca5c5d-arm64-unsigned.zip`;
+  `f7519835b76c86d5e0279115a12b6bada1a4eab4134f1f196af65098c315a4ed`;
+- ZIP: `Matterhorn-Work-79da1e4b-arm64-unsigned.zip`;
 - ZIP SHA-256:
-  `61a27cb71208ab8636af9c87918f06bee792ea699535d004870d87cac37570a3`;
+  `fd7a6e667be0576ffd5e306bcaaf5c519ffc308b393a4e1b00c122653d8932f4`;
 - `hdiutil verify`: valid;
 - `unzip -t`: no errors;
-- desktop doctor: 11/11 pass;
-- packaged clean-profile smoke: 16/16 pass.
+- desktop doctor: ready, 9 pass, 0 warning, 1 expected server-health skip,
+  0 fail;
+- packaged clean-profile smoke: 11/11 pass and temporary user data removed;
+- Developer ID signing: unavailable;
+- notarization: skipped;
+- publishing: disabled.
 
 After the artifact was verified and the release ref was pushed, the clean RC
 replaced the previous canonical stack on `4130/5190`. Exactly one process owns

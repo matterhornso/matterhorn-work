@@ -39,6 +39,31 @@ operator-owned release gates.
 The local bearer and host tokens are launch secrets. They are intentionally not
 included in this document or committed QA evidence.
 
+## Beta.2 Desktop Artifact
+
+The final controlled-tester artifact was built from source commit `79da1e4b`.
+
+- artifact directory:
+  `/Users/abhinavramesh/Desktop/matterhorn-work-controlled-beta-79da1e4b`;
+- DMG: `Matterhorn-Work-79da1e4b-arm64-unsigned.dmg`;
+- DMG SHA-256:
+  `f7519835b76c86d5e0279115a12b6bada1a4eab4134f1f196af65098c315a4ed`;
+- ZIP: `Matterhorn-Work-79da1e4b-arm64-unsigned.zip`;
+- ZIP SHA-256:
+  `fd7a6e667be0576ffd5e306bcaaf5c519ffc308b393a4e1b00c122653d8932f4`;
+- `hdiutil verify`: valid;
+- `unzip -t`: no errors;
+- desktop beta doctor: ready, 9 pass, 0 warning, 1 expected server-health
+  skip, 0 fail;
+- packaged clean-profile smoke: ready, 11 pass, 0 fail;
+- clean-profile test data removed: yes;
+- code signed with Developer ID: no;
+- notarized: no;
+- publishing enabled: no.
+
+This artifact may be shared only with named internal testers who receive the
+unsigned-build warning. It is not the public macOS release.
+
 ## Exact-Source Verification
 
 | Gate | Result |
