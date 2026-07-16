@@ -2434,10 +2434,10 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {[
                   "Non-custodial",
-                  "Read/preview-only",
-                  "Preview Only",
+                  "Automatic execution off",
+                  "Polymarket preview only",
                   "External signer required",
-                  "No market submit",
+                  "Wallet approval per Hyperliquid order",
                 ].map((item) => (
                   <div key={item} className="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200">
                     {item}

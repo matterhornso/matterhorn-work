@@ -84,17 +84,25 @@ for (const phrase of [
 for (const phrase of [
   "Desktop release checks",
   "Bittensor: Read and preview",
-  "Hyperliquid/Polymarket: Preview only",
+  "Hyperliquid: Wallet-approved trading",
+  "Polymarket remains preview only",
   "Longevity workflow: Standalone",
   "Open install guide",
   "Copy doctor",
   "Copy tester build",
-  "No market submit",
+  "Automatic execution off",
+  "Wallet approval per Hyperliquid order",
   "External signer required",
   "Not Web3, not medical advice, and no live payments or email.",
 ]) {
   assert.ok(panel.includes(phrase), `Demo tab should include desktop beta copy: ${phrase}`);
 }
+
+assert.equal(
+  doctor.includes("Hyperliquid and Polymarket: preview/external-signer readiness only; no live submit"),
+  false,
+  "release doctor must not collapse wallet-approved Hyperliquid execution into Polymarket's preview-only boundary",
+);
 
 assert.ok(workflow.includes("pnpm test:desktop-beta-first-run"), "CI should run the desktop beta first-run gate");
 
@@ -118,7 +126,6 @@ assert.ok(
 );
 
 for (const forbidden of [
-  "/api/hyperliquid/orders/submit",
   "/api/polymarket/orders/submit",
   "privateKey:",
   "apiSecret:",
@@ -131,6 +138,21 @@ for (const forbidden of [
   assert.equal(doc.includes(forbidden), false, `guide must not expose ${forbidden}`);
   assert.equal(panel.includes(forbidden), false, `panel must not expose ${forbidden}`);
 }
+
+assert.equal(
+  doctor.includes("/api/hyperliquid/orders/submit"),
+  false,
+  "release diagnostics must not expose the internal Hyperliquid submit route",
+);
+assert.equal(
+  doc.includes("/api/hyperliquid/orders/submit"),
+  false,
+  "tester guidance must describe the reviewed wallet flow without exposing an internal submit route",
+);
+assert.ok(
+  panel.includes('"/api/hyperliquid/orders/submit"'),
+  "the reviewed Hyperliquid wallet ticket should call the exact-intent submit route",
+);
 
 const fixtureDir = "/tmp/matterhorn-desktop-beta-first-run-test";
 rmSync(fixtureDir, { recursive: true, force: true });

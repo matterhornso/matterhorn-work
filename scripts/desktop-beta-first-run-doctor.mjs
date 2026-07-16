@@ -238,14 +238,14 @@ const checks = [
   check(
     "ui.release_boundary",
     "Customer-facing release boundary",
-    panelText.includes("Read and preview") && panelText.includes("Preview only") && panelText.includes("Matterhorn uses public reads and external signer/client handoffs") ? "pass" : "fail",
-    "Stable UI distinguishes public reads, unsigned previews, and external handoffs without beta-era labels.",
+    panelText.includes("Read and preview") && panelText.includes("Hyperliquid: Wallet-approved trading") && panelText.includes("Polymarket remains preview only") && panelText.includes("Matterhorn uses public reads and external signer/client handoffs") ? "pass" : "fail",
+    "Stable UI distinguishes public reads, wallet-approved Hyperliquid execution, and preview-only Polymarket handoffs.",
   ),
   check(
     "safety.copy",
     "Safety copy",
-    FORBIDDEN_RE.test(panelText) && panelText.includes("No market submit") && panelText.includes("External signer required") ? "pass" : "fail",
-    "UI contains explicit rejection of secrets/custody/live market submission.",
+    FORBIDDEN_RE.test(panelText) && panelText.includes("Automatic execution off") && panelText.includes("Wallet approval per Hyperliquid order") && panelText.includes("External signer required") ? "pass" : "fail",
+    "UI rejects secrets, custody, and automatic execution while requiring explicit wallet approval for Hyperliquid orders.",
   ),
   inspectArtifactDir(config.artifactDir),
   ...(await liveServerChecks(config)),
@@ -277,7 +277,7 @@ const report = {
     ],
     customerBoundary: {
       bittensor: "Bittensor: public read, unsigned preview, and external-signer workflow",
-      hyperliquidPolymarket: "Hyperliquid and Polymarket: preview/external-signer readiness only; no live submit",
+      hyperliquidPolymarket: "Hyperliquid: exact-intent connected-wallet execution; Polymarket: preview/external-signer only",
       servicesWellness: "Services and wellness: workflow packs only; unavailable operator services remain disabled",
     },
   },
