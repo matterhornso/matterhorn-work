@@ -47,6 +47,8 @@ for (const required of [
   "/api/hyperliquid/orders/external-sign-request",
   "/api/hyperliquid/orders/external-artifact/validate",
   "/api/hyperliquid/orders/receipt",
+  "/api/hyperliquid/orders/submit",
+  "isHyperliquidExecutionEnabled()",
   "/api/polymarket/orders/handoff",
   "/api/polymarket/orders/external-sign-request",
   "/api/polymarket/orders/external-artifact/validate",
@@ -133,12 +135,13 @@ for (const required of [
 }
 
 for (const required of [
-  "Current Safe Execution Chain",
+  "Connected-Wallet Hyperliquid Execution",
+  "Legacy Preview And Evidence Chain",
   "matterhorn.market.external-sign-request.v1",
   "matterhorn.market.execution-chain-guide.v1",
   "matterhorn.market.redacted-signed-artifact-envelope.v1",
   "matterhorn.market.artifact-validation.v1",
-  "This chain is deliberately incomplete for live execution",
+  "This legacy chain remains deliberately incomplete for agent and operator automation",
 ]) {
   assert.ok(readinessDoc.includes(required), `security gate doc should describe safe chain: ${required}`);
 }
@@ -176,6 +179,25 @@ for (const required of [
 }
 
 for (const forbidden of [
+  "/api/polymarket/orders/submit",
+  "/orders/sign",
+  "/exchange/submit",
+  "submitSigned(",
+  "privateKey:",
+  "apiSecret:",
+  "rawSignature:",
+  "signedPayload:",
+]) {
+  for (const [label, surface] of [
+    ["server", server],
+    ["Demo panel", panel],
+    ["coverage matrix", matrix],
+  ]) {
+    assert.equal(surface.includes(forbidden), false, `${label} must not expose forbidden chain surface ${forbidden}`);
+  }
+}
+
+for (const forbidden of [
   "/api/hyperliquid/orders/submit",
   "/api/polymarket/orders/submit",
   "/orders/submit",
@@ -188,14 +210,22 @@ for (const forbidden of [
   "signedPayload:",
 ]) {
   for (const [label, surface] of [
-    ["server", server],
     ["MCP", mcp],
     ["CLI", cli],
-    ["Demo panel", panel],
-    ["coverage matrix", matrix],
   ]) {
     assert.equal(surface.includes(forbidden), false, `${label} must not expose forbidden chain surface ${forbidden}`);
   }
 }
+
+assert.ok(
+  server.includes('addRoute(routes, "POST", "/api/hyperliquid/orders/submit", "client"'),
+  "server should expose only a client-authenticated Hyperliquid submit route",
+);
+assert.ok(panel.includes('"/api/hyperliquid/orders/submit"'), "web Hyperliquid ticket should call the guarded submit route");
+assert.ok(panel.includes("signTypedData"), "web Hyperliquid ticket should require connected-wallet typed-data approval");
+assert.ok(
+  matrix.includes("submit requires a matching connected-wallet signature and deployment kill switch"),
+  "coverage matrix should document the manual Hyperliquid execution exception",
+);
 
 console.log("Market execution chain aggregate gate passed.");

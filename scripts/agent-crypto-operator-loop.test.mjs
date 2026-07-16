@@ -62,7 +62,7 @@ for (const phrase of [
 
 for (const phrase of [
   "Unified crypto chat router",
-  "Hyperliquid read/preview chat",
+  "Hyperliquid read, preview, and web execution",
   "Polymarket read/preview chat",
   "test:agent-crypto-operator-loop",
   "test:unified-crypto-chat",

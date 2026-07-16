@@ -2,7 +2,7 @@
 
 A customer-facing overview of what Matterhorn Work enables across Web3 trading, wellness creation, and decentralized services — all through chat, no separate apps required.
 
-> **Safety first:** Every use case below is bounded by the [Matterhorn Workflow Contract](../matterhorn-workflow-contract.md). No live market submission, no custody, no signing, no secrets, and no live execution of external services. Hyperliquid and Polymarket remain preview-only. Wellness remains artifact/workflow support. Decentralized services remain planned.
+> **Safety first:** Every use case below is bounded by the [Matterhorn Workflow Contract](../matterhorn-workflow-contract.md). Matterhorn never takes custody or accepts keys and API secrets. Chat, MCP, CLI, watches, and agent prompts never submit. Hyperliquid supports a separate manual connected-wallet order ticket after exact review and wallet approval; Polymarket remains preview-only. Wellness remains artifact/workflow support. Decentralized services remain planned.
 
 ---
 

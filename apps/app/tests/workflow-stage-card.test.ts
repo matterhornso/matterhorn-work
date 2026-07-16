@@ -204,21 +204,25 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
 
   test("keeps desk safety copy behind an info popover", () => {
     const src = readAppSource("domains/session/chat/session-page.tsx");
+    const surfaceSrc = readAppSource("domains/session/surface/session-surface.tsx");
 
     expect(src).toContain("deskSafetyInfo");
     expect(src).toContain("desk safety info");
-    expect(src).toContain("Matterhorn never submits orders inside the app");
+    expect(src).toContain("Agent tasks run market and account checks and prepare order context, but cannot submit.");
+    expect(src).toContain("Manual execution is available only in the Hyperliquid panel after exact review and connected-wallet approval.");
+    expect(surfaceSrc).toContain("Agent tasks run market and account checks and prepare order context, but cannot submit.");
+    expect(surfaceSrc).toContain("Manual execution is available only in the Hyperliquid panel after exact review and connected-wallet approval.");
     expect(src).toContain("Matterhorn never places bets inside the app");
     expect(src).toContain("<PopoverTrigger");
     expect(src).toContain("<PopoverContent");
     expect(src).not.toContain("Boundary:");
   });
 
-  test("uses positive task copy for preview-only desks", () => {
+  test("uses positive task copy for protocol desks", () => {
     const src = readAppSource("domains/session/chat/session-page.tsx");
 
     expect(src).toContain("Summarize spread, depth, and stale-data warnings.");
-    expect(src).toContain("Draft an external-client handoff you can review outside Matterhorn.");
+    expect(src).toContain("Draft an order for exact review and connected-wallet approval.");
     expect(src).toContain("Draft a non-custodial wallet handoff you can review externally.");
   });
 

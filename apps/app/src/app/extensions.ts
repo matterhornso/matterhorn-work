@@ -189,7 +189,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     icon: { src: "/matterhorn-wallet.svg" },
     composer: { prompt: "Use Matterhorn protocol chat. " },
     setup: {
-      instructions: "Protocol workflows are available as separate Bittensor, Hyperliquid, and Polymarket desks in the session rail. Market routes prepare external handoffs only; signing and submission stay external.",
+      instructions: "Protocol workflows are available as separate Bittensor, Hyperliquid, and Polymarket desks in the session rail. Agent, chat, and MCP routes prepare reads, previews, and drafts only. Hyperliquid orders can be submitted only from the dedicated web ticket after exact review and connected-wallet approval; Bittensor and Polymarket actions remain external handoffs.",
       primaryCta: "Open protocol desks",
     },
     resources: [
@@ -261,12 +261,12 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     schemaVersion: 1,
     id: "hyperliquid",
     name: "Hyperliquid",
-    description: "Read markets, orderbooks, account exposure, watches, and prepare external trade handoffs with live submission off.",
+    description: "Read markets, orderbooks, account exposure, and watches, then review exact orders for connected-wallet approval in the web app.",
     source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
     icon: { src: "/assets/desks/hyperliquid/logo-dark.svg" },
     composer: { prompt: "Use Matterhorn protocol chat. For Hyperliquid, " },
     setup: {
-      instructions: "Hyperliquid is external-handoff-only in this build. Matterhorn does not accept API secrets, raw signatures, signed payloads, or live order submission.",
+      instructions: "Hyperliquid agent, chat, MCP, CLI, and watch routes never submit orders. Manual execution is available only in the dedicated web ticket after exact review and connected-wallet approval. Never paste API secrets, private keys, raw signatures, signed payloads, or custody credentials; Matterhorn verifies the wallet signature for the one-time relay and does not store it.",
       primaryCta: "Open Hyperliquid desk",
     },
     resources: [

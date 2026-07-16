@@ -89,10 +89,14 @@ assertIncludes(activePolymarketAgent, "If an event or market reports restricted:
 assertIncludes(activePolymarketAgent, "websearch: deny", "active Polymarket web search runtime denial");
 assertIncludes(deskAgents, "For a simple subnet discovery or comparison, do not delegate to subagents", "Bittensor bounded discovery guidance");
 assertIncludes(deskAgents, "Call the Bittensor desk tool exactly once", "Bittensor single-call guidance");
-assertIncludes(deskAgents, "answer from the bounded result instead of searching elsewhere", "Bittensor fallback guidance");
+assertIncludes(deskAgents, "sole source for subnet IDs, names, and capabilities", "Bittensor evidence-only guidance");
+assertIncludes(deskAgents, "current subnet recommendations are unavailable", "Bittensor unavailable-data guidance");
+assertIncludes(deskAgents, "do not name subnet IDs, subnet names, or capabilities", "Bittensor no-invention guidance");
 assertIncludes(activeBittensorAgent, "For a simple subnet discovery or comparison, do not delegate to subagents", "active Bittensor bounded discovery guidance");
 assertIncludes(activeBittensorAgent, "Call the Bittensor desk tool exactly once", "active Bittensor single-call guidance");
-assertIncludes(activeBittensorAgent, "answer from the bounded result instead of searching elsewhere", "active Bittensor fallback guidance");
+assertIncludes(activeBittensorAgent, "sole source for subnet IDs, names, and capabilities", "active Bittensor evidence-only guidance");
+assertIncludes(activeBittensorAgent, "current subnet recommendations are unavailable", "active Bittensor unavailable-data guidance");
+assertIncludes(activeBittensorAgent, "do not name subnet IDs, subnet names, or capabilities", "active Bittensor no-invention guidance");
 assertIncludes(activeBittensorAgent, "websearch: deny", "active Bittensor web search runtime denial");
 assertIncludes(activeBittensorAgent, '"*": false', "active Bittensor deny-by-default tool map");
 assertIncludes(activeBittensorAgent, '"matterhorn-work_matterhorn_bittensor_chat": true', "active Bittensor MCP tool allowlist");

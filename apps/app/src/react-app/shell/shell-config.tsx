@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import { createContext, useCallback, use, useMemo, useState, type ReactNode } from "react";
+import { MATTERHORN_LAUNCH_FEATURES } from "../../app/lib/launch-features";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -40,7 +41,7 @@ export const DEFAULT_SHELL_CONFIG: ShellConfig = {
   sidebar: true,
   docsButton: true,
   feedbackButton: true,
-  cloudSignin: true,
+  cloudSignin: MATTERHORN_LAUNCH_FEATURES.cloud,
   welcomePage: true,
   starterCards: true,
   modelPicker: true,
@@ -60,7 +61,8 @@ function readShellConfig(): ShellConfig {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SHELL_CONFIG;
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_SHELL_CONFIG, ...parsed };
+    const config = { ...DEFAULT_SHELL_CONFIG, ...parsed };
+    return MATTERHORN_LAUNCH_FEATURES.cloud ? config : { ...config, cloudSignin: false };
   } catch {
     return DEFAULT_SHELL_CONFIG;
   }
@@ -73,6 +75,10 @@ function writeShellConfig(config: ShellConfig): void {
   } catch {
     // Ignore storage errors.
   }
+}
+
+function applyLaunchShellPolicy(config: ShellConfig): ShellConfig {
+  return MATTERHORN_LAUNCH_FEATURES.cloud ? config : { ...config, cloudSignin: false };
 }
 
 /* ------------------------------------------------------------------ */
@@ -92,7 +98,7 @@ export function ShellConfigProvider({ children }: { children: ReactNode }) {
 
   const update = useCallback((patch: Partial<ShellConfig>) => {
     setConfig((prev) => {
-      const next = { ...prev, ...patch };
+      const next = applyLaunchShellPolicy({ ...prev, ...patch });
       writeShellConfig(next);
       return next;
     });

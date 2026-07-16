@@ -24,14 +24,16 @@ assert.equal(
 for (const phrase of [
   '"/api/crypto/readiness"',
   "Bittensor readiness",
-  "Hyperliquid read/preview",
+  "Hyperliquid wallet execution",
   "Polymarket read/preview",
   "Market execution safety",
   "pnpm smoke:customer-ready-crypto",
   "matterhorn-work crypto customer-packet",
   "nonCustodial: true",
-  "liveSubmissionEnabled: false",
-  "canSubmit: false",
+  "liveSubmissionEnabled: hyperliquidExecution",
+  "canSubmit: hyperliquidExecution",
+  "requiresWalletApproval: true",
+  "autoExecutionEnabled: false",
   "Attach offline smoke/CI evidence",
 ]) {
   assert.ok(readinessRoute.includes(phrase), `server crypto readiness route should include ${phrase}`);

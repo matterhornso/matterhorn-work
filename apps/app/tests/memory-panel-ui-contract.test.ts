@@ -64,6 +64,18 @@ describe("Memory panel UI contract", () => {
     expect(source).toContain("Save memory");
   });
 
+  test("visually separates interactive controls from passive memory states", () => {
+    const source = readAppSource("domains/memory/memory-panel.tsx");
+
+    expect(source).toContain("MEMORY_ICON_ACTION_CLASS");
+    expect(source).toContain("MEMORY_SECONDARY_ACTION_CLASS");
+    expect(source).toContain("bg-dls-surface-raised text-dls-secondary");
+    expect(source).toContain("bg-dls-surface-raised text-dls-text");
+    expect(source).toContain("bg-dls-surface-muted/60 text-dls-text");
+    expect(source).toContain("hover:bg-dls-surface-muted/[0.42]");
+    expect(source).not.toContain("hover:bg-transparent hover:text-dls-text");
+  });
+
   test("uses workspace-scoped memory APIs when a workspace id is available", () => {
     const source = readAppSource("domains/memory/memory-panel.tsx");
 

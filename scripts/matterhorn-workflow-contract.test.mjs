@@ -127,8 +127,15 @@ for (const [name, block] of Object.entries(blocks)) {
 
 // 7. All fixtures disable live execution and submission.
 for (const [name, block] of Object.entries(blocks)) {
-  assert.ok(block.includes("liveExecutionEnabled: false"), `${name} must set liveExecutionEnabled: false`);
-  assert.ok(block.includes("canSubmit: false"), `${name} must set canSubmit: false`);
+  const hyperliquidExecution = name === "HYPERLIQUID";
+  assert.ok(
+    block.includes(`liveExecutionEnabled: ${hyperliquidExecution ? "true" : "false"}`),
+    `${name} must declare the expected execution boundary`,
+  );
+  assert.ok(
+    block.includes(`canSubmit: ${hyperliquidExecution ? "true" : "false"}`),
+    `${name} must declare the expected submit boundary`,
+  );
 }
 
 // 8. Market fixtures remain read/preview only.
@@ -241,22 +248,33 @@ for (const [name, block] of Object.entries(protocolBlocks)) {
   assert.ok(/supportedCardKinds:[\s\S]*?"/.test(block), `${name} must have at least one supported card kind`);
   assert.ok(block.includes("demoPrompt:"), `${name} must include demoPrompt`);
   assert.ok(block.includes("launchBehavior:"), `${name} must include launchBehavior`);
-  assert.ok(block.includes("liveExecutionEnabled: false"), `${name} must set liveExecutionEnabled: false`);
-  assert.ok(block.includes("canSubmit: false"), `${name} must set canSubmit: false`);
+  const hyperliquidExecution = name === "HYPERLIQUID";
+  assert.ok(
+    block.includes(`liveExecutionEnabled: ${hyperliquidExecution ? "true" : "false"}`),
+    `${name} must declare the expected execution boundary`,
+  );
+  assert.ok(
+    block.includes(`canSubmit: ${hyperliquidExecution ? "true" : "false"}`),
+    `${name} must declare the expected submit boundary`,
+  );
   assert.equal(block.includes("acceptsSecrets: true"), false, `${name} must not accept secrets`);
   assert.equal(block.includes("acceptsPrivateKeys: true"), false, `${name} must not accept private keys`);
   assert.equal(block.includes("acceptsRawSignatures: true"), false, `${name} must not accept raw signatures`);
   assert.equal(block.includes("acceptsApiSecrets: true"), false, `${name} must not accept API secrets`);
 }
 
-// Market protocol workspaces must not enable live submission or custody.
-for (const id of ["hyperliquid", "polymarket"]) {
-  const block = protocolBlocks[id.toUpperCase()];
-  assert.ok(block, `${id} protocol workspace manifest block must exist`);
-  assert.ok(block.includes('customerStatus: "preview_only"'), `${id} must be preview_only`);
-  assert.ok(block.includes("canExecute: false"), `${id} must set canExecute: false`);
-  assert.ok(block.includes("requiresExternalSigner: false"), `${id} must not require external signer`);
-}
+// Hyperliquid supports manual wallet-approved execution. Polymarket remains preview-only.
+const hyperliquidProtocolBlock = protocolBlocks.HYPERLIQUID;
+assert.ok(hyperliquidProtocolBlock.includes('customerStatus: "live"'), "Hyperliquid must be live");
+assert.ok(hyperliquidProtocolBlock.includes("canExecute: true"), "Hyperliquid must support execution");
+assert.ok(hyperliquidProtocolBlock.includes("canSubmit: true"), "Hyperliquid must support wallet-approved submission");
+assert.ok(hyperliquidProtocolBlock.includes("requiresExternalSigner: false"), "Hyperliquid must use the connected wallet flow");
+
+const polymarketProtocolBlock = protocolBlocks.POLYMARKET;
+assert.ok(polymarketProtocolBlock.includes('customerStatus: "preview_only"'), "Polymarket must be preview_only");
+assert.ok(polymarketProtocolBlock.includes("canExecute: false"), "Polymarket must not execute");
+assert.ok(polymarketProtocolBlock.includes("canSubmit: false"), "Polymarket must not submit");
+assert.ok(polymarketProtocolBlock.includes("requiresExternalSigner: false"), "Polymarket must not accept signer material");
 
 const mappingBlock = types.slice(types.indexOf("MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE"));
 for (const id of protocolWorkspaceIds) {

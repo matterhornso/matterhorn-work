@@ -137,11 +137,15 @@ const server = mustContain("apps/server/src/server.ts", [
   "findForbiddenHyperliquidCredentialInput",
   "findForbiddenPolymarketCredentialInput",
   "market_secret_rejected",
+  "/api/hyperliquid/orders/execution-intent",
+  "/api/hyperliquid/orders/submit",
+  "isHyperliquidExecutionEnabled",
+  "hyperliquid_execution_disabled",
 ]);
 
 mustNotContain("apps/server/src/server.ts", [
-  "/api/hyperliquid/orders/submit",
   "/api/polymarket/orders/submit",
+  "/api/polymarket/orders/sign",
 ]);
 
 const hyperliquidRoutes = sectionBetween(server, '"/api/hyperliquid/markets"', '"/api/polymarket/markets"');
@@ -150,7 +154,14 @@ mustContain("apps/server/src/server.ts", [
   "Hyperliquid receipt must contain only public status",
   "verifyHyperliquidReceipt",
 ]);
-assertNoSubmitRoute("Hyperliquid server routes", hyperliquidRoutes);
+for (const required of [
+  "/api/hyperliquid/orders/execution-intent",
+  "/api/hyperliquid/orders/submit",
+  "Unexpected execution-intent field",
+]) {
+  if (hyperliquidRoutes.includes(required)) pass(`Hyperliquid server routes contain ${required}`);
+  else fail(`Hyperliquid server routes contain ${required}`, "missing");
+}
 
 const polymarketRoutes = sectionBetween(server, '"/api/polymarket/markets"', '"/api/bittensor/subnets"');
 mustContain("apps/server/src/server.ts", [
@@ -159,6 +170,23 @@ mustContain("apps/server/src/server.ts", [
   "verifyPolymarketReceipt",
 ]);
 assertNoSubmitRoute("Polymarket server routes", polymarketRoutes);
+
+const hyperliquidExecution = mustContain("apps/server/src/tools/hyperliquid-live-execution.ts", [
+  "recoverTypedDataAddress",
+  "Wallet signature does not authorize this exact order intent",
+  "oneTimeSubmission: true",
+  "privateKeysAccepted: false",
+  "apiSecretsAccepted: false",
+  "expiresAfter: Date.parse(intent.expiresAt)",
+  "hashHyperliquidAction(action, nonce, null, expiresAtMs)",
+  "This execution intent is already being submitted",
+  "SUBMIT LIVE ORDER",
+  "MATTERHORN_HYPERLIQUID_MAX_ORDER_USDC",
+]);
+for (const forbidden of ["privateKey =", "apiSecret =", "seedPhrase", "mnemonic"]) {
+  if (hyperliquidExecution.includes(forbidden)) fail(`Hyperliquid execution excludes ${forbidden}`, "present");
+  else pass(`Hyperliquid execution excludes ${forbidden}`);
+}
 
 const mcp = mustContain("packages/matterhorn-work-mcp/index.mjs", [
   "matterhorn_hyperliquid_prepare_handoff",
@@ -201,6 +229,13 @@ mustContain("docs/hyperliquid-read-preview.md", [
   "It does not accept API secrets, private keys, signatures, or signed payloads",
   "canSubmit: false",
   "requiresClientValidation",
+]);
+
+mustContain("docs/market-execution-readiness-security-gate.md", [
+  "Connected-Wallet Hyperliquid Execution",
+  "MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED",
+  "SUBMIT LIVE ORDER",
+  "Polymarket remains read/preview only",
 ]);
 
 mustContain("docs/polymarket-read-preview.md", [

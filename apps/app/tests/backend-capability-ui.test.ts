@@ -50,7 +50,7 @@ describe("Backend capability status helpers", () => {
   test("maps statuses to truthful UI labels", () => {
     expect(capabilityStatusLabel("working")).toBe("Working");
     expect(capabilityStatusLabel("needs_setup")).toBe("Needs setup");
-    expect(capabilityStatusLabel("preview")).toBe("Early access");
+    expect(capabilityStatusLabel("preview")).toBe("Limited release");
     expect(capabilityStatusLabel("unsupported")).toBe("Not supported here");
     expect(capabilityStatusLabel("error")).toBe("Unavailable");
     expect(capabilityStatusLabel("unavailable")).toBe("Unavailable");
@@ -74,7 +74,7 @@ describe("Backend capability status helpers", () => {
 
     expect(copy.label).toBe("Not supported here");
     expect(copy.hint).toContain("Sui direct wallet connect is not available in this runtime.");
-    expect(copy.hint).toContain("Backend handoffs and receipt evidence remain available");
+    expect(copy.hint).toContain("Transaction drafts and receipt evidence remain available");
     expect(copy.hint).not.toContain("not implemented");
   });
 });
@@ -195,7 +195,7 @@ describe("Backend capability status badge", () => {
   test.each([
     ["working", "Working"],
     ["needs_setup", "Needs setup"],
-    ["preview", "Early access"],
+    ["preview", "Limited release"],
     ["unsupported", "Not supported here"],
     ["error", "Unavailable"],
     ["unavailable", "Unavailable"],
@@ -224,9 +224,9 @@ describe("Backend capabilities section renders all capability states", () => {
     expect(html).toContain("NFT marketplace listing");
     expect(html).toContain("Kiosk/TransferPolicy needed");
     expect(html).toContain("MATTERHORN_SUI_KIOSK_PACKAGE_ID");
-    expect(html).toContain("Direct connect");
-    expect(html).toContain("Public read / external signer");
-    expect(html).toContain("Wallet-standard connect");
+    expect(html).toContain("Connect here");
+    expect(html).toContain("Read here · Prepare only");
+    expect(html).toContain("Connect here · Limited release");
     expect(html).toContain("Machine / global");
     expect(html).toContain("Structured feedback is stored locally for evaluation, routing, and product quality only.");
     expect(html).toContain("Route: /settings/wallet");
@@ -238,12 +238,12 @@ describe("Backend capabilities section renders all capability states", () => {
     const html = renderCapabilitiesSection(backendCapabilitiesNeedsSetupFixture);
     expect(html).toContain("Needs setup");
     expect(html).toContain("EVM wallet");
-    expect(html).not.toContain("Direct connect");
+    expect(html).toContain("Connect here · Limited release");
   });
 
   test("preview state", () => {
     const html = renderCapabilitiesSection(backendCapabilitiesPreviewFixture);
-    expect(html).toContain("Early access");
+    expect(html).toContain("Limited release");
     expect(html).toContain("Cloud teams");
     expect(html).toContain("Sui wallet");
     expect(html).toContain("Structured feedback is in preview.");
@@ -288,10 +288,10 @@ describe("Profile capability status renders all states", () => {
 
   test("disabled Cloud is distinct from the working local profile", () => {
     const html = renderProfile(backendCapabilitiesWorkingFixture, null, false);
-    expect(html).toContain("Not available in this build");
-    expect(html).toContain("Matterhorn Cloud is disabled in this build. Local use needs no account.");
     expect(html).toContain("Local teammate access");
     expect(html).toContain("Working");
+    expect(html).not.toContain("Cloud account");
+    expect(html).not.toContain("Cloud teammates");
     expect(html).not.toContain("Platform setup");
   });
 
@@ -302,8 +302,8 @@ describe("Profile capability status renders all states", () => {
     expect(html).toContain("Preferences and workspace access");
     expect(html).toContain("Local teammate access");
     expect(html).toContain("Technical details");
-    expect(html).toContain("Not included");
     expect(html).not.toContain("Cloud account");
+    expect(html).not.toContain("Cloud teammates");
   });
 
   test("needs_setup profile", () => {

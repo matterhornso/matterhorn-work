@@ -212,6 +212,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts --prefer-offline
 
+      - name: Typecheck web app
+        run: pnpm --filter @matterhorn-work/app typecheck
+
+      - name: Typecheck backend
+        run: pnpm --dir apps/server typecheck
+
+      - name: Run full web app test suite
+        run: pnpm --filter @matterhorn-work/app test
+
+      - name: Run full backend test suite
+        run: pnpm --dir apps/server test
+
       - name: Validate platform safety gate wiring
         run: pnpm test:matterhorn-platform-safety-gate
 

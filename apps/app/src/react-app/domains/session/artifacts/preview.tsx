@@ -1,12 +1,12 @@
 /** @jsxImportSource react */
-import type * as React from "react";
-import { ChevronRight, Copy, Loader2 } from "lucide-react";
+import { useState, type ComponentProps } from "react";
+import { ChevronRight, Copy, Image as ImageIcon, ImageOff, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { ErrorState } from "../../shell/error-state";
 import { MarkdownBlock } from "../surface/markdown";
 
-interface PreviewLoadingProps extends React.ComponentProps<"div"> {}
+interface PreviewLoadingProps extends ComponentProps<"div"> {}
 
 export function PreviewLoading({ className, ...props }: PreviewLoadingProps) {
   return (
@@ -16,7 +16,7 @@ export function PreviewLoading({ className, ...props }: PreviewLoadingProps) {
   );
 }
 
-interface PreviewErrorProps extends React.ComponentProps<"div"> {
+interface PreviewErrorProps extends ComponentProps<"div"> {
   message: string;
 }
 
@@ -32,7 +32,7 @@ export function PreviewError({ message, className, ...props }: PreviewErrorProps
   );
 }
 
-interface PlainTextProps extends React.ComponentProps<"pre"> {
+interface PlainTextProps extends ComponentProps<"pre"> {
   content: string;
 }
 
@@ -94,7 +94,7 @@ function compactReceiptValue(value: string): string {
   return `${value.slice(0, 14)}...${value.slice(-10)}`;
 }
 
-interface StructuredJsonPreviewProps extends React.ComponentProps<"div"> {
+interface StructuredJsonPreviewProps extends ComponentProps<"div"> {
   content: string;
   receipt?: boolean;
 }
@@ -217,7 +217,7 @@ export function StructuredJsonPreview({ content, receipt = false, className, ...
   );
 }
 
-interface MarkdownPreviewProps extends React.ComponentProps<"div"> {
+interface MarkdownPreviewProps extends ComponentProps<"div"> {
   content: string;
 }
 
@@ -251,7 +251,7 @@ export function HTMLPreview({ className, ...props }: HTMLPreviewProps) {
   return <iframe src={props.url} title={props.title} className={cn("h-full w-full border-0", className)} sandbox="allow-scripts allow-same-origin" />;
 }
 
-interface ImagePreviewProps extends React.ComponentProps<"div"> {
+interface ImagePreviewProps extends ComponentProps<"div"> {
   src: string;
   alt: string;
 }
@@ -264,7 +264,83 @@ export function ImagePreview({ src, alt, className, ...props }: ImagePreviewProp
   );
 }
 
-interface PreviewUnavailableProps extends React.ComponentProps<"div"> {}
+interface GeneratedImagePreviewProps extends ComponentProps<"div"> {
+  src: string;
+  alt: string;
+  prompt?: string;
+  provider?: string;
+  model?: string;
+  size?: string;
+  mock?: boolean;
+}
+
+export function GeneratedImagePreview({
+  src,
+  alt,
+  prompt,
+  provider,
+  model,
+  size,
+  mock = false,
+  className,
+  ...props
+}: GeneratedImagePreviewProps) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const providerModel = [provider, model].filter(Boolean).join(" / ");
+
+  return (
+    <div className={cn("h-full overflow-auto px-4 py-5", className)} {...props}>
+      <div className="mx-auto grid max-w-3xl gap-4">
+        {mock ? (
+          <div className="flex min-h-56 items-center justify-center rounded-lg bg-dls-surface-raised px-6 py-10 text-center">
+            <div className="max-w-sm">
+              <div className="mx-auto flex size-10 items-center justify-center rounded-md bg-dls-surface-muted/45 text-muted-foreground">
+                <ImageIcon className="size-5" />
+              </div>
+              <h4 className="mt-3 text-sm font-semibold text-foreground">Mock preview</h4>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                This placeholder confirms the image workflow works. No production image was rendered.
+              </p>
+            </div>
+          </div>
+        ) : imageFailed ? (
+          <div className="flex min-h-56 items-center justify-center rounded-lg bg-dls-surface-raised px-6 py-10 text-center">
+            <div className="max-w-sm">
+              <ImageOff className="mx-auto size-5 text-muted-foreground" />
+              <h4 className="mt-3 text-sm font-semibold text-foreground">Preview unavailable</h4>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                The image file is saved. Download it or open it externally to inspect it.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <figure className="flex min-h-56 items-center justify-center overflow-hidden rounded-lg bg-dls-surface-raised p-3">
+            <img
+              src={src}
+              alt={alt}
+              className="max-h-[min(70vh,720px)] max-w-full rounded-md object-contain"
+              onError={() => setImageFailed(true)}
+            />
+          </figure>
+        )}
+
+        <section className="min-w-0 border-t border-dls-border-subtle pt-4">
+          <p className="text-[11px] font-medium text-muted-foreground">Prompt</p>
+          <p className="mt-1 text-sm leading-6 text-foreground">
+            {prompt || "Prompt details are unavailable for this image."}
+          </p>
+          {providerModel || size ? (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {[providerModel, size].filter(Boolean).join(" · ")}
+            </p>
+          ) : null}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+interface PreviewUnavailableProps extends ComponentProps<"div"> {}
 
 export function PreviewUnavailable({ className, ...props }: PreviewUnavailableProps) {
   return <div className={cn("p-4 text-sm text-muted-foreground", className)} {...props}>Preview unavailable. Open externally to view this file.</div>;

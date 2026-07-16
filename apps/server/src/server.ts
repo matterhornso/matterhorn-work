@@ -139,6 +139,11 @@ import {
   verifyHyperliquidReceipt,
 } from "./tools/hyperliquid.js";
 import {
+  hyperliquidExecutionIntentStore,
+  type CreateHyperliquidExecutionIntentInput,
+  type SubmitHyperliquidExecutionInput,
+} from "./tools/hyperliquid-live-execution.js";
+import {
   buildPolymarketComplianceCard,
   buildPolymarketEventListCard,
   buildPolymarketMarketDetailCard,
@@ -246,6 +251,7 @@ import {
   buildMarketExecutionChainResponse,
   buildMarketExecutionReadinessResponse,
   buildMarketSdkValidationResponse,
+  isHyperliquidExecutionEnabled,
 } from "./tools/market-execution-readiness.js";
 import {
   createMatterhornMemoryVault,
@@ -344,7 +350,7 @@ import { ReloadEventStore } from "./events.js";
 import { computeReloadFingerprint } from "./reload-fingerprint.js";
 import { startReloadWatchers } from "./reload-watcher.js";
 import { opencodeConfigPath, openworkConfigPath, projectCommandsDir, projectSkillsDir } from "./workspace-files.js";
-import { ensureDir, exists, hashToken, shortId } from "./utils.js";
+import { ensureDir, exists, hashToken, shortId, timingSafeTokenEqual } from "./utils.js";
 import { workspaceIdForPath } from "./workspaces.js";
 import { ensureWorkspaceFiles, readRawOpencodeConfig } from "./workspace-init.js";
 import { sanitizeCommandName, validateMcpName } from "./validators.js";
@@ -414,7 +420,7 @@ import {
 } from "./workspace-export-safety.js";
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
-import { serve, type ServeResult } from "./serve-node.js";
+import { serve, type ServeRequestContext, type ServeResult } from "./serve-node.js";
 import {
   createGoogleWorkspaceConnectFlowManager,
   googleWorkspaceDisconnect,
@@ -429,6 +435,7 @@ import constants from "../../../constants.json" with { type: "json" };
 
 const SERVER_VERSION = pkg.version;
 const OPENCODE_VERSION = constants.opencodeVersion.trim().replace(/^v/, "");
+
 
 const FILE_SESSION_DEFAULT_TTL_MS = 15 * 60 * 1000;
 const FILE_SESSION_MIN_TTL_MS = 30 * 1000;
@@ -697,7 +704,11 @@ const DEFAULT_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_RATE_LIMIT_MAX_REQUESTS = 1_200;
 
 type RequestRateLimiter = {
-  check: (request: Request, url: URL) => { allowed: true } | { allowed: false; retryAfterSeconds: number };
+  check: (
+    request: Request,
+    url: URL,
+    peerAddress: string | null,
+  ) => { allowed: true } | { allowed: false; retryAfterSeconds: number };
 };
 
 function createRequestRateLimiter(config: RequestRateLimitConfig | undefined): RequestRateLimiter {
@@ -705,15 +716,19 @@ function createRequestRateLimiter(config: RequestRateLimitConfig | undefined): R
   const windowMs = Math.max(1_000, Math.floor(config?.windowMs ?? DEFAULT_RATE_LIMIT_WINDOW_MS));
   const maxRequests = Math.max(1, Math.floor(config?.maxRequests ?? DEFAULT_RATE_LIMIT_MAX_REQUESTS));
   const buckets = new Map<string, { resetAt: number; count: number }>();
+  let lastSweepAt = 0;
 
   return {
-    check(request: Request, url: URL) {
+    check(request: Request, url: URL, peerAddress: string | null) {
       if (!enabled || request.method === "OPTIONS") return { allowed: true };
       const now = Date.now();
-      const client =
-        request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-        request.headers.get("x-real-ip")?.trim() ||
-        "loopback";
+      if (now - lastSweepAt >= windowMs) {
+        for (const [bucketKey, staleBucket] of buckets.entries()) {
+          if (now >= staleBucket.resetAt) buckets.delete(bucketKey);
+        }
+        lastSweepAt = now;
+      }
+      const client = peerAddress?.trim() || "unknown-peer";
       // UI polling and session hydration can be read-heavy. Keep those reads
       // from exhausting the budget used by user-triggered writes such as
       // image generation, notes, approvals, and wallet evidence.
@@ -727,9 +742,6 @@ function createRequestRateLimiter(config: RequestRateLimitConfig | undefined): R
       bucket.count += 1;
       if (bucket.count <= maxRequests) return { allowed: true };
 
-      for (const [bucketKey, staleBucket] of buckets.entries()) {
-        if (now >= staleBucket.resetAt) buckets.delete(bucketKey);
-      }
       return {
         allowed: false,
         retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
@@ -859,11 +871,11 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const serverOptions: {
     hostname: string;
     port: number;
-    fetch: (request: Request) => Response | Promise<Response>;
+    fetch: (request: Request, context: ServeRequestContext) => Response | Promise<Response>;
   } = {
     hostname: config.host,
     port: config.port,
-    fetch: async (request: Request) => {
+    fetch: async (request: Request, context: ServeRequestContext) => {
       const url = new URL(request.url);
       const startedAt = Date.now();
       let authMode: AuthMode = "none";
@@ -911,7 +923,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
         return finalize(new Response(null, { status: 204 }));
       }
 
-      const rateLimit = requestRateLimiter.check(request, url);
+      const rateLimit = requestRateLimiter.check(request, url, context.remoteAddress);
       if (!rateLimit.allowed) {
         errorMessage = "rate_limited";
         return finalize(new Response(
@@ -2208,7 +2220,13 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
       source: "matterhorn-work-server",
       payload,
     };
-    controller.enqueue(encoder.encode(`id: ${cursor}\nevent: ${type}\ndata: ${JSON.stringify(event)}\n\n`));
+    try {
+      controller.enqueue(encoder.encode(`id: ${cursor}\nevent: ${type}\ndata: ${JSON.stringify(event)}\n\n`));
+    } catch {
+      closed = true;
+      if (heartbeat) clearInterval(heartbeat);
+      return;
+    }
     sent += 1;
     if (input.maxEvents && sent >= input.maxEvents) {
       close(controller);
@@ -2416,7 +2434,7 @@ async function requireClient(request: Request, config: ServerConfig, tokens: Tok
 
 function requireHostToken(request: Request, config: ServerConfig): Actor {
   const hostToken = request.headers.get("x-matterhorn-host-token") ?? request.headers.get("x-openwork-host-token");
-  if (hostToken && hostToken === config.hostToken) {
+  if (hostToken && timingSafeTokenEqual(hostToken, config.hostToken)) {
     return { type: "host", tokenHash: hashToken(hostToken), scope: "owner" };
   }
   throw new ApiError(401, "unauthorized", "Invalid host token");
@@ -2424,7 +2442,7 @@ function requireHostToken(request: Request, config: ServerConfig): Actor {
 
 async function requireHost(request: Request, config: ServerConfig, tokens: TokenService): Promise<Actor> {
   const hostToken = request.headers.get("x-matterhorn-host-token") ?? request.headers.get("x-openwork-host-token");
-  if (hostToken && hostToken === config.hostToken) {
+  if (hostToken && timingSafeTokenEqual(hostToken, config.hostToken)) {
     return { type: "host", tokenHash: hashToken(hostToken), scope: "owner" };
   }
 
@@ -2787,7 +2805,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     ...capability(
       "preview",
       "Sui wallet",
-      "Sui wallet-standard connect is wired through the current Mysten dApp Kit React packages for account reads and handoffs; signing stays in the user's wallet.",
+      "Connect a supported Sui wallet in the web app for account reads and transaction previews. The user reviews and signs every transaction in that wallet.",
       {
         recommendedPackages: ["@mysten/dapp-kit-react", "@mysten/dapp-kit-core", "@mysten/sui"],
         configuredNetworks: ["sui-testnet", "sui-mainnet"],
@@ -2808,7 +2826,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     runtimeSupport: {
       web: {
         runtime: "web",
-        ...capability("preview", "Web wallet-standard connect", "Sui wallet-standard wallets can connect in the web app through Mysten dApp Kit. Signing stays in the wallet."),
+        ...capability("preview", "Web wallet-standard connect", "Connect a supported Sui wallet in the web app. The user reviews and signs every transaction in that wallet."),
         custody: false,
         directConnect: true,
         publicRead: true,
@@ -2817,7 +2835,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       desktop: {
         runtime: "desktop",
-        ...capability("preview", "Desktop external handoff", "Desktop can prepare Sui reads, previews, and receipts. Signing happens in the user's Sui wallet or protocol client outside Matterhorn."),
+        ...capability("preview", "Desktop external handoff", "Desktop can prepare Sui reads, transaction drafts, and receipts. The user reviews, signs, and submits them in a Sui wallet or protocol client outside Matterhorn."),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -2826,7 +2844,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       },
       electron: {
         runtime: "electron",
-        ...capability("preview", "Electron external handoff", "Electron can prepare Sui reads, previews, and receipts. Signing happens in the user's Sui wallet or protocol client outside Matterhorn."),
+        ...capability("preview", "Electron external handoff", "Electron can prepare Sui reads, transaction drafts, and receipts. The user reviews, signs, and submits them in a Sui wallet or protocol client outside Matterhorn."),
         custody: false,
         directConnect: false,
         publicRead: true,
@@ -4676,14 +4694,25 @@ export function isSupportedWorkspaceTextFilePath(relativePath: string): boolean 
   );
 }
 
-function resolveSafeChildPath(root: string, child: string): string {
-  const rootResolved = resolve(root);
+export function resolveSafeChildPath(root: string, child: string): string {
+  const rootResolved = realpathSync(resolve(root));
   const candidate = resolve(rootResolved, child);
   if (candidate === rootResolved) {
     throw new ApiError(400, "invalid_path", "Path must point to a file");
   }
   if (!candidate.startsWith(rootResolved + sep)) {
     throw new ApiError(400, "invalid_path", "Path traversal is not allowed");
+  }
+
+  let existingAncestor = candidate;
+  while (!existsSync(existingAncestor)) {
+    const parent = dirname(existingAncestor);
+    if (parent === existingAncestor) break;
+    existingAncestor = parent;
+  }
+  const resolvedAncestor = realpathSync(existingAncestor);
+  if (resolvedAncestor !== rootResolved && !resolvedAncestor.startsWith(rootResolved + sep)) {
+    throw new ApiError(400, "invalid_path", "Path traversal through a symbolic link is not allowed");
   }
   return candidate;
 }
@@ -9781,6 +9810,7 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/crypto/readiness", "client", async () => {
     const bittensor = await auditBittensorReadiness();
+    const hyperliquidExecution = isHyperliquidExecutionEnabled();
     const checks = [
       {
         id: "bittensor.readiness",
@@ -9791,10 +9821,12 @@ function createRoutes(
           : "Review Bittensor blockers or warnings before production use.",
       },
       {
-        id: "hyperliquid.read_preview",
-        label: "Hyperliquid read/preview",
-        status: "pass" as const,
-        summary: "Hyperliquid is limited to read-only data, unsigned previews, external signer handoff, and public receipt evidence.",
+        id: "hyperliquid.wallet_execution",
+        label: "Hyperliquid wallet execution",
+        status: hyperliquidExecution ? "pass" as const : "warning" as const,
+        summary: hyperliquidExecution
+          ? "Hyperliquid supports reads plus short-lived, one-time order intents signed by the connected wallet before submission."
+          : "Hyperliquid reads and previews are available; wallet execution is disabled by the deployment kill switch.",
       },
       {
         id: "polymarket.read_preview",
@@ -9806,7 +9838,9 @@ function createRoutes(
         id: "market.execution_safety",
         label: "Market execution safety",
         status: "pass" as const,
-        summary: "Matterhorn exposes no live Hyperliquid or Polymarket submit route and does not accept signing secrets.",
+        summary: hyperliquidExecution
+          ? "Hyperliquid submission is bound to a server-issued intent and recovered signer address. Polymarket remains preview-only. Matterhorn accepts no private keys or API secrets."
+          : "Hyperliquid execution is disabled. Polymarket remains preview-only. Matterhorn accepts no private keys or API secrets.",
       },
     ];
     const blockers = [
@@ -9833,8 +9867,10 @@ function createRoutes(
         : bittensor.nextActions,
       safety: {
         nonCustodial: true,
-        liveSubmissionEnabled: false,
-        canSubmit: false,
+        liveSubmissionEnabled: hyperliquidExecution,
+        canSubmit: hyperliquidExecution,
+        requiresWalletApproval: true,
+        autoExecutionEnabled: false,
       },
     };
     return jsonResponse({
@@ -9844,14 +9880,14 @@ function createRoutes(
         kind: "readiness_report",
         title: "Crypto customer readiness",
         summary: ready
-          ? "Runtime crypto surfaces are ready within the stated read, preview, and external-handoff boundaries after offline smoke evidence is attached."
+          ? "Runtime crypto surfaces are ready within their stated boundaries: Hyperliquid uses wallet-approved execution, while other write paths remain external or preview-only."
           : "Resolve readiness blockers before production use.",
         tone: ready ? "good" : "danger",
         items: [
           { label: "Bittensor", value: bittensor.status, tone: bittensor.status === "pass" ? "good" : bittensor.status === "warning" ? "warning" : "danger" },
-          { label: "Hyperliquid", value: "Read/preview only", tone: "good" },
+          { label: "Hyperliquid", value: hyperliquidExecution ? "Wallet-approved execution" : "Execution disabled", tone: hyperliquidExecution ? "good" : "warning" },
           { label: "Polymarket", value: "Read/preview only", tone: "good" },
-          { label: "Live submission", value: "Off", tone: "good" },
+          { label: "Automatic execution", value: "Off", tone: "good" },
         ],
         warnings,
         data: { report },
@@ -10024,6 +10060,57 @@ function createRoutes(
     }
     const verification = verifyHyperliquidReceipt(handoff, coerceHyperliquidReceiptInput(body.receipt));
     return jsonResponse({ success: verification.ok, ...verification });
+  });
+
+  addRoute(routes, "POST", "/api/hyperliquid/orders/execution-intent", "client", async (ctx) => {
+    if (!isHyperliquidExecutionEnabled()) {
+      throw new ApiError(503, "hyperliquid_execution_disabled", "Hyperliquid execution is disabled for this deployment.");
+    }
+    const body = await readJsonBody(ctx.request);
+    const allowedKeys = new Set([
+      "network",
+      "signerAddress",
+      "asset",
+      "side",
+      "size",
+      "orderType",
+      "limitPrice",
+      "slippageBps",
+      "reduceOnly",
+    ]);
+    const extraKey = Object.keys(body).find((key) => !allowedKeys.has(key));
+    if (extraKey) {
+      throw new ApiError(400, "invalid_hyperliquid_execution_intent", `Unexpected execution-intent field: ${extraKey}. Private keys, API secrets, signatures, and custom payloads are not accepted.`);
+    }
+    try {
+      const intent = await hyperliquidExecutionIntentStore.create({
+        network: body.network,
+        signerAddress: body.signerAddress,
+        asset: body.asset,
+        side: body.side,
+        size: body.size,
+        orderType: body.orderType,
+        limitPrice: body.limitPrice,
+        slippageBps: body.slippageBps,
+        reduceOnly: body.reduceOnly,
+      } as CreateHyperliquidExecutionIntentInput);
+      return jsonResponse({ success: true, intent });
+    } catch (err) {
+      throw new ApiError(400, "invalid_hyperliquid_execution_intent", err instanceof Error ? err.message : "Could not prepare Hyperliquid execution intent");
+    }
+  });
+
+  addRoute(routes, "POST", "/api/hyperliquid/orders/submit", "client", async (ctx) => {
+    if (!isHyperliquidExecutionEnabled()) {
+      throw new ApiError(503, "hyperliquid_execution_disabled", "Hyperliquid execution is disabled for this deployment.");
+    }
+    const body = await readJsonBody(ctx.request);
+    try {
+      const receipt = await hyperliquidExecutionIntentStore.submit(body as unknown as SubmitHyperliquidExecutionInput);
+      return jsonResponse({ success: receipt.status === "submitted", receipt });
+    } catch (err) {
+      throw new ApiError(400, "hyperliquid_submission_rejected", err instanceof Error ? err.message : "Could not submit Hyperliquid order");
+    }
   });
 
   addRoute(routes, "GET", "/api/polymarket/markets", "client", async (ctx) => {

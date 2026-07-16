@@ -79,6 +79,7 @@ import { useElectronUpdaterState } from "../domains/settings/state/electron-upda
 import { CloudSessionProvider, useCloudSession } from "../domains/settings/cloud/cloud-session-provider";
 import { useDenSession } from "../domains/settings/cloud/use-den-session";
 import { useBootState } from "./boot-state";
+import { SurfaceErrorBoundary } from "./surface-error-boundary";
 import { SettingsShell } from "../domains/settings/shell/settings-shell";
 import { createExtensionsStore, useExtensionsStoreSnapshot } from "../domains/settings/state/extensions-store";
 import { usePlatform } from "../kernel/platform";
@@ -137,6 +138,10 @@ import { resolveMatterhornConnection } from "./matterhorn-connection";
 import { abortSessionSafe } from "../../app/lib/opencode-session";
 import { useReloadCoordinator } from "./reload-coordinator";
 import { getDenInferenceUrl, MATTERHORN_CLOUD_ENABLED } from "../../app/lib/den";
+import {
+  isExtensionVisibleAtLaunch,
+  isSettingsTabRouteEnabledAtLaunch,
+} from "../../app/lib/launch-features";
 import { readActiveWorkspaceId, writeActiveWorkspaceId } from "./session-memory";
 import { workspaceRunHistoryRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
 import { getReactQueryClient } from "../infra/query-client";
@@ -455,6 +460,14 @@ function settingsPathForRoute(route: ReturnType<typeof parseSettingsPath>) {
   return route.tab;
 }
 
+function applyLaunchSettingsRoutePolicy(
+  route: ReturnType<typeof parseSettingsPath>,
+  options: { allowLocalProfile?: boolean } = {},
+): ReturnType<typeof parseSettingsPath> {
+  if (isSettingsTabRouteEnabledAtLaunch(route.tab, undefined, options)) return route;
+  return { tab: "overview", redirectPath: "overview" };
+}
+
 export type SettingsSurfaceProps = {
   embedded?: boolean;
   hideWorkspaceSwitcher?: boolean;
@@ -477,7 +490,10 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const reloadCoordinator = useReloadCoordinator();
   const walletProvider = useWallet();
   const [embeddedPath, setEmbeddedPath] = useState(props.initialPath ?? "general");
-  const route = props.embedded ? parseSettingsPath(`/settings/${embeddedPath}`) : parseSettingsPath(location.pathname);
+  const route = applyLaunchSettingsRoutePolicy(
+    props.embedded ? parseSettingsPath(`/settings/${embeddedPath}`) : parseSettingsPath(location.pathname),
+    { allowLocalProfile: props.embedded },
+  );
   const navigationWorkspaceId = readNavigationWorkspaceId(location.state);
   const navigationSessionId = readNavigationSessionId(location.state);
 
@@ -572,6 +588,13 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const [voiceStatus, setVoiceStatus] = useState<string | null>(null);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [userEnvKeys, setUserEnvKeys] = useState<string[]>([]);
+  const openExtensionDetail = useCallback((id: string) => {
+    setExtensionDetailRequest((current) => ({
+      id,
+      requestId: (current?.requestId ?? 0) + 1,
+    }));
+    navigateSettingsPath("extensions/mcp");
+  }, [navigateSettingsPath]);
   const emptyWorkspaceDisplay = useMemo<WorkspaceDisplay>(
     () => ({
       id: "",
@@ -2099,14 +2122,6 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     navigate(workspaceId ? workspaceSessionRoute(workspaceId) : "/session");
   };
 
-  const openExtensionDetail = useCallback((id: string) => {
-    setExtensionDetailRequest((current) => ({
-      id,
-      requestId: (current?.requestId ?? 0) + 1,
-    }));
-    navigateSettingsPath("extensions/mcp");
-  }, [navigateSettingsPath]);
-
   const settingsView = (() => {
     switch (route.tab) {
       case "overview":
@@ -2271,7 +2286,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                 mcpConnectingName={connectionsSnapshot.mcpConnectingName}
                 selectedMcp={connectionsSnapshot.selectedMcp}
                 setSelectedMcp={(name) => connectionsStore.setSelectedMcp(name)}
-                quickConnect={connectionsStore.quickConnect}
+                quickConnect={connectionsStore.quickConnect.filter((entry) =>
+                  isExtensionVisibleAtLaunch(entry.id ?? entry.serverName ?? entry.name)
+                )}
                 detailEntryRequest={extensionDetailRequest}
                 onDetailEntryRequestHandled={(requestId) => {
                   setExtensionDetailRequest((current) =>
@@ -2377,6 +2394,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             developerMode={developerMode}
             session={denSession}
             workspaceId={selectedWorkspaceId}
+            runtimeWorkspaceId={runtimeWorkspaceId}
             matterhornServerClient={settingsCapabilityClient}
             onSendFeedback={() => setFeedbackDialogOpen(true)}
           />
@@ -2579,7 +2597,14 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         compact={props.embedded}
         backendSettingsSections={settingsCapabilitySectionsQuery.data ?? null}
       >
-        {settingsView}
+        <SurfaceErrorBoundary
+          resetKey={route.tab}
+          title="This settings page could not open"
+          detail="Your workspace is still running. Choose another settings page, then try this one again."
+          source={`SettingsRoute:${route.tab}`}
+        >
+          {settingsView}
+        </SurfaceErrorBoundary>
       </SettingsShell>
 
       <ProjectFeedbackDialog

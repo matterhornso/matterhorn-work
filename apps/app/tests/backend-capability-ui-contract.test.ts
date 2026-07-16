@@ -370,9 +370,13 @@ describe("backend capability UI contract", () => {
     expect(walletSource).toContain("Sui wallet");
     expect(walletSource).toContain("Connect EVM and Sui wallets where this runtime supports direct wallet connect.");
     expect(walletSource).toContain("Connect an EVM or Sui wallet.");
-    expect(walletSource).toContain("Sui handoffs and receipt import still work.");
-    expect(walletSource).toContain('"Handoff only"');
-    expect(walletSource).toContain("One wallet surface; each desk keeps its own safety boundary.");
+    expect(walletSource).toContain("prepare Sui actions and import receipts");
+    expect(walletSource).toContain('"Prepare only"');
+    expect(walletSource).toContain("Review &amp; submit</span> still requires your approval in a connected wallet");
+    expect(walletSource).toContain("Prepare only</span> creates a draft for you to finish elsewhere");
+    expect(walletSource).toContain("Limited release</span> means wallet compatibility is still expanding");
+    expect(walletSource).not.toContain('"Handoff only"');
+    expect(walletSource).toContain("Matterhorn either completes the action here or prepares it for you to finish elsewhere.");
     expect(walletSource).not.toContain("Current read, preview, and signing limits.");
     expect(walletSource).toContain("useWallets");
     expect(walletSource).toContain("connectSuiWallet");
@@ -395,8 +399,8 @@ describe("backend capability UI contract", () => {
     expect(walletSource).not.toContain("useState(() => { syncStore(); return null; });");
     expect(walletSource).toContain("backendSui?.runtimeSupport?.[props.capability.runtime]");
     expect(walletSource).toContain("walletRuntimeSupportSummary");
-    expect(walletSource).toContain("Wallet Standard");
-    expect(walletSource).toContain("Sui external handoff");
+    expect(walletSource).toContain("Prepare Sui actions");
+    expect(walletSource).toContain("Finish wallet actions outside Matterhorn");
     expect(walletSource).toContain("wallet-extension connect");
     expect(walletSource).toContain("runtime={runtime}");
     expect(walletSource).toContain("Browser wallet extensions are available when installed and allowed.");
@@ -420,7 +424,8 @@ describe("backend capability UI contract", () => {
     expect(sessionSource).toContain('aria-label={headline}');
     expect(sessionSource).toContain("Wallet readiness");
     expect(sessionSource).toContain("Wallet readiness details");
-    expect(sessionSource).toContain("Sui signing stays in your wallet; desktop uses external handoff.");
+    expect(sessionSource).not.toContain("Sui signing stays in your wallet; desktop uses external handoff.");
+    expect(sessionSource).toContain("Open wallet settings");
     expect(sessionSource).toContain('onOpenWallet={() => setCurrentSidePanel("wallet")}');
   });
 
@@ -478,12 +483,12 @@ describe("backend capability UI contract", () => {
   test("status helpers use truthful user-facing labels", () => {
     expect(backendCapabilityLabel("working")).toBe("Working");
     expect(backendCapabilityLabel("needs_setup")).toBe("Needs setup");
-    expect(backendCapabilityLabel("preview")).toBe("Early access");
+    expect(backendCapabilityLabel("preview")).toBe("Limited release");
     expect(backendCapabilityLabel("unsupported")).toBe("Not supported here");
     expect(backendCapabilityTone("unsupported")).toBe("neutral");
   });
 
-  test("model and wallet helpers expose Sui as early access instead of hidden", () => {
+  test("model and wallet helpers explain limited Sui support instead of hiding it", () => {
     const result = capabilities();
     expect(summarizeModelSource(result)).toBe("opencode/big-pickle");
     expect(summarizeModelRoutingPolicy(result)).toContain("Local session prompts");
@@ -499,11 +504,12 @@ describe("backend capability UI contract", () => {
     expect(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.desktop.directConnect).toBe(false);
     expect(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.desktop.signing).toBe("external_signer");
     const webCopy = walletRuntimeSupportSummary(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.web);
-    expect(webCopy.label).toBe("Direct connect · Early access");
-    expect(webCopy.detail).toContain("Mysten dApp Kit");
+    expect(webCopy.label).toBe("Connect here · Limited release");
+    expect(webCopy.detail).toContain("review and sign every transaction in your wallet");
+    expect(webCopy.detail).toContain("Wallet compatibility is still expanding");
     const desktopCopy = walletRuntimeSupportSummary(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.desktop);
-    expect(desktopCopy.label).toBe("External handoff · Early access");
-    expect(desktopCopy.detail).toContain("external Sui wallet");
+    expect(desktopCopy.label).toBe("Prepare only · Limited release");
+    expect(desktopCopy.detail).toContain("Review, sign, and submit it in your own wallet or protocol client");
   });
 
   test("Sui wallet card keeps healthy capability labels silent", () => {

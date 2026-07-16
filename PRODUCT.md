@@ -6,7 +6,7 @@ product
 
 ## Users
 
-Matterhorn Work is for non-expert customers who want to use Web3 protocols, AI workflows, and agent tools through plain language. Primary beta users include Bittensor operators, crypto-curious traders who need safe previews, longevity creators packaging offline optimization workflows, and agent operators using Matterhorn tools from Codex, Claude Code, Claude Desktop, Cursor, and compatible MCP clients.
+Matterhorn Work is for non-expert customers who want to use Web3 protocols, AI workflows, and agent tools through plain language. Launch users include Bittensor operators, crypto-curious traders who need safe previews, longevity creators packaging offline optimization workflows, and agent operators using Matterhorn tools from Codex, Claude Code, Claude Desktop, Cursor, and compatible MCP clients.
 
 ## Product Purpose
 
@@ -23,10 +23,11 @@ Avoid generic AI dashboards, over-rounded cards, decorative gradients, hidden ra
 ## Design Principles
 
 - Desks over categories: Bittensor, Hyperliquid, Polymarket, Longevity, Memory, MCPs, and Settings are first-class surfaces.
-- Safety is visible before action: every serious flow shows source, freshness, submit state, signer boundary, and what Matterhorn cannot do.
+- Safety is visible before action: every serious flow shows source, freshness, submit state, signer boundary, and what Matterhorn cannot do. Hyperliquid execution must distinguish manual wallet-approved orders from read/watch/chat actions that never trade automatically.
 - Progressive disclosure beats giant panels: show the next useful command first, then deeper details when the user asks or selects a tab.
 - Chat stays primary but not blank: desks should provide prompt chips, readable cards, empty states, and evidence commands that teach by doing.
 - Familiar product UI wins: stable navigation, readable density, responsive layout, and direct copy matter more than decorative novelty.
+- Stable builds expose only production-approved surfaces. Billing, generated-media publishing, and Matterhorn Cloud require explicit build flags and must not appear as setup chores when their services are unavailable.
 
 ## Accessibility & Inclusion
 

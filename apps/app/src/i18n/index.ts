@@ -16,15 +16,7 @@ import { LANGUAGE_PREF_KEY } from "../app/constants";
 export type Language = "en" | "ja" | "zh" | "vi" | "pt-BR" | "th" | "fr" | "ca" | "es" | "ru";
 export type Locale = Language;
 
-/**
- * All supported languages - single source of truth
- */
-export const LANGUAGES: Language[] = ["en", "ja", "zh", "vi", "pt-BR", "th", "fr", "ca", "es", "ru"];
-
-/**
- * Language options for UI - single source of truth
- */
-export const LANGUAGE_OPTIONS = [
+const ALL_LANGUAGE_OPTIONS = [
   { value: "en" as Language, label: "English", nativeName: "English" },
   { value: "ja" as Language, label: "Japanese", nativeName: "日本語" },
   { value: "zh" as Language, label: "Chinese (Simplified)", nativeName: "简体中文" },
@@ -36,6 +28,30 @@ export const LANGUAGE_OPTIONS = [
   { value: "es" as Language, label: "Spanish", nativeName: "Español" },
   { value: "ru" as Language, label: "Russian", nativeName: "Русский" },
 ] as const;
+
+const BUILD_ENV = typeof import.meta !== "undefined"
+  ? import.meta.env as Record<string, unknown> | undefined
+  : undefined;
+
+export function resolveLanguageOptions(env: Record<string, unknown> | undefined) {
+  const value = env?.VITE_MATTERHORN_EXPERIMENTAL_LOCALES_ENABLED;
+  const experimentalLocalesEnabled =
+    typeof value === "string" && /^(1|true|yes|on)$/i.test(value.trim());
+  return experimentalLocalesEnabled
+    ? ALL_LANGUAGE_OPTIONS
+    : ALL_LANGUAGE_OPTIONS.filter((option) => option.value === "en");
+}
+
+export const MATTERHORN_EXPERIMENTAL_LOCALES_ENABLED =
+  resolveLanguageOptions(BUILD_ENV).length > 1;
+
+/**
+ * Stable launch builds are English-only until every customer-facing locale has
+ * completed the Matterhorn terminology and onboarding review.
+ */
+export const LANGUAGE_OPTIONS = resolveLanguageOptions(BUILD_ENV);
+
+export const LANGUAGES: Language[] = LANGUAGE_OPTIONS.map((option) => option.value);
 
 const PLURAL_SUFFIX_EMPTY_LANGUAGES = new Set<Language>(["ja", "zh", "th"]);
 

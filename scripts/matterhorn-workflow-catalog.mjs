@@ -292,8 +292,8 @@ const CUSTOMER_TEMPLATES = [
     id: "hyperliquid_trader",
     name: "Trade on Hyperliquid",
     summary:
-      "Preview Hyperliquid orders, check positions, and generate external-signer handoffs without live submission.",
-    promise: "Preview-only. No live submission, no custody, and no signing by Matterhorn.",
+      "Research Hyperliquid markets, preview orders, and manually place an exact reviewed order with a connected wallet.",
+    promise: "This template never submits. Manual execution is available only in the separate wallet-approved order panel.",
     category: "markets",
     examplePrompts: [
       "Preview a Hyperliquid BTC-PERP trade",
@@ -322,7 +322,7 @@ const CUSTOMER_TEMPLATES = [
     safetyBoundaries: {
       ...COMMON_SAFETY,
       canExecute: false,
-      requiresExternalSigner: false,
+      requiresExternalSigner: true,
       allowsRealFunds: false,
     },
     forbiddenInputs: ["private key", "API secret", "raw signature", "signed payload", "signed order"],
@@ -335,7 +335,7 @@ const CUSTOMER_TEMPLATES = [
     chatMode: "crypto chat",
     launch: {
       primaryCta: "Open Hyperliquid panel",
-      secondaryCta: "Preview a trade",
+      secondaryCta: "Review an order",
       defaultPrompt: "Preview a Hyperliquid BTC-PERP trade",
       handoffContextLabel: "Public wallet address",
       recommendedSurface: "protocol_desk",
@@ -344,7 +344,7 @@ const CUSTOMER_TEMPLATES = [
       iconHint: "hyperliquid",
       accent: "matterhorn_blue",
       shortDescription:
-        "Preview Hyperliquid trades and generate external-signer handoffs.",
+        "Research in chat, then review and approve an exact order in your connected wallet.",
     },
     routing: {
       chatMode: "hyperliquid",

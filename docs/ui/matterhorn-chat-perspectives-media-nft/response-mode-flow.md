@@ -34,7 +34,8 @@ User types query
 │  • Non-custodial guard                          │
 │  • External signer check                        │
 │  • No secrets / keys / diagnoses               │
-│  • Hyperliquid/Polymarket: preview-only        │
+│  • Agents never submit; Polymarket preview-only │
+│  • Hyperliquid trade ticket: wallet approval    │
 │  • Wellness: medical disclaimer                │
 │  • Bittensor: receipt + external signer        │
 └────────────────────────────────────────────────┘
@@ -434,7 +435,7 @@ Expandable drawer on each response card (collapsed by default):
 │  ✓ Non-custodial confirmed                     │
 │  ✓ External signer required                    │
 │  ✓ No secret input detected                   │
-│  ✓ Hyperliquid preview-only confirmed          │
+│  ✓ Hyperliquid agent auto-submit blocked       │
 └────────────────────────────────────────────────┘
 ```
 

@@ -781,10 +781,14 @@ describe("Security capability classification", () => {
       requestRateLimit: { enabled: true, windowMs: 60_000, maxRequests: 4 },
     });
 
-    const allowedReads = await Promise.all(Array.from({ length: 4 }, () =>
-      jsonFetch(base, "/api/backend/capabilities", ownerToken),
+    const allowedReads = await Promise.all(Array.from({ length: 4 }, (_, index) =>
+      jsonFetch(base, "/api/backend/capabilities", ownerToken, {
+        headers: { "X-Forwarded-For": `203.0.113.${index + 1}` },
+      }),
     ));
-    const blocked = await jsonFetch(base, "/api/backend/capabilities", ownerToken);
+    const blocked = await jsonFetch(base, "/api/backend/capabilities", ownerToken, {
+      headers: { "X-Forwarded-For": "198.51.100.200", "X-Real-IP": "198.51.100.201" },
+    });
 
     expect(allowedReads.every((result) => result.response.status === 200)).toBe(true);
     expect(blocked.response.status).toBe(429);

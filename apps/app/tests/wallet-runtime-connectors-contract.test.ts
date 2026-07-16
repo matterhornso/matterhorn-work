@@ -98,4 +98,13 @@ describe("wallet runtime connector contract", () => {
     expect(source).toContain('className="group matterhorn-rail-section"');
     expect(source).not.toContain("<WalletBoundaryList compact safetyCopy={capability.safetyCopy} />");
   });
+
+  test("Hyperliquid copy distinguishes wallet-approved execution from agent automation", () => {
+    const source = readReactAppSource("domains/settings/pages/wallet-view.tsx");
+
+    expect(source).toContain('cap.canSubmit\n          ? "Read markets, prepare the exact order');
+    expect(source).toContain('cap.canSubmit\n            ? "Review & submit"');
+    expect(source).toContain("agents and watches cannot submit");
+    expect(source).toContain("Review &amp; submit</span> still requires your approval in a connected wallet");
+  });
 });

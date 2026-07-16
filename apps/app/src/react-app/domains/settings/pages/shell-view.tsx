@@ -19,6 +19,7 @@ import {
 } from "../settings-layout";
 import { useShellConfig, DEFAULT_SHELL_CONFIG, type ShellConfig } from "../../../shell/shell-config";
 import { useUiStateStore } from "../../../shell/ui-state-store";
+import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 
 /* ------------------------------------------------------------------ */
 /*  Interactive wireframe preview                                      */
@@ -338,12 +339,14 @@ export function ShellCustomizationView() {
               checked={config.feedbackButton}
               onChange={(value) => update({ feedbackButton: value })}
             />
-            <ToggleRow
-              label="Display cloud sign-in"
-              description="Show a sign-in prompt for users who aren't logged in."
-              checked={config.cloudSignin}
-              onChange={(value) => update({ cloudSignin: value })}
-            />
+            {MATTERHORN_LAUNCH_FEATURES.cloud ? (
+              <ToggleRow
+                label="Display cloud sign-in"
+                description="Show a sign-in prompt for users who aren't logged in."
+                checked={config.cloudSignin}
+                onChange={(value) => update({ cloudSignin: value })}
+              />
+            ) : null}
           </div>
         ) : null}
 

@@ -27,6 +27,7 @@ import {
 import { t } from "../../../../i18n";
 import type { SettingsTab } from "../../../../app/types";
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
+import { isSettingsTabVisibleAtLaunch } from "../../../../app/lib/launch-features";
 import type {
   MatterhornCapabilityStatus,
   MatterhornSettingsSectionCapability,
@@ -367,6 +368,7 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
         <div className="px-2 pb-2 text-sm font-semibold text-dls-text">Workspace</div>
         <div className={SETTINGS_HUB_GRID_CLASS}>
           {workspaceCards
+            .filter((card) => isSettingsTabVisibleAtLaunch(card.tab))
             .filter((card) => props.developerMode || !card.developerOnly)
             .map((card) => {
               const liveStatus = getSettingsTabStatus(card.tab, props.backendSettingsSections);
@@ -389,6 +391,7 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
         <div className="px-2 pb-2 text-sm font-semibold text-dls-text">Global</div>
         <div className={SETTINGS_HUB_GRID_CLASS}>
           {globalCards
+            .filter((card) => isSettingsTabVisibleAtLaunch(card.tab))
             .filter((card) => props.developerMode || !card.developerOnly)
             .map((card) => {
               const liveStatus = getSettingsTabStatus(card.tab, props.backendSettingsSections);

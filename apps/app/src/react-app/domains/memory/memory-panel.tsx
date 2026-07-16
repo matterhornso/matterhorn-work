@@ -105,10 +105,14 @@ const SUGGESTION_INBOX_FILTERS: Array<{
 const SAVED_SUGGESTION_STATUSES = new Set<MatterhornMemorySuggestionStatus>(["confirmed", "edited"]);
 const NOT_SAVED_SUGGESTION_STATUSES = new Set<MatterhornMemorySuggestionStatus>(["dismissed", "expired", "blocked"]);
 const MEMORY_FIELD_CLASS =
-  "border-transparent bg-dls-surface-muted/25 shadow-none placeholder:text-dls-secondary/80 focus-visible:border-[rgba(var(--dls-accent-rgb),0.45)] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.22)]";
+  "border-transparent bg-dls-surface-raised shadow-none placeholder:text-dls-secondary/80 hover:bg-dls-surface-muted/[0.34] focus-visible:border-[rgba(var(--dls-accent-rgb),0.45)] focus-visible:bg-dls-surface-muted/[0.38] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.22)] dark:bg-dls-surface-raised";
 const MEMORY_SELECT_CLASS =
-  "h-10 rounded-md border border-transparent bg-dls-background/45 px-3 text-sm outline-none transition-colors focus:border-[rgba(var(--dls-accent-rgb),0.45)] focus:ring-1 focus:ring-[rgba(var(--dls-accent-rgb),0.22)]";
+  "h-10 rounded-md border border-transparent bg-dls-surface-raised px-3 text-sm outline-none transition-colors hover:bg-dls-surface-muted/[0.34] focus:border-[rgba(var(--dls-accent-rgb),0.45)] focus:bg-dls-surface-muted/[0.38] focus:ring-1 focus:ring-[rgba(var(--dls-accent-rgb),0.22)]";
 const MEMORY_MUTED_BADGE_CLASS = "border-transparent bg-transparent px-0 text-dls-secondary";
+const MEMORY_ICON_ACTION_CLASS =
+  "bg-dls-surface-raised text-dls-secondary shadow-none hover:bg-dls-surface-muted/[0.42] hover:text-dls-text";
+const MEMORY_SECONDARY_ACTION_CLASS =
+  "bg-dls-surface-raised text-dls-text shadow-none hover:bg-dls-surface-muted/[0.42]";
 
 function formatKind(kind: string) {
   return kind.replaceAll("_", " ");
@@ -749,7 +753,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             Review suggestions before saving.
           </p>
         </div>
-        <Button variant="ghost" size="icon-sm" onClick={props.onClose} aria-label="Close Memory panel">
+        <Button className={MEMORY_ICON_ACTION_CLASS} variant="ghost" size="icon-sm" onClick={props.onClose} aria-label="Close Memory panel">
           <X size={16} />
         </Button>
       </header>
@@ -766,7 +770,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 placeholder="Search saved memories..."
               />
             </label>
-            <Button className="justify-center border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text sm:w-auto" variant="ghost" size="icon-sm" onClick={() => void refresh()} disabled={loading} aria-label="Refresh saved memories">
+            <Button className={cn("justify-center", MEMORY_ICON_ACTION_CLASS)} variant="ghost" size="icon-sm" onClick={() => void refresh()} disabled={loading} aria-label="Refresh saved memories">
               <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
             </Button>
           </div>
@@ -823,7 +827,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 </p>
               </div>
             </div>
-            <Button className="shrink-0 border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text" variant="ghost" size="icon-sm" onClick={() => void refreshSuggestions()} disabled={suggestionsLoading || !props.client} aria-label="Refresh memory review">
+            <Button className={cn("shrink-0", MEMORY_ICON_ACTION_CLASS)} variant="ghost" size="icon-sm" onClick={() => void refreshSuggestions()} disabled={suggestionsLoading || !props.client} aria-label="Refresh memory review">
               <RefreshCw className={cn("size-3.5", suggestionsLoading && "animate-spin")} />
             </Button>
           </div>
@@ -838,7 +842,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
           ) : null}
 
           <div aria-label="Memory inbox filters">
-            <div className="grid grid-cols-2 gap-0.5 rounded-md bg-dls-surface-muted/10 p-0.5 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-1 rounded-md bg-dls-surface-raised p-1 sm:grid-cols-4">
               {SUGGESTION_INBOX_FILTERS.map((filter) => {
                 const selected = suggestionStatusFilter === filter.id;
                 return (
@@ -848,10 +852,10 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     aria-pressed={selected}
                     onClick={() => setSuggestionStatusFilter(filter.id)}
                     className={cn(
-                      "min-w-0 rounded-md px-2 py-1.5 text-center text-[11px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]",
+                      "min-w-0 rounded-md px-2 py-1.5 text-center text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-dls-border",
                       selected
-                        ? "bg-dls-hover/45 text-dls-text"
-                        : "text-dls-secondary hover:bg-dls-hover/35 hover:text-dls-text",
+                        ? "bg-dls-surface-muted/60 text-dls-text"
+                        : "text-dls-secondary hover:bg-dls-surface-muted/[0.34] hover:text-dls-text",
                     )}
                   >
                     <span className="font-semibold">{filter.label}</span>
@@ -980,7 +984,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                           <Button size="sm" onClick={() => void handleSaveEditedSuggestion(entry)} disabled={!props.client}>
                             Save edited
                           </Button>
-                          <Button variant="ghost" size="sm" className="bg-transparent hover:bg-dls-hover/35" onClick={cancelSuggestionEdit}>
+                          <Button variant="ghost" size="sm" className={MEMORY_SECONDARY_ACTION_CLASS} onClick={cancelSuggestionEdit}>
                             Cancel
                           </Button>
                         </div>
@@ -1006,7 +1010,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="justify-center bg-transparent hover:bg-dls-hover/35"
+                          className={cn("justify-center", MEMORY_SECONDARY_ACTION_CLASS)}
                           onClick={() => beginSuggestionEdit(entry)}
                           disabled={!props.client || Boolean(editing)}
                           aria-label={`Edit visible Memory suggestion before saving: ${suggestion.proposedRecord.title}`}
@@ -1016,7 +1020,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="justify-center bg-transparent hover:bg-dls-hover/35"
+                          className={cn("justify-center", MEMORY_SECONDARY_ACTION_CLASS)}
                           onClick={() => void handleResolveSuggestion(entry, "dismiss")}
                           disabled={!props.client}
                           aria-label={`Dismiss visible Memory suggestion: ${suggestion.proposedRecord.title}`}
@@ -1029,7 +1033,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="bg-transparent hover:bg-dls-hover/35"
+                          className={MEMORY_SECONDARY_ACTION_CLASS}
                           onClick={() => handleDismissSuggestionFromView(entry)}
                           aria-label={`Dismiss ${entry.status} Memory suggestion from view`}
                         >
@@ -1113,7 +1117,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                   <Button
                     variant={selected ? "default" : "ghost"}
                     size="sm"
-                    className={cn(!selected && "bg-transparent hover:bg-dls-hover/35")}
+                    className={cn(!selected && MEMORY_SECONDARY_ACTION_CLASS)}
                     disabled={!policyDecision.canUseInChat}
                     onClick={() => toggleSelectedRecord(record)}
                     title={policyDecision.canUseInChat ? "Use this visible memory in chat" : `Chat use blocked: ${policyDecision.blockedReasons.join("; ") || policyDecision.warnings.join("; ")}`}
@@ -1124,7 +1128,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="bg-transparent hover:bg-dls-hover/35"
+                    className={MEMORY_SECONDARY_ACTION_CLASS}
                     disabled={!record.canDelete}
                     onClick={() => void handleForget(record)}
                   >
@@ -1138,7 +1142,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
         </section>
 
         <details
-          className="group rounded-md bg-dls-surface-muted/[0.08] px-3.5 py-1 transition-colors open:bg-dls-surface-muted/[0.12]"
+          className="group rounded-md bg-dls-surface-muted/[0.16] px-3.5 py-1 transition-colors hover:bg-dls-surface-muted/[0.22] open:bg-dls-surface-muted/[0.24]"
           open={manualCaptureOpen}
           onToggle={(event) => setManualCaptureOpen(event.currentTarget.open)}
         >
@@ -1230,7 +1234,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 Exports include only policy-approved public-safe memory metadata.
               </p>
             </div>
-            <Button className="w-full justify-center bg-transparent hover:bg-dls-hover/35" variant="ghost" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
+            <Button className={cn("w-full justify-center", MEMORY_SECONDARY_ACTION_CLASS)} variant="ghost" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
               <Download className="mr-2 size-3.5" />
               Export memory
             </Button>

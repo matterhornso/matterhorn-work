@@ -90,7 +90,15 @@ assert.match(desktopMain, /while \(value\.endsWith\("\."\)\) value = value\.slic
 assert.match(desktopMain, /value === "::ffff:7f00:1"/);
 assert.match(desktopMain, /function isAllowedMainWindowUrl/);
 assert.match(desktopMain, /isLocalRendererOrigin[\s\S]*return isAllowedMainWindowUrl\(value\)/);
+assert.match(desktopMain, /trustedMainWindowOrigin && parsed\.origin === trustedMainWindowOrigin/);
+assert.match(desktopMain, /trustedMainWindowFileRoot[\s\S]*isPathWithinRoot\(fileURLToPath\(parsed\), trustedMainWindowFileRoot\)/);
+assert.match(desktopMain, /function isAllowedInitialMainWindowUrl[\s\S]*isLoopbackHostname\(parsed\.hostname\)/);
+assert.match(desktopMain, /trustMainWindowUrl\(startUrl\)/);
+assert.match(desktopMain, /trustMainWindowFile\(rendererIndexPath\)/);
 assert.match(desktopMain, /setWindowOpenHandler[\s\S]*isAllowedMainWindowUrl\(url\)/);
+assert.match(desktopMain, /webContents\.on\("will-navigate", guardMainWindowNavigation\)/);
+assert.match(desktopMain, /webContents\.on\("will-redirect", guardMainWindowNavigation\)/);
+assert.match(desktopMain, /guardMainWindowNavigation[\s\S]*event\.preventDefault\(\)/);
 assert.equal(
   desktopMain.includes('url.startsWith("http://localhost")'),
   false,
@@ -104,6 +112,14 @@ assert.equal(
 assert.match(desktopMain, /function isTrustedMainWindowIpcEvent/);
 assert.match(desktopMain, /function requireTrustedMainWindowIpcEvent/);
 assert.match(desktopMain, /function trustedMainWindowHandler/);
+assert.match(desktopMain, /ALLOWED_MAIN_WINDOW_PERMISSIONS/);
+assert.match(desktopMain, /clipboard-sanitized-write/);
+assert.match(desktopMain, /notifications/);
+assert.match(
+  desktopMain,
+  /shouldAllowMainWindowPermission[\s\S]*if \(!ALLOWED_MAIN_WINDOW_PERMISSIONS\.has\(permission\)\) return false;[\s\S]*if \(permission !== "media" && permission !== "audioCapture"\) return true/,
+  "main window permissions must reject values outside the explicit allowlist before granting non-media permissions",
+);
 assert.match(desktopMain, /isTrustedMainWindowIpcEvent[\s\S]*isMainWindowWebContents\(sender\)/);
 assert.match(desktopMain, /isTrustedMainWindowIpcEvent[\s\S]*isLocalRendererOrigin\(frameUrl\)/);
 assert.match(desktopMain, /ipcMain\.handle\("openwork:desktop", trustedMainWindowHandler\("openwork:desktop", handleDesktopInvoke\)\)/);
@@ -163,10 +179,26 @@ assert.match(desktopMain, /function resolveDesktopFetchBody/);
 assert.match(desktopMain, /Desktop fetch request body exceeded the maximum size/);
 assert.match(desktopMain, /function sanitizeDesktopFetchHeaders/);
 assert.match(desktopMain, /BLOCKED_DESKTOP_FETCH_REQUEST_HEADERS/);
+assert.match(desktopMain, /BLOCKED_LOOPBACK_DESKTOP_FETCH_REQUEST_HEADERS/);
+assert.match(desktopMain, /authorization/);
+assert.match(desktopMain, /x-api-key/);
+assert.match(desktopMain, /sanitizeDesktopFetchHeaders\(init\.headers, url\)/);
 assert.match(desktopMain, /proxy-authorization/);
 assert.match(desktopMain, /function readDesktopFetchResponseBody/);
 assert.match(desktopMain, /Desktop fetch response exceeded the maximum size/);
 assert.match(desktopMain, /sanitizeDesktopFetchResponseHeaders\(response\.headers\)/);
+assert.match(desktopMain, /function resolveSafeDesktopPath/);
+assert.match(desktopMain, /function initializeTrustedWorkspacePathRoots/);
+assert.match(desktopMain, /await initializeTrustedWorkspacePathRoots\(\)/);
+assert.match(desktopMain, /trustedWorkspacePathRoots\.add\(canonical\)/);
+assert.match(desktopMain, /pathForPolicy\(canonical\) === pathForPolicy\(path\.parse\(canonical\)\.root\)/);
+assert.match(desktopMain, /Desktop file access is limited to configured workspaces and locations you selected/);
+assert.match(desktopMain, /BLOCKED_DESKTOP_OPEN_SUFFIXES/);
+assert.match(desktopMain, /Matterhorn will not launch executable files/);
+assert.match(desktopMain, /case "__openPath"[\s\S]*resolveSafeDesktopPath\(target\)/);
+assert.match(desktopMain, /case "__revealItemInDir"[\s\S]*resolveSafeDesktopPath\(target, \{ revealOnly: true \}\)/);
+assert.match(desktopMain, /case "pickDirectory"[\s\S]*rememberDesktopGrantedPath\(filePath, "directory"\)/);
+assert.match(desktopMain, /case "pickFile"[\s\S]*rememberDesktopGrantedPath\(filePath, "file"\)/);
 assert.match(desktopRuntime, /DESKTOP_MANAGED_CORS_ORIGINS = Object\.freeze\(\["loopback", "file:\/\/"\]\)/);
 assert.match(desktopRuntime, /function desktopManagedCorsOrigins/);
 assert.match(desktopRuntime, /function desktopManagedCorsArg/);

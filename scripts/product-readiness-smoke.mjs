@@ -6,6 +6,11 @@ import process from "node:process";
 const DEFAULT_SERVER_URL = "http://127.0.0.1:4125";
 const DEFAULT_TOKEN = "matterhorn-media-smoke-client-token";
 
+function envFlag(name) {
+  const value = process.env[name];
+  return typeof value === "string" && /^(1|true|yes|on)$/i.test(value.trim());
+}
+
 const forbiddenLeakKeys = [
   "OPENAI_API_KEY",
   "MATTERHORN_WALRUS_PUBLISHER_BEARER_TOKEN",
@@ -33,6 +38,9 @@ function parseArgs(argv) {
       process.env.MATTERHORN_MEDIA_SMOKE_WORKSPACE_ID ||
       "",
     includeGeneratedMediaFlow: false,
+    enforceLaunchScope: false,
+    launchBilling: envFlag("VITE_MATTERHORN_BILLING_ENABLED"),
+    launchGeneratedMedia: envFlag("VITE_MATTERHORN_GENERATED_MEDIA_ENABLED"),
     requireProduction: false,
     strict: false,
     dryRun: false,
@@ -70,6 +78,15 @@ function parseArgs(argv) {
       case "--require-production":
         config.requireProduction = true;
         break;
+      case "--enforce-launch-scope":
+        config.enforceLaunchScope = true;
+        break;
+      case "--launch-billing":
+        config.launchBilling = true;
+        break;
+      case "--launch-generated-media":
+        config.launchGeneratedMedia = true;
+        break;
       case "--timeout-ms":
         config.timeoutMs = Number(next());
         break;
@@ -101,6 +118,9 @@ function parseArgs(argv) {
   if (!Number.isFinite(config.timeoutMs) || config.timeoutMs <= 0) {
     throw new Error("--timeout-ms must be a positive number.");
   }
+  if (config.enforceLaunchScope && config.includeGeneratedMediaFlow && !config.launchGeneratedMedia) {
+    throw new Error("--include-generated-media-flow requires --launch-generated-media when launch scope is enforced.");
+  }
   return config;
 }
 
@@ -129,6 +149,7 @@ function help() {
     "",
     "Add --include-generated-media-flow to also run the full image -> Walrus -> Sui NFT receipt flow.",
     "Add --require-production to reject mock billing and local/mock generated-media readiness.",
+    "Add --enforce-launch-scope for release checks; optional services are skipped unless enabled with --launch-billing or --launch-generated-media.",
   ].join("\n");
 }
 
@@ -145,14 +166,24 @@ function buildPlannedStages(config) {
     ["team.access_summary", "Read local team access summary"],
     ["ledger.project", "Read project data ledger"],
     ["ledger.export", "Read redacted data ledger export"],
-    ["billing.production_readiness", "Read billing production readiness"],
-    ["generated_media.production_readiness", "Read generated media production readiness"],
-    ["generated_media.history", "Read generated media history"],
-  ].map(([id, label]) => ({ id, label }));
+    ["billing.production_readiness", "Read billing production readiness", "billing"],
+    ["generated_media.production_readiness", "Read generated media production readiness", "generated-media"],
+    ["generated_media.history", "Read generated media history", "generated-media"],
+  ].map(([id, label, optionalFeature]) => ({ id, label, optionalFeature }));
   if (config.includeGeneratedMediaFlow) {
-    stages.push({ id: "generated_media.flow", label: "Run image to Sui NFT receipt flow smoke" });
+    stages.push({ id: "generated_media.flow", label: "Run image to Sui NFT receipt flow smoke", optionalFeature: "generated-media" });
   }
   return stages;
+}
+
+function launchFeatureEnabled(config, feature) {
+  if (feature === "billing") return config.launchBilling;
+  if (feature === "generated-media") return config.launchGeneratedMedia;
+  return true;
+}
+
+function launchScopeSkipReason(feature) {
+  return `${feature} is not included in this stable launch scope`;
 }
 
 async function fetchJson(config, path, init = {}) {
@@ -477,6 +508,11 @@ async function runProductReadinessSmoke(config) {
       serverUrl: config.serverUrl,
       workspaceId: "",
       requireProduction: config.requireProduction,
+      launchScope: {
+        enforced: config.enforceLaunchScope,
+        billing: config.launchBilling,
+        generatedMedia: config.launchGeneratedMedia,
+      },
     },
     safety: {
       nonCustodial: true,
@@ -496,10 +532,16 @@ async function runProductReadinessSmoke(config) {
 
   if (config.dryRun) {
     report.ready = true;
-    report.stages = buildPlannedStages(config).map((stage) => ({
-      ...stage,
-      status: "planned",
-      command: stage.id === "generated_media.flow"
+    report.stages = buildPlannedStages(config).map((stage) => {
+      const skipped = Boolean(
+        config.enforceLaunchScope && stage.optionalFeature && !launchFeatureEnabled(config, stage.optionalFeature),
+      );
+      return {
+        id: stage.id,
+        label: stage.label,
+        status: skipped ? "skip" : "planned",
+        ...(skipped ? { reason: launchScopeSkipReason(stage.optionalFeature) } : {}),
+        command: stage.id === "generated_media.flow"
         ? ["node", "scripts/generated-media-flow-smoke.mjs", "--strict"]
         : stage.id === "billing.production_readiness"
           ? ["GET", "<server>", "/workspace/<id>/billing/status"]
@@ -513,7 +555,8 @@ async function runProductReadinessSmoke(config) {
         : stage.id === "production.cors_readiness"
           ? ["node", "scripts/production-cors-readiness.mjs", "--require-production"]
         : ["GET", "<server>", stage.id],
-    }));
+      };
+    });
     return report;
   }
 
@@ -537,6 +580,17 @@ async function runProductReadinessSmoke(config) {
       report.summary.fail += 1;
       return null;
     }
+  }
+
+  function skipStage(id, label, feature) {
+    report.stages.push({
+      id,
+      label,
+      status: "skip",
+      durationMs: 0,
+      reason: launchScopeSkipReason(feature),
+    });
+    report.summary.skip += 1;
   }
 
   try {
@@ -686,7 +740,10 @@ async function runProductReadinessSmoke(config) {
       return payload;
     });
 
-    await stage("billing.production_readiness", "Read billing production readiness", async () => {
+    if (config.enforceLaunchScope && !config.launchBilling) {
+      skipStage("billing.production_readiness", "Read billing production readiness", "billing");
+    } else {
+      await stage("billing.production_readiness", "Read billing production readiness", async () => {
       const payload = unwrap(await fetchJson(config, `/workspace/${encodeURIComponent(workspaceId)}/billing/status`));
       assert(payload.version === "matterhorn.billing.v1", "billing status version mismatch");
       const status = payload.status;
@@ -710,9 +767,13 @@ async function runProductReadinessSmoke(config) {
           : [],
       };
       return report.artifacts.billingProductionReadiness;
-    });
+      });
+    }
 
-    await stage("generated_media.production_readiness", "Read generated media production readiness", async () => {
+    if (config.enforceLaunchScope && !config.launchGeneratedMedia) {
+      skipStage("generated_media.production_readiness", "Read generated media production readiness", "generated-media");
+    } else {
+      await stage("generated_media.production_readiness", "Read generated media production readiness", async () => {
       const result = await runGeneratedMediaProductionReadiness({ ...config, workspaceId });
       if (result.code !== 0) throw generatedMediaReadinessFailure(result);
       assert(result.payload?.version === "matterhorn.generated-media-production-readiness.v1", "generated media production readiness version mismatch");
@@ -732,9 +793,13 @@ async function runProductReadinessSmoke(config) {
       };
       report.artifacts.generatedMediaProductionReadiness = safeSummary;
       return safeSummary;
-    });
+      });
+    }
 
-    await stage("generated_media.history", "Read generated media history", async () => {
+    if (config.enforceLaunchScope && !config.launchGeneratedMedia) {
+      skipStage("generated_media.history", "Read generated media history", "generated-media");
+    } else {
+      await stage("generated_media.history", "Read generated media history", async () => {
       const payload = unwrap(await fetchJson(config, `/workspace/${encodeURIComponent(workspaceId)}/generated-media/history?limit=20`));
       assert(payload.success === true, "generated media history should return success");
       assert(Array.isArray(payload.items), "generated media history should return items");
@@ -744,7 +809,8 @@ async function runProductReadinessSmoke(config) {
         counts: payload.counts,
       };
       return payload;
-    });
+      });
+    }
 
     if (config.includeGeneratedMediaFlow) {
       await stage("generated_media.flow", "Run image to Sui NFT receipt flow smoke", async () => {
@@ -765,7 +831,9 @@ async function runProductReadinessSmoke(config) {
         id: "generated_media.flow",
         label: "Run image to Sui NFT receipt flow smoke",
         status: "skip",
-        reason: "Pass --include-generated-media-flow to exercise image, Walrus, and Sui NFT receipt routes.",
+        reason: config.enforceLaunchScope && !config.launchGeneratedMedia
+          ? launchScopeSkipReason("generated-media")
+          : "Pass --include-generated-media-flow to exercise image, Walrus, and Sui NFT receipt routes.",
       });
       report.summary.skip += 1;
     }

@@ -479,10 +479,21 @@ const IDLE_ROUTER_INFO = Object.freeze({
 });
 
 let mainWindow = null;
+let trustedMainWindowOrigin = null;
+let trustedMainWindowFileRoot = null;
 const pendingDeepLinks = [];
 let uiControlServer = null;
 let uiControlDiscoveryPaths = [];
 const uiControlToken = randomBytes(32).toString("hex");
+const desktopGrantedPaths = new Map();
+const trustedWorkspacePathRoots = new Set();
+
+const ALLOWED_MAIN_WINDOW_PERMISSIONS = new Set([
+  "audioCapture",
+  "clipboard-sanitized-write",
+  "media",
+  "notifications",
+]);
 
 function isLocalRendererOrigin(origin) {
   const value = String(origin ?? "").trim();
@@ -517,6 +528,7 @@ function trustedMainWindowHandler(channel, handler) {
 function shouldAllowMainWindowPermission(webContents, permission, origin, details = {}) {
   if (!isMainWindowWebContents(webContents)) return false;
   if (!isLocalRendererOrigin(origin)) return false;
+  if (!ALLOWED_MAIN_WINDOW_PERMISSIONS.has(permission)) return false;
   if (permission !== "media" && permission !== "audioCapture") return true;
   const mediaType = typeof details.mediaType === "string" ? details.mediaType : "";
   if (mediaType && mediaType !== "audio") return false;
@@ -868,6 +880,22 @@ function isPrivateIpv4Literal(hostname) {
   );
 }
 
+function pathForPolicy(value) {
+  const resolved = path.resolve(String(value ?? ""));
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+function isPathWithinRoot(candidate, root) {
+  const candidatePath = pathForPolicy(candidate);
+  const rootPath = pathForPolicy(root);
+  const relative = path.relative(rootPath, candidatePath);
+  return relative === "" || (
+    relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+}
+
 const desktopFetchPublicHttpsOptIn =
   !app.isPackaged && envFlagEnabled("MATTERHORN_DESKTOP_FETCH_ALLOW_PUBLIC_HTTPS");
 
@@ -888,15 +916,41 @@ function isAllowedDesktopFetchUrl(rawUrl) {
 
 function isAllowedMainWindowUrl(rawUrl) {
   const value = String(rawUrl ?? "").trim();
-  if (value === "file://") return true;
+  if (value === "file://") return Boolean(trustedMainWindowFileRoot);
   try {
     const parsed = new URL(value);
-    if (parsed.protocol === "file:") return true;
+    if (parsed.protocol === "file:") {
+      if (!trustedMainWindowFileRoot) return false;
+      return isPathWithinRoot(fileURLToPath(parsed), trustedMainWindowFileRoot);
+    }
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-    return isLoopbackHostname(parsed.hostname);
+    return Boolean(trustedMainWindowOrigin && parsed.origin === trustedMainWindowOrigin);
   } catch {
     return false;
   }
+}
+
+function isAllowedInitialMainWindowUrl(rawUrl) {
+  try {
+    const parsed = new URL(String(rawUrl ?? "").trim());
+    return (
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      isLoopbackHostname(parsed.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function trustMainWindowUrl(rawUrl) {
+  const parsed = new URL(rawUrl);
+  trustedMainWindowOrigin = parsed.origin;
+  trustedMainWindowFileRoot = null;
+}
+
+function trustMainWindowFile(indexPath) {
+  trustedMainWindowOrigin = null;
+  trustedMainWindowFileRoot = path.dirname(path.resolve(indexPath));
 }
 
 const DESKTOP_FETCH_DEFAULT_TIMEOUT_MS = 30_000;
@@ -913,6 +967,10 @@ const BLOCKED_DESKTOP_FETCH_REQUEST_HEADERS = new Set([
   "sec-fetch-site",
   "sec-fetch-user",
   "set-cookie",
+]);
+const BLOCKED_LOOPBACK_DESKTOP_FETCH_REQUEST_HEADERS = new Set([
+  "authorization",
+  "x-api-key",
 ]);
 const BLOCKED_DESKTOP_FETCH_RESPONSE_HEADERS = new Set([
   "set-cookie",
@@ -944,11 +1002,21 @@ function resolveDesktopFetchBody(method, value) {
   return value;
 }
 
-function sanitizeDesktopFetchHeaders(headers) {
+function sanitizeDesktopFetchHeaders(headers, rawUrl) {
   if (!headers || typeof headers !== "object") return undefined;
   const next = new Headers(headers);
   for (const header of BLOCKED_DESKTOP_FETCH_REQUEST_HEADERS) {
     next.delete(header);
+  }
+  try {
+    const parsed = new URL(rawUrl);
+    if (isLoopbackHostname(parsed.hostname)) {
+      for (const header of BLOCKED_LOOPBACK_DESKTOP_FETCH_REQUEST_HEADERS) {
+        next.delete(header);
+      }
+    }
+  } catch {
+    return undefined;
   }
   return next;
 }
@@ -1450,6 +1518,118 @@ function configHomePath() {
     return process.env.APPDATA.trim();
   }
   return path.join(os.homedir(), ".config");
+}
+
+const BLOCKED_DESKTOP_OPEN_SUFFIXES = Object.freeze([
+  ".app",
+  ".bat",
+  ".cmd",
+  ".com",
+  ".command",
+  ".desktop",
+  ".dmg",
+  ".exe",
+  ".jar",
+  ".pkg",
+  ".ps1",
+  ".scpt",
+  ".sh",
+  ".url",
+  ".webloc",
+]);
+
+async function canonicalExistingPath(target) {
+  const resolved = path.resolve(target);
+  return realpath(resolved).catch(() => null);
+}
+
+async function rememberDesktopGrantedPath(target, kind = null) {
+  const trimmed = String(target ?? "").trim();
+  if (!trimmed || !path.isAbsolute(trimmed)) return;
+  const resolved = path.resolve(trimmed);
+  const canonical = await realpath(resolved).catch(() => resolved);
+  let directory = kind === "directory";
+  if (kind === null) {
+    const info = await stat(canonical).catch(() => null);
+    directory = Boolean(info?.isDirectory());
+  }
+  desktopGrantedPaths.set(pathForPolicy(canonical), { path: canonical, directory });
+}
+
+function isDesktopGrantedPath(target) {
+  const targetKey = pathForPolicy(target);
+  for (const grant of desktopGrantedPaths.values()) {
+    if (pathForPolicy(grant.path) === targetKey) return true;
+    if (grant.directory && isPathWithinRoot(target, grant.path)) return true;
+  }
+  return false;
+}
+
+function desktopApplicationRevealTargets() {
+  const executablePath = app.isPackaged ? app.getPath("exe") : process.execPath;
+  const appBundlePath = process.platform === "darwin"
+    ? path.resolve(executablePath, "../../..")
+    : path.dirname(executablePath);
+  return [appBundlePath, `${appBundlePath}.migrate-bak`];
+}
+
+async function desktopPathPolicyRoots() {
+  const rawRoots = [
+    app.getPath("userData"),
+    configHomePath(),
+    ...trustedWorkspacePathRoots.values(),
+  ];
+  const canonicalRoots = await Promise.all(rawRoots.map((root) => canonicalExistingPath(root)));
+  return canonicalRoots.filter(Boolean);
+}
+
+async function initializeTrustedWorkspacePathRoots() {
+  trustedWorkspacePathRoots.clear();
+  const state = await readWorkspaceState().catch(() => EMPTY_WORKSPACE_LIST);
+  for (const workspace of state.workspaces) {
+    if (workspace.workspaceType !== "local") continue;
+    const workspacePath = String(workspace.path ?? "").trim();
+    if (!workspacePath || !path.isAbsolute(workspacePath)) continue;
+    const canonical = await canonicalExistingPath(workspacePath);
+    if (!canonical || pathForPolicy(canonical) === pathForPolicy(path.parse(canonical).root)) continue;
+    trustedWorkspacePathRoots.add(canonical);
+  }
+}
+
+async function resolveSafeDesktopPath(target, { revealOnly = false } = {}) {
+  const trimmed = String(target ?? "").trim();
+  if (!trimmed) throw new Error("Path is required.");
+  if (!path.isAbsolute(trimmed)) {
+    throw new Error("Desktop file access requires an absolute path.");
+  }
+
+  const canonical = await canonicalExistingPath(trimmed);
+  if (!canonical) throw new Error("The selected path does not exist.");
+  const info = await stat(canonical);
+  if (!info.isFile() && !info.isDirectory()) {
+    throw new Error("Desktop file access supports files and folders only.");
+  }
+
+  const roots = await desktopPathPolicyRoots();
+  const allowedByRoot = roots.some((root) => isPathWithinRoot(canonical, root));
+  const allowedRevealTarget = revealOnly && (
+    await Promise.all(desktopApplicationRevealTargets().map((entry) => canonicalExistingPath(entry)))
+  ).filter(Boolean).some((entry) => pathForPolicy(entry) === pathForPolicy(canonical));
+  if (!allowedByRoot && !allowedRevealTarget && !isDesktopGrantedPath(canonical)) {
+    throw new Error("Desktop file access is limited to configured workspaces and locations you selected.");
+  }
+
+  if (!revealOnly) {
+    const basename = path.basename(canonical).toLowerCase();
+    if (BLOCKED_DESKTOP_OPEN_SUFFIXES.some((suffix) => basename.endsWith(suffix))) {
+      throw new Error("Matterhorn will not launch executable files. Reveal the item instead.");
+    }
+    if (info.isFile() && process.platform !== "win32" && (info.mode & 0o111) !== 0) {
+      throw new Error("Matterhorn will not launch executable files. Reveal the item instead.");
+    }
+  }
+
+  return canonical;
 }
 
 function globalOpencodeRoot() {
@@ -2788,6 +2968,7 @@ async function handleDesktopInvoke(event, command, ...args) {
         properties,
       });
       if (result.canceled) return null;
+      await Promise.all(result.filePaths.map((filePath) => rememberDesktopGrantedPath(filePath, "directory")));
       return options.multiple ? result.filePaths : (result.filePaths[0] ?? null);
     }
     case "pickFile": {
@@ -2801,6 +2982,7 @@ async function handleDesktopInvoke(event, command, ...args) {
         properties,
       });
       if (result.canceled) return null;
+      await Promise.all(result.filePaths.map((filePath) => rememberDesktopGrantedPath(filePath, "file")));
       return options.multiple ? result.filePaths : (result.filePaths[0] ?? null);
     }
     case "saveFile": {
@@ -2810,7 +2992,9 @@ async function handleDesktopInvoke(event, command, ...args) {
         defaultPath: options.defaultPath,
         filters: options.filters,
       });
-      return result.canceled ? null : (result.filePath ?? null);
+      const filePath = result.canceled ? null : (result.filePath ?? null);
+      if (filePath) await rememberDesktopGrantedPath(filePath, "file");
+      return filePath;
     }
     case "importSkill": {
       const projectDir = String(args[0] ?? "").trim();
@@ -2911,13 +3095,14 @@ async function handleDesktopInvoke(event, command, ...args) {
       return undefined;
     case "__openPath": {
       const target = String(args[0] ?? "").trim();
-      if (!target) return "Path is required.";
-      return shell.openPath(target);
+      const safeTarget = await resolveSafeDesktopPath(target);
+      return shell.openPath(safeTarget);
     }
     case "__revealItemInDir": {
       const target = String(args[0] ?? "").trim();
       if (!target) return undefined;
-      shell.showItemInFolder(target);
+      const safeTarget = await resolveSafeDesktopPath(target, { revealOnly: true });
+      shell.showItemInFolder(safeTarget);
       return undefined;
     }
     case "__fetch": {
@@ -2931,7 +3116,7 @@ async function handleDesktopInvoke(event, command, ...args) {
       const method = resolveDesktopFetchMethod(init.method);
       const response = await fetch(url, {
         method,
-        headers: sanitizeDesktopFetchHeaders(init.headers),
+        headers: sanitizeDesktopFetchHeaders(init.headers, url),
         body: resolveDesktopFetchBody(method, init.body),
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -3108,7 +3293,20 @@ async function stopUiControlServer() {
 async function createMainWindow() {
   if (mainWindow) return mainWindow;
 
+  await initializeTrustedWorkspacePathRoots();
   const preloadPath = path.join(__dirname, "preload.mjs");
+  const packagedIndexPath = path.join(process.resourcesPath, "app-dist", "index.html");
+  const devIndexPath = path.resolve(__dirname, "../../app/dist/index.html");
+  const rendererIndexPath = app.isPackaged ? packagedIndexPath : devIndexPath;
+  const startUrl = process.env.OPENWORK_ELECTRON_START_URL?.trim() || process.env.ELECTRON_START_URL?.trim();
+  if (startUrl) {
+    if (!isAllowedInitialMainWindowUrl(startUrl)) {
+      throw new Error("The Matterhorn desktop renderer URL must use a loopback origin.");
+    }
+    trustMainWindowUrl(startUrl);
+  } else {
+    trustMainWindowFile(rendererIndexPath);
+  }
   const windowAppearanceOptions = {};
   if (process.platform === "darwin") {
     Object.assign(windowAppearanceOptions, {
@@ -3157,23 +3355,27 @@ async function createMainWindow() {
   mainWindow.on("closed", () => {
     destroyBrowserView();
     mainWindow = null;
+    trustedMainWindowOrigin = null;
+    trustedMainWindowFileRoot = null;
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (!isAllowedMainWindowUrl(url)) {
-      if (isAllowedExternalUrl(url)) void shell.openExternal(url);
-      return { action: "deny" };
-    }
-    return { action: "allow" };
+    if (isAllowedExternalUrl(url)) void shell.openExternal(url);
+    return { action: "deny" };
   });
 
-  const startUrl = process.env.OPENWORK_ELECTRON_START_URL?.trim() || process.env.ELECTRON_START_URL?.trim();
+  const guardMainWindowNavigation = (event, url) => {
+    if (isAllowedMainWindowUrl(url)) return;
+    event.preventDefault();
+    if (isAllowedExternalUrl(url)) void shell.openExternal(url);
+  };
+  mainWindow.webContents.on("will-navigate", guardMainWindowNavigation);
+  mainWindow.webContents.on("will-redirect", guardMainWindowNavigation);
+
   if (startUrl) {
     await mainWindow.loadURL(startUrl);
   } else {
-    const packagedIndexPath = path.join(process.resourcesPath, "app-dist", "index.html");
-    const devIndexPath = path.resolve(__dirname, "../../app/dist/index.html");
-    await mainWindow.loadFile(app.isPackaged ? packagedIndexPath : devIndexPath);
+    await mainWindow.loadFile(rendererIndexPath);
   }
 
   if (!activeBrowserTabId) {

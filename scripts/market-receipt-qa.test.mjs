@@ -105,7 +105,7 @@ function expectRejected(label, result, expectedText) {
 }
 
 const hyperliquidReceiptRouteStart = server.indexOf('"/api/hyperliquid/orders/receipt"');
-const hyperliquidReceiptRouteEnd = server.indexOf('"/api/polymarket/markets"', hyperliquidReceiptRouteStart);
+const hyperliquidReceiptRouteEnd = server.indexOf('"/api/hyperliquid/orders/execution-intent"', hyperliquidReceiptRouteStart);
 const hyperliquidReceiptRoute = hyperliquidReceiptRouteStart >= 0 ? server.slice(hyperliquidReceiptRouteStart, hyperliquidReceiptRouteEnd > hyperliquidReceiptRouteStart ? hyperliquidReceiptRouteEnd : server.length) : "";
 const polymarketReceiptRouteStart = server.indexOf('"/api/polymarket/orders/receipt"');
 const polymarketReceiptRouteEnd = server.indexOf('"/api/bittensor/subnets"', polymarketReceiptRouteStart);

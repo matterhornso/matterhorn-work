@@ -131,49 +131,40 @@ function protocolLabelAndDetail(
   protocol: WalletProtocol,
   cap: WalletProtocolCapability,
 ): { label: string; detail: string; tone: string } {
-  const readLabel = cap.canRead ? "Read" : "—";
-  const handoffLabel = cap.canPreview ? "Handoff" : "—";
-  const submitLabel = cap.canSubmit ? "Submit" : cap.canPreview ? "Handoff only" : "—";
-  const connectionLabel = (() => {
-    switch (cap.connectionMode) {
-      case "wallet_standard": return "Wallet Standard";
-      case "injected_evm": return "Browser wallet";
-      case "external_handoff": return "External handoff";
-      case "public_read": return "Public reads";
-      case "unsupported": return "Not supported";
-    }
-  })();
-  const signerNote =
-    cap.signerRequirement === "external_signer"
-      ? " External signer required for writes."
-      : cap.signerRequirement === "client_signer"
-        ? " Client signer required."
-        : "";
-
   switch (protocol) {
     case "bittensor":
       return {
         label: "Bittensor",
-        detail: `${connectionLabel}. ${readLabel} public SS58/coldkey data. ${handoffLabel} unsigned actions and receipt evidence. ${submitLabel}.${signerNote}`,
-        tone: cap.canRead ? "text-cyan-300 bg-cyan-500/10" : "text-gray-500 bg-gray-500/10",
+        detail: cap.canPreview
+          ? "Read public SS58 data and prepare unsigned actions. Review, sign, and submit them with your own Bittensor signer."
+          : "Read public SS58 and coldkey data.",
+        tone: cap.canRead ? "text-cyan-300 bg-cyan-500/10" : "text-dls-secondary bg-dls-surface/75",
       };
     case "hyperliquid":
       return {
         label: "Hyperliquid",
-        detail: `${connectionLabel}. ${readLabel} markets, orderbooks, and funding. ${handoffLabel} order drafts. ${submitLabel}.${signerNote}`,
-        tone: cap.canRead ? "text-blue-300 bg-blue-500/10" : "text-gray-500 bg-gray-500/10",
+        detail: cap.canSubmit
+          ? "Read markets, prepare the exact order, and review it in the trade ticket. Matterhorn submits only after your connected wallet signs the short-lived intent; agents and watches cannot submit."
+          : cap.canPreview
+          ? "Read markets, orderbooks, and funding, then prepare an order draft. Review and submit it in your Hyperliquid client."
+          : "Read markets, orderbooks, and funding.",
+        tone: cap.canRead ? "text-blue-300 bg-blue-500/10" : "text-dls-secondary bg-dls-surface/75",
       };
     case "polymarket":
       return {
         label: "Polymarket",
-        detail: `${connectionLabel}. ${readLabel} markets, compliance, and liquidity. ${handoffLabel} order drafts. ${submitLabel}.${signerNote}`,
-        tone: cap.canRead ? "text-violet-300 bg-violet-500/10" : "text-gray-500 bg-gray-500/10",
+        detail: cap.canPreview
+          ? "Read markets, compliance, and liquidity, then prepare an order draft. Review and submit it in your Polymarket client."
+          : "Read markets, compliance, and liquidity.",
+        tone: cap.canRead ? "text-violet-300 bg-violet-500/10" : "text-dls-secondary bg-dls-surface/75",
       };
     case "sui":
       return {
         label: "Sui",
-        detail: `${connectionLabel}. ${readLabel} public account data. Prepare wallet handoffs. ${submitLabel}.${signerNote}`,
-        tone: cap.canRead ? "text-cyan-300 bg-cyan-500/10" : "text-gray-500 bg-gray-500/10",
+        detail: cap.canSubmit
+          ? "Connect a supported Sui wallet, review the transaction, and approve it in that wallet."
+          : "Read public account data and prepare an action to finish in your own Sui wallet.",
+        tone: cap.canRead ? "text-cyan-300 bg-cyan-500/10" : "text-dls-secondary bg-dls-surface/75",
       };
   }
 }
@@ -201,7 +192,7 @@ function WalletProtocolSupportMap(props: {
   const backendSuiRuntimeCopy = walletRuntimeSupportSummary(backendSuiRuntime);
   const evmDetail = props.capability.supportsInjectedEvm
     ? "Browser extension wallets such as MetaMask or Rabby can appear when installed and allowed."
-    : "Desktop does not use injected browser wallets. Use public addresses and external signer handoffs.";
+    : "Desktop does not connect browser extensions. Use a public address here, then review and submit actions in your own wallet.";
   const rows: { label: string; status: string; detail: string; tone: string }[] = [
     {
       label: "EVM wallet",
@@ -215,7 +206,7 @@ function WalletProtocolSupportMap(props: {
       detail: backendSuiRuntimeCopy.status
         ? backendSuiRuntimeCopy.detail
         : backendSui.status === "preview"
-          ? "Wallet-standard Sui connect is in early access. Signing stays in your Sui wallet."
+          ? "Connect a supported Sui wallet here. You still review and sign every transaction in that wallet. Wallet compatibility is still expanding."
           : backendSui.label,
       tone: (backendSuiRuntimeCopy.status ?? backendSui.status) === "unsupported"
         ? "text-gray-400 bg-gray-500/10"
@@ -232,9 +223,9 @@ function WalletProtocolSupportMap(props: {
         const { label, detail, tone } = protocolLabelAndDetail(protocol, cap);
         const submitStatus =
           cap.canSubmit
-            ? "Submit"
+            ? "Review & submit"
             : cap.canPreview
-              ? "Handoff only"
+              ? "Prepare only"
               : cap.canRead
                 ? "Read only"
                 : "Unavailable";
@@ -249,11 +240,14 @@ function WalletProtocolSupportMap(props: {
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-1 text-sm transition-colors hover:text-dls-text">
           <span>
             <span className="block font-medium text-dls-text">Supported wallets and desks</span>
-            <span className="mt-0.5 block text-xs text-dls-secondary">Connections, reads, and external handoffs</span>
+            <span className="mt-0.5 block text-xs text-dls-secondary">What works here and what you finish elsewhere</span>
           </span>
           <ChevronDown className="size-4 shrink-0 text-dls-muted transition-transform group-open:rotate-180" />
         </summary>
         <div className="mt-3 grid gap-3 border-t border-dls-border/40 pt-3">
+          <p className="text-xs leading-5 text-dls-secondary">
+            <span className="font-medium text-dls-text">Review &amp; submit</span> still requires your approval in a connected wallet; agents and watches never submit automatically. <span className="font-medium text-dls-text">Prepare only</span> creates a draft for you to finish elsewhere. <span className="font-medium text-dls-text">Limited release</span> means wallet compatibility is still expanding.
+          </p>
           {rows.map((row) => (
             <div key={row.label} className="grid gap-1 text-xs leading-5">
               <div className="flex items-center justify-between gap-3">
@@ -276,9 +270,12 @@ function WalletProtocolSupportMap(props: {
       <div>
         <h4 className="text-sm font-semibold text-dls-text">Protocol support</h4>
         <p className="mt-1 text-xs leading-5 text-dls-secondary">
-          One wallet surface; each desk keeps its own safety boundary.
+          Matterhorn either completes the action here or prepares it for you to finish elsewhere.
         </p>
       </div>
+      <p className="text-xs leading-5 text-dls-secondary">
+        <span className="font-medium text-dls-text">Review &amp; submit</span> still requires your approval in a connected wallet; agents and watches never submit automatically. <span className="font-medium text-dls-text">Prepare only</span> creates a draft for you to finish elsewhere. <span className="font-medium text-dls-text">Limited release</span> means wallet compatibility is still expanding.
+      </p>
       <div className="grid gap-2">
         {rows.map((row) => (
           <div key={row.label} className="grid gap-1 rounded-md py-1.5 text-xs leading-5">
@@ -380,15 +377,15 @@ function SuiWalletPreviewSection(props: {
           <div className="flex min-w-0 items-start gap-2">
             <Waves className="mt-0.5 size-4 shrink-0 text-dls-secondary" />
             <div className="min-w-0">
-              <h4 className="text-sm font-semibold text-dls-text">Sui external handoff</h4>
+              <h4 className="text-sm font-semibold text-dls-text">Prepare Sui actions</h4>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Desktop prepares Sui handoffs and receipt evidence. Signing happens in your Sui wallet or protocol client.
+                Matterhorn prepares the action and receipt evidence. Review, sign, and submit it in your Sui wallet or protocol client.
               </p>
             </div>
           </div>
         </div>
         <div className="grid gap-1 text-xs leading-5 text-dls-secondary">
-          <p><span className="font-medium text-dls-text">Available here:</span> public reads, transfer handoffs, handoff copy, and receipt import.</p>
+          <p><span className="font-medium text-dls-text">Available here:</span> public reads, transfer drafts, copyable transaction details, and receipt import.</p>
           <p><span className="font-medium text-dls-text">Not here:</span> wallet-extension connect, seed phrases, private keys, raw signatures, or live submit by Matterhorn.</p>
         </div>
         <SuiWorkflowPanel
@@ -567,7 +564,7 @@ function WalletRuntimeExplainer(props: { capability: WalletRuntimeCapability; co
       return "Browser wallet extensions are available when installed and allowed.";
     }
     switch (props.capability.desktopWalletStrategy) {
-      case "external_signer": return "External signer handoffs are available here.";
+      case "external_signer": return "Matterhorn can prepare actions here. Review, sign, and submit them in your own wallet or protocol client.";
       case "walletconnect_planned": return "WalletConnect support is planned for this runtime.";
       case "deep_link_planned": return "Deep-link support is planned for this runtime.";
       default: return "Direct wallet connection is not available in this runtime.";
@@ -602,7 +599,7 @@ function WalletRuntimeExplainer(props: { capability: WalletRuntimeCapability; co
         <div className="min-w-0">
           <h4 className="text-sm font-semibold text-dls-text">Wallet runtime</h4>
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
-            Matterhorn shows where signing happens before any handoff.
+            Matterhorn shows where each action is reviewed, signed, and submitted.
           </p>
         </div>
       </div>
@@ -633,8 +630,8 @@ function noEvmConnectorCopy(capability: WalletRuntimeCapability): { title: strin
     };
   }
   return {
-    title: "Desktop uses external handoffs",
-    body: "Browser extensions do not connect inside the desktop app. Use public addresses here, then sign in your own wallet or protocol client.",
+    title: "Finish wallet actions outside Matterhorn",
+    body: "Browser extensions do not connect inside the desktop app. Use public addresses here, then review, sign, and submit in your own wallet or protocol client.",
   };
 }
 
@@ -844,7 +841,7 @@ function WalletSafetyPolicyControls(props: {
       setForm(walletSafetyPolicyFormFromServer(response.policy));
       showToast({
         title: "Safety boundaries saved",
-        description: "Future wallet reviews will use this workspace policy.",
+        description: "Future Base transaction reviews will use this workspace policy.",
         tone: "success",
         durationMs: 2400,
       });
@@ -880,9 +877,9 @@ function WalletSafetyPolicyControls(props: {
     )}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h4 className="text-sm font-semibold text-dls-text">Safety boundaries</h4>
+          <h4 className="text-sm font-semibold text-dls-text">EVM transaction limits</h4>
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
-            These limits block wallet sends before anything reaches your signer.
+            Applied to Base transactions before they reach your browser wallet. Sui and Bittensor use their own review checks before you finish actions in those wallets.
           </p>
         </div>
         <span className="shrink-0 text-xs font-medium text-dls-secondary">{sourceLabel}</span>
@@ -890,7 +887,7 @@ function WalletSafetyPolicyControls(props: {
 
       <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr))]">
         <label className="grid gap-1.5 text-xs font-medium text-dls-secondary">
-          Per transaction
+          Per transaction (USD)
           <Input
             className={fieldClass}
             inputMode="decimal"
@@ -901,7 +898,7 @@ function WalletSafetyPolicyControls(props: {
           />
         </label>
         <label className="grid gap-1.5 text-xs font-medium text-dls-secondary">
-          Daily limit
+          Daily limit (USD)
           <Input
             className={fieldClass}
             inputMode="decimal"
@@ -912,7 +909,7 @@ function WalletSafetyPolicyControls(props: {
           />
         </label>
         <label className="grid gap-1.5 text-xs font-medium text-dls-secondary">
-          Slippage bps
+          Max slippage (bps)
           <Input
             className={fieldClass}
             inputMode="numeric"
@@ -926,25 +923,28 @@ function WalletSafetyPolicyControls(props: {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex rounded-lg bg-dls-surface-muted/[0.16] p-1">
-          {[
-            ["84532", "Base Sepolia"],
-            ["8453", "Base"],
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className={cn(
-                "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                form.preferredNetwork === value
-                  ? "bg-dls-surface-muted/45 text-dls-text"
-                  : "text-dls-secondary hover:bg-dls-surface-muted/[0.16] hover:text-dls-text",
-              )}
-              onClick={() => updateForm("preferredNetwork", value)}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="grid gap-1.5">
+          <span className="text-xs font-medium text-dls-secondary">Base network</span>
+          <div className="flex rounded-lg bg-dls-surface-muted/[0.16] p-1">
+            {[
+              ["84532", "Sepolia"],
+              ["8453", "Mainnet"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                  form.preferredNetwork === value
+                    ? "bg-dls-surface-muted/45 text-dls-text"
+                    : "text-dls-secondary hover:bg-dls-surface-muted/[0.16] hover:text-dls-text",
+                )}
+                onClick={() => updateForm("preferredNetwork", value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <button
           type="button"
@@ -1554,7 +1554,7 @@ export function WalletSettingsView({
                   {noConnectorCopy.body}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                  Public Bittensor reads and market previews still work. Sui handoffs and receipt import still work.
+                  Public Bittensor reads and market previews still work. You can also prepare Sui actions and import receipts.
                 </p>
               </div>
             )}
@@ -1570,9 +1570,9 @@ export function WalletSettingsView({
         </SettingsSection>
         <SettingsSection>
           <SettingsSectionHeader>
-            <SettingsSectionHeaderTitle>Safety boundaries</SettingsSectionHeaderTitle>
+            <SettingsSectionHeaderTitle>Wallet safety</SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Wallet review limits and recent safety events for this workspace.
+              Base transaction limits and recent review events. Other wallets use their own review checks before you finish an action.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeader>
           <WalletSafetyPolicyControls
@@ -1686,9 +1686,9 @@ export function WalletSettingsView({
 
       <SettingsSection>
         <SettingsSectionHeader>
-          <SettingsSectionHeaderTitle>Safety boundaries</SettingsSectionHeaderTitle>
+          <SettingsSectionHeaderTitle>Wallet safety</SettingsSectionHeaderTitle>
           <SettingsSectionHeaderDescription>
-            Workspace policy used before wallet approval.
+            Base transaction limits and recent review events. Other wallets use their own review checks before you finish an action.
           </SettingsSectionHeaderDescription>
         </SettingsSectionHeader>
         <WalletSafetyPolicyControls

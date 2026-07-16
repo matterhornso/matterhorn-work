@@ -15,6 +15,14 @@ const cryptoChat = read("apps/server/src/tools/crypto-chat.ts");
 const cli = read("apps/orchestrator/src/cli.ts");
 const mcp = read("packages/matterhorn-work-mcp/index.mjs");
 const smoke = read("scripts/customer-ready-crypto-smoke.mjs");
+const hyperliquidWatchRouteStart = server.indexOf('"/api/hyperliquid/watches"');
+const hyperliquidWatchRouteEnd = server.indexOf('"/api/crypto/market-execution-readiness"', hyperliquidWatchRouteStart);
+const polymarketWatchRouteStart = server.indexOf('"/api/polymarket/watches"');
+const polymarketWatchRouteEnd = server.indexOf('"/api/polymarket/orders/preview"', polymarketWatchRouteStart);
+const watchServer = [
+  server.slice(hyperliquidWatchRouteStart, hyperliquidWatchRouteEnd),
+  server.slice(polymarketWatchRouteStart, polymarketWatchRouteEnd),
+].join("\n");
 
 for (const route of [
   "/api/hyperliquid/watches",
@@ -99,7 +107,7 @@ assert.ok(cryptoChat.includes('case "hyperliquid_watch":'), "unified crypto card
 assert.ok(cryptoChat.includes('case "polymarket_watch":'), "unified crypto cards should map Polymarket watches to watch_alert");
 assert.ok(smoke.includes("test:market-watch-workflows"), "customer-ready crypto smoke should include market watch workflows");
 
-for (const text of [server, hyperliquid, polymarket, cli, mcp].join("\n").matchAll(/\/api\/(?:hyperliquid|polymarket)[^\s"'`]+/g)) {
+for (const text of [watchServer, hyperliquid, polymarket, cli, mcp].join("\n").matchAll(/\/api\/(?:hyperliquid|polymarket)[^\s"'`]+/g)) {
   assert.ok(!/\/(?:orders\/)?(?:submit|sign)|exchange\/submit/i.test(text[0]), `forbidden submit/sign path leaked into watch work: ${text[0]}`);
 }
 

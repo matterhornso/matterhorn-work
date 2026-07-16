@@ -29,11 +29,11 @@ for (const phrase of [
   "Release boundary",
   "VENUE_DESKS",
   "Start with your TAO, then choose what to do next.",
-  "Preview Hyperliquid trades with the Hyperliquid Agent, with execution off.",
+  "Research and execute Hyperliquid perpetual orders with wallet review.",
   "Analyze prediction markets and preview safely.",
   "BTC orderbook",
   "Find markets",
-  "Exchange preview controls",
+  "Exchange safeguards",
   "Market preview controls",
   "Readiness",
   "Ask Agent ->",
@@ -56,7 +56,7 @@ for (const phrase of [
   "crypto-readiness-panel",
   "market-execution-readiness-panel",
   "Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
-  "Protocol readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview flows.",
+  "Protocol readiness is green within each desk boundary",
   "matterhorn-work crypto readiness --json",
   "matterhorn-work crypto execution-readiness --json",
   "matterhorn-work crypto execution-chain --json",
@@ -76,7 +76,7 @@ for (const phrase of [
   "Hyperliquid read",
   "Polymarket compliance",
   "Signer preview",
-  "Can Matterhorn submit Hyperliquid and Polymarket orders yet?",
+  "Can Matterhorn submit Hyperliquid and Polymarket orders?",
   "Preview Only",
   "Can submit: No",
   "Live submission: Off",
@@ -86,8 +86,8 @@ for (const phrase of [
   "Polymarket submit",
   "Execution CLI",
   "Execution API",
-  "This is a readiness contract, not execution permission.",
-  "live submit routes until a separate security review",
+  "Hyperliquid can submit only an exact, expiring order signed by the connected wallet.",
+  "Agents and watches cannot execute.",
   "Execution chain",
   "Testnet-only path: preview",
   "external-signer request",
@@ -129,7 +129,7 @@ for (const phrase of [
   "Testnet validate",
   "SDK loop",
   "Safe execution chain",
-  "Confirm that Matterhorn rejects raw signatures, signed payloads, API secrets, private keys, hash mismatches, and any live submission request.",
+  "Confirm that this evidence chain rejects raw signatures, signed payloads, API secrets, private keys, hash mismatches, and live submission requests.",
   "reject raw signatures, signed payloads, secrets, and hash mismatches.",
   "Hyperliquid watch",
   "Polymarket watch",
@@ -150,29 +150,31 @@ for (const phrase of [
   "matterhorn-work polymarket watch digest --json",
   "matterhorn-work polymarket watch act",
   "<public-polymarket-watch.json>",
-  "Create HL watch",
+  "Copy watch setup command",
   "Check HL watches",
-  "Digest HL watches",
+  "Copy watch digest command",
   "Act HL alert",
-  "Create PM watch",
   "Check PM watches",
-  "Digest PM watches",
   "Act PM alert",
+  "Developer tools",
+  "Copy CLI commands. Nothing runs automatically.",
+  "Copy signer examples",
+  "Copy SDK check command",
   "review-only alert actions",
   "no orders are signed, submitted, or auto-executed",
-  "Matterhorn prepares safe previews; your wallet/client decides whether anything is signed externally.",
+  "Bittensor and Polymarket use external handoffs.",
+  "Hyperliquid requires a separate trade-ticket review and connected-wallet signature for every order.",
   "External signer required",
   "Read/preview-only",
   "No market submit",
   "Protocol Agent",
   "Market Agent",
-  "no seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, custody, or live Hyperliquid/Polymarket submission",
+  "no seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, custody, automatic execution, or Polymarket submission",
 ]) {
   assert.ok(panel.includes(phrase), `Bittensor panel should include customer demo checklist text: ${phrase}`);
 }
 
 for (const forbidden of [
-  "/api/hyperliquid/orders/submit",
   "/api/polymarket/orders/submit",
   "privateKey:",
   "apiSecret:",
@@ -181,6 +183,9 @@ for (const forbidden of [
 ]) {
   assert.equal(panel.includes(forbidden), false, `customer UI must not include forbidden execution/secret surface ${forbidden}`);
 }
+
+assert.ok(panel.includes("/api/hyperliquid/orders/execution-intent"), "customer UI must prepare an exact Hyperliquid intent");
+assert.ok(panel.includes("/api/hyperliquid/orders/submit"), "customer UI must expose the wallet-approved Hyperliquid submit route");
 
 assert.ok(panel.includes("matterhorn:crypto-chat-handoff"), "demo tasks should use the generic crypto handoff event");
 assert.ok(surface.includes("matterhorn:crypto-chat-handoff"), "session surface should listen for the generic crypto handoff event");

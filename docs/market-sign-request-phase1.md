@@ -1,6 +1,6 @@
 # Market Sign Request Phase 1
 
-Phase 1 adds disabled-by-default external sign-request generation for Hyperliquid and Polymarket. It still does not add live submission, Matterhorn signing, signed-payload intake, custody, API-secret storage, or exchange broadcast.
+Phase 1 adds disabled-by-default external sign-request generation for Hyperliquid and Polymarket. This flow still does not perform live submission, Matterhorn signing, signed-payload intake, custody, API-secret storage, or exchange broadcast. Hyperliquid's separate web execution ticket is governed by its own exact-intent, connected-wallet, expiry, replay, notional-limit, and deployment-kill-switch contract.
 
 Official references:
 
@@ -65,15 +65,17 @@ Matterhorn builds the existing order preview and handoff, runs the compliance ga
 
 Polymarket CLOB posting needs L2 authentication headers. Phase 1 does not accept, store, or proxy those headers. It only creates a local external-sign request for operator-owned testnet validation.
 
-## Still Forbidden
+## Still Forbidden In The Phase 1 Sign-Request Flow
 
-- `/api/hyperliquid/orders/submit`
+- calling `/api/hyperliquid/orders/submit` from the Phase 1 sign-request, MCP, CLI, chat, watch, or workflow surface
 - `/api/polymarket/orders/submit`
 - `/api/hyperliquid/orders/sign`
 - `/api/polymarket/orders/sign`
 - `/api/hyperliquid/exchange/submit`
 - `/api/polymarket/exchange/submit`
 - any request body, CLI flag, MCP argument, log, or evidence file containing a seed phrase, private key, wallet export, API secret, passphrase, raw signature, signed order, or signed payload.
+
+The separate web Hyperliquid execution ticket never accepts a Phase 1 signed order or arbitrary signed payload. It submits only the exact server-held action authorized by the matching connected-wallet signature.
 
 ## Required Gates
 

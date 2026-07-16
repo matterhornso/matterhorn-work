@@ -141,8 +141,10 @@ describe("Wallet approval security contract", () => {
     expect(walletViewSource).toContain("updateWalletSafetyPolicy");
     expect(walletViewSource).toContain("Safety boundaries saved");
     expect(walletViewSource).toContain("Safety boundaries applied locally");
-    expect(walletViewSource).toContain("Future wallet reviews will use this workspace policy.");
-    expect(walletViewSource).toContain("Workspace policy used before wallet approval.");
+    expect(walletViewSource).toContain("Future Base transaction reviews will use this workspace policy.");
+    expect(walletViewSource).toContain("EVM transaction limits");
+    expect(walletViewSource).toContain("Applied to Base transactions before they reach your browser wallet.");
+    expect(walletViewSource).toContain("Other wallets use their own review checks before you finish an action.");
     expect(walletViewSource).toContain("Reviewed");
     expect(walletViewSource).toContain("Sent");
     expect(walletViewSource).toContain("shortWalletAuditText");
@@ -157,6 +159,31 @@ describe("Wallet approval security contract", () => {
     expect(approvalSource).toContain("Mark reviewed");
     expect(approvalSource).not.toContain("Sign & Submit");
     expect(approvalSource).not.toContain("onApprove(pending as unknown as TxApprovalRequest)");
+  });
+
+  test("Hyperliquid execution is exact-intent, wallet-signed, and never agent automatic", () => {
+    const panelSource = readAppSource("domains/wallet/pages/BittensorPanel.tsx");
+    const serverSource = readFileSync(new URL("../../server/src/server.ts", import.meta.url), "utf8");
+    const executionSource = readFileSync(new URL("../../server/src/tools/hyperliquid-live-execution.ts", import.meta.url), "utf8");
+    const readinessSource = readFileSync(new URL("../../server/src/tools/market-execution-readiness.ts", import.meta.url), "utf8");
+    const cryptoMcpSource = readFileSync(new URL("../../../packages/matterhorn-work-crypto-mcp/index.mjs", import.meta.url), "utf8");
+
+    expect(panelSource).toContain("Place a perpetual order");
+    expect(panelSource).toContain("signTypedDataAsync(intent.typedData)");
+    expect(panelSource).toContain("/api/hyperliquid/orders/execution-intent");
+    expect(panelSource).toContain("/api/hyperliquid/orders/submit");
+    expect(panelSource).toContain("Agent prompts never auto-execute");
+    expect(readinessSource).toContain("MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED");
+    expect(serverSource).toContain("isHyperliquidExecutionEnabled()");
+    expect(serverSource).toContain("hyperliquid_execution_disabled");
+    expect(executionSource).toContain("recoverTypedDataAddress");
+    expect(executionSource).toContain("Wallet signature does not authorize this exact order intent");
+    expect(executionSource).toContain("oneTimeSubmission: true");
+    expect(executionSource).toContain("privateKeysAccepted: false");
+    expect(executionSource).toContain("apiSecretsAccepted: false");
+    expect(executionSource).toContain("expiresAfter: Date.parse(intent.expiresAt)");
+    expect(executionSource).toContain("hashHyperliquidAction(action, nonce, null, expiresAtMs)");
+    expect(cryptoMcpSource).not.toContain("hl_submitOrder");
   });
 
   test("batch wallet steps are audited when approved or blocked", () => {

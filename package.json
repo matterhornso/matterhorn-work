@@ -34,6 +34,8 @@
     "test:production-launch-environment": "node scripts/production-launch-environment.test.mjs",
     "smoke:product-readiness": "node scripts/product-readiness-smoke.mjs --strict --include-generated-media-flow",
     "test:product-readiness-smoke": "node scripts/product-readiness-smoke.test.mjs",
+    "audit:dependencies": "node scripts/dependency-bulk-audit.mjs --all --audit-level low",
+    "test:dependency-bulk-audit": "node scripts/dependency-bulk-audit.test.mjs",
     "test:matterhorn-platform-safety": "node scripts/matterhorn-platform-safety-gate.mjs",
     "test:matterhorn-platform-safety-gate": "node scripts/matterhorn-platform-safety-gate.test.mjs",
     "dev:electron": "OPENWORK_DEV_MODE=1 pnpm --filter @matterhorn-work/desktop dev:electron",
@@ -54,6 +56,8 @@
     "smoke:desktop-packaged-clean-profile": "node scripts/desktop-packaged-clean-profile-smoke.mjs",
     "test:desktop-packaged-clean-profile-smoke": "node scripts/desktop-packaged-clean-profile-smoke.test.mjs",
     "beta:monday-rc": "node scripts/monday-beta-rc-pack.mjs",
+    "launch:readiness": "node scripts/launch-channel-readiness.mjs",
+    "test:launch-channel-readiness": "node scripts/launch-channel-readiness.test.mjs",
     "preview": "pnpm --filter @matterhorn-work/app preview",
     "typecheck": "pnpm --filter @matterhorn-work/app typecheck",
     "test:health": "pnpm --filter @matterhorn-work/app test:health",
@@ -221,7 +225,7 @@
   "devDependencies": {
     "lighthouse": "^13.4.0",
     "playwright": "^1.60.0",
-    "turbo": "^2.5.5"
+    "turbo": "^2.10.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -235,9 +239,11 @@
       "@babel/core": "7.29.6",
       "@hono/node-server": "1.19.13",
       "@isaacs/brace-expansion": "5.0.1",
+      "@sentry/node": "10.65.0",
       "axios": "1.16.0",
       "brace-expansion@>=2.0.0 <2.0.3": "2.0.3",
       "diff": "8.0.3",
+      "electron-builder-squirrel-windows": "26.15.6",
       "esbuild": "0.28.1",
       "fast-uri": "3.1.2",
       "file-type": "21.3.2",
@@ -251,7 +257,9 @@
       "postcss": "8.5.10",
       "qs": "6.15.2",
       "react-router": "7.15.1",
+      "rollup": "4.62.2",
       "seroval": "1.4.1",
+      "tmp": "0.2.7",
       "viem": "2.52.2",
       "ws": "8.21.0",
       "yaml": "2.8.3"

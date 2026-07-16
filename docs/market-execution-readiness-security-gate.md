@@ -1,19 +1,32 @@
 # Market Execution-Readiness Security Gate
 
-This document defines the security gate that must pass before Matterhorn Work can even discuss enabling live Hyperliquid or Polymarket execution. It does **not** enable live submission. Current product behavior remains read-only, preview-only, external-signer handoff, and public receipt import.
+This document defines the security boundary for market execution. Matterhorn Work supports connected-wallet Hyperliquid execution in the web app. Polymarket remains read/preview only. Agent, MCP, CLI, watch, and chat surfaces do not submit orders.
 
 ## Current Enforcement
 
-- `liveSubmissionEnabled: false`
-- `canSubmit: false` on every Hyperliquid and Polymarket preview/handoff
-- no Matterhorn route that submits, signs, or broadcasts market orders
-- no private key, seed phrase, API secret, raw signature, signed payload, or wallet export accepted through HTTP, MCP, CLI, fixtures, or docs
+- `MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED=true` is required to enable the Hyperliquid execution routes; omitting it is the deployment kill switch
+- Hyperliquid execution is limited to `POST /api/hyperliquid/orders/execution-intent` followed by `POST /api/hyperliquid/orders/submit`
+- the user reviews an exact, expiring intent and signs it in the connected wallet; Matterhorn verifies the recovered signer and relays that one intent once
+- mainnet additionally requires the typed confirmation `SUBMIT LIVE ORDER`
+- the default maximum order notional is 1,000 USDC and can be lowered or explicitly changed with `MATTERHORN_HYPERLIQUID_MAX_ORDER_USDC`
+- Polymarket has no submit route and remains compliance-gated read/preview and external handoff only
+- no private key, seed phrase, API secret, unbound signature, arbitrary signed payload, or wallet export is accepted; the dedicated submit route accepts only the signature for a server-held intent
 - Polymarket compliance-blocked previews carry no executable price, size, estimated shares, or typed-data handoff
 - public receipt import verifies preview/handoff hashes and rejects credential-shaped fields
 
-## Current Safe Execution Chain
+## Connected-Wallet Hyperliquid Execution
 
-The only customer-demo execution chain currently allowed is:
+1. The web app reads current Hyperliquid metadata and mark price through the server.
+2. The server validates asset, side, size, price/slippage, network, precision, and notional cap.
+3. The server creates a 90-second, one-time intent with an immutable action, nonce, `expiresAfter`, expected signer, and exact EIP-712 Agent payload.
+4. The connected wallet signs that exact payload. Matterhorn never receives a private key or API secret.
+5. The submit route accepts only intent id, public signer address, signature, and the mainnet confirmation when required.
+6. The server recovers the signer, rejects mismatches/replays/expired intents, then relays the already-authorized action to the fixed Hyperliquid testnet or mainnet exchange endpoint.
+7. The receipt stores public result data and explicitly does not persist the signature.
+
+Market orders are implemented as IOC limit orders at the reviewed slippage boundary. Limit orders use GTC. Every order requires a fresh wallet approval; no watch, prompt, agent, MCP, or CLI action can auto-submit.
+
+## Legacy Preview And Evidence Chain
 
 `matterhorn.market.execution-chain-guide.v1` is available as a read-only guide through the local API at `GET /api/crypto/market-execution-chain`, plus the local CLI/MCP helpers. It is not a submit or signing permission.
 
@@ -23,19 +36,19 @@ The only customer-demo execution chain currently allowed is:
 4. Artifact reconciliation turns accepted public validation outputs into customer evidence.
 5. Public receipt import accepts only public status fields and verifies them against the originating handoff.
 
-This chain is deliberately incomplete for live execution. It proves hash binding, redacted evidence handling, and external-signer education without giving Matterhorn a submit/sign/broadcast path.
+This legacy chain remains deliberately incomplete for agent and operator automation. It proves hash binding and redacted evidence handling without giving MCP, CLI, chat, or watches a submit path.
 
-## Future External-Signer-Only Architecture
+## Non-Custodial Boundary
 
-Any future execution path must keep Matterhorn non-custodial:
+All current and future execution paths must keep Matterhorn non-custodial:
 
 1. Build a fresh preview from public data and user-supplied public context.
 2. Bind the preview to `previewSha256`.
 3. Reject stale previews and hash mismatches before a handoff can be used.
-4. Show an operator confirmation with exact venue, market, side, size, price, expiry, fee/risk notes, and `canSubmit: false`.
-5. Hand off public order terms to the user's own wallet/client or official SDK.
-6. The user's own signer decides whether to sign and submit outside Matterhorn.
-7. Matterhorn imports only a public receipt: order id, tx hash, status, public signer address, or public result metadata.
+4. Show the exact venue, network, asset, side, size, price/slippage, expiry, reduce-only state, and estimated notional before signing.
+5. The user's own connected wallet decides whether to sign the exact intent.
+6. Matterhorn may relay only that verified, one-time intent when the deployment kill switch allows it.
+7. Matterhorn stores only public receipt data: order id, status, public signer address, or public result metadata.
 8. Audit logs store public hashes, public route names, safety status, and redacted evidence only.
 
 ## Required Controls
@@ -45,7 +58,7 @@ Any future execution path must keep Matterhorn non-custodial:
 | `preview_hash_binding` | Every preview includes a deterministic public hash over the non-secret action terms. |
 | `stale_preview_rejection` | Expired previews, mismatched hashes, or changed public terms fail closed. |
 | `operator_confirmation` | Any future handoff requires a plain-English consequence statement and explicit external-signer acknowledgement. |
-| `external_signer_handoff` | Matterhorn never signs, computes a final signature, stores keys, or broadcasts. |
+| `external_signer_handoff` | Matterhorn never signs, computes a final signature, or stores keys. Hyperliquid relay is limited to the exact wallet-authorized intent. |
 | `public_receipt_import` | Receipt import accepts only public status fields and verifies them against the originating handoff. |
 | `audit_logging` | Evidence logs are public/redacted and contain no signing material. |
 | `prompt_injection_rejection` | Prompts that ask Matterhorn to ignore safety, sign, submit, or bypass policy return a safe refusal or clarification. |
@@ -56,13 +69,14 @@ Any future execution path must keep Matterhorn non-custodial:
 
 The readiness gate must continue to prove:
 
-- prompt injection cannot enable market signing/submission;
+- prompt injection cannot enable signing or submission; execution is reachable only from the dedicated connected-wallet ticket;
 - secret-shaped input is rejected in HTTP, MCP, and CLI surfaces;
 - stale preview or hash mismatch fails closed;
 - Polymarket compliance blocks cannot be bypassed into executable price/size/share fields;
 - fake signed-payload or raw-signature receipt imports are rejected;
-- no route, command, MCP schema, or helper exposes live market submit/sign/exchange API secret handling.
+- no command, MCP schema, chat helper, or watch exposes live market submission or exchange credential handling;
+- kill-switch-off, expired intent, changed wallet, changed intent, replay, oversized notional, excess slippage, and wrong mainnet confirmation all fail closed.
 
 ## Current Status
 
-The gate is intentionally conservative. Passing it means Matterhorn Work is safe for read/preview customer demos and external-signer education. It does not approve live submission. A separate security review, threat model, signed artifact validation, customer consent design, and incident response plan are required before any future live execution PR.
+Hyperliquid connected-wallet execution is enabled only when the deployment kill switch is on. Polymarket remains read/preview only. Passing this gate means the code preserves those separate boundaries; it does not replace a small-value testnet wallet acceptance test or production incident-response review.

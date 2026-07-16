@@ -1,6 +1,6 @@
 # Market Official SDK Validation Track
 
-Matterhorn Work currently supports Hyperliquid and Polymarket as read, preview, external-signer handoff, and public-receipt surfaces only. This validation track exists so future execution work cannot quietly treat Matterhorn's templates as final signed payloads.
+Matterhorn Work supports Hyperliquid and Polymarket reads, previews, external-signer handoffs, and public receipts. Hyperliquid also has a separate connected-wallet execution ticket in the web app. This validation track covers only public/redacted preview and handoff parity; it never signs, submits, or grants execution permission.
 
 ## Scope
 
@@ -11,7 +11,7 @@ Matterhorn Work currently supports Hyperliquid and Polymarket as read, preview, 
 ## Non-Negotiable Rules
 
 - Matterhorn must not ask for, store, log, transmit, or import seed phrases, private keys, API secrets, wallet exports, raw signatures, signed payloads, or signed extrinsics.
-- Matterhorn must not add `/api/hyperliquid/orders/submit` or `/api/polymarket/orders/submit`.
+- This validation track must not call any submit route. It does not grant submission permission. The product's separate web ticket may use the guarded `POST /api/hyperliquid/orders/submit` route after exact review and connected-wallet approval; `/api/polymarket/orders/submit` remains forbidden.
 - Market previews and handoffs must keep `canSubmit: false` and `externalSignerOnly: true` where a handoff exists.
 - Template payloads must keep `requiresClientValidation: true` until official SDK validation evidence is attached.
 - Testnet validation must happen outside Matterhorn's server process with an operator-owned wallet/client. Matterhorn records public evidence only.
@@ -365,6 +365,6 @@ matterhorn-work crypto sdk-capture --self-test --json
 matterhorn-work crypto evidence-bundle --customer-ready-smoke <smoke.json> --official-sdk-validation <sdk-evidence.json> --operator-summary <operator-summary.md> --sdk-manifest-check <manifest-check.json> --require-sdk-manifest-check --output <bundle.md> --json-output <bundle.json>
 ```
 
-This gate does not perform live SDK submission. It verifies that the source code and docs still require official SDK validation, preserve `requiresClientValidation: true`, preserve `canSubmit: false`, and do not introduce submit routes or secret-bearing schemas. The evidence validator lets an operator attach public, redacted official-client/testnet evidence later without importing keys or secrets into Matterhorn.
+This gate does not perform live SDK submission. It verifies that legacy planning artifacts still require official SDK validation, preserve `requiresClientValidation: true`, preserve `canSubmit: false`, and do not introduce submission into the SDK validation tools or secret-bearing schemas. The evidence validator lets an operator attach public, redacted official-client/testnet evidence later without importing keys or secrets into Matterhorn. The separate connected-wallet Hyperliquid route is covered by its own execution-intent and wallet-signature safety gates.
 
 Sources: Hyperliquid API docs (`hyperliquid-python-sdk`, testnet URL), Polymarket trading overview (`@polymarket/clob-client-v2`, EIP-712 orders, API credential separation).

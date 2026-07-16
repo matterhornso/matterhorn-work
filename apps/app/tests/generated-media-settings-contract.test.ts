@@ -17,20 +17,26 @@ function readServerSource(path: string) {
 }
 
 describe("Generated media settings surface", () => {
-  test("SettingsTab and sidebar expose Generated media as a first-class workspace tab", () => {
+  test("keeps Generated media implemented but launch-gated until production approval", () => {
     const types = readAppSource("app/types.ts");
+    const launchPolicy = readAppSource("app/lib/launch-features.ts");
     const settingsPage = readAppSource("react-app/domains/settings/shell/settings-page.tsx");
     expect(types).toContain('"generated-media"');
     expect(settingsPage).toContain('case "generated-media"');
     expect(settingsPage).toContain('return "Generated media"');
     expect(settingsPage).toContain('"generated-media": ["image-generation", "nft"]');
     expect(settingsPage).toContain('["preferences", "permissions", "wallet", "generated-media", "extensions"]');
+    expect(settingsPage).toContain("filterLaunchSettingsTabs(tabs)");
+    expect(launchPolicy).toContain("VITE_MATTERHORN_GENERATED_MEDIA_ENABLED");
+    expect(launchPolicy).toContain('if (tab === "generated-media") return policy.generatedMedia;');
   });
 
   test("settings route parses and renders the generated-media page", () => {
     const route = readAppSource("react-app/shell/settings-route.tsx");
     expect(route).toContain('case "generated-media"');
     expect(route).toContain("GeneratedMediaSettingsView");
+    expect(route).toContain("applyLaunchSettingsRoutePolicy");
+    expect(route).toContain("isSettingsTabRouteEnabledAtLaunch");
     expect(route).toContain("onOpenWorkspaceChat={openWorkspaceChat}");
     expect(route).toContain("onOpenRunHistory={openWorkspaceOutputs}");
     expect(route).toContain('onOpenImageProviderSetup={() => openExtensionDetail("openai-image-gen")}');

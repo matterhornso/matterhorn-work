@@ -42,8 +42,12 @@ describe("ensureWorkspaceFiles", () => {
       expect(bittensorAgent).toContain('"*": false');
       expect(bittensorAgent).toContain('"matterhorn-work_matterhorn_bittensor_chat": true');
       expect(bittensorAgent).toContain("Call the Bittensor desk tool exactly once");
+      expect(bittensorAgent).toContain("sole source for subnet IDs, names, and capabilities");
+      expect(bittensorAgent).toContain("current subnet recommendations are unavailable");
+      expect(bittensorAgent).toContain("do not name subnet IDs, subnet names, or capabilities");
       expect(hyperliquidAgent).toContain("Hyperliquid Agent");
-      expect(hyperliquidAgent).toContain("Can submit: No");
+      expect(hyperliquidAgent).toContain("explicit review, connected-wallet signature, and one-time submission flow");
+      expect(hyperliquidAgent).toContain("Never claim an Agent prompt placed an order");
       expect(hyperliquidAgent).toContain("websearch: deny");
       expect(hyperliquidAgent).toContain('"matterhorn-work_matterhorn_hyperliquid_list_markets": true');
       expect(hyperliquidAgent).toContain("single most specific Hyperliquid desk tool");

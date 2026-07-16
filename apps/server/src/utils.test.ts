@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hashToken, shortId, parseList, ensureDir, exists } from "./utils.js";
+import { hashToken, shortId, parseList, ensureDir, exists, timingSafeTokenEqual } from "./utils.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,6 +19,14 @@ describe("hashToken", () => {
   test("returns a hex string", () => {
     const hash = hashToken("test");
     expect(hash).toMatch(/^[0-9a-f]+$/);
+  });
+});
+
+describe("timingSafeTokenEqual", () => {
+  test("matches equal tokens and rejects unequal tokens", () => {
+    expect(timingSafeTokenEqual("owner-token", "owner-token")).toBe(true);
+    expect(timingSafeTokenEqual("owner-token", "owner-token-extra")).toBe(false);
+    expect(timingSafeTokenEqual("", "owner-token")).toBe(false);
   });
 });
 

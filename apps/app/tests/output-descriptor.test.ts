@@ -188,7 +188,7 @@ describe("output descriptor", () => {
       id: "workflow-output:img_evt:.matterhorn-work/outputs/images/img_123.png",
       kind: "image",
       outputPath: ".matterhorn-work/outputs/images/img_123.png",
-      title: "Image generated: img_123.png",
+      title: "Generated image",
       summary: "mock;mock-image-1;.matterhorn-work/outputs/images/img_123.png",
       taskId: "image_gen_img_123",
       timestamp: "2026-07-07T10:00:00.000Z",
@@ -199,7 +199,7 @@ describe("output descriptor", () => {
     };
 
     expect(outputDescriptorFromOpenTarget(target, receipt)).toMatchObject({
-      title: "Image generated: img_123.png",
+      title: "Generated image",
       path: ".matterhorn-work/outputs/images/img_123.png",
       preview: "image",
       originLabel: "Generated image",

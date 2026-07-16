@@ -110,31 +110,15 @@ export async function signAndSubmitOrder(_input: {
  * Requires the L1 signature (from signTypedData) and the order JSON.
  */
 export async function submitOrder({
-  signedOrder,
-  signature,
-  publicAddress,
+  signedOrder: _signedOrder,
+  signature: _signature,
+  publicAddress: _publicAddress,
 }: {
   signedOrder: unknown;
   signature: `0x${string}`;
   publicAddress: `0x${string}`;
 }) {
-  const res = await fetch("https://api.hyperliquid.xyz/exchange", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      action: signedOrder,
-      signature,
-      nonce: Date.now(),
-      user: publicAddress,
-    }),
-  });
-
-  const data = (await res.json()) as Record<string, unknown>;
-
-  if ("error" in data) {
-    return { success: false, error: data.error };
-  }
-  return { success: true, data };
+  throw new Error("Arbitrary signed-order submission is disabled. Use the short-lived Hyperliquid execution-intent flow.");
 }
 
 /**

@@ -181,6 +181,9 @@ export type MarketExecutionReadinessCardTone = "good" | "warning" | "danger" | "
 export interface MarketExecutionReadinessVenueReport {
   venue: Extract<MarketVenue, "hyperliquid" | "polymarket">;
   routeFamily: string;
+  executionMode?: "wallet_approved" | "preview_only";
+  liveSubmissionEnabled?: boolean;
+  canSubmit?: boolean;
   supportedNow: string[];
   blockedNow: string[];
   missingBeforeLiveSubmit: string[];
@@ -194,9 +197,11 @@ export interface MarketExecutionReadinessControlReport {
 
 export interface MarketExecutionReadinessSafety {
   nonCustodial: true;
-  liveSubmissionEnabled: false;
-  canSubmit: false;
-  signsOrSubmits: false;
+  liveSubmissionEnabled: boolean;
+  canSubmit: boolean;
+  signsOrSubmits: boolean;
+  signs?: false;
+  submitsWalletAuthorizedIntents?: boolean;
   acceptsSecrets: false;
   acceptsRawSignatures: false;
   acceptsSignedPayloads: false;
@@ -205,7 +210,7 @@ export interface MarketExecutionReadinessSafety {
 export interface MarketExecutionReadinessReport {
   version: "matterhorn.market.execution-readiness.v1";
   checkedAt: string;
-  readyForLiveSubmission: false;
+  readyForLiveSubmission: boolean;
   status: MarketExecutionReadinessReportStatus;
   venues: MarketExecutionReadinessVenueReport[];
   controls: MarketExecutionReadinessControlReport[];
@@ -223,7 +228,7 @@ export interface MarketExecutionReadinessCard {
   kind: "market_execution_readiness";
   title: "Market execution readiness";
   summary: string;
-  tone: Extract<MarketExecutionReadinessCardTone, "warning" | "danger" | "info">;
+  tone: MarketExecutionReadinessCardTone;
   source: MarketSourceFreshness;
   items: MarketExecutionReadinessCardItem[];
   warnings: string[];

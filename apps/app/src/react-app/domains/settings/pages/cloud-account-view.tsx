@@ -68,6 +68,7 @@ export type CloudAccountViewProps = {
   session: CloudAccountSession;
   compact?: boolean;
   workspaceId?: string;
+  runtimeWorkspaceId?: string | null;
   matterhornServerClient?: MatterhornServerClient | null;
   onSendFeedback?: () => void;
 };
@@ -260,6 +261,7 @@ export function CloudAccountView({
   developerMode,
   session,
   workspaceId,
+  runtimeWorkspaceId,
   matterhornServerClient,
   onSendFeedback,
 }: CloudAccountViewProps) {
@@ -270,7 +272,7 @@ export function CloudAccountView({
     () => getProfileReadiness(cloudAuthState(isSignedIn, session.authError)),
     [isSignedIn, session.authError],
   );
-  const workspaceIdForBackend = workspaceId?.trim() ?? "";
+  const workspaceIdForBackend = runtimeWorkspaceId?.trim() ?? "";
   const backendProfileQuery = useQuery({
     queryKey: ["profile-backend-control-plane", workspaceIdForBackend],
     enabled: Boolean(matterhornServerClient),
@@ -313,27 +315,25 @@ export function CloudAccountView({
           Open workspace preferences
         </Button>
 
-        <section className="flex flex-col gap-3 rounded-lg bg-dls-surface-muted/[0.12] px-3.5 py-3.5">
+        {cloudAvailable ? <section className="flex flex-col gap-3 rounded-lg bg-dls-surface-muted/[0.12] px-3.5 py-3.5">
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-2.5">
               <Cloud className="mt-0.5 size-4 shrink-0 text-dls-secondary" />
               <div className="min-w-0">
                 <h3 className="truncate text-sm font-semibold text-dls-text">{t("den.cloud_section_title")}</h3>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                  {cloudAvailable
-                    ? isSignedIn ? t("den.cloud_signed_in_desc") : t("den.cloud_section_desc")
-                    : "Cross-device sync and shared Cloud teammates are not included. Local chats, notes, memory, and outputs keep working."}
+                  {isSignedIn ? t("den.cloud_signed_in_desc") : t("den.cloud_section_desc")}
                 </p>
               </div>
             </div>
             <span className="shrink-0 text-[11px] font-medium text-dls-secondary">
-              {cloudAvailable ? session.summaryLabel : "Not included"}
+              {session.summaryLabel}
             </span>
           </div>
-          {cloudAvailable && !isSignedIn ? (
+          {!isSignedIn ? (
             <p className="pl-[1.625rem] text-xs leading-5 text-dls-secondary">{t("den.cloud_sleep_hint")}</p>
           ) : null}
-        </section>
+        </section> : null}
 
         {statusMessage && cloudAvailable && !session.authError && !session.orgsError ? (
           <SettingsNotice>{statusMessage}</SettingsNotice>
@@ -399,7 +399,7 @@ export function CloudAccountView({
         />
       </SettingsSection>
 
-      <SettingsSection>
+      {cloudAvailable ? <SettingsSection>
         <SettingsSectionHeader>
           <SettingsSectionHeaderContent>
             <SettingsSectionHeaderTitle>
@@ -463,7 +463,7 @@ export function CloudAccountView({
             sessionBusy={session.sessionBusy}
           />
         )}
-      </SettingsSection>
+      </SettingsSection> : null}
 
     </SettingsStack>
   );

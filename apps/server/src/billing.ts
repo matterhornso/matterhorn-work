@@ -861,7 +861,7 @@ function planIdFromStripeSubscriptionItems(
   return null;
 }
 
-function subscriptionStatusValue(value: unknown): MatterhornBillingSubscription["status"] {
+export function subscriptionStatusValue(value: unknown): MatterhornBillingSubscription["status"] {
   const status = stringValue(value);
   if (
     status === "active" ||
@@ -873,7 +873,7 @@ function subscriptionStatusValue(value: unknown): MatterhornBillingSubscription[
   ) {
     return status;
   }
-  return "active";
+  return "none";
 }
 
 function isoFromStripeSeconds(value: unknown): string | null {
@@ -881,9 +881,8 @@ function isoFromStripeSeconds(value: unknown): string | null {
   return new Date(value * 1000).toISOString();
 }
 
-function checkoutPaymentStatusAllowsSync(value: unknown): boolean {
+export function checkoutPaymentStatusAllowsSync(value: unknown): boolean {
   const status = stringValue(value);
-  if (!status) return true;
   return status === "paid" || status === "no_payment_required";
 }
 

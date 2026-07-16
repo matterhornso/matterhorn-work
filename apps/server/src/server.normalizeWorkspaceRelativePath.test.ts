@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { isSupportedWorkspaceTextFilePath, normalizeWorkspaceRelativePath } from "./server.js";
+import { mkdtemp, mkdir, realpath, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { isSupportedWorkspaceTextFilePath, normalizeWorkspaceRelativePath, resolveSafeChildPath } from "./server.js";
 
 describe("normalizeWorkspaceRelativePath", () => {
   test("accepts a plain workspace-relative path", () => {
@@ -58,5 +61,28 @@ describe("isSupportedWorkspaceTextFilePath", () => {
 
   test("rejects unsupported binary-like extensions", () => {
     expect(isSupportedWorkspaceTextFilePath(".opencode/plugins/cloud.bin")).toBe(false);
+  });
+});
+
+describe("resolveSafeChildPath", () => {
+  test("rejects existing and not-yet-created files reached through an escaping symlink", async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), "matterhorn-safe-child-"));
+    const workspaceRoot = join(fixtureRoot, "workspace");
+    const outsideRoot = join(fixtureRoot, "outside");
+    await mkdir(workspaceRoot);
+    await mkdir(outsideRoot);
+    await symlink(outsideRoot, join(workspaceRoot, "linked"), process.platform === "win32" ? "junction" : "dir");
+    const canonicalWorkspaceRoot = await realpath(workspaceRoot);
+
+    try {
+      expect(() => resolveSafeChildPath(workspaceRoot, "linked/secret.txt")).toThrow(
+        "Path traversal through a symbolic link is not allowed",
+      );
+      expect(resolveSafeChildPath(workspaceRoot, "reports/safe.txt")).toBe(
+        join(canonicalWorkspaceRoot, "reports", "safe.txt"),
+      );
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
   });
 });

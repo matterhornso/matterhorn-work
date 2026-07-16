@@ -12,6 +12,7 @@ const types = read("packages/types/src/markets.ts");
 const doc = read("docs/market-sign-request-phase1.md");
 const server = read("apps/server/src/server.ts");
 const hyperliquid = read("apps/server/src/tools/hyperliquid.ts");
+const hyperliquidLiveExecution = read("apps/server/src/tools/hyperliquid-live-execution.ts");
 const polymarket = read("apps/server/src/tools/polymarket.ts");
 const mcp = read("packages/matterhorn-work-mcp/index.mjs");
 const cli = read("apps/orchestrator/src/cli.ts");
@@ -121,7 +122,6 @@ for (const required of [
 }
 
 for (const [label, text] of [
-  ["server", server],
   ["MCP", mcp],
   ["CLI", cli],
 ]) {
@@ -135,6 +135,40 @@ for (const [label, text] of [
   ]) {
     assert.ok(!text.includes(forbidden), `${label} must not contain ${forbidden}`);
   }
+}
+
+for (const forbidden of [
+  "/api/hyperliquid/orders/sign",
+  "/api/polymarket/orders/sign",
+  "/api/polymarket/orders/submit",
+  "/api/hyperliquid/exchange/submit",
+  "/api/polymarket/exchange/submit",
+]) {
+  assert.ok(!server.includes(forbidden), `server must not contain ${forbidden}`);
+}
+
+for (const required of [
+  'addRoute(routes, "POST", "/api/hyperliquid/orders/submit", "client"',
+  "isHyperliquidExecutionEnabled()",
+  "hyperliquid_execution_disabled",
+  "hyperliquidExecutionIntentStore.submit",
+]) {
+  assert.ok(server.includes(required), `manual Hyperliquid submit route missing ${required}`);
+}
+
+for (const required of [
+  'new Set(["intentId", "signerAddress", "signature", "liveConfirmation"])',
+  "Execution intent was not found or has expired",
+  "This execution intent is already being submitted",
+  "Execution intent expired",
+  "recoverTypedDataAddress",
+  "Wallet signature does not authorize this exact order intent",
+  'input.liveConfirmation !== "SUBMIT LIVE ORDER"',
+  'stored.state = "submitting"',
+  'stored.state = "complete"',
+  "signatureStored: false",
+]) {
+  assert.ok(hyperliquidLiveExecution.includes(required), `manual Hyperliquid execution safety missing ${required}`);
 }
 
 for (const required of [

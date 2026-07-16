@@ -99,7 +99,9 @@ mustContain("docs/market-official-sdk-validation.md", [
   "canSubmit: false",
   "externalSignerOnly: true",
   "Matterhorn must not ask for, store, log, transmit, or import seed phrases",
-  "Matterhorn must not add `/api/hyperliquid/orders/submit` or `/api/polymarket/orders/submit`",
+  "This validation track must not call any submit route",
+  "POST /api/hyperliquid/orders/submit",
+  "`/api/polymarket/orders/submit` remains forbidden",
   "Testnet validation must happen outside Matterhorn's server process",
   "Redacted Matterhorn typed-data template",
   "Official-client normalized typed-data/order",
@@ -394,10 +396,11 @@ else pass("Polymarket payloads keep requiresClientValidation true");
 if (/canSubmit:\s*true/.test(polymarketTool)) fail("Polymarket payloads never enable canSubmit", "found true");
 else pass("Polymarket payloads never enable canSubmit");
 
-mustNotContain("apps/server/src/server.ts", [
-  "/api/hyperliquid/orders/submit",
-  "/api/polymarket/orders/submit",
+mustContain("apps/server/src/server.ts", [
+  'addRoute(routes, "POST", "/api/hyperliquid/orders/submit", "client"',
+  "isHyperliquidExecutionEnabled()",
 ]);
+mustNotContain("apps/server/src/server.ts", ["/api/polymarket/orders/submit"]);
 
 for (const [label, text] of [["Hyperliquid", hyperliquidTool], ["Polymarket", polymarketTool]]) {
   for (const forbidden of ["privateKey =", "apiSecret =", "seedPhrase =", "mnemonic ="]) {

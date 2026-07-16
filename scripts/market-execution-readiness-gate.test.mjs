@@ -23,7 +23,7 @@ for (const required of [
   "MARKET_EXECUTION_READINESS_CONTROLS",
   "MarketExecutionReadinessChecklist",
   "futureArchitecture: \"external_signer_only\"",
-  "liveSubmissionEnabled: false",
+  "liveSubmissionEnabled: boolean",
   "acceptsPrivateKeys: false",
   "acceptsApiSecrets: false",
   "acceptsRawSignatures: false",
@@ -49,12 +49,12 @@ for (const control of [
 }
 
 for (const required of [
-  "liveSubmissionEnabled: false",
-  "canSubmit: false",
-  "no Matterhorn route that submits, signs, or broadcasts market orders",
+  "Connected-Wallet Hyperliquid Execution",
+  "MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED",
+  "SUBMIT LIVE ORDER",
+  "Polymarket has no submit route",
   "Reject stale previews and hash mismatches",
-  "Matterhorn imports only a public receipt",
-  "Passing it means Matterhorn Work is safe for read/preview customer demos",
+  "Matterhorn stores only public receipt data",
 ]) {
   assert.ok(doc.includes(required), `readiness doc missing ${required}`);
 }
@@ -69,7 +69,6 @@ const codeSurfaces = [
 
 for (const [label, text] of codeSurfaces) {
   for (const forbidden of [
-    "/api/hyperliquid/orders/submit",
     "/api/polymarket/orders/submit",
     "/api/hyperliquid/orders/sign",
     "/api/polymarket/orders/sign",
@@ -82,6 +81,25 @@ for (const [label, text] of codeSurfaces) {
   ]) {
     assert.ok(!text.includes(forbidden), `${label} must not contain ${forbidden}`);
   }
+}
+
+for (const required of [
+  "/api/hyperliquid/orders/execution-intent",
+  "/api/hyperliquid/orders/submit",
+  "hyperliquid_execution_disabled",
+]) {
+  assert.ok(server.includes(required), `server should expose guarded Hyperliquid execution surface ${required}`);
+}
+
+const liveExecution = read("apps/server/src/tools/hyperliquid-live-execution.ts");
+for (const required of [
+  "recoverTypedDataAddress",
+  "hashHyperliquidAction(action, nonce, null, expiresAtMs)",
+  "oneTimeSubmission: true",
+  "privateKeysAccepted: false",
+  "apiSecretsAccepted: false",
+]) {
+  assert.ok(liveExecution.includes(required), `Hyperliquid live execution missing ${required}`);
 }
 
 assert.ok(

@@ -337,7 +337,7 @@ const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: str
     {
       title: "Show market context",
       detail: "Summarize spread, depth, and stale-data warnings.",
-      prompt: "Show BTC orderbook context on Hyperliquid, spread, depth summary, and stale-data warnings. Explain that Matterhorn can prepare an external trade handoff, but Can submit: No and Live submission: Off.",
+      prompt: "Show BTC orderbook context on Hyperliquid, spread, depth summary, and stale-data warnings. Explain how I can review and sign an order in the Hyperliquid desk.",
     },
     {
       title: "Show account exposure",
@@ -345,9 +345,9 @@ const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: str
       prompt: "Summarize my public/read-only Hyperliquid account exposure if an address or public account context is available. Do not ask for API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
     },
     {
-      title: "Prepare trade handoff",
-      detail: "Draft an external-client handoff you can review outside Matterhorn.",
-      prompt: "Prepare a Hyperliquid external trade handoff for BTC with Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
+      title: "Prepare an order",
+      detail: "Draft an order for exact review and connected-wallet approval.",
+      prompt: "Prepare a Hyperliquid BTC order. Ask for network, side, size, market or limit, slippage, and reduce-only state. Explain that execution requires a separate review and wallet signature in the Hyperliquid desk.",
     },
   ],
   polymarket: [
@@ -511,18 +511,13 @@ function HomeWalletRuntimeStatus({
                   Start the Matterhorn Work engine to read wallet-family status.
                 </p>
               )}
-              <div className="mt-2 rounded-md bg-dls-surface-muted/[0.08] px-2.5 py-2">
-                <p className="text-xs leading-5 text-dls-secondary">
-                  Sui signing stays in your wallet; desktop uses external handoff.
-                </p>
-                <button
-                  type="button"
-                  className="mt-1 rounded-md px-0 py-1 text-xs font-medium text-dls-text transition-colors hover:text-dls-secondary"
-                  onClick={onOpenWallet}
-                >
-                  Open wallet
-                </button>
-              </div>
+              <button
+                type="button"
+                className="mt-1 w-fit rounded-md px-0 py-1 text-xs font-medium text-dls-text transition-colors hover:text-dls-secondary"
+                onClick={onOpenWallet}
+              >
+                Open wallet settings
+              </button>
             </div>
           </PopoverContent>
         </Popover>
@@ -861,7 +856,7 @@ function ProtocolDeskEmptyState({
       ? "Runs market research, compliance checks, and external-wallet handoffs. Matterhorn never places bets inside the app."
       : panel === "sui"
         ? "Runs public Sui account reads and transfer previews. Web signing happens in your connected Sui wallet; desktop signing stays external."
-        : "Runs read-only market/account checks and prepares external-client handoffs. Matterhorn never submits orders inside the app.";
+        : "Agent tasks run market and account checks and prepare order context, but cannot submit. Manual execution is available only in the Hyperliquid panel after exact review and connected-wallet approval.";
   const providerNotice = panel === "bittensor"
     ? bittensorSidecarNotice(bittensorSidecarQuery.data?.health, bittensorSidecarQuery.isError)
     : null;
@@ -1638,7 +1633,12 @@ export function SessionPage(props: SessionPageProps) {
     const requestedPanel = new URLSearchParams(location.search).get("panel");
     if (SIDE_PANEL_ITEMS.includes(requestedPanel as SidePanelItem)) {
       setCurrentSidePanel(requestedPanel as SidePanelItem);
+      return;
     }
+
+    // The URL is the shareable source of truth. A plain project-home URL must
+    // not resurrect a panel that happened to be open in a previous visit.
+    setCurrentSidePanel(null);
   }, [location.search, setCurrentSidePanel]);
 
   useEffect(() => {

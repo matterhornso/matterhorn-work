@@ -1,25 +1,36 @@
+export function isHyperliquidExecutionEnabled(): boolean {
+  const value = process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED?.trim().toLowerCase();
+  return value === "1" || value === "true";
+}
+
 export function buildMarketExecutionReadinessReport(checkedAt = new Date().toISOString()) {
+  const hyperliquidExecution = isHyperliquidExecutionEnabled();
   return {
     version: "matterhorn.market.execution-readiness.v1",
     checkedAt,
-    readyForLiveSubmission: false,
-    status: "disabled",
+    readyForLiveSubmission: hyperliquidExecution,
+    status: hyperliquidExecution ? "ready" : "review",
     venues: [
       {
         venue: "hyperliquid",
         routeFamily: "hyperliquid.orders",
-        supportedNow: ["read", "preview", "external_sign_request", "redacted_artifact_validation", "public_receipt_import"],
-        blockedNow: ["live_submit", "custodial_signing", "exchange_secret_storage"],
-        missingBeforeLiveSubmit: [
-          "independent security review",
-          "external signer UX approval",
-          "testnet signed-artifact evidence",
-          "operator kill-switch rehearsal",
-        ],
+        executionMode: hyperliquidExecution ? "wallet_approved" : "preview_only",
+        liveSubmissionEnabled: hyperliquidExecution,
+        canSubmit: hyperliquidExecution,
+        supportedNow: hyperliquidExecution
+          ? ["read", "preview", "connected_wallet_sign", "intent_bound_live_submit", "public_receipt"]
+          : ["read", "preview", "external_sign_request", "redacted_artifact_validation", "public_receipt_import"],
+        blockedNow: hyperliquidExecution
+          ? ["agent_auto_submit", "custodial_signing", "exchange_secret_storage", "unbound_signature_submit"]
+          : ["live_submit", "custodial_signing", "exchange_secret_storage"],
+        missingBeforeLiveSubmit: hyperliquidExecution ? [] : ["enable deployment execution kill switch"],
       },
       {
         venue: "polymarket",
         routeFamily: "polymarket.orders",
+        executionMode: "preview_only",
+        liveSubmissionEnabled: false,
+        canSubmit: false,
         supportedNow: ["read", "preview", "compliance_check", "external_sign_request", "redacted_artifact_validation", "public_receipt_import"],
         blockedNow: ["live_submit", "custodial_signing", "exchange_secret_storage", "compliance_bypass"],
         missingBeforeLiveSubmit: [
@@ -32,23 +43,30 @@ export function buildMarketExecutionReadinessReport(checkedAt = new Date().toISO
       },
     ],
     controls: [
-      { id: "preview_hash_binding", status: "pass", summary: "Action previews and handoffs carry stable hashes before any external signing step." },
-      { id: "external_signer_only", status: "pass", summary: "Matterhorn creates public sign-request packets but does not sign or custody keys." },
+      { id: "preview_hash_binding", status: "pass", summary: "Hyperliquid submission signs an exact, expiring server intent; legacy handoffs retain stable public hashes." },
+      { id: "external_signer_only", status: "pass", summary: "The connected wallet signs each Hyperliquid intent. Matterhorn never signs or custodies keys." },
       { id: "redacted_artifact_validation", status: "pass", summary: "Only public/redacted signed-artifact metadata can be validated." },
       { id: "public_receipt_import", status: "pass", summary: "Receipt evidence is public status only and not treated as exchange submission authority." },
-      { id: "route_level_kill_switch", status: "blocked", summary: "Live submit routes do not exist and must remain blocked until a separate security review." },
-      { id: "live_submit_routes", status: "blocked", summary: "No Hyperliquid or Polymarket live submit route is exposed." },
+      { id: "route_level_kill_switch", status: "pass", summary: hyperliquidExecution ? "The deployment kill switch enables Hyperliquid execution." : "The deployment kill switch currently disables Hyperliquid execution." },
+      { id: "live_submit_routes", status: hyperliquidExecution ? "pass" : "blocked", summary: hyperliquidExecution ? "Hyperliquid exposes a wallet-signed, intent-bound submit route. Polymarket has no submit route." : "No live market submission is enabled for this deployment." },
     ],
-    nextActions: [
-      "Keep using read/preview/external-signer/public-receipt flows for Hyperliquid and Polymarket.",
-      "Validate official-client signed-artifact evidence on operator-owned testnets without sending secrets to Matterhorn.",
-      "Run pnpm test:market-execution-safety-gate before any future execution-contract PR.",
-    ],
+    nextActions: hyperliquidExecution
+      ? [
+          "Test a small Hyperliquid order on testnet with the connected wallet before using mainnet.",
+          "Keep Polymarket on compliance-gated read/preview and external handoff flows.",
+          "Run pnpm test:market-execution-safety-gate before release.",
+        ]
+      : [
+          "Enable MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED only after deployment review.",
+          "Keep using read/preview/external-signer/public-receipt flows while execution is disabled.",
+        ],
     safety: {
       nonCustodial: true,
-      liveSubmissionEnabled: false,
-      canSubmit: false,
-      signsOrSubmits: false,
+      liveSubmissionEnabled: hyperliquidExecution,
+      canSubmit: hyperliquidExecution,
+      signsOrSubmits: hyperliquidExecution,
+      signs: false,
+      submitsWalletAuthorizedIntents: hyperliquidExecution,
       acceptsSecrets: false,
       acceptsRawSignatures: false,
       acceptsSignedPayloads: false,
@@ -57,20 +75,24 @@ export function buildMarketExecutionReadinessReport(checkedAt = new Date().toISO
 }
 
 export function buildMarketExecutionReadinessCard(report = buildMarketExecutionReadinessReport()) {
+  const hyperliquid = report.venues.find((venue) => venue.venue === "hyperliquid");
+  const hyperliquidEnabled = hyperliquid?.canSubmit === true;
   return {
     kind: "market_execution_readiness",
     title: "Market execution readiness",
-    summary: "Hyperliquid and Polymarket are read/preview/external-signer only. Live submission is disabled until a separate security review.",
-    tone: "warning",
+    summary: hyperliquidEnabled
+      ? "Hyperliquid supports connected-wallet execution. Polymarket remains read/preview and external-handoff only."
+      : "Hyperliquid execution is disabled by the deployment kill switch. Polymarket remains preview-only.",
+    tone: hyperliquidEnabled ? "good" : "warning",
     source: { source: "matterhorn.execution-readiness", freshness: "live" },
     items: [
-      { label: "Hyperliquid", value: "Execution disabled", tone: "warning" },
+      { label: "Hyperliquid", value: hyperliquidEnabled ? "Wallet-approved execution" : "Execution disabled", tone: hyperliquidEnabled ? "good" : "warning" },
       { label: "Polymarket", value: "Execution disabled", tone: "warning" },
-      { label: "Can submit", value: "No", tone: "good" },
-      { label: "Live submission", value: "Off", tone: "good" },
+      { label: "Can submit", value: hyperliquidEnabled ? "Hyperliquid only" : "No", tone: hyperliquidEnabled ? "good" : "warning" },
+      { label: "Automatic execution", value: "Off", tone: "good" },
       { label: "Secrets accepted", value: "No", tone: "good" },
     ],
-    warnings: ["This is a readiness contract, not execution permission."],
+    warnings: ["Every Hyperliquid order still requires review and a matching connected-wallet signature. Agents cannot submit orders."],
     data: { report },
   } as const;
 }

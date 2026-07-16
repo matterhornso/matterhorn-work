@@ -136,6 +136,22 @@ describe("Outputs panel contract", () => {
     expect(previewSource).toContain("<details");
   });
 
+  test("generated image previews distinguish mock placeholders from production images", () => {
+    const artifactSource = readAppSource("domains/session/artifacts/artifact-panel.tsx");
+    const previewSource = readAppSource("domains/session/artifacts/preview.tsx");
+    const receiptSource = readAppSource("domains/session/artifacts/output-receipts.ts");
+
+    expect(receiptSource).toContain('? "Generated image"');
+    expect(receiptSource).not.toContain('`Image generated: ${basename(outputPath)}`');
+    expect(artifactSource).toContain("client.getGeneratedImage");
+    expect(artifactSource).toContain("Mock preview · no production image rendered");
+    expect(artifactSource).toContain("<GeneratedImagePreview");
+    expect(artifactSource).toContain("w-fit max-w-full");
+    expect(previewSource).toContain("This placeholder confirms the image workflow works. No production image was rendered.");
+    expect(previewSource).toContain("Preview unavailable");
+    expect(previewSource).toContain("Prompt");
+  });
+
   test("command palette uses Outputs terminology for accessible targets", () => {
     const paletteSource = readAppSource("shell/command-palette.tsx");
 

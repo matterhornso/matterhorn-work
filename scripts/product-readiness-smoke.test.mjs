@@ -178,6 +178,33 @@ assert.deepEqual(
   ["node", "scripts/generated-media-production-readiness.mjs", "--require-production", "--json"],
 );
 
+const stableLaunchDryRun = await run(["--dry-run", "--require-production", "--enforce-launch-scope", "--json"]);
+assert.equal(stableLaunchDryRun.code, 0, stableLaunchDryRun.stderr || stableLaunchDryRun.stdout);
+const stableLaunchReport = JSON.parse(stableLaunchDryRun.stdout);
+assert.deepEqual(stableLaunchReport.metadata.launchScope, {
+  enforced: true,
+  billing: false,
+  generatedMedia: false,
+});
+for (const stageId of [
+  "billing.production_readiness",
+  "generated_media.production_readiness",
+  "generated_media.history",
+]) {
+  const stage = stableLaunchReport.stages.find((candidate) => candidate.id === stageId);
+  assert.equal(stage?.status, "skip", `${stageId} should be skipped outside the stable launch scope`);
+  assert.match(stage?.reason ?? "", /not included in this stable launch scope/);
+}
+
+const contradictoryScope = await run([
+  "--dry-run",
+  "--enforce-launch-scope",
+  "--include-generated-media-flow",
+  "--json",
+]);
+assert.equal(contradictoryScope.code, 1);
+assert.match(contradictoryScope.stderr, /requires --launch-generated-media/);
+
 const failingServer = createServer((request, response) => {
   response.setHeader("Content-Type", "application/json");
   if (request.url === "/workspaces") {

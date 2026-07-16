@@ -3,6 +3,25 @@ import { setTimeout as delay } from "node:timers/promises";
 import { serve } from "./serve-node.js";
 
 describe("serve", () => {
+  test("passes the trusted socket peer to request handlers", async () => {
+    const server = await serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (_request, context) => Response.json({ remoteAddress: context.remoteAddress }),
+    });
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${server.port}/peer`, {
+        headers: { "X-Forwarded-For": "203.0.113.44" },
+      });
+      const payload = await response.json() as { remoteAddress: string | null };
+      expect(payload.remoteAddress).toMatch(/127\.0\.0\.1|::ffff:127\.0\.0\.1/);
+      expect(payload.remoteAddress).not.toBe("203.0.113.44");
+    } finally {
+      await server.stop();
+    }
+  });
+
   test("does not write an error response after a streaming response has ended", async () => {
     const uncaught: unknown[] = [];
     const onUncaughtException = (error: unknown) => {

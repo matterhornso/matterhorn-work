@@ -17,7 +17,7 @@ export function backendCapabilityLabel(status: MatterhornCapabilityStatus): stri
     case "needs_setup":
       return "Needs setup";
     case "preview":
-      return "Early access";
+      return "Limited release";
     case "unsupported":
       return "Not supported here";
     case "error":
@@ -114,16 +114,32 @@ export function walletRuntimeSupportSummary(
       status: null,
     };
   }
-  const connection = support.directConnect ? "Direct connect" : "External handoff";
-  const signing =
-    support.signing === "client_wallet"
-      ? "signing stays in the user's wallet"
-      : support.signing === "external_signer"
-        ? "external signer required"
-        : "signing not supported";
+  if (["needs_setup", "unsupported", "error"].includes(support.status)) {
+    return {
+      label: backendCapabilityLabel(support.status),
+      detail: support.description || "Wallet support is not available in this runtime.",
+      status: support.status,
+    };
+  }
+
+  const limitedRelease = support.status === "preview";
+  const label = support.directConnect
+    ? `Connect here${limitedRelease ? " · Limited release" : ""}`
+    : `Prepare only${limitedRelease ? " · Limited release" : ""}`;
+  const detail = support.directConnect
+    ? `Connect and use a supported wallet in Matterhorn. ${
+      support.signing === "client_wallet"
+        ? "You still review and sign every transaction in your wallet."
+        : "Transaction signing is not available here."
+    }${limitedRelease ? " Wallet compatibility is still expanding." : ""}`
+    : `Matterhorn prepares the action. ${
+      support.signing === "external_signer"
+        ? "Review, sign, and submit it in your own wallet or protocol client."
+        : "Signing and submission are not available here."
+    }${limitedRelease ? " This workflow is still in a limited release." : ""}`;
   return {
-    label: `${connection} · ${backendCapabilityLabel(support.status)}`,
-    detail: support.description || `${connection}; ${signing}.`,
+    label,
+    detail,
     status: support.status,
   };
 }

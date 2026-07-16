@@ -56,11 +56,13 @@ describe("customer workflow template launch cards", () => {
     expect(bittensor?.prompt).toContain("Do not ask for seed phrases");
     expect(bittensor?.prompt).toContain("private keys");
 
-    for (const card of [hyperliquid, polymarket]) {
-      expect(card?.prompt).toContain("Can submit: No");
-      expect(card?.prompt).toContain("Live submission: Off");
-      expect(card?.prompt).toContain("Matterhorn never signs");
-    }
+    expect(hyperliquid?.prompt).toContain("Actual execution happens only in the Hyperliquid desk");
+    expect(hyperliquid?.prompt).toContain("connected-wallet signing");
+    expect(hyperliquid?.prompt).toContain("Never request keys or API secrets");
+
+    expect(polymarket?.prompt).toContain("Can submit: No");
+    expect(polymarket?.prompt).toContain("Live submission: Off");
+    expect(polymarket?.prompt).toContain("Matterhorn never signs");
 
     expect(sui?.prompt).toContain("Sui task");
     expect(sui?.prompt).toContain("Scope: Sui public addresses");

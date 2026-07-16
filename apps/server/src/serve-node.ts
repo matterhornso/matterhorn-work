@@ -11,8 +11,12 @@ import { Readable } from "node:stream";
 export type ServeOptions = {
   hostname: string;
   port: number;
-  fetch: (request: Request) => Response | Promise<Response>;
+  fetch: (request: Request, context: ServeRequestContext) => Response | Promise<Response>;
   idleTimeout?: number;
+};
+
+export type ServeRequestContext = {
+  remoteAddress: string | null;
 };
 
 export type ServeResult = {
@@ -174,7 +178,9 @@ export function serve(options: ServeOptions): Promise<ServeResult> {
 
     try {
       const webReq = toWebRequest(nodeReq, hostname, boundPort, requestController.signal);
-      const webRes = await fetchHandler(webReq);
+      const webRes = await fetchHandler(webReq, {
+        remoteAddress: nodeReq.socket.remoteAddress ?? null,
+      });
       await writeWebResponse(webRes, nodeRes);
     } catch (error) {
       if (requestController.signal.aborted || !isResponseWritable(nodeRes)) return;

@@ -58,9 +58,10 @@ for (const phrase of [
   "non-custodial",
   "never holds your keys, signs silently, or moves funds",
   "external Bittensor-compatible signer",
-  "Live submission is off",
-  "reads and external handoffs only",
-  "your own eligible client executes trades",
+  "manual orders use a separate trade ticket",
+  "sign a short-lived intent in your connected wallet",
+  "agents and watches cannot submit",
+  "prepares drafts for you to review and submit in your own eligible client",
   "never asks for or stores seed phrases, private keys, or API secrets",
   "stored",
 ]) {
@@ -84,7 +85,7 @@ assert.ok(generalView.includes('tab: "wallet"'), "Settings hub should include Wa
 assert.ok(generalView.includes('tab: "billing"'), "Settings hub should include Billing");
 assert.ok(settingsPage.includes("getWorkspaceSettingsTabs(developerMode = false)"), "Workspace settings should be gated by developer mode");
 assert.ok(settingsPage.includes('if (developerMode) tabs.push("marketplace", "advanced");'), "Agent templates and Advanced should be developer-gated");
-assert.ok(settingsPage.includes('return developerMode ? ["cloud-account", "cloud-workers"] : ["cloud-account"];'), "Cloud Workers should be developer-gated");
+assert.ok(settingsPage.includes('return filterLaunchSettingsTabs(developerMode ? ["cloud-account", "cloud-workers"] : ["cloud-account"]);'), "Cloud Workers should require both developer mode and the Cloud launch flag");
 assert.ok(generalView.includes("developerOnly: true"), "Demo/developer settings cards should be hidden unless developer mode is on");
 assert.ok(generalView.includes('title: "Matterhorn Cloud"'), "Settings hub should use Matterhorn Cloud branding");
 assert.ok(generalView.includes('title: "Advanced"'), "Advanced settings should remain documented as a developer-only technical surface");

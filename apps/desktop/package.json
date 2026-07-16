@@ -27,7 +27,7 @@
   "dependencies": {
     "@opencode-ai/sdk": "^1.14.38",
     "better-sqlite3": "^11.10.0",
-    "electron-updater": "^6.3.9",
+    "electron-updater": "^6.8.9",
     "hyperliquid": "^1.7.7",
     "jsonc-parser": "^3.2.1",
     "minimatch": "^10.0.1",
@@ -37,8 +37,9 @@
   },
   "devDependencies": {
     "asar": "3.2.0",
-    "electron": "^35.0.0",
-    "electron-builder": "^25.1.8",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.6",
+    "electron-builder-squirrel-windows": "26.15.6",
     "electron-devtools-installer": "^4.0.0"
   },
   "packageManager": "pnpm@10.27.0",

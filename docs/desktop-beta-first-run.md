@@ -132,12 +132,15 @@ On first launch, confirm:
 - Bittensor, Hyperliquid, Polymarket, Sui, and Longevity open as distinct desks;
 - stable builds do not show the operator-only Demo tab;
 - Bittensor is labelled `Read and preview` and uses external signing handoffs;
-- Hyperliquid and Polymarket are preview-only and have no live market submit;
+- Hyperliquid exposes a separate manual connected-wallet order ticket when the
+  deployment execution switch is enabled; Polymarket remains preview-only;
 - Longevity is a standalone workflow surface with no medical diagnosis, live
   payments, live email, live storage, or live access control;
 - prompt buttons insert context into chat without auto-sending;
-- every preview card says `Can submit: No`, `Live submission: Off`, or
-  `External signer required` when relevant.
+- every chat, MCP, CLI, and watch preview says `Can submit: No`,
+  `Live submission: Off`, or `External signer required` when relevant;
+- the Hyperliquid order ticket defaults to testnet, requires exact order review
+  and a fresh wallet approval, and never implies agent or unattended execution.
 
 ## 5. Optional Local Server Doctor
 
@@ -180,16 +183,20 @@ For the current release:
 
 - Bittensor: public explain/read/preview/watch/receipt flows with external-signer
   handoff.
-- Hyperliquid and Polymarket: preview/external-signer readiness only; no live
-  market submit.
+- Hyperliquid: read/preview flows plus manual connected-wallet perpetual orders
+  through a short-lived, one-time intent. Chat, MCP, CLI, watches, and agent
+  prompts cannot submit.
+- Polymarket: preview/external-signer readiness only; no live market submit.
 - Wellness workflows: useful sample workflow pack; no medical diagnosis, no live
   payments, no live email, no live hosting, no live access control.
 - Decentralized services: future contracts and provider discovery only; no live
   provider execution.
 
-No seed phrases, private keys, API secrets, raw signatures, signed payloads,
-wallet exports, custody, or live Hyperliquid/Polymarket submission are accepted
-in this release.
+No seed phrases, private keys, API secrets, pasted raw signatures, caller-supplied
+signed payloads, wallet exports, or custody are accepted in this release. The
+only live market submission path is the reviewed Hyperliquid web ticket: the
+connected wallet signs the exact server-issued intent, and the server relays
+that one intent without persisting the signature. Polymarket cannot submit.
 
 Service red line: no live payments, no live email, no live storage, no live
 access control, and no live provider execution are enabled in this desktop release.

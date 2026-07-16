@@ -7,8 +7,8 @@ This file mirrors the durable product rules in [docs/ui/matterhorn-design-system
 ## Product Shape
 
 - **Home** is the launcher. It creates a session, opens a desk, or starts a workflow with an editable prompt. It never auto-sends.
-- **Bittensor** is beta-ready. It supports public SS58 wallet reads, subnet discovery, validator comparison, unsigned staking/unstaking/transfer previews, watches, receipt import, and coldkey/hotkey explanations.
-- **Hyperliquid** is preview-only. It supports account/orderbook/funding/open-order reads, watches, preview handoffs, and receipt evidence. Every preview says `Can submit: No`, `Live submission: Off`, and `External signer/client required`.
+- **Bittensor** supports public SS58 wallet reads, subnet discovery, validator comparison, unsigned staking/unstaking/transfer previews, watches, receipt import, and coldkey/hotkey explanations. Live chain submission remains outside Matterhorn Work.
+- **Hyperliquid** supports account/orderbook/funding/open-order reads, watches, previews, receipt evidence, and manual connected-wallet execution in its dedicated trade ticket. Chat, MCP, CLI, and watches never auto-submit. Every order uses explicit review, a short-lived one-time intent, connected-wallet signing, and the deployment kill switch; testnet is the default and mainnet requires an additional typed confirmation.
 - **Polymarket** is preview-only. It supports market discovery, outcome probability context, liquidity/orderbook reads, compliance state, watches, preview handoffs, and receipt evidence. Compliance-blocked previews must not show executable price, size, or share fields.
 - **Longevity** is standalone. It is not Web3, not a market desk, and not medical care. It creates safe offline optimization workflows and client artifacts without diagnosis, prescription, treatment claims, guaranteed outcomes, live payment, live email, live hosting, or token-gating claims.
 - **Memory** is visible and user-controlled. No hidden saves. Every suggestion shows why suggested, source, sensitivity, confidence, and confirm/edit/dismiss controls.
@@ -33,12 +33,13 @@ This file mirrors the durable product rules in [docs/ui/matterhorn-design-system
 - The composer is always visible but never overlaps card content.
 - The right rail is optional. On narrower layouts it collapses before it traps the main desk.
 - Back to chat, Home, Profile, and Settings must be discoverable.
-- Every serious action uses preview -> explicit review -> external signer/client handoff. Matterhorn does not hide signing or submit on behalf of users.
+- Every serious action uses preview -> explicit review -> external signer or connected-wallet approval. Matterhorn never hides signing or signs on behalf of users. It may relay only the exact Hyperliquid intent the connected wallet approved; other write paths remain external handoffs.
 - Empty, loading, degraded-provider, and no-wallet states must explain what still works and what to try next.
+- Stable launch navigation includes only production-approved surfaces. Generated-media publishing, billing, and Matterhorn Cloud stay hidden unless their explicit build flags are enabled.
 
 ## Forbidden Patterns
 
 - Customer-facing `Crypto workspace`, `Services`, `Computer Use`, `OpenWork`, or unexplained `OpenCode` copy.
 - Seed phrase, private key, mnemonic, raw signature, signed payload, wallet export, API secret, or exchange secret fields.
-- Hyperliquid/Polymarket live submit or hidden signing claims.
+- Agent-initiated or unreviewed Hyperliquid submission, any Polymarket live submission, or hidden signing claims.
 - Trapped right rails, horizontal overflow, nested scrolling inside cards, bottom composer overlap, text clipped inside buttons, and cards inside cards.

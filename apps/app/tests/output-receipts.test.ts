@@ -77,7 +77,7 @@ describe("workflow output receipts", () => {
     expect(receipts[0]).toMatchObject({
       kind: "image",
       outputPath: ".matterhorn-work/outputs/images/img_123.png",
-      title: "Image generated: img_123.png",
+      title: "Generated image",
       status: "generated",
       taskId: "image_gen_img_123",
     });

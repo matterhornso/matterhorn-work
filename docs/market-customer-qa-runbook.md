@@ -5,9 +5,9 @@ This runbook is for Hermes, Claude Code, Codex, or a human tester validating the
 Scope:
 
 - Bittensor remains the mature flow: wallet reads, validator/subnet intelligence, watch/autopilot, unsigned previews, external-signer handoff, and receipt evidence.
-- Hyperliquid and Polymarket are read/preview/external-signer only.
+- Hyperliquid provides read/preview/external-signer flows plus a separate web-only, wallet-approved execution ticket. Polymarket remains read/preview/external-signer only.
 - Matterhorn Work must never ask for, store, log, or transmit private keys, seed phrases, API secrets, raw signatures, or signed payloads.
-- No live Hyperliquid or Polymarket order submission should happen from Matterhorn Work.
+- No chat, MCP, CLI, watch, workflow, or agent prompt may submit an order. Hyperliquid submission is allowed only through the guarded web ticket after the connected wallet signs an exact, expiring server intent; Polymarket submission is unavailable.
 
 ## 1. Static Safety Gates
 
@@ -35,8 +35,8 @@ Expected result:
 
 - All commands exit 0.
 - Every market preview stays `canSubmit: false`.
-- `liveSubmissionEnabled` stays `false`.
-- No `/api/hyperliquid/orders/submit` or `/api/polymarket/orders/submit` route exists.
+- Legacy preview, handoff, sign-request, and artifact-validation contracts keep `liveSubmissionEnabled: false`.
+- The guarded `/api/hyperliquid/orders/execution-intent` and `/api/hyperliquid/orders/submit` routes exist but return disabled unless `MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED` is explicitly enabled. No `/api/polymarket/orders/submit` route exists.
 - Receipt checks reject raw signatures and signed payloads.
 
 ## 2. Offline Venue QA
@@ -201,7 +201,9 @@ Use the desktop app or web UI and capture screenshots for:
 
 - Bittensor chat: wallet/subnet/validator/readiness cards still render without overflow.
 - Customer readiness panel: `Crypto Gate`, `Venue Checks`, blockers, next actions, `Refresh Crypto Gate`, and `Ask Crypto Chat` are visible and do not imply live submission.
-- Hyperliquid chat: a read-only market/account request and a preview-only order response.
+- Hyperliquid chat: a read-only market/account request and a preview-only order
+  response; then separately inspect the web order ticket without signing or
+  submitting during automated QA.
 - Polymarket chat: search/events/market detail and geoblock/compliance response.
 - Handoff cards: show external-signer language, hashes, expiry, and `canSubmit: false`.
 - Error states: missing parameters ask one clear clarification question; secret-shaped input is rejected without echoing the secret value.
@@ -212,7 +214,11 @@ Fail the QA run if any of these happen:
 
 - Matterhorn asks for a seed phrase, private key, API secret, raw signature, or signed payload.
 - Matterhorn stores or logs a secret value.
-- A Hyperliquid or Polymarket route submits an order.
+- A Polymarket route submits an order, or any chat/MCP/CLI/watch/agent surface
+  can call the Hyperliquid submit route.
+- The Hyperliquid web ticket accepts modified, expired, replayed, oversized, or
+  mismatched-signer intents, bypasses the deployment kill switch, skips the
+  exact mainnet confirmation phrase, or persists a wallet signature.
 - A preview or handoff reports `canSubmit: true`.
 - A sign request or artifact validation reports `canSubmit: true` or
   `submitSignedAllowedByContract: true`.

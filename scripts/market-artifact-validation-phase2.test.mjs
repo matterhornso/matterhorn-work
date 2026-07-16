@@ -12,6 +12,7 @@ const types = read("packages/types/src/markets.ts");
 const doc = read("docs/market-artifact-validation-phase2.md");
 const server = read("apps/server/src/server.ts");
 const hyperliquid = read("apps/server/src/tools/hyperliquid.ts");
+const hyperliquidLiveExecution = read("apps/server/src/tools/hyperliquid-live-execution.ts");
 const polymarket = read("apps/server/src/tools/polymarket.ts");
 const hyperliquidTest = read("apps/server/src/tools/hyperliquid.test.ts");
 const polymarketTest = read("apps/server/src/tools/polymarket.test.ts");
@@ -144,7 +145,6 @@ for (const required of [
 }
 
 for (const [label, text] of [
-  ["server", server],
   ["MCP", mcp],
   ["CLI", cli],
 ]) {
@@ -163,6 +163,30 @@ for (const [label, text] of [
     assert.ok(!text.includes(forbidden), `${label} must not contain ${forbidden}`);
   }
 }
+
+for (const forbidden of [
+  "/api/hyperliquid/orders/sign",
+  "/api/polymarket/orders/sign",
+  "/api/polymarket/orders/submit",
+  "/api/hyperliquid/exchange/submit",
+  "/api/polymarket/exchange/submit",
+  "submitSignedOrder(",
+  "signOrder(",
+  "privateKey =",
+  "apiSecret =",
+]) {
+  assert.ok(!server.includes(forbidden), `server must not contain ${forbidden}`);
+}
+
+for (const required of [
+  'addRoute(routes, "POST", "/api/hyperliquid/orders/submit", "client"',
+  "isHyperliquidExecutionEnabled()",
+  "hyperliquid_execution_disabled",
+  "hyperliquidExecutionIntentStore.submit",
+]) {
+  assert.ok(server.includes(required), `manual Hyperliquid submit route missing ${required}`);
+}
+assert.ok(hyperliquidLiveExecution.includes("signatureStored: false"), "manual Hyperliquid receipts must state that signatures are not stored");
 
 for (const required of [
   "market.artifact_validation_phase2",

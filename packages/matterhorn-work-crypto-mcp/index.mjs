@@ -602,15 +602,6 @@ function summarizeOrder({ asset, isBuy, sz, limitPx }) {
   return `${side} ${sz} ${asset} (${type})`;
 }
 
-async function submitOrder({ signedOrder, signature, publicAddress }) {
-  const data = await fetchJson("https://api.hyperliquid.xyz/exchange", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: signedOrder, signature, nonce: Date.now() }),
-  });
-  if (data?.error) return { success: false, error: data.error };
-  return { success: true, data };
-}
-
 // =========================================================
 // Polymarket Research
 // =========================================================
@@ -1387,7 +1378,6 @@ const tools = [
   { name: "hl_buildOrder", description: "Build an unsigned Hyperliquid order JSON (needs wallet_signTypedData after)", inputSchema: { type: "object", properties: { asset: { type: "string" }, isBuy: { type: "boolean" }, sz: { type: "number" }, limitPx: { type: "number" }, reduceOnly: { type: "boolean" } }, required: ["asset", "isBuy", "sz"] } },
   { name: "hl_summarizeOrder", description: "Generate a human-readable summary of an HL order", inputSchema: { type: "object", properties: { asset: { type: "string" }, isBuy: { type: "boolean" }, sz: { type: "number" }, limitPx: { type: "number" } }, required: ["asset", "isBuy", "sz"] } },
   { name: "hl_placeOrder", description: "Request a Hyperliquid order placement. The UI will prompt the user to sign.", inputSchema: { type: "object", properties: { asset: { type: "string" }, isBuy: { type: "boolean" }, sz: { type: "number" }, limitPx: { type: "number" }, reduceOnly: { type: "boolean" } }, required: ["asset", "isBuy", "sz"] } },
-  { name: "hl_submitOrder", description: "Submit a signed Hyperliquid order. Requires L1 signature from wallet_signTypedData.", inputSchema: { type: "object", properties: { signedOrder: {}, signature: { type: "string" }, publicAddress: { type: "string" } }, required: ["signedOrder", "signature", "publicAddress"] } },
 
   // -- polymarket --
   { name: "pm_searchEvents", description: "Search Polymarket events by keyword", inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" } }, required: ["query"] } },
@@ -1547,7 +1537,6 @@ function handleMessage(msg) {
           process.stderr.write(JSON.stringify({ event: "hl_placeOrder", order }) + "\n");
           return respond(textResult({ status: "needs_signature", message: "Hyperliquid orders require EIP-712 signing via wallet_signTypedData.", order }));
         }
-        case "hl_submitOrder": return submitOrder({ signedOrder: args.signedOrder, signature: args.signature, publicAddress: args.publicAddress }).then(r => respond(textResult(r))).catch(catchErr);
 
         // polymarket
         case "pm_searchEvents": return pm_searchEvents(args.query, args.limit).then(r => respond(textResult(r))).catch(catchErr);

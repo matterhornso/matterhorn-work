@@ -18,7 +18,7 @@ The Matterhorn Desk System is the top-level navigation and workspace layer. Each
 Matterhorn
 └── Home (Desk Launcher)
     ├── Bittensor Desk       ← protocol, read-only Subtensor
-    ├── Hyperliquid Desk     ← protocol, preview-only
+    ├── Hyperliquid Desk     ← protocol, research + wallet-approved orders
     ├── Polymarket Desk      ← protocol, preview-only
     ├── Wellness Desk       ← restricted, opt-in, local-only
     ├── Memory Desk          ← cross-desk memory overview

@@ -49,6 +49,7 @@
   "dependencies": {
     "@matterhorn-work/memory-vault": "workspace:*",
     "@matterhorn-work/types": "workspace:*",
+    "@msgpack/msgpack": "^3.1.2",
     "@mysten/sui": "^2.20.1",
     "@opencode-ai/sdk": "^1.14.38",
     "better-sqlite3": "^11.10.0",

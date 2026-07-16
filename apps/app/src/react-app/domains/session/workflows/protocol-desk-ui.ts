@@ -79,6 +79,7 @@ export type CustomerProtocolDeskVisual = {
 };
 
 const STATUS_LABELS: Record<ProtocolDeskVisualStatus, string> = {
+  live: "Working",
   beta_ready: "Read and preview",
   preview_only: "Preview only",
   workflow_ready: "Workflow-ready",
@@ -86,7 +87,7 @@ const STATUS_LABELS: Record<ProtocolDeskVisualStatus, string> = {
 };
 
 const MARKET_STATUS_LABELS: Partial<Record<CustomerProtocolDeskId, string>> = {
-  hyperliquid: "External trade handoff",
+  hyperliquid: "Wallet-approved execution",
   polymarket: "Compliance-gated handoff",
 };
 
@@ -142,10 +143,10 @@ function safetySummary(manifest: ProtocolDeskManifest): string {
     return "Public SS58 reads and unsigned previews only. External signer required; no seed phrases, private keys, or wallet exports.";
   }
   if (manifest.id === "hyperliquid" || manifest.id === "polymarket") {
-    return "Runs read and preview tasks with external handoff. Matterhorn never stores keys, API secrets, raw signatures, or signed payloads.";
+    return "Runs read and preview tasks, then prepares drafts for you to finish in your own wallet or client. Matterhorn never stores keys, API secrets, raw signatures, or signed payloads.";
   }
   if (manifest.id === "sui") {
-    return "Use your Sui wallet on web, or an external handoff on desktop. Matterhorn stores previews and public receipts only.";
+    return "Use your Sui wallet on web. On desktop, Matterhorn prepares the action for you to finish in your own wallet. Matterhorn stores previews and public receipts only.";
   }
   if (manifest.id === "wellness") {
     return "Standalone business workflow. Not Web3, not markets, no medical advice, and no live payments/email/hosting.";
@@ -164,7 +165,7 @@ function railTitle(manifest: ProtocolDeskManifest): string {
     return "Bittensor: TAO wallet reads, subnets, validators, watches, receipts, and unsigned staking previews";
   }
   if (manifest.id === "hyperliquid") {
-    return "Hyperliquid: orderbooks, exposure, funding, watches, and external trade handoffs";
+    return "Hyperliquid: orderbooks, exposure, funding, watches, and wallet-approved orders";
   }
   if (manifest.id === "polymarket") {
     return "Polymarket: markets, outcomes, liquidity, compliance, watches, and trade handoffs";

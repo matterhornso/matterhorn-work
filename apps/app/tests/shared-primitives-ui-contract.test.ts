@@ -457,8 +457,8 @@ describe("Shared primitives UI contract", () => {
     expect(accountView).toContain("bg-dls-surface-muted/[0.32]");
     expect(accountView).toContain("hover:bg-dls-surface-muted/[0.46]");
     expect(accountView).toContain("bg-dls-surface-muted/[0.18] px-2.5 py-1.5");
-    expect(accountView).toContain("Cross-device sync and shared Cloud teammates are not included");
-    expect(accountView).toContain("rounded-none bg-transparent px-0 py-0");
+    expect(accountView).toContain("{cloudAvailable ? <section");
+    expect(accountView).toContain("{cloudAvailable ? <SettingsSection>");
     expect(readAppSource("domains/profile/profile-capability-status.tsx")).toContain("bg-dls-surface-muted/[0.20]");
     expect(readAppSource("domains/profile/profile-capability-status.tsx")).toContain("hover:bg-dls-surface-muted/[0.30]");
   });

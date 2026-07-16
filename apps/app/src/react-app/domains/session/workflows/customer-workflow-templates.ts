@@ -32,7 +32,7 @@ export type CustomerWorkflowTemplate = {
   summary: string;
   promise: string;
   category: "bittensor" | "markets" | "wellness" | "decentralized_services" | "future" | "web3";
-  status: "beta_ready" | "preview_only" | "planned_not_live" | "workflow_ready" | "blank";
+  status: "live" | "beta_ready" | "preview_only" | "planned_not_live" | "workflow_ready" | "blank";
   examplePrompts: string[];
   launch: {
     primaryCta: string;
@@ -56,16 +56,16 @@ export type CustomerWorkflowTemplate = {
     acceptsPrivateKeys: false;
     acceptsApiSecrets: false;
     acceptsRawSignatures: false;
-    canSubmit: false;
-    liveExecutionEnabled: false;
+    canSubmit: boolean;
+    liveExecutionEnabled: boolean;
     canExecute: boolean;
     requiresExternalSigner: boolean;
-    allowsRealFunds: false;
+    allowsRealFunds: boolean;
   };
   protocolWorkspace?: {
     id: MatterhornProtocolWorkspaceId;
     displayName: string;
-    customerStatus: "beta_ready" | "preview_only" | "workflow_ready" | "planned_not_live";
+    customerStatus: "live" | "beta_ready" | "preview_only" | "workflow_ready" | "planned_not_live";
     launchBehavior: MatterhornProtocolWorkspaceLaunchBehavior;
     primaryPanelRouteId: string;
     allowedIntents: string[];
@@ -118,6 +118,9 @@ type CustomerWorkflowTemplateResponse = {
 const MARKET_HANDOFF_SUFFIX =
   "Prepare an external trade handoff when asked. Make clear: Can submit: No. Live submission: Off. External trade handoff only. The user executes in their own external client, and Matterhorn never signs or holds keys.";
 
+const HYPERLIQUID_EXECUTION_SUFFIX =
+  "Prepare and explain the order in chat, but never claim chat placed it. Actual execution happens only in the Hyperliquid desk after exact-order review, connected-wallet signing, and one-time submission. Never request keys or API secrets.";
+
 const BITTENSOR_SUFFIX =
   "Use public wallet context only. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";
 
@@ -168,6 +171,8 @@ const CHAT_MODE_BY_PROTOCOL_WORKSPACE: Record<MatterhornProtocolWorkspaceId, Cus
 
 function statusLabel(status: CustomerWorkflowTemplate["status"] | undefined): string {
   switch (status) {
+    case "live":
+      return "Working";
     case "beta_ready":
       return "Read and preview";
     case "preview_only":
@@ -248,7 +253,7 @@ function buildCustomerWorkflowPromptFromText(template: CustomerWorkflowTemplate,
     case "bittensor":
       return `Bittensor task: ${prompt}. Scope: TAO, SS58 public addresses, coldkeys, hotkeys, subnets, validators, wallet reads, staking previews, watches, and receipts. ${BITTENSOR_SUFFIX} ${intentContext}`.trim();
     case "hyperliquid":
-      return `Hyperliquid task: ${prompt}. Scope: markets, orderbooks, account exposure, funding, open orders, external trade handoffs, watches, and receipts. ${MARKET_HANDOFF_SUFFIX} ${intentContext}`.trim();
+      return `Hyperliquid task: ${prompt}. Scope: markets, orderbooks, account exposure, funding, open orders, wallet-approved orders, watches, and receipts. ${HYPERLIQUID_EXECUTION_SUFFIX} ${intentContext}`.trim();
     case "polymarket":
       return `Polymarket task: ${prompt}. Scope: market discovery, outcomes, probabilities, liquidity, compliance checks, external trade handoffs, watches, and receipts. ${MARKET_HANDOFF_SUFFIX} ${intentContext}`.trim();
     case "sui":
@@ -299,9 +304,9 @@ function enrichCustomerWorkflowTemplate(template: CustomerWorkflowTemplate): Cus
       acceptsPrivateKeys: false,
       acceptsApiSecrets: false,
       acceptsRawSignatures: false,
-      canSubmit: false,
-      liveExecutionEnabled: false,
-      allowsRealFunds: false,
+      canSubmit: manifest.safetyBoundaries.canSubmit,
+      liveExecutionEnabled: manifest.safetyBoundaries.liveExecutionEnabled,
+      allowsRealFunds: manifest.safetyBoundaries.allowsRealFunds,
     },
     protocolWorkspace: {
       id: manifest.id,
@@ -355,22 +360,22 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   {
     id: "hyperliquid_trader",
     name: "Use Hyperliquid",
-    summary: "Read Hyperliquid markets, check exposure, and prepare external trade handoffs for your own client.",
-    promise: "Trade handoff only. No live submission, no custody, and no signing by Matterhorn.",
+    summary: "Read Hyperliquid markets, check exposure, and place wallet-approved perpetual orders.",
+    promise: "Non-custodial execution. Your connected wallet signs each reviewed order before submission.",
     category: "markets",
-    status: "preview_only",
-    examplePrompts: ["Prepare Hyperliquid BTC-PERP handoff", "Show my Hyperliquid exposure"],
+    status: "live",
+    examplePrompts: ["Prepare a Hyperliquid BTC-PERP order", "Show my Hyperliquid exposure"],
     launch: {
       primaryCta: "Open Hyperliquid desk",
-      secondaryCta: "Prepare trade handoff",
-      defaultPrompt: "Prepare Hyperliquid BTC-PERP handoff",
+      secondaryCta: "Place an order",
+      defaultPrompt: "Prepare a Hyperliquid BTC-PERP order",
       handoffContextLabel: "Public wallet address",
       recommendedSurface: "protocol_desk",
     },
     ui: {
       iconHint: "hyperliquid",
       accent: "matterhorn_blue",
-      shortDescription: "Read orderbooks, account exposure, funding, and prepare external trade handoffs. Submission stays off.",
+      shortDescription: "Read markets and place orders after connected-wallet review and signing.",
     },
     routing: { chatMode: "hyperliquid", opensPanel: "hyperliquid", startsSession: true },
     safetyBoundaries: {
@@ -378,11 +383,11 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
       acceptsPrivateKeys: false,
       acceptsApiSecrets: false,
       acceptsRawSignatures: false,
-      canSubmit: false,
-      liveExecutionEnabled: false,
-      canExecute: false,
+      canSubmit: true,
+      liveExecutionEnabled: true,
+      canExecute: true,
       requiresExternalSigner: false,
-      allowsRealFunds: false,
+      allowsRealFunds: true,
     },
   },
   {

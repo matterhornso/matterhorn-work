@@ -53,6 +53,7 @@ import type {
   MatterhornTeamShareableTokenScope,
 } from "@matterhorn-work/types/backend-team-access";
 import type { MatterhornBillingStatusResponse } from "@matterhorn-work/types/billing";
+import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import {
   MATTERHORN_PROJECT_FEEDBACK_KINDS,
   type MatterhornProjectDataLedgerEntry,
@@ -940,7 +941,9 @@ function teamAccessInviteText(input: {
     input.token.label ? `Label: ${input.token.label}` : null,
     "",
     "Open Matterhorn Work, choose Connect custom remote, then paste the server URL and access token.",
-    "This is local server access, not durable Matterhorn Cloud team membership.",
+    MATTERHORN_LAUNCH_FEATURES.cloud
+      ? "This is local server access, not durable Matterhorn Cloud team membership."
+      : "This is scoped local server access. It does not create an online account.",
   ].filter((line): line is string => line !== null).join("\n");
 }
 
@@ -982,7 +985,7 @@ function TeamAccessControls(props: {
   isLoading: boolean;
   isOpen: boolean;
   onOpen: () => void;
-  onOpenBilling: () => void;
+  onOpenBilling?: () => void;
   refetch: () => Promise<unknown>;
   refetchBilling?: () => Promise<unknown>;
 }) {
@@ -1013,7 +1016,9 @@ function TeamAccessControls(props: {
       return;
     }
     if (teamLimitReached) {
-      setStatus("Team seats are full on this plan. Open Billing to upgrade before creating teammate tokens.");
+      setStatus(props.onOpenBilling
+        ? "Team seats are full on this plan. Open Billing to upgrade before creating teammate tokens."
+        : "Team seats are full for this workspace. Contact the workspace owner before creating another teammate token.");
       return;
     }
     setBusyTokenId("create");
@@ -1037,13 +1042,15 @@ function TeamAccessControls(props: {
     } catch (error) {
       setStatus(
         isTeamSeatBillingError(error)
-          ? "Team seats are full on this plan. Open Billing to upgrade before creating teammate tokens."
+          ? props.onOpenBilling
+            ? "Team seats are full on this plan. Open Billing to upgrade before creating teammate tokens."
+            : "Team seats are full for this workspace. Contact the workspace owner before creating another teammate token."
           : error instanceof Error ? error.message : "Could not create a local access token.",
       );
     } finally {
       setBusyTokenId(null);
     }
-  }, [client, label, refetch, refetchBilling, scope, teamLimitReached, workspaceId]);
+  }, [client, label, props.onOpenBilling, refetch, refetchBilling, scope, teamLimitReached, workspaceId]);
 
   const revokeToken = useCallback(async (tokenId: string, tokenLabel?: string) => {
     if (!client || !workspaceId) {
@@ -1132,7 +1139,7 @@ function TeamAccessControls(props: {
               ? `${teamSeatLine} Upgrade to Matterhorn Max to create teammate tokens.`
               : teamSeatLine}
           </span>
-          {teamLimitReached ? (
+          {teamLimitReached && props.onOpenBilling ? (
             <Button
               type="button"
               variant="ghost"
@@ -1164,7 +1171,9 @@ function TeamAccessControls(props: {
             Teammates should open Matterhorn Work, choose Connect custom remote, then paste this URL and the one-time token.
           </p>
           <p>
-            This is local server access. Durable org invites and shared cloud workspaces still require Matterhorn Cloud.
+            {MATTERHORN_LAUNCH_FEATURES.cloud
+              ? "This is local server access. Durable org invites and shared cloud workspaces still require Matterhorn Cloud."
+              : "This is scoped local server access. It does not create an online account."}
           </p>
           {!connection.reachableFromOtherDevices ? (
             <p className="text-amber-300">
@@ -1337,7 +1346,7 @@ export function SettingsOverviewView(props: {
   });
   const workspaceBillingStatusQuery = useQuery({
     queryKey: ["settings-workspace-billing-status", props.runtimeWorkspaceId],
-    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    enabled: Boolean(MATTERHORN_LAUNCH_FEATURES.billing && props.matterhornServerClient && props.runtimeWorkspaceId),
     queryFn: async () => {
       const client = props.matterhornServerClient;
       const workspaceId = props.runtimeWorkspaceId?.trim();
@@ -1615,7 +1624,9 @@ export function SettingsOverviewView(props: {
         <SettingsCard
           icon={<CircleUser size={18} />}
           title="Profile"
-          description="Account and local/cloud profile readiness."
+            description={MATTERHORN_LAUNCH_FEATURES.cloud
+              ? "Account, local profile, and Cloud readiness."
+              : "Local profile and workspace access readiness."}
           status={
             profileCapability ? (
               <CapabilityBadge status={profileCapability.status} />
@@ -1628,7 +1639,9 @@ export function SettingsOverviewView(props: {
         >
           <Row
             label={profileCapability?.label ?? "Profile status"}
-            hint={profileCapability?.description ?? "Open account settings to sign in, manage cloud account state, or keep using Matterhorn locally."}
+            hint={profileCapability?.description ?? (MATTERHORN_LAUNCH_FEATURES.cloud
+              ? "Open profile settings to manage local and Cloud account state."
+              : "Open profile settings to review local workspace access.")}
             value={
               profileCapability ? (
                 <CapabilityBadge status={profileCapability.status} />
@@ -1641,7 +1654,7 @@ export function SettingsOverviewView(props: {
           />
           <div>
             <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => onSelectTab("cloud-account")}>
-              Open account settings
+              Open profile settings
             </Button>
           </div>
         </SettingsCard>
@@ -1711,7 +1724,7 @@ export function SettingsOverviewView(props: {
                   </div>
                 </div>
               ) : null}
-              {publishingReadiness.length ? (
+              {MATTERHORN_LAUNCH_FEATURES.generatedMedia && publishingReadiness.length ? (
                 <div className="px-1 py-3">
                   <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0">
@@ -1809,10 +1822,10 @@ export function SettingsOverviewView(props: {
               <Row
                 label="Teams"
                 hint={teamAccessSummaryQuery.data
-                  ? `${teamAccessSummaryQuery.data.sharingMode.label}. ${teamAccessSummaryQuery.data.localAccess.tokenCount} local access tokens. Owners ${teamAccessSummaryQuery.data.localAccess.byScope.owner}; collaborators ${teamAccessSummaryQuery.data.localAccess.byScope.collaborator}; viewers ${teamAccessSummaryQuery.data.localAccess.byScope.viewer}. Cloud teams: ${backendCapabilityLabel(teamAccessSummaryQuery.data.cloudTeams.status)}.`
+                  ? `${teamAccessSummaryQuery.data.sharingMode.label}. ${teamAccessSummaryQuery.data.localAccess.tokenCount} local access tokens. Owners ${teamAccessSummaryQuery.data.localAccess.byScope.owner}; collaborators ${teamAccessSummaryQuery.data.localAccess.byScope.collaborator}; viewers ${teamAccessSummaryQuery.data.localAccess.byScope.viewer}.${MATTERHORN_LAUNCH_FEATURES.cloud ? ` Cloud teams: ${backendCapabilityLabel(teamAccessSummaryQuery.data.cloudTeams.status)}.` : ""}`
                   : teamAccessSummaryQuery.isLoading
                     ? "Loading local access status."
-                    : summarizeCapability(backendCapabilities.teams)}
+                  : summarizeCapability(backendCapabilities.teams)}
                 value={<CapabilityBadge status={backendCapabilities.teams.status} />}
               />
               <TeamAccessControls
@@ -1826,7 +1839,7 @@ export function SettingsOverviewView(props: {
                 isLoading={teamAccessQuery.isLoading}
                 isOpen={teamTokenManagementOpen}
                 onOpen={() => setTeamTokenManagementOpen(true)}
-                onOpenBilling={() => onSelectTab("billing")}
+                onOpenBilling={MATTERHORN_LAUNCH_FEATURES.billing ? () => onSelectTab("billing") : undefined}
                 refetch={teamAccessQuery.refetch}
                 refetchBilling={workspaceBillingStatusQuery.refetch}
               />
@@ -2123,7 +2136,10 @@ export function SettingsOverviewView(props: {
               <span className="font-medium text-dls-text">Bittensor:</span> actions are prepared as previews. Anything on-chain is signed in your own external Bittensor-compatible signer — Matterhorn Work cannot sign or broadcast.
             </li>
             <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
-              <span className="font-medium text-dls-text">Hyperliquid &amp; Polymarket:</span> reads and external handoffs only. Live submission is off; your own eligible client executes trades.
+              <span className="font-medium text-dls-text">Hyperliquid:</span> manual orders use a separate trade ticket. Matterhorn submits only after you review the exact terms and sign a short-lived intent in your connected wallet; agents and watches cannot submit.
+            </li>
+            <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
+              <span className="font-medium text-dls-text">Polymarket:</span> Matterhorn reads market data and prepares drafts for you to review and submit in your own eligible client.
             </li>
             <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
               <span className="font-medium text-dls-text">No secret storage:</span> Matterhorn Work never asks for or stores seed phrases, private keys, or API secrets.
@@ -2139,8 +2155,8 @@ export function SettingsOverviewView(props: {
           status={<StatusBadge tone="ready">Boundaries visible</StatusBadge>}
         >
           <Row label="Bittensor" hint="TAO, subnets, validators, and staking previews (external signer required)." value={<StatusBadge tone="ready">Read and preview</StatusBadge>} />
-          <Row label="Hyperliquid" hint="Account, orderbook, and trade handoffs. Your client executes." value={<StatusBadge tone="preview">External handoff</StatusBadge>} />
-          <Row label="Polymarket" hint="Market discovery, odds, compliance, and gated handoffs." value={<StatusBadge tone="preview">Compliance gated</StatusBadge>} />
+          <Row label="Hyperliquid" hint="Manual execution uses a separate exact-order review and connected-wallet signature. Agents and watches cannot submit." value={<StatusBadge tone="preview">Review and sign</StatusBadge>} />
+          <Row label="Polymarket" hint="Market discovery, odds, and compliance checks before Matterhorn prepares a trade draft." value={<StatusBadge tone="preview">Compliance gated</StatusBadge>} />
           <p className="text-xs leading-5 text-dls-secondary">
             Open a protocol workspace from the sidebar to explore its desk.
           </p>

@@ -33,8 +33,9 @@ Desk scope:
 - If required public context is missing, ask one concise question for the public value only.
 - For a simple subnet discovery or comparison, do not delegate to subagents and do not create files unless the user requests a saved report.
 - Call the Bittensor desk tool exactly once. After it returns, do not call any tool again. Answer immediately from that bounded evidence; do not inspect repository files, use shell commands, or call generic web tools.
-- If the returned evidence is fallback or stale, disclose that limitation and answer from the bounded result instead of searching elsewhere.
-- Return at most five relevant subnets and keep the default answer concise while always naming the data source and freshness.
+- Treat the returned tool evidence as the sole source for subnet IDs, names, and capabilities. Never fill gaps from model memory or infer a subnet-to-capability mapping that the tool did not return.
+- If the returned evidence is fallback, stale, unavailable, or does not explicitly identify matching subnets, say that current subnet recommendations are unavailable. Give only generic selection criteria plus a concise configure-and-retry step; do not name subnet IDs, subnet names, or capabilities.
+- Return at most five relevant subnets only when every recommendation is directly supported by the returned evidence. Keep the default answer concise and always name the data source and freshness.
 
 <!-- OPENWORK_ARTIFACTS_START -->
 ## Matterhorn Work Artifacts

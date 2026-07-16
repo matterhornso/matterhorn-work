@@ -7,6 +7,15 @@ const accountSource = await Bun.file(
 const cloudProvidersSource = await Bun.file(
   new URL("../src/react-app/domains/settings/pages/cloud-providers-view.tsx", import.meta.url),
 ).text();
+const launchPolicySource = await Bun.file(
+  new URL("../src/app/lib/launch-features.ts", import.meta.url),
+).text();
+const settingsPageSource = await Bun.file(
+  new URL("../src/react-app/domains/settings/shell/settings-page.tsx", import.meta.url),
+).text();
+const settingsRouteSource = await Bun.file(
+  new URL("../src/react-app/shell/settings-route.tsx", import.meta.url),
+).text();
 
 describe("Matterhorn Cloud availability contract", () => {
   test("requires explicit Cloud configuration instead of trusting the fallback hostname", () => {
@@ -16,12 +25,17 @@ describe("Matterhorn Cloud availability contract", () => {
     expect(denSource).toContain("export const MATTERHORN_CLOUD_ENABLED");
   });
 
-  test("keeps unavailable Cloud actions out of the signed-out account surface", () => {
+  test("keeps unavailable Cloud actions out while preserving the local Profile surface", () => {
     expect(accountSource).toContain("cloudAvailable");
-    expect(accountSource).toContain("Matterhorn Cloud is not available in this build.");
-    expect(accountSource).toContain('label={cloudAvailable ? session.summaryLabel : "Not included"}');
-    expect(accountSource).toContain('{cloudAvailable ? session.summaryLabel : "Not included"}');
-    expect(accountSource).not.toContain('label={cloudAvailable ? session.summaryLabel : "Unavailable"}');
+    expect(accountSource).toContain("<ProfileCapabilityStatus");
+    expect(accountSource).toContain("runtimeWorkspaceId?: string | null");
+    expect(accountSource).toContain('const workspaceIdForBackend = runtimeWorkspaceId?.trim() ?? ""');
+    expect(settingsRouteSource).toContain("runtimeWorkspaceId={runtimeWorkspaceId}");
+    expect(accountSource).toContain("{cloudAvailable ? <SettingsSection>");
+    expect(accountSource).toContain("{cloudAvailable ? <section");
+    expect(launchPolicySource).toContain('if (tab === "cloud-account" && options.allowLocalProfile) return true;');
+    expect(settingsRouteSource).toContain("{ allowLocalProfile: props.embedded }");
+    expect(settingsPageSource).toContain("filterLaunchSettingsTabs");
   });
 
   test("keeps the Account surface focused on profile and Cloud state", () => {

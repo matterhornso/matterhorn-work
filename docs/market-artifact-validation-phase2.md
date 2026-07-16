@@ -89,15 +89,17 @@ node scripts/market-customer-evidence-bundle.mjs \
   --strict
 ```
 
-## Still Forbidden
+## Still Forbidden In The Artifact-Validation Flow
 
-- `/api/hyperliquid/orders/submit`
+- calling `/api/hyperliquid/orders/submit` from an artifact-validation, MCP, CLI, chat, watch, or workflow surface; the separate web execution ticket never accepts imported signed artifacts
 - `/api/polymarket/orders/submit`
 - `/api/hyperliquid/orders/sign`
 - `/api/polymarket/orders/sign`
 - `/api/hyperliquid/exchange/submit`
 - `/api/polymarket/exchange/submit`
 - accepting raw signatures or signed payloads through HTTP, MCP, CLI, docs, fixtures, logs, or evidence bundles.
+
+The guarded web Hyperliquid execution ticket is a separate contract: it accepts only a signature over an unexpired server-issued intent from the matching connected wallet. It does not consume or authorize Phase 2 artifact-validation output.
 
 ## Required Gates
 

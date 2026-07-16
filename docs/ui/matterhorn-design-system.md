@@ -44,7 +44,7 @@ Customer-facing navigation must not expose **Services** as a primary destination
 | Desk | Token | Intent |
 | --- | --- | --- |
 | Bittensor | electric cyan / violet | TAO, subnets, validators, external-signer previews |
-| Hyperliquid | blue / green | market data, account exposure, preview-only trade planning |
+| Hyperliquid | blue / green | market data, account exposure, preview planning, wallet-approved orders |
 | Polymarket | purple / amber | market outcomes, compliance, preview-only prediction planning |
 | Longevity | coral / mint | human service workflows, educational client artifacts |
 | Memory | gold / slate | remembered context, provenance, confidence, privacy |

@@ -499,7 +499,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     ],
     toolSummary: "16 tools for markets, accounts, watches, handoffs, validation, and receipts.",
     boundary:
-      "External handoff only. No live submit. Use your own signer/client. Never paste API secrets, keys, signatures, signed payloads, or custody credentials.",
+      "Prepare only. Matterhorn cannot submit the action; review and submit it with your own signer or client. Never paste API secrets, keys, signatures, signed payloads, or custody credentials.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
     docs: mcpDocs(
       "hyperliquid",

@@ -198,7 +198,9 @@ for (const phrase of [
   "Non-medical workflow",
   "Show my TAO",
   "Compare validators",
-  "Prepare Hyperliquid BTC-PERP handoff",
+  "Prepare an order",
+  "Draft an order for exact review and connected-wallet approval.",
+  "execution requires a separate review and wallet signature in the Hyperliquid desk",
   "Summarize this Polymarket market",
   "Check Polymarket compliance",
   "Build the full 7-stage Longevity workflow for my clients",
@@ -451,7 +453,7 @@ assert.ok(workflowTemplates.includes('launchBehavior: manifest.launchBehavior'),
 assert.ok(workflowTemplates.includes('canSubmit: false'), "app launcher metadata should keep market submit disabled");
 assert.ok(workflowTemplates.includes('liveExecutionEnabled: false'), "app launcher metadata should keep live execution disabled");
 assert.ok(protocolDeskUi.includes("Bittensor: TAO wallet reads, subnets, validators, watches, receipts, and unsigned staking previews"), "Bittensor rail tooltip should explain protocol-specific work");
-assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, exposure, funding, watches, and external trade handoffs"), "Hyperliquid rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, exposure, funding, watches, and wallet-approved orders"), "Hyperliquid rail tooltip should explain protocol-specific work");
 assert.ok(protocolDeskUi.includes("Polymarket: markets, outcomes, liquidity, compliance, watches, and trade handoffs"), "Polymarket rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes('w-[var(--nav-rail-width-compact)]'), "right rail should use a compact responsive width before wide desktop");
 assert.ok(sessionPage.includes('2xl:w-[var(--nav-rail-width)]'), "right rail should expand to readable customer desk labels on wide desktop");
@@ -521,10 +523,13 @@ assert.equal(sessionSurface.includes("rounded-[28px]"), false, "session empty su
 assert.ok(sessionSurface.includes("activeDeskMode ? ("), "generic starter grid should be bypassed when a protocol desk session is active");
 assert.ok(sessionSurface.includes("ArrowDown"), "Jump to latest should use a visible down-arrow icon");
 assert.ok(sessionSurface.includes("bottom-4 left-1/2 z-40"), "Jump to latest should sit visibly above the composer edge");
-assert.ok(sessionSurface.includes("border border-dls-border bg-dls-surface px-1.5 py-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.28)]"), "Jump controls should use a visible bordered surface");
-assert.ok(sessionSurface.includes("border border-dls-text bg-dls-text"), "Jump to latest should be the high-contrast primary action");
+assert.ok(sessionSurface.includes("gap-0.5 rounded-md bg-dls-surface-muted/70 p-0.5 shadow-[0_1px_4px_rgba(0,0,0,0.2)]"), "Jump controls should use a compact, quiet surface");
+assert.ok(sessionSurface.includes("inline-flex h-7 items-center gap-1 rounded"), "Jump controls should stay compact above the composer");
+assert.equal(sessionSurface.includes("border border-dls-text bg-dls-text"), false, "Jump controls should not compete with primary composer actions");
 assert.ok(sessionSurface.includes('aria-label="Jump to the latest message"'), "Jump to latest should expose a clear accessible label");
 assert.equal(sessionSurface.includes("rounded-full px-3 py-1.5 text-xs text-dls-text"), false, "Jump to latest should not regress to the hidden low-contrast pill");
+assert.ok(composer.includes("inline-flex h-8 max-h-8 items-center gap-1.5 rounded-md bg-dls-hover/70 px-2.5 text-[12px]"), "Stop generating should remain a compact secondary chat control");
+assert.equal(composer.includes("rounded-lg bg-gray-12 px-3.5 text-[13px]"), false, "Stop generating should not dominate the composer with a large high-contrast fill");
 assert.ok(sessionSurface.includes("matterhorn-session-start-list grid grid-cols-1 gap-1.5 lg:grid-cols-2"), "starter workflow grid should use compact two-column command rows instead of a crowded card wall");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
 assert.ok(sessionSurface.includes("group grid min-h-[64px] min-w-0 grid-cols-[32px_minmax(0,1fr)]"), "starter workflow rows should use tighter logo-led command rows");
@@ -609,7 +614,7 @@ for (const phrase of [
   "walletStatusLabel",
   "Wallet not connected",
   "Open Matterhorn Wallet",
-  "Bittensor uses public SS58 reads and external signing; market desks prepare external handoffs only.",
+  "Bittensor uses public SS58 reads and the user's own signer. Hyperliquid orders require exact review and connected-wallet approval. Polymarket stays preview-only.",
 ]) {
   assert.ok(statusBar.includes(phrase), `status bar should expose customer navigation: ${phrase}`);
 }
@@ -676,7 +681,8 @@ for (const phrase of [
   "Local teammate access",
   "Technical details",
   "Backend version",
-  "Not included",
+  "Profile capability",
+  "Local token sharing",
 ]) {
   assert.ok(profileCapabilityStatus.includes(phrase), `profile rail should keep local status clear and progressively disclosed: ${phrase}`);
 }
@@ -692,7 +698,7 @@ for (const phrase of [
   "Connect an EVM or Sui wallet.",
   "No EVM wallet connector detected",
   "Install or enable MetaMask, Rabby, or another injected wallet. Public reads and market previews still work.",
-  "public SS58/coldkey data",
+  "Read public SS58 data and prepare unsigned actions.",
   "Hyperliquid",
   "Polymarket",
   "safetyCopy.forbiddenSecretsLine",
@@ -851,8 +857,8 @@ for (const phrase of [
   "matterhorn-work mcp config --target claude-desktop --profile full",
   "matterhorn-work mcp config --target cursor --profile full",
   "Public reads and unsigned previews only.",
-  "External handoff only. No live submit.",
-  "Use your own signer/client.",
+  "Compliance-gated handoff only. No live submit.",
+  "review and submit it with your own signer or client.",
   "Never paste seeds, keys, mnemonics, signatures, signed payloads, or wallet exports.",
   "Never paste API secrets, keys, signatures, signed payloads, or custody credentials.",
   "No hidden saves.",

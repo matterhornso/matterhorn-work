@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { t } from "../../../../i18n";
 import type { SettingsTab } from "../../../../app/types";
+import { filterLaunchSettingsTabs } from "../../../../app/lib/launch-features";
 import type {
   MatterhornCapabilityStatus,
   MatterhornSettingsSectionCapability,
@@ -201,7 +202,7 @@ export function getSettingsTabDescription(tab: SettingsTab) {
     case "debug":
       return t("settings.tab_description_debug");
     case "wallet":
-      return "Connect wallets for safe handoffs.";
+      return "Connect wallets and control transaction safety.";
     case "generated-media":
       return "Image generation, public storage, and Sui NFT publishing readiness.";
     case "marketplace":
@@ -276,7 +277,7 @@ function capabilityStatusToSettingsStatus(
 }
 
 export function settingsReadinessStatusLabel(status: SettingsReadinessStatus | "Unavailable"): string {
-  return status === "Preview" ? "Early access" : status;
+  return status === "Preview" ? "Limited release" : status;
 }
 
 export function shouldDisplaySettingsReadinessStatus(status: SettingsReadinessStatus | null): boolean {
@@ -348,17 +349,17 @@ export function getSettingsTabStatus(
 export function getWorkspaceSettingsTabs(developerMode = false): SettingsTab[] {
   const tabs: SettingsTab[] = ["preferences", "permissions", "wallet", "generated-media", "extensions"];
   if (developerMode) tabs.push("marketplace", "advanced");
-  return tabs;
+  return filterLaunchSettingsTabs(tabs);
 }
 
 export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {
   const tabs: SettingsTab[] = ["overview", "ai", "shell", "appearance", "updates", "billing"];
   if (developerMode) tabs.push("environment", "recovery", "debug");
-  return tabs;
+  return filterLaunchSettingsTabs(tabs);
 }
 
 export function getCloudSettingsTabs(developerMode = false): SettingsTab[] {
-  return developerMode ? ["cloud-account", "cloud-workers"] : ["cloud-account"];
+  return filterLaunchSettingsTabs(developerMode ? ["cloud-account", "cloud-workers"] : ["cloud-account"]);
 }
 
 function SettingsTabReadinessBadge(props: { status: SettingsReadinessStatus | null }) {
@@ -531,30 +532,32 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>{t("settings.group_cloud")}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {cloudTabs.map((tab) => {
-                const Icon = getSettingsTabIcon(tab);
-                return (
-                  <SidebarMenuItem key={tab}>
-                    <SidebarMenuButton
-                      type="button"
-                      isActive={props.activeTab === tab}
-                      className={SETTINGS_SIDEBAR_ITEM_CLASS}
-                      onClick={() => props.onSelectTab(tab)}
-                    >
-                      <Icon />
-                      <span>{getSettingsTabLabel(tab)}</span>
-                      <SettingsTabReadinessBadge status={getSettingsTabStatus(tab, props.backendSettingsSections)} />
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {cloudTabs.length ? (
+          <SidebarGroup>
+            <SidebarGroupLabel>{t("settings.group_cloud")}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {cloudTabs.map((tab) => {
+                  const Icon = getSettingsTabIcon(tab);
+                  return (
+                    <SidebarMenuItem key={tab}>
+                      <SidebarMenuButton
+                        type="button"
+                        isActive={props.activeTab === tab}
+                        className={SETTINGS_SIDEBAR_ITEM_CLASS}
+                        onClick={() => props.onSelectTab(tab)}
+                      >
+                        <Icon />
+                        <span>{getSettingsTabLabel(tab)}</span>
+                        <SettingsTabReadinessBadge status={getSettingsTabStatus(tab, props.backendSettingsSections)} />
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
       </SidebarContent>
     </Sidebar>
   );

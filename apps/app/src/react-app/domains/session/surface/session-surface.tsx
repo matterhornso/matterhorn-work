@@ -23,6 +23,7 @@ import {
 
 import { createClient, unwrap } from "../../../../app/lib/opencode";
 import { abortSessionSafe } from "../../../../app/lib/opencode-session";
+import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import { t } from "../../../../i18n";
 import { readWorkspaceCloudImports, type CloudImportedPlugin } from "../../../../app/cloud/import-state";
 import {
@@ -215,7 +216,7 @@ const MATTERHORN_DESK_EMPTY_PROMPTS: Record<MatterhornDeskMode, MatterhornDeskPr
     {
       title: "Read orderbook context",
       detail: "Summarize spread, depth, and stale-data warnings.",
-      prompt: "Show BTC orderbook context on Hyperliquid, spread, depth summary, and stale-data warnings. Explain that Matterhorn can prepare an external trade handoff, but Can submit: No and Live submission: Off.",
+      prompt: "Show BTC orderbook context on Hyperliquid, spread, depth summary, and stale-data warnings. Explain how I can review and sign an order in the Hyperliquid desk.",
     },
     {
       title: "Summarize exposure",
@@ -223,9 +224,9 @@ const MATTERHORN_DESK_EMPTY_PROMPTS: Record<MatterhornDeskMode, MatterhornDeskPr
       prompt: "Summarize my read-only Hyperliquid account exposure if public account context is available. Do not ask for API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
     },
     {
-      title: "Prepare trade handoff",
-      detail: "Draft an external-client handoff you can review outside Matterhorn.",
-      prompt: "Prepare a Hyperliquid external trade handoff for BTC. Keep Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
+      title: "Prepare an order",
+      detail: "Draft an order for exact review and connected-wallet approval.",
+      prompt: "Prepare a Hyperliquid BTC order. Ask for network, side, size, market or limit, slippage, and reduce-only state. Explain that execution requires a separate review and wallet signature in the Hyperliquid desk.",
     },
   ],
   polymarket: [
@@ -387,7 +388,7 @@ function MatterhornDeskFocusedEmptyState({
       ? "Runs market research, compliance checks, and external-wallet handoffs. Matterhorn never places bets inside the app."
       : mode === "sui"
         ? "Runs public Sui account reads and transfer previews. Signing stays in your Sui wallet or external client."
-        : "Runs read-only market/account checks and prepares external-client handoffs. Matterhorn never submits orders inside the app.";
+        : "Agent tasks run market and account checks and prepare order context, but cannot submit. Manual execution is available only in the Hyperliquid panel after exact review and connected-wallet approval.";
 
   return (
     <div
@@ -2334,7 +2335,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
   useControlAction(sessionReadTranscriptControlAction);
 
   const hasTodoContent = (props.todos ?? []).some((todo) => todo.content.trim());
-  const showImageGenerationPanel = Boolean(props.client && props.workspaceId && props.sessionId);
+  const showImageGenerationPanel = Boolean(
+    MATTERHORN_LAUNCH_FEATURES.generatedMedia && props.client && props.workspaceId && props.sessionId,
+  );
   const hasComposerTopAccessory = Boolean(
     showImageGenerationPanel ||
       props.activeQuestion ||
@@ -2518,33 +2521,33 @@ export function SessionSurface(props: SessionSurfaceProps) {
         </div>
         {renderedMessages.length > 0 && hasTranscriptJumpTarget && (!sessionScroll.isAtBottom || (!chatStreaming && sessionScroll.topClippedMessageId)) ? (
           <div className="pointer-events-none absolute bottom-4 left-1/2 z-40 flex -translate-x-1/2 justify-center sm:bottom-5">
-            <div className="pointer-events-auto flex items-center gap-1.5 rounded-lg border border-dls-border bg-dls-surface px-1.5 py-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.28)]">
+            <div className="pointer-events-auto flex items-center gap-0.5 rounded-md bg-dls-surface-muted/70 p-0.5 shadow-[0_1px_4px_rgba(0,0,0,0.2)]">
               {!chatStreaming && sessionScroll.topClippedMessageId ? (
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                  className="inline-flex h-7 items-center gap-1 rounded px-2 text-[11px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover/70 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
                   onClick={() => {
                     sessionScroll.jumpToStartOfMessage("smooth");
                   }}
                   title="Jump to the start of the latest message"
                   aria-label="Jump to the start of the latest message"
                 >
-                  <ArrowUp size={14} />
-                  Jump to start
+                  <ArrowUp size={12} />
+                  Start
                 </button>
               ) : null}
               {!sessionScroll.isAtBottom ? (
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-dls-text bg-dls-text px-3.5 py-2 text-[12px] font-semibold text-dls-canvas transition-colors hover:bg-dls-text/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.36)]"
+                  className="inline-flex h-7 items-center gap-1 rounded bg-dls-hover/65 px-2 text-[11px] font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.32)]"
                   onClick={() => {
                     sessionScroll.jumpToLatest("smooth");
                   }}
                   title="Jump to the latest message"
                   aria-label="Jump to the latest message"
                 >
-                  Jump to latest
-                  <ArrowDown size={14} />
+                  Latest
+                  <ArrowDown size={12} />
                 </button>
               ) : null}
             </div>

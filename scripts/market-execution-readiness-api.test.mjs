@@ -31,8 +31,8 @@ const contractSurface = `${route}\n${readinessHelper}`;
 
 for (const phrase of [
   "matterhorn.market.execution-readiness.v1",
-  "readyForLiveSubmission: false",
-  'status: "disabled"',
+  "readyForLiveSubmission: hyperliquidExecution",
+  'status: hyperliquidExecution ? "ready" : "review"',
   'venue: "hyperliquid"',
   'venue: "polymarket"',
   "external_sign_request",
@@ -40,19 +40,19 @@ for (const phrase of [
   "public_receipt_import",
   "route_level_kill_switch",
   "live_submit_routes",
-  "independent security review",
-  "operator kill-switch rehearsal",
+  "connected_wallet_sign",
+  "intent_bound_live_submit",
+  "enable deployment execution kill switch",
   "nonCustodial: true",
-  "liveSubmissionEnabled: false",
-  "canSubmit: false",
-  "signsOrSubmits: false",
+  "liveSubmissionEnabled: hyperliquidExecution",
+  "canSubmit: hyperliquidExecution",
+  "signsOrSubmits: hyperliquidExecution",
   "acceptsSecrets: false",
 ]) {
   assert.ok(contractSurface.includes(phrase), `execution-readiness contract should include ${phrase}`);
 }
 
 for (const forbidden of [
-  "/api/hyperliquid/orders/submit",
   "/api/polymarket/orders/submit",
   "/api/hyperliquid/orders/sign",
   "/api/polymarket/orders/sign",
@@ -75,10 +75,10 @@ assert.ok(matrix.includes("matterhorn-work crypto execution-readiness"), "covera
 
 for (const phrase of [
   "export interface MarketExecutionReadinessReport",
-  "readyForLiveSubmission: false",
+  "readyForLiveSubmission: boolean",
   "export interface MarketExecutionReadinessResponse",
   "export interface MarketExecutionReadinessCard",
-  "liveSubmissionEnabled: false",
+  "liveSubmissionEnabled: boolean",
   "acceptsRawSignatures: false",
   "acceptsSignedPayloads: false",
 ]) {

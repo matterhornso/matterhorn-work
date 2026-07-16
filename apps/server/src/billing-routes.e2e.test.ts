@@ -175,6 +175,7 @@ async function linkStripeTestSubscription(base: string, input: {
         object: "checkout.session",
         customer: providerCustomerId,
         subscription: providerSubscriptionId,
+        payment_status: "paid",
         metadata: {
           workspace_id: WORKSPACE_ID,
           plan_id: input.planId,
@@ -721,6 +722,7 @@ describe("Billing routes", () => {
           object: "checkout.session",
           customer: "cus_test_workspace",
           subscription: "sub_test_workspace",
+          payment_status: "paid",
           metadata: {
             workspace_id: WORKSPACE_ID,
             plan_id: "max",
@@ -1208,6 +1210,7 @@ describe("Billing routes", () => {
           object: "checkout.session",
           customer: "cus_test_fallback",
           subscription: "sub_test_fallback",
+          payment_status: "paid",
           client_reference_id: `matterhorn_${WORKSPACE_ID}_plus`,
           metadata: {},
         },
@@ -1317,6 +1320,7 @@ describe("Billing routes", () => {
           object: "checkout.session",
           customer: "cus_test_duplicate",
           subscription: "sub_test_duplicate",
+          payment_status: "paid",
           metadata: {
             workspace_id: WORKSPACE_ID,
             plan_id: "plus",

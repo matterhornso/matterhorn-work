@@ -187,11 +187,11 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
         preview: true,
         signing: "client_wallet",
         supportedChains: ["sui-testnet", "sui-mainnet"],
-        description: "Sui wallet-standard connect is in early access. Matterhorn Work never holds keys.",
+        description: "Sui wallet connection is in a limited release. Matterhorn Work never holds keys.",
         runtimeSupport: {
           web: {
             runtime: "web",
-            ...cap("preview", "Web wallet-standard connect", "Sui wallet-standard wallets can connect in the web app through Mysten dApp Kit."),
+            ...cap("preview", "Web wallet-standard connect", "Connect a supported Sui wallet in the web app. The user reviews and signs every transaction in that wallet."),
             custody: false,
             directConnect: true,
             publicRead: true,
@@ -200,7 +200,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
           },
           desktop: {
             runtime: "desktop",
-            ...cap("preview", "Desktop external handoff", "Desktop prepares Sui handoffs; signing happens in an external Sui wallet or protocol client."),
+            ...cap("preview", "Desktop external handoff", "Desktop prepares Sui transaction drafts. The user reviews, signs, and submits them in a Sui wallet or protocol client."),
             custody: false,
             directConnect: false,
             publicRead: true,
@@ -209,7 +209,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
           },
           electron: {
             runtime: "electron",
-            ...cap("preview", "Electron external handoff", "Electron prepares Sui handoffs; signing happens in an external Sui wallet or protocol client."),
+            ...cap("preview", "Electron external handoff", "Electron prepares Sui transaction drafts. The user reviews, signs, and submits them in a Sui wallet or protocol client."),
             custody: false,
             directConnect: false,
             publicRead: true,

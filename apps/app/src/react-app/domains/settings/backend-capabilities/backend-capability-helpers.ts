@@ -35,13 +35,13 @@ export function walletFamilySigningCopy(family: MatterhornWalletFamilyCapability
   if (family.family === "sui") {
     if (family.status === "preview" || family.status === "working") {
       return {
-        label: "Wallet-standard connect",
-        hint: "Sui wallet connection uses Mysten dApp Kit. Account reads and handoffs are available; signing stays in the user's wallet.",
+        label: family.status === "preview" ? "Connect here · Limited release" : "Connect here",
+        hint: "Connect a supported Sui wallet in Matterhorn. You still review and sign every transaction in that wallet.",
       };
     }
     return {
       label: "Not supported here",
-      hint: "Sui direct wallet connect is not available in this runtime. Backend handoffs and receipt evidence remain available when the workspace engine supports them.",
+      hint: "Sui direct wallet connect is not available in this runtime. Transaction drafts and receipt evidence remain available when the workspace engine supports them.",
     };
   }
 
@@ -55,7 +55,7 @@ export function walletFamilySigningCopy(family: MatterhornWalletFamilyCapability
   if (family.family === "evm") {
     if (family.directConnect && family.signing === "client_wallet") {
       return {
-        label: family.status === "working" ? "Direct connect" : capabilityStatusLabel(family.status),
+        label: family.status === "working" ? "Connect here" : capabilityStatusLabel(family.status),
         hint: "Connect your own EVM wallet. Matterhorn Work never holds your keys.",
       };
     }
@@ -67,8 +67,8 @@ export function walletFamilySigningCopy(family: MatterhornWalletFamilyCapability
 
   if (family.family === "bittensor") {
     return {
-      label: family.publicRead ? "Public read / external signer" : capabilityStatusLabel(family.status),
-      hint: "Bittensor actions are public-read previews. On-chain signing happens in your own external signer — Matterhorn Work has no custody.",
+      label: family.publicRead ? "Read here · Prepare only" : capabilityStatusLabel(family.status),
+      hint: "Matterhorn reads public Bittensor data and prepares unsigned actions. Review, sign, and submit them with your own Bittensor signer.",
     };
   }
 
@@ -119,9 +119,9 @@ export function feedbackCapabilityCopy(capability: MatterhornCapability | undefi
     };
   }
   if (capability.status === "preview") {
-    return {
-      label: "Early access",
-      hint: capability.description || "Structured feedback is stored locally for product quality and routing. No training by default.",
+      return {
+        label: "Limited release",
+        hint: capability.description || "Structured feedback is stored locally for product quality and routing. No training by default.",
     };
   }
   return {

@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { MatterhornGeneratedImage } from "@matterhorn-work/types/generated-media";
 import { ChevronRight, Copy, Download, ExternalLink, FolderOpen, NotebookPen, Pencil, Trash2, X } from "lucide-react";
 
 import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
@@ -15,7 +16,7 @@ import type { BinaryData, Data, OpenTarget, TextData } from "./open-target";
 import { outputDescriptorFromOpenTarget, type OutputDescriptor } from "./output-descriptor";
 import { OutputList } from "./output-list";
 import { normalizeOutputReceiptPath, type WorkflowOutputReceipt } from "./output-receipts";
-import { HTMLPreview, ImagePreview, MarkdownPreview, PlainText, PreviewError, PreviewLoading, PreviewUnavailable, StructuredJsonPreview } from "./preview";
+import { GeneratedImagePreview, HTMLPreview, ImagePreview, MarkdownPreview, PlainText, PreviewError, PreviewLoading, PreviewUnavailable, StructuredJsonPreview } from "./preview";
 
 const ArtifactTextEditor = lazy(() =>
   import("./artifact-text-editor").then((module) => ({ default: module.ArtifactTextEditor })),
@@ -55,6 +56,18 @@ function absoluteWorkspacePath(root: string, path: string) {
 
 function isTextContent(target: OpenTarget): boolean {
   return ["markdown", "text", "sheet", "html"].includes(target.preview) && !/\.(xlsx|xls|ods)$/i.test(target.value);
+}
+
+function generatedImageIdFromTarget(target: OpenTarget): string | null {
+  if (target.kind !== "file" || target.preview !== "image") return null;
+  const fileName = target.value.split(/[\\/]/).pop() ?? "";
+  const imageId = fileName.replace(/\.[^.]+$/, "");
+  return /^img_[a-z0-9]+$/i.test(imageId) ? imageId : null;
+}
+
+function generatedImageReceiptProvider(summary?: string): { provider?: string; model?: string } {
+  const [provider, model] = summary?.split(";") ?? [];
+  return { provider: provider?.trim() || undefined, model: model?.trim() || undefined };
 }
 
 export function ArtifactPanel({
@@ -102,6 +115,31 @@ export function ArtifactPanel({
     () => outputs.find((output) => output.id === target.id) ?? outputs[0] ?? null,
     [outputs, target.id],
   );
+  const generatedImageId = useMemo(() => generatedImageIdFromTarget(target), [target]);
+  const receiptImageProvider = useMemo(
+    () => generatedImageReceiptProvider(selectedOutput?.receiptSummary),
+    [selectedOutput?.receiptSummary],
+  );
+  const { data: generatedImageResponse } = useQuery({
+    queryKey: ["generated-image", workspaceId, generatedImageId] as const,
+    queryFn: async () => {
+      if (!generatedImageId) return null;
+      try {
+        return await client.getGeneratedImage(workspaceId, generatedImageId);
+      }
+      catch {
+        return null;
+      }
+    },
+    enabled: Boolean(generatedImageId),
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+  });
+  const generatedImage: MatterhornGeneratedImage | null = generatedImageResponse?.image ?? null;
+  const isMockGeneratedImage = generatedImage?.provider === "mock" || receiptImageProvider.provider === "mock";
+  const imageProviderLabel = generatedImage?.provider ?? receiptImageProvider.provider;
+  const imageModelLabel = generatedImage?.model ?? receiptImageProvider.model;
   const canDeleteTarget = target.kind === "file" && target.exists !== false && normalizeOutputReceiptPath(target.value).startsWith("outputs/");
 
   const { data, error, isError, isLoading } = useQuery<ArtifactQueryState>({
@@ -332,10 +370,14 @@ export function ArtifactPanel({
                   {selectedOutput?.receiptTitle ?? selectedOutput?.title ?? target.name}
                 </h3>
                 <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-                  <span className="truncate">{target.name}</span>
+                  {generatedImageId ? (
+                    <span>{isMockGeneratedImage ? "Mock preview · no production image rendered" : "Image preview"}</span>
+                  ) : (
+                    <span className="truncate">{target.name}</span>
+                  )}
                   {target.exists === false ? <span>Missing</span> : null}
                   {target.size !== undefined ? <span>{formatFileSize(target.size)}</span> : null}
-                  {selectedOutput?.receiptStatus ? <span>{selectedOutput.receiptStatus}</span> : null}
+                  {!generatedImageId && selectedOutput?.receiptStatus ? <span>{selectedOutput.receiptStatus}</span> : null}
                 </div>
               </div>
               <Tooltip>
@@ -352,7 +394,7 @@ export function ArtifactPanel({
             <div
               role="toolbar"
               aria-label="Selected output actions"
-              className="mt-2 flex min-w-0 flex-wrap items-center gap-0.5 rounded-lg bg-dls-surface-muted/[0.14] p-1"
+              className="mt-2 flex w-fit max-w-full min-w-0 flex-wrap items-center gap-0.5 rounded-md bg-dls-surface-raised px-0.5 py-0.5"
             >
               {isTextContent(target) && data?.kind === "text" ? (
                 editing || isDirectTextEdit ? (
@@ -541,6 +583,16 @@ export function ArtifactPanel({
               />
             ) : target.preview === "html" && data?.kind === "text" ? (
               <HTMLPreview type="text" title={target.name} content={data.data} />
+            ) : target.preview === "image" && data?.kind === "binary" && binaryObjectUrl && generatedImageId ? (
+              <GeneratedImagePreview
+                src={binaryObjectUrl}
+                alt={generatedImage?.prompt || "Generated image"}
+                prompt={generatedImage?.prompt}
+                provider={imageProviderLabel}
+                model={imageModelLabel}
+                size={generatedImage?.size}
+                mock={isMockGeneratedImage}
+              />
             ) : target.preview === "image" && data?.kind === "binary" && binaryObjectUrl ? (
               <ImagePreview src={binaryObjectUrl} alt={target.name} />
             ) : data?.kind === "binary" && binaryObjectUrl && (target.preview === "pdf" || target.preview === "html") ? (

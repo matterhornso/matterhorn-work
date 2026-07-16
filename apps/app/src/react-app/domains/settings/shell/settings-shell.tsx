@@ -189,12 +189,13 @@ function SettingsSectionMenu(
     backendSettingsSections?: MatterhornSettingsSectionCapability[] | null;
   },
 ) {
-  const sections: Array<{ label: string | null; tabs: SettingsTab[] }> = [
+  const allSections: Array<{ label: string | null; tabs: SettingsTab[] }> = [
     { label: null, tabs: ["general"] },
     { label: t("settings.group_workspace"), tabs: getWorkspaceSettingsTabs(props.developerMode) },
     { label: t("settings.group_global"), tabs: getGlobalSettingsTabs(props.developerMode) },
     { label: t("settings.group_cloud"), tabs: getCloudSettingsTabs(props.developerMode) },
   ];
+  const sections = allSections.filter((section) => section.tabs.length > 0);
   const ActiveIcon = getSettingsTabIcon(props.activeTab);
 
   return (

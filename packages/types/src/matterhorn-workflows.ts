@@ -1601,15 +1601,15 @@ export const MATTERHORN_WORKFLOW_EVIDENCE_BUNDLE_FIXTURES: Record<
 };
 
 export interface MatterhornWorkflowTemplateSafetyBoundary {
-  liveExecutionEnabled: false;
+  liveExecutionEnabled: boolean;
   canExecute: boolean;
-  canSubmit: false;
+  canSubmit: boolean;
   acceptsSecrets: false;
   acceptsPrivateKeys: false;
   acceptsRawSignatures: false;
   acceptsApiSecrets: false;
   requiresExternalSigner: boolean;
-  allowsRealFunds: false;
+  allowsRealFunds: boolean;
 }
 
 export interface MatterhornWorkflowTemplate {
@@ -2014,6 +2014,7 @@ export const MATTERHORN_WORKFLOW_TEMPLATE_REGISTRY: Record<string, MatterhornWor
 // -----------------------------------------------------------------------------
 
 export const MATTERHORN_CUSTOMER_WORKFLOW_STATUSES = [
+  "live",
   "beta_ready",
   "preview_only",
   "planned_not_live",
@@ -2246,9 +2247,9 @@ export const HYPERLIQUID_TRADER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
   id: "hyperliquid_trader",
   name: "Trade on Hyperliquid",
   summary:
-    "Read Hyperliquid markets, check exposure, and prepare external trade handoffs for the user's own client.",
+    "Read Hyperliquid markets, check exposure, and place wallet-approved perpetual orders.",
   promise:
-    "Trade handoff only. No live submission, no custody, and no signing by Matterhorn.",
+    "Non-custodial execution. The connected wallet signs every reviewed order before Matterhorn submits it.",
   category: "markets",
   examplePrompts: [
     "Prepare a Hyperliquid BTC-PERP trade handoff",
@@ -2301,17 +2302,17 @@ export const HYPERLIQUID_TRADER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
       type: "number",
     },
   ],
-  status: "preview_only",
+  status: "live",
   safetyBoundaries: {
-    liveExecutionEnabled: false,
-    canExecute: false,
-    canSubmit: false,
+    liveExecutionEnabled: true,
+    canExecute: true,
+    canSubmit: true,
     acceptsSecrets: false,
     acceptsPrivateKeys: false,
     acceptsRawSignatures: false,
     acceptsApiSecrets: false,
     requiresExternalSigner: false,
-    allowsRealFunds: false,
+    allowsRealFunds: true,
   },
   forbiddenInputs: [
     "private key",
@@ -2324,14 +2325,14 @@ export const HYPERLIQUID_TRADER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
     supported: true,
     types: ["market_preview", "signing_handoff"],
     description:
-      "Produces a read-only market preview and an external-signer handoff.",
+      "Produces a reviewed execution intent, wallet-signing request, and public submission receipt.",
   },
-  serviceHooks: [{ hook: "hyperliquid", status: "preview_only" }],
+  serviceHooks: [{ hook: "hyperliquid", status: "live_local" }],
   chatMode: "crypto chat",
   launch: {
-    primaryCta: "Open Hyperliquid panel",
-    secondaryCta: "Prepare trade handoff",
-    defaultPrompt: "Prepare a Hyperliquid BTC-PERP trade handoff",
+    primaryCta: "Open Hyperliquid desk",
+    secondaryCta: "Place an order",
+    defaultPrompt: "Prepare a wallet-approved Hyperliquid BTC-PERP order",
     handoffContextLabel: "Public wallet address",
     recommendedSurface: "protocol_desk",
   },
@@ -2339,7 +2340,7 @@ export const HYPERLIQUID_TRADER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
     iconHint: "hyperliquid",
     accent: "matterhorn_blue",
     shortDescription:
-      "Prepare Hyperliquid trade handoffs for external execution.",
+      "Research markets and place orders after connected-wallet approval.",
   },
   routing: {
     chatMode: "hyperliquid",
@@ -2920,6 +2921,7 @@ export type MatterhornProtocolWorkspaceId =
   (typeof MATTERHORN_PROTOCOL_WORKSPACE_IDS)[number];
 
 export const MATTERHORN_PROTOCOL_WORKSPACE_CUSTOMER_STATUSES = [
+  "live",
   "beta_ready",
   "preview_only",
   "workflow_ready",
@@ -3018,27 +3020,28 @@ export const HYPERLIQUID_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspac
   id: "hyperliquid",
   displayName: "Hyperliquid",
   category: "markets",
-  customerStatus: "preview_only",
+  customerStatus: "live",
   allowedIntents: [
+    "place order",
     "preview trade",
     "show exposure",
-    "prepare handoff",
+    "manage watch",
   ],
   safetyBoundaries: {
-    liveExecutionEnabled: false,
-    canExecute: false,
-    canSubmit: false,
+    liveExecutionEnabled: true,
+    canExecute: true,
+    canSubmit: true,
     acceptsSecrets: false,
     acceptsPrivateKeys: false,
     acceptsRawSignatures: false,
     acceptsApiSecrets: false,
     requiresExternalSigner: false,
-    allowsRealFunds: false,
+    allowsRealFunds: true,
   },
   primaryPanelRouteId: "/workspaces/hyperliquid",
   mcpCliHints: {
-    cli: 'matterhorn-work crypto chat --message "prepare Hyperliquid BTC-PERP handoff" --json',
-    mcp: "matterhorn_hyperliquid_prepare_handoff",
+    cli: 'matterhorn-work crypto chat --message "prepare Hyperliquid BTC-PERP order" --json',
+    mcp: "matterhorn_hyperliquid_preview_order",
   },
   supportedCardKinds: [
     "market_card",
@@ -3046,7 +3049,7 @@ export const HYPERLIQUID_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspac
     "handoff_card",
     "receipt_card",
   ],
-  demoPrompt: "Prepare a Hyperliquid BTC-PERP trade handoff",
+  demoPrompt: "Prepare a Hyperliquid BTC-PERP order",
   launchBehavior: "opens_desk",
 };
 
@@ -3960,6 +3963,7 @@ export const MATTERHORN_CUSTOMER_TEMPLATE_TO_DESK: Record<string, MatterhornDesk
 };
 
 export const PROTOCOL_DESK_VISUAL_STATUSES = [
+  "live",
   "beta_ready",
   "preview_only",
   "workflow_ready",
@@ -3981,6 +3985,7 @@ export type ProtocolDeskCategory = (typeof PROTOCOL_DESK_CATEGORIES)[number];
 
 export const PROTOCOL_DESK_WALLET_REQUIREMENTS = [
   "none",
+  "evm_wallet",
   "evm_read_only",
   "sui_wallet_standard",
   "sui_external_handoff",
@@ -3991,6 +3996,7 @@ export type ProtocolDeskWalletRequirement = (typeof PROTOCOL_DESK_WALLET_REQUIRE
 
 export const PROTOCOL_DESK_WALLET_RAIL_MODES = [
   "external_signer",
+  "evm_connect",
   "evm_preview",
   "sui_wallet",
   "sui_handoff",
@@ -4007,6 +4013,7 @@ export const PROTOCOL_DESK_STATUS_BADGE_TONES = [
 export type ProtocolDeskStatusBadgeTone = (typeof PROTOCOL_DESK_STATUS_BADGE_TONES)[number];
 
 export const PROTOCOL_DESK_READINESS_TONES = [
+  "live",
   "beta_ready",
   "preview_only",
   "workflow_ready",
@@ -4024,6 +4031,7 @@ export const PROTOCOL_DESK_BACKEND_STATUSES = [
 export type ProtocolDeskBackendStatus = (typeof PROTOCOL_DESK_BACKEND_STATUSES)[number];
 
 export const PROTOCOL_DESK_ACTION_STATUSES = [
+  "live",
   "read_only",
   "preview_only",
   "external_signer",
@@ -4061,9 +4069,9 @@ export interface ProtocolDeskThemeTokenHints {
 }
 
 export interface ProtocolDeskSafetyBoundaries {
-  liveSubmissionEnabled: false;
+  liveSubmissionEnabled: boolean;
   canExecute: boolean;
-  canSubmit: false;
+  canSubmit: boolean;
   acceptsPrivateKeys: false;
   acceptsSeedPhrases: false;
   acceptsApiSecrets: false;
@@ -4071,7 +4079,7 @@ export interface ProtocolDeskSafetyBoundaries {
   acceptsSignedPayloads: false;
   acceptsWalletExports: false;
   requiresExternalSigner: boolean;
-  allowsRealFunds: false;
+  allowsRealFunds: boolean;
   medicalClaimsAllowed: false;
 }
 
@@ -4281,22 +4289,22 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   version: "matterhorn.protocol.desk.manifest.v1",
   id: "hyperliquid",
   displayName: "Hyperliquid",
-  shortDescription: "Read-only perp market previews and watchlists.",
+  shortDescription: "Perpetual market research and wallet-approved execution.",
   launcherTitle: "Hyperliquid",
-  launcherDescription: "Preview perp markets and manage watchlists. Read-only.",
-  launcherPrompt: "Preview a Hyperliquid BTC-PERP trade",
-  rightRailSummary: "Preview-only desk. Enter a public EVM wallet address or market for read-only previews.",
+  launcherDescription: "Research perp markets, manage watches, and place reviewed orders.",
+  launcherPrompt: "Prepare a Hyperliquid BTC-PERP order",
+  rightRailSummary: "Research markets and place orders after connected-wallet review and signing.",
   logoAssetId: "hyperliquid-logo",
   officialLogoAssetId: "hyperliquid-logo",
   logoAlt: "Hyperliquid logo",
   category: "markets",
-  status: "preview_only",
-  readinessTone: "preview_only",
-  backendStatus: "preview",
-  actionStatus: "preview_only",
+  status: "live",
+  readinessTone: "live",
+  backendStatus: "live",
+  actionStatus: "live",
   extensionStatus: "built_in_live",
-  statusBadgeLabel: "Preview",
-  statusBadgeTone: "caution",
+  statusBadgeLabel: "Working",
+  statusBadgeTone: "success",
   routeOrPanelId: "/workspaces/hyperliquid",
   logoAssetKey: "hyperliquid-logo",
   preferredColorToken: "--desk-hyperliquid-accent",
@@ -4324,11 +4332,11 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   },
   primaryActions: [
     {
-      actionId: "preview-trade",
-      label: "Preview trade",
+      actionId: "place-order",
+      label: "Place order",
       iconHint: "preview",
-      intent: "preview trade",
-      requiresConfirmation: false,
+      intent: "review and place trade",
+      requiresConfirmation: true,
       surface: "desk_panel",
     },
     {
@@ -4340,7 +4348,7 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
-  primaryActionLabel: "Preview market",
+  primaryActionLabel: "Trade Hyperliquid",
   secondaryActions: [
     {
       actionId: "show-exposure",
@@ -4351,12 +4359,12 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "chat",
     },
   ],
-  walletRequirements: ["evm_read_only"],
-  walletRailMode: "evm_preview",
+  walletRequirements: ["evm_wallet"],
+  walletRailMode: "evm_connect",
   safetyBoundaries: {
-    liveSubmissionEnabled: false,
-    canExecute: false,
-    canSubmit: false,
+    liveSubmissionEnabled: true,
+    canExecute: true,
+    canSubmit: true,
     acceptsPrivateKeys: false,
     acceptsSeedPhrases: false,
     acceptsApiSecrets: false,
@@ -4364,19 +4372,19 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     acceptsSignedPayloads: false,
     acceptsWalletExports: false,
     requiresExternalSigner: false,
-    allowsRealFunds: false,
+    allowsRealFunds: true,
     medicalClaimsAllowed: false,
   },
   customerVisible: true,
   capabilityBullets: [
     "Read perp market data, orderbooks, and funding",
     "Show account exposure and open orders",
-    "Preview trades without order placement",
+    "Place market and limit orders after wallet approval",
     "Manage market watches and receipts",
   ],
-  safetySummary: "Matterhorn never holds your credentials. All market data is read-only.",
-  customerCapabilitySummary: "Read perp market data, orderbooks, funding, account exposure, and open orders. Preview trades without order placement.",
-  noCustodySafetyLine: "Matterhorn never holds your credentials. All market data is read-only.",
+  safetySummary: "Your connected wallet signs the exact reviewed order. Matterhorn never holds keys or API secrets.",
+  customerCapabilitySummary: "Read perp markets, funding, account exposure, and open orders. Place market and limit orders after wallet approval.",
+  noCustodySafetyLine: "Matterhorn never holds credentials. Every order is short-lived, one-time, and signed by your connected wallet.",
   suggestedPromptTitles: [
     "Show BTC-PERP on Hyperliquid",
     "Preview a BTC long",
@@ -4384,9 +4392,9 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     "Watch BTC funding",
   ],
   emptyStateCopy: {
-    headline: "Preview Hyperliquid markets",
-    body: "Enter a public wallet address or market to generate a read-only preview.",
-    primaryActionId: "preview-trade",
+    headline: "Trade Hyperliquid",
+    body: "Connect the wallet associated with your Hyperliquid account, then review and sign an order.",
+    primaryActionId: "place-order",
   },
   degradedStateCopy: {
     headline: "Market preview unavailable",
@@ -5019,6 +5027,9 @@ export function getDeskSafetySummary(id: string): string | undefined {
   if (manifest.safetyBoundaries.requiresExternalSigner) {
     return "External signer required. Matterhorn never holds your keys.";
   }
+  if (manifest.walletRailMode === "evm_connect") {
+    return "Connected-wallet approval required for every order. Matterhorn never holds keys or API secrets.";
+  }
   if (manifest.walletRailMode === "evm_preview") {
     return "External handoff only. No live submission or signing.";
   }
@@ -5043,6 +5054,8 @@ export function getDeskWalletRequirementSummary(id: string): string | undefined 
       return "SS58 address + external signer";
     case "evm_preview":
       return "EVM address for reads and handoffs";
+    case "evm_connect":
+      return "Connected EVM wallet for order approval";
     case "none":
       return "No wallet needed";
     default:

@@ -42,6 +42,8 @@ function printHelp() {
     "  MATTERHORN_LOCAL_CLIENT_TOKEN=<token>",
     "  MATTERHORN_LOCAL_HOST_TOKEN=<token>",
     "  MATTERHORN_LOCAL_OPENCODE_URL=<url>",
+    "  MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED=0|1 (local default: 1)",
+    "  MATTERHORN_HYPERLIQUID_MAX_ORDER_USDC=<number> (default: 1000)",
     "",
     "A server config is the durable source of truth for multi-workspace launches.",
   ].join(os.EOL));
@@ -314,6 +316,7 @@ async function main() {
     env: {
       ...process.env,
       OPENWORK_DEV_MODE: "1",
+      MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED: process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED ?? "1",
       ...(manageOpencode ? { OPENWORK_MANAGE_OPENCODE: "1" } : {}),
       ...(opencodeBin ? { OPENWORK_OPENCODE_BIN: opencodeBin } : {}),
     },

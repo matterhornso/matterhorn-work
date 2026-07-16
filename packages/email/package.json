@@ -29,11 +29,11 @@
     "nodemailer": "^9.0.1",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-email": "6.1.1",
+    "react-email": "6.8.1",
     "resend": "^6.12.2"
   },
   "devDependencies": {
-    "@react-email/ui": "6.1.1",
+    "@react-email/ui": "6.8.1",
     "@types/nodemailer": "^8.0.0",
     "@types/react": "^19.2.14",
     "tsup": "^8.5.0",

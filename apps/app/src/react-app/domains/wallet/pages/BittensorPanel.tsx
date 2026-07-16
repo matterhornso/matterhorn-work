@@ -5,6 +5,8 @@ import {
   ArrowUpDown,
   BarChart3,
   BrainCircuit,
+  ChevronDown,
+  Copy,
   Database,
   ExternalLink,
   Info,
@@ -17,8 +19,10 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useAccount, useConnect, useSignTypedData } from "wagmi";
 import { ProtocolBrandLogo } from "../../session/workflows/protocol-brand-logo";
 import type {
   BittensorActionQuote,
@@ -44,6 +48,50 @@ const WATCH_ADDRESS_KEY = "matterhorn:bittensor:watchAddress";
 const FAVORITES_KEY = "matterhorn:bittensor:favorites";
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
 const CHECK_PENDING_LABEL = "Check pending";
+
+type HyperliquidExecutionIntent = {
+  intentId: string;
+  network: "testnet" | "mainnet";
+  signerAddress: `0x${string}`;
+  asset: string;
+  side: "buy" | "sell";
+  size: number;
+  orderType: "market" | "limit";
+  orderPrice: number;
+  estimatedNotionalUsdc: number;
+  slippageBps: number;
+  reduceOnly: boolean;
+  expiresAt: string;
+  typedData: {
+    domain: {
+      name: "Exchange";
+      version: "1";
+      chainId: 1337;
+      verifyingContract: `0x${string}`;
+    };
+    types: {
+      Agent: readonly [
+        { readonly name: "source"; readonly type: "string" },
+        { readonly name: "connectionId"; readonly type: "bytes32" },
+      ];
+    };
+    primaryType: "Agent";
+    message: { source: "a" | "b"; connectionId: `0x${string}` };
+  };
+  confirmation: { required: boolean; phrase: "SUBMIT LIVE ORDER" | null };
+  safety: { maxOrderNotionalUsdc: number };
+};
+
+type HyperliquidExecutionReceipt = {
+  intentId: string;
+  network: "testnet" | "mainnet";
+  asset: string;
+  side: "buy" | "sell";
+  size: number;
+  status: "submitted" | "rejected" | "uncertain";
+  submittedAt: string;
+  venueResponse: unknown;
+};
 const CUSTOMER_DEMO_COMMANDS = {
   readiness: "matterhorn-work crypto readiness --json",
   readinessApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/readiness\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
@@ -154,7 +202,7 @@ const MONDAY_BETA_LAUNCH_CHECKLIST = [
     title: "Crypto safety smoke is green",
     owner: "Operator",
     commandKey: "mondayBetaQuickSmoke",
-    proof: "Bittensor stays non-custodial; Hyperliquid and Polymarket remain Can submit: No, Live submission: Off.",
+    proof: "Bittensor stays non-custodial; Hyperliquid requires exact-order wallet approval; Polymarket remains Can submit: No, Live submission: Off.",
   },
   {
     id: "beta-app-typecheck",
@@ -201,7 +249,7 @@ const CUSTOMER_DEMO_PROMPTS = [
     id: "hyperliquid-orderbook",
     label: "Hyperliquid read",
     betaVisible: false,
-    prompt: "Hyperliquid Agent task: Show BTC Hyperliquid orderbook context and explain why Matterhorn is preview-only for orders: Can submit: No, Live submission: Off, External signer required.",
+    prompt: "Hyperliquid Agent task: Show BTC Hyperliquid orderbook context. Explain that this read does not place an order and that execution is available only from the Hyperliquid trade ticket after exact-order review and connected-wallet approval.",
   },
   {
     id: "polymarket-compliance",
@@ -213,19 +261,19 @@ const CUSTOMER_DEMO_PROMPTS = [
     id: "external-signer-preview",
     label: "Signer preview",
     betaVisible: true,
-    prompt: "Matterhorn protocol task: Explain the external-signer preview flow across Bittensor, Hyperliquid, and Polymarket. Make clear that Matterhorn prepares safe previews; my wallet/client decides whether anything is signed externally, and Matterhorn cannot sign, submit, custody, or broadcast.",
+    prompt: "Matterhorn protocol task: Explain the signing boundary across Bittensor, Hyperliquid, and Polymarket. Bittensor and Polymarket use external handoffs. Hyperliquid can submit only an exact, short-lived order reviewed and signed by my connected wallet. Matterhorn never signs, custodies keys, or auto-executes.",
   },
   {
     id: "market-execution-readiness",
     label: "Execution readiness",
     betaVisible: false,
-    prompt: "Matterhorn protocol task: Can Matterhorn submit Hyperliquid and Polymarket orders yet? Show the execution readiness contract, Can submit: No, Live submission: Off, and the missing security-review steps before any future route could change.",
+    prompt: "Matterhorn protocol task: Can Matterhorn submit Hyperliquid and Polymarket orders? Show whether the Hyperliquid connected-wallet execution switch is enabled, its exact-intent and one-time safeguards, why agents cannot auto-submit, and why Polymarket remains Can submit: No and Live submission: Off.",
   },
   {
     id: "market-execution-chain",
     label: "Safe execution chain",
     betaVisible: false,
-    prompt: "Matterhorn protocol task: Explain the Hyperliquid and Polymarket preview -> external sign request -> redacted artifact validation -> public receipt import chain. Confirm that Matterhorn rejects raw signatures, signed payloads, API secrets, private keys, hash mismatches, and any live submission request.",
+    prompt: "Matterhorn protocol task: Explain the Hyperliquid and Polymarket preview -> external sign request -> redacted artifact validation -> public receipt import evidence chain. Confirm that this evidence chain rejects raw signatures, signed payloads, API secrets, private keys, hash mismatches, and live submission requests. Distinguish it from the separate wallet-approved Hyperliquid trade ticket.",
   },
   {
     id: "market-sdk-validation",
@@ -283,7 +331,7 @@ const BETA_TRY_PROMPTS = [
     label: "show Hyperliquid BTC orderbook",
     mode: "crypto",
     prompt:
-      "Hyperliquid Agent task: Show the BTC Hyperliquid orderbook context and explain that Matterhorn is preview-only for orders: Can submit: No, Live submission: Off, External signer required.",
+      "Hyperliquid Agent task: Show the BTC Hyperliquid orderbook context. Explain that this read never places an order; execution requires a separate exact-order review and connected-wallet signature in the Hyperliquid trade ticket.",
   },
   {
     id: "beta-pm-summary",
@@ -462,6 +510,8 @@ function venueToneStyle(activeVenue: CryptoVenue): CSSProperties {
 
 function protocolStatusLabel(status: MatterhornProtocolWorkspaceManifest["customerStatus"]): string {
   switch (status) {
+    case "live":
+      return "Working";
     case "beta_ready":
       return "Read and preview";
     case "preview_only":
@@ -540,7 +590,6 @@ const VENUE_DESKS: Record<CryptoVenue, {
   label: string;
   shortLabel: string;
   workspaceTitle: string;
-  eyebrow: string;
   headline: string;
   description: string;
   statusLabel: string;
@@ -554,7 +603,6 @@ const VENUE_DESKS: Record<CryptoVenue, {
     label: "Bittensor",
     shortLabel: "TAO",
     workspaceTitle: "Bittensor desk",
-    eyebrow: "TAO wallet · subnets · validators",
     headline: "Start with your TAO, then choose what to do next.",
     description: "Matterhorn explains Bittensor in plain language: check a public wallet, browse subnets, compare validators, prepare staking or transfer previews, and keep every action external-signer only.",
     statusLabel: "Read and preview",
@@ -580,7 +628,7 @@ const VENUE_DESKS: Record<CryptoVenue, {
       },
       {
         label: "Prepare staking",
-        summary: "Build an unsigned stake preview and external signer handoff.",
+        summary: "Build an unsigned stake preview to review and submit with your own Bittensor signer.",
         prompt: "Bittensor Agent task: Prepare staking 1 TAO safely. Ask for netuid and validator hotkey if missing. Return an unsigned preview only and explain that external signing is required.",
       },
     ],
@@ -589,19 +637,18 @@ const VENUE_DESKS: Record<CryptoVenue, {
     label: "Hyperliquid",
     shortLabel: "HL",
     workspaceTitle: "Hyperliquid desk",
-    eyebrow: "Orderbook · account · previews",
-    headline: "Preview Hyperliquid trades with the Hyperliquid Agent, with execution off.",
-    description: "Inspect orderbooks, account exposure, funding, open-order context, watch plans, and external-signer handoffs. Matterhorn does not submit live Hyperliquid orders in this build.",
-    statusLabel: "Preview-only",
-    canSubmit: "No",
-    liveSubmission: "Off",
-    signer: "External signer/client required",
-    source: "Hyperliquid public info endpoints and fixture/testnet evidence",
+    headline: "Research and execute Hyperliquid perpetual orders with wallet review.",
+    description: "Inspect orderbooks, account exposure, funding, and open orders, then place market or limit orders after your connected wallet signs the exact reviewed intent.",
+    statusLabel: "Read and trade",
+    canSubmit: "After wallet approval",
+    liveSubmission: "Available",
+    signer: "Connected wallet required",
+    source: "Hyperliquid public info and exchange endpoints",
     prompts: [
       {
         label: "BTC orderbook",
         summary: "Read spread, depth, source, and stale-data context.",
-        prompt: "Hyperliquid Agent task: Show BTC orderbook context, spread, depth summary, stale-data warnings, and explain that this is read/preview-only with Can submit: No and Live submission: Off.",
+        prompt: "Hyperliquid Agent task: Show BTC orderbook context, spread, depth summary, and stale-data warnings. Explain that this read never places an order and that execution requires the separate wallet-approved trade ticket.",
       },
       {
         label: "Account exposure",
@@ -609,14 +656,14 @@ const VENUE_DESKS: Record<CryptoVenue, {
         prompt: "Hyperliquid Agent task: Show my Hyperliquid exposure for this public address: <paste public address>. Summarize account value, margin, positions, open orders, funding exposure, and risk notes where data exists.",
       },
       {
-        label: "Preview order",
-        summary: "Prepare a no-submit testnet preview with hash expectations.",
-        prompt: "Hyperliquid Agent task: Prepare a preview for buying 0.001 BTC with a testnet external-signer flow. Do not submit, sign, or ask for API secrets. Show Can submit: No, Live submission: Off, missing context, and preview hash expectations.",
+        label: "Prepare order",
+        summary: "Review an order before wallet signing and submission.",
+        prompt: "Hyperliquid Agent task: Prepare an order for buying 0.001 BTC. Ask whether I want testnet or mainnet, market or limit, and my slippage tolerance. Do not ask for keys or API secrets. Explain that the connected wallet must approve the exact order before Matterhorn submits it.",
       },
       {
         label: "Create watch",
-        summary: "Create read-only funding and orderbook movement watches.",
-        prompt: "Hyperliquid Agent task: Create a read-only watch plan for BTC funding rate and orderbook movement. Explain threshold, source/freshness, alert card behavior, and confirm no auto-execution.",
+        summary: "Create funding and orderbook alerts without automatic trading.",
+        prompt: "Hyperliquid Agent task: Create a watch plan for BTC funding rate and orderbook movement. Explain threshold, source/freshness, alert behavior, and confirm that alerts never auto-execute an order.",
       },
     ],
   },
@@ -624,7 +671,6 @@ const VENUE_DESKS: Record<CryptoVenue, {
     label: "Polymarket",
     shortLabel: "PM",
     workspaceTitle: "Polymarket desk",
-    eyebrow: "Markets · outcomes · compliance",
     headline: "Analyze prediction markets and preview safely.",
     description: "Find markets, explain outcomes as probabilities, read orderbook/liquidity context, check compliance state, and prepare external-signer previews without sending orders from Matterhorn.",
     statusLabel: "Preview-only",
@@ -808,6 +854,246 @@ function buildBittensorChatPrompt(prompt: string, context: Record<string, unknow
   }
 
   return lines.length ? `${prompt}\n\nBittensor context:\n${lines.join("\n")}` : prompt;
+}
+
+function HyperliquidTradeExecution() {
+  const { address, isConnected } = useAccount();
+  const { connectors, connect, isPending: connectPending } = useConnect();
+  const { signTypedDataAsync } = useSignTypedData();
+  const [network, setNetwork] = useState<"testnet" | "mainnet">("testnet");
+  const [asset, setAsset] = useState("BTC");
+  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [size, setSize] = useState("0.001");
+  const [orderType, setOrderType] = useState<"market" | "limit">("market");
+  const [limitPrice, setLimitPrice] = useState("");
+  const [slippageBps, setSlippageBps] = useState("100");
+  const [reduceOnly, setReduceOnly] = useState(false);
+  const [intent, setIntent] = useState<HyperliquidExecutionIntent | null>(null);
+  const [liveConfirmation, setLiveConfirmation] = useState("");
+  const [receipt, setReceipt] = useState<HyperliquidExecutionReceipt | null>(null);
+  const [busy, setBusy] = useState<"prepare" | "submit" | null>(null);
+  const [tradeError, setTradeError] = useState<string | null>(null);
+
+  const resetReview = useCallback(() => {
+    setIntent(null);
+    setReceipt(null);
+    setTradeError(null);
+    setLiveConfirmation("");
+  }, []);
+
+  const prepareIntent = useCallback(async () => {
+    if (!address) {
+      setTradeError("Connect an EVM wallet first. The connected address must own or be authorized for the Hyperliquid account.");
+      return;
+    }
+    setBusy("prepare");
+    setTradeError(null);
+    setReceipt(null);
+    try {
+      const { response, json } = await fetchMatterhornApiJson<{
+        success?: boolean;
+        intent?: HyperliquidExecutionIntent;
+        error?: { message?: string };
+      }>("/api/hyperliquid/orders/execution-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          network,
+          signerAddress: address,
+          asset,
+          side,
+          size: Number(size),
+          orderType,
+          limitPrice: orderType === "limit" ? Number(limitPrice) : null,
+          slippageBps: Number(slippageBps),
+          reduceOnly,
+        }),
+      });
+      if (!response.ok || !json.success || !json.intent) {
+        throw new Error(json.error?.message ?? "Could not prepare the Hyperliquid order.");
+      }
+      setIntent(json.intent);
+    } catch (error) {
+      setTradeError(error instanceof Error ? error.message : "Could not prepare the Hyperliquid order.");
+    } finally {
+      setBusy(null);
+    }
+  }, [address, asset, limitPrice, network, orderType, reduceOnly, side, size, slippageBps]);
+
+  const signAndSubmit = useCallback(async () => {
+    if (!intent || !address) return;
+    if (intent.network === "mainnet" && liveConfirmation !== intent.confirmation.phrase) {
+      setTradeError("Type SUBMIT LIVE ORDER before sending a mainnet order.");
+      return;
+    }
+    setBusy("submit");
+    setTradeError(null);
+    try {
+      const signature = await signTypedDataAsync(intent.typedData);
+      const { response, json } = await fetchMatterhornApiJson<{
+        success?: boolean;
+        receipt?: HyperliquidExecutionReceipt;
+        error?: { message?: string };
+      }>("/api/hyperliquid/orders/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          intentId: intent.intentId,
+          signerAddress: address,
+          signature,
+          liveConfirmation: intent.network === "mainnet" ? liveConfirmation : null,
+        }),
+      });
+      if (!json.receipt) throw new Error(json.error?.message ?? "Hyperliquid did not return a submission receipt.");
+      setReceipt(json.receipt);
+      if (!response.ok || json.receipt.status !== "submitted") {
+        setTradeError(json.receipt.status === "uncertain"
+          ? "Submission status is uncertain. Check your Hyperliquid open orders before trying again."
+          : "Hyperliquid rejected the order. Review the receipt before preparing another order.");
+      }
+    } catch (error) {
+      setTradeError(error instanceof Error ? error.message : "Wallet signing or order submission failed.");
+    } finally {
+      setBusy(null);
+    }
+  }, [address, intent, liveConfirmation, signTypedDataAsync]);
+
+  const shortWalletAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null;
+  const firstConnector = connectors.find((connector) => connector.id !== "injected") ?? connectors[0];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-dls-text">Place a perpetual order</div>
+          <p className="mt-1 max-w-xl text-xs leading-5 text-dls-secondary">
+            Review the exact order, sign it in your connected wallet, then Matterhorn submits it to Hyperliquid. Keys and API secrets never enter Matterhorn.
+          </p>
+        </div>
+        <div className="text-right text-[11px] leading-5 text-dls-secondary">
+          <div className={cn("font-medium", isConnected ? "text-emerald-300" : "text-dls-secondary")}>{shortWalletAddress ?? "Wallet not connected"}</div>
+          <div>{network === "mainnet" ? "Mainnet · real funds" : "Testnet"}</div>
+        </div>
+      </div>
+
+      {!isConnected ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-dls-surface-muted/30 px-3 py-3">
+          <p className="text-xs leading-5 text-dls-secondary">Connect the wallet associated with your Hyperliquid account.</p>
+          <Button size="sm" disabled={!firstConnector || connectPending} onClick={() => firstConnector && connect({ connector: firstConnector })}>
+            {connectPending ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : <Wallet className="mr-2 size-3.5" />}
+            Connect wallet
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="space-y-1.5 text-xs text-dls-secondary">
+          Network
+          <select value={network} onChange={(event) => { setNetwork(event.target.value as "testnet" | "mainnet"); resetReview(); }} className="h-10 w-full rounded-lg border-0 bg-dls-surface-muted/45 px-3 text-sm text-dls-text outline-none ring-1 ring-dls-border/35 focus:ring-[var(--protocol-desk-accent)]">
+            <option value="testnet">Testnet</option>
+            <option value="mainnet">Mainnet · real funds</option>
+          </select>
+        </label>
+        <label className="space-y-1.5 text-xs text-dls-secondary">
+          Asset
+          <Input value={asset} onChange={(event) => { setAsset(event.target.value.toUpperCase()); resetReview(); }} placeholder="BTC" />
+        </label>
+        <label className="space-y-1.5 text-xs text-dls-secondary">
+          Side
+          <div className="grid h-10 grid-cols-2 rounded-lg bg-dls-surface-muted/35 p-1">
+            {(["buy", "sell"] as const).map((item) => (
+              <button key={item} type="button" onClick={() => { setSide(item); resetReview(); }} className={cn("rounded-md text-xs font-semibold capitalize transition-colors", side === item ? item === "buy" ? "bg-emerald-500/18 text-emerald-200" : "bg-red-500/18 text-red-200" : "text-dls-secondary hover:text-dls-text")}>{item}</button>
+            ))}
+          </div>
+        </label>
+        <label className="space-y-1.5 text-xs text-dls-secondary">
+          Size
+          <Input value={size} inputMode="decimal" onChange={(event) => { setSize(event.target.value); resetReview(); }} placeholder="0.001" />
+        </label>
+        <label className="space-y-1.5 text-xs text-dls-secondary">
+          Order type
+          <select value={orderType} onChange={(event) => { setOrderType(event.target.value as "market" | "limit"); resetReview(); }} className="h-10 w-full rounded-lg border-0 bg-dls-surface-muted/45 px-3 text-sm text-dls-text outline-none ring-1 ring-dls-border/35 focus:ring-[var(--protocol-desk-accent)]">
+            <option value="market">Market</option>
+            <option value="limit">Limit</option>
+          </select>
+        </label>
+        {orderType === "limit" ? (
+          <label className="space-y-1.5 text-xs text-dls-secondary">
+            Limit price (USDC)
+            <Input value={limitPrice} inputMode="decimal" onChange={(event) => { setLimitPrice(event.target.value); resetReview(); }} placeholder="65000" />
+          </label>
+        ) : (
+          <label className="space-y-1.5 text-xs text-dls-secondary">
+            Max slippage
+            <div className="relative">
+              <Input value={slippageBps} inputMode="numeric" onChange={(event) => { setSlippageBps(event.target.value); resetReview(); }} />
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-dls-secondary">bps</span>
+            </div>
+          </label>
+        )}
+      </div>
+
+      <label className="flex cursor-pointer items-center gap-2 text-xs text-dls-secondary">
+        <input type="checkbox" checked={reduceOnly} onChange={(event) => { setReduceOnly(event.target.checked); resetReview(); }} className="size-4 accent-[var(--protocol-desk-accent)]" />
+        Reduce-only order
+      </label>
+
+      {intent ? (
+        <div className="space-y-3 rounded-lg bg-dls-surface-muted/30 px-3 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-semibold text-dls-text">Review exact order</span>
+            <span className={cn("text-xs font-semibold capitalize", intent.side === "buy" ? "text-emerald-300" : "text-red-300")}>{intent.side}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs sm:grid-cols-3">
+            {[
+              ["Order", `${intent.size} ${intent.asset}`],
+              [intent.orderType === "market" ? "Slippage boundary" : "Limit price", `$${intent.orderPrice.toLocaleString()}`],
+              ["Estimated notional", `$${intent.estimatedNotionalUsdc.toLocaleString()}`],
+              ["Network", intent.network === "mainnet" ? "Mainnet · real funds" : "Testnet"],
+              ["Reduce only", intent.reduceOnly ? "Yes" : "No"],
+              ["Expires", new Date(intent.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <div className="text-[10px] text-dls-secondary">{label}</div>
+                <div className="mt-0.5 font-medium text-dls-text">{value}</div>
+              </div>
+            ))}
+          </div>
+          {intent.network === "mainnet" ? (
+            <label className="block space-y-1.5 text-xs text-red-200">
+              Type <span className="font-semibold">SUBMIT LIVE ORDER</span>
+              <Input value={liveConfirmation} onChange={(event) => setLiveConfirmation(event.target.value)} autoComplete="off" />
+            </label>
+          ) : null}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={resetReview} disabled={busy !== null}>Edit order</Button>
+            <Button size="sm" onClick={() => void signAndSubmit()} disabled={busy !== null || !isConnected || (intent.network === "mainnet" && liveConfirmation !== intent.confirmation.phrase)}>
+              {busy === "submit" ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : <Shield className="mr-2 size-3.5" />}
+              Sign and submit
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex justify-end">
+          <Button size="sm" onClick={() => void prepareIntent()} disabled={busy !== null || !isConnected}>
+            {busy === "prepare" ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : null}
+            Review order
+          </Button>
+        </div>
+      )}
+
+      {receipt ? (
+        <div className={cn("rounded-lg px-3 py-3 text-xs leading-5", receipt.status === "submitted" ? "bg-emerald-500/10 text-emerald-200" : "bg-red-500/10 text-red-200")}>
+          <div className="font-semibold">{receipt.status === "submitted" ? "Order sent to Hyperliquid" : `Order ${receipt.status}`}</div>
+          <div className="mt-1 opacity-80">Receipt {receipt.intentId.slice(0, 8)} · {new Date(receipt.submittedAt).toLocaleString()}</div>
+        </div>
+      ) : null}
+      {tradeError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Hyperliquid order">{tradeError}</Notice> : null}
+      <p className="text-[11px] leading-5 text-dls-secondary">
+        Market orders use an IOC limit at your slippage boundary. The connected wallet must already have a funded Hyperliquid account. Matterhorn never stores the wallet signature after submission.
+      </p>
+    </div>
+  );
 }
 
 export default function BittensorPanel({ initialVenue = "bittensor" }: { initialVenue?: CryptoVenue }) {
@@ -1192,7 +1478,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   };
 
   const askAgentAboutMarketExecutionReadiness = async () => {
-    const prompt = "Matterhorn protocol task: Review the current Hyperliquid and Polymarket market execution readiness contract. Explain why live submission is disabled, which controls are passing, what is still missing before any future submit/sign route, and the next safe operator command to run. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
+    const prompt = "Matterhorn protocol task: Review the current Hyperliquid and Polymarket execution readiness contract. Explain whether connected-wallet Hyperliquid execution is enabled, which controls are passing, why Polymarket remains preview-only, and the next safe operator action. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
     await sendToChat(prompt, { marketExecutionReadiness }, { mode: "crypto", source: "market-execution-readiness-panel" });
   };
 
@@ -1318,10 +1604,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const marketVenueState = (venueName: string): string => {
     const venue = marketExecutionReadiness?.venues?.find((item) => item.venue?.toLowerCase() === venueName);
     if (!venue) return CHECK_PENDING_LABEL;
+    if (venue.canSubmit === true || venue.liveSubmissionEnabled === true) return "Wallet approved";
     return venue.blockedNow?.includes("live_submit") ? "Disabled" : "Review";
   };
   const marketExecutionSubmissionState = marketExecutionReadiness
-    ? "No"
+    ? marketExecutionReadiness.readyForLiveSubmission ? "Hyperliquid" : "No"
     : CHECK_PENDING_LABEL;
   const marketExecutionChainStages = marketExecutionChain?.stages ?? [];
   const marketExecutionChainStageCount = marketExecutionChainStages.length ? String(marketExecutionChainStages.length) : CHECK_PENDING_LABEL;
@@ -1348,10 +1635,16 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const activeManifestCanSubmit = activeManifest.safetyBoundaries.canSubmit ? "Yes" : "No";
   const activeManifestLiveSubmission = activeManifest.safetyBoundaries.liveExecutionEnabled ? "On" : "Off";
   const activeManifestSigner = protocolSignerLabel(activeManifest);
-  const activeSafetyBadge = venue === "bittensor" ? "Read/preview + external signer" : "Preview Only";
+  const activeSafetyBadge = venue === "bittensor"
+    ? "Read/preview + external signer"
+    : venue === "hyperliquid"
+      ? "Wallet approval required"
+      : "Preview only";
   const activeSafetyCopy = venue === "bittensor"
     ? "Bittensor safety: share only public SS58/coldkey or validator hotkey addresses. Matterhorn can read balances, explain subnets, create watches, and prepare unsigned previews. You review and sign elsewhere; never paste seed phrases, private keys, mnemonics, or wallet exports."
-    : `Safety strip: ${activeVenue.label} is Preview Only. Can submit: No. Live submission: Off. External signer/client required. Matterhorn never accepts private keys, API secrets, raw signatures, signed payloads, or wallet exports.`;
+    : venue === "hyperliquid"
+      ? "Hyperliquid orders can submit only after you review the network, asset, side, size, price or slippage boundary, and reduce-only state, then sign the exact short-lived intent in your connected wallet. Matterhorn never accepts private keys or API secrets."
+      : `Safety strip: ${activeVenue.label} is Preview Only. Can submit: No. Live submission: Off. External signer/client required. Matterhorn never accepts private keys, API secrets, raw signatures, signed payloads, or wallet exports.`;
 
   return (
     <div
@@ -1365,7 +1658,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <div className="min-w-0">
               <h2 className="text-lg font-semibold tracking-[-0.01em] text-dls-text">{activeVenue.workspaceTitle}</h2>
               <p className="text-[12px] leading-5 text-dls-secondary">
-                {activeVenue.eyebrow} · {venue === "bittensor" && sidecarStatus?.configured ? "Subtensor sidecar ready" : activeManifestStatus}
+                {venue === "bittensor" && sidecarStatus?.configured ? "Subtensor sidecar ready" : activeManifestStatus}
               </p>
             </div>
           </div>
@@ -1498,8 +1791,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <Section title={activeVenue.workspaceTitle} icon={venue === "hyperliquid" ? <BarChart3 className="size-4" /> : <Shield className="size-4" />}>
               <div className="space-y-3">
                 <div className="rounded-lg bg-[var(--protocol-desk-soft)] p-3">
-                  <div className="text-[10px] font-medium text-[var(--protocol-desk-accent)]">{activeVenue.eyebrow}</div>
-                  <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
+                  <h3 className="text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
                   <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
@@ -1509,14 +1801,22 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <Metric label="Signer" value={activeVenue.signer} compact />
                 </div>
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Source: {activeVenue.source}. Ask the {activeVenue.label} Agent in plain English, review cards, then use an external wallet/client only when an approved handoff requires it.
+                  Source: {activeVenue.source}. {venue === "hyperliquid"
+                    ? "Agent prompts prepare context only. To trade, use the order ticket below, review every field, and approve the exact intent in your connected wallet."
+                    : `Ask the ${activeVenue.label} Agent in plain English, review cards, then use an external wallet or client only when an approved handoff requires it.`}
                 </p>
               </div>
             </Section>
 
+            {venue === "hyperliquid" ? (
+              <Section title="Trade Hyperliquid" icon={<ArrowUpDown className="size-4" />}>
+                <HyperliquidTradeExecution />
+              </Section>
+            ) : null}
+
             <Section title={venue === "hyperliquid" ? "Standard Hyperliquid actions" : "Standard Polymarket actions"} icon={<BrainCircuit className="size-4" />}>
               <p className="mb-3 text-xs leading-5 text-dls-secondary">
-                These stage editable {activeVenue.label} Agent tasks in the composer. One-click tasks stay short; the full instruction stays editable before you send. They do not auto-send, sign, submit, place orders, bet, or ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.
+                These stage editable {activeVenue.label} Agent tasks in the composer. One-click tasks stay short and the full instruction stays editable before you send. Agent prompts never auto-execute; Hyperliquid orders still require a separate review and wallet signature in the trade ticket.
               </p>
               <div className="grid gap-2">
                 {activeVenue.prompts.map((item) => (
@@ -1536,37 +1836,54 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               </div>
             </Section>
 
-            <Section title={venue === "hyperliquid" ? "Exchange preview controls" : "Market preview controls"} icon={<Shield className="size-4" />}>
+            <Section title={venue === "hyperliquid" ? "Exchange safeguards" : "Market preview controls"} icon={<Shield className="size-4" />}>
               <div className="space-y-3">
                 <div className="rounded-lg bg-[var(--protocol-desk-soft)] px-3 py-2.5">
-                  <p className="text-xs font-semibold text-dls-text">Read-only market context</p>
+                  <p className="text-xs font-semibold text-dls-text">{venue === "hyperliquid" ? "Wallet-authorized execution" : "Read-only market context"}</p>
                   <p className="mt-1 text-[11px] leading-5 text-dls-secondary">
-                    Preview boundary: show the user what can be read, what context is missing, and why no market action can submit from Matterhorn.
+                    {venue === "hyperliquid"
+                      ? "Every order is hash-bound to the reviewed terms, expires quickly, can submit once, and must be signed by the connected wallet. Mainnet also requires a typed live-order confirmation."
+                      : "Preview boundary: show the user what can be read, what context is missing, and why no market action can submit from Matterhorn."}
                   </p>
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
                   <Metric label="Readiness" value={venue === "hyperliquid" ? hyperliquidReadinessState : polymarketReadinessState} compact />
-                  <Metric label="Execution" value={marketVenueState(venue)} compact />
-                  <Metric label="Can submit" value={marketExecutionSubmissionState} compact />
+                  <Metric label="Execution" value={venue === "hyperliquid" ? "Wallet approved" : marketVenueState(venue)} compact />
+                  <Metric label="Can submit" value={venue === "hyperliquid" ? "After signature" : marketExecutionSubmissionState} compact />
                   <Metric label="SDK evidence" value={marketSdkValidationState} compact />
                 </div>
-                <Notice tone="info" icon={<Shield className="size-4" />} title="Preview-only boundary">
-                  {activeVenue.label} is separated from Bittensor because it has a different risk model. This desk supports read, preview, watch, external-signer request evidence, and receipt review. It does not submit live market orders or accept private keys, API secrets, raw signatures, signed payloads, or wallet exports.
+                <Notice tone="info" icon={<Shield className="size-4" />} title={venue === "hyperliquid" ? "Execution boundary" : "Preview-only boundary"}>
+                  {venue === "hyperliquid"
+                    ? "Matterhorn submits only a short-lived order intent that this server prepared and your connected wallet signed. It does not accept private keys, API secrets, arbitrary signed payloads, alternate exchange URLs, or automatic watch-triggered orders."
+                    : `${activeVenue.label} supports read, preview, watches, external-signer request evidence, and receipt review. It does not submit live market orders or accept private keys, API secrets, raw signatures, signed payloads, or wallet exports.`}
                 </Notice>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand(venue === "hyperliquid" ? "hyperliquidWatchCreate" : "polymarketWatchCreate")}>
-                    {copiedCustomerCommand === (venue === "hyperliquid" ? "hyperliquidWatchCreate" : "polymarketWatchCreate") ? "Copied" : `Create ${activeVenue.shortLabel} watch`}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainSignRequest")}>
-                    {copiedCustomerCommand === "executionChainSignRequest" ? "Copied" : "Copy external-signer examples"}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand(venue === "hyperliquid" ? "hyperliquidWatchDigest" : "polymarketWatchDigest")}>
-                    {copiedCustomerCommand === (venue === "hyperliquid" ? "hyperliquidWatchDigest" : "polymarketWatchDigest") ? "Copied" : `Digest ${activeVenue.shortLabel} watches`}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand("sdkValidateFixture")}>
-                    {copiedCustomerCommand === "sdkValidateFixture" ? "Copied" : "SDK fixture validation"}
-                  </Button>
-                </div>
+                <details className="group rounded-md bg-dls-surface-muted/[0.10] px-3 py-2">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--protocol-desk-rgb),0.30)] [&::-webkit-details-marker]:hidden">
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-dls-text">Developer tools</span>
+                      <span className="mt-0.5 block text-[11px] leading-4 text-dls-secondary">Copy CLI commands. Nothing runs automatically.</span>
+                    </span>
+                    <ChevronDown className="size-3.5 shrink-0 text-dls-secondary group-open:rotate-180" />
+                  </summary>
+                  <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
+                    <Button variant="ghost" size="sm" className="h-8 justify-start gap-1.5 px-2 text-xs text-dls-secondary hover:bg-dls-hover/45 hover:text-dls-text" onClick={() => void copyCustomerDemoCommand(venue === "hyperliquid" ? "hyperliquidWatchCreate" : "polymarketWatchCreate")}>
+                      <Copy className="size-3.5" />
+                      {copiedCustomerCommand === (venue === "hyperliquid" ? "hyperliquidWatchCreate" : "polymarketWatchCreate") ? "Copied" : "Copy watch setup command"}
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-8 justify-start gap-1.5 px-2 text-xs text-dls-secondary hover:bg-dls-hover/45 hover:text-dls-text" onClick={() => void copyCustomerDemoCommand("executionChainSignRequest")}>
+                      <Copy className="size-3.5" />
+                      {copiedCustomerCommand === "executionChainSignRequest" ? "Copied" : "Copy signer examples"}
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-8 justify-start gap-1.5 px-2 text-xs text-dls-secondary hover:bg-dls-hover/45 hover:text-dls-text" onClick={() => void copyCustomerDemoCommand(venue === "hyperliquid" ? "hyperliquidWatchDigest" : "polymarketWatchDigest")}>
+                      <Copy className="size-3.5" />
+                      {copiedCustomerCommand === (venue === "hyperliquid" ? "hyperliquidWatchDigest" : "polymarketWatchDigest") ? "Copied" : "Copy watch digest command"}
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-8 justify-start gap-1.5 px-2 text-xs text-dls-secondary hover:bg-dls-hover/45 hover:text-dls-text" onClick={() => void copyCustomerDemoCommand("sdkValidateFixture")}>
+                      <Copy className="size-3.5" />
+                      {copiedCustomerCommand === "sdkValidateFixture" ? "Copied" : "Copy SDK check command"}
+                    </Button>
+                  </div>
+                </details>
               </div>
             </Section>
           </div>
@@ -1577,8 +1894,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <Section title="Bittensor workspace" icon={<BrainCircuit className="size-4" />}>
               <div className="space-y-3">
                 <div className="rounded-lg bg-[var(--protocol-desk-soft)] p-3">
-                  <div className="text-[10px] font-medium text-[var(--protocol-desk-accent)]">{activeVenue.eyebrow}</div>
-                  <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
+                  <h3 className="text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
                   <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
@@ -1775,7 +2091,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                   <p className="text-xs font-semibold text-dls-text">Hyperliquid</p>
                   <p className="mt-1 break-words text-[11px] leading-5 text-dls-secondary">
-                    Preview only, live submission off. Can submit: No.
+                    Manual execution is available in the trade ticket after exact-order review and connected-wallet approval. Agent prompts and watches never auto-submit.
                   </p>
                 </div>
                 <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
@@ -1785,7 +2101,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   </p>
                 </div>
                 <p className="break-words text-[11px] leading-5 text-dls-secondary">
-                  Matterhorn does not custody keys, sign silently, or submit live market trades.
+                  Matterhorn never custodies keys or signs silently. It can relay only an exact, short-lived Hyperliquid intent approved by your connected wallet; Polymarket does not submit orders.
                 </p>
               </div>
             </Section>
@@ -1827,7 +2143,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 ) : cryptoReadinessWarnings[0] ? (
                   <p className="text-xs leading-5 text-amber-300">{cryptoReadinessWarnings[0].label ?? "Protocol readiness"}: {cryptoReadinessWarnings[0].summary ?? "Review before production use."}</p>
                 ) : cryptoReadiness?.ready && readiness?.ready ? (
-                  <p className="text-xs leading-5 text-emerald-300">Protocol readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview flows.</p>
+                  <p className="text-xs leading-5 text-emerald-300">Protocol readiness is green within each desk boundary: Bittensor reads and previews, Hyperliquid wallet-approved execution, and Polymarket read/preview.</p>
                 ) : (
                   <p className="text-xs leading-5 text-dls-secondary">Check readiness before customer use.</p>
                 )}
@@ -1867,8 +2183,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Read, preview, watches, receipts, and external-signer handoff.</p>
                   </div>
                   <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
-                    <p className="text-xs font-semibold text-dls-text">Hyperliquid/Polymarket: Preview only</p>
-                    <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Can submit: No. Live submission: Off. No market submit.</p>
+                    <p className="text-xs font-semibold text-dls-text">Hyperliquid: Wallet-approved trading</p>
+                    <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Each order needs review and an exact connected-wallet signature. Polymarket remains preview only.</p>
                   </div>
                   <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                     <p className="text-xs font-semibold text-dls-text">Longevity workflow: Standalone</p>
@@ -1898,11 +2214,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <Metric label="Controls" value={marketExecutionControls.length ? `${marketExecutionPassedControls}/${marketExecutionControls.length}` : "Unknown"} compact />
                 </div>
                 <p className="text-xs leading-5 text-dls-secondary">
-                  This is a readiness contract, not execution permission. Hyperliquid and Polymarket remain read/preview/external-signer only: Can submit: No, Live submission: Off.
+                  Hyperliquid can submit only an exact, expiring order signed by the connected wallet. Agents and watches cannot execute. Polymarket remains read/preview and external-handoff only.
                 </p>
                 {marketExecutionBlockedControls > 0 ? (
                   <p className="text-xs leading-5 text-amber-300">
-                    {marketExecutionBlockedControls} execution control{marketExecutionBlockedControls === 1 ? "" : "s"} intentionally block live submit routes until a separate security review.
+                    {marketExecutionBlockedControls} execution control{marketExecutionBlockedControls === 1 ? "" : "s"} still require review or intentionally block unsupported execution paths.
                   </p>
                 ) : null}
                 {marketExecutionNextAction ? (
@@ -2129,10 +2445,10 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 ))}
               </div>
               <p className="mt-3 text-xs leading-5 text-dls-secondary">
-                Demo boundary: no seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, custody, or live Hyperliquid/Polymarket submission.
+                Demo boundary: no seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, custody, automatic execution, or Polymarket submission.
               </p>
               <p className="mt-2 text-xs leading-5 text-dls-secondary">
-                Matterhorn prepares safe previews; your wallet/client decides whether anything is signed externally.
+                Bittensor and Polymarket use external handoffs. Hyperliquid requires a separate trade-ticket review and connected-wallet signature for every order.
               </p>
               {BITTENSOR_BETA_MODE ? (
                 <p className="mt-2 text-xs leading-5 text-dls-secondary">

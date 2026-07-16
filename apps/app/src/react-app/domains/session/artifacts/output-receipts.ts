@@ -126,7 +126,7 @@ export function workflowOutputReceiptsFromEvidence(events: MatterhornProjectEvid
         title: event.title && event.title !== "Image generated"
           ? event.title
           : kind === "image"
-            ? `Image generated: ${basename(outputPath)}`
+            ? "Generated image"
             : event.title || basename(outputPath),
         summary: event.summary,
         desk: event.desk,

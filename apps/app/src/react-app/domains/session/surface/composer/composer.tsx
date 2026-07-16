@@ -1501,10 +1501,10 @@ export function ReactSessionComposer(props: ComposerProps) {
                   <button
                     type="button"
                     onClick={props.onStop}
-                    className="inline-flex h-9 max-h-9 items-center gap-2 rounded-lg bg-gray-12 px-3.5 text-[13px] font-medium text-gray-1 transition-colors hover:bg-gray-11"
+                    className="inline-flex h-8 max-h-8 items-center gap-1.5 rounded-md bg-dls-hover/70 px-2.5 text-[12px] font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
                     title={t("composer.stop")}
                   >
-                    <Square size={12} fill="currentColor" />
+                    <Square size={10} fill="currentColor" />
                     <span>{t("composer.stop")}</span>
                   </button>
                 ) : (

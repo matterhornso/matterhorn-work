@@ -45,6 +45,7 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("Image and NFT publishing");
     expect(source).toContain("Generated images, public storage, Sui minting, and marketplace listing readiness.");
     expect(source).toContain("These are backend setup gates only.");
+    expect(source).toContain("MATTERHORN_LAUNCH_FEATURES.generatedMedia && publishingReadiness.length");
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
   });
@@ -55,7 +56,7 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain('settingsCapability(backendCapabilities, "profile")');
     expect(source).toContain("profileCapability?.description");
     expect(source).toContain("<CapabilityBadge status={profileCapability.status}");
-    expect(source).toContain("Account and local/cloud profile readiness.");
+    expect(source).toContain('"Local profile and workspace access readiness."');
     expect(source).not.toContain("You are not signed in to a Matterhorn Work account.");
     expect(source).not.toContain("<StatusBadge tone=\"setup\">Signed out</StatusBadge>");
     expect(source).toContain("function UnavailableStatus(props: { label?: string })");
@@ -106,6 +107,10 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("non-custodial");
     expect(source).toContain("Bittensor:");
     expect(source).toContain("external Bittensor-compatible signer");
+    expect(source).toContain("Hyperliquid:</");
+    expect(source).toContain("manual orders use a separate trade ticket");
+    expect(source).toContain("agents and watches cannot submit");
+    expect(source).toContain("Polymarket:");
     expect(source).toContain("No secret storage");
     expect(source).toContain("Wallet signing still happens in the user's Sui wallet.");
     expect(source).not.toContain("direct-connect");
@@ -120,7 +125,10 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("teamLimitReached");
     expect(source).toContain("Team seats are full on this plan. Open Billing to upgrade before creating teammate tokens.");
     expect(source).toContain("Upgrade to Matterhorn Max to create teammate tokens.");
-    expect(source).toContain("onOpenBilling={() => onSelectTab(\"billing\")}");
+    expect(source).toContain("MATTERHORN_LAUNCH_FEATURES.billing && props.matterhornServerClient");
+    expect(source).toContain('onOpenBilling={MATTERHORN_LAUNCH_FEATURES.billing ? () => onSelectTab("billing") : undefined}');
+    expect(source).toContain('MATTERHORN_LAUNCH_FEATURES.cloud ? ` Cloud teams:');
+    expect(source).toContain("Contact the workspace owner before creating another teammate token.");
     expect(source).toContain("refetchBilling={workspaceBillingStatusQuery.refetch}");
   });
 

@@ -1,0 +1,49 @@
+{
+  "version": "matterhorn.launch-channel-evidence.v1",
+  "capturedAt": "2026-07-16T00:00:00.000Z",
+  "commit": "0000000000000000000000000000000000000000",
+  "common": {
+    "gates": {
+      "scope.freeze": { "status": "pending", "evidence": "" },
+      "release.exact_commit": { "status": "pending", "evidence": "" },
+      "code.app_suite": { "status": "pending", "evidence": "" },
+      "code.server_suite": { "status": "pending", "evidence": "" },
+      "code.typechecks": { "status": "pending", "evidence": "" },
+      "code.production_build": { "status": "pending", "evidence": "" },
+      "code.platform_safety": { "status": "pending", "evidence": "" },
+      "security.dependency_audit": { "status": "pending", "evidence": "" },
+      "security.desktop_trust_boundary": { "status": "pending", "evidence": "" },
+      "ux.local_responsive_acceptance": { "status": "pending", "evidence": "" },
+      "product.deferred_features_hidden": { "status": "pending", "evidence": "" }
+    }
+  },
+  "channels": {
+    "beta": {
+      "gates": {
+        "beta.named_tester_access": { "status": "pending", "evidence": "" },
+        "beta.support_owner": { "status": "pending", "evidence": "" },
+        "beta.rollback": { "status": "pending", "evidence": "" }
+      }
+    },
+    "product-hunt": {
+      "gates": {
+        "release.stable_tag": { "status": "pending", "evidence": "" },
+        "deployment.https": { "status": "pending", "evidence": "" },
+        "deployment.exact_origin_cors": { "status": "pending", "evidence": "" },
+        "deployment.security_headers": { "status": "pending", "evidence": "" },
+        "deployment.monitoring": { "status": "pending", "evidence": "" },
+        "operations.backup_restore": { "status": "pending", "evidence": "" },
+        "operations.rollback_drill": { "status": "pending", "evidence": "" },
+        "ux.deployed_two_user_acceptance": { "status": "pending", "evidence": "" },
+        "wallet.metamask_coinbase": { "status": "pending", "evidence": "" },
+        "wallet.phantom_sui": { "status": "pending", "evidence": "" },
+        "wallet.hyperliquid_testnet": { "status": "pending", "evidence": "" },
+        "connectors.visible_oauth": { "status": "pending", "evidence": "" },
+        "desktop.signed_notarized": { "status": "pending", "evidence": "" },
+        "desktop.clean_install": { "status": "pending", "evidence": "" },
+        "product.public_copy_and_legal": { "status": "pending", "evidence": "" },
+        "support.launch_room": { "status": "pending", "evidence": "" }
+      }
+    }
+  }
+}

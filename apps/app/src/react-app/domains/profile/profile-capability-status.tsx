@@ -137,15 +137,15 @@ export function ProfileCapabilityStatus(props: ProfileCapabilityStatusProps) {
               <dt>Local token sharing</dt>
               <dd><ProfileStatusText status={localTeamStatus} /></dd>
             </div>
-            <div className="flex items-center justify-between gap-3">
+            {!cloudDisabled ? <div className="flex items-center justify-between gap-3">
               <dt>Cloud teammates</dt>
               <dd>
                 <ProfileStatusText
-                  status={cloudDisabled ? "unavailable" : cloudTeamStatus}
-                  label={cloudDisabled ? "Not included" : capabilityStatusLabel(cloudTeamStatus)}
+                  status={cloudTeamStatus}
+                  label={capabilityStatusLabel(cloudTeamStatus)}
                 />
               </dd>
-            </div>
+            </div> : null}
           </dl>
         </details>
       </section>
@@ -170,20 +170,18 @@ export function ProfileCapabilityStatus(props: ProfileCapabilityStatusProps) {
       </div>
 
       <div className="grid min-w-0 gap-1 pl-0 sm:pl-12">
-        <ProfileStatusRow
+        {!cloudDisabled ? <ProfileStatusRow
           compact={props.compact}
           label="Cloud account"
-          status={cloudDisabled ? "unavailable" : accountStatus}
-          hint={cloudDisabled
-            ? "Matterhorn Cloud is disabled in this build. Local use needs no account."
-            : "Cloud account sync status from the backend. Local use needs no account."}
+          status={accountStatus}
+          hint="Cloud account sync status from the backend. Local use needs no account."
           value={(
             <ProfileStatusText
-              status={cloudDisabled ? "unavailable" : accountStatus}
-              label={cloudDisabled ? "Not available in this build" : capabilityStatusLabel(accountStatus)}
+              status={accountStatus}
+              label={capabilityStatusLabel(accountStatus)}
             />
           )}
-        />
+        /> : null}
         <ProfileStatusRow
           compact={props.compact}
           label="Local teammate access"
@@ -191,24 +189,20 @@ export function ProfileCapabilityStatus(props: ProfileCapabilityStatusProps) {
           hint="Local workspace sharing uses scoped tokens and the Matterhorn Work engine. It is not cloud collaboration."
           value={<ProfileStatusText status={localTeamStatus} label={capabilityStatusLabel(localTeamStatus)} />}
         />
-        <ProfileStatusRow
+        {!cloudDisabled ? <ProfileStatusRow
           compact={props.compact}
           label="Cloud teammates"
-          status={cloudDisabled ? "unavailable" : cloudTeamStatus}
-          hint={cloudDisabled
-            ? "Cloud teammates are disabled in this build. Local scoped-token access remains available."
-            : "Shared cloud workspaces require Matterhorn Cloud team setup."}
+          status={cloudTeamStatus}
+          hint="Shared cloud workspaces require Matterhorn Cloud team setup."
           value={(
             <ProfileStatusText
-              status={cloudDisabled ? "unavailable" : cloudTeamStatus}
-              label={cloudDisabled
-                ? "Not available in this build"
-                : cloudTeamStatus === "needs_setup"
+              status={cloudTeamStatus}
+              label={cloudTeamStatus === "needs_setup"
                   ? "Platform setup"
                   : capabilityStatusLabel(cloudTeamStatus)}
             />
           )}
-        />
+        /> : null}
         <ProfileStatusRow
           compact={props.compact}
           label="Backend version"

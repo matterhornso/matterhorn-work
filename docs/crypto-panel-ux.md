@@ -13,9 +13,12 @@ The Crypto panel (right rail → Crypto: Bittensor, Hyperliquid, Polymarket) ope
    - `summarize a Polymarket market`
 2. **Safety status** — per-venue maturity at a glance:
    - **Bittensor** — most complete beta flow; external signer required for actions; Matterhorn never holds keys.
-   - **Hyperliquid** — preview only, live submission off. Can submit: No.
+   - **Hyperliquid** — research and previews in chat; manual connected-wallet
+     execution lives in the separate order ticket and requires exact review and
+     fresh wallet approval.
    - **Polymarket** — preview only, compliance checks required. Can submit: No.
-   - Plus: *Matterhorn does not custody keys, sign silently, or submit live market trades.*
+   - Plus: *Matterhorn never custodies keys or signs silently. Agents never
+     auto-submit. Polymarket remains preview-only.*
 3. **Evidence / QA** — where to find proof:
    - Customer crypto smoke — `pnpm smoke:customer-ready-crypto`
    - Bittensor beta packet — `pnpm beta:bittensor:packet`
@@ -24,7 +27,8 @@ The Crypto panel (right rail → Crypto: Bittensor, Hyperliquid, Polymarket) ope
 ## Safety invariants (enforced by the gate)
 
 - Prompt buttons **insert, never auto-send** (they dispatch the `matterhorn:crypto-chat-handoff` event, which the session surface applies to the composer with a "Review or send it from the chat composer" notice).
-- No copy claims live Hyperliquid/Polymarket submission.
+- Copy distinguishes manual wallet-approved Hyperliquid execution from
+  preview-only Polymarket and non-executing agent surfaces.
 - No copy asks for private keys, seed phrases, API secrets, raw signatures, or signed payloads.
 - Public-read flows do not require an EVM wallet.
 

@@ -100,12 +100,22 @@ mustContain("apps/server/src/server.ts", [
   "/api/hyperliquid/orders/preview",
   "/api/hyperliquid/orders/handoff",
   "/api/hyperliquid/orders/receipt",
+  "/api/hyperliquid/orders/execution-intent",
+  "/api/hyperliquid/orders/submit",
   "/api/hyperliquid/chat/execute",
   "market_secret_rejected",
+  "isHyperliquidExecutionEnabled()",
 ]);
 mustNotContain("apps/server/src/server.ts", [
-  "/api/hyperliquid/orders/submit",
   "/api/hyperliquid/exchange",
+]);
+
+mustContain("apps/server/src/tools/hyperliquid-live-execution.ts", [
+  "recoverTypedDataAddress",
+  "Execution intent expired",
+  "Wallet signature does not authorize this exact order intent",
+  "SUBMIT LIVE ORDER",
+  "signatureStored: false",
 ]);
 
 const mcp = mustContain("packages/matterhorn-work-mcp/index.mjs", [
@@ -154,7 +164,7 @@ mustContain("scripts/hyperliquid-cli-fallback.test.mjs", [
 mustContain("docs/hyperliquid-read-preview.md", [
   "preview-only",
   "API wallet creation or storage.",
-  "Private keys, API secrets, signatures, signed actions, or signed payloads.",
+  "Private keys, API secrets, signatures, signed actions, or signed payloads supplied outside the exact server-issued intent.",
   "does not accept API secrets, private keys, signatures, or signed payloads",
   "matterhorn-work hyperliquid funding",
   "/api/hyperliquid/funding/BTC",
@@ -174,7 +184,7 @@ mustContain("docs/hermes-hyperliquid-usability-security-qa.md", [
   "Failure Cases",
   "What a Tester Should Screenshot",
   "canSubmit: false",
-  "no `/api/hyperliquid/orders/submit` route",
+  "`/api/hyperliquid/orders/submit` accepts only the signature matching an unexpired one-time server intent",
 ]);
 
 if (failures > 0) {
