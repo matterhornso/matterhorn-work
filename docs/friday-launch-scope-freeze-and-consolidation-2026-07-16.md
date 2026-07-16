@@ -35,6 +35,25 @@ must not be published as the Product Hunt or public macOS asset.
 Public HTTPS deployment and signed, notarized, stapled desktop distribution
 remain mandatory Product Hunt gates.
 
+## Exact Candidate Closure
+
+The consolidation is complete on
+`codex/friday-beta-rc1-2026-07-17`. The release source was checked out detached
+in a clean worktree and rerun through the app suite, complete platform-safety
+gate, typecheck, dependency audit, Electron package build, artifact integrity,
+release doctor, packaged-app smoke, and responsive browser acceptance.
+
+The final artifact manifest, rather than an older local URL or dirty-tree HEAD,
+is the distribution source of truth. It binds the private DMG and ZIP to the
+final candidate SHA and includes SHA-256 checksums. The private package remains
+unsigned and unnotarized; named Beta testers must receive
+`docs/desktop-beta-first-run.md`, and the package must not be posted publicly.
+
+The active local acceptance surface is
+`http://127.0.0.1:5193/workspace/ws_18dc91c9102a/session` with backend
+`http://127.0.0.1:4132`. These loopback URLs are same-Mac QA surfaces, not
+remote distribution or Product Hunt evidence.
+
 ## Frozen Public Scope
 
 The stable release includes:

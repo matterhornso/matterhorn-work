@@ -14,40 +14,53 @@ ledgers remain historical evidence; they do not authorize either new channel.
   visible OAuth connectors, signed desktop distribution, monitoring, backup,
   rollback, public copy/legal, and deployed two-user acceptance all pass from
   one immutable tag.
-- The current local acceptance URL is
-  `http://127.0.0.1:5192/workspace/ws_18dc91c9102a/session`. It is available on
+- The exact-candidate local acceptance URL is
+  `http://127.0.0.1:5193/workspace/ws_18dc91c9102a/session`. It is available on
   this Mac without a sign-in step. It is not a remotely shareable production
   URL and is not Product Hunt evidence.
 
 ## Current Candidate Evidence
 
-The July 16 closure rerun is technically green on the current working tree:
+The intentionally dirty integration tree has been consolidated on
+`codex/friday-beta-rc1-2026-07-17`. Release source was reproduced in a clean
+detached worktree before the final tests and package build. The artifact
+manifest is the authoritative exact-commit identifier for distribution.
+
+The July 16 exact-candidate closure is technically green:
 
 - app suite: 556 passed, 0 failed, 3,727 assertions across 74 files;
 - server suite: 711 passed, 0 failed, 5,007 assertions across 57 files;
 - app, server, and Electron typechecks: passed;
 - production web build and exact-source Electron directory package: passed;
 - complete 10-stage Matterhorn platform-safety gate: passed;
-- installed dependency graph audit: zero advisories at low severity or higher;
-- packaged desktop isolated-profile smoke: 16 passed, 0 failed;
+- dependency audit: 1,341 locked versions checked with zero advisories at low
+  severity or higher;
+- live release doctor: 11 passed, 0 skipped, 0 failed;
+- packaged desktop authenticated clean-profile smoke: 16 passed, 0 failed;
+- DMG, ZIP, manifest, checksums, DMG filesystem, and ZIP payload integrity:
+  passed;
 - local desktop and mobile route acceptance: no crash signatures, console
-  errors, or horizontal overflow on the stable journeys;
+  errors, warnings, off-screen controls, or horizontal overflow on the stable
+  journeys;
 - Bittensor fallback handling now refuses to invent subnet recommendations when
   live tool evidence does not contain explicit matching subnets.
 
-This is not yet an exact release candidate: the intentionally dirty integration
-tree still differs from `8a6272dbd3f0834158c05e229dadd11698d695e5`.
-`qa-reports/friday-production-go-live-2026-07-17/current-candidate/launch-channel-evidence.json`
-records the current evidence and the remaining operator-owned gates. The Friday
-Beta remains **NO-GO** until an exact candidate commit, named cohort, staffed
-support channel, and verified rollback procedure exist. Product Hunt remains
-**NO-GO** until every deployed, wallet, connector, signing, operations, and
-public-copy gate also passes.
+The private arm64 tester artifact is under the hash-bound
+`qa-reports/friday-beta-final-<git-sha>/tester-artifact/` directory generated
+from the final candidate. It remains unsigned and unnotarized, so it is eligible
+only for the named private cohort with the documented Gatekeeper and uninstall
+instructions. It is not a public download.
 
-The machine gate currently reports:
+The Friday Beta remains **NO-GO** until the release owner records the named
+cohort, staffed support channel, and verified rollback procedure against the
+final candidate. Product Hunt remains **NO-GO** until every deployed, wallet,
+connector, signing, operations, and public-copy gate also passes.
 
-- Friday Beta: **NO-GO**, 12 of 16 gates passed; the four blockers are exact
-  candidate commit, named tester access, staffed support, and verified rollback.
+After exact-candidate evidence is regenerated, the Beta machine gate has three
+remaining operator-owned blockers:
+
+- Friday Beta: **NO-GO**, 13 of 16 gates passed; the blockers are named tester
+  access, staffed support, and verified rollback.
 - Product Hunt: **NO-GO**, 12 of 29 gates passed; the 17 blockers are the exact
   release/tag plus deployed HTTPS/security/operations, real wallets and OAuth,
   signed distribution, public legal copy, two-user acceptance, and launch-room
@@ -58,14 +71,18 @@ The machine gate currently reports:
 The Friday Beta includes local project workspaces, chat, response perspectives,
 Notes, Memory review, Outputs, Bittensor public reads and external handoffs,
 Polymarket research and handoffs, Sui public reads and external-wallet
-handoffs, the Longevity workflow, and Hyperliquid research/previews.
+handoffs, the Longevity workflow, and Hyperliquid research/previews. The code
+also contains a separate web-only Hyperliquid trade ticket that binds an exact,
+short-lived intent to a connected-wallet signature.
 
-Hyperliquid connected-wallet execution remains fail-closed unless the operator
-enables `MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED=true` and completes the real
-testnet acceptance packet. Agents, MCPs, CLI commands, watches, and background
-workflows cannot submit orders. Billing, generated-media publishing, Matterhorn
-Cloud, marketplace deployment, hiring, and payments stay hidden or explicitly
-coming soon.
+Hyperliquid submission remains fail-closed unless the operator enables
+`MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED=true`. Enable it only for the named
+test cohort after the real testnet reject, approve, receipt, replay, expiry,
+limit, and kill-switch packet passes. Agents, MCPs, CLI commands, watches, and
+background workflows cannot submit orders. Polymarket remains preview and
+external-handoff only. Billing, generated-media publishing, Matterhorn Cloud,
+marketplace deployment, hiring, and payments stay hidden or explicitly coming
+soon.
 
 ## Thursday, July 16 - Candidate Closure
 
