@@ -442,11 +442,13 @@ function DefaultModelRow({
     >
       {recommended ? <Star size={12} className="shrink-0 text-amber-9" /> : <div className="w-3 shrink-0" />}
       <div className="min-w-0 flex-1">
-        <span className={["text-[12px]", active ? "font-medium text-dls-text" : "text-dls-text"].join(" ")}>{opt.title}</span>
-        <span className="ml-2 font-mono text-[10px] text-dls-secondary/60">{opt.modelID}</span>
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className={["text-[12px]", active ? "font-medium text-dls-text" : "text-dls-text"].join(" ")}>{opt.title}</span>
+          <span className="text-[10px] text-dls-secondary">{opt.behaviorCapabilityLabel}</span>
+        </div>
+        <div className="truncate font-mono text-[10px] text-dls-secondary/60">{opt.modelID}</div>
       </div>
       {active ? <Check size={14} className="shrink-0 text-green-11" /> : null}
     </button>
   );
 }
-

@@ -77,14 +77,29 @@ function normalizeModelPart(value: unknown, label: string): string {
   return text;
 }
 
+function normalizeOptionalModelPart(value: unknown, label: string): string | undefined {
+  if (value == null || value === "") return undefined;
+  return normalizeModelPart(value, label);
+}
+
 export function workspaceModelSelectionPath(workspace: WorkspaceInfo): string {
   return join(workspace.path, ".matterhorn-work", "models", "selection.json");
 }
 
-export function normalizeModelSelectionRequest(input: MatterhornBackendModelSelectionRequest): MatterhornBackendModelSelectionRequest {
+type NormalizedModelSelectionRequest = {
+  providerId: string;
+  modelId: string;
+  variant?: string;
+};
+
+export function normalizeModelSelectionRequest(
+  input: MatterhornBackendModelSelectionRequest,
+): NormalizedModelSelectionRequest {
+  const variant = normalizeOptionalModelPart(input.variant, "variant");
   return {
     providerId: normalizeModelPart(input.providerId, "providerId"),
     modelId: normalizeModelPart(input.modelId, "modelId"),
+    ...(variant ? { variant } : {}),
   };
 }
 
@@ -110,6 +125,7 @@ export async function readWorkspaceModelSelection(
       ...normalizeModelSelectionRequest({
         providerId: parsed.providerId ?? "",
         modelId: parsed.modelId ?? "",
+        variant: parsed.variant,
       }),
       source: "server_workspace_preference",
       savedAt: parsed.savedAt,
@@ -156,11 +172,13 @@ export function buildWorkspaceModelSelectionResponse(input: {
       providerId: selection.providerId,
       modelId: selection.modelId,
       source: "server_workspace_preference" as const,
+      variant: selection.variant ?? null,
     }
     : {
       providerId: input.fallbackModel.providerId,
       modelId: input.fallbackModel.modelId,
       source: "server_default" as const,
+      variant: input.fallbackModel.variant ?? null,
     };
   return {
     success: true,
@@ -177,7 +195,7 @@ export function buildWorkspaceModelSelectionResponse(input: {
       ...capability(
         "working",
         "Workspace model preference",
-        "Matterhorn stores only the selected provider/model identifiers for this workspace. Provider credentials are not stored here.",
+        "Matterhorn stores only the selected provider/model identifiers and optional reasoning level for this workspace. Provider credentials are not stored here.",
       ),
       scope: "workspace",
       path: workspaceModelSelectionPath(input.workspace),
@@ -204,6 +222,7 @@ export function buildBackendModels(input: {
       providerId: input.selection.providerId,
       modelId: input.selection.modelId,
       source: "server_workspace_preference" as const,
+      variant: input.selection.variant ?? null,
     }
     : catalogDefault;
   return {

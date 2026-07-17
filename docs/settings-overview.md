@@ -1,7 +1,7 @@
 # Matterhorn Work Settings
 
 **Status:** Current implementation overview
-**Updated:** 2026-07-12
+**Updated:** 2026-07-17
 
 Settings is the product surface for account, workspace, provider, wallet, extension, appearance, and diagnostic controls. The session-side Profile and Wallet rails reuse focused Settings pages; they do not open the generic Settings index.
 
@@ -55,6 +55,24 @@ Show status only when it helps the user act. Setup language must identify the ow
 Do not use the unqualified label **Needs setup** on customer-facing navigation when the owner is known.
 
 Backend-backed readiness comes from the capability endpoint or the relevant live subsystem, not a hard-coded optimistic label.
+
+## Models And Reasoning
+
+AI Providers separates three levels of model configuration:
+
+1. **Workspace default** persists the model and reasoning level for the workspace.
+2. **Current app override** applies only to the current app session and inherits the workspace default when cleared.
+3. **Provider default** is used when neither Matterhorn level specifies a reasoning variant.
+
+The model picker labels capability rather than implying every model supports the same control:
+
+- **Adjustable reasoning** exposes the provider-supported reasoning levels.
+- **Built-in reasoning** reasons internally without a user-adjustable effort control.
+- **Standard** has no separate reasoning-effort setting.
+
+CUDOS / ASI:Cloud uses its OpenAI-compatible endpoint and documented hosted model IDs. Opening **Connect CUDOS** shows a masked key field. The provider is not added to routing until the credential is saved; disconnecting removes both the stored credential and the workspace provider route.
+
+Operational model metrics are metadata-only and bounded in memory. They may include provider/model IDs, selected reasoning level and source, latency, token counts, cancellations, and sanitized provider error classes. Prompts, model responses, reasoning content, credentials, and raw provider errors are never recorded by this collector.
 
 ## Compact Rail Rules
 

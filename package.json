@@ -10,6 +10,7 @@
     "test:dev-generated-media-smoke": "node scripts/dev-generated-media-smoke.test.mjs",
     "smoke:model-prompt-path-audit": "node scripts/model-prompt-path-audit.mjs",
     "test:model-prompt-path-audit": "node scripts/model-prompt-path-audit.test.mjs",
+    "test:reasoning-effort-control": "bun test apps/app/tests/model-behavior-control.test.ts && node scripts/reasoning-effort-control.test.mjs",
     "smoke:generated-media-flow": "node scripts/generated-media-flow-smoke.mjs --strict",
     "test:generated-media-flow-smoke": "node scripts/generated-media-flow-smoke.test.mjs",
     "smoke:generated-media-browser": "node scripts/generated-media-browser-smoke.mjs --strict",

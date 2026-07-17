@@ -21,6 +21,7 @@ export type MatterhornBackendModelSelectionSource =
 
 export interface MatterhornBackendModelSelectionRecord extends MatterhornBackendModelRef {
   source: "server_workspace_preference";
+  variant?: string;
   savedAt: string;
   savedBy?: {
     type: string;
@@ -28,7 +29,9 @@ export interface MatterhornBackendModelSelectionRecord extends MatterhornBackend
   };
 }
 
-export interface MatterhornBackendModelSelectionRequest extends MatterhornBackendModelRef {}
+export interface MatterhornBackendModelSelectionRequest extends MatterhornBackendModelRef {
+  variant?: string | null;
+}
 
 export interface MatterhornBackendModelSelectionResponse {
   success: true;
@@ -42,6 +45,7 @@ export interface MatterhornBackendModelSelectionResponse {
   selection: MatterhornBackendModelSelectionRecord | null;
   effectiveModel: MatterhornBackendModelRef & {
     source: Extract<MatterhornBackendModelSelectionSource, "server_workspace_preference" | "server_default">;
+    variant?: string | null;
   };
   storage: MatterhornCapability & {
     scope: "workspace";
@@ -109,6 +113,7 @@ export interface MatterhornBackendModelsResponse {
   generatedAt: string;
   defaultModel: MatterhornBackendModelRef & {
     source: MatterhornBackendModelSelectionSource;
+    variant?: string | null;
   };
   workspaceSelection?: MatterhornBackendModelSelectionRecord | null;
   catalog: MatterhornBackendModelCatalogSnapshot;

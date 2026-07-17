@@ -1,12 +1,15 @@
 /** @jsxImportSource react */
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ModelBehaviorSelect } from "@/components/model-behavior-select";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { ChevronDown, KeyRound } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { t } from "@/i18n";
 import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
+import { recordModelReasoningLevelSelection } from "@/app/lib/model-operation-metrics";
+import type { ModelBehaviorOption } from "@/app/types";
 import { cn } from "@/lib/utils";
 import { ProviderIcon } from "../../../design-system/provider-icon";
 import { SettingsNotice, SettingsStatusBadge } from "../settings-section";
@@ -46,6 +49,12 @@ export type AiSettingsViewProps = {
   defaultModelRef: string;
   defaultModelProviderId?: string | null;
   defaultModelId?: string | null;
+  modelBehaviorTitle?: string | null;
+  modelBehaviorOptions?: ModelBehaviorOption[];
+  currentAppModelVariant?: string | null;
+  providerDefaultModelVariant?: string | null;
+  providerDefaultModelVariantLabel?: string | null;
+  onCurrentAppModelVariantChange?: (variant: string | null) => void;
   hasLocalModelOverride?: boolean;
   connectedModelCount: number;
   providerStatusLabel: string;
@@ -56,6 +65,11 @@ export type AiSettingsViewProps = {
   providerConnectError: string | null;
   providerDisconnectStatus: string | null;
   providerDisconnectError: string | null;
+  cudosConnected?: boolean;
+  cudosBusy?: boolean;
+  cudosStatus?: string | null;
+  cudosError?: string | null;
+  onConnectCudos?: () => void | Promise<void>;
   onOpenModelPicker: () => void | Promise<void>;
   onUseWorkspaceDefault?: () => void | Promise<void>;
   onOpenProviderAuth: () => void | Promise<void>;
@@ -105,6 +119,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
   const runtimeWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
   const [modelDetailsOpen, setModelDetailsOpen] = useState(false);
   const [localModelStatus, setLocalModelStatus] = useState<string | null>(null);
+  const [workspaceVariantDraft, setWorkspaceVariantDraft] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const workspaceBackendModelsQuery = useQuery({
     queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId],
@@ -143,9 +158,20 @@ export function AiSettingsView(props: AiSettingsViewProps) {
       const modelId = props.defaultModelId?.trim();
       if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
       if (!providerId || !modelId) throw new Error("Choose a model before saving a workspace default.");
-      return client.saveWorkspaceModelSelection(runtimeWorkspaceId, { providerId, modelId });
+      return client.saveWorkspaceModelSelection(runtimeWorkspaceId, {
+        providerId,
+        modelId,
+        variant: workspaceVariantDraft,
+      });
     },
     onSuccess: (data) => {
+      recordModelReasoningLevelSelection({
+        workspaceId: runtimeWorkspaceId,
+        providerId: data.selection?.providerId,
+        modelId: data.selection?.modelId,
+        reasoningLevel: data.selection?.variant,
+        source: "workspace",
+      });
       queryClient.setQueryData(["settings-workspace-model-selection", runtimeWorkspaceId], data);
       void queryClient.invalidateQueries({ queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId] });
       notifyWorkspaceModelSelectionChanged(runtimeWorkspaceId);
@@ -218,10 +244,43 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     connectedProviderCount,
     connectedModelCount,
   });
+  const behaviorOptions = props.modelBehaviorOptions ?? [];
+  const behaviorLabel = (value: string | null | undefined, fallback: string) =>
+    behaviorOptions.find((option) => option.value === value)?.label ?? fallback;
+  const providerDefaultVariant = props.providerDefaultModelVariant ?? null;
+  const providerDefaultVariantLabel =
+    props.providerDefaultModelVariantLabel ??
+    behaviorLabel(providerDefaultVariant, "Provider default");
+  const savedWorkspaceVariant = workspaceSelection?.variant ?? null;
+  const workspaceVariantLabel = workspaceVariantDraft
+    ? behaviorLabel(workspaceVariantDraft, workspaceVariantDraft)
+    : providerDefaultVariantLabel;
+  const currentAppVariantLabel = props.currentAppModelVariant
+    ? behaviorLabel(props.currentAppModelVariant, props.currentAppModelVariant)
+    : workspaceSelection
+      ? behaviorLabel(savedWorkspaceVariant, providerDefaultVariantLabel)
+      : providerDefaultVariantLabel;
+
+  useEffect(() => {
+    const sameModel = Boolean(
+      workspaceSelection &&
+      workspaceSelection.providerId === props.defaultModelProviderId?.trim() &&
+      workspaceSelection.modelId === props.defaultModelId?.trim(),
+    );
+    setWorkspaceVariantDraft(sameModel ? workspaceSelection?.variant ?? null : null);
+  }, [
+    props.defaultModelId,
+    props.defaultModelProviderId,
+    workspaceSelection?.modelId,
+    workspaceSelection?.providerId,
+    workspaceSelection?.variant,
+  ]);
+
   const selectedModelMatchesWorkspaceDefault = Boolean(
     workspaceSelection &&
     workspaceSelection.providerId === props.defaultModelProviderId?.trim() &&
-    workspaceSelection.modelId === props.defaultModelId?.trim(),
+    workspaceSelection.modelId === props.defaultModelId?.trim() &&
+    savedWorkspaceVariant === workspaceVariantDraft,
   );
   const canSaveWorkspaceDefault = Boolean(
     props.defaultModelProviderId &&
@@ -325,6 +384,59 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             ))}
           </div>
 
+          {behaviorOptions.length > 1 ? (
+            <div className="mt-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-2">
+              <div className="grid items-center gap-2 py-1.5 @md/settings:grid-cols-[minmax(9rem,1fr)_auto]">
+                <div>
+                  <div className="text-xs font-medium text-dls-text">Workspace reasoning default</div>
+                  <div className="text-xs leading-5 text-muted-foreground">
+                    Used by new chats and desk tasks unless this app overrides it.
+                  </div>
+                </div>
+                <ModelBehaviorSelect
+                  title={props.modelBehaviorTitle ?? "Reasoning effort"}
+                  value={workspaceVariantDraft}
+                  label={workspaceVariantLabel}
+                  options={behaviorOptions}
+                  onChange={setWorkspaceVariantDraft}
+                  disabled={props.busy || saveWorkspaceDefaultMutation.isPending}
+                  isProviderDefault={workspaceVariantDraft == null}
+                />
+              </div>
+              <div className="grid items-center gap-2 py-1.5 @md/settings:grid-cols-[minmax(9rem,1fr)_auto]">
+                <div>
+                  <div className="text-xs font-medium text-dls-text">Current app override</div>
+                  <div className="text-xs leading-5 text-muted-foreground">
+                    {props.currentAppModelVariant ? "Overrides the workspace for this app." : "Inherits the workspace default."}
+                  </div>
+                </div>
+                <ModelBehaviorSelect
+                  title={props.modelBehaviorTitle ?? "Reasoning effort"}
+                  value={props.currentAppModelVariant ?? null}
+                  label={currentAppVariantLabel}
+                  options={behaviorOptions}
+                  onChange={(value) => {
+                    recordModelReasoningLevelSelection({
+                      workspaceId: runtimeWorkspaceId,
+                      providerId: props.defaultModelProviderId,
+                      modelId: props.defaultModelId,
+                      reasoningLevel: value,
+                      source: "current_app",
+                    });
+                    props.onCurrentAppModelVariantChange?.(value);
+                  }}
+                  disabled={props.busy || !props.onCurrentAppModelVariantChange}
+                  isProviderDefault={props.currentAppModelVariant == null}
+                  defaultLabel="Workspace default"
+                />
+              </div>
+              <div className="grid items-center gap-2 py-1.5 text-xs @md/settings:grid-cols-[minmax(9rem,1fr)_auto]">
+                <span className="text-muted-foreground">Provider fallback</span>
+                <span className="text-dls-secondary">{providerDefaultVariantLabel}</span>
+              </div>
+            </div>
+          ) : null}
+
           <Collapsible open={modelDetailsOpen} onOpenChange={setModelDetailsOpen}>
             <CollapsibleTrigger
               render={(
@@ -397,6 +509,38 @@ export function AiSettingsView(props: AiSettingsViewProps) {
           <LayoutSectionTitle>{t("settings.providers_title")}</LayoutSectionTitle>
           <LayoutSectionDescription>{t("settings.providers_desc")}</LayoutSectionDescription>
         </LayoutSectionHeader>
+
+        <LayoutSectionItem className="flex-row flex-wrap items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.09] px-3 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-dls-hover/70 text-dls-text">
+              <KeyRound className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-sm font-medium text-dls-text">CUDOS / ASI:Cloud</span>
+                {props.cudosConnected ? (
+                  <span className="text-xs text-green-11">Credential saved</span>
+                ) : null}
+              </div>
+              <div className="text-xs leading-5 text-muted-foreground">
+                OpenAI-compatible hosted inference with seven selectable models. The API key stays in the local engine auth store.
+              </div>
+            </div>
+          </div>
+          <Button
+            variant={props.cudosConnected ? "outline" : "default"}
+            onClick={() => void props.onConnectCudos?.()}
+            disabled={props.busy || props.providerAuthBusy || props.cudosBusy || !props.onConnectCudos}
+          >
+            {props.cudosBusy
+              ? "Preparing CUDOS"
+              : props.cudosConnected
+                ? "Replace API key"
+                : "Connect CUDOS"}
+          </Button>
+        </LayoutSectionItem>
+        {props.cudosStatus ? <SettingsNotice>{props.cudosStatus}</SettingsNotice> : null}
+        {props.cudosError ? <SettingsNotice tone="error">{props.cudosError}</SettingsNotice> : null}
 
         <LayoutSectionItem>
           <LayoutSectionItemHeader>

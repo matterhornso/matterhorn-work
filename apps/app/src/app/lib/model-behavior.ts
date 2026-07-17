@@ -1,4 +1,4 @@
-import type { ProviderListItem } from "../types";
+import type { ModelBehaviorCapability, ProviderListItem } from "../types";
 import type { ModelBehaviorOption } from "../types";
 import { t } from "../../i18n";
 
@@ -68,6 +68,21 @@ const getVariantKeys = (model: ProviderModel) => {
     return normalized ? [normalized] : [];
   });
   return Array.from(new Set(keys));
+};
+
+export const getModelBehaviorCapability = (
+  model: ProviderModel,
+): ModelBehaviorCapability => {
+  if (getVariantKeys(model).length > 0) return "adjustable";
+  if (model.capabilities?.reasoning) return "built-in";
+  return "standard";
+};
+
+export const getModelBehaviorCapabilityLabel = (model: ProviderModel) => {
+  const capability = getModelBehaviorCapability(model);
+  if (capability === "adjustable") return "Adjustable reasoning";
+  if (capability === "built-in") return "Built-in reasoning";
+  return "Standard";
 };
 
 const sortVariantKeys = (keys: string[]) =>

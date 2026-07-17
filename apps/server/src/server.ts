@@ -5878,6 +5878,7 @@ function createRoutes(
       requestSelection = normalizeModelSelectionRequest({
         providerId: body.providerId,
         modelId: body.modelId,
+        variant: body.variant,
       } as MatterhornBackendModelSelectionRequest);
     } catch (error) {
       throw new ApiError(400, "invalid_model_selection", error instanceof Error ? error.message : "Invalid model selection");
@@ -5900,6 +5901,9 @@ function createRoutes(
       target: `${selection.providerId}/${selection.modelId}`,
       summary: "Updated workspace default model",
       timestamp: Date.now(),
+      metadata: {
+        reasoningLevel: selection.variant ?? "provider_default",
+      },
     });
 
     const models = await buildWorkspaceBackendModels(config, workspace);
@@ -7030,7 +7034,14 @@ function createRoutes(
       throw new ApiError(400, "execution_mode_mismatch", "Prompt execution mode does not match the request header");
     }
     const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
-    const auditMetadata = sessionPromptAuditMetadata(body, modelResolution);
+    const requestVariant = typeof body.variant === "string" && body.variant.trim()
+      ? body.variant.trim()
+      : undefined;
+    const effectiveVariant = requestVariant ?? modelResolution.variant;
+    const auditMetadata = sessionPromptAuditMetadata(
+      effectiveVariant ? { ...body, variant: effectiveVariant } : body,
+      modelResolution,
+    );
     auditMetadata.executionMode = executionMode;
     const directory = resolveOpencodeDirectory(workspace) ?? undefined;
     const opencode = createWorkspaceOpencodeClient(config, workspace);
@@ -7057,7 +7068,7 @@ function createRoutes(
         ...(typeof body.messageID === "string" && body.messageID.trim() ? { messageID: body.messageID.trim() } : {}),
         ...(modelResolution.model ? { model: modelResolution.model } : {}),
         ...(agent ? { agent } : {}),
-        ...(typeof body.variant === "string" && body.variant.trim() ? { variant: body.variant.trim() } : {}),
+        ...(effectiveVariant ? { variant: effectiveVariant } : {}),
         ...(typeof body.noReply === "boolean" ? { noReply: body.noReply } : {}),
         ...(modeTools ? { tools: modeTools } : isBooleanRecord(body.tools) ? { tools: body.tools } : {}),
         system: requestedSystemPrompt ? `${requestedSystemPrompt}\n\n${modeSystemPrompt}` : modeSystemPrompt,
@@ -11875,6 +11886,7 @@ type SessionPromptModelSource = Extract<MatterhornBackendModelSelectionSource, "
 type SessionPromptModelResolution = {
   model: SessionPromptModel;
   source: SessionPromptModelSource;
+  variant?: string;
 };
 
 function parseSessionPromptModel(body: Record<string, unknown>): SessionPromptModel | undefined {
@@ -11915,6 +11927,7 @@ async function resolveSessionPromptModel(
       modelID: backendModels.defaultModel.modelId,
     },
     source: backendModels.defaultModel.source === "server_workspace_preference" ? "server_workspace_preference" : "server_default",
+    ...(backendModels.defaultModel.variant ? { variant: backendModels.defaultModel.variant } : {}),
   };
 }
 
@@ -11941,7 +11954,7 @@ function sessionPromptAuditMetadata(
   const agent = boundedPromptAuditString(body.agent);
   if (agent) metadata.agent = agent;
 
-  const variant = boundedPromptAuditString(body.variant);
+  const variant = boundedPromptAuditString(body.variant) ?? resolution.variant;
   if (variant) metadata.variant = variant;
 
   const reasoningEffort = boundedPromptAuditString(body.reasoning_effort ?? body.reasoningEffort, 80);

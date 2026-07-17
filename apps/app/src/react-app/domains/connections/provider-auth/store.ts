@@ -43,6 +43,10 @@ import {
   withWorkspaceCloudImports,
   type CloudImportedProvider,
 } from "../../../../app/cloud/import-state";
+import {
+  buildCudosProviderConfig,
+  CUDOS_PROVIDER_ID,
+} from "../../../../app/lib/cudos-provider";
 import { dispatchNewProviders } from "../../../../app/lib/provider-events";
 import {
   isDesktopProviderBlocked,
@@ -695,6 +699,56 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     return updated.endsWith("\n") ? updated : `${updated}\n`;
   };
 
+  const formatConfigWithCudosProvider = (raw: string) => {
+    let updated = raw.trim()
+      ? raw
+      : '{\n  "$schema": "https://opencode.ai/config.json"\n}\n';
+    const providerEdits = modify(
+      updated,
+      ["provider", CUDOS_PROVIDER_ID],
+      buildCudosProviderConfig(),
+      { formattingOptions: { insertSpaces: true, tabSize: 2 } },
+    );
+    updated = applyEdits(updated, providerEdits);
+
+    const nextDisabled = options
+      .disabledProviders()
+      .filter((id) => id !== CUDOS_PROVIDER_ID);
+    const disabledEdits = modify(
+      updated,
+      ["disabled_providers"],
+      nextDisabled.length ? nextDisabled : undefined,
+      { formattingOptions: { insertSpaces: true, tabSize: 2 } },
+    );
+    updated = applyEdits(updated, disabledEdits);
+    return updated.endsWith("\n") ? updated : `${updated}\n`;
+  };
+
+  const formatConfigWithoutCudosProvider = (raw: string) => {
+    let updated = raw.trim()
+      ? raw
+      : '{\n  "$schema": "https://opencode.ai/config.json"\n}\n';
+    const providerEdits = modify(
+      updated,
+      ["provider", CUDOS_PROVIDER_ID],
+      undefined,
+      { formattingOptions: { insertSpaces: true, tabSize: 2 } },
+    );
+    updated = applyEdits(updated, providerEdits);
+
+    const nextDisabled = options
+      .disabledProviders()
+      .filter((id) => id !== CUDOS_PROVIDER_ID);
+    const disabledEdits = modify(
+      updated,
+      ["disabled_providers"],
+      nextDisabled.length ? nextDisabled : undefined,
+      { formattingOptions: { insertSpaces: true, tabSize: 2 } },
+    );
+    updated = applyEdits(updated, disabledEdits);
+    return updated.endsWith("\n") ? updated : `${updated}\n`;
+  };
+
   // Sweep all cloud-managed provider entries (keys matching /^lpr_/) from
   // opencode.jsonc regardless of importedCloudProviders state. Returns the
   // list of provider IDs that were removed so callers can also clear their
@@ -1029,7 +1083,10 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
       const id = provider.id?.trim();
       if (!id) continue;
       if (isDesktopProviderBlocked({ providerId: id, checkRestriction: options.checkDesktopAppRestriction })) continue;
-      if (!Array.isArray(provider.env) || provider.env.length === 0) continue;
+      const supportsApiKey =
+        id.toLowerCase() === "cudos" ||
+        (Array.isArray(provider.env) && provider.env.length > 0);
+      if (!supportsApiKey) continue;
       const existing = merged[id] ?? [];
       if (existing.some((method) => method.type === "api")) continue;
       merged[id] = [...existing, { type: "api", label: t("providers.api_key_label") }];
@@ -1288,8 +1345,46 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
 
     try {
       await c.auth.set({ providerID: providerId, auth: { type: "api", key: trimmed } });
+      if (providerId.trim().toLowerCase() === CUDOS_PROVIDER_ID) {
+        const updatedConfig = await updateProjectConfigFile(
+          formatConfigWithCudosProvider,
+          (config) => {
+            const providerSection =
+              config.provider &&
+              typeof config.provider === "object" &&
+              !Array.isArray(config.provider)
+                ? config.provider as Record<string, unknown>
+                : {};
+            const nextDisabled = normalizeDisabledProviders(
+              config.disabled_providers,
+            ).filter((id) => id !== CUDOS_PROVIDER_ID);
+            const next: Record<string, unknown> = {
+              ...config,
+              provider: {
+                ...providerSection,
+                [CUDOS_PROVIDER_ID]: buildCudosProviderConfig(),
+              },
+            };
+            if (nextDisabled.length) {
+              next.disabled_providers = nextDisabled;
+            } else {
+              delete next.disabled_providers;
+            }
+            return next;
+          },
+        );
+        if (!updatedConfig) {
+          throw new Error("Could not install the CUDOS provider for this workspace.");
+        }
+        options.setDisabledProviders(
+          options.disabledProviders().filter((id) => id !== CUDOS_PROVIDER_ID),
+        );
+        options.markOpencodeConfigReloadRequired();
+      }
       await refreshProviders({ dispose: true });
-      return `${t("status.connected")} ${providerId}`;
+      return providerId.trim().toLowerCase() === CUDOS_PROVIDER_ID
+        ? "CUDOS credential saved and provider enabled."
+        : `${t("status.connected")} ${providerId}`;
     } catch (error) {
       const message = describeProviderError(error, t("providers.save_api_key_failed"));
       setStateField("providerAuthError", message);
@@ -1622,6 +1717,43 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
 
     try {
       await removeProviderAuthCredentials(resolved);
+      if (resolved.toLowerCase() === CUDOS_PROVIDER_ID) {
+        const updatedConfig = await updateProjectConfigFile(
+          formatConfigWithoutCudosProvider,
+          (config) => {
+            const providerSection =
+              config.provider &&
+              typeof config.provider === "object" &&
+              !Array.isArray(config.provider)
+                ? config.provider as Record<string, unknown>
+                : {};
+            const nextProvider = { ...providerSection };
+            delete nextProvider[CUDOS_PROVIDER_ID];
+            const nextDisabled = normalizeDisabledProviders(
+              config.disabled_providers,
+            ).filter((id) => id !== CUDOS_PROVIDER_ID);
+            const next = { ...config };
+            if (Object.keys(nextProvider).length) {
+              next.provider = nextProvider;
+            } else {
+              delete next.provider;
+            }
+            if (nextDisabled.length) {
+              next.disabled_providers = nextDisabled;
+            } else {
+              delete next.disabled_providers;
+            }
+            return next;
+          },
+        );
+        if (!updatedConfig) {
+          throw new Error("Could not remove the CUDOS provider from this workspace.");
+        }
+        options.setDisabledProviders(
+          options.disabledProviders().filter((id) => id !== CUDOS_PROVIDER_ID),
+        );
+        options.markOpencodeConfigReloadRequired();
+      }
       const updated = await refreshProviders({ dispose: true });
       if (Array.isArray(updated?.connected) && updated.connected.includes(resolved)) {
         // Provider is still connected (e.g. via env var). Just remove
@@ -1641,16 +1773,26 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     returnFocusTarget?: ProviderReturnFocusTarget;
     preferredProviderId?: string;
   }) {
+    const preferredProviderId = optionsArg?.preferredProviderId?.trim() || null;
     mutateState((current) => ({
       ...current,
       providerAuthReturnFocusTarget: optionsArg?.returnFocusTarget ?? "none",
-      providerAuthPreferredProviderId: optionsArg?.preferredProviderId?.trim() || null,
+      providerAuthPreferredProviderId: preferredProviderId,
       providerAuthBusy: true,
       providerAuthError: null,
     }));
 
     try {
       const methods = await loadProviderAuthMethods(getProviderAuthWorkerType());
+      if (
+        preferredProviderId?.toLowerCase() === "cudos" &&
+        !methods[preferredProviderId]?.some((method) => method.type === "api")
+      ) {
+        methods[preferredProviderId] = [
+          ...(methods[preferredProviderId] ?? []),
+          { type: "api", label: t("providers.api_key_label") },
+        ];
+      }
       mutateState((current) => ({
         ...current,
         providerAuthMethods: methods,

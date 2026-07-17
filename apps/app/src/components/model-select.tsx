@@ -34,6 +34,11 @@ import { readHiddenModels } from "@/react-app/domains/session/modals/model-picke
 import { Settings2 } from "lucide-react";
 import { openModelPickerEvent } from "@/react-app/shell/new-providers-toast";
 import { newProvidersEvent } from "@/app/lib/provider-events";
+import {
+  getModelBehaviorCapability,
+  getModelBehaviorCapabilityLabel,
+  getModelBehaviorSummary,
+} from "@/app/lib/model-behavior";
 
 function getProviderDisplayName(providerId: string) {
   return providerId
@@ -80,18 +85,24 @@ function useModelOptions(open: boolean) {
 
     const options = getConnectedProviderItems(data)
       .flatMap((provider) =>
-        Object.entries(provider.models).map(([id, model]) => ({
-          providerID: provider.id,
-          modelID: id,
-          title: model.name,
-          description: provider.name,
-          behaviorTitle: "Reasoning",
-          behaviorLabel: "Default",
-          behaviorDescription: "",
-          behaviorValue: null,
-          isFree: false,
-          isConnected: true,
-        })),
+        Object.entries(provider.models).map(([id, model]) => {
+          const behavior = getModelBehaviorSummary(provider.id, model, null, provider.name);
+          return {
+            providerID: provider.id,
+            modelID: id,
+            title: model.name,
+            description: provider.name,
+            behaviorTitle: behavior.title,
+            behaviorLabel: behavior.label,
+            behaviorDescription: behavior.description,
+            behaviorValue: behavior.value,
+            behaviorOptions: behavior.options,
+            behaviorCapability: getModelBehaviorCapability(model),
+            behaviorCapabilityLabel: getModelBehaviorCapabilityLabel(model),
+            isFree: false,
+            isConnected: true,
+          };
+        }),
       );
 
     return options.filter((option) => {

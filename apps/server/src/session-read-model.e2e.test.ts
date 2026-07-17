@@ -667,7 +667,7 @@ describe("workspace session read APIs", () => {
     const saved = await fetch(`${base}/workspace/ws_1/backend/model-selection`, {
       method: "PATCH",
       headers: { ...auth(openwork.token), "Content-Type": "application/json" },
-      body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1" }),
+      body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1", variant: "high" }),
     });
     expect(saved.status).toBe(200);
 
@@ -681,6 +681,7 @@ describe("workspace session read APIs", () => {
     const promptRequest = mock.requests.find((request) => request.method === "POST" && request.pathname === "/session/ses_1/prompt_async");
     expect(promptRequest?.body).toMatchObject({
       model: { providerID: "openai", modelID: "gpt-4.1" },
+      variant: "high",
       agent: "build",
       parts: [{ type: "text", text: "Use the saved workspace model" }],
     });
@@ -697,6 +698,7 @@ describe("workspace session read APIs", () => {
         modelProviderId: "openai",
         modelId: "gpt-4.1",
         modelRef: "openai/gpt-4.1",
+        variant: "high",
         agent: "build",
       },
     });

@@ -635,6 +635,12 @@ describe("backend control plane routes", () => {
     });
     expect(invalid.response.status).toBe(400);
 
+    const invalidVariant = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {
+      method: "PATCH",
+      body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1", variant: "bearer token should not be here" }),
+    });
+    expect(invalidVariant.response.status).toBe(400);
+
     const unknownModel = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {
       method: "PATCH",
       body: JSON.stringify({ providerId: "openai", modelId: "not-in-provider-list" }),
@@ -644,18 +650,20 @@ describe("backend control plane routes", () => {
 
     const saved = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {
       method: "PATCH",
-      body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1" }),
+      body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1", variant: "high" }),
     });
     expect(saved.response.status).toBe(200);
     expect(saved.payload.selection).toMatchObject({
       providerId: "openai",
       modelId: "gpt-4.1",
+      variant: "high",
       source: "server_workspace_preference",
     });
     expect(saved.payload.effectiveModel).toMatchObject({
       providerId: "openai",
       modelId: "gpt-4.1",
       source: "server_workspace_preference",
+      variant: "high",
     });
     expect(saved.payload.policy).toMatchObject({
       storesCredentials: false,
@@ -668,6 +676,7 @@ describe("backend control plane routes", () => {
       providerId: "openai",
       modelId: "gpt-4.1",
       source: "server_workspace_preference",
+      variant: "high",
     });
     expect(models.payload.routing.selection.preferenceStore).toBe("server");
     expect(models.payload.routing.selection.serverPersisted).toBe(true);

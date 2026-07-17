@@ -54,6 +54,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
   google: "Google",
   openrouter: "OpenRouter",
+  cudos: "CUDOS / ASI:Cloud",
 };
 
 const OPENWORK_MODELS_PROVIDER_ID = "matterhorn";
@@ -534,7 +535,15 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
     }
 
     if (entry.methods.length === 1) {
-      void handleMethodSelect(entry.methods[0]);
+      const method = entry.methods[0];
+      if (method.type === "oauth") {
+        void startOauth(entry, method.methodIndex);
+      } else if (method.type === "cloud") {
+        setSelectedCloudMethod(method);
+        setView("cloud");
+      } else {
+        setView("api");
+      }
       return;
     }
 

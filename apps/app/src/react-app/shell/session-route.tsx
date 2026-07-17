@@ -157,7 +157,18 @@ import { readDenSettings } from "../../app/lib/den";
 import { denSessionUpdatedEvent } from "../../app/lib/den-session-events";
 
 import { openModelPickerEvent, pendingModelPickerProviderIdsKey } from "./new-providers-toast";
-import { getModelBehaviorSummary } from "../../app/lib/model-behavior";
+import {
+  getModelBehaviorCapability,
+  getModelBehaviorCapabilityLabel,
+  getModelBehaviorSummary,
+} from "../../app/lib/model-behavior";
+import {
+  beginModelOperation,
+  pendingModelOperation,
+  recordModelOperationAccepted,
+  recordModelOperationProviderError,
+  recordModelReasoningLevelSelection,
+} from "../../app/lib/model-operation-metrics";
 import { filterProviderList } from "../../app/utils/providers";
 import { ensureDesktopLocalMatterhornConnection } from "./desktop-local-matterhorn";
 import { resolveMatterhornConnection } from "./matterhorn-connection";
@@ -363,7 +374,7 @@ function focusPromptSoon() {
 const emptyPendingPermissions: PendingPermission[] = [];
 const emptyPendingQuestions: PendingQuestion[] = [];
 const emptyTodos: TodoItem[] = [];
-const emptyModelBehaviorOptions: { value: string | null; label: string }[] = [];
+const emptyModelBehaviorOptions: { value: string | null; label: string; description?: string }[] = [];
 
 function useQueryCacheState<T>(queryKey: readonly unknown[] | null, fallback: T): T {
   const queryClient = getReactQueryClient();
@@ -2143,31 +2154,61 @@ export function SessionRoute() {
 
   // Compute behavior (reasoning/thinking variant) options for the current
   // default model. This is what the composer renders as its variant pill.
-  const { modelVariantLabel, modelBehaviorOptions, modelVariantValue } = useMemo(() => {
+  const {
+    modelBehaviorTitle,
+    modelVariantLabel,
+    modelBehaviorOptions,
+    modelVariantValue,
+    modelBehaviorIsProviderDefault,
+    modelBehaviorDefaultLabel,
+  } = useMemo(() => {
     const ref = selectedPromptModel;
-    const variant = local.prefs.modelVariant ?? null;
+    const localVariant = local.prefs.modelVariant ?? null;
+    const workspaceEffectiveModel = workspaceModelSelection?.effectiveModel ?? null;
+    const selectedModelMatchesWorkspace = Boolean(
+      ref &&
+      workspaceEffectiveModel &&
+      ref.providerID === workspaceEffectiveModel.providerId &&
+      ref.modelID === workspaceEffectiveModel.modelId,
+    );
+    const workspaceVariant = selectedModelMatchesWorkspace
+      ? workspaceEffectiveModel?.variant ?? null
+      : null;
+    const variant = localVariant ?? workspaceVariant;
+    const defaultLabel = workspaceVariant && localVariant == null
+      ? "Workspace default"
+      : "Provider default";
     if (!ref) {
       return {
+        modelBehaviorTitle: t("model_behavior.title_reasoning_effort"),
         modelVariantLabel: t("settings.default_label"),
         modelBehaviorOptions: emptyModelBehaviorOptions,
         modelVariantValue: null,
+        modelBehaviorIsProviderDefault: true,
+        modelBehaviorDefaultLabel: "Provider default",
       };
     }
     const model = providerCatalog[ref.providerID]?.[ref.modelID];
     if (!model) {
       return {
+        modelBehaviorTitle: t("model_behavior.title_reasoning_effort"),
         modelVariantLabel: variant ?? t("settings.default_label"),
         modelBehaviorOptions: emptyModelBehaviorOptions,
         modelVariantValue: variant,
+        modelBehaviorIsProviderDefault: localVariant == null,
+        modelBehaviorDefaultLabel: defaultLabel,
       };
     }
     const summary = getModelBehaviorSummary(ref.providerID, model, variant);
     return {
+      modelBehaviorTitle: summary.title,
       modelVariantLabel: summary.label,
       modelBehaviorOptions: summary.options,
-      modelVariantValue: summary.value,
+      modelVariantValue: variant,
+      modelBehaviorIsProviderDefault: localVariant == null,
+      modelBehaviorDefaultLabel: defaultLabel,
     };
-  }, [local.prefs.modelVariant, providerCatalog, selectedPromptModel]);
+  }, [local.prefs.modelVariant, providerCatalog, selectedPromptModel, workspaceModelSelection]);
 
   // Load the picker list lazily the first time the modal opens. Uses the
   // cached catalog when available, otherwise re-fetches.
@@ -2199,15 +2240,19 @@ export function SessionRoute() {
           const isNew = !seenIds.has(provider.id) || recentProviderIds.has(provider.id);
           for (const id of modelIds) {
             const model = provider.models[id];
+            const behavior = getModelBehaviorSummary(provider.id, model, null, provider.name);
             options.push({
               providerID: provider.id,
               modelID: id,
               title: model.name || id,
               description: customerModelProviderLabel(provider),
-              behaviorTitle: "Reasoning",
-              behaviorLabel: "Default",
-              behaviorDescription: "",
-              behaviorValue: null,
+              behaviorTitle: behavior.title,
+              behaviorLabel: behavior.label,
+              behaviorDescription: behavior.description,
+              behaviorValue: behavior.value,
+              behaviorOptions: behavior.options,
+              behaviorCapability: getModelBehaviorCapability(model),
+              behaviorCapabilityLabel: getModelBehaviorCapabilityLabel(model),
               isFree: false,
               isConnected: true,
               isRecommended: isNew,
@@ -2472,10 +2517,21 @@ export function SessionRoute() {
       onSessionMissing: recoverMissingSession,
       attachmentsEnabled: true,
       attachmentsDisabledReason: null,
+      modelBehaviorTitle,
       modelVariantLabel,
       modelVariant: modelVariantValue,
       modelBehaviorOptions,
+      modelBehaviorIsProviderDefault,
+      modelBehaviorDefaultLabel,
       onModelVariantChange: (value: string | null) => {
+        recordModelReasoningLevelSelection({
+          workspaceId: selectedWorkspaceId,
+          sessionId: selectedSessionId,
+          providerId: selectedPromptModel?.providerID,
+          modelId: selectedPromptModel?.modelID,
+          reasoningLevel: value,
+          source: "current_app",
+        });
         local.setPrefs((previous) => ({ ...previous, modelVariant: value }));
       },
       responsePerspective,
@@ -2568,7 +2624,10 @@ export function SessionRoute() {
     handleSelectAgent,
     local,
     listSlashCommands,
+    modelBehaviorIsProviderDefault,
+    modelBehaviorDefaultLabel,
     modelBehaviorOptions,
+    modelBehaviorTitle,
     modelLabel,
     modelVariantLabel,
     modelVariantValue,
@@ -3380,6 +3439,14 @@ export function SessionRoute() {
 
               try {
                 const systemContext = await buildSessionSystemContext(prompt, session.id, agent, "work");
+                const operation = beginModelOperation({
+                  workspaceId,
+                  sessionId: session.id,
+                  providerId: selectedPromptModel?.providerID,
+                  modelId: selectedPromptModel?.modelID,
+                  reasoningLevel: modelVariantValue,
+                  source: "desk",
+                });
                 recordInspectorEvent("desk.task_launch.prompt_send_started", {
                   ...taskLaunchEvent,
                   sessionId: session.id,
@@ -3395,6 +3462,7 @@ export function SessionRoute() {
                 if (result.error) {
                   throw new Error(serializeSDKError(result.error));
                 }
+                recordModelOperationAccepted(operation);
                 saveSessionDraft(workspaceId, session.id, { text: "", mode: "prompt" });
                 recordInspectorEvent("desk.task_launch.prompt_sent", {
                   ...taskLaunchEvent,
@@ -3408,6 +3476,8 @@ export function SessionRoute() {
                 });
                 return true;
               } catch (error) {
+                const operation = pendingModelOperation(session.id);
+                if (operation) recordModelOperationProviderError(operation, error);
                 const message = describeTaskCreateError(error);
                 useSessionActivityStore.getState().setRunStatus(workspaceId, session.id, { type: "idle" });
                 saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });

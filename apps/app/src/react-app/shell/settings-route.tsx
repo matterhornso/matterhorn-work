@@ -18,6 +18,15 @@ import { resolveWorkspaceEndpoint } from "../../app/lib/workspace-endpoint";
 import { isPublicBetaWebDeployment } from "../../app/lib/matterhorn-deployment";
 import { buildMatterhornEnvRuntimeKey } from "../../app/lib/matterhorn-env-runtime";
 import {
+  getModelBehaviorCapability,
+  getModelBehaviorCapabilityLabel,
+  getModelBehaviorSummary,
+} from "../../app/lib/model-behavior";
+import {
+  CUDOS_PROVIDER_ID,
+  CUDOS_PROVIDER_NAME,
+} from "../../app/lib/cudos-provider";
+import {
   getInitialThemeMode,
   setThemeMode as setAppThemeMode,
   type ThemeMode,
@@ -581,6 +590,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const [localProviderBusy, setLocalProviderBusy] = useState(false);
   const [localProviderStatus, setLocalProviderStatus] = useState<string | null>(null);
   const [localProviderError, setLocalProviderError] = useState<string | null>(null);
+  const [cudosProviderBusy, setCudosProviderBusy] = useState(false);
+  const [cudosProviderStatus, setCudosProviderStatus] = useState<string | null>(null);
+  const [cudosProviderError, setCudosProviderError] = useState<string | null>(null);
   const [extensionDetailRequest, setExtensionDetailRequest] = useState<{ id: string; requestId: number } | null>(null);
   const [imageExtensionInstalled, setImageExtensionInstalled] = useState(false);
   const [googleWorkspaceConnected, setGoogleWorkspaceConnected] = useState(false);
@@ -1233,6 +1245,42 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     }
   }, [local, matterhornClient, reloadCoordinator, runtimeWorkspaceId, selectedWorkspaceEndpoint]);
 
+  const connectCudosProvider = useCallback(async () => {
+    if (checkDesktopRestriction({ restriction: "allowCustomProviders" })) {
+      restrictionNotice.show({
+        title: "Adding custom providers is disabled",
+        message: "Your organization administrator has disabled adding custom providers.",
+      });
+      return;
+    }
+
+    if (!opencodeClient) {
+      setCudosProviderError("Matterhorn Work engine is not connected for this workspace.");
+      return;
+    }
+
+    setCudosProviderBusy(true);
+    setCudosProviderStatus(null);
+    setCudosProviderError(null);
+    try {
+      setCudosProviderStatus(
+        `${CUDOS_PROVIDER_NAME} will be enabled after its API key is saved.`,
+      );
+      await providerAuthStore.openProviderAuthModal({
+        preferredProviderId: CUDOS_PROVIDER_ID,
+      });
+    } catch (error) {
+      setCudosProviderError(describeRouteError(error));
+    } finally {
+      setCudosProviderBusy(false);
+    }
+  }, [
+    checkDesktopRestriction,
+    opencodeClient,
+    providerAuthStore,
+    restrictionNotice,
+  ]);
+
   useEffect(() => {
     const openFromPending = (raw: string | null) => {
       if (!raw) return false;
@@ -1294,15 +1342,19 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           const isNew = !seenIds.has(provider.id);
           for (const id of modelIds) {
             const model = provider.models[id];
+            const behavior = getModelBehaviorSummary(provider.id, model, null, provider.name);
             options.push({
               providerID: provider.id,
               modelID: id,
               title: model.name || id,
               description: provider.name,
-              behaviorTitle: "Reasoning",
-              behaviorLabel: "Default",
-              behaviorDescription: "",
-              behaviorValue: null,
+              behaviorTitle: behavior.title,
+              behaviorLabel: behavior.label,
+              behaviorDescription: behavior.description,
+              behaviorValue: behavior.value,
+              behaviorOptions: behavior.options,
+              behaviorCapability: getModelBehaviorCapability(model),
+              behaviorCapabilityLabel: getModelBehaviorCapabilityLabel(model),
               isFree: false,
               isConnected: true,
               isRecommended: isNew,
@@ -1782,7 +1834,29 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const defaultModelRef = local.prefs.defaultModel
     ? `${local.prefs.defaultModel.providerID}/${local.prefs.defaultModel.modelID}`
     : t("settings.default_label");
-  const defaultModelVariantLabel = local.prefs.modelVariant ?? t("settings.default_label");
+  const defaultModelProvider = local.prefs.defaultModel
+    ? providers.find((provider) => provider.id === local.prefs.defaultModel?.providerID)
+    : undefined;
+  const defaultModel = local.prefs.defaultModel
+    ? defaultModelProvider?.models?.[local.prefs.defaultModel.modelID]
+    : undefined;
+  const defaultModelBehavior = defaultModel && local.prefs.defaultModel
+    ? getModelBehaviorSummary(
+        local.prefs.defaultModel.providerID,
+        defaultModel,
+        local.prefs.modelVariant,
+        defaultModelProvider?.name,
+      )
+    : null;
+  const providerDefaultModelBehavior = defaultModel && local.prefs.defaultModel
+    ? getModelBehaviorSummary(
+        local.prefs.defaultModel.providerID,
+        defaultModel,
+        null,
+        defaultModelProvider?.name,
+      )
+    : null;
+  const defaultModelVariantLabel = defaultModelBehavior?.label ?? t("settings.default_label");
   const providerStatusLabel = providerConnectedIds.length > 0 ? t("status.connected") : t("status.disconnected_label");
   const providerStatusStyle = providerConnectedIds.length > 0
     ? "bg-green-7/10 text-green-11 border-green-7/20"
@@ -2204,6 +2278,17 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             defaultModelRef={defaultModelRef}
             defaultModelProviderId={local.prefs.defaultModel?.providerID ?? null}
             defaultModelId={local.prefs.defaultModel?.modelID ?? null}
+            modelBehaviorTitle={defaultModelBehavior?.title ?? null}
+            modelBehaviorOptions={defaultModelBehavior?.options ?? []}
+            currentAppModelVariant={local.prefs.modelVariant}
+            providerDefaultModelVariant={providerDefaultModelBehavior?.value ?? null}
+            providerDefaultModelVariantLabel={providerDefaultModelBehavior?.label ?? "Provider default"}
+            onCurrentAppModelVariantChange={(variant) => {
+              local.setPrefs((previous) => ({
+                ...previous,
+                modelVariant: variant,
+              }));
+            }}
             hasLocalModelOverride={Boolean(local.prefs.defaultModel)}
             connectedModelCount={connectedModelCount}
             providerStatusLabel={providerStatusLabel}
@@ -2214,6 +2299,11 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             providerConnectError={providerAuthSnapshot.providerAuthError}
             providerDisconnectStatus={configActionStatus}
             providerDisconnectError={null}
+            cudosConnected={providerConnectedIdSet.has(CUDOS_PROVIDER_ID)}
+            cudosBusy={cudosProviderBusy}
+            cudosStatus={cudosProviderStatus}
+            cudosError={cudosProviderError}
+            onConnectCudos={connectCudosProvider}
             onOpenModelPicker={() => {
               setModelPickerQuery("");
               setModelOptionsLoading(true);

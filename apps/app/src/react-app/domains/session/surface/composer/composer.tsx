@@ -91,9 +91,12 @@ type ComposerProps = {
   onRemoveAttachment: (id: string) => void;
   attachmentsEnabled: boolean;
   attachmentsDisabledReason: string | null;
+  modelBehaviorTitle: string;
   modelVariantLabel: string;
   modelVariant: string | null;
-  modelBehaviorOptions?: { value: string | null; label: string }[];
+  modelBehaviorOptions?: { value: string | null; label: string; description?: string }[];
+  modelBehaviorIsProviderDefault: boolean;
+  modelBehaviorDefaultLabel: string;
   onModelVariantChange: (value: string | null) => void;
   responsePerspective: ResponsePerspective;
   onResponsePerspectiveChange: (perspective: ResponsePerspective) => void;
@@ -1718,9 +1721,12 @@ export function ReactSessionComposer(props: ComposerProps) {
             <ModelBehaviorSelect
               value={props.modelVariant}
               label={props.modelVariantLabel}
+              title={props.modelBehaviorTitle}
               options={props.modelBehaviorOptions}
               onChange={props.onModelVariantChange}
               disabled={props.busy}
+              isProviderDefault={props.modelBehaviorIsProviderDefault}
+              defaultLabel={props.modelBehaviorDefaultLabel}
             />
           </div>
 

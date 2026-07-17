@@ -24,6 +24,14 @@ import {
 import { createClient, unwrap } from "../../../../app/lib/opencode";
 import { abortSessionSafe } from "../../../../app/lib/opencode-session";
 import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
+import {
+  beginModelOperation,
+  pendingModelOperation,
+  recordModelOperationAccepted,
+  recordModelOperationCancelled,
+  recordModelOperationCompleted,
+  recordModelOperationProviderError,
+} from "../../../../app/lib/model-operation-metrics";
 import { t } from "../../../../i18n";
 import { readWorkspaceCloudImports, type CloudImportedPlugin } from "../../../../app/cloud/import-state";
 import {
@@ -550,9 +558,12 @@ export type SessionSurfaceProps = {
   onDraftChange: (draft: ComposerDraft) => void;
   attachmentsEnabled: boolean;
   attachmentsDisabledReason: string | null;
+  modelBehaviorTitle: string;
   modelVariantLabel: string;
   modelVariant: string | null;
-  modelBehaviorOptions?: { value: string | null; label: string }[];
+  modelBehaviorOptions?: { value: string | null; label: string; description?: string }[];
+  modelBehaviorIsProviderDefault: boolean;
+  modelBehaviorDefaultLabel: string;
   onModelVariantChange: (value: string | null) => void;
   responsePerspective: ResponsePerspective;
   onResponsePerspectiveChange: (perspective: ResponsePerspective) => void;
@@ -1196,6 +1207,23 @@ export function SessionSurface(props: SessionSurfaceProps) {
     return () => window.clearTimeout(id);
   }, [props.sessionId, currentSnapshot, props.workspaceId]);
 
+  useEffect(() => {
+    if (!currentSnapshot) return;
+    const operation = pendingModelOperation(props.sessionId);
+    if (!operation) return;
+    const completedAssistant = currentSnapshot.messages.find((message) => (
+      message.info.role === "assistant" &&
+      !message.info.error &&
+      typeof message.info.time.completed === "number" &&
+      message.info.time.created >= operation.startedAt - 1_000
+    ));
+    if (!completedAssistant || completedAssistant.info.role !== "assistant") return;
+    recordModelOperationCompleted(operation, {
+      completedAt: completedAssistant.info.time.completed,
+      tokens: completedAssistant.info.tokens,
+    });
+  }, [currentSnapshot, props.sessionId]);
+
   const snapshot = resolveRenderedSessionSnapshot({
     sessionId: props.sessionId,
     currentSnapshot,
@@ -1514,6 +1542,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
       return;
     }
 
+    const operation = pendingModelOperation(props.sessionId);
+    if (operation) {
+      recordModelOperationProviderError(operation, { name: failure.name });
+    }
     setError(failure.error);
     activity.setError(props.workspaceId, props.sessionId);
     if (failure.retryMessage && !draft.trim()) {
@@ -1576,6 +1608,14 @@ export function SessionSurface(props: SessionSurfaceProps) {
     setSending(true);
     setAwaitingAssistantBaseline(renderedMessages.length);
     setNoVisibleAssistantOutputBaseline(null);
+    const operation = beginModelOperation({
+      workspaceId: props.workspaceId,
+      sessionId: props.sessionId,
+      providerId: props.selectedModel.providerID,
+      modelId: props.selectedModel.modelID,
+      reasoningLevel: props.modelVariant,
+      source: "chat",
+    });
     try {
       let resolvedText = addBittensorContextToResolvedText(text, bittensorContext);
       resolvedText = addMatterhornMemoryContextToResolvedText(resolvedText, memoryContext);
@@ -1612,11 +1652,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
       }
 
       await props.onSendDraft(nextDraft);
+      recordModelOperationAccepted(operation);
       attachments.forEach(revokeAttachmentPreview);
       clearComposerSession(props.sessionId);
       props.onDraftChange(buildDraft("", []));
       setSending(false);
     } catch (nextError) {
+      recordModelOperationProviderError(operation, nextError);
       const parsed = parseSessionError(nextError);
       setError(parsed);
       useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId);
@@ -1625,7 +1667,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
     }
-  }, [activeWorkflowDeskAgent, attachments, bittensorContext, buildDraft, clearComposerSession, draft, memoryContext, props.onDraftChange, props.onSendDraft, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft]);
+  }, [activeWorkflowDeskAgent, attachments, bittensorContext, buildDraft, clearComposerSession, draft, memoryContext, props.modelVariant, props.onDraftChange, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft]);
 
   const handleAbort = useCallback(async () => {
     if (!chatStreaming) return;
@@ -1633,6 +1675,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
     setError(null);
     try {
       await abortSessionSafe(opencodeClient, props.sessionId);
+      const operation = pendingModelOperation(props.sessionId);
+      if (operation) recordModelOperationCancelled(operation);
       await snapshotQuery.refetch();
       setSending(false);
       setAwaitingAssistantBaseline(null);
@@ -2462,9 +2506,12 @@ export function SessionSurface(props: SessionSurfaceProps) {
         onRemoveAttachment={handleRemoveAttachment}
         attachmentsEnabled={props.attachmentsEnabled}
         attachmentsDisabledReason={props.attachmentsDisabledReason}
+        modelBehaviorTitle={props.modelBehaviorTitle}
         modelVariantLabel={props.modelVariantLabel}
         modelVariant={props.modelVariant}
         modelBehaviorOptions={props.modelBehaviorOptions}
+        modelBehaviorIsProviderDefault={props.modelBehaviorIsProviderDefault}
+        modelBehaviorDefaultLabel={props.modelBehaviorDefaultLabel}
         onModelVariantChange={props.onModelVariantChange}
         responsePerspective={props.responsePerspective}
         onResponsePerspectiveChange={props.onResponsePerspectiveChange}

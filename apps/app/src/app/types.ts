@@ -408,6 +408,8 @@ export type ModelBehaviorOption = {
   description: string;
 };
 
+export type ModelBehaviorCapability = "adjustable" | "built-in" | "standard";
+
 export type ModelOption = {
   providerID: string;
   modelID: string;
@@ -419,6 +421,8 @@ export type ModelOption = {
   behaviorDescription: string;
   behaviorValue: string | null;
   behaviorOptions?: ModelBehaviorOption[];
+  behaviorCapability: ModelBehaviorCapability;
+  behaviorCapabilityLabel: string;
   disabled?: boolean;
   isFree: boolean;
   isConnected: boolean;
