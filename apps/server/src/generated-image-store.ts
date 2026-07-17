@@ -1,6 +1,7 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { MatterhornGeneratedImage } from "@matterhorn-work/types/generated-media";
+import { atomicWriteTextFile } from "./atomic-file.js";
 import { exists } from "./utils.js";
 
 export interface GeneratedImageStoreOptions {
@@ -34,9 +35,8 @@ export class MatterhornGeneratedImageStore {
   }
 
   async save(image: MatterhornGeneratedImage): Promise<void> {
-    await this.ensureDir();
     const path = metadataPath(this.workspaceRoot, image.id);
-    await writeFile(path, JSON.stringify(image, null, 2));
+    await atomicWriteTextFile(path, `${JSON.stringify(image, null, 2)}\n`, { mode: 0o600 });
   }
 
   async get(imageId: string): Promise<MatterhornGeneratedImage | null> {

@@ -1,4 +1,5 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type {
   MatterhornBillingAccountSource,
@@ -24,6 +25,30 @@ export interface MatterhornBillingAccountSnapshot {
 export interface BillingAccountStoreOptions {
   workspaceRoot: string;
   workspaceId: string;
+}
+
+export interface BillingAccountMutation<T> {
+  snapshot?: MatterhornBillingAccountSnapshot | null;
+  result: T;
+}
+
+const billingMutationQueues = new Map<string, Promise<void>>();
+
+async function withBillingMutationLock<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const previous = billingMutationQueues.get(key) ?? Promise.resolve();
+  let release = () => {};
+  const ticket = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.catch(() => undefined).then(() => ticket);
+  billingMutationQueues.set(key, queued);
+  await previous.catch(() => undefined);
+  try {
+    return await task();
+  } finally {
+    release();
+    if (billingMutationQueues.get(key) === queued) billingMutationQueues.delete(key);
+  }
 }
 
 function billingDir(workspaceRoot: string): string {
@@ -77,6 +102,42 @@ export class MatterhornBillingAccountStore {
   }
 
   async get(): Promise<MatterhornBillingAccountSnapshot | null> {
+    return this.getUnlocked();
+  }
+
+  async save(snapshot: MatterhornBillingAccountSnapshot): Promise<void> {
+    const path = billingAccountPath(this.workspaceRoot);
+    await withBillingMutationLock(path, () => this.saveUnlocked(snapshot));
+  }
+
+  async mutate<T>(
+    mutation: (
+      current: MatterhornBillingAccountSnapshot | null,
+    ) => BillingAccountMutation<T> | Promise<BillingAccountMutation<T>>,
+  ): Promise<T> {
+    const path = billingAccountPath(this.workspaceRoot);
+    return withBillingMutationLock(path, async () => {
+      const current = await this.getUnlocked();
+      const next = await mutation(current);
+      if (next.snapshot === null) {
+        await rm(path, { force: true });
+      } else if (next.snapshot !== undefined) {
+        await this.saveUnlocked(next.snapshot);
+      }
+      return next.result;
+    });
+  }
+
+  async delete(): Promise<boolean> {
+    const path = billingAccountPath(this.workspaceRoot);
+    return withBillingMutationLock(path, async () => {
+      const existed = await exists(path);
+      await rm(path, { force: true });
+      return existed;
+    });
+  }
+
+  private async getUnlocked(): Promise<MatterhornBillingAccountSnapshot | null> {
     const path = billingAccountPath(this.workspaceRoot);
     if (!(await exists(path))) return null;
     try {
@@ -86,15 +147,23 @@ export class MatterhornBillingAccountStore {
     }
   }
 
-  async save(snapshot: MatterhornBillingAccountSnapshot): Promise<void> {
+  private async saveUnlocked(snapshot: MatterhornBillingAccountSnapshot): Promise<void> {
     await this.ensureDir();
-    await writeFile(billingAccountPath(this.workspaceRoot), JSON.stringify(snapshot, null, 2), "utf8");
-  }
-
-  async delete(): Promise<boolean> {
     const path = billingAccountPath(this.workspaceRoot);
-    const existed = await exists(path);
-    await rm(path, { force: true });
-    return existed;
+    const tempPath = join(
+      dirname(path),
+      `.subscription.${process.pid}.${Date.now()}.${randomUUID()}.tmp`,
+    );
+    try {
+      await writeFile(tempPath, `${JSON.stringify(snapshot, null, 2)}\n`, {
+        encoding: "utf8",
+        flag: "wx",
+        mode: 0o600,
+      });
+      await rename(tempPath, path);
+    } catch (error) {
+      await rm(tempPath, { force: true }).catch(() => {});
+      throw error;
+    }
   }
 }

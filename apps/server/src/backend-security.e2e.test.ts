@@ -40,6 +40,7 @@ const priorEnv = {
   tokenStore: process.env.OPENWORK_TOKEN_STORE,
   memoryRoot: process.env.MATTERHORN_WORK_MEMORY_ROOT,
   devLogFile: process.env.OPENWORK_DEV_LOG_FILE,
+  toyUi: process.env.OPENWORK_TOY_UI,
 };
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
@@ -224,11 +225,53 @@ afterEach(async () => {
   else process.env.MATTERHORN_WORK_MEMORY_ROOT = priorEnv.memoryRoot;
   if (priorEnv.devLogFile === undefined) delete process.env.OPENWORK_DEV_LOG_FILE;
   else process.env.OPENWORK_DEV_LOG_FILE = priorEnv.devLogFile;
+  if (priorEnv.toyUi === undefined) delete process.env.OPENWORK_TOY_UI;
+  else process.env.OPENWORK_TOY_UI = priorEnv.toyUi;
 });
 
 // ---------------------------------------------------------------------------
 // Scope 0: Observability log safety
 // ---------------------------------------------------------------------------
+
+describe("HTTP routing safety", () => {
+  test("malformed encoded route parameters fail safely without escaping response hardening", async () => {
+    const { base, ownerToken } = await boot();
+
+    const malformed = await fetch(`${base}/workspace/%E0%A4%A/backend/readiness`, {
+      headers: {
+        Authorization: `Bearer ${ownerToken}`,
+        Connection: "close",
+      },
+    });
+    const payload = await malformed.json();
+
+    expect(malformed.status).toBe(404);
+    expect(payload).toEqual({ code: "not_found", message: "Not found" });
+    expect(malformed.headers.get("content-type")).toContain("application/json");
+    expect(malformed.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(malformed.headers.get("x-frame-options")).toBe("DENY");
+
+    const health = await fetch(`${base}/health`, { headers: { Connection: "close" } });
+    expect(health.status).toBe(200);
+  });
+
+  test("static route punctuation is matched literally", async () => {
+    process.env.OPENWORK_TOY_UI = "1";
+    const { base } = await boot();
+
+    const exact = await fetch(`${base}/ui/assets/toy.css`, {
+      headers: { Connection: "close" },
+    });
+    const nearMatch = await fetch(`${base}/ui/assets/toyXcss`, {
+      headers: { Connection: "close" },
+    });
+
+    expect(exact.status).toBe(200);
+    expect(exact.headers.get("content-type")).toContain("text/css");
+    expect(nearMatch.status).toBe(404);
+    expect(await nearMatch.json()).toEqual({ code: "not_found", message: "Not found" });
+  });
+});
 
 describe("Dev observability log safety", () => {
   test("POST /dev/log redacts bearer tokens, secret fields, and private-key-shaped text before writing JSONL", async () => {
@@ -955,6 +998,43 @@ describe("Security capability classification", () => {
     expect(serialized).not.toContain(HOST_TOKEN);
     expect(serialized).toContain("tokenSource");
     expect(serialized).toContain("hostTokenSource");
+  });
+
+  test("workspace responses never expose engine or remote workspace credentials", async () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-workspace-secret-"));
+    dirs.push(root);
+    const engineUsername = "engine-user-not-for-clients";
+    const enginePassword = "engine-password-not-for-clients";
+    const remoteToken = "remote-workspace-token-not-for-clients";
+    const workspaces: ServerConfig["workspaces"] = [{
+      id: "ws_secret",
+      name: "Credential redaction workspace",
+      path: root,
+      preset: "starter",
+      workspaceType: "local",
+      baseUrl: "http://127.0.0.1:65530",
+      openworkHostUrl: "http://127.0.0.1:65530",
+      openworkToken: remoteToken,
+      openworkWorkspaceId: "ws_remote",
+      opencodeUsername: engineUsername,
+      opencodePassword: enginePassword,
+    }];
+    const { base, ownerToken } = await boot(false, { workspaces, authorizedRoots: [root] });
+
+    for (const path of ["/workspaces", "/status", "/w/ws_secret/capabilities", "/w/ws_secret/workspaces"]) {
+      const result = await jsonFetch(base, path, ownerToken);
+      if (result.response.status !== 200) {
+        throw new Error(`${path} returned ${result.response.status}: ${JSON.stringify(result.payload)}`);
+      }
+      expect(result.response.status).toBe(200);
+      const serialized = JSON.stringify(result.payload);
+      expect(serialized).not.toContain(engineUsername);
+      expect(serialized).not.toContain(enginePassword);
+      expect(serialized).not.toContain(remoteToken);
+      expect(serialized).not.toContain("\"username\"");
+      expect(serialized).not.toContain("\"password\"");
+      expect(serialized).not.toContain("\"openworkToken\"");
+    }
   });
 
   test("approval mode is correctly reported in capabilities", async () => {

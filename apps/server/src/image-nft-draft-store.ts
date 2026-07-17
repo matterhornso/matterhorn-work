@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type {
   MatterhornGeneratedImage,
   MatterhornImageNftDraft,
@@ -11,6 +11,25 @@ import type {
   MatterhornNftStorageStatus,
 } from "@matterhorn-work/types/generated-media";
 import { exists } from "./utils.js";
+
+const draftMutationQueues = new Map<string, Promise<void>>();
+
+async function withDraftMutationLock<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const previous = draftMutationQueues.get(key) ?? Promise.resolve();
+  let release = () => {};
+  const ticket = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.catch(() => undefined).then(() => ticket);
+  draftMutationQueues.set(key, queued);
+  await previous.catch(() => undefined);
+  try {
+    return await task();
+  } finally {
+    release();
+    if (draftMutationQueues.get(key) === queued) draftMutationQueues.delete(key);
+  }
+}
 
 export interface NftDraftStoreOptions {
   workspaceRoot: string;
@@ -117,9 +136,8 @@ export class MatterhornImageNftDraftStore {
   }
 
   async save(draft: MatterhornImageNftDraft): Promise<void> {
-    await this.ensureDir();
     const path = draftPath(this.workspaceRoot, draft.id);
-    await writeFile(path, JSON.stringify(draft, null, 2));
+    await withDraftMutationLock(path, () => this.saveUnlocked(draft));
   }
 
   async create(image: MatterhornGeneratedImage, input?: MatterhornImageNftDraftInput): Promise<MatterhornImageNftDraft> {
@@ -129,43 +147,49 @@ export class MatterhornImageNftDraftStore {
   }
 
   async update(draftId: string, input: MatterhornImageNftDraftInput): Promise<MatterhornImageNftDraft | null> {
-    const draft = await this.get(draftId);
-    if (!draft) return null;
+    const path = draftPath(this.workspaceRoot, draftId);
+    return withDraftMutationLock(path, async () => {
+      const draft = await this.get(draftId);
+      if (!draft) return null;
 
-    if (input.title?.trim()) {
-      draft.title = input.title.trim();
-      draft.metadata.name = input.title.trim();
-    }
-    if (input.description?.trim() !== undefined) {
-      draft.description = input.description.trim();
-      draft.metadata.description = input.description.trim();
-    }
-    if (input.creatorAddress !== undefined) {
-      draft.creatorAddress = input.creatorAddress || null;
-    }
-    if (input.network) {
-      draft.network = input.network;
-    }
-    if (input.metadata) {
-      draft.metadata = { ...draft.metadata, ...input.metadata };
-    }
-    if (input.attributes) {
-      draft.metadata.attributes = input.attributes;
-    }
-    if (input.listingPriceMist !== undefined && draft.listing.status !== "listed") {
-      draft.listing.priceMist = input.listingPriceMist || null;
-    }
+      if (input.title?.trim()) {
+        draft.title = input.title.trim();
+        draft.metadata.name = input.title.trim();
+      }
+      if (input.description?.trim() !== undefined) {
+        draft.description = input.description.trim();
+        draft.metadata.description = input.description.trim();
+      }
+      if (input.creatorAddress !== undefined) {
+        draft.creatorAddress = input.creatorAddress || null;
+      }
+      if (input.network) {
+        draft.network = input.network;
+      }
+      if (input.metadata) {
+        draft.metadata = { ...draft.metadata, ...input.metadata };
+      }
+      if (input.attributes) {
+        draft.metadata.attributes = input.attributes;
+      }
+      if (input.listingPriceMist !== undefined && draft.listing.status !== "listed") {
+        draft.listing.priceMist = input.listingPriceMist || null;
+      }
 
-    draft.updatedAt = nowIso();
-    await this.save(draft);
-    return draft;
+      draft.updatedAt = nowIso();
+      await this.saveUnlocked(draft);
+      return draft;
+    });
   }
 
   async delete(draftId: string): Promise<MatterhornImageNftDraft | null> {
-    const draft = await this.get(draftId);
-    if (!draft) return null;
-    await rm(draftPath(this.workspaceRoot, draftId), { force: true });
-    return draft;
+    const path = draftPath(this.workspaceRoot, draftId);
+    return withDraftMutationLock(path, async () => {
+      const draft = await this.get(draftId);
+      if (!draft) return null;
+      await rm(path, { force: true });
+      return draft;
+    });
   }
 
   async updateStorageStatus(
@@ -178,25 +202,30 @@ export class MatterhornImageNftDraftStore {
       transactionDigest?: string;
       endEpoch?: number;
       url?: string;
+      imageUrl?: string;
       uploadedAt?: string;
       error?: string;
     },
   ): Promise<MatterhornImageNftDraft | null> {
-    const draft = await this.get(draftId);
-    if (!draft) return null;
-    if (updates?.provider !== undefined) draft.storage.provider = updates.provider;
-    draft.storage.status = status;
-    if (updates?.blobId !== undefined) draft.storage.blobId = updates.blobId || null;
-    if (updates?.objectId !== undefined) draft.storage.objectId = updates.objectId || null;
-    if (updates?.transactionDigest !== undefined) draft.storage.transactionDigest = updates.transactionDigest || null;
-    if (updates?.endEpoch !== undefined) draft.storage.endEpoch = Number.isFinite(updates.endEpoch) ? updates.endEpoch : null;
-    if (updates?.url !== undefined) draft.storage.url = updates.url || null;
-    if (updates?.uploadedAt !== undefined) draft.storage.uploadedAt = updates.uploadedAt || null;
-    if (updates?.error !== undefined) draft.storage.error = updates.error || null;
-    draft.updatedAt = nowIso();
-    this.deriveDraftStatus(draft);
-    await this.save(draft);
-    return draft;
+    const path = draftPath(this.workspaceRoot, draftId);
+    return withDraftMutationLock(path, async () => {
+      const draft = await this.get(draftId);
+      if (!draft) return null;
+      if (updates?.provider !== undefined) draft.storage.provider = updates.provider;
+      draft.storage.status = status;
+      if (updates?.blobId !== undefined) draft.storage.blobId = updates.blobId || null;
+      if (updates?.objectId !== undefined) draft.storage.objectId = updates.objectId || null;
+      if (updates?.transactionDigest !== undefined) draft.storage.transactionDigest = updates.transactionDigest || null;
+      if (updates?.endEpoch !== undefined) draft.storage.endEpoch = Number.isFinite(updates.endEpoch) ? updates.endEpoch : null;
+      if (updates?.url !== undefined) draft.storage.url = updates.url || null;
+      if (updates?.imageUrl !== undefined) draft.metadata.imageUrl = updates.imageUrl || null;
+      if (updates?.uploadedAt !== undefined) draft.storage.uploadedAt = updates.uploadedAt || null;
+      if (updates?.error !== undefined) draft.storage.error = updates.error || null;
+      draft.updatedAt = nowIso();
+      this.deriveDraftStatus(draft);
+      await this.saveUnlocked(draft);
+      return draft;
+    });
   }
 
   async updateMintStatus(
@@ -204,17 +233,20 @@ export class MatterhornImageNftDraftStore {
     status: MatterhornNftMintStatus,
     updates?: { transactionDigest?: string; objectId?: string; packageId?: string; error?: string },
   ): Promise<MatterhornImageNftDraft | null> {
-    const draft = await this.get(draftId);
-    if (!draft) return null;
-    draft.mint.status = status;
-    if (updates?.transactionDigest !== undefined) draft.mint.transactionDigest = updates.transactionDigest || null;
-    if (updates?.objectId !== undefined) draft.mint.objectId = updates.objectId || null;
-    if (updates?.packageId !== undefined) draft.mint.packageId = updates.packageId || null;
-    if (updates?.error !== undefined) draft.mint.error = updates.error || null;
-    draft.updatedAt = nowIso();
-    this.deriveDraftStatus(draft);
-    await this.save(draft);
-    return draft;
+    const path = draftPath(this.workspaceRoot, draftId);
+    return withDraftMutationLock(path, async () => {
+      const draft = await this.get(draftId);
+      if (!draft) return null;
+      draft.mint.status = status;
+      if (updates?.transactionDigest !== undefined) draft.mint.transactionDigest = updates.transactionDigest || null;
+      if (updates?.objectId !== undefined) draft.mint.objectId = updates.objectId || null;
+      if (updates?.packageId !== undefined) draft.mint.packageId = updates.packageId || null;
+      if (updates?.error !== undefined) draft.mint.error = updates.error || null;
+      draft.updatedAt = nowIso();
+      this.deriveDraftStatus(draft);
+      await this.saveUnlocked(draft);
+      return draft;
+    });
   }
 
   async updateListingStatus(
@@ -229,19 +261,38 @@ export class MatterhornImageNftDraftStore {
       error?: string;
     },
   ): Promise<MatterhornImageNftDraft | null> {
-    const draft = await this.get(draftId);
-    if (!draft) return null;
-    draft.listing.status = status;
-    if (updates?.kioskId !== undefined) draft.listing.kioskId = updates.kioskId || null;
-    if (updates?.kioskOwnerCapId !== undefined) draft.listing.kioskOwnerCapId = updates.kioskOwnerCapId || null;
-    if (updates?.transferPolicyId !== undefined) draft.listing.transferPolicyId = updates.transferPolicyId || null;
-    if (updates?.itemType !== undefined) draft.listing.itemType = updates.itemType || null;
-    if (updates?.priceMist !== undefined) draft.listing.priceMist = updates.priceMist || null;
-    if (updates?.error !== undefined) draft.listing.error = updates.error || null;
-    draft.updatedAt = nowIso();
-    this.deriveDraftStatus(draft);
-    await this.save(draft);
-    return draft;
+    const path = draftPath(this.workspaceRoot, draftId);
+    return withDraftMutationLock(path, async () => {
+      const draft = await this.get(draftId);
+      if (!draft) return null;
+      draft.listing.status = status;
+      if (updates?.kioskId !== undefined) draft.listing.kioskId = updates.kioskId || null;
+      if (updates?.kioskOwnerCapId !== undefined) draft.listing.kioskOwnerCapId = updates.kioskOwnerCapId || null;
+      if (updates?.transferPolicyId !== undefined) draft.listing.transferPolicyId = updates.transferPolicyId || null;
+      if (updates?.itemType !== undefined) draft.listing.itemType = updates.itemType || null;
+      if (updates?.priceMist !== undefined) draft.listing.priceMist = updates.priceMist || null;
+      if (updates?.error !== undefined) draft.listing.error = updates.error || null;
+      draft.updatedAt = nowIso();
+      this.deriveDraftStatus(draft);
+      await this.saveUnlocked(draft);
+      return draft;
+    });
+  }
+
+  private async saveUnlocked(draft: MatterhornImageNftDraft): Promise<void> {
+    await this.ensureDir();
+    const path = draftPath(this.workspaceRoot, draft.id);
+    const tempPath = join(
+      dirname(path),
+      `.${draft.id}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`,
+    );
+    try {
+      await writeFile(tempPath, JSON.stringify(draft, null, 2), { encoding: "utf8", flag: "wx" });
+      await rename(tempPath, path);
+    } catch (error) {
+      await rm(tempPath, { force: true }).catch(() => {});
+      throw error;
+    }
   }
 
   private deriveDraftStatus(draft: MatterhornImageNftDraft): void {

@@ -34,9 +34,37 @@ test("isWithinWorkspaceRootPath accepts Windows verbatim aliases for workspace r
   );
 });
 
+test("isWithinWorkspaceRootPath accepts children reached through Windows verbatim paths", () => {
+  const workspaceRoot = String.raw`G:\project\openwork_project`;
+  const candidate = String.raw`\\?\G:\project\openwork_project\outputs\receipt.json`;
+
+  assert.equal(
+    isWithinWorkspaceRootPath({
+      workspaceRoot,
+      candidate,
+      platform: "win32",
+    }),
+    true,
+  );
+});
+
 test("isWithinWorkspaceRootPath still rejects directories outside the workspace root", () => {
   const workspaceRoot = String.raw`G:\project\openwork_project`;
   const candidate = String.raw`\\?\G:\project\outside`;
+
+  assert.equal(
+    isWithinWorkspaceRootPath({
+      workspaceRoot,
+      candidate,
+      platform: "win32",
+    }),
+    false,
+  );
+});
+
+test("isWithinWorkspaceRootPath rejects sibling paths that only share the root prefix", () => {
+  const workspaceRoot = String.raw`G:\project\openwork_project`;
+  const candidate = String.raw`\\?\G:\project\openwork_project-copy\receipt.json`;
 
   assert.equal(
     isWithinWorkspaceRootPath({

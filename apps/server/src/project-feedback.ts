@@ -1,8 +1,28 @@
 import { dirname, join } from "node:path";
-import { appendFile, readFile, writeFile } from "node:fs/promises";
+import { appendFile, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import type { MatterhornProjectFeedbackEntry } from "@matterhorn-work/types/project-data-ledger";
+import { atomicWriteTextFile } from "./atomic-file.js";
 import { ensureDir, exists } from "./utils.js";
+
+const feedbackMutationQueues = new Map<string, Promise<void>>();
+
+async function withFeedbackMutationLock<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const previous = feedbackMutationQueues.get(key) ?? Promise.resolve();
+  let release = () => {};
+  const ticket = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.catch(() => undefined).then(() => ticket);
+  feedbackMutationQueues.set(key, queued);
+  await previous.catch(() => undefined);
+  try {
+    return await task();
+  } finally {
+    release();
+    if (feedbackMutationQueues.get(key) === queued) feedbackMutationQueues.delete(key);
+  }
+}
 
 function expandHome(value: string): string {
   if (value.startsWith("~/")) {
@@ -23,8 +43,10 @@ export function projectFeedbackLogPath(workspaceId: string): string {
 
 export async function recordProjectFeedback(entry: MatterhornProjectFeedbackEntry): Promise<void> {
   const path = projectFeedbackLogPath(entry.workspaceId);
-  await ensureDir(dirname(path));
-  await appendFile(path, JSON.stringify(entry) + "\n", "utf8");
+  await withFeedbackMutationLock(path, async () => {
+    await ensureDir(dirname(path));
+    await appendFile(path, JSON.stringify(entry) + "\n", { encoding: "utf8", mode: 0o600 });
+  });
 }
 
 export async function readProjectFeedbackEntries(
@@ -53,49 +75,51 @@ export async function deleteProjectFeedbackEntry(
   feedbackId: string,
 ): Promise<MatterhornProjectFeedbackEntry | null> {
   const path = projectFeedbackLogPath(workspaceId);
-  if (!(await exists(path))) return null;
-  const content = await readFile(path, "utf8");
-  const rawLines = content.trim().split("\n").filter(Boolean);
-  let deleted: MatterhornProjectFeedbackEntry | null = null;
-  const kept: string[] = [];
+  return withFeedbackMutationLock(path, async () => {
+    if (!(await exists(path))) return null;
+    const content = await readFile(path, "utf8");
+    const rawLines = content.trim().split("\n").filter(Boolean);
+    let deleted: MatterhornProjectFeedbackEntry | null = null;
+    const kept: string[] = [];
 
-  for (const line of rawLines) {
-    try {
-      const entry = JSON.parse(line) as MatterhornProjectFeedbackEntry;
-      if (entry.id === feedbackId) {
-        deleted = entry;
-        continue;
+    for (const line of rawLines) {
+      try {
+        const entry = JSON.parse(line) as MatterhornProjectFeedbackEntry;
+        if (entry.id === feedbackId) {
+          deleted = entry;
+          continue;
+        }
+      } catch {
+        // Keep malformed lines so deletion does not silently rewrite unrelated data.
       }
-    } catch {
-      // Keep malformed lines so deletion does not silently rewrite unrelated data.
+      kept.push(line);
     }
-    kept.push(line);
-  }
 
-  if (!deleted) return null;
-  await ensureDir(dirname(path));
-  await writeFile(path, kept.length ? `${kept.join("\n")}\n` : "", "utf8");
-  return deleted;
+    if (!deleted) return null;
+    await atomicWriteTextFile(path, kept.length ? `${kept.join("\n")}\n` : "", { mode: 0o600 });
+    return deleted;
+  });
 }
 
 export async function deleteAllProjectFeedbackEntries(workspaceId: string): Promise<number> {
   const path = projectFeedbackLogPath(workspaceId);
-  if (!(await exists(path))) return 0;
-  const content = await readFile(path, "utf8");
-  const rawLines = content.trim().split("\n").filter(Boolean);
-  let deletedCount = 0;
-  const malformed: string[] = [];
+  return withFeedbackMutationLock(path, async () => {
+    if (!(await exists(path))) return 0;
+    const content = await readFile(path, "utf8");
+    const rawLines = content.trim().split("\n").filter(Boolean);
+    let deletedCount = 0;
+    const malformed: string[] = [];
 
-  for (const line of rawLines) {
-    try {
-      JSON.parse(line);
-      deletedCount += 1;
-    } catch {
-      malformed.push(line);
+    for (const line of rawLines) {
+      try {
+        JSON.parse(line);
+        deletedCount += 1;
+      } catch {
+        malformed.push(line);
+      }
     }
-  }
 
-  await ensureDir(dirname(path));
-  await writeFile(path, malformed.length ? `${malformed.join("\n")}\n` : "", "utf8");
-  return deletedCount;
+    await atomicWriteTextFile(path, malformed.length ? `${malformed.join("\n")}\n` : "", { mode: 0o600 });
+    return deletedCount;
+  });
 }

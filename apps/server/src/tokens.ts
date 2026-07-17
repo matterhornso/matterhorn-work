@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
 
 import type { ServerConfig, TokenScope } from "./types.js";
-import { ensureDir, exists, hashToken, shortId, timingSafeTokenEqual } from "./utils.js";
+import { ensureDir, hashToken, shortId, timingSafeTokenEqual } from "./utils.js";
 
 export type TokenRecord = {
   id: string;
@@ -34,11 +35,21 @@ function resolveTokenStorePath(config: ServerConfig): string {
 }
 
 async function readTokenStore(path: string): Promise<TokenStoreFile> {
-  if (!(await exists(path))) {
-    return { schemaVersion: 1, updatedAt: Date.now(), tokens: [] };
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf8");
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return { schemaVersion: 1, updatedAt: Date.now(), tokens: [] };
+    }
+    throw new Error("Token store is unreadable; refusing to discard durable access state.");
   }
   try {
-    const raw = await readFile(path, "utf8");
     const parsed = JSON.parse(raw) as Partial<TokenStoreFile>;
     const tokens = Array.isArray(parsed.tokens)
       ? parsed.tokens
@@ -67,7 +78,7 @@ async function readTokenStore(path: string): Promise<TokenStoreFile> {
       tokens,
     };
   } catch {
-    return { schemaVersion: 1, updatedAt: Date.now(), tokens: [] };
+    throw new Error("Token store is invalid; refusing to discard durable access state.");
   }
 }
 
@@ -78,13 +89,29 @@ async function writeTokenStore(path: string, tokens: TokenRecord[]): Promise<voi
     updatedAt: Date.now(),
     tokens,
   };
-  await writeFile(path, JSON.stringify(payload, null, 2) + "\n", "utf8");
+  const tempPath = join(
+    dirname(path),
+    `.tokens.${process.pid}.${Date.now()}.${randomUUID()}.tmp`,
+  );
+  try {
+    await writeFile(tempPath, JSON.stringify(payload, null, 2) + "\n", {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600,
+    });
+    await rename(tempPath, path);
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 export class TokenService {
   private config: ServerConfig;
   private path: string;
   private loaded = false;
+  private loadPromise: Promise<void> | null = null;
+  private mutationQueue: Promise<void> = Promise.resolve();
   private tokens: TokenRecord[] = [];
   private byHash = new Map<string, TokenRecord>();
 
@@ -95,53 +122,72 @@ export class TokenService {
 
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return;
-    const store = await readTokenStore(this.path);
-    this.tokens = store.tokens;
-    this.byHash = new Map(store.tokens.map((token) => [token.hash, token]));
-    this.loaded = true;
+    if (!this.loadPromise) {
+      this.loadPromise = readTokenStore(this.path).then((store) => {
+        this.tokens = store.tokens;
+        this.byHash = new Map(store.tokens.map((token) => [token.hash, token]));
+        this.loaded = true;
+      });
+    }
+    await this.loadPromise;
+  }
+
+  private runMutation<T>(task: () => Promise<T>): Promise<T> {
+    const result = this.mutationQueue.then(task, task);
+    this.mutationQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   async list(): Promise<Array<Omit<TokenRecord, "hash">>> {
+    await this.mutationQueue;
     await this.ensureLoaded();
     return this.tokens.map(({ hash: _hash, ...rest }) => rest);
   }
 
   async create(scope: TokenScope, options?: { label?: string }): Promise<{ id: string; token: string; scope: TokenScope; createdAt: number; label?: string }> {
-    await this.ensureLoaded();
+    return this.runMutation(async () => {
+      await this.ensureLoaded();
 
-    const id = shortId();
-    const token = `owt_${shortId().replace(/-/g, "")}`;
-    const createdAt = Date.now();
-    const record: TokenRecord = {
-      id,
-      hash: hashToken(token),
-      scope,
-      createdAt,
-      label: options?.label?.trim() || undefined,
-    };
+      const id = shortId();
+      const token = `owt_${shortId().replace(/-/g, "")}`;
+      const createdAt = Date.now();
+      const record: TokenRecord = {
+        id,
+        hash: hashToken(token),
+        scope,
+        createdAt,
+        label: options?.label?.trim() || undefined,
+      };
 
-    this.tokens = [record, ...this.tokens];
-    this.byHash.set(record.hash, record);
-    await writeTokenStore(this.path, this.tokens);
-    return { id, token, scope, createdAt, label: record.label };
+      const nextTokens = [record, ...this.tokens];
+      await writeTokenStore(this.path, nextTokens);
+      this.tokens = nextTokens;
+      this.byHash = new Map(nextTokens.map((entry) => [entry.hash, entry]));
+      return { id, token, scope, createdAt, label: record.label };
+    });
   }
 
   async revoke(id: string): Promise<boolean> {
-    await this.ensureLoaded();
-    const index = this.tokens.findIndex((token) => token.id === id);
-    if (index === -1) return false;
-    const [removed] = this.tokens.splice(index, 1);
-    if (removed) {
-      this.byHash.delete(removed.hash);
-    }
-    await writeTokenStore(this.path, this.tokens);
-    return true;
+    return this.runMutation(async () => {
+      await this.ensureLoaded();
+      const index = this.tokens.findIndex((token) => token.id === id);
+      if (index === -1) return false;
+      const nextTokens = this.tokens.filter((token) => token.id !== id);
+      await writeTokenStore(this.path, nextTokens);
+      this.tokens = nextTokens;
+      this.byHash = new Map(nextTokens.map((entry) => [entry.hash, entry]));
+      return true;
+    });
   }
 
   async scopeForToken(token: string): Promise<TokenScope | null> {
     const trimmed = token.trim();
     if (!trimmed) return null;
     if (timingSafeTokenEqual(trimmed, this.config.token)) return "collaborator";
+    await this.mutationQueue;
     await this.ensureLoaded();
     const found = this.byHash.get(hashToken(trimmed));
     return found?.scope ?? null;

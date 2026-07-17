@@ -1,8 +1,9 @@
-import { describe, expect, test, beforeEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { TokenService } from "./tokens.js";
 import type { ServerConfig } from "./types.js";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 function createTestConfig(): ServerConfig {
   const tempDir = join(
@@ -30,9 +31,15 @@ function createTestConfig(): ServerConfig {
 
 describe("TokenService", () => {
   let service: TokenService;
+  let config: ServerConfig;
 
   beforeEach(() => {
-    service = new TokenService(createTestConfig());
+    config = createTestConfig();
+    service = new TokenService(config);
+  });
+
+  afterEach(async () => {
+    await rm(dirname(config.configPath ?? ""), { recursive: true, force: true });
   });
 
   test("starts with empty token list", async () => {
@@ -99,5 +106,62 @@ describe("TokenService", () => {
 
     const list = await service.list();
     expect(list.length).toBe(3);
+  });
+
+  test("serializes concurrent token creation and persists every token", async () => {
+    const created = await Promise.all(
+      Array.from({ length: 40 }, (_, index) =>
+        service.create(index % 2 === 0 ? "collaborator" : "viewer", {
+          label: `Concurrent token ${index}`,
+        }),
+      ),
+    );
+
+    expect(await service.list()).toHaveLength(40);
+
+    const reloaded = new TokenService(config);
+    expect(await reloaded.list()).toHaveLength(40);
+    for (const record of created) {
+      expect(await reloaded.scopeForToken(record.token)).toBe(record.scope);
+    }
+  });
+
+  test("stores the durable token file with owner-only permissions", async () => {
+    await service.create("owner");
+    if (process.platform === "win32") return;
+
+    const tokenFile = join(dirname(config.configPath ?? ""), "tokens.json");
+    expect((await stat(tokenFile)).mode & 0o777).toBe(0o600);
+  });
+
+  test("fails closed when the durable token file is corrupt", async () => {
+    const tokenFile = join(dirname(config.configPath ?? ""), "tokens.json");
+    await mkdir(dirname(tokenFile), { recursive: true });
+    await writeFile(tokenFile, "{not-json", "utf8");
+
+    await expect(service.list()).rejects.toThrow("Token store is invalid");
+    await expect(service.create("owner")).rejects.toThrow("Token store is invalid");
+    expect(await readFile(tokenFile, "utf8")).toBe("{not-json");
+  });
+
+  test("does not publish a token in memory when its durable write fails", async () => {
+    await service.list();
+    const storeDir = dirname(config.configPath ?? "");
+    await rm(storeDir, { recursive: true, force: true });
+    await writeFile(storeDir, "not-a-directory", "utf8");
+
+    await expect(service.create("owner")).rejects.toThrow();
+    expect(await service.list()).toEqual([]);
+  });
+
+  test("does not revoke a token in memory when its durable write fails", async () => {
+    const created = await service.create("viewer");
+    const storeDir = dirname(config.configPath ?? "");
+    await rm(storeDir, { recursive: true, force: true });
+    await writeFile(storeDir, "not-a-directory", "utf8");
+
+    await expect(service.revoke(created.id)).rejects.toThrow();
+    expect(await service.scopeForToken(created.token)).toBe("viewer");
+    expect(await service.list()).toHaveLength(1);
   });
 });

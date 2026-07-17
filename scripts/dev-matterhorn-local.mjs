@@ -336,7 +336,8 @@ async function main() {
 
   await waitForJson(`${serverUrl}/health`, { timeoutMs: 45_000 });
   const workspaceList = await waitForJson(`${serverUrl}/workspaces`, {
-    timeoutMs: 15_000,
+    timeoutMs: 45_000,
+    requestTimeoutMs: 20_000,
     headers: { Authorization: `Bearer ${clientToken}` },
   });
   const activeWorkspaceId =

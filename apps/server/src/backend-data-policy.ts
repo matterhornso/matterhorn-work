@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import type {
   MatterhornWorkspaceAppendOnlyRetentionMode,
@@ -10,8 +10,8 @@ import type {
   MatterhornWorkspaceDataPolicyUpdateRequest,
   MatterhornWorkspaceFeedbackUse,
 } from "@matterhorn-work/types/backend-data-policy";
+import { atomicWriteTextFile } from "./atomic-file.js";
 import type { WorkspaceInfo } from "./types.js";
-import { ensureDir } from "./utils.js";
 
 export function workspaceDataPolicyPath(workspace: WorkspaceInfo): string {
   return join(workspace.path, ".matterhorn-work", "privacy", "data-policy.json");
@@ -158,7 +158,6 @@ export async function writeWorkspaceDataPolicy(
     ...(updatedBy ? { updatedBy: updatedBy.slice(0, 80) } : {}),
   };
   const path = workspaceDataPolicyPath(workspace);
-  await ensureDir(dirname(path));
-  await writeFile(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  await atomicWriteTextFile(path, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
   return buildWorkspaceDataPolicyResponse(workspace);
 }

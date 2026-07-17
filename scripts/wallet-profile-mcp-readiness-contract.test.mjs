@@ -37,14 +37,53 @@ for (const token of [
   assert.ok(walletRuntime.includes(token), `wallet-runtime.ts missing ${token}`);
 }
 
-// 3. Hyperliquid and Polymarket remain canSubmit:false and liveSubmissionEnabled:false.
-for (const protocol of ["hyperliquid", "polymarket"]) {
-  const block = extractObjectBlock(walletRuntime, `${protocol}: `);
-  assert.ok(block, `wallet runtime block must exist for ${protocol}`);
-  assert.ok(block.includes("canSubmit: false"), `${protocol} wallet capability must disable canSubmit`);
+// 3. Web Hyperliquid may use the guarded connected-wallet execution flow.
+// Polymarket and every non-web runtime remain non-submitting.
+const webProtocolsBlock = extractObjectBlock(walletRuntime, "WEB_WALLET_RUNTIME_CAPABILITY");
+const webHyperliquidBlock = extractObjectBlock(webProtocolsBlock, "hyperliquid: ");
+assert.ok(webHyperliquidBlock, "web wallet runtime block must exist for hyperliquid");
+assert.ok(
+  webHyperliquidBlock.includes('connectionMode: "injected_evm"'),
+  "web Hyperliquid execution must use an injected wallet",
+);
+assert.ok(webHyperliquidBlock.includes("canSubmit: true"), "web Hyperliquid may submit");
+assert.ok(
+  webHyperliquidBlock.includes("liveSubmissionEnabled: true"),
+  "web Hyperliquid may expose guarded live submission",
+);
+assert.ok(
+  webHyperliquidBlock.includes('signerRequirement: "client_signer"'),
+  "web Hyperliquid submission must require the client wallet",
+);
+assert.ok(webHyperliquidBlock.includes("custody: false"), "web Hyperliquid must remain non-custodial");
+assert.ok(
+  webHyperliquidBlock.includes("secretInputsAllowed: false"),
+  "web Hyperliquid must reject secret inputs",
+);
+
+const webPolymarketBlock = extractObjectBlock(webProtocolsBlock, "polymarket: ");
+assert.ok(webPolymarketBlock, "web wallet runtime block must exist for polymarket");
+assert.ok(webPolymarketBlock.includes("canSubmit: false"), "Polymarket must disable canSubmit");
+assert.ok(
+  webPolymarketBlock.includes("liveSubmissionEnabled: false"),
+  "Polymarket must disable live submission",
+);
+
+for (const capabilityName of [
+  "DESKTOP_WALLET_RUNTIME_CAPABILITY",
+  "ELECTRON_WALLET_RUNTIME_CAPABILITY",
+  "UNKNOWN_WALLET_RUNTIME_CAPABILITY",
+]) {
+  const capabilityBlock = extractObjectBlock(walletRuntime, capabilityName);
+  const hyperliquidBlock = extractObjectBlock(capabilityBlock, "hyperliquid: ");
+  assert.ok(hyperliquidBlock, `${capabilityName} must declare Hyperliquid`);
   assert.ok(
-    block.includes("liveSubmissionEnabled: false"),
-    `${protocol} wallet capability must disable live submission`,
+    hyperliquidBlock.includes("canSubmit: false"),
+    `${capabilityName} must disable Hyperliquid submission`,
+  );
+  assert.ok(
+    hyperliquidBlock.includes("liveSubmissionEnabled: false"),
+    `${capabilityName} must disable Hyperliquid live submission`,
   );
 }
 

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import type {
   MatterhornWalletSafetyPolicy,
@@ -8,8 +8,8 @@ import type {
   MatterhornWalletSafetyPolicyUpdateRequest,
 } from "@matterhorn-work/types/wallet-safety-policy";
 import { MATTERHORN_WALLET_SAFETY_POLICY_VERSION } from "@matterhorn-work/types/wallet-safety-policy";
+import { atomicWriteTextFile } from "./atomic-file.js";
 import type { WorkspaceInfo } from "./types.js";
-import { ensureDir } from "./utils.js";
 
 const DEFAULT_MAX_PER_TX_USD = 50;
 const DEFAULT_MAX_DAILY_USD = 100;
@@ -169,7 +169,6 @@ export async function writeWorkspaceWalletSafetyPolicy(
     ...(updatedBy ? { updatedBy: updatedBy.slice(0, 80) } : {}),
   };
   const path = walletSafetyPolicyPath(workspace);
-  await ensureDir(dirname(path));
-  await writeFile(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  await atomicWriteTextFile(path, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
   return buildWalletSafetyPolicyResponse(workspace, { writable: true });
 }

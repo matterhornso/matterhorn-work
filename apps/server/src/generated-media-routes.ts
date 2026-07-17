@@ -494,13 +494,10 @@ export function addGeneratedMediaRoutes(
         transactionDigest: upload.transactionDigest,
         endEpoch: upload.endEpoch,
         url: upload.url,
+        imageUrl: upload.url ?? `walrus://${upload.blobId}`,
         uploadedAt: upload.uploadedAt,
         error: "",
       });
-      if (updated) {
-        updated.metadata.imageUrl = upload.url ?? `walrus://${upload.blobId}`;
-        await store.save(updated);
-      }
 
       await recordAudit(workspace.path, {
         id: shortId(),

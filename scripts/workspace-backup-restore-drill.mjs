@@ -22,6 +22,7 @@ function parseArgs(argv) {
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg === "--") continue;
     const next = () => {
       const value = argv[index + 1];
       if (!value || value.startsWith("--")) throw new Error(`${arg} requires a value.`);
@@ -187,6 +188,8 @@ async function runDrill(config) {
 
   let approvalCompleted = false;
   let restoredDigest = null;
+  let exactPortableDigestMatch = false;
+  let verificationSummary = null;
   let verified = false;
   if (config.apply) {
     const importState = { done: false };
@@ -211,8 +214,24 @@ async function runDrill(config) {
       "Restored workspace export",
     );
     restoredDigest = portableDigest(restored);
-    verified = restoredDigest === portableDigest(backup);
-    if (!verified) throw new Error("Restored workspace does not match the portable source backup.");
+    exactPortableDigestMatch = restoredDigest === portableDigest(backup);
+    const verificationPreview = await requestJson(`${serverUrl}/workspace/${targetId}/import/preview`, {
+      method: "POST",
+      headers: clientHeaders(config),
+      body: JSON.stringify(backup),
+    }, "Restored workspace verification preview");
+    verificationSummary = verificationPreview.summary;
+    verified = Boolean(
+      verificationSummary
+      && verificationSummary.create === 0
+      && verificationSummary.update === 0
+      && verificationSummary.replace === 0
+      && verificationSummary.delete === 0
+      && verificationSummary.unchanged === verificationSummary.total,
+    );
+    if (!verified) {
+      throw new Error("Restored workspace is not idempotent against the source backup.");
+    }
   }
 
   const report = {
@@ -237,6 +256,8 @@ async function runDrill(config) {
       approvalCompleted,
       verified,
       portableDigest: restoredDigest,
+      exactPortableDigestMatch,
+      verificationSummary,
     },
     durationMs: Date.now() - startedAt,
   };

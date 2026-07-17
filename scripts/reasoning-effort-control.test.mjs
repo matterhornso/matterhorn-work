@@ -37,9 +37,9 @@ assert.ok(control.includes("Math.max(0, levels.length - 1)"), "range max should 
 
 for (const required of [
   "modelBehaviorTitle: summary.title",
-  "modelBehaviorIsProviderDefault: variant == null",
+  "modelBehaviorIsProviderDefault: localVariant == null",
   "modelBehaviorOptions: summary.options",
-  "modelVariantValue: summary.value",
+  "modelVariantValue: variant",
 ]) {
   assert.ok(route.includes(required), `${routePath} should include ${required}`);
 }

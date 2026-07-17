@@ -177,10 +177,7 @@ async function recordBillingAudit(input: {
   });
 }
 
-async function persistStripeWebhookBilling(input: {
-  result: Awaited<ReturnType<BillingProvider["handleStripeWebhook"]>>;
-  ctx: BillingRouteContext;
-}): Promise<{
+type StripeWebhookPersistence = {
   accepted: boolean;
   synced: boolean;
   mutation:
@@ -190,11 +187,17 @@ async function persistStripeWebhookBilling(input: {
     | "checkout_mismatch"
     | "subscription_mismatch"
     | "not_handled";
-}> {
+};
+
+async function persistStripeWebhookBilling(input: {
+  result: Awaited<ReturnType<BillingProvider["handleStripeWebhook"]>>;
+  ctx: BillingRouteContext;
+}): Promise<StripeWebhookPersistence> {
   const { result, ctx } = input;
   if (!result.verified || !result.handled || !result.workspaceId || !result.planId || !ctx.resolveWorkspace) {
     return { accepted: false, synced: false, mutation: "not_handled" };
   }
+  const planId = result.planId;
   let workspace: WorkspaceInfo;
   try {
     workspace = await ctx.resolveWorkspace(ctx.config, result.workspaceId);
@@ -202,95 +205,119 @@ async function persistStripeWebhookBilling(input: {
     return { accepted: false, synced: false, mutation: "not_handled" };
   }
   const accountStore = new MatterhornBillingAccountStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
-  const existingAccount = await accountStore.get();
-  const processedEventIds = existingAccount?.processedProviderEventIds ?? [];
-  if (result.eventId && (existingAccount?.lastProviderEventId === result.eventId || processedEventIds.includes(result.eventId))) {
-    return { accepted: true, synced: false, mutation: "duplicate_event" };
-  }
-  const pendingCheckout = activeMatterhornBillingPendingCheckout(existingAccount?.pendingCheckout);
-  if (result.eventType === "checkout.session.completed") {
-    const checkoutSessionId = result.providerCheckoutSessionId ?? null;
-    const pendingSessionId = pendingCheckout?.providerSessionId ?? null;
+  const persistence = await accountStore.mutate<StripeWebhookPersistence>((existingAccount) => {
+    const processedEventIds = existingAccount?.processedProviderEventIds ?? [];
     if (
-      !pendingCheckout ||
-      pendingCheckout.provider !== "stripe" ||
-      pendingCheckout.mode !== "stripe_test" ||
-      pendingCheckout.planId !== result.planId ||
-      (pendingSessionId ? pendingSessionId !== checkoutSessionId : Boolean(checkoutSessionId))
+      result.eventId &&
+      (existingAccount?.lastProviderEventId === result.eventId ||
+        processedEventIds.includes(result.eventId))
     ) {
-      return { accepted: false, synced: false, mutation: "checkout_mismatch" };
+      return {
+        result: { accepted: true, synced: false, mutation: "duplicate_event" },
+      };
     }
-  }
-  if (
-    result.eventType === "customer.subscription.created" ||
-    result.eventType === "customer.subscription.updated" ||
-    result.eventType === "customer.subscription.deleted"
-  ) {
-    const existingSubscription = existingAccount?.subscription;
-    const existingProviderSubscriptionId = existingSubscription?.providerSubscriptionId ?? null;
-    const existingProviderCustomerId = existingSubscription?.providerCustomerId ?? null;
-    const incomingProviderSubscriptionId = result.providerSubscriptionId ?? null;
-    const incomingProviderCustomerId = result.providerCustomerId ?? null;
-    if (!existingAccount || !existingProviderSubscriptionId || !existingProviderCustomerId) {
-      return { accepted: false, synced: false, mutation: "subscription_mismatch" };
+    const pendingCheckout = activeMatterhornBillingPendingCheckout(existingAccount?.pendingCheckout);
+    if (result.eventType === "checkout.session.completed") {
+      const checkoutSessionId = result.providerCheckoutSessionId ?? null;
+      const pendingSessionId = pendingCheckout?.providerSessionId ?? null;
+      if (
+        !pendingCheckout ||
+        pendingCheckout.provider !== "stripe" ||
+        pendingCheckout.mode !== "stripe_test" ||
+        pendingCheckout.planId !== planId ||
+        (pendingSessionId ? pendingSessionId !== checkoutSessionId : Boolean(checkoutSessionId))
+      ) {
+        return {
+          result: { accepted: false, synced: false, mutation: "checkout_mismatch" },
+        };
+      }
     }
     if (
-      incomingProviderSubscriptionId !== existingProviderSubscriptionId ||
-      incomingProviderCustomerId !== existingProviderCustomerId
+      result.eventType === "customer.subscription.created" ||
+      result.eventType === "customer.subscription.updated" ||
+      result.eventType === "customer.subscription.deleted"
     ) {
-      return { accepted: false, synced: false, mutation: "subscription_mismatch" };
+      const existingSubscription = existingAccount?.subscription;
+      const existingProviderSubscriptionId = existingSubscription?.providerSubscriptionId ?? null;
+      const existingProviderCustomerId = existingSubscription?.providerCustomerId ?? null;
+      const incomingProviderSubscriptionId = result.providerSubscriptionId ?? null;
+      const incomingProviderCustomerId = result.providerCustomerId ?? null;
+      if (!existingAccount || !existingProviderSubscriptionId || !existingProviderCustomerId) {
+        return {
+          result: { accepted: false, synced: false, mutation: "subscription_mismatch" },
+        };
+      }
+      if (
+        incomingProviderSubscriptionId !== existingProviderSubscriptionId ||
+        incomingProviderCustomerId !== existingProviderCustomerId
+      ) {
+        return {
+          result: { accepted: false, synced: false, mutation: "subscription_mismatch" },
+        };
+      }
     }
-  }
-  const incomingCreatedAt = result.eventCreatedAt ? Date.parse(result.eventCreatedAt) : NaN;
-  const previousCreatedAt = existingAccount?.lastProviderEventCreatedAt
-    ? Date.parse(existingAccount.lastProviderEventCreatedAt)
-    : NaN;
-  if (
-    Number.isFinite(incomingCreatedAt) &&
-    Number.isFinite(previousCreatedAt) &&
-    incomingCreatedAt < previousCreatedAt
-  ) {
-    return { accepted: true, synced: false, mutation: "stale_event" };
-  }
+    const incomingCreatedAt = result.eventCreatedAt ? Date.parse(result.eventCreatedAt) : NaN;
+    const previousCreatedAt = existingAccount?.lastProviderEventCreatedAt
+      ? Date.parse(existingAccount.lastProviderEventCreatedAt)
+      : NaN;
+    if (
+      Number.isFinite(incomingCreatedAt) &&
+      Number.isFinite(previousCreatedAt) &&
+      incomingCreatedAt < previousCreatedAt
+    ) {
+      return {
+        result: { accepted: true, synced: false, mutation: "stale_event" },
+      };
+    }
 
-  const now = new Date().toISOString();
-  const status = result.subscriptionStatus ?? (result.planId === "free" ? "none" : "active");
-  const fallbackPeriod = nextBillingPeriod(result.eventCreatedAt ? new Date(result.eventCreatedAt) : new Date());
-  const nextProcessedEventIds = [
-    ...(processedEventIds.filter((id) => id !== result.eventId)),
-    ...(result.eventId ? [result.eventId] : []),
-  ].slice(-50);
-  await accountStore.save({
-    version: "matterhorn.billing.account.v1",
-    workspaceId: workspace.id,
-    subscription: {
-      ...buildMatterhornBillingSubscription(result.planId),
-      status,
-      currentPeriodStart: result.currentPeriodStart ?? fallbackPeriod.currentPeriodStart,
-      currentPeriodEnd: result.currentPeriodEnd ?? (result.planId === "free" ? null : fallbackPeriod.currentPeriodEnd),
-      cancelAtPeriodEnd: result.cancelAtPeriodEnd ?? false,
-      providerCustomerId: result.providerCustomerId ?? null,
-      providerSubscriptionId: result.providerSubscriptionId ?? null,
-    },
-    pendingCheckout: null,
-    updatedAt: now,
-    source: "stripe_test_webhook",
-    lastProviderEventId: result.eventId ?? null,
-    lastProviderEventType: result.eventType ?? null,
-    lastProviderEventCreatedAt: result.eventCreatedAt ?? existingAccount?.lastProviderEventCreatedAt ?? null,
-    lastProviderSyncedAt: now,
-    processedProviderEventIds: nextProcessedEventIds,
+    const now = new Date().toISOString();
+    const status = result.subscriptionStatus ?? (planId === "free" ? "none" : "active");
+    const fallbackPeriod = nextBillingPeriod(
+      result.eventCreatedAt ? new Date(result.eventCreatedAt) : new Date(),
+    );
+    const nextProcessedEventIds = [
+      ...(processedEventIds.filter((id) => id !== result.eventId)),
+      ...(result.eventId ? [result.eventId] : []),
+    ].slice(-50);
+    return {
+      snapshot: {
+        version: "matterhorn.billing.account.v1",
+        workspaceId: workspace.id,
+        subscription: {
+          ...buildMatterhornBillingSubscription(planId),
+          status,
+          currentPeriodStart: result.currentPeriodStart ?? fallbackPeriod.currentPeriodStart,
+          currentPeriodEnd:
+            result.currentPeriodEnd ??
+            (planId === "free" ? null : fallbackPeriod.currentPeriodEnd),
+          cancelAtPeriodEnd: result.cancelAtPeriodEnd ?? false,
+          providerCustomerId: result.providerCustomerId ?? null,
+          providerSubscriptionId: result.providerSubscriptionId ?? null,
+        },
+        pendingCheckout: null,
+        updatedAt: now,
+        source: "stripe_test_webhook",
+        lastProviderEventId: result.eventId ?? null,
+        lastProviderEventType: result.eventType ?? null,
+        lastProviderEventCreatedAt:
+          result.eventCreatedAt ?? existingAccount?.lastProviderEventCreatedAt ?? null,
+        lastProviderSyncedAt: now,
+        processedProviderEventIds: nextProcessedEventIds,
+      },
+      result: { accepted: true, synced: true, mutation: "synced" },
+    };
   });
+  if (!persistence.synced) return persistence;
   await recordBillingAudit({
     workspace,
     action: "workspace.billing.webhook",
-    summary: `Synced Stripe test billing event for ${result.planId}.`,
-    planId: result.planId,
+    summary: `Synced Stripe test billing event for ${planId}.`,
+    planId,
     interval: "month",
     mode: providerModeForAudit(ctx.provider),
     provider: ctx.provider.config.provider,
   });
-  return { accepted: true, synced: true, mutation: "synced" };
+  return persistence;
 }
 
 function providerModeForAudit(provider: BillingProvider): string {

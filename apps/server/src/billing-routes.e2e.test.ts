@@ -1333,27 +1333,25 @@ describe("Billing routes", () => {
       body: rawBody,
       headers: { "stripe-signature": stripeSignatureHeader("whsec_idempotent", rawBody) },
     };
-    const first = await jsonFetch(base, "/api/billing/webhook/stripe", requestInit, undefined);
-    const second = await jsonFetch(base, "/api/billing/webhook/stripe", requestInit, undefined);
+    const [first, second] = await Promise.all([
+      jsonFetch(base, "/api/billing/webhook/stripe", requestInit, undefined),
+      jsonFetch(base, "/api/billing/webhook/stripe", requestInit, undefined),
+    ]);
 
     expect(first.response.status).toBe(200);
     expect(second.response.status).toBe(200);
-    expect(first.payload).toMatchObject({
-      verified: true,
-      handled: true,
-      workspaceSynced: true,
-      webhookMutation: "synced",
-      eventId: "evt_billing_duplicate",
-      planId: "plus",
-    });
-    expect(second.payload).toMatchObject({
-      verified: true,
-      handled: true,
-      workspaceSynced: false,
-      webhookMutation: "duplicate_event",
-      eventId: "evt_billing_duplicate",
-      planId: "plus",
-    });
+    expect([first.payload, second.payload].map((payload) => payload.webhookMutation).sort()).toEqual([
+      "duplicate_event",
+      "synced",
+    ]);
+    for (const payload of [first.payload, second.payload]) {
+      expect(payload).toMatchObject({
+        verified: true,
+        handled: true,
+        eventId: "evt_billing_duplicate",
+        planId: "plus",
+      });
+    }
 
     const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
     expect(status.payload.status.subscription).toMatchObject({

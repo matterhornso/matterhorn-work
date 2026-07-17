@@ -6,10 +6,11 @@ import type {
   MatterhornBackendModelsResponse,
 } from "@matterhorn-work/types/backend-models";
 import type { MatterhornCapability } from "@matterhorn-work/types/backend-capabilities";
-import { dirname, join } from "node:path";
-import { readFile, writeFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { readFile, rm } from "node:fs/promises";
+import { atomicWriteTextFile } from "./atomic-file.js";
 import type { Actor, WorkspaceInfo } from "./types.js";
-import { ensureDir, exists } from "./utils.js";
+import { exists } from "./utils.js";
 
 function capability(status: MatterhornCapability["status"], label: string, description: string): MatterhornCapability {
   return { status, label, description };
@@ -148,8 +149,7 @@ export async function writeWorkspaceModelSelection(
     ...(actor ? { savedBy: actorDescriptor(actor) } : {}),
   };
   const path = workspaceModelSelectionPath(workspace);
-  await ensureDir(dirname(path));
-  await writeFile(path, `${JSON.stringify(selection, null, 2)}\n`, "utf8");
+  await atomicWriteTextFile(path, `${JSON.stringify(selection, null, 2)}\n`, { mode: 0o600 });
   return selection;
 }
 

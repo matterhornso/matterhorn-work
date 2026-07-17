@@ -22,6 +22,7 @@ let targetPayload = { workspaceId: "ws_restore", exportedAt: 456, opencode: {}, 
 let pendingApproval = null;
 let releaseImport = null;
 let decoyApproved = false;
+let restoreApplied = false;
 
 function json(response, status, body) {
   response.writeHead(status, { "content-type": "application/json" });
@@ -35,7 +36,9 @@ const server = createServer(async (request, response) => {
   if (url.pathname === "/workspace/ws_source/export" && isClient) return json(response, 200, sourcePayload);
   if (url.pathname === "/workspace/ws_restore/export" && isClient) return json(response, 200, targetPayload);
   if (url.pathname === "/workspace/ws_restore/import/preview" && request.method === "POST" && isClient) {
-    return json(response, 200, { fingerprint: "preview-123", summary: { total: 2, create: 0, update: 2, replace: 0, delete: 0, unchanged: 0 } });
+    return json(response, 200, restoreApplied
+      ? { fingerprint: "verification-456", summary: { total: 2, create: 0, update: 0, replace: 0, delete: 0, unchanged: 2 } }
+      : { fingerprint: "preview-123", summary: { total: 2, create: 0, update: 2, replace: 0, delete: 0, unchanged: 0 } });
   }
   if (url.pathname === "/workspace/ws_restore/import" && request.method === "POST" && isClient) {
     let body = "";
@@ -52,6 +55,7 @@ const server = createServer(async (request, response) => {
     await new Promise((resolve) => { releaseImport = resolve; });
     targetPayload = { ...parsed, workspaceId: "ws_restore", exportedAt: 999 };
     delete targetPayload.previewFingerprint;
+    restoreApplied = true;
     return json(response, 200, { ok: true });
   }
   if (url.pathname === "/approvals" && isHost) return json(response, 200, {
@@ -98,6 +102,7 @@ try {
 
   const reportPath = join(outputDir, "report.json");
   const result = await run([
+    "--",
     "--server-url", serverUrl, "--token", clientToken, "--host-token", hostToken,
     "--source-workspace", "ws_source", "--target-workspace", "ws_restore", "--apply",
     "--confirm-target", "ws_restore", "--output-dir", outputDir, "--json-output", reportPath, "--json",
@@ -110,6 +115,14 @@ try {
   assert.equal(report.sensitiveMode, "exclude");
   assert.equal(report.restore.approvalCompleted, true);
   assert.equal(report.restore.verified, true);
+  assert.deepEqual(report.restore.verificationSummary, {
+    total: 2,
+    create: 0,
+    update: 0,
+    replace: 0,
+    delete: 0,
+    unchanged: 2,
+  });
   assert.equal(decoyApproved, false);
   assert.match(report.backup.sha256, /^[a-f0-9]{64}$/);
   assert.deepEqual(JSON.parse(readFileSync(reportPath, "utf8")), report);

@@ -56,6 +56,10 @@ assert.ok(
   script.includes("requestTimeoutMs: 20_000"),
   "dev:matterhorn-local should allow the first cold control-plane request to finish",
 );
+assert.ok(
+  script.includes('waitForJson(`${serverUrl}/workspaces`, {\n    timeoutMs: 45_000,\n    requestTimeoutMs: 20_000'),
+  "dev:matterhorn-local should allow the authenticated workspace bootstrap to finish on a cold project",
+);
 
 const help = spawnSync(process.execPath, ["scripts/dev-matterhorn-local.mjs", "--help"], {
   cwd: process.cwd(),

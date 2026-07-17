@@ -758,12 +758,13 @@ function parseWorkspaceMount(pathname: string): { workspaceId: string; restPath:
   if (!remainder) return null;
   const slash = remainder.indexOf("/");
   if (slash === -1) {
-    return { workspaceId: decodeURIComponent(remainder), restPath: "/" };
+    const workspaceId = decodePathSegment(remainder);
+    return workspaceId ? { workspaceId, restPath: "/" } : null;
   }
-  const workspaceId = remainder.slice(0, slash);
+  const workspaceId = decodePathSegment(remainder.slice(0, slash));
   const restPath = remainder.slice(slash) || "/";
-  if (!workspaceId.trim()) return null;
-  return { workspaceId: decodeURIComponent(workspaceId), restPath };
+  if (!workspaceId?.trim()) return null;
+  return { workspaceId, restPath };
 }
 
 function parseWorkspaceOpencodeMount(pathname: string): { workspaceId: string; restPath: string } | null {
@@ -772,11 +773,19 @@ function parseWorkspaceOpencodeMount(pathname: string): { workspaceId: string; r
   if (!remainder) return null;
   const slash = remainder.indexOf("/");
   if (slash === -1) return null;
-  const workspaceId = remainder.slice(0, slash);
+  const workspaceId = decodePathSegment(remainder.slice(0, slash));
   const restPath = remainder.slice(slash) || "/";
-  if (!workspaceId.trim()) return null;
+  if (!workspaceId?.trim()) return null;
   if (restPath !== "/opencode" && !restPath.startsWith("/opencode/")) return null;
-  return { workspaceId: decodeURIComponent(workspaceId), restPath };
+  return { workspaceId, restPath };
+}
+
+function decodePathSegment(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }
 
 function normalizeOpencodeProxyPath(proxyPath: string): string {
@@ -957,7 +966,11 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       // matches the mount workspace id to preserve the "single-workspace" mental model.
       if (mount && mount.restPath.startsWith("/workspace/")) {
         const match = mount.restPath.match(/^\/workspace\/([^/]+)/);
-        const nestedId = match?.[1] ? decodeURIComponent(match[1]) : null;
+        const nestedId = match?.[1] ? decodePathSegment(match[1]) : null;
+        if (match?.[1] && !nestedId) {
+          errorMessage = "not_found";
+          return finalize(jsonResponse({ code: "not_found", message: "Not found" }, 404));
+        }
         if (nestedId && nestedId !== mount.workspaceId) {
           errorMessage = "not_found";
           return finalize(jsonResponse({ code: "not_found", message: "Not found" }, 404));
@@ -1044,9 +1057,16 @@ function matchRoute(routes: Route[], method: string, path: string) {
     const match = path.match(route.regex);
     if (!match) continue;
     const params: Record<string, string> = {};
+    let valid = true;
     route.keys.forEach((key, index) => {
-      params[key] = decodeURIComponent(match[index + 1]);
+      const value = decodePathSegment(match[index + 1]);
+      if (value === null) {
+        valid = false;
+        return;
+      }
+      params[key] = value;
     });
+    if (!valid) return null;
     return { ...route, params };
   }
   return null;
@@ -1059,11 +1079,22 @@ function addRoute(routes: Route[], method: string, path: string, auth: AuthMode,
 }
 
 function pathToRegex(path: string, keys: string[]): RegExp {
-  const pattern = path.replace(/:([A-Za-z0-9_]+)/g, (_, key) => {
-    keys.push(key);
-    return "([^/]+)";
-  });
+  const parameter = /:([A-Za-z0-9_]+)/g;
+  let pattern = "";
+  let cursor = 0;
+  for (const match of path.matchAll(parameter)) {
+    const index = match.index ?? cursor;
+    pattern += escapeRegexLiteral(path.slice(cursor, index));
+    keys.push(match[1]);
+    pattern += "([^/]+)";
+    cursor = index + match[0].length;
+  }
+  pattern += escapeRegexLiteral(path.slice(cursor));
   return new RegExp(`^${pattern}$`);
+}
+
+function escapeRegexLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function buildOpencodeProxyUrl(baseUrl: string, path: string, search: string) {
@@ -5122,15 +5153,18 @@ function buildConfigTrigger(path: string): ReloadTrigger {
 }
 
 function serializeWorkspace(workspace: ServerConfig["workspaces"][number]) {
-  const { opencodeUsername, opencodePassword, ...rest } = workspace;
+  const {
+    openworkToken: _openworkToken,
+    opencodeUsername: _opencodeUsername,
+    opencodePassword: _opencodePassword,
+    ...rest
+  } = workspace;
   const opencodeDirectory = resolveOpencodeDirectory(workspace);
   const opencode =
-    workspace.baseUrl || opencodeDirectory || opencodeUsername || opencodePassword
+    workspace.baseUrl || opencodeDirectory
       ? {
           baseUrl: workspace.baseUrl,
           directory: opencodeDirectory ?? undefined,
-          username: opencodeUsername,
-          password: opencodePassword,
         }
       : undefined;
   return {

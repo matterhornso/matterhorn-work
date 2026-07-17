@@ -28,7 +28,7 @@ async function findFreePort() {
   });
 }
 
-async function waitFor(url, timeoutMs = 10_000, pollMs = 250) {
+async function waitFor(url, timeoutMs = 30_000, pollMs = 250) {
   const start = Date.now();
   let lastError;
   while (Date.now() - start < timeoutMs) {
