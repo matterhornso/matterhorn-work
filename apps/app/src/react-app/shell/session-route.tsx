@@ -33,6 +33,7 @@ import {
   workspaceServerId,
   type ResolvedWorkspaceEndpoint,
 } from "../../app/lib/workspace-endpoint";
+import { isPublicBetaWebDeployment } from "../../app/lib/matterhorn-deployment";
 import { buildMatterhornEnvRuntimeKey } from "../../app/lib/matterhorn-env-runtime";
 import {
   engineInfo,
@@ -579,6 +580,7 @@ async function draftToParts(draft: ComposerDraft, workspaceRoot: string) {
 }
 
 export function SessionRoute() {
+  const publicBetaWeb = isPublicBetaWebDeployment();
   const executionModeFeatureEnabled = executionModesEnabled();
   const navigate = useNavigate();
   const location = useLocation();
@@ -872,7 +874,9 @@ export function SessionRoute() {
         const endpoint = endpointForWorkspace(workspace);
         if (!endpoint) {
           if (workspace.workspaceType === "remote") {
-            const message = "Remote worker URL is missing. Edit connection and add a server URL.";
+            const message = publicBetaWeb
+              ? "This Cloud project is not ready yet. Return to Matterhorn Cloud to finish setup."
+              : "Remote worker URL is missing. Edit connection and add a server URL.";
             setErrorsByWorkspaceId((current) => ({ ...current, [workspace.id]: message }));
             setWorkspaceConnectionOverrides((current) => ({
               ...current,
@@ -965,7 +969,7 @@ export function SessionRoute() {
           }
           // Final failure: keep local workspace startup quiet, but give
           // remote workers a precise endpoint/token/workspace diagnostic.
-          if (workspace.workspaceType === "remote") {
+          if (workspace.workspaceType === "remote" && !publicBetaWeb) {
             const connectionState = await diagnoseRemoteWorkspaceTaskLoadFailure(workspace, message);
             setErrorsByWorkspaceId((current) => ({
               ...current,
@@ -977,6 +981,17 @@ export function SessionRoute() {
                 [workspace.id]: connectionState,
               };
             });
+          } else if (workspace.workspaceType === "remote") {
+            const cloudMessage = "This Cloud project is temporarily unavailable. Reload, or return to Matterhorn Cloud if it persists.";
+            setErrorsByWorkspaceId((current) => ({ ...current, [workspace.id]: cloudMessage }));
+            setWorkspaceConnectionOverrides((current) => ({
+              ...current,
+              [workspace.id]: {
+                status: "error",
+                message: cloudMessage,
+                checkedAt: Date.now(),
+              },
+            }));
           }
           setRetryingWorkspaceIds((current) =>
             current.includes(workspace.id) ? current.filter((id) => id !== workspace.id) : current,
@@ -990,7 +1005,7 @@ export function SessionRoute() {
 
       await Promise.all(workspaces.map((workspace) => fetchOnce(workspace, 0)));
     },
-    [endpointForWorkspace, mergeFetchedSessionsWithPending],
+    [endpointForWorkspace, mergeFetchedSessionsWithPending, publicBetaWeb],
   );
 
   const refreshRouteState = useCallback(async () => {
@@ -1024,7 +1039,7 @@ export function SessionRoute() {
 
       const { normalizedBaseUrl, resolvedToken, resolvedHostToken, hostInfo } = await resolveMatterhornConnection();
       setOpenworkServerHostInfoState(hostInfo);
-      if (!normalizedBaseUrl || !resolvedToken) {
+      if (!normalizedBaseUrl || (!resolvedToken && !publicBetaWeb)) {
         // Keep `localServerRef` in lockstep with the disconnected state.
         // Otherwise a previously-cached baseUrl/token would still resolve a
         // (now invalid) endpoint for any callback that consults the ref.
@@ -1058,7 +1073,7 @@ export function SessionRoute() {
 
       const matterhornClient = createMatterhornServerClient({
         baseUrl: normalizedBaseUrl,
-        token: resolvedToken,
+        token: resolvedToken || undefined,
         hostToken: resolvedHostToken || undefined,
       });
       const list = await matterhornClient.listWorkspaces();
@@ -1715,14 +1730,23 @@ export function SessionRoute() {
 
   const opencodeClient = useMemo(
     () =>
-      opencodeBaseUrl && selectedWorkspaceServerToken && !selectedWorkspaceError
+      opencodeBaseUrl &&
+      (selectedWorkspaceServerToken || publicBetaWeb) &&
+      !selectedWorkspaceError
         ? createClient(opencodeBaseUrl, selectedWorkspaceRoot || undefined, {
-            token: selectedWorkspaceServerToken,
+            token: selectedWorkspaceServerToken || undefined,
             mode: "matterhorn",
             executionMode,
           })
         : null,
-    [executionMode, opencodeBaseUrl, selectedWorkspaceError, selectedWorkspaceRoot, selectedWorkspaceServerToken],
+    [
+      executionMode,
+      opencodeBaseUrl,
+      publicBetaWeb,
+      selectedWorkspaceError,
+      selectedWorkspaceRoot,
+      selectedWorkspaceServerToken,
+    ],
   );
   const providerListQuery = useProviderListQuery({
     client: opencodeClient,
@@ -2045,7 +2069,7 @@ export function SessionRoute() {
       if (cancelled) return;
       // When not signed in, filter out cloud-managed providers (lpr_*)
       // so stale entries from a previous session don't appear.
-      const hasCloudAuth = !!readDenSettings().authToken?.trim();
+      const hasCloudAuth = publicBetaWeb || !!readDenSettings().authToken?.trim();
       const isCloudProvider = (id: string) => /^lpr_/i.test(id);
       const all = hasCloudAuth
         ? ((value.all ?? []) as ProviderListItem[])
@@ -2333,7 +2357,14 @@ export function SessionRoute() {
   }, []);
 
   const surfaceProps = useMemo(() => {
-    if (!client || !selectedWorkspaceId || !selectedSessionId || !opencodeBaseUrl || !token || !opencodeClient) {
+    if (
+      !client ||
+      !selectedWorkspaceId ||
+      !selectedSessionId ||
+      !opencodeBaseUrl ||
+      (!token && !publicBetaWeb) ||
+      !opencodeClient
+    ) {
       return null;
     }
     if (!selectedSessionKnown && !selectedSessionPending) {
@@ -2693,6 +2724,7 @@ export function SessionRoute() {
 
   const runRemoteWorkspaceConnectionCheck = useCallback(
     async (workspaceId: string, mode: "test" | "recover") => {
+      if (publicBetaWeb) return false;
       const workspace = workspacesRef.current.find((item) => item.id === workspaceId);
       if (!workspace || workspace.workspaceType !== "remote") return false;
       const connectionKey = getRemoteWorkspaceConnectionKey(workspace);
@@ -2747,7 +2779,7 @@ export function SessionRoute() {
       }
       return true;
     },
-    [refreshRouteState],
+    [publicBetaWeb, refreshRouteState],
   );
 
   const handleCreateTaskInWorkspace = useCallback(async (workspaceId: string) => {
@@ -2760,13 +2792,13 @@ export function SessionRoute() {
       return;
     }
     const endpoint = resolveWorkspaceEndpoint(workspace, { baseUrl, token, hostToken });
-    if (!endpoint || !endpoint.token) {
+    if (!endpoint || (!endpoint.token && !publicBetaWeb)) {
       return;
     }
     const workspaceClient = createClient(
       endpoint.opencodeBaseUrl,
       workspace.path?.trim() || undefined,
-      { token: endpoint.token, mode: "matterhorn" },
+      { token: endpoint.token || undefined, mode: "matterhorn" },
     );
     try {
       setErrorsByWorkspaceId((current) => ({ ...current, [workspaceId]: null }));
@@ -2812,7 +2844,7 @@ export function SessionRoute() {
         }
       }
     }
-  }, [baseUrl, loading, navigateToWorkspaceSession, refreshRouteState, rememberPendingCreatedSession, retryingWorkspaceIds, showToast, token, workspaces]);
+  }, [baseUrl, loading, navigateToWorkspaceSession, publicBetaWeb, refreshRouteState, rememberPendingCreatedSession, retryingWorkspaceIds, showToast, token, workspaces]);
 
   // Global shortcuts:
   //   Cmd/Ctrl+N  -> new task in selected workspace
@@ -2953,7 +2985,7 @@ export function SessionRoute() {
   }, []);
 
   const handleCreateWorkspace = useCallback(async (preset: WorkspacePreset, folder: string | null) => {
-    if (!folder) return;
+    if (!folder || !isDesktopRuntime()) return;
     setCreateWorkspaceBusy(true);
     setCreateWorkspaceError(null);
     try {
@@ -2990,11 +3022,11 @@ export function SessionRoute() {
       await refreshRouteState();
       if (targetWorkspaceId) {
         const workspacePath = targetWorkspace?.path?.trim() || folder;
-        const session = baseUrl && token
+        const session = baseUrl && (token || publicBetaWeb)
           ? unwrap(await createClient(
               `${(buildMatterhornWorkspaceBaseUrl(baseUrl, targetWorkspaceId) ?? baseUrl).replace(/\/+$/, "")}/opencode`,
               workspacePath || undefined,
-              { token, mode: "matterhorn" },
+              { token: token || undefined, mode: "matterhorn" },
             ).session.create({ directory: workspacePath || undefined }))
           : null;
         setLegacySelectedWorkspaceId(targetWorkspaceId);
@@ -3019,7 +3051,7 @@ export function SessionRoute() {
     } finally {
       setCreateWorkspaceBusy(false);
     }
-  }, [client, local, navigateToWorkspaceSession, refreshRouteState, rememberPendingCreatedSession]);
+  }, [baseUrl, client, local, navigateToWorkspaceSession, publicBetaWeb, refreshRouteState, rememberPendingCreatedSession, token]);
 
   const handleCreateRemoteWorkspace = useCallback(async (input: {
     matterhornHostUrl?: string | null;
@@ -3027,6 +3059,15 @@ export function SessionRoute() {
     directory?: string | null;
     displayName?: string | null;
   }) => {
+    if (publicBetaWeb) {
+      showToast({
+        title: "Use Matterhorn Cloud to access projects",
+        description: "Public web never accepts a worker URL or access token. Open your Cloud project instead.",
+        tone: "warning",
+        durationMs: 4200,
+      });
+      return false;
+    }
     const baseUrlValue = input.matterhornHostUrl?.trim() ?? "";
     if (!baseUrlValue) return false;
     setCreateWorkspaceRemoteBusy(true);
@@ -3056,7 +3097,7 @@ export function SessionRoute() {
     } finally {
       setCreateWorkspaceRemoteBusy(false);
     }
-  }, [local, refreshRouteState]);
+  }, [local, publicBetaWeb, refreshRouteState, showToast]);
 
   const renderEmbeddedSettingsSurface = useCallback((initialPath: "general" | "cloud-account" | "wallet" | "extensions") => (
     <LazyEmbeddedSettingsSurface
@@ -3081,7 +3122,7 @@ export function SessionRoute() {
       opencodeBaseUrl={opencodeBaseUrl}
       selectedWorkspaceRoot={selectedWorkspaceRoot}
     >
-    {opencodeClient && selectedWorkspaceEndpoint && opencodeBaseUrl && selectedWorkspaceServerToken ? (
+    {opencodeClient && selectedWorkspaceEndpoint && opencodeBaseUrl && (selectedWorkspaceServerToken || publicBetaWeb) ? (
       <ReactSessionRuntime
         // Use the server-side workspace id (the one without the `rem_`
         // prefix) so the React Query cache keys session-sync writes match
@@ -3091,7 +3132,7 @@ export function SessionRoute() {
         sessionId={selectedSessionId}
         activeSessionIds={activeSelectedWorkspaceSessionIds}
         opencodeBaseUrl={opencodeBaseUrl}
-        matterhornToken={selectedWorkspaceServerToken}
+        matterhornToken={selectedWorkspaceServerToken || ""}
         onSessionUpdated={handleRuntimeSessionUpdated}
       />
     ) : null}
@@ -3251,7 +3292,7 @@ export function SessionRoute() {
               return false;
             }
             const endpoint = resolveWorkspaceEndpoint(workspace, { baseUrl, token, hostToken });
-            if (!endpoint?.token) {
+            if (!endpoint || (!endpoint.token && !publicBetaWeb)) {
               recordInspectorEvent("desk.task_launch.failed", {
                 ...taskLaunchEvent,
                 reason: "engine_offline",
@@ -3284,7 +3325,7 @@ export function SessionRoute() {
             const workspaceClient = createClient(
               endpoint.opencodeBaseUrl,
               workspacePath,
-              { token: endpoint.token, mode: "matterhorn", executionMode: "work" },
+              { token: endpoint.token || undefined, mode: "matterhorn", executionMode: "work" },
             );
             try {
               const session = unwrap(
@@ -3402,9 +3443,13 @@ export function SessionRoute() {
         onOpenRenameWorkspace: handleOpenRenameWorkspace,
         onShareWorkspace: handleShareWorkspace,
         onRevealWorkspace: (id) => void handleRevealWorkspace(id),
-        onRecoverWorkspace: (workspaceId) => runRemoteWorkspaceConnectionCheck(workspaceId, "recover"),
-        onTestWorkspaceConnection: (workspaceId) => runRemoteWorkspaceConnectionCheck(workspaceId, "test"),
-        onEditWorkspaceConnection: remoteWorkspaceConnectionEditor.open,
+        onRecoverWorkspace: publicBetaWeb
+          ? undefined
+          : (workspaceId) => runRemoteWorkspaceConnectionCheck(workspaceId, "recover"),
+        onTestWorkspaceConnection: publicBetaWeb
+          ? undefined
+          : (workspaceId) => runRemoteWorkspaceConnectionCheck(workspaceId, "test"),
+        onEditWorkspaceConnection: publicBetaWeb ? undefined : remoteWorkspaceConnectionEditor.open,
         onForgetWorkspace: (id) => void handleForgetWorkspace(id),
         onOpenCreateWorkspace: handleOpenCreateWorkspace,
         onReorderWorkspaces: handleReorderWorkspaces,
@@ -3496,14 +3541,21 @@ export function SessionRoute() {
         setCreateWorkspaceError(null);
       }}
       onConfirm={handleCreateWorkspace}
-      onConfirmRemote={handleCreateRemoteWorkspace}
+      onConfirmRemote={publicBetaWeb ? undefined : handleCreateRemoteWorkspace}
+      allowDirectWorkspaceConnections={!publicBetaWeb}
+      localDisabled={!isDesktopRuntime()}
+      localDisabledReason={
+        isDesktopRuntime()
+          ? undefined
+          : "Create local projects in the desktop app. Matterhorn Cloud provides projects for public web."
+      }
       onPickFolder={() => pickDirectory({ title: t("onboarding.authorize_folder") }) as Promise<string | null>}
       submitting={createWorkspaceBusy}
       localError={createWorkspaceError}
       remoteSubmitting={createWorkspaceRemoteBusy}
       remoteError={createWorkspaceRemoteError}
     />
-    <CreateRemoteWorkspaceModal
+    {!publicBetaWeb ? <CreateRemoteWorkspaceModal
       open={remoteWorkspaceConnectionEditor.workspace !== null}
       onClose={remoteWorkspaceConnectionEditor.close}
       onConfirm={(input) => void remoteWorkspaceConnectionEditor.save(input)}
@@ -3513,7 +3565,7 @@ export function SessionRoute() {
       title={t("dashboard.edit_remote_workspace_title")}
       subtitle={t("dashboard.edit_remote_workspace_subtitle")}
       confirmLabel={t("dashboard.edit_remote_workspace_confirm")}
-    />
+    /> : null}
     <RenameWorkspaceModal
       open={renameWorkspaceId !== null}
       title={renameWorkspaceTitle}

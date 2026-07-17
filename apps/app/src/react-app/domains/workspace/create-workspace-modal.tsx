@@ -100,6 +100,8 @@ function workerSecondaryLine(worker: DenWorkerSummary) {
 export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
   const remoteUrlRef = useRef<HTMLInputElement | null>(null);
   const platform = usePlatform();
+  const allowDirectWorkspaceConnections =
+    props.allowDirectWorkspaceConnections !== false;
 
   const [localState, dispatchLocal] = useReducer(
     createWorkspaceLocalReducer,
@@ -237,6 +239,15 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
     if (!props.open) return;
     dispatchLocal({ type: "reset", settings: readDenSettings() });
   }, [props.open]);
+
+  useEffect(() => {
+    if (
+      !allowDirectWorkspaceConnections &&
+      (screen === "remote" || screen === "shared")
+    ) {
+      setScreen("chooser");
+    }
+  }, [allowDirectWorkspaceConnections, screen]);
 
   // React to Den session changes.
   useEffect(() => {
@@ -494,18 +505,46 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
                   ) : undefined
                 }
               />
-              <WorkspaceOptionCard
-                title={t("dashboard.create_remote_custom_title")}
-                description={t("dashboard.chooser_remote_desc")}
-                icon={Globe}
-                onClick={() => setScreen("remote")}
-              />
-              <WorkspaceOptionCard
-                title={t("dashboard.create_shared_title")}
-                description={t("dashboard.chooser_shared_desc")}
-                icon={Cloud}
-                onClick={() => setScreen("shared")}
-              />
+              {allowDirectWorkspaceConnections ? (
+                <>
+                  <WorkspaceOptionCard
+                    title={t("dashboard.create_remote_custom_title")}
+                    description={t("dashboard.chooser_remote_desc")}
+                    icon={Globe}
+                    onClick={() => setScreen("remote")}
+                  />
+                  <WorkspaceOptionCard
+                    title={t("dashboard.create_shared_title")}
+                    description={t("dashboard.chooser_shared_desc")}
+                    icon={Cloud}
+                    onClick={() => setScreen("shared")}
+                  />
+                </>
+              ) : (
+                <div className="flex flex-col gap-3 rounded-xl border border-dls-border bg-dls-hover/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-medium text-foreground">Matterhorn Cloud assigns your project</p>
+                    <p className="text-sm leading-5 text-muted-foreground">
+                      Public web does not accept worker URLs or access tokens. Open Matterhorn Cloud to create or access a project for this account.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => {
+                      const url = resolveDenBaseUrls(cloudSettings.baseUrl).baseUrl;
+                      if (typeof window !== "undefined") {
+                        window.location.assign(url);
+                        return;
+                      }
+                      platform.openLink(url);
+                    }}
+                  >
+                    Open Matterhorn Cloud
+                  </Button>
+                </div>
+              )}
 
               {props.onImportConfig ? (
                 <div className="pt-2">

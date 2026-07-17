@@ -236,29 +236,33 @@ function WorkspaceActionsMenu({ workspace, isConnectionActionBusy, canRecover, c
         ) : null}
         {workspace.workspaceType === "remote" ? (
           <>
-            {canRecover ? (
+            {canRecover && ctx.onRecoverWorkspace ? (
               <DropdownMenuItem
-                onClick={() => void Promise.resolve(ctx.onRecoverWorkspace(workspace.id))}
+                onClick={() => void Promise.resolve(ctx.onRecoverWorkspace?.(workspace.id))}
                 disabled={isConnectionActionBusy}
               >
                 <RefreshCw className="size-4" />
                 {t("workspace_list.recover")}
               </DropdownMenuItem>
             ) : null}
-            <DropdownMenuItem
-              onClick={() => void Promise.resolve(ctx.onTestWorkspaceConnection(workspace.id))}
-              disabled={isConnectionActionBusy}
-            >
-              <RefreshCw className="size-4" />
-              {t("workspace_list.test_connection")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => ctx.onEditWorkspaceConnection(workspace.id)}
-              disabled={isConnectionActionBusy}
-            >
-              <Settings className="size-4" />
-              {t("workspace_list.edit_connection")}
-            </DropdownMenuItem>
+            {ctx.onTestWorkspaceConnection ? (
+              <DropdownMenuItem
+                onClick={() => void Promise.resolve(ctx.onTestWorkspaceConnection?.(workspace.id))}
+                disabled={isConnectionActionBusy}
+              >
+                <RefreshCw className="size-4" />
+                {t("workspace_list.test_connection")}
+              </DropdownMenuItem>
+            ) : null}
+            {ctx.onEditWorkspaceConnection ? (
+              <DropdownMenuItem
+                onClick={() => ctx.onEditWorkspaceConnection?.(workspace.id)}
+                disabled={isConnectionActionBusy}
+              >
+                <Settings className="size-4" />
+                {t("workspace_list.edit_connection")}
+              </DropdownMenuItem>
+            ) : null}
           </>
         ) : null}
         <DropdownMenuSeparator />
@@ -279,9 +283,9 @@ function RemoteConnectionIssueCard(props: {
   tone: "error" | "offline";
   canRecover: boolean;
   busy: boolean;
-  onRecover: () => void;
-  onTest: () => void;
-  onEdit: () => void;
+  onRecover?: () => void;
+  onTest?: () => void;
+  onEdit?: () => void;
 }) {
   const isOffline = props.tone === "offline";
 
@@ -320,7 +324,7 @@ function RemoteConnectionIssueCard(props: {
             </div>
             <MatterhornDenHelpLink />
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {props.canRecover ? (
+              {props.canRecover && props.onRecover ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -333,28 +337,32 @@ function RemoteConnectionIssueCard(props: {
                   {t("workspace_list.recover")}
                 </Button>
               ) : null}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1.5 rounded-lg px-2 text-[11px]"
-                onClick={props.onTest}
-                disabled={props.busy}
-              >
-                <RefreshCw size={12} />
-                {t("workspace_list.test_connection")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1.5 rounded-lg px-2 text-[11px]"
-                onClick={props.onEdit}
-                disabled={props.busy}
-              >
-                <Settings size={12} />
-                {t("common.edit")}
-              </Button>
+              {props.onTest ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 rounded-lg px-2 text-[11px]"
+                  onClick={props.onTest}
+                  disabled={props.busy}
+                >
+                  <RefreshCw size={12} />
+                  {t("workspace_list.test_connection")}
+                </Button>
+              ) : null}
+              {props.onEdit ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 rounded-lg px-2 text-[11px]"
+                  onClick={props.onEdit}
+                  disabled={props.busy}
+                >
+                  <Settings size={12} />
+                  {t("common.edit")}
+                </Button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -383,9 +391,9 @@ export type AppSidebarProps = {
   onOpenRenameWorkspace: (workspaceId: string) => void;
   onShareWorkspace: (workspaceId: string) => void;
   onRevealWorkspace: (workspaceId: string) => void;
-  onRecoverWorkspace: (workspaceId: string) => Promise<boolean> | boolean | void;
-  onTestWorkspaceConnection: (workspaceId: string) => Promise<boolean> | boolean | void;
-  onEditWorkspaceConnection: (workspaceId: string) => void;
+  onRecoverWorkspace?: (workspaceId: string) => Promise<boolean> | boolean | void;
+  onTestWorkspaceConnection?: (workspaceId: string) => Promise<boolean> | boolean | void;
+  onEditWorkspaceConnection?: (workspaceId: string) => void;
   onForgetWorkspace: (workspaceId: string) => void;
   onOpenCreateWorkspace: () => void;
   onReorderWorkspaces?: (workspaceIds: string[]) => void;
@@ -747,7 +755,7 @@ function WorkspaceSidebarGroup({
   };
   const isConnectionActionBusy = isConnecting || connectionState.status === "connecting";
   const isRemoteWorkspace = isRemoteConnectionWorkspace(workspace);
-  const canRecover = isRemoteWorkspace && connectionState.status === "error";
+  const canRecover = Boolean(ctx.onRecoverWorkspace) && isRemoteWorkspace && connectionState.status === "error";
   const taskLoadError = getWorkspaceTaskLoadErrorDisplay(workspace, group.error);
   const connectionIssueMessage = connectionState.status === "error"
     ? connectionState.message?.trim() || taskLoadError.message
@@ -847,15 +855,15 @@ function WorkspaceSidebarGroup({
                     tone={taskLoadError.tone}
                     canRecover={canRecover}
                     busy={isConnectionActionBusy}
-                    onRecover={() => {
-                      void Promise.resolve(ctx.onRecoverWorkspace(workspace.id));
-                    }}
-                    onTest={() => {
-                      void Promise.resolve(ctx.onTestWorkspaceConnection(workspace.id));
-                    }}
-                    onEdit={() => {
-                      ctx.onEditWorkspaceConnection(workspace.id);
-                    }}
+                    onRecover={ctx.onRecoverWorkspace ? () => {
+                      void Promise.resolve(ctx.onRecoverWorkspace?.(workspace.id));
+                    } : undefined}
+                    onTest={ctx.onTestWorkspaceConnection ? () => {
+                      void Promise.resolve(ctx.onTestWorkspaceConnection?.(workspace.id));
+                    } : undefined}
+                    onEdit={ctx.onEditWorkspaceConnection ? () => {
+                      ctx.onEditWorkspaceConnection?.(workspace.id);
+                    } : undefined}
                   />
                 ) : showInitialLoading || (group.status === "loading" && group.sessions.length === 0) ? (
                   <SidebarMenuSubItem>

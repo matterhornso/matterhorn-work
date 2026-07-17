@@ -10,9 +10,12 @@ import {
 import {
   buildDenAuthUrl,
   clearDenSession,
+  createDenClient,
   readDenBootstrapConfig,
+  readDenSettings,
   type DenUser,
 } from "@/app/lib/den";
+import { isPublicBetaWebDeployment } from "@/app/lib/matterhorn-deployment";
 import { usePlatform } from "@/react-app/kernel/platform";
 import { useDenAuth } from "@/react-app/domains/cloud/den-auth-provider";
 import type { BetaAuthStore, BetaClerkStub, BetaUser } from "./beta-auth-types";
@@ -53,17 +56,35 @@ export function BetaAuthProvider({ children }: BetaAuthProviderProps) {
 
   const openSignIn = useCallback(() => {
     const baseUrl = readDenBootstrapConfig().baseUrl;
-    platform.openLink(buildDenAuthUrl(baseUrl, "sign-in"));
+    const url = buildDenAuthUrl(baseUrl, "sign-in");
+    if (isPublicBetaWebDeployment() && typeof window !== "undefined") {
+      window.location.assign(url);
+      return;
+    }
+    platform.openLink(url);
   }, [platform]);
 
   const openSignUp = useCallback(() => {
     const baseUrl = readDenBootstrapConfig().baseUrl;
-    platform.openLink(buildDenAuthUrl(baseUrl, "sign-up"));
+    const url = buildDenAuthUrl(baseUrl, "sign-up");
+    if (isPublicBetaWebDeployment() && typeof window !== "undefined") {
+      window.location.assign(url);
+      return;
+    }
+    platform.openLink(url);
   }, [platform]);
 
   const signOut = useCallback(async () => {
+    if (isPublicBetaWebDeployment()) {
+      const settings = readDenSettings();
+      await createDenClient({
+        baseUrl: settings.baseUrl,
+        apiBaseUrl: settings.apiBaseUrl,
+      }).signOut().catch(() => undefined);
+    }
     clearDenSession();
-  }, []);
+    await denAuth.refresh();
+  }, [denAuth]);
 
   const user = denUserToBetaUser(denAuth.user ?? undefined);
 

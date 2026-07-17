@@ -25,14 +25,19 @@ function listGates(channel) {
 
 function passingEvidence() {
   const common = {};
-  const channels = { beta: {}, "product-hunt": {} };
-  for (const gate of listGates("beta")) {
-    const target = gate.id.startsWith("beta.") ? channels.beta : common;
-    target[gate.id] = { status: "pass", evidence: `qa/${gate.id}.json` };
-  }
-  for (const gate of listGates("product-hunt")) {
-    const target = common[gate.id] ? common : channels["product-hunt"];
-    target[gate.id] ??= { status: "pass", evidence: `qa/${gate.id}.json` };
+  const channels = { beta: {}, "public-beta": {}, "product-hunt": {} };
+  for (const channel of ["beta", "public-beta", "product-hunt"]) {
+    for (const gate of listGates(channel)) {
+      const target =
+        gate.id.startsWith("beta.")
+          ? channels.beta
+          : channel === "public-beta" && !common[gate.id]
+            ? channels["public-beta"]
+            : common[gate.id]
+              ? channels[channel]
+              : common;
+      target[gate.id] ??= { status: "pass", evidence: `qa/${gate.id}.json` };
+    }
   }
   return {
     version: "matterhorn.launch-channel-evidence.v1",
@@ -41,6 +46,7 @@ function passingEvidence() {
     common: { gates: common },
     channels: {
       beta: { gates: channels.beta },
+      "public-beta": { gates: channels["public-beta"] },
       "product-hunt": { gates: channels["product-hunt"] },
     },
   };
@@ -67,6 +73,14 @@ const betaReport = JSON.parse(beta.stdout);
 assert.equal(betaReport.ready, true);
 assert.equal(betaReport.decision, "GO");
 
+const publicBeta = run("public-beta", evidence);
+assert.equal(publicBeta.status, 0, publicBeta.stderr);
+const publicBetaReport = JSON.parse(publicBeta.stdout);
+assert.equal(publicBetaReport.ready, true);
+assert.ok(publicBetaReport.counts.required > betaReport.counts.required);
+assert.ok(publicBetaReport.checks.some((check) => check.id === "web.authenticated_same_origin"));
+assert.ok(publicBetaReport.checks.some((check) => check.id === "distribution.public_download"));
+
 const productHunt = run("product-hunt", evidence);
 assert.equal(productHunt.status, 0, productHunt.stderr);
 const productHuntReport = JSON.parse(productHunt.stdout);
@@ -80,6 +94,12 @@ pending.channels.beta.gates["beta.support_owner"] = { status: "pending", evidenc
 const pendingResult = run("beta", pending);
 assert.notEqual(pendingResult.status, 0);
 assert.ok(JSON.parse(pendingResult.stdout).blockers.some((blocker) => blocker.id === "beta.support_owner"));
+
+const publicPending = structuredClone(evidence);
+publicPending.channels["public-beta"].gates["web.authenticated_same_origin"] = { status: "pending", evidence: "" };
+const publicPendingResult = run("public-beta", publicPending);
+assert.notEqual(publicPendingResult.status, 0);
+assert.ok(JSON.parse(publicPendingResult.stdout).blockers.some((blocker) => blocker.id === "web.authenticated_same_origin"));
 
 const missingEvidence = structuredClone(evidence);
 missingEvidence.common.gates["code.app_suite"] = { status: "pass", evidence: "" };

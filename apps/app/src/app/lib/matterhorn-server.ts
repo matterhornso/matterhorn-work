@@ -88,6 +88,7 @@ import type {
   MatterhornWorkflowRunStageInput,
 } from "@matterhorn-work/types/workflow-runs";
 import { desktopFetch } from "./desktop";
+import { isPublicBetaWebDeployment } from "./matterhorn-deployment";
 import { isDesktopRuntime } from "../utils";
 import type { ExecResult, OpencodeConfigFile, WorkspaceInfo, WorkspaceList } from "./desktop";
 
@@ -1122,6 +1123,17 @@ export function stripMatterhornConnectInviteFromUrl(input: string) {
 
 export function readMatterhornServerSettings(): MatterhornServerSettings {
   if (typeof window === "undefined") return {};
+
+  if (isPublicBetaWebDeployment()) {
+    const publicOrigin = /^https?:$/.test(window.location.protocol)
+      ? normalizeMatterhornServerUrl(window.location.origin) ?? undefined
+      : undefined;
+    return {
+      urlOverride: publicOrigin,
+      remoteAccessEnabled: false,
+    };
+  }
+
   try {
     const urlOverride = normalizeMatterhornServerUrl(
       getMigratingLocalStorageValue(STORAGE_URL_OVERRIDE, LEGACY_STORAGE_URL_OVERRIDE) ?? "",
@@ -1145,6 +1157,27 @@ export function readMatterhornServerSettings(): MatterhornServerSettings {
 
 export function writeMatterhornServerSettings(next: MatterhornServerSettings): MatterhornServerSettings {
   if (typeof window === "undefined") return next;
+
+  if (isPublicBetaWebDeployment()) {
+    const publicOrigin = /^https?:$/.test(window.location.protocol)
+      ? normalizeMatterhornServerUrl(window.location.origin) ?? undefined
+      : undefined;
+
+    // Public web never persists a direct server target or bearer credentials.
+    removeLocalStorageAlias(STORAGE_URL_OVERRIDE, LEGACY_STORAGE_URL_OVERRIDE);
+    removeLocalStorageAlias(STORAGE_PORT_OVERRIDE, LEGACY_STORAGE_PORT_OVERRIDE);
+    removeLocalStorageAlias(STORAGE_TOKEN, LEGACY_STORAGE_TOKEN);
+    removeLocalStorageAlias(STORAGE_HOST_AUTH_KEY, LEGACY_STORAGE_HOST_AUTH_KEY);
+    removeLocalStorageAlias(STORAGE_REMOTE_ACCESS, LEGACY_STORAGE_REMOTE_ACCESS);
+    if (publicOrigin) {
+      window.localStorage.setItem(STORAGE_URL_OVERRIDE, publicOrigin);
+    }
+    return {
+      urlOverride: publicOrigin,
+      remoteAccessEnabled: false,
+    };
+  }
+
   try {
     const urlOverride = normalizeMatterhornServerUrl(next.urlOverride ?? "");
     const portOverride = typeof next.portOverride === "number" ? next.portOverride : undefined;
@@ -1190,6 +1223,19 @@ export function writeMatterhornServerSettings(next: MatterhornServerSettings): M
 
 export function hydrateMatterhornServerSettingsFromEnv() {
   if (typeof window === "undefined") return;
+
+  if (isPublicBetaWebDeployment()) {
+    // Clear an inherited desktop connection before using the same-origin proxy.
+    // Public web authentication belongs to the deployment session, never a
+    // browser-visible client or host token.
+    writeMatterhornServerSettings({
+      urlOverride: /^https?:$/.test(window.location.protocol)
+        ? normalizeMatterhornServerUrl(window.location.origin) ?? undefined
+        : undefined,
+      remoteAccessEnabled: false,
+    });
+    return;
+  }
 
   const envUrl = readViteEnv("VITE_MATTERHORN_WORK_URL", "VITE_OPENWORK_URL");
   const envPort = readViteEnv("VITE_MATTERHORN_WORK_PORT", "VITE_OPENWORK_PORT");

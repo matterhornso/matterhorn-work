@@ -23,8 +23,10 @@ import type { WorkspaceInfo } from "./desktop";
 import {
   buildMatterhornWorkspaceBaseUrl,
   createMatterhornServerClient,
+  normalizeMatterhornServerUrl,
   type MatterhornServerClient,
 } from "./matterhorn-server";
+import { isPublicBetaWebDeployment } from "./matterhorn-deployment";
 
 export type ResolvedWorkspaceEndpoint = {
   /** Host URL of the Matterhorn Work server that owns this workspace (no `/workspace` mount). */
@@ -118,6 +120,34 @@ export function resolveWorkspaceEndpoint(
   localServer: LocalServerHandle,
 ): ResolvedWorkspaceEndpoint | null {
   if (!workspace) return null;
+
+  if (isPublicBetaWebDeployment()) {
+    // Public web ignores any direct worker URL or credential retained in
+    // desktop-era workspace metadata. Requests stay on the authenticated
+    // same-origin proxy, which decides whether this user may access it.
+    const baseUrl =
+      typeof window !== "undefined" && /^https?:$/.test(window.location.protocol)
+        ? normalizeMatterhornServerUrl(window.location.origin) ?? ""
+        : "";
+    const workspaceId = workspaceServerId(workspace);
+    if (!baseUrl || !workspaceId) return null;
+
+    const client = createMatterhornServerClient({ baseUrl });
+    const mountedBaseUrl = (
+      buildMatterhornWorkspaceBaseUrl(baseUrl, workspaceId) ?? baseUrl
+    ).replace(/\/+$/, "");
+
+    return {
+      baseUrl,
+      token: "",
+      hostToken: "",
+      workspaceId,
+      isRemote: isRemoteWorkspace(workspace),
+      client,
+      mountedBaseUrl,
+      opencodeBaseUrl: `${mountedBaseUrl}/opencode`,
+    };
+  }
 
   if (isRemoteWorkspace(workspace)) {
     const baseUrl = pickRemoteBaseUrl(workspace);

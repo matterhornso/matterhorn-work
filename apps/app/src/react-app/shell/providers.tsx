@@ -5,7 +5,10 @@ import { WagmiProvider } from "wagmi";
 
 import { wagmiConfig } from "../infra/wagmi-config";
 import { suiDAppKit } from "../infra/sui-dapp-kit";
-import { isWebDeployment } from "../../app/lib/matterhorn-deployment";
+import {
+  isPublicBetaWebDeployment,
+  isWebDeployment,
+} from "../../app/lib/matterhorn-deployment";
 import { hydrateMatterhornServerSettingsFromEnv } from "../../app/lib/matterhorn-server";
 import { isDesktopRuntime } from "../../app/utils";
 import { DenAuthProvider } from "../domains/cloud/den-auth-provider";
@@ -26,6 +29,12 @@ import { LazyWalletProvider } from "./LazyWalletProvider";
 
 function resolveDefaultServerUrl(): string {
   if (isDesktopRuntime()) return "http://127.0.0.1:4096";
+
+  // A public web build always reaches the authenticated deployment proxy on
+  // its own origin. It must never inherit a local API URL or browser token.
+  if (isPublicBetaWebDeployment() && typeof window !== "undefined") {
+    return `${window.location.origin}/opencode`;
+  }
 
   const matterhornUrl =
     (typeof import.meta.env?.VITE_MATTERHORN_WORK_URL === "string"

@@ -48,7 +48,6 @@ const requiredActiveKeys = [
   "MATTERHORN_SUI_NFT_MODULE_NAME",
   "MATTERHORN_SUI_KIOSK_PACKAGE_ID",
   "MATTERHORN_SUI_TRANSFER_POLICY_PACKAGE_ID",
-  "VITE_MATTERHORN_WORK_URL",
   "VITE_MATTERHORN_CLOUD_ENABLED",
 ];
 
@@ -83,8 +82,17 @@ assert.ok(corsOrigins.startsWith("https://"), "production CORS must name an HTTP
 assert.ok(!corsOrigins.includes("*"), "production CORS must never use a wildcard");
 assert.ok(!/localhost|127\.0\.0\.1/i.test(corsOrigins), "production CORS must not use a loopback app origin");
 
-for (const key of ["MATTERHORN_WORK_SERVER_URL", "MATTERHORN_APP_URL", "VITE_MATTERHORN_WORK_URL", "MATTERHORN_WALRUS_PUBLISHER_URL", "MATTERHORN_WALRUS_RELAY_URL"]) {
+for (const key of ["MATTERHORN_WORK_SERVER_URL", "MATTERHORN_APP_URL", "MATTERHORN_WALRUS_PUBLISHER_URL", "MATTERHORN_WALRUS_RELAY_URL"]) {
   assert.ok(activeEntries.get(key).startsWith("https://"), `${key} must use HTTPS in the launch template`);
+}
+
+for (const key of [
+  "VITE_MATTERHORN_WORK_URL",
+  "VITE_MATTERHORN_WORK_TOKEN",
+  "VITE_MATTERHORN_WORK_HOST_TOKEN",
+  "VITE_OPENCODE_URL",
+]) {
+  assert.ok(!activeEntries.has(key), `${key} must stay out of the generic public browser template`);
 }
 
 assert.ok(!/(?:sk_live_|sk_test_|whsec_)[A-Za-z0-9]/.test(template), "template must not contain Stripe credentials");
@@ -142,6 +150,8 @@ for (const phrase of [
   "node scripts/release/review.mjs --strict --json",
   "pnpm desktop:release-doctor",
   "pnpm smoke:desktop-packaged-clean-profile",
+  "same-origin proxy",
+  "gate:public-beta-web",
 ]) {
   assert.ok(guide.includes(phrase), `production launch guide must explain ${phrase}`);
 }

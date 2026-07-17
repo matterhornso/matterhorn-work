@@ -84,8 +84,8 @@ const subscribeToRequireSignin = (onStoreChange: () => void) => {
  * `/signin` redirects to `/session`; explicit Cloud account CTAs use
  * `/signin?intent=cloud-auth` so first-run users can still sign in.
  *
- * While we're still checking the Den session AND sign-in is required, we
- * render nothing so the transcript/settings never flash behind the gate.
+ * When sign-in is required, a signed-out session remains on the sign-in
+ * surface so the transcript and settings never flash behind the gate.
  */
 function DenSigninGate({ children }: DenSigninGateProps) {
   const denAuth = useDenAuth();
@@ -159,7 +159,7 @@ function DenSigninGate({ children }: DenSigninGateProps) {
     return () => window.removeEventListener(denSessionUpdatedEvent, handler);
   }, [navigate]);
 
-  if (requireSignin && denAuth.status === "checking") {
+  if (requireSignin && (denAuth.status === "checking" || !denAuth.isSignedIn)) {
     return <ForcedSigninPage developerMode={false} />;
   }
 

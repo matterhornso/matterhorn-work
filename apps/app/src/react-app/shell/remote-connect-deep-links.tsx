@@ -14,7 +14,11 @@ import {
   takePendingDeepLinks,
   type DeepLinkBridgeDetail,
 } from "../../app/lib/deep-link-bridge";
-import { parseRemoteConnectDeepLink } from "../../app/lib/matterhorn-links";
+import {
+  parseRemoteConnectDeepLink,
+  stripRemoteConnectQuery,
+} from "../../app/lib/matterhorn-links";
+import { isPublicBetaWebDeployment } from "../../app/lib/matterhorn-deployment";
 import { useStatusToasts } from "../domains/shell-feedback/status-toasts";
 import { useLocal } from "../kernel/local-provider";
 import { writeActiveWorkspaceId } from "./session-memory";
@@ -28,6 +32,17 @@ export function RemoteConnectDeepLinkHandler() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    if (isPublicBetaWebDeployment()) {
+      // A public browser session is authenticated by Matterhorn Cloud. Never
+      // accept a worker URL or bearer token from a link, and remove one from
+      // the address bar before it can be copied or retained in browser history.
+      const sanitized = stripRemoteConnectQuery(window.location.href);
+      if (sanitized) {
+        window.history.replaceState(window.history.state, document.title, sanitized);
+      }
+      return;
+    }
 
     const takeRemoteLinks = () =>
       takePendingDeepLinks(window, (url) => Boolean(parseRemoteConnectDeepLink(url)));

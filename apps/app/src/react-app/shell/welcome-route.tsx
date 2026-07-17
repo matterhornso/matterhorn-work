@@ -15,6 +15,7 @@ import {
   type WorkspaceList,
 } from "../../app/lib/desktop";
 import { isDesktopRuntime } from "../../app/utils";
+import { isPublicBetaWebDeployment } from "../../app/lib/matterhorn-deployment";
 import { createClient, unwrap } from "../../app/lib/opencode";
 import { useLocal } from "../kernel/local-provider";
 import { WelcomePage } from "../domains/onboarding/welcome-page";
@@ -95,6 +96,7 @@ export function WelcomeRoute() {
   const navigate = useNavigate();
   const local = useLocal();
   const [state, dispatch] = useReducer(welcomeReducer, initialWelcomeState);
+  const publicBetaWeb = isPublicBetaWebDeployment();
 
   const redirectToWorkspaceHome = useCallback((workspaceId: string) => {
     const id = workspaceId.trim();
@@ -154,7 +156,7 @@ export function WelcomeRoute() {
 
   const handleCreateWorkspace = useCallback(
     async (_preset: string, folder: string | null) => {
-      if (!folder) return;
+      if (!folder || !isDesktopRuntime()) return;
       dispatch({ type: "create:start" });
       try {
         const workspaceName = folderNameFromPath(folder);
@@ -236,6 +238,7 @@ export function WelcomeRoute() {
       directory?: string | null;
       displayName?: string | null;
     }) => {
+      if (publicBetaWeb) return false;
       const baseUrlValue = input.matterhornHostUrl?.trim() ?? "";
       if (!baseUrlValue) return false;
       dispatch({ type: "remote:start" });
@@ -271,7 +274,7 @@ export function WelcomeRoute() {
         dispatch({ type: "remote:finish" });
       }
     },
-    [markOnboardingComplete, navigate],
+    [markOnboardingComplete, navigate, publicBetaWeb],
   );
 
   return (
@@ -281,7 +284,8 @@ export function WelcomeRoute() {
         open={state.modalOpen}
         onClose={() => dispatch({ type: "close" })}
         onConfirm={handleCreateWorkspace}
-        onConfirmRemote={handleCreateRemote}
+        onConfirmRemote={publicBetaWeb ? undefined : handleCreateRemote}
+        allowDirectWorkspaceConnections={!publicBetaWeb}
         onPickFolder={() =>
           pickDirectory({ title: t("onboarding.authorize_folder") }) as Promise<
             string | null
@@ -295,7 +299,7 @@ export function WelcomeRoute() {
         localDisabledReason={
           isDesktopRuntime()
             ? undefined
-            : t("app.local_disabled_reason")
+            : "Create local projects in the desktop app. Matterhorn Cloud provides projects for public web."
         }
       />
     </>

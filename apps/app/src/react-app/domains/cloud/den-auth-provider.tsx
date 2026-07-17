@@ -29,6 +29,7 @@ import {
   type DeepLinkBridgeDetail,
 } from "../../../app/lib/deep-link-bridge";
 import { parseDenAuthDeepLink } from "../../../app/lib/matterhorn-links";
+import { isPublicBetaWebDeployment } from "../../../app/lib/matterhorn-deployment";
 
 export type DenAuthStatus = "checking" | "signed_in" | "signed_out";
 
@@ -45,6 +46,14 @@ const DenAuthContext = createContext<DenAuthStore | undefined>(undefined);
 type DenAuthProviderProps = {
   children: ReactNode;
 };
+
+function userFacingCloudSessionError(error: unknown): string | null {
+  // An expired or missing browser session is an ordinary signed-out state, not
+  // an error the user needs to diagnose. Other failures stay deliberately
+  // generic so browser/network internals are never surfaced in the product.
+  if (error instanceof DenApiError && error.status === 401) return null;
+  return "Matterhorn Cloud could not be reached. Check your connection and try again.";
+}
 
 /**
  * React port of the Solid `DenAuthProvider` (`apps/app/src/app/cloud/den-auth-provider.tsx`
@@ -64,8 +73,9 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
     const currentRun = ++refreshTokenRef.current;
     const settings = readDenSettings();
     const token = settings.authToken?.trim() ?? "";
+    const publicBetaWeb = isPublicBetaWebDeployment();
 
-    if (!token) {
+    if (!token && !publicBetaWeb) {
       setUser(null);
       setError(null);
       setStatus("signed_out");
@@ -78,7 +88,7 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
       const nextUser = await createDenClient({
         baseUrl: settings.baseUrl,
         apiBaseUrl: settings.apiBaseUrl,
-        token,
+        token: token || undefined,
       }).getSession();
 
       if (currentRun !== refreshTokenRef.current) return;
@@ -101,11 +111,7 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
       }
 
       setUser(null);
-      setError(
-        nextError instanceof Error
-          ? nextError.message
-          : "Failed to restore Matterhorn Cloud session.",
-      );
+      setError(userFacingCloudSessionError(nextError));
       setStatus("signed_out");
     }
   }, []);
@@ -127,6 +133,7 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (isPublicBetaWebDeployment()) return;
 
     const handleUrls = (urls: readonly string[]) => {
       for (const rawUrl of urls) {

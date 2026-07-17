@@ -20,6 +20,7 @@ Dated handoffs describe the tree at a moment in time. They are valuable evidence
 - [Product surfaces](product-surfaces.md) - current customer-facing navigation and behavior.
 - [Platform safety gate](platform-safety-gate.md) - the required 10-stage verification gate.
 - [Production launch configuration](production-launch-configuration.md) - setup ownership, safe environment defaults, and the release verification path.
+- [Public Beta launch](public-beta-launch-2026-07-17.md) - desktop-first scope, authenticated web deployment, required evidence, and stop-ship gates.
 - [Friday production readiness](friday-production-go-live-readiness-2026-07-17.md) - current public-launch decision, evidence, and stop-ship gates.
 - [Friday production execution](friday-production-go-live-execution-2026-07-17.md) - Wednesday-through-Friday freeze, proof, publish, and rollback sequence.
 - [Product Hunt launch kit](product-hunt-launch-kit-2026-07-21.md) - canonical listing copy, capability boundaries, screenshots, demo, and FAQ.

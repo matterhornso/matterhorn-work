@@ -15,6 +15,7 @@ import {
   setDenBootstrapConfig,
   writeDenSettings,
 } from "../../../app/lib/den";
+import { isPublicBetaWebDeployment } from "../../../app/lib/matterhorn-deployment";
 import {
   denSessionUpdatedEvent,
   dispatchDenSessionUpdated,
@@ -127,7 +128,12 @@ export function ForcedSigninPage({ developerMode }: ForcedSigninPageProps) {
         setStatusMessage(null);
         return;
       }
-      platform.openLink(buildDenAuthUrl(baseUrl, mode));
+      const url = buildDenAuthUrl(baseUrl, mode);
+      if (isPublicBetaWebDeployment() && typeof window !== "undefined") {
+        window.location.assign(url);
+        return;
+      }
+      platform.openLink(url);
       setStatusMessage(
         mode === "sign-up"
           ? t("den.status_browser_signup")
@@ -139,6 +145,10 @@ export function ForcedSigninPage({ developerMode }: ForcedSigninPageProps) {
   );
 
   const submitManualAuth = useCallback(async () => {
+    if (isPublicBetaWebDeployment()) {
+      setAuthError("Use Matterhorn Cloud to sign in. Public web does not accept sign-in codes.");
+      return;
+    }
     const parsed = parseManualAuthInput(manualAuthInput);
     if (!parsed || authBusy) {
       if (!parsed) {
@@ -293,6 +303,7 @@ export function ForcedSigninPage({ developerMode }: ForcedSigninPageProps) {
   return (
     <DenSignInSurface
       variant="fullscreen"
+      publicBeta={isPublicBetaWebDeployment()}
       developerMode={developerMode}
       baseUrl={baseUrl}
       baseUrlDraft={baseUrlDraft}

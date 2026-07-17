@@ -10,7 +10,10 @@ import {
 export type { SharedDesktopConfig };
 export { normalizeDesktopConfig };
 
-import { isDesktopDeployment } from "./matterhorn-deployment";
+import {
+  isDesktopDeployment,
+  isPublicBetaWebDeployment,
+} from "./matterhorn-deployment";
 import {
   dispatchDenSettingsChanged,
 } from "./den-session-events";
@@ -559,6 +562,15 @@ export async function setDenBootstrapConfig(
 export function buildDenAuthUrl(baseUrl: string, mode: "sign-in" | "sign-up"): string {
   const target = new URL(resolveDenBaseUrls(baseUrl).baseUrl);
   target.searchParams.set("mode", mode);
+  if (
+    isPublicBetaWebDeployment() &&
+    typeof window !== "undefined" &&
+    /^https?:$/.test(window.location.protocol)
+  ) {
+    // Cloud owns the browser session. The public app only gives it a
+    // same-origin return target; it never receives or stores a bearer token.
+    target.searchParams.set("returnTo", `${window.location.origin}/session`);
+  }
   if (isDesktopDeployment()) {
     target.searchParams.set("desktopAuth", "1");
     target.searchParams.set("desktopScheme", "openwork");
@@ -622,6 +634,23 @@ export function readDenSettings(): DenSettings {
     };
   }
 
+  if (isPublicBetaWebDeployment()) {
+    // Do not migrate a desktop deep-link grant into a browser build. Public
+    // Beta uses the Cloud's HttpOnly browser session for authenticated calls.
+    window.localStorage.removeItem(STORAGE_AUTH_TOKEN);
+    window.localStorage.removeItem("openwork.den.authToken");
+    clearLegacyDenSettings();
+
+    const baseUrls = resolveDenBaseUrls(readDenBootstrapConfig());
+    return {
+      ...baseUrls,
+      authToken: null,
+      activeOrgId: (window.localStorage.getItem(STORAGE_ACTIVE_ORG_ID) ?? "").trim() || null,
+      activeOrgSlug: (window.localStorage.getItem(STORAGE_ACTIVE_ORG_SLUG) ?? "").trim() || null,
+      activeOrgName: (window.localStorage.getItem(STORAGE_ACTIVE_ORG_NAME) ?? "").trim() || null,
+    };
+  }
+
   migrateLegacyDenSettings();
 
   const baseUrls = resolveDenBaseUrls({
@@ -640,6 +669,36 @@ export function readDenSettings(): DenSettings {
 
 export function writeDenSettings(next: DenSettings, options?: { persistBootstrap?: boolean }) {
   if (typeof window === "undefined") {
+    return;
+  }
+
+  if (isPublicBetaWebDeployment()) {
+    // Browser Cloud auth is cookie-backed. Retain only the non-secret active
+    // organization choice and never persist a desktop bearer credential.
+    const activeOrgId = next.activeOrgId?.trim() ?? "";
+    const activeOrgSlug = next.activeOrgSlug?.trim() ?? "";
+    const activeOrgName = next.activeOrgName?.trim() ?? "";
+    window.localStorage.removeItem(STORAGE_AUTH_TOKEN);
+    window.localStorage.removeItem("openwork.den.authToken");
+    clearLegacyDenSettings();
+
+    if (activeOrgId) {
+      window.localStorage.setItem(STORAGE_ACTIVE_ORG_ID, activeOrgId);
+    } else {
+      window.localStorage.removeItem(STORAGE_ACTIVE_ORG_ID);
+    }
+    if (activeOrgSlug) {
+      window.localStorage.setItem(STORAGE_ACTIVE_ORG_SLUG, activeOrgSlug);
+    } else {
+      window.localStorage.removeItem(STORAGE_ACTIVE_ORG_SLUG);
+    }
+    if (activeOrgName) {
+      window.localStorage.setItem(STORAGE_ACTIVE_ORG_NAME, activeOrgName);
+    } else {
+      window.localStorage.removeItem(STORAGE_ACTIVE_ORG_NAME);
+    }
+
+    dispatchDenSettingsChanged({ settings: readDenSettings() });
     return;
   }
 
@@ -740,14 +799,14 @@ export function clearDenSession(options?: { includeBaseUrls?: boolean }) {
 export async function ensureDenActiveOrganization(options?: { forceServerSync?: boolean }) {
   const settings = readDenSettings();
   const token = settings.authToken?.trim() ?? "";
-  if (!token) {
+  if (!token && !isPublicBetaWebDeployment()) {
     return null;
   }
 
   const client = createDenClient({
     baseUrl: settings.baseUrl,
     apiBaseUrl: settings.apiBaseUrl,
-    token,
+    token: token || undefined,
   });
 
   const response = await client.listOrgs();
@@ -1617,7 +1676,10 @@ async function ensureActiveOrganization(
 ) {
   const organizationId = input.organizationId?.trim() ?? "";
   const organizationSlug = input.organizationSlug?.trim() ?? "";
-  if (!token || (!organizationId && !organizationSlug)) {
+  if (
+    (!token && !isPublicBetaWebDeployment()) ||
+    (!organizationId && !organizationSlug)
+  ) {
     return;
   }
 

@@ -25,6 +25,7 @@ import {
   type DenOrgSummary,
   type DenWorkerSummary,
 } from "@/app/lib/den";
+import { isPublicBetaWebDeployment } from "@/app/lib/matterhorn-deployment";
 import { usePlatform } from "../../kernel/platform";
 import { useBootState } from "../../shell/boot-state";
 import { resolveModelDisplayName, resolveProviderDisplayName } from "@/app/utils";
@@ -80,6 +81,7 @@ function useDenClient() {
 
   return {
     authToken,
+    hasCloudSession: Boolean(authToken) || isPublicBetaWebDeployment(),
     denClient,
     orgId: settings.activeOrgId ?? "",
     orgName: settings.activeOrgName ?? "",
@@ -108,7 +110,7 @@ function markProvidersSeen(providers: DenOrgLlmProvider[]) {
  */
 export function OrgOnboardingPage() {
   const navigate = useNavigate();
-  const { authToken, denClient, orgId, settings } = useDenClient();
+  const { denClient, hasCloudSession, orgId, settings } = useDenClient();
   const { markRouteReady } = useBootState();
   const [hasSelectedOrganization, setHasSelectedOrganization] = useState(false);
   
@@ -124,18 +126,18 @@ export function OrgOnboardingPage() {
   }, [markRouteReady]);
 
   useEffect(() => {
-    if (!authToken) {
+    if (!hasCloudSession) {
       navigate("/session", { replace: true });
     }
-  }, [authToken, navigate]);
+  }, [hasCloudSession, navigate]);
 
   const { data, error, isPending } = useQuery({
     queryKey: ["den-org-onboarding", settings.baseUrl, settings.apiBaseUrl, "orgs"],
-    enabled: Boolean(authToken),
+    enabled: hasCloudSession,
     queryFn: () => denClient.listOrgs(),
   });
 
-  if (!authToken) {
+  if (!hasCloudSession) {
     return null;
   }
 
@@ -205,7 +207,7 @@ export function ResourceSelectionPage() {
   const navigate = useNavigate();
   const platform = usePlatform();
   const { markRouteReady } = useBootState();
-  const { authToken, denClient, orgId, orgName, settings } = useDenClient();
+  const { denClient, hasCloudSession, orgId, orgName, settings } = useDenClient();
 
   const [selectedDefault, setSelectedDefault] = useState<{
     providerId: string;
@@ -219,26 +221,26 @@ export function ResourceSelectionPage() {
   }, [markRouteReady]);
 
   useEffect(() => {
-    if (!authToken || !orgId) {
+    if (!hasCloudSession || !orgId) {
       navigate("/session", { replace: true });
     }
-  }, [authToken, navigate, orgId]);
+  }, [hasCloudSession, navigate, orgId]);
 
   const { providers, marketplaces, workers, loading, error } = useQueries({
     queries: [
       {
         queryKey: ["den-org-onboarding", settings.baseUrl, settings.apiBaseUrl, orgId, "providers"],
-        enabled: Boolean(authToken && orgId),
+        enabled: Boolean(hasCloudSession && orgId),
         queryFn: () => denClient.listOrgLlmProviders(orgId),
       },
       {
         queryKey: ["den-org-onboarding", settings.baseUrl, settings.apiBaseUrl, orgId, "marketplaces"],
-        enabled: Boolean(authToken && orgId),
+        enabled: Boolean(hasCloudSession && orgId),
         queryFn: () => denClient.listOrgMarketplaces(orgId),
       },
       {
         queryKey: ["den-org-onboarding", settings.baseUrl, settings.apiBaseUrl, orgId, "workers"],
-        enabled: Boolean(authToken && orgId),
+        enabled: Boolean(hasCloudSession && orgId),
         queryFn: () => denClient.listWorkers(orgId),
       },
     ],

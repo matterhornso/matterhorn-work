@@ -15,6 +15,7 @@ export type DenSignInSurfaceVariant = "panel" | "fullscreen";
 
 export type DenSignInSurfaceProps = {
   variant?: DenSignInSurfaceVariant;
+  publicBeta?: boolean;
   developerMode: boolean;
   baseUrl: string;
   baseUrlDraft: string;
@@ -243,19 +244,21 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
           {t("den.create_account")}
           <ArrowUpRight size={13} />
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={props.onToggleManualAuth}
-          disabled={props.authBusy || props.sessionBusy}
-        >
-          {props.manualAuthOpen
-            ? t("den.hide_signin_code")
-            : t("den.paste_signin_code")}
-        </Button>
+        {!props.publicBeta ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={props.onToggleManualAuth}
+            disabled={props.authBusy || props.sessionBusy}
+          >
+            {props.manualAuthOpen
+              ? t("den.hide_signin_code")
+              : t("den.paste_signin_code")}
+          </Button>
+        ) : null}
       </div>
 
-      {props.manualAuthOpen ? (
+      {!props.publicBeta && props.manualAuthOpen ? (
         <div className={`${settingsPanelSoftClass} space-y-3`}>
           <TextInput
             label={t("den.signin_link_label")}
@@ -305,23 +308,24 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
                   Welcome to Matterhorn Work
                 </h1>
                 <p className="text-sm text-dls-secondary">
-                  Sign in with Matterhorn Cloud, or continue locally for desktop
-                  testing.
+                  {props.publicBeta
+                    ? "Create a Matterhorn account to open your private workspace in the public beta."
+                    : "Sign in with Matterhorn Cloud, or continue locally for desktop testing."}
                 </p>
               </div>
 
               {cloudUrlMayNeedSetup ? (
                 <div className={softNoticeClass}>
-                  Matterhorn Cloud is not live in this local build yet.
-                  Continue locally, or enter a Matterhorn Cloud control-plane URL
-                  if you have one.
+                  {props.publicBeta
+                    ? "The public Beta sign-in service is not ready yet. The release owner must fix the Cloud deployment before public access can open."
+                    : "Matterhorn Cloud is not live in this local build yet. Continue locally, or enter a Matterhorn Cloud control-plane URL if you have one."}
                 </div>
               ) : null}
 
               <div className="grid gap-2">
                 {cloudUrlMayNeedSetup ? (
                   <>
-                    {props.onContinueWithoutCloud ? (
+                    {!props.publicBeta && props.onContinueWithoutCloud ? (
                       <button
                         type="button"
                         className={primaryActionClass}
@@ -351,7 +355,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
                       Create account
                       <ArrowUpRight size={14} />
                     </button>
-                    {props.onContinueWithoutCloud ? (
+                    {!props.publicBeta && props.onContinueWithoutCloud ? (
                       <button
                         type="button"
                         className={tertiaryActionClass}
@@ -372,6 +376,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
                 <div className={errorBannerClass}>{props.authError}</div>
               ) : null}
 
+              {!props.publicBeta ? (
               <div className="space-y-3">
                 <button
                   type="button"
@@ -418,6 +423,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
                   </div>
                 ) : null}
               </div>
+              ) : null}
 
               {props.developerMode ? (
                 <div className="space-y-3 rounded-lg border border-dls-border bg-dls-surface p-4">

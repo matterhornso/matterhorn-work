@@ -12,7 +12,10 @@ import {
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 
 import { desktopFetch } from "../../app/lib/desktop";
-import { isWebDeployment } from "../../app/lib/matterhorn-deployment";
+import {
+  isPublicBetaWebDeployment,
+  isWebDeployment,
+} from "../../app/lib/matterhorn-deployment";
 import { isDesktopRuntime } from "../../app/utils";
 import { initialServerState, serverReducer } from "./server-provider-state";
 
@@ -65,6 +68,7 @@ const MATTERHORN_SERVER_TOKEN_STORAGE_KEY = "matterhorn-work.server.token";
 const LEGACY_OPENWORK_SERVER_TOKEN_STORAGE_KEY = "openwork.server.token";
 
 function readMatterhornServerTokenFromEnv(): string {
+  if (isPublicBetaWebDeployment()) return "";
   return (
     import.meta.env.VITE_MATTERHORN_WORK_TOKEN ??
     import.meta.env.VITE_OPENWORK_TOKEN ??
@@ -73,6 +77,7 @@ function readMatterhornServerTokenFromEnv(): string {
 }
 
 function readMatterhornServerToken(): string {
+  if (isPublicBetaWebDeployment()) return "";
   if (typeof window === "undefined") return readMatterhornServerTokenFromEnv();
   try {
     return (
@@ -122,7 +127,8 @@ export function ServerProvider({ children, defaultUrl }: ServerProviderProps) {
     const forceProxy =
       !isDesktopRuntime() &&
       isWebDeployment() &&
-      (import.meta.env.PROD ||
+      (isPublicBetaWebDeployment() ||
+        import.meta.env.PROD ||
         (typeof import.meta.env?.VITE_MATTERHORN_WORK_URL === "string" &&
           import.meta.env.VITE_MATTERHORN_WORK_URL.trim().length > 0) ||
         (typeof import.meta.env?.VITE_OPENWORK_URL === "string" &&

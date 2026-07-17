@@ -3,6 +3,7 @@ import {
   normalizeMatterhornServerUrl,
   readMatterhornServerSettings,
 } from "../../app/lib/matterhorn-server";
+import { isPublicBetaWebDeployment } from "../../app/lib/matterhorn-deployment";
 import { matterhornServerInfo, type MatterhornServerInfo } from "../../app/lib/desktop";
 import { isDesktopRuntime } from "../../app/utils";
 
@@ -17,7 +18,10 @@ export type ResolvedMatterhornConnection = {
 };
 
 function hasUsableConnection(url: string, token: string) {
-  return url.trim().length > 0 && token.trim().length > 0;
+  return (
+    url.trim().length > 0 &&
+    (token.trim().length > 0 || isPublicBetaWebDeployment())
+  );
 }
 
 /**
@@ -27,6 +31,8 @@ function hasUsableConnection(url: string, token: string) {
  * minted tokens on every boot, so live runtime info is the source of truth
  * there. Stored settings remain the fallback for remote/manual server
  * connections and for desktop cases where the runtime bridge is unavailable.
+ * Public web uses the same-origin authenticated proxy, where the browser
+ * session replaces a client-side bearer token.
  */
 export async function resolveMatterhornConnection(): Promise<ResolvedMatterhornConnection> {
   let staleDesktopRuntimeBaseUrl = "";

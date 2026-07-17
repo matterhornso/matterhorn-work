@@ -15,6 +15,7 @@ import {
 
 import { usePlatform } from "./platform";
 import { useServer } from "./server-provider";
+import { isPublicBetaWebDeployment } from "../../app/lib/matterhorn-deployment";
 
 type OpencodeClient = ReturnType<typeof createOpencodeClient>;
 
@@ -66,6 +67,7 @@ const MATTERHORN_SERVER_TOKEN_STORAGE_KEY = "matterhorn-work.server.token";
 const LEGACY_OPENWORK_SERVER_TOKEN_STORAGE_KEY = "openwork.server.token";
 
 function readMatterhornServerTokenFromEnv(): string {
+  if (isPublicBetaWebDeployment()) return "";
   return (
     import.meta.env.VITE_MATTERHORN_WORK_TOKEN ??
     import.meta.env.VITE_OPENWORK_TOKEN ??
@@ -74,6 +76,7 @@ function readMatterhornServerTokenFromEnv(): string {
 }
 
 function readMatterhornServerToken(): string {
+  if (isPublicBetaWebDeployment()) return "";
   if (typeof window === "undefined") return readMatterhornServerTokenFromEnv();
   try {
     return (

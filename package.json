@@ -73,6 +73,8 @@
     "beta:monday-rc": "node scripts/monday-beta-rc-pack.mjs",
     "launch:readiness": "node scripts/launch-channel-readiness.mjs",
     "test:launch-channel-readiness": "node scripts/launch-channel-readiness.test.mjs",
+    "gate:public-beta-web": "node scripts/public-beta-web-readiness.mjs --strict",
+    "test:public-beta-web-readiness": "node scripts/public-beta-web-readiness.test.mjs",
     "preview": "pnpm --filter @matterhorn-work/app preview",
     "typecheck": "pnpm --filter @matterhorn-work/app typecheck",
     "test:health": "pnpm --filter @matterhorn-work/app test:health",

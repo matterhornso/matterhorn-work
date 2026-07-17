@@ -29,6 +29,7 @@ import {
   denSettingsChangedEvent,
 } from "../../../app/lib/den-session-events";
 import { useDenAuth } from "./den-auth-provider";
+import { isPublicBetaWebDeployment } from "../../../app/lib/matterhorn-deployment";
 
 export type DesktopConfigStore = {
   config: DenDesktopConfig;
@@ -141,6 +142,7 @@ type DesktopConfigState = {
  */
 export function DesktopConfigProvider({ children }: DesktopConfigProviderProps) {
   const denAuth = useDenAuth();
+  const publicBetaWeb = isPublicBetaWebDeployment();
   const [desktopConfigState, setDesktopConfigState] = useState<DesktopConfigState>({
     config: DEFAULT_DESKTOP_CONFIG,
     loading: false,
@@ -178,7 +180,11 @@ export function DesktopConfigProvider({ children }: DesktopConfigProviderProps) 
     const token = settings.authToken?.trim() ?? "";
     const cacheKey = getDesktopConfigCacheKey();
 
-    if (!isSignedIn || !token || !settings.activeOrgId?.trim()) {
+    if (
+      !isSignedIn ||
+      (!token && !publicBetaWeb) ||
+      !settings.activeOrgId?.trim()
+    ) {
       applyDesktopConfigActions(DEFAULT_DESKTOP_CONFIG);
       setDesktopConfigState((current) => ({ ...current, loading: false }));
       return;
@@ -197,7 +203,7 @@ export function DesktopConfigProvider({ children }: DesktopConfigProviderProps) 
       const nextConfig = await createDenClient({
         baseUrl: settings.baseUrl,
         apiBaseUrl: settings.apiBaseUrl,
-        token,
+        token: token || undefined,
       }).getDesktopConfig();
 
       if (currentRun !== refreshRunRef.current) return;
@@ -225,7 +231,7 @@ export function DesktopConfigProvider({ children }: DesktopConfigProviderProps) 
         setDesktopConfigState((current) => ({ ...current, loading: false }));
       }
     }
-  }, [applyDesktopConfigActions, isSignedIn]);
+  }, [applyDesktopConfigActions, isSignedIn, publicBetaWeb]);
 
   const refresh = desktopConfigHandler;
 

@@ -15,6 +15,7 @@ import {
   type MatterhornWorkspaceInfo,
 } from "../../app/lib/matterhorn-server";
 import { resolveWorkspaceEndpoint } from "../../app/lib/workspace-endpoint";
+import { isPublicBetaWebDeployment } from "../../app/lib/matterhorn-deployment";
 import { buildMatterhornEnvRuntimeKey } from "../../app/lib/matterhorn-env-runtime";
 import {
   getInitialThemeMode,
@@ -481,6 +482,7 @@ export type SettingsSurfaceProps = {
 };
 
 function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
+  const publicBetaWeb = isPublicBetaWebDeployment();
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ workspaceId?: string }>();
@@ -967,16 +969,21 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   });
 
   const opencodeClient = useMemo(() => {
-    if (!selectedWorkspaceEndpoint || !selectedWorkspaceEndpoint.token) return null;
+    if (
+      !selectedWorkspaceEndpoint ||
+      (!selectedWorkspaceEndpoint.token && !publicBetaWeb)
+    ) {
+      return null;
+    }
     return createClient(
       selectedWorkspaceEndpoint.opencodeBaseUrl,
       selectedWorkspaceRoot || undefined,
       {
-        token: selectedWorkspaceEndpoint.token,
+        token: selectedWorkspaceEndpoint.token || undefined,
         mode: "matterhorn",
       },
     );
-  }, [selectedWorkspaceEndpoint, selectedWorkspaceRoot]);
+  }, [publicBetaWeb, selectedWorkspaceEndpoint, selectedWorkspaceRoot]);
 
   useEffect(() => {
     setActiveClient(opencodeClient);
@@ -1366,7 +1373,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       }
       const { normalizedBaseUrl, resolvedToken, resolvedHostToken } = await resolveMatterhornConnection();
 
-      if (!normalizedBaseUrl || !resolvedToken) {
+      if (!normalizedBaseUrl || (!resolvedToken && !publicBetaWeb)) {
         const nextSelectedWorkspaceId =
           legacySelectedWorkspaceIdRef.current ||
           readActiveWorkspaceId() ||
@@ -1387,7 +1394,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
 
       const client = createMatterhornServerClient({
         baseUrl: normalizedBaseUrl,
-        token: resolvedToken,
+        token: resolvedToken || undefined,
         hostToken: resolvedHostToken || undefined,
       });
       const list = await client.listWorkspaces();
@@ -1412,13 +1419,25 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             };
           } catch (error) {
             const fallback = error instanceof Error ? error.message : t("app.unknown_error");
-            if (workspace.workspaceType === "remote") {
+            if (workspace.workspaceType === "remote" && !publicBetaWeb) {
               const connectionState = await diagnoseRemoteWorkspaceTaskLoadFailure(workspace, fallback);
               return {
                 workspaceId: workspace.id,
                 sessions: [],
                 error: connectionState.message ?? "Remote worker connection failed.",
                 connectionState,
+              };
+            }
+            if (workspace.workspaceType === "remote") {
+              return {
+                workspaceId: workspace.id,
+                sessions: [],
+                error: "This Cloud project is temporarily unavailable. Reload, or return to Matterhorn Cloud if it persists.",
+                connectionState: {
+                  status: "error" as const,
+                  message: "This Cloud project is temporarily unavailable. Reload, or return to Matterhorn Cloud if it persists.",
+                  checkedAt: Date.now(),
+                },
               };
             }
             return {
@@ -1489,7 +1508,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       // completed our first data load.
       markBootRouteReady();
     }
-  }, [markBootRouteReady, navigationSessionId, navigationWorkspaceId, routeWorkspaceId]);
+  }, [markBootRouteReady, navigationSessionId, navigationWorkspaceId, publicBetaWeb, routeWorkspaceId]);
 
   useEffect(() => {
     workspacesRef.current = workspaces;
@@ -1536,6 +1555,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
 
   const runRemoteWorkspaceConnectionCheck = useCallback(
     async (workspaceId: string, mode: "test" | "recover") => {
+      if (publicBetaWeb) return false;
       const workspace = workspacesRef.current.find((item) => item.id === workspaceId);
       if (!workspace || workspace.workspaceType !== "remote") return false;
       const connectionKey = getRemoteWorkspaceConnectionKey(workspace);
@@ -1589,7 +1609,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       }
       return true;
     },
-    [refreshRouteState],
+    [publicBetaWeb, refreshRouteState],
   );
 
   useEffect(() => {
@@ -1974,7 +1994,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   }, [matterhornClient, refreshRouteState, selectedWorkspaceId, workspaces]);
 
   const handleCreateWorkspace = async (preset: WorkspacePreset, folder: string | null) => {
-    if (!folder) return;
+    if (!folder || !isDesktopRuntime()) return;
     setCreateWorkspaceBusy(true);
     setCreateWorkspaceError(null);
     try {
@@ -2014,6 +2034,15 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     directory?: string | null;
     displayName?: string | null;
   }) => {
+    if (publicBetaWeb) {
+      showToast({
+        title: "Use Matterhorn Cloud to access projects",
+        description: "Public web never accepts a worker URL or access token. Open your Cloud project instead.",
+        tone: "warning",
+        durationMs: 4200,
+      });
+      return false;
+    }
     const baseUrlValue = input.matterhornHostUrl?.trim() ?? "";
     if (!baseUrlValue) return false;
     setCreateWorkspaceRemoteBusy(true);
@@ -2676,7 +2705,14 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           setCreateWorkspaceError(null);
         }}
         onConfirm={handleCreateWorkspace}
-        onConfirmRemote={handleCreateRemoteWorkspace}
+        onConfirmRemote={publicBetaWeb ? undefined : handleCreateRemoteWorkspace}
+        allowDirectWorkspaceConnections={!publicBetaWeb}
+        localDisabled={!isDesktopRuntime()}
+        localDisabledReason={
+          isDesktopRuntime()
+            ? undefined
+            : "Create local projects in the desktop app. Matterhorn Cloud provides projects for public web."
+        }
         onPickFolder={() => pickDirectory({ title: t("onboarding.authorize_folder") }) as Promise<string | null>}
         submitting={createWorkspaceBusy}
         localError={createWorkspaceError}
@@ -2716,7 +2752,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           exportDisabledReason={shareWorkspaceState.exportDisabledReason}
         />
       ) : null}
-      <CreateRemoteWorkspaceModal
+      {!publicBetaWeb ? <CreateRemoteWorkspaceModal
         open={remoteWorkspaceConnectionEditor.workspace !== null}
         onClose={remoteWorkspaceConnectionEditor.close}
         onConfirm={(input) => void remoteWorkspaceConnectionEditor.save(input)}
@@ -2726,7 +2762,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         title={t("dashboard.edit_remote_workspace_title")}
         subtitle={t("dashboard.edit_remote_workspace_subtitle")}
         confirmLabel={t("dashboard.edit_remote_workspace_confirm")}
-      />
+      /> : null}
       <ConnectionsModals
         client={activeClient}
         projectDir={selectedWorkspaceRoot}

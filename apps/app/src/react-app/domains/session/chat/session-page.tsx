@@ -1061,9 +1061,9 @@ export type SessionPageSidebarProps = {
   onOpenRenameWorkspace: (workspaceId: string) => void;
   onShareWorkspace: (workspaceId: string) => void;
   onRevealWorkspace: (workspaceId: string) => void;
-  onRecoverWorkspace: (workspaceId: string) => Promise<boolean> | boolean | void;
-  onTestWorkspaceConnection: (workspaceId: string) => Promise<boolean> | boolean | void;
-  onEditWorkspaceConnection: (workspaceId: string) => void;
+  onRecoverWorkspace?: (workspaceId: string) => Promise<boolean> | boolean | void;
+  onTestWorkspaceConnection?: (workspaceId: string) => Promise<boolean> | boolean | void;
+  onEditWorkspaceConnection?: (workspaceId: string) => void;
   onForgetWorkspace: (workspaceId: string) => void;
   onOpenCreateWorkspace: () => void;
   onReorderWorkspaces?: (workspaceIds: string[]) => void;
@@ -2500,25 +2500,29 @@ export function SessionPage(props: SessionPageProps) {
                           >
                             Retry
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => void Promise.resolve(props.sidebar.onTestWorkspaceConnection(props.selectedWorkspaceId))}
-                          >
-                            {t("workspace_list.test_connection")}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => props.sidebar.onEditWorkspaceConnection(props.selectedWorkspaceId)}
-                          >
-                            {t("workspace_list.edit_connection")}
-                          </Button>
-                          {props.sidebar.workspaceConnectionStateById[props.selectedWorkspaceId]?.status === "error" ? (
+                          {props.sidebar.onTestWorkspaceConnection ? (
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => void Promise.resolve(props.sidebar.onRecoverWorkspace(props.selectedWorkspaceId))}
+                              onClick={() => void Promise.resolve(props.sidebar.onTestWorkspaceConnection?.(props.selectedWorkspaceId))}
+                            >
+                              {t("workspace_list.test_connection")}
+                            </Button>
+                          ) : null}
+                          {props.sidebar.onEditWorkspaceConnection ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => props.sidebar.onEditWorkspaceConnection?.(props.selectedWorkspaceId)}
+                            >
+                              {t("workspace_list.edit_connection")}
+                            </Button>
+                          ) : null}
+                          {props.sidebar.onRecoverWorkspace && props.sidebar.workspaceConnectionStateById[props.selectedWorkspaceId]?.status === "error" ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void Promise.resolve(props.sidebar.onRecoverWorkspace?.(props.selectedWorkspaceId))}
                             >
                               {t("workspace_list.recover")}
                             </Button>

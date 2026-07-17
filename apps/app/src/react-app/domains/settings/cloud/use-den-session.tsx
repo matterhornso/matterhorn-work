@@ -14,6 +14,7 @@ import {
   writeDenSettings,
   type DenOrgSummary,
 } from "../../../../app/lib/den";
+import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import {
   denSessionUpdatedEvent,
   dispatchDenSessionUpdated,
@@ -70,6 +71,7 @@ export function useDenSession({
   developerMode,
   openLink,
 }: UseDenSessionProps) {
+  const publicBetaWeb = isPublicBetaWebDeployment();
   const { showToast } = useStatusToasts();
   const {
     authToken,
@@ -101,7 +103,8 @@ export function useDenSession({
     [activeOrgId, orgs],
   );
 
-  const isSignedIn = Boolean(user && authToken.trim());
+  const hasSessionCredential = Boolean(authToken.trim()) || publicBetaWeb;
+  const isSignedIn = Boolean(user && hasSessionCredential);
 
   const summaryTone = React.useMemo<SettingsTone>(() => {
     if (authError || orgsError) {
@@ -202,7 +205,12 @@ export function useDenSession({
 
   const openBrowserAuth = React.useCallback(
     (mode: "sign-in" | "sign-up") => {
-      openLink(buildDenAuthUrl(baseUrl, mode));
+      const url = buildDenAuthUrl(baseUrl, mode);
+      if (publicBetaWeb && typeof window !== "undefined") {
+        window.location.assign(url);
+        return;
+      }
+      openLink(url);
       setStatusMessage(
         mode === "sign-up"
           ? t("den.status_browser_signup")
@@ -210,10 +218,14 @@ export function useDenSession({
       );
       setAuthError(null);
     },
-    [baseUrl, openLink],
+    [baseUrl, openLink, publicBetaWeb],
   );
 
   const applyBaseUrl = React.useCallback(() => {
+    if (publicBetaWeb) {
+      setBaseUrlError("Matterhorn Cloud is managed by this public app.");
+      return;
+    }
     const normalized = normalizeDenBaseUrl(baseUrlDraft);
     if (!normalized) {
       setBaseUrlError(t("den.error_base_url"));
@@ -240,11 +252,11 @@ export function useDenSession({
     clearSignedInState(t("den.status_base_url_updated"), {
       baseUrl: resolved.baseUrl,
     });
-  }, [baseUrl, baseUrlDraft, clearSignedInState]);
+  }, [baseUrl, baseUrlDraft, clearSignedInState, publicBetaWeb]);
 
   React.useEffect(() => {
     const token = authToken.trim();
-    if (!token) {
+    if (!token && !publicBetaWeb) {
       setSessionBusy(false);
       clearSessionState();
       setAuthError(null);
@@ -278,11 +290,11 @@ export function useDenSession({
     return () => {
       cancelled = true;
     };
-  }, [authToken, clearSessionState, clearSignedInState, client]);
+  }, [authToken, clearSessionState, clearSignedInState, client, publicBetaWeb]);
 
   const refreshOrgs = React.useCallback(
     async (quiet = false) => {
-      if (!authToken.trim()) {
+      if (!hasSessionCredential) {
         setOrgs([]);
         setActiveOrgId("");
         return;
@@ -338,7 +350,7 @@ export function useDenSession({
         setOrgsBusy(false);
       }
     },
-    [activeOrgId, authToken, baseUrl, client, setActiveOrganization, showToast],
+    [activeOrgId, authToken, baseUrl, client, hasSessionCredential, setActiveOrganization, showToast],
   );
 
   React.useEffect(() => {
@@ -379,6 +391,10 @@ export function useDenSession({
   }, [clearSessionState, setAuthToken, setBaseUrl]);
 
   const submitManualAuth = React.useCallback(async (input: string) => {
+    if (publicBetaWeb) {
+      setAuthError("Use Matterhorn Cloud to sign in. Public web does not accept sign-in codes.");
+      return false;
+    }
     const parsed = parseManualAuthInput(input);
     if (!parsed || authBusy) {
       if (!parsed) setAuthError(t("den.error_paste_valid_code"));
@@ -426,14 +442,14 @@ export function useDenSession({
     } finally {
       setAuthBusy(false);
     }
-  }, [authBusy, baseUrl, developerMode]);
+  }, [authBusy, baseUrl, developerMode, publicBetaWeb]);
 
   const signOut = React.useCallback(async () => {
     if (authBusy) return;
 
     setAuthBusy(true);
     try {
-      if (authToken.trim()) {
+      if (hasSessionCredential) {
         await client.signOut();
       }
     } catch {
@@ -443,7 +459,7 @@ export function useDenSession({
     }
 
     clearSignedInState(t("den.status_signed_out"));
-  }, [authBusy, authToken, clearSignedInState, client]);
+  }, [authBusy, clearSignedInState, client, hasSessionCredential]);
 
   const handleActiveOrgChange = React.useCallback(
     async (nextId: string) => {
@@ -504,7 +520,7 @@ export function useDenSession({
   // User is signed in, orgs loaded, multiple orgs available, but none selected yet.
   // The UI should prompt the user to pick an org before cloud features activate.
   const needsOrgSelection =
-    !!authToken.trim() && !!user && !orgsBusy && orgs.length > 1 && !activeOrgId;
+    hasSessionCredential && !!user && !orgsBusy && orgs.length > 1 && !activeOrgId;
 
   return {
     authBusy,

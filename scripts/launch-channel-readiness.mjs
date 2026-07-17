@@ -3,8 +3,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import process from "node:process";
 
 const EVIDENCE_VERSION = "matterhorn.launch-channel-evidence.v1";
-const CHANNELS = new Set(["beta", "product-hunt"]);
-const MAX_EVIDENCE_AGE_HOURS = Object.freeze({ beta: 24, "product-hunt": 12 });
+const CHANNELS = new Set(["beta", "public-beta", "product-hunt"]);
+const MAX_EVIDENCE_AGE_HOURS = Object.freeze({ beta: 24, "public-beta": 12, "product-hunt": 12 });
 
 const COMMON_GATES = Object.freeze([
   ["scope.freeze", "Launch scope and deferred features are frozen", "Release owner"],
@@ -24,6 +24,28 @@ const BETA_GATES = Object.freeze([
   ["beta.named_tester_access", "Access is limited to the named Beta cohort", "Release owner"],
   ["beta.support_owner", "A support owner and response channel are staffed", "Operations"],
   ["beta.rollback", "The Beta rollback and kill-switch procedure is verified", "Operations"],
+]);
+
+const PUBLIC_BETA_GATES = Object.freeze([
+  ["release.stable_tag", "The public candidate is built from one immutable stable tag", "Release owner"],
+  ["deployment.https", "The public web build is deployed behind production HTTPS", "Engineering"],
+  ["deployment.exact_origin_cors", "Production CORS allows only intended origins", "Security"],
+  ["deployment.security_headers", "CSP and production security headers pass", "Security"],
+  ["deployment.monitoring", "Health, errors, latency, and provider failures are monitored", "Operations"],
+  ["operations.backup_restore", "Backup and restore are proven on production-shaped data", "Operations"],
+  ["operations.rollback_drill", "A production rollback drill succeeds", "Operations"],
+  ["web.authenticated_same_origin", "Public web uses the authenticated same-origin proxy with no browser bearer credentials", "Security"],
+  ["web.deployed_two_user_acceptance", "New-user and returning-user deployed web journeys pass", "Product and QA"],
+  ["wallet.metamask_coinbase", "MetaMask and Coinbase Wallet acceptance passes", "Wallet QA"],
+  ["wallet.phantom_sui", "Phantom Sui connect and reject/approve handoff acceptance passes", "Wallet QA"],
+  ["wallet.hyperliquid_testnet", "Hyperliquid testnet reject, approve, receipt, replay, expiry, limit, and kill-switch acceptance passes", "Wallet QA"],
+  ["connectors.visible_oauth", "Every visible OAuth connector passes connect, reload, tools, and disconnect", "Integration QA"],
+  ["desktop.signed_notarized", "Public macOS assets are signed, notarized, stapled, and checksum-verified", "Release engineering"],
+  ["desktop.clean_install", "The signed desktop app passes clean-install, update, and reinstall acceptance", "Release QA"],
+  ["distribution.public_download", "The public desktop download resolves to the exact signed candidate", "Release engineering"],
+  ["product.public_copy_and_legal", "Public copy, privacy policy, terms, and support links are approved", "Product and legal"],
+  ["support.public_beta_channel", "A public support channel and response owner are staffed", "Operations"],
+  ["support.launch_room", "Launch-room owners and incident escalation are staffed", "Operations"],
 ]);
 
 const PRODUCT_HUNT_GATES = Object.freeze([
@@ -79,7 +101,7 @@ function parseArgs(argv) {
     else throw new Error(`Unknown argument: ${arg}`);
   }
   if (!CHANNELS.has(config.channel)) {
-    throw new Error("--channel must be beta or product-hunt.");
+    throw new Error("--channel must be beta, public-beta, or product-hunt.");
   }
   if (Number.isNaN(config.now.getTime())) throw new Error("--now must be an ISO date-time.");
   if (!config.help && !config.listGates && !config.evidencePath) {
@@ -94,6 +116,7 @@ function help() {
     "",
     "Usage:",
     "  node scripts/launch-channel-readiness.mjs --channel beta --evidence <json> --strict --json",
+    "  node scripts/launch-channel-readiness.mjs --channel public-beta --evidence <json> --strict --json",
     "  node scripts/launch-channel-readiness.mjs --channel product-hunt --evidence <json> --strict --json",
     "  node scripts/launch-channel-readiness.mjs --channel product-hunt --list-gates --json",
     "",
@@ -105,7 +128,9 @@ function help() {
 function requiredGates(channel) {
   const rows = channel === "beta"
     ? [...COMMON_GATES, ...BETA_GATES]
-    : [...COMMON_GATES, ...PRODUCT_HUNT_GATES];
+    : channel === "public-beta"
+      ? [...COMMON_GATES, ...PUBLIC_BETA_GATES]
+      : [...COMMON_GATES, ...PRODUCT_HUNT_GATES];
   return rows.map(([id, label, owner]) => ({ id, label, owner }));
 }
 
@@ -206,7 +231,7 @@ function markdown(report) {
     `| ${check.id} | ${check.passed ? "PASS" : "BLOCKED"} | ${check.owner} | ${check.evidence ?? check.note ?? "Missing"} |`
   ));
   return [
-    `# Matterhorn ${report.channel === "beta" ? "Friday Beta" : "Product Hunt"} Readiness`,
+    `# Matterhorn ${report.channel === "beta" ? "Friday Beta" : report.channel === "public-beta" ? "Public Beta" : "Product Hunt"} Readiness`,
     "",
     `**Decision:** ${report.decision}`,
     `**Candidate:** ${report.commit ?? "Missing"}`,

@@ -57,6 +57,8 @@ export type CreateWorkspaceModalProps = {
   submittingProgress?: CreateWorkspaceProgress | null;
   localDisabled?: boolean;
   localDisabledReason?: string | null;
+  /** Public web never accepts direct worker URLs or access tokens. */
+  allowDirectWorkspaceConnections?: boolean;
 };
 
 export type CreateRemoteWorkspaceModalProps = {

@@ -30,6 +30,9 @@ user failure.
 - Keep Stripe in `phase1_stripe_test`. Live charging remains disabled.
 - Keep Sui publishing on `sui-testnet` until reviewed mainnet packages and a separate money-path review exist.
 - Keep Matterhorn Cloud disabled unless its full acceptance flow has passed.
+- Public Beta web traffic must use the authenticated same-origin deployment
+  proxy. Never put a Matterhorn Work URL, client bearer token, host token, or
+  raw engine URL in a public `VITE_` variable.
 - Keep public OAuth connectors in `Coming soon` state unless every visible
   connector has passed connect, reload, tool-call, disconnect, and revoked
   account acceptance. Allowlist accepted connector server names with
@@ -40,11 +43,12 @@ user failure.
 
 1. Copy the root `.env.example` into the deployment secret/config system. Replace placeholders there, not in the repository.
 2. Configure the backend workspace, client token, host token, exact CORS origin, request limits, and attached Matterhorn Work engine. Set `MATTERHORN_BUILD_COMMIT` to the exact 40-character release SHA.
-3. Build the web app with `VITE_MATTERHORN_WORK_URL` pointing to the deployed HTTPS backend.
-4. Configure Stripe test credentials, webhook secret, Plus/Max test prices, and a test customer.
-5. Configure OpenAI image generation, public HTTPS Walrus endpoints, and reviewed Sui testnet package IDs.
-6. Leave Cloud disabled or complete the separate Cloud acceptance flow before setting `VITE_MATTERHORN_CLOUD_ENABLED=1`.
-7. Restart the backend and rebuild the web app after changing server or `VITE_` values.
+3. For a private or local web bridge, configure `VITE_MATTERHORN_WORK_URL` only in its protected deployment configuration. It is never a public browser credential path.
+4. For Public Beta web, set `VITE_MATTERHORN_DEPLOYMENT=web`, `VITE_MATTERHORN_PUBLIC_BETA=1`, `VITE_MATTERHORN_REQUIRE_SIGNIN=1`, and the reviewed Matterhorn Cloud URLs. Leave every browser-side Matterhorn Work URL and token variable unset so requests use the same-origin proxy.
+5. Configure Stripe test credentials, webhook secret, Plus/Max test prices, and a test customer.
+6. Configure OpenAI image generation, public HTTPS Walrus endpoints, and reviewed Sui testnet package IDs.
+7. Leave Cloud disabled for desktop/local builds, or complete the separate Cloud acceptance flow before setting `VITE_MATTERHORN_CLOUD_ENABLED=1` for public web.
+8. Restart the backend and rebuild the web app after changing server or `VITE_` values.
 
 ## Verification
 
@@ -54,6 +58,21 @@ or printing deployment secrets:
 ```bash
 pnpm test:production-launch-environment
 ```
+
+For a public web candidate, verify the build configuration before deploying it.
+This check intentionally fails if a Vite variable would expose a direct
+backend, raw engine URL, client token, or host token to browser users:
+
+```bash
+pnpm test:public-beta-web-readiness
+pnpm gate:public-beta-web -- --strict --json \
+  --json-output qa-reports/public-beta/public-web-config.json
+```
+
+The gate proves configuration only. The reverse proxy must still authenticate
+the deployed Cloud session, bind that session to the correct workspace, proxy
+both the root Matterhorn API and `/opencode`, and keep its upstream credentials
+server-side. Prove that behavior with the deployed two-user acceptance gate.
 
 Against the running release stack, use environment variables from the secret
 manager and run the production-required probe:

@@ -43,6 +43,7 @@ import {
   normalizeMatterhornServerUrl,
   readMatterhornServerSettings,
 } from "../../../../app/lib/matterhorn-server";
+import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 
 const WATCH_ADDRESS_KEY = "matterhorn:bittensor:watchAddress";
 const FAVORITES_KEY = "matterhorn:bittensor:favorites";
@@ -539,6 +540,14 @@ function readViteEnvValue(primary: string, legacy?: string) {
 }
 
 function resolveMatterhornApiConnection() {
+  if (isPublicBetaWebDeployment()) {
+    const baseUrl =
+      typeof window !== "undefined" && /^https?:$/.test(window.location.protocol)
+        ? normalizeMatterhornServerUrl(window.location.origin) ?? ""
+        : "";
+    return { baseUrl, token: undefined, hostToken: undefined };
+  }
+
   const settings = readMatterhornServerSettings();
   const envUrl = readViteEnvValue("VITE_MATTERHORN_WORK_URL", "VITE_OPENWORK_URL");
   const envPort = readViteEnvValue("VITE_MATTERHORN_WORK_PORT", "VITE_OPENWORK_PORT");
@@ -563,7 +572,11 @@ async function fetchMatterhornApiJson<T>(path: string, init?: RequestInit): Prom
     headers.set("X-Matterhorn-Host-Token", api.hostToken);
   }
 
-  const response = await fetch(`${api.baseUrl}${path}`, { ...init, headers });
+  const response = await fetch(`${api.baseUrl}${path}`, {
+    ...init,
+    headers,
+    ...(isPublicBetaWebDeployment() ? { credentials: "same-origin" } : {}),
+  });
   const body = await response.text();
   try {
     return { response, json: JSON.parse(body) as T };
