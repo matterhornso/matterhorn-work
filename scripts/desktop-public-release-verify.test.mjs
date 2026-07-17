@@ -35,7 +35,7 @@ function run(args) {
 }
 
 try {
-  const pass = await run(["--dist-dir", dir, "--expected-version", "0.13.13", "--source-commit", sourceCommit, "--command-fixture", fixturePath, "--json"]);
+  const pass = await run(["--", "--dist-dir", dir, "--expected-version", "0.13.13", "--source-commit", sourceCommit, "--command-fixture", fixturePath, "--json"]);
   assert.equal(pass.code, 0, pass.stderr || pass.stdout);
   const report = JSON.parse(pass.stdout);
   assert.equal(report.version, "matterhorn.desktop-public-release-verification.v1");

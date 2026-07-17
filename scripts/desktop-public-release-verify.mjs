@@ -17,6 +17,7 @@ function parseArgs(argv) {
       index += 1;
       return value;
     };
+    if (arg === "--") continue;
     if (arg === "--dist-dir") config.distDir = next();
     else if (arg === "--expected-version") config.expectedVersion = next().replace(/^v/, "");
     else if (arg === "--source-commit") config.sourceCommit = next().toLowerCase();
