@@ -634,7 +634,7 @@ export function createServerLogger(config: ServerConfig): ServerLogger {
   const runId = process.env.OPENWORK_RUN_ID ?? shortId();
   const host = hostname().trim();
   const resource: Record<string, string> = {
-    "service.name": "openwork-server",
+    "service.name": "matterhorn-work-server",
     "service.version": SERVER_VERSION,
     "service.instance.id": runId,
   };
@@ -1012,7 +1012,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
         return finalize(response);
       } catch (error) {
         if (!(error instanceof ApiError)) {
-          console.error("[openwork-server] Unhandled error:", error);
+          console.error("[matterhorn-work-server] Unhandled error:", error);
         }
         const apiError = error instanceof ApiError
           ? error
@@ -5734,6 +5734,14 @@ function createRoutes(
     return jsResponse(TOY_UI_JS);
   });
 
+  addRoute(routes, "GET", "/ui/assets/matterhorn-mark.svg", "none", async () => {
+    if (!resolveToyUiEnabled()) {
+      throw new ApiError(404, "ui_disabled", "Toy UI is disabled");
+    }
+    return svgResponse(TOY_UI_FAVICON_SVG);
+  });
+
+  // Preserve the legacy asset route for older local harness bookmarks.
   addRoute(routes, "GET", "/ui/assets/openwork-mark.svg", "none", async () => {
     if (!resolveToyUiEnabled()) {
       throw new ApiError(404, "ui_disabled", "Toy UI is disabled");

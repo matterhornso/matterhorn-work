@@ -21,6 +21,7 @@ const statusBar = read("apps/app/src/react-app/domains/session/chat/status-bar.t
 const modelSelect = read("apps/app/src/components/model-select.tsx");
 const remoteWorkspaceFields = read("apps/app/src/react-app/domains/workspace/remote-workspace-fields.tsx");
 const workflowTemplates = read("apps/app/src/react-app/domains/session/workflows/customer-workflow-templates.ts");
+const deskTaskStarters = read("apps/app/src/react-app/domains/session/workflows/desk-task-starters.ts");
 const protocolDeskUi = read("apps/app/src/react-app/domains/session/workflows/protocol-desk-ui.ts");
 const appSidebar = read("apps/app/src/react-app/domains/session/sidebar/app-sidebar.tsx");
 const sidebarUtils = read("apps/app/src/react-app/domains/session/sidebar/utils.ts");
@@ -234,7 +235,7 @@ for (const phrase of [
   "CUSTOMER_VISIBLE_DEMO_TEMPLATE_IDS",
 ]) {
   assert.ok(
-    `${sessionPage}\n${sessionSurface}\n${workflowTemplates}\n${protocolDeskUi}`.includes(phrase),
+    `${sessionPage}\n${sessionSurface}\n${workflowTemplates}\n${deskTaskStarters}\n${protocolDeskUi}`.includes(phrase),
     `starter UI should expose Matterhorn task: ${phrase}`,
   );
 }
@@ -438,7 +439,7 @@ assert.ok(walletPanel.includes("<BittensorPanel initialVenue={initialVenue} />")
 assert.equal(walletPanel.includes("EVM wallet not connected"), false, "no-wallet protocol panel should not block content with a bottom overlay");
 assert.ok(sessionPage.includes("GLOBAL_HOME_SIDE_PANEL_KEY"), "home should keep right-rail panels usable before a session exists");
 assert.ok(sessionPage.includes("ProtocolDeskEmptyState"), "protocol launchers should open a focused desk start state before staging an agent task");
-assert.ok(sessionPage.includes("PROTOCOL_DESK_SUGGESTED_PROMPTS"), "focused desk start states should offer protocol-specific suggested prompts");
+assert.ok(sessionPage.includes("MATTERHORN_DESK_TASK_STARTERS"), "focused desk start states should offer the expanded protocol-specific task starters");
 assert.ok(sessionPage.includes("openVenueRailPane(id);"), "protocol launchers should open a dedicated desk without auto-priming a mixed generic task");
 assert.equal(sessionPage.includes("bittensorLauncher"), false, "home hero should not keep a duplicate Bittensor-only shortcut above the desk launcher");
 assert.ok(sessionPage.includes("{item.statusLabel}"), "protocol launchers should show manifest-backed status labels");
@@ -498,8 +499,8 @@ assert.ok(sessionSurface.includes("overflow-y-auto px-4 py-5"), "empty session l
 assert.ok(sessionPage.includes("absolute inset-0 flex items-start justify-center overflow-y-auto"), "home starter launcher should be viewport-constrained and scroll inside the main pane");
 assert.equal(sessionPage.includes("relative flex min-h-0 flex-1 items-start justify-center overflow-y-auto"), false, "home starter launcher must not size to full content height inside an overflow-hidden parent");
 assert.ok(sessionSurface.includes("MatterhornDeskFocusedEmptyState"), "empty desk sessions should render a focused desk prompt state");
-assert.ok(sessionSurface.includes("MATTERHORN_DESK_EMPTY_PROMPTS"), "focused desk prompt state should use desk-specific suggestions");
-assert.ok(sessionSurface.includes("Show TAO balance"), "Bittensor focused empty state should suggest TAO balance reads");
+assert.ok(sessionSurface.includes("MATTERHORN_DESK_TASK_STARTERS"), "focused desk prompt state should use the shared expanded task starters");
+assert.ok(deskTaskStarters.includes("Show TAO balance"), "Bittensor focused empty state should suggest TAO balance reads");
 assert.ok(
   sessionPage.includes("matterhorn-focused-desk-hero px-1 py-2") &&
     sessionPage.includes("<ProtocolLogo venue={panel} size={52} />"),
@@ -507,9 +508,9 @@ assert.ok(
 );
 assert.equal(sessionPage.includes("matterhorn-focused-desk-boundary"), false, "focused desk header should not render decorative metadata labels");
 assert.ok(
-  sessionPage.includes("matterhorn-focused-desk-prompt-list space-y-2") &&
+  sessionPage.includes("matterhorn-focused-desk-prompt-list grid grid-cols-1 gap-2 lg:grid-cols-2") &&
     sessionPage.includes("<WorkflowStageCard"),
-  "focused desk prompts should render as compact workflow cards",
+  "focused desk prompts should render as compact responsive workflow cards",
 );
 assert.ok(
   sessionSurface.includes("Start task") && sessionSurface.includes("Choose a starter below to run"),

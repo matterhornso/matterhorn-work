@@ -114,7 +114,7 @@ async function requestWorkspaceImportWithPreview(
 async function silenceExpectedServerError<T>(run: () => Promise<T>): Promise<T> {
   const originalError = console.error;
   console.error = (...args: unknown[]) => {
-    if (args[0] === "[openwork-server] Unhandled error:") return;
+    if (args[0] === "[matterhorn-work-server] Unhandled error:") return;
     originalError(...args);
   };
   try {

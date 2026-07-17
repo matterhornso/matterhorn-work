@@ -25,6 +25,19 @@ assert.match(serverCanonical, /openwork-server/);
 const serverLegacy = readText("apps/server/bin/openwork-server.mjs");
 assert.match(serverLegacy, /matterhorn-work-server\.mjs/);
 
+const serverSource = readText("apps/server/src/server.ts");
+assert.match(serverSource, /"service\.name": "matterhorn-work-server"/);
+assert.match(serverSource, /\[matterhorn-work-server\] Unhandled error:/);
+
+const toyUi = readText("apps/server/src/toy-ui.ts");
+assert.match(toyUi, /Matterhorn Work Local UI/);
+assert.match(toyUi, /\/ui\/assets\/matterhorn-mark\.svg/);
+assert.doesNotMatch(toyUi, /OpenWork Toy UI/);
+
+const skillHub = readText("apps/server/src/skill-hub.ts");
+assert.match(skillHub, /"User-Agent": "matterhorn-work-server"/);
+assert.doesNotMatch(skillHub, /"User-Agent": "openwork-server"/);
+
 const orchestratorPkg = readJson("apps/orchestrator/package.json");
 assert.equal(orchestratorPkg.name, "matterhorn-work-orchestrator");
 assert.match(orchestratorPkg.scripts["build:bin"], /--filename matterhorn-work/);
@@ -73,5 +86,9 @@ assert.match(desktopRuntime, /resolveBinary\("openwork"\)/);
 const headlessWeb = readText("scripts/dev-headless-web.ts");
 assert.match(headlessWeb, /matterhorn-work-server/);
 assert.match(headlessWeb, /--matterhorn-work-server-bin/);
+
+const releaseWorkflow = readText(".github/workflows/release-macos-aarch64.yml");
+assert.match(releaseWorkflow, /Release title \(defaults to Matterhorn Work <tag>\)/);
+assert.doesNotMatch(releaseWorkflow, /Release title \(defaults to OpenWork <tag>\)/);
 
 console.log("CLI packaging rename smoke checks passed.");

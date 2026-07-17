@@ -125,9 +125,9 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     },
     {
       id: "order-preview",
-      title: "Preview an order",
-      detail: "Draft side, size, price, slippage, and reduce-only state.",
-      prompt: "Preview a Hyperliquid order. Ask for network, symbol, side, size, market or limit, slippage, and reduce-only state. Keep this as a reviewable preview with no submission.",
+      title: "Prepare an order",
+      detail: "Draft an order for exact review and connected-wallet approval.",
+      prompt: "Prepare a Hyperliquid order. Ask for network, symbol, side, size, market or limit, slippage, and reduce-only state. Chat prepares a reviewable draft but does not submit it; execution requires a separate review and wallet signature in the Hyperliquid desk.",
     },
     {
       id: "wallet-approved-trade",

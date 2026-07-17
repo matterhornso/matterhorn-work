@@ -11,7 +11,7 @@ on:
         required: false
         type: string
       release_name:
-        description: "Release title (defaults to OpenWork <tag>)"
+        description: "Release title (defaults to Matterhorn Work <tag>)"
         required: false
         type: string
       release_body:
