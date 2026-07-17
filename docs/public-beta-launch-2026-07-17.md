@@ -5,6 +5,24 @@ with an authenticated web companion. It is intentionally stricter than a
 named-tester Beta: a public download or browser link is not a go signal until
 every required gate has fresh evidence for one immutable candidate.
 
+## Current Candidate Snapshot - 2026-07-17
+
+- The source checkpoint used for the local desktop artifacts below is
+  `a2382305277e5b7b946ea14a61e79ebf53da8034`. The current PR head and generated
+  machine-readable readiness packet are authoritative for final release.
+- Consolidated draft:
+  [PR #831](https://github.com/matterhornso/matterhorn-work/pull/831)
+  targeting `dev`.
+- Source-checkpoint CI: macOS, Ubuntu, i18n, customer crypto, and the full
+  Matterhorn platform-safety workflow all pass.
+- Local unsigned macOS preflight:
+  `qa-reports/product-hunt-local-preflight-a2382305/`. Packaging, updater
+  metadata, checksums, release doctor, and clean-profile smoke pass.
+- Public decision: **NO-GO**. The unsigned preflight does not satisfy public
+  distribution. Authenticated HTTPS deployment, two-user isolation, real
+  wallet and OAuth acceptance, signing/notarization/stapling, operations
+  drills, legal approval, and staffed support still require external evidence.
+
 ## What Public Beta Includes
 
 - Signed Matterhorn Work desktop builds for the approved public platforms.

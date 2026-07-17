@@ -13,6 +13,13 @@ The release is under scope freeze. Only correctness, recovery, accessibility,
 security, performance, release evidence, and launch-operation work is allowed.
 Do not add customer capabilities during this phase.
 
+The source checkpoint used for the local desktop artifacts is
+`a2382305277e5b7b946ea14a61e79ebf53da8034`. Draft
+[PR #831](https://github.com/matterhornso/matterhorn-work/pull/831) targets
+`dev`; its current head and the generated machine-readable readiness packet are
+authoritative for final release. The macOS, Ubuntu, i18n, customer-crypto, and
+platform-safety checks all passed on the source checkpoint.
+
 ## 1. Scope Freeze And Dirty-Tree Ownership
 
 Baseline taken on July 17 before the reload recovery fix:
@@ -123,7 +130,7 @@ the required readiness check is the workspace control-plane response reporting
 ## 4. Pull Request And Candidate Consolidation
 
 Current pull request: [#831](https://github.com/matterhornso/matterhorn-work/pull/831)
-against `codex/friday-beta-rc1-2026-07-17`.
+against `dev`.
 
 Before changing it from draft to ready:
 
@@ -171,4 +178,6 @@ NO-GO, not a soft warning.
 | 2026-07-17 | Reload recovery | Pass locally | Fresh-storage Playwright smoke against `http://127.0.0.1:5194`; toast dismissed after actual engine reload and no raw timeout was present. |
 | 2026-07-17 | Code, browser, security, build | Pass locally | App 659/0, server 715/0, typecheck, build, dependency audit, and all 10 Matterhorn platform-safety stages passed. Green browser summaries are recorded in section 3. |
 | 2026-07-17 | Managed local engine and full browser sweep | Pass locally | The engine readiness probe reported `opencode_connection: working`; product smoke passed 20 stages and the full browser audit passed 104 surfaces, 11 interactions, and 3,329 controls with zero findings. |
+| 2026-07-17 | Exact-head CI | Pass | GitHub Actions run `29588807987` passed macOS, Ubuntu, customer crypto, and Matterhorn platform safety; the separate i18n check also passed on `a2382305`. |
+| 2026-07-17 | Unsigned macOS preflight | Pass for local testing only | `qa-reports/product-hunt-local-preflight-a2382305/` contains the arm64 DMG/ZIP, checksums, updater metadata, release-doctor report, and clean-profile proof. The strict public verifier correctly blocks Developer ID signing, notarization, Gatekeeper, and app/DMG staples. |
 | Pending external owners | Devices, OAuth, deployment, distribution, operations | Blocking | Attach redacted evidence to the machine-readable channel packet. |
