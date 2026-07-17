@@ -7,6 +7,14 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 assert.equal(packageJson.scripts["gate:public-beta-web"], "node scripts/public-beta-web-readiness.mjs --strict");
 assert.equal(packageJson.scripts["test:public-beta-web-readiness"], "node scripts/public-beta-web-readiness.test.mjs");
 
+const publicBetaLaunchDoc = readFileSync("docs/public-beta-launch-2026-07-17.md", "utf8");
+const productionLaunchDoc = readFileSync("docs/production-launch-configuration.md", "utf8");
+const gateSource = readFileSync("scripts/public-beta-web-readiness.mjs", "utf8");
+for (const source of [publicBetaLaunchDoc, productionLaunchDoc, gateSource]) {
+  assert.doesNotMatch(source, /pnpm (?:gate:public-beta-web|launch:readiness) --(?: |\s*\\)/);
+}
+assert.match(gateSource, /pnpm gate:public-beta-web --json/);
+
 const managedKeys = [
   "VITE_MATTERHORN_DEPLOYMENT",
   "VITE_MATTERHORN_PUBLIC_BETA",

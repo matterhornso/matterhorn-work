@@ -82,7 +82,7 @@ secret values:
 ```bash
 mkdir -p qa-reports/public-beta
 pnpm test:public-beta-web-readiness
-pnpm gate:public-beta-web -- --strict --json \
+pnpm gate:public-beta-web --json \
   --json-output qa-reports/public-beta/public-web-config.json
 ```
 
@@ -95,14 +95,13 @@ or signed desktop artifact exists.
 Run the public-Beta channel gate to list the exact current requirements:
 
 ```bash
-pnpm launch:readiness -- --channel public-beta --list-gates --json
+pnpm launch:readiness --channel public-beta --list-gates --json
 ```
 
 Attach fresh evidence for the exact release commit, then evaluate it:
 
 ```bash
-pnpm launch:readiness -- \
-  --channel public-beta \
+pnpm launch:readiness --channel public-beta \
   --evidence qa-reports/public-beta/evidence.json \
   --strict --json \
   --json-output qa-reports/public-beta/readiness.json

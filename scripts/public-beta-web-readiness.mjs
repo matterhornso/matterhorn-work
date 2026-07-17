@@ -36,7 +36,7 @@ function help() {
     "Matterhorn public Beta web readiness gate",
     "",
     "Usage:",
-    "  pnpm gate:public-beta-web -- --strict --json",
+    "  pnpm gate:public-beta-web --json",
     "",
     "Checks public-web configuration only. It never prints or reads credential values.",
   ].join("\n");

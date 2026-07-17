@@ -65,7 +65,7 @@ backend, raw engine URL, client token, or host token to browser users:
 
 ```bash
 pnpm test:public-beta-web-readiness
-pnpm gate:public-beta-web -- --strict --json \
+pnpm gate:public-beta-web --json \
   --json-output qa-reports/public-beta/public-web-config.json
 ```
 
