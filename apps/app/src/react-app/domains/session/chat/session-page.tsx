@@ -131,7 +131,7 @@ import {
   getDeskWorkflowManifest,
   type CustomerProtocolDeskId,
 } from "../workflows/protocol-desk-ui";
-import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
+import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
 import { WorkflowStageCard } from "../workflows/workflow-stage-card";
 import {
@@ -237,7 +237,7 @@ const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof
 
 function ProtocolLogo({ venue, size = 18 }: { venue: VenueSidePanel; size?: number }) {
   const visual = getCustomerProtocolDeskVisual(venue);
-  return <ProtocolBrandLogo id={venue} visual={visual} size={size} />;
+  return <ProtocolDeskMark id={venue} visual={visual} size={size} />;
 }
 
 function deskToneStyle(iconHint: CustomerWorkflowIconHint | VenueSidePanel | "memory" | "mcp"): CSSProperties {
@@ -463,7 +463,7 @@ function DeskBrandMark({
 }) {
   const visual = getCustomerProtocolDeskVisual(id);
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[id as CustomerWorkflowIconHint] ?? FileText;
-  if (visual) return <ProtocolBrandLogo id={visual.id} visual={visual} size={size} />;
+  if (visual) return <ProtocolDeskMark id={visual.id} visual={visual} size={size} />;
   return <Icon className="size-4" />;
 }
 
@@ -633,7 +633,7 @@ function WorkflowDeskHomeSurface({
         <section className="rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.06)] px-4 py-4">
           <div className="flex min-w-0 items-start gap-3">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
-              <ProtocolBrandLogo id={deskId} visual={visual ?? undefined} size={34} />
+              <ProtocolDeskMark id={deskId} visual={visual ?? undefined} size={34} />
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">

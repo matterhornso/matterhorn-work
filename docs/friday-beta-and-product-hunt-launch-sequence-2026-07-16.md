@@ -14,17 +14,21 @@ ledgers remain historical evidence; they do not authorize either new channel.
   visible OAuth connectors, signed desktop distribution, monitoring, backup,
   rollback, public copy/legal, and deployed two-user acceptance all pass from
   one immutable tag.
-- The exact-candidate local acceptance URL is
-  `http://127.0.0.1:5193/workspace/ws_18dc91c9102a/session`. It is available on
-  this Mac without a sign-in step. It is not a remotely shareable production
-  URL and is not Product Hunt evidence.
+- The currently running local acceptance URL is
+  `http://127.0.0.1:5194/workspace/ws_028bfb4e9ee2/session`. It is available on
+  this Mac without a sign-in step. It is ephemeral, not remotely shareable, and
+  not Product Hunt evidence. Start a managed local stack with
+  `OPENWORK_MANAGE_OPENCODE=1 pnpm dev:matterhorn-local` before treating chat or
+  desk-task acceptance as valid.
 
 ## Current Candidate Evidence
 
-The intentionally dirty integration tree has been consolidated on
-`codex/friday-beta-rc1-2026-07-17`. Release source was reproduced in a clean
-detached worktree before the final tests and package build. The artifact
-manifest is the authoritative exact-commit identifier for distribution.
+The intentionally dirty integration tree was consolidated on
+`codex/friday-beta-rc1-2026-07-17`. The scope-frozen post-Beta hardening
+candidate now lives on `codex/product-hunt-hardening-2026-07-21`; its final
+commit, not this working directory, becomes the next candidate identifier.
+The artifact manifest is the authoritative exact-commit identifier for
+distribution.
 
 The July 16 exact-candidate closure is technically green:
 
@@ -56,15 +60,15 @@ cohort, staffed support channel, and verified rollback procedure against the
 final candidate. Product Hunt remains **NO-GO** until every deployed, wallet,
 connector, signing, operations, and public-copy gate also passes.
 
-After exact-candidate evidence is regenerated, the Beta machine gate has three
-remaining operator-owned blockers:
+After exact-candidate evidence is regenerated, the Beta machine gate retains
+three operator-owned blockers: named tester access, staffed support, and a
+verified rollback procedure. The prior numeric gate snapshot is historical;
+use `launch-channel-readiness.mjs --list-gates --json` and the final
+machine-readable evidence packet as the authoritative count and decision.
 
-- Friday Beta: **NO-GO**, 13 of 16 gates passed; the blockers are named tester
-  access, staffed support, and verified rollback.
-- Product Hunt: **NO-GO**, 12 of 29 gates passed; the 17 blockers are the exact
-  release/tag plus deployed HTTPS/security/operations, real wallets and OAuth,
-  signed distribution, public legal copy, two-user acceptance, and launch-room
-  staffing.
+Product Hunt remains **NO-GO** until the exact release/tag, deployed
+HTTPS/security/operations, real wallets and OAuth, signed distribution, public
+legal copy, two-user acceptance, and launch-room staffing are all evidenced.
 
 ## Frozen Beta Scope
 

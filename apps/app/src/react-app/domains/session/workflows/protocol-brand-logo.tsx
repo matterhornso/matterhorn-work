@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import type { CSSProperties } from "react";
+import { Dumbbell } from "lucide-react";
 import { resolveExtensionIconSrc } from "../../../design-system/extension-icon-src";
 import { getCustomerProtocolDeskVisual, type CustomerProtocolDeskId, type CustomerProtocolDeskVisual } from "./protocol-desk-ui";
 
@@ -78,4 +79,25 @@ export function ProtocolBrandLogo({
       {fallback}
     </span>
   );
+}
+
+/**
+ * Desk marks use the same visual identity as their launcher in the app rail.
+ * Longevity deliberately uses the familiar Dumbbell mark instead of its
+ * separate asset so the desk and rail do not present competing identities.
+ */
+export function ProtocolDeskMark({
+  id,
+  visual,
+  size = 24,
+  className,
+  style,
+}: ProtocolBrandLogoProps) {
+  const deskId = visual?.id ?? id;
+
+  if (deskId === "wellness") {
+    return <Dumbbell aria-hidden="true" className={className} size={size} style={style} />;
+  }
+
+  return <ProtocolBrandLogo id={id} visual={visual} size={size} className={className} style={style} />;
 }

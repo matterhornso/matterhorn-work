@@ -91,19 +91,34 @@ All of the following completed against the local candidate on this branch:
 
 | Gate | Result |
 |---|---|
-| App suite | 658 passing, 0 failing tests across 83 files. |
+| App suite | 659 passing, 0 failing tests across 83 files. |
 | Server suite | 715 passing, 0 failing tests across 58 files. |
 | App typecheck | Pass. |
 | Production build | Pass. Vite reported only its non-blocking large-chunk advisory. |
 | Dependency audit | Pass: 1,341 locked versions, no low-or-higher advisories. |
 | Matterhorn platform safety | Pass: all 10 stages, covering wallet approval, money-path security, local router and desktop perimeter, error boundaries, design, browser contracts, CORS, and product readiness. |
-| Product browser smoke | Pass: 20 user-facing stages, with no network failures. Summary: `qa-reports/matterhorn-product-browser-smoke-2026-07-17-rerun-6/summary.json`. |
-| Full platform browser audit | Pass: 104 surfaces, 11 interactions, 3,319 controls, and zero P0/P1 findings. Summary: `qa-reports/matterhorn-full-platform-browser-audit-2026-07-17-rerun-5/summary.json`. |
+| Product browser smoke | Pass: 20 user-facing stages, with no network failures. Summary: `qa-reports/friday-production-go-live-2026-07-17/current-candidate/product-browser-smoke-final2/summary.json`. |
+| Full platform browser audit | Pass: 104 surfaces, 11 interactions, 3,329 controls, and zero findings. Summary: `qa-reports/friday-production-go-live-2026-07-17/current-candidate/full-platform-browser-audit-final/summary.json`. |
 
 The browser checks include desktop, compact laptop, tablet, and mobile layouts;
 all desk launches, session restoration, notes, memory, outputs, wallet settings,
 AI/MCP settings, and launch-policy fallbacks for deliberately hidden billing,
 generated-media, and cloud-account routes.
+
+### Local QA Stack Requirement
+
+Browser task starts require a connected agent engine. For local QA, use the
+supported managed-engine mode rather than starting the HTTP server by itself:
+
+```bash
+OPENWORK_MANAGE_OPENCODE=1 pnpm dev:matterhorn-local
+```
+
+For this run, the same requirement was satisfied by starting the server with
+`OPENWORK_MANAGE_OPENCODE=1` and the bundled OpenCode sidecar. A server can
+answer `/health` while still returning `opencode_unconfigured` for task routes;
+the required readiness check is the workspace control-plane response reporting
+`opencode_connection: working` and `start_desk_task: ready`.
 
 ## 4. Pull Request And Candidate Consolidation
 
@@ -154,5 +169,6 @@ NO-GO, not a soft warning.
 | UTC timestamp | Workstream | Result | Evidence |
 |---|---|---|---|
 | 2026-07-17 | Reload recovery | Pass locally | Fresh-storage Playwright smoke against `http://127.0.0.1:5194`; toast dismissed after actual engine reload and no raw timeout was present. |
-| 2026-07-17 | Code, browser, security, build | Pass locally | App 658/0, server 715/0, typecheck, build, dependency audit, and all 10 Matterhorn platform-safety stages passed. Green browser summaries are recorded in section 3. |
+| 2026-07-17 | Code, browser, security, build | Pass locally | App 659/0, server 715/0, typecheck, build, dependency audit, and all 10 Matterhorn platform-safety stages passed. Green browser summaries are recorded in section 3. |
+| 2026-07-17 | Managed local engine and full browser sweep | Pass locally | The engine readiness probe reported `opencode_connection: working`; product smoke passed 20 stages and the full browser audit passed 104 surfaces, 11 interactions, and 3,329 controls with zero findings. |
 | Pending external owners | Devices, OAuth, deployment, distribution, operations | Blocking | Attach redacted evidence to the machine-readable channel packet. |

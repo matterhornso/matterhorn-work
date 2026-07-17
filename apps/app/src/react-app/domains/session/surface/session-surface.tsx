@@ -123,7 +123,7 @@ import {
   deskToneStyle,
   getCustomerProtocolDeskVisual,
 } from "../workflows/protocol-desk-ui";
-import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
+import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
 import { WorkflowStageCard } from "../workflows/workflow-stage-card";
 import {
@@ -182,7 +182,7 @@ const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof
 function ProtocolLogo({ iconHint, size = 18 }: { iconHint: CustomerWorkflowIconHint; size?: number }) {
   const visual = getCustomerProtocolDeskVisual(iconHint);
   if (!visual) return null;
-  return <ProtocolBrandLogo id={iconHint} visual={visual} size={size} />;
+  return <ProtocolDeskMark id={iconHint} visual={visual} size={size} />;
 }
 
 type MatterhornDeskMode = MatterhornDeskTaskStarterDesk;

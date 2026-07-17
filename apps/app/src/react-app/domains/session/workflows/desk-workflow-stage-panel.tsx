@@ -4,7 +4,7 @@ import type { MatterhornWorkflowArtifact, MatterhornWorkflowManifest, Matterhorn
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { deskToneStyle, getCustomerProtocolDeskVisual, getDeskWorkflowManifest, type CustomerProtocolDeskId } from "./protocol-desk-ui";
-import { ProtocolBrandLogo } from "./protocol-brand-logo";
+import { ProtocolDeskMark } from "./protocol-brand-logo";
 import { WorkflowStageCard, type WorkflowStageStatus } from "./workflow-stage-card";
 
 export type DeskWorkflowStagePanelProps = {
@@ -129,7 +129,7 @@ export function DeskWorkflowStagePanel({
       {/* Agent header */}
       <div className="flex min-w-0 items-start gap-3 rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.06)] px-3.5 py-3.5">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
-          <ProtocolBrandLogo id={deskId} size={30} />
+          <ProtocolDeskMark id={deskId} size={30} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">

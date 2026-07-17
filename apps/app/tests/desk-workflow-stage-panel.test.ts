@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
   getCustomerProtocolDeskVisual,
   getDeskWorkflowManifest,
@@ -124,5 +125,24 @@ describe("desk workflow stage panel metadata", () => {
     expect(source).toContain("actionTitle={stageActionTitle}");
     expect(source).toContain('stageActionDisabled ? stageActionLabel');
     expect(source).toContain('stageActionLabel = "Task unavailable"');
+  });
+
+  test("Longevity desk marks match the Dumbbell icon used in the app rail", () => {
+    const markSource = readFileSync(
+      "apps/app/src/react-app/domains/session/workflows/protocol-brand-logo.tsx",
+      "utf8",
+    );
+    const deskSources = [
+      "apps/app/src/react-app/domains/session/chat/session-page.tsx",
+      "apps/app/src/react-app/domains/session/surface/session-surface.tsx",
+      "apps/app/src/react-app/domains/session/workflows/desk-workflow-stage-panel.tsx",
+    ].map((path) => readFileSync(path, "utf8"));
+
+    expect(markSource).toContain('deskId === "wellness"');
+    expect(markSource).toContain("<Dumbbell");
+    expect(markSource).toContain("export function ProtocolDeskMark");
+    for (const source of deskSources) {
+      expect(source).toContain("ProtocolDeskMark");
+    }
   });
 });
