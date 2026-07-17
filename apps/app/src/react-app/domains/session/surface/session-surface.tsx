@@ -127,6 +127,10 @@ import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
 import { WorkflowStageCard } from "../workflows/workflow-stage-card";
 import {
+  MATTERHORN_DESK_TASK_STARTERS,
+  type MatterhornDeskTaskStarterDesk,
+} from "../workflows/desk-task-starters";
+import {
   getMatterhornDeskAgent,
   getMatterhornDeskAgentById,
   matterhornDeskAgentIdForDesk,
@@ -181,126 +185,7 @@ function ProtocolLogo({ iconHint, size = 18 }: { iconHint: CustomerWorkflowIconH
   return <ProtocolBrandLogo id={iconHint} visual={visual} size={size} />;
 }
 
-type MatterhornDeskMode = "bittensor" | "hyperliquid" | "polymarket" | "sui" | "wellness";
-
-type MatterhornDeskPrompt = {
-  title: string;
-  detail: string;
-  prompt: string;
-};
-
-const MATTERHORN_DESK_EMPTY_PROMPTS: Record<MatterhornDeskMode, MatterhornDeskPrompt[]> = {
-  bittensor: [
-    {
-      title: "Show TAO balance",
-      detail: "Read a public SS58 coldkey balance and explain what the user can safely share.",
-      prompt: "Show my TAO balance for this SS58 public address: <paste public SS58 address>. Use public wallet context only and never ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
-    },
-    {
-      title: "Browse useful subnets",
-      detail: "Explain useful subnets in plain language, including image-generation options.",
-      prompt: "Find useful Bittensor subnets for image generation. Explain what each subnet does, why it is useful, source/freshness, and what public context would help narrow the choice.",
-    },
-    {
-      title: "Compare validators",
-      detail: "Compare validators on a subnet before staking, with risk notes and missing public context.",
-      prompt: "Compare Bittensor validators on subnet 14. Show source, freshness, risks, and what public validator/coldkey context is needed before staking.",
-    },
-    {
-      title: "Prepare unsigned staking preview",
-      detail: "Build a non-custodial preview that must be reviewed and signed elsewhere.",
-      prompt: "Prepare a Bittensor staking preview for 1 TAO on subnet 14. Ask for public coldkey and validator hotkey if missing. This must stay unsigned and require an external Bittensor-compatible signer.",
-    },
-  ],
-  hyperliquid: [
-    {
-      title: "Read orderbook context",
-      detail: "Summarize spread, depth, and stale-data warnings.",
-      prompt: "Show BTC orderbook context on Hyperliquid, spread, depth summary, and stale-data warnings. Explain how I can review and sign an order in the Hyperliquid desk.",
-    },
-    {
-      title: "Summarize exposure",
-      detail: "Use public/read-only account context only; never ask for exchange secrets.",
-      prompt: "Summarize my read-only Hyperliquid account exposure if public account context is available. Do not ask for API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
-    },
-    {
-      title: "Prepare an order",
-      detail: "Draft an order for exact review and connected-wallet approval.",
-      prompt: "Prepare a Hyperliquid BTC order. Ask for network, side, size, market or limit, slippage, and reduce-only state. Explain that execution requires a separate review and wallet signature in the Hyperliquid desk.",
-    },
-  ],
-  polymarket: [
-    {
-      title: "Research a market",
-      detail: "Explain outcomes, liquidity, orderbook context, and compliance state.",
-      prompt: "Summarize this Polymarket market: <paste market URL or slug>. Include outcomes, liquidity/orderbook context, compliance state, source, freshness, and no bet placement.",
-    },
-    {
-      title: "Check compliance",
-      detail: "If blocked, do not expose executable price, size, share, or order fields.",
-      prompt: "Check whether this Polymarket market is eligible for a handoff: <paste market URL or slug>. If compliance blocks the flow, do not show executable price, size, share, or order fields.",
-    },
-    {
-      title: "Prepare trade handoff",
-      detail: "Draft a non-custodial wallet handoff you can review externally.",
-      prompt: "Prepare a Polymarket compliance-gated external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
-    },
-  ],
-  sui: [
-    {
-      title: "Read wallet",
-      detail: "Read a public Sui address, network, and balance without custody.",
-      prompt: "Show my Sui wallet for this public address: <paste public Sui address>. Use public Sui account and balance context only and never ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
-    },
-    {
-      title: "Preview transfer",
-      detail: "Prepare a transfer preview and save it as project evidence before wallet signing.",
-      prompt: "Prepare a Sui transfer preview. Ask for sender, recipient, network, amount, and memo if missing. Signing must happen in my connected Sui wallet on web or in an external Sui wallet/client on desktop.",
-    },
-    {
-      title: "Import receipt",
-      detail: "Import a public transaction digest after signing in the wallet.",
-      prompt: "Import a Sui transaction receipt from this public transaction digest: <paste transaction digest>. Use only public receipt metadata and save it as project evidence.",
-    },
-  ],
-  wellness: [
-    {
-      title: "1. Intake",
-      detail: "Describe your audience, goal, constraints, session type, duration, equipment, and level.",
-      prompt: "Start a new longevity program — here is my audience, goal, constraints, session type, duration, equipment, and level",
-    },
-    {
-      title: "2. Program design",
-      detail: "Design the program with mandatory non-medical safety disclaimers attached.",
-      prompt: "Design the program with safety disclaimers",
-    },
-    {
-      title: "3. Client artifacts",
-      detail: "Generate the weekly plan, video script, checklist, FAQ, and progress tracker.",
-      prompt: "Generate the client artifacts: weekly plan, video script, checklist, FAQ, and progress tracker",
-    },
-    {
-      title: "4. Service packaging",
-      detail: "Package the program as a sellable service with draft pricing and onboarding.",
-      prompt: "Package this as a service: offer page copy, pricing-package draft, onboarding questionnaire, and terms/disclaimer text",
-    },
-    {
-      title: "5. Delivery plan",
-      detail: "Draft how the program would be delivered through planned Matterhorn services.",
-      prompt: "Draft the delivery plan: storage/hosting, email updates, payments, and client access",
-    },
-    {
-      title: "6. Customer management",
-      detail: "Set up follow-up cadence, feedback form, and renewal/up-sell prompts.",
-      prompt: "Set up customer management: follow-up cadence, feedback form, and renewal/up-sell prompts",
-    },
-    {
-      title: "7. Export",
-      detail: "Export the whole workflow as a re-runnable Matterhorn / MCP artifact.",
-      prompt: "Export this as a Matterhorn workflow / MCP artifact",
-    },
-  ],
-};
+type MatterhornDeskMode = MatterhornDeskTaskStarterDesk;
 
 function deriveMatterhornDeskMode(chunks: string[]): MatterhornDeskMode | null {
   const text = chunks.join("\n").toLowerCase();
@@ -379,7 +264,7 @@ function MatterhornDeskFocusedEmptyState({
   const agent = getMatterhornDeskAgent(mode);
   const iconHint = (visual?.id ?? mode) as CustomerWorkflowIconHint;
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint] ?? FileText;
-  const prompts = MATTERHORN_DESK_EMPTY_PROMPTS[mode];
+  const prompts = MATTERHORN_DESK_TASK_STARTERS[mode];
   const boundary = mode === "bittensor"
     ? "Runs public SS58 reads and unsigned previews. Signing stays in an external Bittensor-compatible wallet."
     : mode === "wellness"
@@ -426,7 +311,7 @@ function MatterhornDeskFocusedEmptyState({
         <div className="matterhorn-desk-session-prompts overflow-hidden rounded-xl bg-dls-surface/44" aria-label="Chat starters">
           {prompts.map((item) => (
             <button
-              key={item.title}
+              key={item.id}
               type="button"
               className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-3.5 py-3 text-left transition duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
               onClick={() => void onUsePrompt(item.prompt)}
@@ -453,7 +338,7 @@ function LongevityDeskEmptyState({
 }) {
   const visual = getCustomerProtocolDeskVisual("wellness");
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS.wellness;
-  const stagePrompts = MATTERHORN_DESK_EMPTY_PROMPTS.wellness;
+  const stagePrompts = MATTERHORN_DESK_TASK_STARTERS.wellness;
 
   const pathChoices = [
     {
@@ -544,7 +429,7 @@ function LongevityDeskEmptyState({
         >
           {stagePrompts.map((item) => (
             <div
-              key={item.title}
+              key={item.id}
               className="group grid w-full grid-cols-1 items-center gap-2 px-3.5 py-2.5 text-left sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto]"
             >
               <span className="text-[13px] font-semibold text-dls-text">{item.title}</span>

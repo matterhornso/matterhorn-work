@@ -140,6 +140,7 @@ import {
   validateDeskTaskInput,
   type DeskTaskInputRequirement,
 } from "../workflows/desk-task-inputs";
+import { MATTERHORN_DESK_TASK_STARTERS } from "../workflows/desk-task-starters";
 import {
   stageWorkflowRun,
   startWorkflowRun,
@@ -311,82 +312,6 @@ type HomeCapabilityStatusItem = {
   statusLabel: string;
   summary: string;
   proof: string;
-};
-
-const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: string; detail: string; prompt: string }>> = {
-  bittensor: [
-    {
-      title: "Show my TAO balance",
-      detail: "Read a public SS58 coldkey balance and explain what is safe to share.",
-      prompt: "Show my TAO balance for this SS58 public address: <paste public SS58 address>. Use public wallet context only and do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
-    },
-    {
-      title: "Find useful subnets",
-      detail: "Explain useful subnets in plain language, including image-generation options.",
-      prompt: "Find useful Bittensor subnets for image generation. Explain what each subnet does, why it is useful, and what data source/freshness you used.",
-    },
-    {
-      title: "Compare validators",
-      detail: "Compare validators before staking, with risk notes and missing public context.",
-      prompt: "Compare Bittensor validators on subnet 14 with a balanced strategy. Show source, freshness, risks, and what extra public context is needed before staking.",
-    },
-    {
-      title: "Prepare staking preview",
-      detail: "Build a non-custodial preview that must be reviewed and signed elsewhere.",
-      prompt: "Prepare a Bittensor staking preview for 1 TAO on subnet 14. Ask for the public validator hotkey and coldkey if missing. This must be unsigned and require an external Bittensor-compatible signer.",
-    },
-  ],
-  hyperliquid: [
-    {
-      title: "Show market context",
-      detail: "Summarize spread, depth, and stale-data warnings.",
-      prompt: "Show BTC orderbook context on Hyperliquid, spread, depth summary, and stale-data warnings. Explain how I can review and sign an order in the Hyperliquid desk.",
-    },
-    {
-      title: "Show account exposure",
-      detail: "Use public or read-only account context only; never ask for exchange secrets.",
-      prompt: "Summarize my public/read-only Hyperliquid account exposure if an address or public account context is available. Do not ask for API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
-    },
-    {
-      title: "Prepare an order",
-      detail: "Draft an order for exact review and connected-wallet approval.",
-      prompt: "Prepare a Hyperliquid BTC order. Ask for network, side, size, market or limit, slippage, and reduce-only state. Explain that execution requires a separate review and wallet signature in the Hyperliquid desk.",
-    },
-  ],
-  polymarket: [
-    {
-      title: "Research a market",
-      detail: "Explain outcomes, liquidity, orderbook context, and compliance state.",
-      prompt: "Summarize this Polymarket market: <paste market URL or slug>. Include outcomes, liquidity/orderbook context, compliance state, source, freshness, and no bet placement.",
-    },
-    {
-      title: "Check compliance",
-      detail: "If blocked, do not expose executable price, size, share, or order fields.",
-      prompt: "Check whether this Polymarket market is eligible for a handoff: <paste market URL or slug>. If compliance blocks the flow, do not show executable price, size, share, or order fields.",
-    },
-    {
-      title: "Prepare trade handoff",
-      detail: "Draft a non-custodial wallet handoff you can review externally.",
-      prompt: "Prepare a Polymarket compliance-gated external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
-    },
-  ],
-  sui: [
-    {
-      title: "Show my Sui wallet",
-      detail: "Read a public Sui address, network, and SUI balance without custody.",
-      prompt: "Show my Sui wallet for this public address: <paste public Sui address>. Use public account and balance context only. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
-    },
-    {
-      title: "Prepare transfer preview",
-      detail: "Create a non-custodial transfer preview and save it as project evidence.",
-      prompt: "Prepare a Sui transfer preview. Ask for the public sender address, recipient address, network, amount, and memo if missing. Signing must happen in my connected Sui wallet on web or an external Sui wallet/client on desktop.",
-    },
-    {
-      title: "Import transaction receipt",
-      detail: "Save public transaction metadata after signing in an external wallet.",
-      prompt: "Import a Sui transaction receipt from this public transaction digest: <paste transaction digest>. Use only public receipt metadata and save the receipt as project evidence.",
-    },
-  ],
 };
 
 function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
@@ -802,7 +727,7 @@ function ProtocolDeskEmptyState({
   onBackHome: () => void;
 }) {
   const visual = getCustomerProtocolDeskVisual(panel);
-  const prompts = PROTOCOL_DESK_SUGGESTED_PROMPTS[panel];
+  const prompts = MATTERHORN_DESK_TASK_STARTERS[panel];
   const draftConfig = getChatDraftConfig(panel);
   const [launchingTaskTitle, setLaunchingTaskTitle] = useState<string | null>(null);
   const [pendingInput, setPendingInput] = useState<{
@@ -999,7 +924,7 @@ function ProtocolDeskEmptyState({
         </div>
       ) : null}
 
-      <div className="matterhorn-focused-desk-prompt-list space-y-2" aria-label="Agent tasks">
+      <div className="matterhorn-focused-desk-prompt-list grid grid-cols-1 gap-2 lg:grid-cols-2" aria-label="Agent tasks">
         {prompts.map((item) => {
           const isLaunching = launchingTaskTitle === item.title;
           const inputRequirement = getDeskTaskInputRequirement(item.prompt);
@@ -1016,7 +941,7 @@ function ProtocolDeskEmptyState({
                   ? "reads: public Sui account and receipt context"
                   : "reads: public context";
           return (
-            <div key={item.title} className="space-y-2">
+            <div key={item.id} className="space-y-2">
               <WorkflowStageCard
                 title={item.title}
                 objective={item.detail}

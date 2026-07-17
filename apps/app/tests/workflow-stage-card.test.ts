@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
+import { MATTERHORN_DESK_TASK_STARTERS } from "../src/react-app/domains/session/workflows/desk-task-starters";
+
 function readAppSource(path: string) {
   return readFileSync(new URL(`../src/react-app/${path}`, import.meta.url), "utf8");
 }
@@ -219,11 +221,12 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
   });
 
   test("uses positive task copy for protocol desks", () => {
-    const src = readAppSource("domains/session/chat/session-page.tsx");
+    const hyperliquidTitles = MATTERHORN_DESK_TASK_STARTERS.hyperliquid.map((starter) => starter.title);
+    const polymarketTitles = MATTERHORN_DESK_TASK_STARTERS.polymarket.map((starter) => starter.title);
 
-    expect(src).toContain("Summarize spread, depth, and stale-data warnings.");
-    expect(src).toContain("Draft an order for exact review and connected-wallet approval.");
-    expect(src).toContain("Draft a non-custodial wallet handoff you can review externally.");
+    expect(hyperliquidTitles).toContain("Read orderbook depth");
+    expect(hyperliquidTitles).toContain("Review a wallet-approved trade");
+    expect(polymarketTitles).toContain("Prepare wallet handoff");
   });
 
   test("focused desk task cards launch the agent instead of hiding a draft", () => {
