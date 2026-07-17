@@ -34,6 +34,17 @@ describe("Outputs panel contract", () => {
     expect(artifactSource).not.toContain("Close artifact");
   });
 
+  test("an empty Outputs rail never falls through to the desktop-only browser panel", () => {
+    const sessionSource = readAppSource("domains/session/chat/session-page.tsx");
+    const artifactSource = readAppSource("domains/session/artifacts/artifact-panel.tsx");
+
+    expect(sessionSource).toContain('visibleSidePanel === "artifacts" ?');
+    expect(sessionSource).toContain("<EmptyArtifactPanel");
+    expect(artifactSource).toContain("export function EmptyArtifactPanel");
+    expect(artifactSource).toContain('aria-label="Outputs"');
+    expect(artifactSource).toContain('aria-label="Close outputs"');
+  });
+
   test("output browser keeps rows compact while preserving source metadata", () => {
     const listSource = readAppSource("domains/session/artifacts/output-list.tsx");
 

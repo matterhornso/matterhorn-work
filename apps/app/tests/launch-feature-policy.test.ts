@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   filterLaunchSettingsTabs,
   isExtensionVisibleAtLaunch,
+  isPublicOauthConnectorEnabledAtLaunch,
   isSettingsTabRouteEnabledAtLaunch,
   isSettingsTabVisibleAtLaunch,
   resolveMatterhornLaunchFeaturePolicy,
@@ -15,6 +16,7 @@ describe("stable launch feature policy", () => {
       billing: false,
       cloud: false,
       generatedMedia: false,
+      publicOauthConnectors: [],
     });
   });
 
@@ -26,6 +28,7 @@ describe("stable launch feature policy", () => {
       billing: true,
       cloud: true,
       generatedMedia: true,
+      publicOauthConnectors: [],
     });
   });
 
@@ -70,5 +73,18 @@ describe("stable launch feature policy", () => {
     expect(isExtensionVisibleAtLaunch("matterhorn-cloud", stablePolicy)).toBe(false);
     expect(isExtensionVisibleAtLaunch("matterhorn-cloud", cloudPolicy)).toBe(true);
     expect(isExtensionVisibleAtLaunch("matterhorn-ui", stablePolicy)).toBe(true);
+  });
+
+  test("fails closed for public OAuth connectors until each connector is allowlisted", () => {
+    const stablePolicy = resolveMatterhornLaunchFeaturePolicy(undefined);
+    const acceptedPolicy = resolveMatterhornLaunchFeaturePolicy({
+      VITE_MATTERHORN_PUBLIC_OAUTH_CONNECTORS: " Notion, linear,notion ",
+    });
+
+    expect(isPublicOauthConnectorEnabledAtLaunch("notion", stablePolicy)).toBe(false);
+    expect(isPublicOauthConnectorEnabledAtLaunch("notion", acceptedPolicy)).toBe(true);
+    expect(isPublicOauthConnectorEnabledAtLaunch("LINEAR", acceptedPolicy)).toBe(true);
+    expect(isPublicOauthConnectorEnabledAtLaunch("sentry", acceptedPolicy)).toBe(false);
+    expect(acceptedPolicy.publicOauthConnectors).toEqual(["notion", "linear"]);
   });
 });

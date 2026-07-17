@@ -26,6 +26,12 @@ for (const phrase of [
   'publish="${INPUT_PUBLISH:-false}"',
   "needs.resolve-release.outputs.publish == 'true'",
   "github.event_name == 'workflow_dispatch'",
+  "Verify macOS public release trust chain",
+  "desktop-public-release-verify.mjs",
+  'source_commit="$(git rev-parse HEAD)"',
+  '--source-commit "$source_commit"',
+  "--strict",
+  "trust-chain-${{ matrix.artifact }}",
 ]) {
   assert.ok(releaseWorkflow.includes(phrase), `release workflow missing safety policy: ${phrase}`);
 }

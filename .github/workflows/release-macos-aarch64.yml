@@ -424,6 +424,28 @@ jobs:
             ${{ matrix.electron_args }} \
             --publish never
 
+      - name: Verify macOS public release trust chain
+        if: matrix.os_type == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          source_commit="$(git rev-parse HEAD)"
+          node scripts/desktop-public-release-verify.mjs \
+            --dist-dir apps/desktop/dist-electron \
+            --expected-version "$version" \
+            --source-commit "$source_commit" \
+            --strict \
+            --json-output "apps/desktop/dist-electron/desktop-public-release-${{ matrix.artifact }}.json"
+
+      - name: Upload macOS trust-chain evidence
+        if: matrix.os_type == 'macos'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trust-chain-${{ matrix.artifact }}
+          path: apps/desktop/dist-electron/desktop-public-release-${{ matrix.artifact }}.json
+          if-no-files-found: error
+
       - name: Upload Electron release assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -437,6 +459,11 @@ jobs:
             exit 1
           fi
           gh release upload "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          if [ "${{ matrix.os_type }}" = "macos" ]; then
+            gh release upload "$RELEASE_TAG" \
+              "apps/desktop/dist-electron/desktop-public-release-${{ matrix.artifact }}.json" \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          fi
 
       - name: Upload Electron updater manifest artifact
         uses: actions/upload-artifact@v4

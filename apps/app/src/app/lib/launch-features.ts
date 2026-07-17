@@ -5,11 +5,21 @@ export type MatterhornLaunchFeaturePolicy = {
   billing: boolean;
   cloud: boolean;
   generatedMedia: boolean;
+  publicOauthConnectors: string[];
 };
 
 function readBooleanFlag(env: Record<string, unknown> | undefined, key: string): boolean {
   const value = env?.[key];
   return typeof value === "string" && /^(1|true|yes|on)$/i.test(value.trim());
+}
+
+function readListFlag(env: Record<string, unknown> | undefined, key: string): string[] {
+  const value = env?.[key];
+  if (typeof value !== "string") return [];
+  return [...new Set(value
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean))];
 }
 
 export function resolveMatterhornLaunchFeaturePolicy(
@@ -20,6 +30,7 @@ export function resolveMatterhornLaunchFeaturePolicy(
     billing: readBooleanFlag(env, "VITE_MATTERHORN_BILLING_ENABLED"),
     cloud: cloudEnabled,
     generatedMedia: readBooleanFlag(env, "VITE_MATTERHORN_GENERATED_MEDIA_ENABLED"),
+    publicOauthConnectors: readListFlag(env, "VITE_MATTERHORN_PUBLIC_OAUTH_CONNECTORS"),
   };
 }
 
@@ -67,4 +78,11 @@ export function isExtensionVisibleAtLaunch(
   if (extensionId === "openai-image-gen") return policy.generatedMedia;
   if (extensionId === "matterhorn-cloud") return policy.cloud;
   return true;
+}
+
+export function isPublicOauthConnectorEnabledAtLaunch(
+  serverName: string,
+  policy: MatterhornLaunchFeaturePolicy = MATTERHORN_LAUNCH_FEATURES,
+): boolean {
+  return policy.publicOauthConnectors.includes(serverName.trim().toLowerCase());
 }

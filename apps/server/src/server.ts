@@ -884,7 +884,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       let errorMessage: string | undefined;
 
       const finalize = (response: Response) => {
-        const wrapped = withCors(response, request, config);
+        const wrapped = withCors(withSecurityHeaders(response), request, config);
         if (config.logRequests) {
             logRequest({
               logger,
@@ -2393,6 +2393,28 @@ function isLoopbackCorsOrigin(origin: string | null) {
   }
 }
 
+function withSecurityHeaders(response: Response) {
+  const headers = new Headers(response.headers);
+  const buildCommit = process.env.MATTERHORN_BUILD_COMMIT?.trim() ?? "";
+  if (/^[a-f0-9]{40}$/i.test(buildCommit)) {
+    headers.set("X-Matterhorn-Build-Commit", buildCommit.toLowerCase());
+  }
+  if (!headers.has("Content-Security-Policy")) {
+    headers.set("Content-Security-Policy", "frame-ancestors 'none'; base-uri 'none'; object-src 'none'");
+  }
+  if (!headers.has("Permissions-Policy")) {
+    headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+  }
+  if (!headers.has("Referrer-Policy")) headers.set("Referrer-Policy", "no-referrer");
+  if (!headers.has("X-Content-Type-Options")) headers.set("X-Content-Type-Options", "nosniff");
+  if (!headers.has("X-Frame-Options")) headers.set("X-Frame-Options", "DENY");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function withCors(response: Response, request: Request, config: ServerConfig) {
   const origin = request.headers.get("origin");
   const allowedOrigins = config.corsOrigins;
@@ -2412,9 +2434,14 @@ function withCors(response: Response, request: Request, config: ServerConfig) {
     "Access-Control-Allow-Headers",
     "Authorization, Content-Type, X-Matterhorn-Execution-Mode, X-Matterhorn-Host-Token, X-OpenWork-Host-Token, X-OpenWork-Client-Id, X-OpenCode-Directory, X-Opencode-Directory, x-opencode-directory",
   );
+  headers.set("Access-Control-Expose-Headers", "X-Matterhorn-Build-Commit");
   headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   headers.set("Vary", "Origin");
-  return new Response(response.body, { status: response.status, headers });
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 async function requireClient(request: Request, config: ServerConfig, tokens: TokenService): Promise<Actor> {

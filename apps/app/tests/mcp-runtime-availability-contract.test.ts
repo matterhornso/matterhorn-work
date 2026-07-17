@@ -16,10 +16,21 @@ describe("MCP runtime availability", () => {
     const card = readAppSource("design-system/extension-card.tsx");
 
     expect(view).toContain('getMcpServerName(entry) === "matterhorn-ui" && !isDesktopRuntime()');
-    expect(view).toContain('statusHint={webSupportComingSoon ? "Coming soon"');
-    expect(view).toContain("disabled={props.busy || webSupportComingSoon}");
-    expect(view).toContain("muted={webSupportComingSoon}");
+    expect(view).toContain("const comingSoon = webSupportComingSoon || oauthComingSoon");
+    expect(view).toContain('statusHint={comingSoon ? "Coming soon"');
+    expect(view).toContain("disabled={props.busy || comingSoon}");
+    expect(view).toContain("muted={comingSoon}");
     expect(card).toContain("muted?: boolean");
     expect(card).toContain('muted ? "cursor-default opacity-55"');
+  });
+
+  test("keeps unaccepted OAuth connectors muted and non-actionable", () => {
+    const view = readAppSource("domains/settings/pages/mcp-view.tsx");
+
+    expect(view).toContain("isPublicOauthConnectorEnabledAtLaunch");
+    expect(view).toContain("const oauthComingSoon = Boolean(entry.oauth)");
+    expect(view).toContain("muted={comingSoon}");
+    expect(view).toContain("disabled={props.busy || comingSoon}");
+    expect(view).toContain("actionLabel={comingSoon ? undefined");
   });
 });

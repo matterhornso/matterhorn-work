@@ -22,6 +22,9 @@ Dated handoffs describe the tree at a moment in time. They are valuable evidence
 - [Production launch configuration](production-launch-configuration.md) - setup ownership, safe environment defaults, and the release verification path.
 - [Friday production readiness](friday-production-go-live-readiness-2026-07-17.md) - current public-launch decision, evidence, and stop-ship gates.
 - [Friday production execution](friday-production-go-live-execution-2026-07-17.md) - Wednesday-through-Friday freeze, proof, publish, and rollback sequence.
+- [Product Hunt launch kit](product-hunt-launch-kit-2026-07-21.md) - canonical listing copy, capability boundaries, screenshots, demo, and FAQ.
+- [Product Hunt launch room](product-hunt-launch-room-2026-07-21.md) - exact-commit proof, owner matrix, recovery drills, final packet, and incident sequence.
+- [Product Hunt measurement and trust](product-hunt-measurement-and-trust-2026-07-21.md) - privacy-safe measurement, public trust surfaces, and support macros.
 - [Matterhorn design system](ui/matterhorn-design-system.md) - production UI rules.
 - [Engine naming boundary](opencode-runtime-abstraction.md) - when to say Matterhorn Work engine vs. OpenCode.
 

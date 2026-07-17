@@ -19,6 +19,7 @@ const priorTokenStore = process.env.OPENWORK_TOKEN_STORE;
 const priorOpenAiApiKey = process.env.OPENAI_API_KEY;
 const priorOpenAiRealtimeApiKey = process.env.OPENAI_REALTIME_API_KEY;
 const priorOpenWorkOpenAiRealtimeApiKey = process.env.OPENWORK_OPENAI_REALTIME_API_KEY;
+const priorBuildCommit = process.env.MATTERHORN_BUILD_COMMIT;
 const nativeFetch = globalThis.fetch;
 
 function baseConfig(input: Partial<Pick<ServerConfig, "corsOrigins">> = {}): ServerConfig {
@@ -94,6 +95,11 @@ afterEach(async () => {
   } else {
     process.env.OPENWORK_OPENAI_REALTIME_API_KEY = priorOpenWorkOpenAiRealtimeApiKey;
   }
+  if (priorBuildCommit === undefined) {
+    delete process.env.MATTERHORN_BUILD_COMMIT;
+  } else {
+    process.env.MATTERHORN_BUILD_COMMIT = priorBuildCommit;
+  }
   globalThis.fetch = nativeFetch;
 });
 
@@ -163,6 +169,25 @@ describe("env routes", () => {
     });
     expect(denied.status).toBe(204);
     expect(denied.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  test("all responses include defensive browser security headers", async () => {
+    const buildCommit = "a".repeat(40);
+    process.env.MATTERHORN_BUILD_COMMIT = buildCommit;
+    const { base } = await boot({ corsOrigins: ["https://app.matterhorn.example"] });
+    const response = await fetch(`${base}/health`, {
+      headers: { origin: "https://app.matterhorn.example" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://app.matterhorn.example");
+    expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    expect(response.headers.get("permissions-policy")).toContain("camera=()");
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
+    expect(response.headers.get("x-matterhorn-build-commit")).toBe(buildCommit);
+    expect(response.headers.get("access-control-expose-headers")).toContain("X-Matterhorn-Build-Commit");
   });
 
   test("PUT + GET round-trips a single entry and returns raw values", async () => {

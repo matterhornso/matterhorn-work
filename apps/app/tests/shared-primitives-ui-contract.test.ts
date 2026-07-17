@@ -354,6 +354,16 @@ describe("Shared primitives UI contract", () => {
     expect(source).not.toContain("border-b border-dls-border/25 px-3 py-4");
   });
 
+  test("configured MCP servers use soft raised rows instead of outlined boxes", () => {
+    const source = readAppSource("domains/settings/pages/mcp-view.tsx");
+
+    expect(source).toContain('"rounded-md bg-dls-surface-muted/[0.14] transition-colors"');
+    expect(source).toContain('? "bg-dls-surface-muted/[0.28]"');
+    expect(source).toContain(': "hover:bg-dls-surface-muted/[0.22]"');
+    expect(source).not.toContain('"border-dls-border bg-dls-surface hover:bg-dls-hover"');
+    expect(source).not.toContain('"border-blue-7 bg-blue-2 shadow-sm"');
+  });
+
   test("compact MCP settings use selection and disclosure instead of a long card document", () => {
     const source = readAppSource("domains/settings/pages/mcp-view.tsx");
     const extensionsSource = readAppSource("domains/settings/pages/extensions-view.tsx");

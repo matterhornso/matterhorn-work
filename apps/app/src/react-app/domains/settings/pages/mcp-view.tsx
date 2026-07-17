@@ -41,6 +41,7 @@ import {
   type OpencodeConfigFile,
 } from "../../../../app/lib/desktop";
 import { MATTERHORN_CLOUD_ENABLED } from "../../../../app/lib/den";
+import { isPublicOauthConnectorEnabledAtLaunch } from "../../../../app/lib/launch-features";
 import {
   getMcpIdentityKey,
   normalizeMcpSlug,
@@ -214,20 +215,6 @@ const serviceColor = (name: string) => {
   }
   if (lower.includes("matterhorn")) return "text-gray-12";
   return "text-dls-secondary";
-};
-
-const serviceIconBg = (name: string) => {
-  const lower = name.toLowerCase();
-  if (lower.includes("notion")) return "bg-gray-3 border-gray-6";
-  if (lower.includes("linear")) return "bg-blue-3 border-blue-6";
-  if (lower.includes("sentry")) return "bg-purple-3 border-purple-6";
-  if (lower.includes("stripe")) return "bg-blue-3 border-blue-6";
-  if (lower.includes("context")) return "bg-green-3 border-green-6";
-  if (lower.includes("devtools")) {
-    return "bg-amber-3 border-amber-6";
-  }
-  if (lower.includes("matterhorn")) return "bg-gray-3 border-gray-6";
-  return "bg-dls-hover border-dls-border";
 };
 
 function extensionResourceLabels(entry: McpDirectoryInfo) {
@@ -2017,6 +2004,8 @@ function McpQuickConnectSection(props: {
           const hidden = props.isEntryHidden(entry);
           const disabledReason = props.disabledReasonForEntry(entry);
           const webSupportComingSoon = getMcpServerName(entry) === "matterhorn-ui" && !isDesktopRuntime();
+          const oauthComingSoon = Boolean(entry.oauth) && !isPublicOauthConnectorEnabledAtLaunch(getMcpServerName(entry));
+          const comingSoon = webSupportComingSoon || oauthComingSoon;
 
           return (
             <ExtensionCard
@@ -2024,6 +2013,8 @@ function McpQuickConnectSection(props: {
               name={entry.name}
               description={webSupportComingSoon
                 ? "Available in the Matterhorn Work desktop app. Web connection is coming soon."
+                : oauthComingSoon
+                  ? `${entry.description} Account connection is coming soon.`
                 : entry.description
               }
               iconSlug={entry.iconSlug}
@@ -2035,13 +2026,13 @@ function McpQuickConnectSection(props: {
               connected={configured}
               enablement={enablement?.results}
               connecting={connecting}
-              muted={webSupportComingSoon}
+              muted={comingSoon}
               hidden={hidden}
               preview={entry.preview}
-              statusHint={webSupportComingSoon ? "Coming soon" : availabilityLabelForEntry(entry, configured, disabledReason)}
+              statusHint={comingSoon ? "Coming soon" : availabilityLabelForEntry(entry, configured, disabledReason)}
               disabledReason={disabledReason}
-              disabled={props.busy || webSupportComingSoon}
-              actionLabel={webSupportComingSoon ? undefined : actionLabelForEntry(entry, configured, disabledReason)}
+              disabled={props.busy || comingSoon}
+              actionLabel={comingSoon ? undefined : actionLabelForEntry(entry, configured, disabledReason)}
               onClick={() => props.onDetail(entry)}
             />
           );
@@ -2204,13 +2195,21 @@ function McpConfiguredServerRow(props: {
   return (
     <div className={props.compact
       ? cn("rounded-md bg-transparent transition-colors", props.selected ? "bg-dls-surface-muted/[0.12]" : "hover:bg-dls-surface-muted/[0.08]")
-      : `rounded-lg border transition-all ${props.selected ? "border-blue-7 bg-blue-2 shadow-sm" : "border-dls-border bg-dls-surface hover:bg-dls-hover"}`
+      : cn(
+          "rounded-md bg-dls-surface-muted/[0.14] transition-colors",
+          props.selected
+            ? "bg-dls-surface-muted/[0.28]"
+            : "hover:bg-dls-surface-muted/[0.22]",
+        )
     }>
       <button type="button" className={props.compact ? "w-full px-2.5 py-2.5 text-left" : "w-full px-4 py-3.5 text-left"} onClick={() => props.onSelect(props.selected ? null : props.entry.name)}>
         <div className="flex items-center gap-3">
           <div className={props.compact
             ? cn("flex size-7 shrink-0 items-center justify-center rounded-md", props.status === "connected" ? "bg-green-3" : "bg-dls-surface-muted/[0.2]")
-            : `flex size-8 shrink-0 items-center justify-center rounded-lg border ${props.status === "connected" ? "border-green-6 bg-green-3" : serviceIconBg(props.entry.name)}`
+            : cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-md",
+                props.status === "connected" ? "bg-green-3" : "bg-dls-surface-muted/[0.34]",
+              )
           }>
             <Icon size={15} className={props.status === "connected" ? "text-green-11" : serviceColor(props.entry.name)} />
           </div>
@@ -2237,7 +2236,7 @@ function McpConfiguredServerDetails(props: Parameters<typeof McpConfiguredServer
   return (
     <div className={props.compact
       ? "animate-in fade-in slide-in-from-top-1 space-y-3 px-3 pb-3 ps-[3.25rem] duration-200"
-      : "animate-in fade-in slide-in-from-top-1 space-y-3 border-t border-blue-6/20 px-4 py-3 duration-200"
+      : "animate-in fade-in slide-in-from-top-1 space-y-3 px-4 pb-4 pt-1 duration-200"
     }>
       <div className="flex items-center gap-4 text-xs">
         <span className="text-dls-secondary">{t("mcp.connection_type")}</span>

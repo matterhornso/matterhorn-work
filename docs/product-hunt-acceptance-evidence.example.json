@@ -1,0 +1,18 @@
+{
+  "version": "matterhorn.product-hunt-acceptance-evidence.v1",
+  "capturedAt": "2026-07-20T00:00:00.000Z",
+  "commit": "0000000000000000000000000000000000000000",
+  "environment": "deployed",
+  "appUrl": "https://app.matterhorn.example/workspace/ws/session",
+  "wallets": {
+    "metamask": { "status": "pending", "connect": false, "reject": false, "approve": false, "receipt": false, "reload": false, "disconnect": false, "browser": "", "walletVersion": "", "reportPath": "" },
+    "coinbase": { "status": "pending", "connect": false, "reject": false, "approve": false, "receipt": false, "reload": false, "disconnect": false, "browser": "", "walletVersion": "", "reportPath": "" },
+    "phantomSui": { "status": "pending", "network": "sui-testnet", "connect": false, "reject": false, "approveHandoff": false, "receipt": false, "reload": false, "disconnect": false, "walletVersion": "", "reportPath": "" },
+    "hyperliquid": { "status": "pending", "network": "testnet", "wallet": "", "connect": false, "reject": false, "approve": false, "receipt": false, "replayBlocked": false, "expiryBlocked": false, "limitBlocked": false, "killSwitchBlocked": false, "reportPath": "" }
+  },
+  "users": {
+    "newUser": { "status": "pending", "tester": "", "openProject": false, "chat": false, "desk": false, "note": false, "output": false, "reportPath": "" },
+    "existingUser": { "status": "pending", "tester": "", "openProject": false, "chat": false, "desk": false, "note": false, "output": false, "reportPath": "" }
+  },
+  "oauth": { "visible": [] }
+}

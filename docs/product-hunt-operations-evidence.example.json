@@ -1,0 +1,39 @@
+{
+  "version": "matterhorn.product-hunt-operations-evidence.v1",
+  "commit": "0000000000000000000000000000000000000000",
+  "capturedAt": "2026-07-20T00:00:00.000Z",
+  "monitoring": {
+    "status": "pending",
+    "dashboardUrl": "",
+    "reportPath": "",
+    "alertTest": {
+      "status": "pending",
+      "testedAt": "",
+      "channel": ""
+    },
+    "signals": {
+      "health": "",
+      "errors": "",
+      "latency": "",
+      "providerFailures": ""
+    }
+  },
+  "backupRestore": {
+    "status": "pending",
+    "reportPath": "",
+    "sensitiveMode": "exclude",
+    "sha256": "",
+    "sourceWorkspaceId": "",
+    "targetWorkspaceId": "",
+    "verified": false
+  },
+  "rollback": {
+    "status": "pending",
+    "reportPath": "",
+    "fromCommit": "",
+    "toCommit": "",
+    "healthVerified": false,
+    "healthVerifiedAt": "",
+    "owner": ""
+  }
+}

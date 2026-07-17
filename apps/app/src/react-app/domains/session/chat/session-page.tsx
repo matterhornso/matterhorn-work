@@ -159,6 +159,9 @@ const BrowserPanel = lazy(() => import("../browser/browser-panel").then((module)
 const ArtifactPanel = lazy(() => import("../artifacts/artifact-panel").then((module) => ({
   default: module.ArtifactPanel,
 })));
+const EmptyArtifactPanel = lazy(() => import("../artifacts/artifact-panel").then((module) => ({
+  default: module.EmptyArtifactPanel,
+})));
 const VoicePanel = lazy(() => import("../voice/voice-panel").then((module) => ({
   default: module.VoicePanel,
 })));
@@ -2060,22 +2063,29 @@ export function SessionPage(props: SessionPageProps) {
       client={props.matterhornServerClient}
       workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
     />
-  ) : visibleSidePanel === "artifacts" && visibleArtifactTarget && props.matterhornServerClient && props.runtimeWorkspaceId ? (
-    <ArtifactPanel
-      client={props.matterhornServerClient}
-      workspaceId={props.runtimeWorkspaceId}
-      workspaceRoot={props.selectedWorkspaceRoot}
-      workspaceName={props.selectedWorkspaceDisplay.displayName ?? props.selectedWorkspaceDisplay.name ?? ""}
-      isRemoteWorkspace={props.surface?.isRemoteWorkspace ?? false}
-      target={visibleArtifactTarget}
-      targets={artifactFileTargets}
-      outputReceipts={workflowOutputReceipts}
-      onSelectTarget={openTarget}
-      onAddNote={(artifactPath, desk, sessionSlug) => void addArtifactNote(artifactPath, desk, sessionSlug)}
-      onRevealPath={props.onRevealPath}
-      onDeletedTarget={removeAccessibleTarget}
-      onClose={closeRightPane}
-    />
+  ) : visibleSidePanel === "artifacts" ? (
+    visibleArtifactTarget && props.matterhornServerClient && props.runtimeWorkspaceId ? (
+      <ArtifactPanel
+        client={props.matterhornServerClient}
+        workspaceId={props.runtimeWorkspaceId}
+        workspaceRoot={props.selectedWorkspaceRoot}
+        workspaceName={props.selectedWorkspaceDisplay.displayName ?? props.selectedWorkspaceDisplay.name ?? ""}
+        isRemoteWorkspace={props.surface?.isRemoteWorkspace ?? false}
+        target={visibleArtifactTarget}
+        targets={artifactFileTargets}
+        outputReceipts={workflowOutputReceipts}
+        onSelectTarget={openTarget}
+        onAddNote={(artifactPath, desk, sessionSlug) => void addArtifactNote(artifactPath, desk, sessionSlug)}
+        onRevealPath={props.onRevealPath}
+        onDeletedTarget={removeAccessibleTarget}
+        onClose={closeRightPane}
+      />
+    ) : (
+      <EmptyArtifactPanel
+        workspaceName={props.selectedWorkspaceDisplay.displayName ?? props.selectedWorkspaceDisplay.name ?? ""}
+        onClose={closeRightPane}
+      />
+    )
   ) : visibleSidePanel === "sui" ? (
     <div
       data-testid="protocol-side-panel-scroll-root"

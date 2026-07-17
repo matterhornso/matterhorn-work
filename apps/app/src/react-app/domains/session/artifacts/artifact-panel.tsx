@@ -41,6 +41,11 @@ type ArtifactPanelProps = {
   onClose: () => void;
 };
 
+type EmptyArtifactPanelProps = {
+  workspaceName?: string;
+  onClose: () => void;
+};
+
 type ArtifactQueryState =
   | (TextData & { updatedAt: number | null })
   | (BinaryData & { contentType: string | null; updatedAt: number | null });
@@ -68,6 +73,43 @@ function generatedImageIdFromTarget(target: OpenTarget): string | null {
 function generatedImageReceiptProvider(summary?: string): { provider?: string; model?: string } {
   const [provider, model] = summary?.split(";") ?? [];
   return { provider: provider?.trim() || undefined, model: model?.trim() || undefined };
+}
+
+export function EmptyArtifactPanel({ workspaceName, onClose }: EmptyArtifactPanelProps) {
+  return (
+    <div
+      role="region"
+      aria-label="Outputs"
+      className="matterhorn-rail-content flex h-full min-h-0 min-w-0 flex-col bg-dls-background"
+    >
+      <div className="hidden min-h-12 shrink-0 items-center justify-between px-4 py-2 md:flex">
+        <h3 className="text-sm font-semibold text-foreground">Outputs</h3>
+        <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close outputs">
+          <X />
+        </Button>
+      </div>
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 pb-12 text-center">
+        <div className="flex size-10 items-center justify-center rounded-md bg-dls-surface-muted/25">
+          <FolderOpen className="size-5 text-muted-foreground" />
+        </div>
+        <div className="grid max-w-xs gap-1">
+          <p className="text-sm font-medium text-foreground">No outputs yet</p>
+          <p className="text-xs leading-5 text-muted-foreground">
+            Files created by Matterhorn will appear here for review, download, and notes.
+          </p>
+          <p className="text-xs leading-5 text-muted-foreground">
+            Saved files live under <span className="font-medium text-foreground">outputs/&lt;desk&gt;/&lt;session-slug&gt;/</span>.
+          </p>
+        </div>
+        {workspaceName ? (
+          <div className="mt-1 flex max-w-full items-center gap-1.5 rounded-md bg-dls-surface-muted/25 px-3 py-1 text-[11px] text-muted-foreground">
+            <FolderOpen className="size-3 shrink-0" />
+            <span className="truncate">{workspaceName}</span>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 export function ArtifactPanel({
