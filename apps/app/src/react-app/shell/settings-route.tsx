@@ -145,7 +145,11 @@ import {
 import { readActiveWorkspaceId, writeActiveWorkspaceId } from "./session-memory";
 import { workspaceRunHistoryRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
 import { getReactQueryClient } from "../infra/query-client";
-import { ensureProviderListQuery, getConnectedProviderItems, refreshProviderListQueries } from "../domains/connections/provider-list-query";
+import {
+  ensureProviderListQuery,
+  getConnectedProviderItems,
+  refreshProviderListAfterEngineReload,
+} from "../domains/connections/provider-list-query";
 import { openModelPickerEvent, pendingModelPickerProviderIdsKey } from "./new-providers-toast";
 import {
   IMAGE_GENERATION_EXTENSION_CONFIG_PATH,
@@ -701,7 +705,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     }
 
     await matterhornClient.reloadEngine(workspaceId);
-    await refreshProviderListQueries(getReactQueryClient());
+    refreshProviderListAfterEngineReload(getReactQueryClient());
 
     try {
       window.dispatchEvent(new CustomEvent("openwork-server-settings-changed"));
@@ -1208,7 +1212,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       } catch {
         // The reload toast still lets the user retry if the immediate reload fails.
       }
-      await refreshProviderListQueries(getReactQueryClient());
+      refreshProviderListAfterEngineReload(getReactQueryClient());
       try {
         window.dispatchEvent(new CustomEvent("openwork-server-settings-changed"));
       } catch {

@@ -40,6 +40,41 @@ export async function refreshProviderListQueries(queryClient: QueryClient) {
   await queryClient.refetchQueries({ queryKey: PROVIDER_LIST_QUERY_ROOT, type: "active" });
 }
 
+const ENGINE_RELOAD_PROVIDER_RETRY_DELAYS_MS = [750, 1_500, 3_000] as const;
+
+type EngineReloadProviderRefreshOptions = {
+  refresh?: typeof refreshProviderListQueries;
+  schedule?: (callback: () => void, delayMs: number) => unknown;
+};
+
+/**
+ * Engine disposal succeeds before every provider client has reconnected. Keep
+ * that transient work off the reload completion path, then retry it briefly.
+ */
+export function refreshProviderListAfterEngineReload(
+  queryClient: QueryClient,
+  options: EngineReloadProviderRefreshOptions = {},
+) {
+  const refresh = options.refresh ?? refreshProviderListQueries;
+  const schedule = options.schedule ?? ((callback, delayMs) => setTimeout(callback, delayMs));
+  let retryIndex = 0;
+
+  const run = async () => {
+    try {
+      await refresh(queryClient);
+    } catch {
+      const delayMs = ENGINE_RELOAD_PROVIDER_RETRY_DELAYS_MS[retryIndex];
+      retryIndex += 1;
+      if (delayMs === undefined) return;
+      schedule(() => {
+        void run();
+      }, delayMs);
+    }
+  };
+
+  void run();
+}
+
 export async function fetchProviderList(input: {
   client: Client;
   baseUrl?: string | null;

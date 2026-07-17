@@ -26,6 +26,16 @@ assert.ok(
     script.includes("childElementCount"),
   "product browser smoke should wait for the Vite React app to mount",
 );
+assert.ok(
+  script.includes("hidden_by_launch_policy") &&
+    script.includes("safe Overview fallback"),
+  "product browser smoke should verify Billing is safely hidden when the launch policy disables it",
+);
+assert.ok(
+  script.includes("Hidden Generated media route") &&
+    script.includes("generatedMediaVisible"),
+  "product browser smoke should verify Generated media is safely hidden when the launch policy disables it",
+);
 
 for (const stageId of [
   "open_app",
@@ -60,7 +70,7 @@ for (const visibleText of [
   "Open outputs folder",
   "Wallet readiness",
   "Wallet readiness details",
-  "Sui signing stays in your wallet; desktop uses external handoff.",
+  "review and sign every transaction in your wallet",
   "Open Bittensor",
   "Open Hyperliquid",
   "Open Polymarket",
@@ -72,12 +82,12 @@ for (const visibleText of [
   "Sui desk",
   "Longevity Agent",
   "Agent tasks",
-  "Find useful subnets",
-  "Show market context",
+  "Explore subnets",
+  "Read market overview",
   "Check compliance",
   "Add market",
   "Market URL or slug",
-  "Prepare transfer preview",
+  "Preview a SUI transfer",
   "7 stages",
   "Run in chat",
   "Start task",
@@ -108,7 +118,7 @@ for (const visibleText of [
   "Download report",
   "Copy command",
   "Sui wallet",
-  "Early access",
+  "Limited release",
   "Agent model",
   "opencode/big-pickle",
   "1 provider connected",

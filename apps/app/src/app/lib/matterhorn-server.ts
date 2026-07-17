@@ -1475,6 +1475,9 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     sessionRead: 12_000,
     status: 6_000,
     config: 10_000,
+    // Disposing and recreating an engine can take longer than an ordinary
+    // workspace request, especially while provider clients reconnect.
+    engineReload: 30_000,
     workspaceExport: 30_000,
     workspaceImport: 30_000,
     binary: 60_000,
@@ -1734,6 +1737,7 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         token,
         hostToken,
         method: "POST",
+        timeoutMs: timeouts.engineReload,
       }),
     listPlugins: (workspaceId: string, options?: { includeGlobal?: boolean }) => {
       const query = options?.includeGlobal ? "?includeGlobal=true" : "";

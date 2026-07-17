@@ -61,6 +61,17 @@ function workspaceUrl(suffix = "session", query = "") {
   return url.toString();
 }
 
+function launchPolicyFallbackForSurface(id) {
+  if (
+    id.endsWith("settings-billing")
+    || id.endsWith("settings-generated-media")
+    || id.endsWith("settings-cloud-account")
+  ) {
+    return workspaceUrl("settings/overview");
+  }
+  return null;
+}
+
 function classifyControl(label, disabled, element) {
   if (disabled) return { classification: "unavailable", skippedReason: "disabled in this runtime/state" };
   if (/delete|remove|disconnect|forget|uninstall|reset|reject|revoke|clear data|sign out/i.test(label)) {
@@ -93,6 +104,17 @@ async function visibleMarker(page, markers, timeoutMs = 20_000) {
   throw new Error(`None of these markers became visible: ${markers.join(", ")}`);
 }
 
+async function waitForChatComposer(page, timeoutMs = 20_000) {
+  // Compact layouts collapse the visual label, but retain the named control users operate.
+  const group = page.getByRole("radiogroup", { name: "Response perspective", exact: true });
+  await group.waitFor({ state: "visible", timeout: timeoutMs });
+  await group.scrollIntoViewIfNeeded();
+  if (await group.count() !== 1) {
+    throw new Error("Response perspective selector is missing or duplicated.");
+  }
+  return group;
+}
+
 async function waitForVisualSettle(page, timeoutMs = 2_000) {
   await page.waitForFunction(
     () => !document.getAnimations().some((animation) => {
@@ -115,7 +137,12 @@ async function inspectSurface(page, report, id, url, markers, viewportName) {
       undefined,
       { timeout: 20_000 },
     );
-    const marker = await visibleMarker(page, markers);
+    const launchPolicyFallback = launchPolicyFallbackForSurface(id);
+    const marker = await visibleMarker(page, launchPolicyFallback ? [...markers, "Overview"] : markers);
+    const hiddenByLaunchPolicy = Boolean(launchPolicyFallback && marker === "Overview");
+    if (hiddenByLaunchPolicy && page.url() !== launchPolicyFallback) {
+      throw new Error(`Hidden launch-policy surface resolved to ${page.url()} instead of ${launchPolicyFallback}.`);
+    }
     if (id.endsWith("settings-overview")) {
       await page.waitForFunction(
         () => Array.from(document.querySelectorAll("button")).some(
@@ -162,6 +189,16 @@ async function inspectSurface(page, report, id, url, markers, viewportName) {
         undefined,
         { timeout: 20_000 },
       );
+      await page.waitForFunction(
+        () => !["Could not load memory", "Could not load memory review"].some((message) =>
+          document.body.textContent?.includes(message),
+        ),
+        undefined,
+        { timeout: 20_000 },
+      );
+    }
+    if (id.endsWith("desk-chat")) {
+      await waitForChatComposer(page);
     }
     await waitForVisualSettle(page);
     const inspection = await page.evaluate(() => {
@@ -212,6 +249,7 @@ async function inspectSurface(page, report, id, url, markers, viewportName) {
       url: page.url(),
       marker,
       status: "pass",
+      launchPolicy: hiddenByLaunchPolicy ? "hidden_by_launch_policy" : "visible",
       durationMs: Date.now() - startedAt,
       horizontalOverflow: inspection.horizontalOverflow,
       controlCount: controls.length,
@@ -338,6 +376,26 @@ async function latestSmokeSessionUrl() {
   return null;
 }
 
+async function generatedMediaChatControlAvailable(page, report) {
+  const generateImage = page.getByRole("button", { name: "Generate image", exact: true });
+  if (await generateImage.isVisible().catch(() => false)) return true;
+
+  const requestedUrl = workspaceUrl("settings/generated-media");
+  const fallbackUrl = launchPolicyFallbackForSurface("settings-generated-media");
+  await page.goto(requestedUrl, { waitUntil: "load", timeout: 30_000 });
+  const marker = await visibleMarker(page, ["Production readiness", "Overview"]);
+  if (marker !== "Overview" || page.url() !== fallbackUrl) {
+    throw new Error("Generate image is absent even though Generated Media remains available in Settings.");
+  }
+  report.launchPolicies.push({
+    surface: "chat-generated-media-control",
+    status: "hidden_by_launch_policy",
+    requestedUrl,
+    resolvedUrl: page.url(),
+  });
+  return false;
+}
+
 async function inspectResponsiveSurfaceCatalog(page, report, prefix, viewportName, chatUrl) {
   await inspectSurface(
     page,
@@ -369,7 +427,7 @@ async function inspectResponsiveSurfaceCatalog(page, report, prefix, viewportNam
     );
   }
   if (chatUrl) {
-    await inspectSurface(page, report, `${prefix}desk-chat`, chatUrl, ["Response perspective", "Generate image"], viewportName);
+    await inspectSurface(page, report, `${prefix}desk-chat`, chatUrl, ["Bittensor session", "Matterhorn"], viewportName);
   } else {
     report.issues.push({
       severity: "P1",
@@ -394,6 +452,7 @@ async function run() {
     pageErrors: [],
     networkFailures: [],
     screenshots: [],
+    launchPolicies: [],
   };
   const browser = await chromium.launch({ headless: true });
   activeBrowser = browser;
@@ -480,7 +539,7 @@ async function run() {
 
       if (!chatUrl) throw new Error("A smoke-created chat is required to verify model picker visibility.");
       await page.goto(chatUrl, { waitUntil: "load" });
-      await visibleMarker(page, ["Generate image"]);
+      await waitForChatComposer(page);
       if (await page.getByRole("button", { name: /^Change model/ }).count() !== 0) {
         throw new Error("Model picker stayed visible after being hidden.");
       }
@@ -496,7 +555,7 @@ async function run() {
     if (await restoredWorkspaceAction.count() !== 1) throw new Error("New project sidebar action did not return after restoring defaults.");
 
     await page.goto(chatUrl, { waitUntil: "load" });
-    await visibleMarker(page, ["Generate image"]);
+    await waitForChatComposer(page);
     if (await page.getByRole("button", { name: /^Change model/ }).count() !== 1) {
       throw new Error("Model picker did not return after restoring defaults.");
     }
@@ -588,12 +647,10 @@ async function run() {
   });
 
   if (chatUrl) {
-    await inspectSurface(page, report, "desk-chat", chatUrl, ["Response perspective", "Generate image"], "desktop");
+    await inspectSurface(page, report, "desk-chat", chatUrl, ["Bittensor session", "Matterhorn"], "desktop");
     await recordInteraction(report, "response-perspective-controls", async () => {
       await page.goto(chatUrl, { waitUntil: "load" });
-      await visibleMarker(page, ["Generate image"]);
-      const group = page.getByRole("radiogroup", { name: "Response perspective", exact: true });
-      if (await group.count() !== 1) throw new Error("Response perspective selector is missing or duplicated.");
+      const group = await waitForChatComposer(page);
       for (const label of ["Cautious", "Balanced", "Optimistic"]) {
         const radio = group.getByRole("radio", { name: label, exact: true });
         await clickUnique(radio, `${label} perspective`);
@@ -602,7 +659,7 @@ async function run() {
     });
     await recordInteraction(report, "generate-image-panel", async () => {
       await page.goto(chatUrl, { waitUntil: "load" });
-      await visibleMarker(page, ["Generate image"]);
+      if (!await generatedMediaChatControlAvailable(page, report)) return;
       await clickUnique(page.getByRole("button", { name: "Generate image", exact: true }), "Generate image");
       await visibleMarker(page, [
         "Create image",
@@ -616,10 +673,19 @@ async function run() {
     report.issues.push({ severity: "P1", surface: "desk-chat", category: "coverage", message: "No current smoke-created chat URL was available." });
   }
 
-  await page.goto(workspaceUrl("settings/cloud-account"), { waitUntil: "load" });
-  await visibleMarker(page, ["Account", "Matterhorn Cloud"]);
+  const cloudAccountUrl = workspaceUrl("settings/cloud-account");
+  const cloudAccountFallback = launchPolicyFallbackForSurface("settings-cloud-account");
+  await page.goto(cloudAccountUrl, { waitUntil: "load" });
+  const cloudAccountMarker = await visibleMarker(page, ["Account", "Matterhorn Cloud", "Overview"]);
+  const cloudAccountHidden = cloudAccountMarker === "Overview";
+  if (cloudAccountHidden && page.url() !== cloudAccountFallback) {
+    throw new Error(`Hidden Cloud Account route resolved to ${page.url()} instead of ${cloudAccountFallback}.`);
+  }
   await waitForVisualSettle(page);
-  const desktopShot = resolve(outputDir, "desktop-settings-cloud-account.png");
+  const desktopShot = resolve(
+    outputDir,
+    cloudAccountHidden ? "desktop-settings-overview-launch-policy.png" : "desktop-settings-cloud-account.png",
+  );
   await page.screenshot({ path: desktopShot, fullPage: true });
   report.screenshots.push(desktopShot);
   await desktop.close();
@@ -650,16 +716,25 @@ async function run() {
       chatUrl,
     );
 
-    await responsivePage.goto(workspaceUrl("settings/cloud-account"), { waitUntil: "load" });
-    await visibleMarker(responsivePage, ["Account", "Matterhorn Cloud"]);
+    await responsivePage.goto(cloudAccountUrl, { waitUntil: "load" });
+    const responsiveCloudMarker = await visibleMarker(responsivePage, ["Account", "Matterhorn Cloud", "Overview"]);
+    const responsiveCloudHidden = responsiveCloudMarker === "Overview";
+    if (responsiveCloudHidden && responsivePage.url() !== cloudAccountFallback) {
+      throw new Error(`Hidden Cloud Account route resolved to ${responsivePage.url()} instead of ${cloudAccountFallback}.`);
+    }
     await waitForVisualSettle(responsivePage);
-    const accountShot = resolve(outputDir, `${viewport.name}-settings-cloud-account.png`);
+    const accountShot = resolve(
+      outputDir,
+      responsiveCloudHidden
+        ? `${viewport.name}-settings-overview-launch-policy.png`
+        : `${viewport.name}-settings-cloud-account.png`,
+    );
     await responsivePage.screenshot({ path: accountShot, fullPage: true });
     report.screenshots.push(accountShot);
 
     if (chatUrl) {
       await responsivePage.goto(chatUrl, { waitUntil: "load" });
-      await visibleMarker(responsivePage, ["Generate image"]);
+      await waitForChatComposer(responsivePage);
       await waitForVisualSettle(responsivePage);
       const chatShot = resolve(outputDir, `${viewport.name}-desk-chat.png`);
       await responsivePage.screenshot({ path: chatShot, fullPage: true });

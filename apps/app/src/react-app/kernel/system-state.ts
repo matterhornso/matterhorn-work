@@ -69,6 +69,14 @@ type UseSystemStateOptions = {
   setError: (message: string | null) => void;
 };
 
+export function describeReloadError(error: unknown): string {
+  const message = error instanceof Error ? error.message : safeStringify(error);
+  // A timeout during engine disposal is a transport detail, not useful
+  // recovery guidance. The reload control stays available for a retry.
+  if (/request timed out/i.test(message)) return t("system.reload_failed");
+  return message || t("system.reload_failed");
+}
+
 export function useSystemState(
   options: UseSystemStateOptions,
 ): SystemStateControls {
@@ -164,8 +172,7 @@ export function useSystemState(
       await options.onReloadComplete?.();
       clearReloadRequired();
     } catch (error) {
-      const message = error instanceof Error ? error.message : safeStringify(error);
-      setReloadError(message || t("system.reload_failed"));
+      setReloadError(describeReloadError(error));
     } finally {
       setReloadBusy(false);
     }

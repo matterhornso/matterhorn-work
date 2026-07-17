@@ -329,14 +329,14 @@ const primaryDeskSmokeScenarios = [
     name: "Bittensor",
     openLabel: "Open Bittensor",
     heading: "Bittensor desk",
-    expectedTask: "Find useful subnets",
+    expectedTask: "Explore subnets",
   },
   {
     id: "hyperliquid",
     name: "Hyperliquid",
     openLabel: "Open Hyperliquid",
     heading: "Hyperliquid desk",
-    expectedTask: "Show market context",
+    expectedTask: "Read market overview",
   },
   {
     id: "polymarket",
@@ -355,7 +355,7 @@ const primaryDeskSmokeScenarios = [
     name: "Sui",
     openLabel: "Open Sui",
     heading: "Sui desk",
-    expectedTask: "Prepare transfer preview",
+    expectedTask: "Preview a SUI transfer",
   },
 ];
 
@@ -492,14 +492,14 @@ async function runSmoke(config) {
 
     await stage(report, "wallet_readiness", "Check compact wallet readiness", async () => {
       await page.getByText("Wallet readiness", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText(/Sui: (Working|Early access|Needs setup|Not supported here)/).waitFor({
+      await page.getByText(/Sui: (Working|Limited release|Needs setup|Not supported here)/).waitFor({
         state: "visible",
         timeout: 20_000,
       });
       await page.getByLabel("Wallet readiness details").click();
-      await page.getByText("Sui signing stays in your wallet; desktop uses external handoff.", { exact: true })
+      await page.getByText(/review and sign every transaction in your wallet/i).first()
         .waitFor({ state: "visible", timeout: 10_000 });
-      await page.getByRole("button", { name: "Open wallet", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await page.getByRole("button", { name: "Open wallet settings", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     });
 
     for (const desk of primaryDeskSmokeScenarios) {
@@ -738,8 +738,26 @@ async function runSmoke(config) {
     });
 
     await stage(report, "settings_billing", "Check Billing settings payment flow copy", async () => {
-      await page.goto(workspaceUrl(config.url, "settings/billing"), { waitUntil: "load", timeout: 30_000 });
-      await page.locator("main").getByRole("heading", { name: "Billing", exact: true }).last().waitFor({ state: "visible", timeout: 20_000 });
+      const requestedBillingUrl = workspaceUrl(config.url, "settings/billing");
+      await page.goto(requestedBillingUrl, { waitUntil: "load", timeout: 30_000 });
+      const billingHeading = page.locator("main").getByRole("heading", { name: "Billing", exact: true }).last();
+      const billingVisible = await billingHeading.isVisible({ timeout: 2_000 }).catch(() => false);
+      if (!billingVisible) {
+        const overviewUrl = workspaceUrl(config.url, "settings/overview");
+        await page.locator("main").getByRole("heading", { name: "Overview", exact: true }).last().waitFor({
+          state: "visible",
+          timeout: 20_000,
+        });
+        if (page.url() !== overviewUrl) {
+          throw new Error(`Hidden Billing route resolved to ${page.url()} instead of the safe Overview fallback.`);
+        }
+        report.artifacts.billing = {
+          status: "hidden_by_launch_policy",
+          requestedUrl: requestedBillingUrl,
+          resolvedUrl: page.url(),
+        };
+        return;
+      }
       await page.locator("main").getByRole("heading", { name: "Matterhorn Plus", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.locator("main").getByRole("heading", { name: "Matterhorn Max", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText("$9.99/month", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
@@ -749,18 +767,37 @@ async function runSmoke(config) {
         page.getByText("Live payments disabled", { exact: true }),
       ], "billing live-payment safety state", 20_000);
       await page.getByText("What billing changes", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      report.artifacts.billingSettingsUrl = page.url();
+      report.artifacts.billing = { status: "visible", url: page.url() };
     });
 
     await stage(report, "settings_generated_media", "Check Generated media settings surface", async () => {
-      await page.goto(workspaceUrl(config.url, "settings/generated-media"), { waitUntil: "load", timeout: 30_000 });
-      await page.getByText("Production readiness", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      const requestedGeneratedMediaUrl = workspaceUrl(config.url, "settings/generated-media");
+      await page.goto(requestedGeneratedMediaUrl, { waitUntil: "load", timeout: 30_000 });
+      const productionReadiness = page.getByText("Production readiness", { exact: true });
+      const generatedMediaVisible = await productionReadiness.isVisible({ timeout: 2_000 }).catch(() => false);
+      if (!generatedMediaVisible) {
+        const overviewUrl = workspaceUrl(config.url, "settings/overview");
+        await page.locator("main").getByRole("heading", { name: "Overview", exact: true }).last().waitFor({
+          state: "visible",
+          timeout: 20_000,
+        });
+        if (page.url() !== overviewUrl) {
+          throw new Error(`Hidden Generated media route resolved to ${page.url()} instead of the safe Overview fallback.`);
+        }
+        report.artifacts.generatedMedia = {
+          status: "hidden_by_launch_policy",
+          requestedUrl: requestedGeneratedMediaUrl,
+          resolvedUrl: page.url(),
+        };
+        return;
+      }
+      await productionReadiness.waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText("Media library", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByRole("button", { name: "Generate image", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText("Diagnostics and readiness report", { exact: true }).click();
       await page.getByRole("button", { name: "Run diagnostics", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       await page.getByText("Storage and data controls", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      report.artifacts.generatedMediaSettingsUrl = page.url();
+      report.artifacts.generatedMedia = { status: "visible", url: page.url() };
     });
 
     const screenshotPath = resolve(config.outputDir, "matterhorn-product-browser-smoke.png");

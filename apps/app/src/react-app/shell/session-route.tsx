@@ -179,7 +179,7 @@ import {
   ensureProviderListQuery,
   getConnectedProviderItems,
   isModelAvailableInConnectedProviders,
-  refreshProviderListQueries,
+  refreshProviderListAfterEngineReload,
   useProviderListQuery,
 } from "../domains/connections/provider-list-query";
 
@@ -1218,7 +1218,7 @@ export function SessionRoute() {
       return false;
     }
     await endpoint.client.reloadEngine(endpoint.workspaceId);
-    await refreshProviderListQueries(getReactQueryClient());
+    refreshProviderListAfterEngineReload(getReactQueryClient());
     setEngineReloadVersion((v) => v + 1);
     try {
       window.dispatchEvent(new CustomEvent("openwork-server-settings-changed"));

@@ -54,9 +54,9 @@ assert.ok(
 );
 for (const visibleText of [
   "Wallet readiness",
-  "Early access",
-  "Sui signing stays in your wallet; desktop uses external handoff.",
-  "Open wallet",
+  "Limited release",
+  "review and sign every transaction in your wallet",
+  "Open wallet settings",
   "Generate image",
   "Describe the image...",
   "Create image",

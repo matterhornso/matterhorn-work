@@ -295,15 +295,14 @@ async function runSmoke(config) {
 
     await stage(report, "home_wallet_readiness", "Check Home wallet readiness", async () => {
       await page.getByText("Wallet readiness", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText(/Sui: (Working|Early access|Needs setup|Not supported here)/).waitFor({
+      await page.getByText(/Sui: (Working|Limited release|Needs setup|Not supported here)/).waitFor({
         state: "visible",
         timeout: 20_000,
       });
       await page.getByLabel("Wallet readiness details").click();
-      await page
-        .getByText("Sui signing stays in your wallet; desktop uses external handoff.", { exact: true })
+      await page.getByText(/review and sign every transaction in your wallet/i).first()
         .waitFor({ state: "visible", timeout: 10_000 });
-      await page.getByRole("button", { name: "Open wallet", exact: true }).waitFor({
+      await page.getByRole("button", { name: "Open wallet settings", exact: true }).waitFor({
         state: "visible",
         timeout: 10_000,
       });
