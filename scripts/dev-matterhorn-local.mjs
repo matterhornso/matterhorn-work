@@ -160,6 +160,7 @@ function findInstalledOpencodeBin() {
 
 async function waitForJson(url, options = {}) {
   const timeoutMs = options.timeoutMs ?? 30_000;
+  const requestTimeoutMs = options.requestTimeoutMs ?? 1_500;
   const startedAt = Date.now();
   let lastError = "";
 
@@ -167,10 +168,15 @@ async function waitForJson(url, options = {}) {
     try {
       const response = await fetch(url, {
         headers: options.headers,
-        signal: AbortSignal.timeout(1500),
+        signal: AbortSignal.timeout(requestTimeoutMs),
       });
-      if (response.ok) return await response.json();
-      lastError = `${response.status} ${response.statusText}`;
+      if (response.ok) {
+        const payload = await response.json();
+        if (!options.accept || options.accept(payload)) return payload;
+        lastError = options.pendingMessage || "response is not ready";
+      } else {
+        lastError = `${response.status} ${response.statusText}`;
+      }
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
     }
@@ -178,6 +184,12 @@ async function waitForJson(url, options = {}) {
   }
 
   throw new Error(`Timed out waiting for ${url}${lastError ? ` (${lastError})` : ""}`);
+}
+
+function workspaceEngineReady(payload) {
+  const summary = payload?.summary;
+  const blockingChecks = Array.isArray(summary?.blockingChecks) ? summary.blockingChecks : [];
+  return summary?.readinessStatus === "working" && !blockingChecks.includes("opencode_connection");
 }
 
 async function waitForHttp(url, options = {}) {
@@ -333,6 +345,21 @@ async function main() {
 
   if (!activeWorkspaceId) {
     throw new Error("Matterhorn Work server started, but it did not report an active workspace.");
+  }
+
+  if (opencodeBaseUrl || manageOpencode) {
+    console.log("Waiting for workspace agent engine readiness...");
+    await waitForJson(
+      `${serverUrl}/workspace/${encodeURIComponent(activeWorkspaceId)}/backend/control-plane`,
+      {
+        timeoutMs: 60_000,
+        requestTimeoutMs: 20_000,
+        headers: { Authorization: `Bearer ${clientToken}` },
+        accept: workspaceEngineReady,
+        pendingMessage: "workspace agent engine is still starting",
+      },
+    );
+    console.log("Workspace agent engine is ready.");
   }
 
   const app = appCommand(appPort);

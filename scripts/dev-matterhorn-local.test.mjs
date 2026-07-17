@@ -42,6 +42,20 @@ assert.ok(
   script.includes("MATTERHORN_LOCAL_SERVER_CONFIG") && script.includes('"--config", serverConfigPath'),
   "dev:matterhorn-local should support a durable multi-workspace server config",
 );
+assert.ok(
+  script.includes("/backend/control-plane") &&
+    script.includes('summary?.readinessStatus === "working"') &&
+    script.includes('!blockingChecks.includes("opencode_connection")'),
+  "dev:matterhorn-local should wait for the workspace engine control plane before starting the app",
+);
+assert.ok(
+  script.indexOf("Waiting for workspace agent engine readiness...") < script.indexOf("const app = appCommand(appPort)"),
+  "dev:matterhorn-local should finish the engine warmup before launching Vite",
+);
+assert.ok(
+  script.includes("requestTimeoutMs: 20_000"),
+  "dev:matterhorn-local should allow the first cold control-plane request to finish",
+);
 
 const help = spawnSync(process.execPath, ["scripts/dev-matterhorn-local.mjs", "--help"], {
   cwd: process.cwd(),
