@@ -56,7 +56,8 @@ export type WorkspaceInfo = {
   path: string;
   preset: string;
   workspaceType: "local" | "remote";
-  remoteType?: "matterhorn" | "opencode" | null;
+  /** `openwork` is accepted only while migrating older persisted desktop state. */
+  remoteType?: "matterhorn" | "opencode" | "openwork" | null;
   baseUrl?: string | null;
   directory?: string | null;
   displayName?: string | null;

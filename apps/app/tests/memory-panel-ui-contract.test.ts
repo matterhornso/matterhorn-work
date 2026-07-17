@@ -5,6 +5,10 @@ function readAppSource(path: string) {
   return readFileSync(new URL(`../src/react-app/${path}`, import.meta.url), "utf8");
 }
 
+function readSessionPageSource() {
+  return readAppSource("domains/session/chat/session-page.tsx");
+}
+
 describe("Memory panel UI contract", () => {
   test("uses a review-first header and four count filters", () => {
     const source = readAppSource("domains/memory/memory-panel.tsx");
@@ -88,6 +92,16 @@ describe("Memory panel UI contract", () => {
     expect(source).toContain("resolveStoredWorkspaceMemorySuggestion");
     expect(source).toContain("resolveWorkspaceMemorySuggestion");
     expect(source).toContain("exportWorkspaceMemory");
+  });
+});
+
+describe("Memory rail inbox contract", () => {
+  test("counts the same workspace-scoped suggestion inbox shown by the Memory panel", () => {
+    const source = readSessionPageSource();
+
+    expect(source).toContain('const workspaceId = (props.runtimeWorkspaceId ?? props.selectedWorkspaceId ?? "").trim();');
+    expect(source).toContain('client.listWorkspaceMemorySuggestions(workspaceId, { status: "pending", limit: 50 })');
+    expect(source).toContain('client.listMemorySuggestions({ status: "pending", limit: 50 })');
   });
 });
 

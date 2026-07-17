@@ -2,7 +2,22 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isSupportedWorkspaceTextFilePath, normalizeWorkspaceRelativePath, resolveSafeChildPath } from "./server.js";
+import {
+  isSupportedWorkspaceTextFilePath,
+  normalizeWorkspaceRelativePath,
+  resolveSafeChildPath,
+  resolveToyUiEnabled,
+} from "./server.js";
+
+describe("resolveToyUiEnabled", () => {
+  test("keeps the legacy anonymous Toy UI disabled unless an operator explicitly enables it", () => {
+    expect(resolveToyUiEnabled(undefined)).toBe(false);
+    expect(resolveToyUiEnabled("")).toBe(false);
+    expect(resolveToyUiEnabled("false")).toBe(false);
+    expect(resolveToyUiEnabled("1")).toBe(true);
+    expect(resolveToyUiEnabled("true")).toBe(true);
+  });
+});
 
 describe("normalizeWorkspaceRelativePath", () => {
   test("accepts a plain workspace-relative path", () => {

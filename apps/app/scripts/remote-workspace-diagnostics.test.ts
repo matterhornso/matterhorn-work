@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { OpenworkServerClient } from "../src/app/lib/openwork-server";
+import type { MatterhornServerClient } from "../src/app/lib/matterhorn-server";
 import type { WorkspaceInfo } from "../src/app/lib/desktop";
 import { getWorkspaceTaskLoadErrorDisplay } from "../src/app/utils";
 import {
@@ -18,14 +18,14 @@ function workspace(overrides: Partial<WorkspaceInfo> = {}): WorkspaceInfo {
     path: "",
     preset: "remote",
     workspaceType: "remote",
-    remoteType: "openwork",
-    openworkHostUrl: "https://worker.example.com/w/ws_remote",
-    openworkToken: "ow-token",
+    remoteType: "matterhorn",
+    matterhornHostUrl: "https://worker.example.com/w/ws_remote",
+    matterhornToken: "ow-token",
     ...overrides,
   };
 }
 
-function client(overrides: Partial<OpenworkServerClient> = {}): OpenworkServerClient {
+function client(overrides: Partial<MatterhornServerClient> = {}): MatterhornServerClient {
   return {
     baseUrl: "https://worker.example.com/w/ws_remote",
     token: "ow-token",
@@ -71,7 +71,7 @@ function client(overrides: Partial<OpenworkServerClient> = {}): OpenworkServerCl
       activeId: "ws_remote",
     }),
     ...overrides,
-  } as OpenworkServerClient;
+  } as MatterhornServerClient;
 }
 
 function serverError(status: number, code: string, message: string) {
@@ -79,11 +79,11 @@ function serverError(status: number, code: string, message: string) {
 }
 
 describe("resolveRemoteWorkspaceConnectionTarget", () => {
-  test("builds a host-scoped OpenWork target from saved worker credentials", () => {
+  test("builds a host-scoped Matterhorn target from saved worker credentials", () => {
     const target = resolveRemoteWorkspaceConnectionTarget(
       workspace({
-        openworkHostUrl: "https://worker.example.com",
-        openworkWorkspaceId: "ws_remote",
+        matterhornHostUrl: "https://worker.example.com",
+        matterhornWorkspaceId: "ws_remote",
       }),
     );
 
@@ -106,7 +106,7 @@ describe("resolveRemoteWorkspaceConnectionTarget", () => {
   test("fails fast when a remote worker has no endpoint", () => {
     const target = resolveRemoteWorkspaceConnectionTarget(
       workspace({
-        openworkHostUrl: "",
+        matterhornHostUrl: "",
         baseUrl: "",
       }),
     );
@@ -120,7 +120,7 @@ describe("resolveRemoteWorkspaceConnectionTarget", () => {
   test("fails fast when a remote worker endpoint is invalid", () => {
     const target = resolveRemoteWorkspaceConnectionTarget(
       workspace({
-        openworkHostUrl: "not a url",
+        matterhornHostUrl: "not a url",
       }),
     );
 
@@ -130,12 +130,12 @@ describe("resolveRemoteWorkspaceConnectionTarget", () => {
     expect(target.state.message).toContain("URL is invalid");
   });
 
-  test("does not run OpenWork probes against non-OpenWork remote workspaces", () => {
+  test("does not run Matterhorn probes against other remote workspace types", () => {
     const target = resolveRemoteWorkspaceConnectionTarget(
       workspace({
         remoteType: "opencode",
-        openworkHostUrl: "",
-        openworkToken: "",
+        matterhornHostUrl: "",
+        matterhornToken: "",
         baseUrl: "https://opencode.example.com",
       }),
     );
@@ -143,10 +143,10 @@ describe("resolveRemoteWorkspaceConnectionTarget", () => {
     expect(target.ok).toBe(false);
     if (target.ok) return;
     expect(target.state.status).toBe("error");
-    expect(target.state.message).toContain("OpenWork remote workers");
+    expect(target.state.message).toContain("Matterhorn remote workers");
   });
 
-  test("does not run OpenWork probes against stale OpenWork fields on non-OpenWork remotes", () => {
+  test("does not run Matterhorn probes against stale legacy fields on other remotes", () => {
     const target = resolveRemoteWorkspaceConnectionTarget(
       workspace({
         remoteType: "opencode",
@@ -158,7 +158,28 @@ describe("resolveRemoteWorkspaceConnectionTarget", () => {
 
     expect(target.ok).toBe(false);
     if (target.ok) return;
-    expect(target.state.message).toContain("OpenWork remote workers");
+    expect(target.state.message).toContain("Matterhorn remote workers");
+  });
+
+  test("reads legacy remote-worker records during the Matterhorn migration", () => {
+    const target = resolveRemoteWorkspaceConnectionTarget(
+      workspace({
+        remoteType: "openwork",
+        matterhornHostUrl: "",
+        matterhornWorkspaceId: "",
+        matterhornToken: "",
+        openworkHostUrl: "https://worker.example.com/w/ws_legacy",
+        openworkWorkspaceId: "ws_legacy",
+        openworkToken: "legacy-token",
+      }),
+    );
+
+    expect(target.ok).toBe(true);
+    if (!target.ok) return;
+    expect(target.target.kind).toBe("matterhorn");
+    expect(target.target.baseUrl).toBe("https://worker.example.com");
+    expect(target.target.workspaceId).toBe("ws_legacy");
+    expect(target.target.token).toBe("legacy-token");
   });
 });
 
@@ -178,15 +199,15 @@ describe("testRemoteWorkspaceConnection", () => {
   });
 
   test("reports a missing token after proving the worker endpoint is reachable", async () => {
-    const result = await testRemoteWorkspaceConnection(workspace({ openworkToken: "" }), {
+    const result = await testRemoteWorkspaceConnection(workspace({ matterhornToken: "" }), {
       createClient: () => client(),
     });
 
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("Token is missing");
-    expect(result.state.message).toContain("Upgrade the OpenWork host");
-    expect(result.state.message).toContain("team@openworklabs.com");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("support@matterhorn.work");
   });
 
   test("reports unhealthy health responses as endpoint failures", async () => {
@@ -200,13 +221,15 @@ describe("testRemoteWorkspaceConnection", () => {
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("unhealthy response");
-    expect(result.state.message).toContain("Upgrade the OpenWork host");
-    expect(result.state.message).toContain("team@openworklabs.com");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("support@matterhorn.work");
   });
 
-  test("uses fallback OpenWork tokens saved on older workspace records", async () => {
+  test("uses fallback legacy tokens saved on older workspace records", async () => {
     const result = await testRemoteWorkspaceConnection(
       workspace({
+        matterhornToken: "",
+        matterhornClientToken: "",
         openworkToken: "",
         openworkClientToken: "legacy-client-token",
       }),
@@ -234,8 +257,8 @@ describe("testRemoteWorkspaceConnection", () => {
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("Token was rejected by worker.example.com");
-    expect(result.state.message).toContain("Upgrade the OpenWork host");
-    expect(result.state.message).toContain("team@openworklabs.com");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("support@matterhorn.work");
   });
 
   test("reports a missing workspace separately from a dead worker", async () => {
@@ -251,15 +274,15 @@ describe("testRemoteWorkspaceConnection", () => {
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("Workspace ws_remote was not found");
-    expect(result.state.message).toContain("Upgrade the OpenWork host");
-    expect(result.state.message).toContain("team@openworklabs.com");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("support@matterhorn.work");
   });
 
   test("uses workspace list when the saved remote target is not workspace-scoped", async () => {
     const result = await testRemoteWorkspaceConnection(
       workspace({
-        openworkHostUrl: "https://worker.example.com",
-        openworkWorkspaceId: "",
+        matterhornHostUrl: "https://worker.example.com",
+        matterhornWorkspaceId: "",
         baseUrl: "",
       }),
       {
@@ -282,8 +305,8 @@ describe("testRemoteWorkspaceConnection", () => {
   test("reports rejected credentials from the workspace list fallback", async () => {
     const result = await testRemoteWorkspaceConnection(
       workspace({
-        openworkHostUrl: "https://worker.example.com",
-        openworkWorkspaceId: "",
+        matterhornHostUrl: "https://worker.example.com",
+        matterhornWorkspaceId: "",
         baseUrl: "",
       }),
       {
@@ -299,8 +322,8 @@ describe("testRemoteWorkspaceConnection", () => {
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("Token was rejected by worker.example.com");
-    expect(result.state.message).toContain("Upgrade the OpenWork host");
-    expect(result.state.message).toContain("team@openworklabs.com");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("support@matterhorn.work");
   });
 
   test("reports unauthorized workspace status separately from bad credentials", async () => {
@@ -316,8 +339,8 @@ describe("testRemoteWorkspaceConnection", () => {
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("is not authorized");
-    expect(result.state.message).toContain("Upgrade the OpenWork host");
-    expect(result.state.message).toContain("team@openworklabs.com");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("support@matterhorn.work");
   });
 
   test("reports endpoint reachability failures from the health probe", async () => {
@@ -333,8 +356,8 @@ describe("testRemoteWorkspaceConnection", () => {
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("Cannot reach worker.example.com");
-    expect(result.state.message).toContain("Upgrade the OpenWork host");
-    expect(result.state.message).toContain("team@openworklabs.com");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("support@matterhorn.work");
   });
 
   test("redacts token-like values from diagnostic error messages", async () => {
@@ -370,8 +393,8 @@ describe("remote diagnostic identity", () => {
   });
 
   test("changes when connection credentials change", () => {
-    const before = getRemoteWorkspaceConnectionKey(workspace({ openworkToken: "old-token" }));
-    const after = getRemoteWorkspaceConnectionKey(workspace({ openworkToken: "new-token" }));
+    const before = getRemoteWorkspaceConnectionKey(workspace({ matterhornToken: "old-token" }));
+    const after = getRemoteWorkspaceConnectionKey(workspace({ matterhornToken: "new-token" }));
 
     expect(before).not.toBe(after);
   });

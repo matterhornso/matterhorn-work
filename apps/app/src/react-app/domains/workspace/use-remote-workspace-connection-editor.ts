@@ -97,7 +97,7 @@ export function useRemoteWorkspaceConnectionEditor<TWorkspace extends WorkspaceI
           matterhornHostToken: "",
           displayName: fields.displayName?.trim() || null,
           directory: fields.directory?.trim() || null,
-          remoteType: "openwork",
+          remoteType: "matterhorn",
         });
         await onSaved(id);
         setWorkspaceId(null);

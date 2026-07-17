@@ -37,10 +37,12 @@ export function buildWorkspaceInfos(
     const rawPath = workspace.path?.trim() ?? "";
     const workspaceType = workspace.workspaceType ?? "local";
     const resolvedPath = rawPath ? resolve(cwd, rawPath) : "";
-    const remoteType = workspace.remoteType;
+    const configuredRemoteType = workspace.remoteType;
+    const isMatterhornRemote = configuredRemoteType === "matterhorn" || configuredRemoteType === "openwork";
+    const remoteType = isMatterhornRemote ? "matterhorn" : configuredRemoteType;
     const id = workspace.id?.trim()
       || (workspaceType === "remote"
-        ? remoteType === "openwork"
+        ? isMatterhornRemote
           ? workspaceIdForOpenwork(workspace.openworkHostUrl ?? workspace.baseUrl ?? "", workspace.openworkWorkspaceId)
           : workspaceIdForRemote(workspace.baseUrl ?? "", workspace.directory)
         : workspaceIdForPath(resolvedPath));

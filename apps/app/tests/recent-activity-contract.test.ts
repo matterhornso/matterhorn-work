@@ -78,6 +78,21 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain("onRetry={() => void refetch()}");
     });
 
+    test("RecentActivitySection performs one bounded recovery retry after a transient timeout", () => {
+      const source = readAppSource("domains/recent-activity/recent-activity-section.tsx");
+      expect(source).toContain("if (!isError) return;");
+      expect(source).toContain("window.setTimeout(() => {");
+      expect(source).toContain("}, 2_500);");
+      expect(source).toContain("window.clearTimeout(retry)");
+    });
+
+    test("RecentActivitySection refreshes when its workspace endpoint changes", () => {
+      const source = readAppSource("domains/recent-activity/recent-activity-section.tsx");
+      expect(source).toContain(
+        '["project-evidence", matterhornServerClient.baseUrl, runtimeWorkspaceId, limit]',
+      );
+    });
+
     test("RecentActivitySection formats ISO timestamps as milliseconds, not seconds", () => {
       const source = readAppSource("domains/recent-activity/recent-activity-section.tsx");
       expect(source).toContain("const timestampMs = Date.parse(timestamp)");

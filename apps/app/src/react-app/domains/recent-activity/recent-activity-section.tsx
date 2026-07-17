@@ -438,7 +438,10 @@ export function RecentActivitySection({
 }: RecentActivitySectionProps) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(defaultExpanded);
-  const queryKey = ["project-evidence", runtimeWorkspaceId, limit] as const;
+  // The route can mount before the local or remote workspace endpoint has
+  // settled. Keep the endpoint in the cache identity so a connection update
+  // cannot preserve a timeout from the earlier client instance.
+  const queryKey = ["project-evidence", matterhornServerClient.baseUrl, runtimeWorkspaceId, limit] as const;
 
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey,
@@ -447,6 +450,19 @@ export function RecentActivitySection({
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
+
+  useEffect(() => {
+    if (!isError) return;
+
+    // A local engine can be briefly unavailable during its supervised restart.
+    // Try once more promptly, then leave a visible Retry action rather than
+    // polling an unhealthy backend indefinitely.
+    const retry = window.setTimeout(() => {
+      void refetch();
+    }, 2_500);
+
+    return () => window.clearTimeout(retry);
+  }, [isError, refetch]);
 
   useEffect(() => {
     const refresh = () => {

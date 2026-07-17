@@ -9,7 +9,7 @@ import {
 import { redactTokenLikeText } from "../../../app/utils";
 
 export type RemoteWorkspaceConnectionTarget = {
-  kind: "openwork";
+  kind: "matterhorn";
   baseUrl: string;
   endpointLabel: string;
   token: string;
@@ -122,6 +122,11 @@ export function getRemoteWorkspaceConnectionKey(workspace: WorkspaceInfo): strin
     trim(workspace.matterhornToken),
     trim(workspace.matterhornClientToken),
     trim(workspace.matterhornHostToken),
+    trim(workspace.openworkHostUrl),
+    trim(workspace.openworkWorkspaceId),
+    trim(workspace.openworkToken),
+    trim(workspace.openworkClientToken),
+    trim(workspace.openworkHostToken),
   ].join("\u001f");
 }
 
@@ -160,7 +165,11 @@ export function resolveRemoteWorkspaceConnectionTarget(workspace: WorkspaceInfo)
     };
   }
 
-  if (workspace.remoteType && workspace.remoteType !== "matterhorn") {
+  if (
+    workspace.remoteType &&
+    workspace.remoteType !== "matterhorn" &&
+    workspace.remoteType !== "openwork"
+  ) {
     return {
       ok: false,
       state: {
@@ -171,7 +180,10 @@ export function resolveRemoteWorkspaceConnectionTarget(workspace: WorkspaceInfo)
     };
   }
 
-  const rawHostUrl = trim(workspace.matterhornHostUrl) || trim(workspace.baseUrl);
+  const rawHostUrl =
+    trim(workspace.matterhornHostUrl) ||
+    trim(workspace.openworkHostUrl) ||
+    trim(workspace.baseUrl);
   if (!rawHostUrl) {
     return {
       ok: false,
@@ -197,6 +209,7 @@ export function resolveRemoteWorkspaceConnectionTarget(workspace: WorkspaceInfo)
 
   const workspaceId =
     trim(workspace.matterhornWorkspaceId) ||
+    trim(workspace.openworkWorkspaceId) ||
     parseOpenworkWorkspaceIdFromUrl(normalizedHostUrl) ||
     parseOpenworkWorkspaceIdFromUrl(trim(workspace.baseUrl)) ||
     null;
@@ -204,12 +217,15 @@ export function resolveRemoteWorkspaceConnectionTarget(workspace: WorkspaceInfo)
   const token =
     trim(workspace.matterhornToken) ||
     trim(workspace.matterhornClientToken) ||
-    trim(workspace.matterhornHostToken);
+    trim(workspace.matterhornHostToken) ||
+    trim(workspace.openworkToken) ||
+    trim(workspace.openworkClientToken) ||
+    trim(workspace.openworkHostToken);
 
   return {
     ok: true,
     target: {
-      kind: "openwork",
+      kind: "matterhorn",
       baseUrl: hostBaseUrl,
       endpointLabel: endpointLabel(hostBaseUrl),
       token,

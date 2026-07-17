@@ -2033,6 +2033,7 @@ async function readWorkspaceState() {
     const rawWorkspace = entry && typeof entry === "object" ? entry : {};
     const workspace = normalizeWorkspaceEntry(rawWorkspace);
     if (
+      rawWorkspace.remoteType !== workspace.remoteType ||
       rawWorkspace.matterhornHostUrl !== workspace.matterhornHostUrl ||
       rawWorkspace.matterhornToken !== workspace.matterhornToken ||
       rawWorkspace.matterhornClientToken !== workspace.matterhornClientToken ||
@@ -2042,7 +2043,7 @@ async function readWorkspaceState() {
     ) {
       changed = true;
     }
-    if (workspace.workspaceType !== "remote" || workspace.remoteType !== "openwork") return workspace;
+    if (workspace.workspaceType !== "remote" || workspace.remoteType !== "matterhorn") return workspace;
 
     const remoteWorkspaceId = String(workspace.openworkWorkspaceId ?? "").trim()
       || parseOpenworkWorkspaceIdFromUrl(workspace.openworkHostUrl)
@@ -2232,6 +2233,10 @@ function ensureRuntimeBootstrap() {
 }
 
 function normalizeWorkspaceEntry(input) {
+  const workspaceType = input.workspaceType === "remote" ? "remote" : "local";
+  const remoteType = workspaceType === "remote"
+    ? input.remoteType === "opencode" ? "opencode" : "matterhorn"
+    : null;
   const matterhornHostUrl = input.matterhornHostUrl ?? input.openworkHostUrl ?? null;
   const matterhornToken = input.matterhornToken ?? input.openworkToken ?? null;
   const matterhornClientToken = input.matterhornClientToken ?? input.openworkClientToken ?? null;
@@ -2243,8 +2248,8 @@ function normalizeWorkspaceEntry(input) {
     name: String(input.name ?? "Workspace"),
     path: String(input.path ?? ""),
     preset: String(input.preset ?? "starter"),
-    workspaceType: input.workspaceType === "remote" ? "remote" : "local",
-    remoteType: input.remoteType ?? null,
+    workspaceType,
+    remoteType,
     baseUrl: input.baseUrl ?? null,
     directory: input.directory ?? null,
     displayName: input.displayName ?? null,
@@ -2607,7 +2612,7 @@ async function handleDesktopInvoke(event, command, ...args) {
       if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
         throw new Error("baseUrl must start with http:// or https://");
       }
-      const remoteType = input.remoteType === "opencode" ? "opencode" : "openwork";
+      const remoteType = input.remoteType === "opencode" ? "opencode" : "matterhorn";
       const directory = typeof input.directory === "string" && input.directory.trim() ? input.directory.trim() : null;
       const matterhornHostUrl = typeof input.matterhornHostUrl === "string"
         ? input.matterhornHostUrl.trim()
@@ -2624,17 +2629,19 @@ async function handleDesktopInvoke(event, command, ...args) {
       const openworkHostToken = typeof input.matterhornHostToken === "string"
         ? input.matterhornHostToken.trim()
         : input.openworkHostToken;
-      const openworkHostUrl = remoteType === "openwork"
+      const openworkHostUrl = remoteType === "matterhorn"
         ? stripOpenworkWorkspaceMount(rawOpenworkHostUrl ?? baseUrl)
         : rawOpenworkHostUrl;
-      const openworkWorkspaceId = typeof input.openworkWorkspaceId === "string" && input.openworkWorkspaceId.trim()
-        ? input.openworkWorkspaceId.trim()
-        : remoteType === "openwork"
+      const openworkWorkspaceId = typeof input.matterhornWorkspaceId === "string" && input.matterhornWorkspaceId.trim()
+        ? input.matterhornWorkspaceId.trim()
+        : typeof input.openworkWorkspaceId === "string" && input.openworkWorkspaceId.trim()
+          ? input.openworkWorkspaceId.trim()
+        : remoteType === "matterhorn"
           ? parseOpenworkWorkspaceIdFromUrl(rawOpenworkHostUrl) || parseOpenworkWorkspaceIdFromUrl(baseUrl)
           : null;
       let resolvedOpenworkWorkspaceId = openworkWorkspaceId;
-      let resolvedOpenworkWorkspaceName = input.openworkWorkspaceName ?? null;
-      if (remoteType === "openwork" && !resolvedOpenworkWorkspaceId) {
+      let resolvedOpenworkWorkspaceName = input.matterhornWorkspaceName ?? input.openworkWorkspaceName ?? null;
+      if (remoteType === "matterhorn" && !resolvedOpenworkWorkspaceId) {
         const discovered = await discoverOpenworkWorkspace({
           hostUrl: openworkHostUrl ?? baseUrl,
           token: openworkToken,
@@ -2651,7 +2658,7 @@ async function handleDesktopInvoke(event, command, ...args) {
         resolvedOpenworkWorkspaceId = String(discovered.id).trim();
         resolvedOpenworkWorkspaceName = openworkWorkspaceDisplayName(discovered);
       }
-      const id = remoteType === "openwork"
+      const id = remoteType === "matterhorn"
         ? openworkRemoteWorkspaceId(openworkHostUrl ?? baseUrl, resolvedOpenworkWorkspaceId)
         : remoteWorkspaceId(baseUrl, directory);
       const workspace = normalizeWorkspaceEntry({
@@ -2662,7 +2669,7 @@ async function handleDesktopInvoke(event, command, ...args) {
         preset: "remote",
         workspaceType: "remote",
         remoteType,
-        baseUrl: remoteType === "openwork" ? (openworkHostUrl ?? baseUrl) : baseUrl,
+        baseUrl: remoteType === "matterhorn" ? (openworkHostUrl ?? baseUrl) : baseUrl,
         directory,
         openworkHostUrl,
         openworkToken: openworkToken || null,
@@ -2692,10 +2699,12 @@ async function handleDesktopInvoke(event, command, ...args) {
         if (!existing) return state;
 
         let nextWorkspace = { ...existing, ...patch };
-        const nextRemoteType = nextWorkspace.remoteType === "opencode" ? "opencode" : "openwork";
-        if (nextRemoteType === "openwork") {
-          const rawHostUrl = typeof nextWorkspace.openworkHostUrl === "string" && nextWorkspace.openworkHostUrl.trim()
-            ? nextWorkspace.openworkHostUrl.trim()
+        const nextRemoteType = nextWorkspace.remoteType === "opencode" ? "opencode" : "matterhorn";
+        if (nextRemoteType === "matterhorn") {
+          const rawHostUrl = typeof nextWorkspace.matterhornHostUrl === "string" && nextWorkspace.matterhornHostUrl.trim()
+            ? nextWorkspace.matterhornHostUrl.trim()
+            : typeof nextWorkspace.openworkHostUrl === "string" && nextWorkspace.openworkHostUrl.trim()
+              ? nextWorkspace.openworkHostUrl.trim()
             : null;
           const nextBaseUrl = String(nextWorkspace.baseUrl ?? "").trim();
           const hostUrl = stripOpenworkWorkspaceMount(rawHostUrl ?? nextBaseUrl);
@@ -2704,16 +2713,18 @@ async function handleDesktopInvoke(event, command, ...args) {
             : null;
           const parsedWorkspaceId = parseOpenworkWorkspaceIdFromUrl(rawHostUrl) || parseOpenworkWorkspaceIdFromUrl(nextBaseUrl);
           let remoteWorkspaceId = parsedWorkspaceId || (
-            typeof nextWorkspace.openworkWorkspaceId === "string" && nextWorkspace.openworkWorkspaceId.trim()
-              ? nextWorkspace.openworkWorkspaceId.trim()
+            typeof nextWorkspace.matterhornWorkspaceId === "string" && nextWorkspace.matterhornWorkspaceId.trim()
+              ? nextWorkspace.matterhornWorkspaceId.trim()
+              : typeof nextWorkspace.openworkWorkspaceId === "string" && nextWorkspace.openworkWorkspaceId.trim()
+                ? nextWorkspace.openworkWorkspaceId.trim()
               : null
           );
-          let remoteWorkspaceName = nextWorkspace.openworkWorkspaceName ?? null;
+          let remoteWorkspaceName = nextWorkspace.matterhornWorkspaceName ?? nextWorkspace.openworkWorkspaceName ?? null;
           if (!remoteWorkspaceId) {
             const discovered = await discoverOpenworkWorkspace({
               hostUrl: hostUrl ?? nextBaseUrl,
-              token: nextWorkspace.openworkToken,
-              hostToken: nextWorkspace.openworkHostToken,
+              token: nextWorkspace.matterhornToken ?? nextWorkspace.openworkToken,
+              hostToken: nextWorkspace.matterhornHostToken ?? nextWorkspace.openworkHostToken,
               directory,
             });
             if (!discovered?.id) {
@@ -2731,11 +2742,11 @@ async function handleDesktopInvoke(event, command, ...args) {
             ...nextWorkspace,
             id: nextId,
             baseUrl: hostUrl ?? nextBaseUrl,
-            openworkHostUrl: hostUrl,
+            matterhornHostUrl: hostUrl,
             directory,
-            remoteType: "openwork",
-            openworkWorkspaceId: remoteWorkspaceId,
-            openworkWorkspaceName: remoteWorkspaceName,
+            remoteType: "matterhorn",
+            matterhornWorkspaceId: remoteWorkspaceId,
+            matterhornWorkspaceName: remoteWorkspaceName,
           });
           if (nextId !== workspaceId) {
             if (state.selectedId === workspaceId) state.selectedId = nextId;

@@ -1,6 +1,6 @@
 export type WorkspaceType = "local" | "remote";
 
-export type RemoteType = "opencode" | "openwork";
+export type RemoteType = "opencode" | "matterhorn" | "openwork";
 
 export type ApprovalMode = "manual" | "auto";
 

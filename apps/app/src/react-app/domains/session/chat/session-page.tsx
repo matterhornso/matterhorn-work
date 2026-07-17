@@ -1510,17 +1510,20 @@ export function SessionPage(props: SessionPageProps) {
   const [memorySuggestionUnreadCount, setMemorySuggestionUnreadCount] = useState(0);
   const refreshMemorySuggestionUnreadCount = useCallback(async () => {
     const client = props.matterhornServerClient;
+    const workspaceId = (props.runtimeWorkspaceId ?? props.selectedWorkspaceId ?? "").trim();
     if (!client) {
       setMemorySuggestionUnreadCount(0);
       return;
     }
     try {
-      const response = await client.listMemorySuggestions({ status: "pending", limit: 50 });
+      const response = workspaceId
+        ? await client.listWorkspaceMemorySuggestions(workspaceId, { status: "pending", limit: 50 })
+        : await client.listMemorySuggestions({ status: "pending", limit: 50 });
       setMemorySuggestionUnreadCount((response.entries ?? []).filter((entry) => entry.status === "pending").length);
     } catch {
       setMemorySuggestionUnreadCount(0);
     }
-  }, [props.matterhornServerClient]);
+  }, [props.matterhornServerClient, props.runtimeWorkspaceId, props.selectedWorkspaceId]);
   useEffect(() => {
     void refreshMemorySuggestionUnreadCount();
   }, [refreshMemorySuggestionUnreadCount]);

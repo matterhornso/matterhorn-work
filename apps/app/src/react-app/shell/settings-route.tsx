@@ -2021,7 +2021,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         matterhornToken: input.matterhornToken?.trim() || null,
         displayName: input.displayName?.trim() || null,
         directory: input.directory?.trim() || null,
-        remoteType: "openwork",
+        remoteType: "matterhorn",
       }) as WorkspaceList;
       const createdId = resolveWorkspaceListSelectedId(list) || list.workspaces[list.workspaces.length - 1]?.id || "";
       if (createdId) {

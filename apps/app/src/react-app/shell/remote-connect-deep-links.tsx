@@ -45,7 +45,7 @@ export function RemoteConnectDeepLinkHandler() {
             matterhornToken: parsed.matterhornToken,
             displayName: parsed.displayName,
             directory: parsed.directory,
-            remoteType: "openwork",
+            remoteType: "matterhorn",
           }) as WorkspaceList;
           const workspaceId =
             resolveWorkspaceListSelectedId(list) ||

@@ -4552,9 +4552,11 @@ function resolveInboxMaxBytes(): number {
   return 50_000_000;
 }
 
-function resolveToyUiEnabled(): boolean {
-  const raw = (process.env.OPENWORK_TOY_UI ?? "").trim().toLowerCase();
-  if (!raw) return true;
+// The legacy Toy UI is retained only as an explicit developer escape hatch.
+// Matterhorn Work ships the React application instead, so do not expose this
+// unauthenticated compatibility surface unless an operator deliberately asks for it.
+export function resolveToyUiEnabled(value = process.env.OPENWORK_TOY_UI): boolean {
+  const raw = (value ?? "").trim().toLowerCase();
   return ["1", "true", "yes", "on"].includes(raw);
 }
 

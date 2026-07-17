@@ -246,7 +246,7 @@ export function WelcomeRoute() {
         matterhornToken: input.matterhornToken?.trim() || null,
         displayName: input.displayName?.trim() || null,
         directory: input.directory?.trim() || null,
-        remoteType: "openwork",
+        remoteType: "matterhorn",
       }) as WorkspaceList;
       const createdId =
         resolveWorkspaceListSelectedId(list) ||
