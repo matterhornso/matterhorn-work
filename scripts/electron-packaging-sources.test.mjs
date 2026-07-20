@@ -221,6 +221,12 @@ assert.ok(
     helperPrep.indexOf('spawnSync("codesign", ["--force", "--deep", "--sign", "-", appPath]'),
   "automation helper extended attributes must be cleared before codesign",
 );
+assert.match(afterPack, /spawnSync\("xattr", \["-cr", helperPath\]/);
+assert.ok(
+  afterPack.indexOf('spawnSync("xattr", ["-cr", helperPath]') <
+    afterPack.indexOf('spawnSync("codesign", args'),
+  "packaged automation helper extended attributes must be cleared immediately before codesign",
+);
 assert.match(helperPrep, /legacyHelperAppName = "OpenWork Computer Use\.app"/);
 assert.match(helperPrep, /rmSync\(legacyAppPath, \{ recursive: true, force: true \}\)/);
 assert.match(helperPrep, /MATTERHORN_WORK_AUTOMATION_HELPER_FORCE_BUILD/);

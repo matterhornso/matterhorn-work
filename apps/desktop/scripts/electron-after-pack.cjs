@@ -180,6 +180,19 @@ function signComputerUseHelper(context) {
     throw new Error(`Missing Matterhorn Desks automation helper app at ${helperPath}`);
   }
 
+  const cleanup = spawnSync("xattr", ["-cr", helperPath], { encoding: "utf8", stdio: "pipe" });
+  if (cleanup.error) {
+    if (cleanup.error.code === "ENOENT") {
+      throw new Error("xattr is required to package the Matterhorn Desks automation helper app");
+    }
+    throw cleanup.error;
+  }
+  if (cleanup.status !== 0) {
+    throw new Error(
+      `Failed to clear extended attributes from Matterhorn Desks automation helper app: ${cleanup.stderr?.trim() || "unknown error"}`,
+    );
+  }
+
   const identity = process.env.OPENWORK_COMPUTER_USE_CODESIGN_IDENTITY
     || process.env.CSC_NAME
     || process.env.APPLE_CODESIGN_IDENTITY
