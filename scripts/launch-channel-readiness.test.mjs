@@ -80,6 +80,7 @@ assert.equal(publicBetaReport.ready, true);
 assert.ok(publicBetaReport.counts.required > betaReport.counts.required);
 assert.ok(publicBetaReport.checks.some((check) => check.id === "web.authenticated_same_origin"));
 assert.ok(publicBetaReport.checks.some((check) => check.id === "distribution.public_download"));
+assert.ok(publicBetaReport.checks.some((check) => check.id === "security.credential_rotation"));
 
 const productHunt = run("product-hunt", evidence);
 assert.equal(productHunt.status, 0, productHunt.stderr);
@@ -88,6 +89,8 @@ assert.equal(productHuntReport.ready, true);
 assert.ok(productHuntReport.counts.required > betaReport.counts.required);
 assert.ok(productHuntReport.checks.some((check) => check.id === "wallet.hyperliquid_testnet"));
 assert.ok(productHuntReport.checks.some((check) => check.id === "desktop.signed_notarized"));
+assert.ok(productHuntReport.checks.some((check) => check.id === "distribution.public_download"));
+assert.ok(productHuntReport.checks.some((check) => check.id === "support.public_beta_channel"));
 
 const pending = structuredClone(evidence);
 pending.channels.beta.gates["beta.support_owner"] = { status: "pending", evidence: "" };

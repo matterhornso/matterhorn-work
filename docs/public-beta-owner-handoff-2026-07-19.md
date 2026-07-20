@@ -1,5 +1,9 @@
 # Matterhorn Desks Public Beta Owner Handoff - 2026-07-19
 
+> Historical consolidation handoff. For the current owner-operated Public Beta
+> acceptance command, required inputs, and fail-closed decision rule, use
+> [`public-beta-owner-acceptance-2026-07-20.md`](public-beta-owner-acceptance-2026-07-20.md).
+
 ## Current Decision
 
 **Local engineering: green. Public Beta: NO-GO pending immutable-candidate and

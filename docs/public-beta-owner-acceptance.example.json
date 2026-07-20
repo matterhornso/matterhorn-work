@@ -1,0 +1,67 @@
+{
+  "version": "matterhorn.public-beta-owner-acceptance-input.v1",
+  "capturedAt": "2026-07-20T00:00:00.000Z",
+  "commit": "0000000000000000000000000000000000000000",
+  "tag": "v0.13.13-public-beta-rc.N",
+  "expectedOauthConnectors": [],
+  "reports": {
+    "candidate": "qa-reports/public-beta/candidate/candidate-certification.json",
+    "ownerApproval": "qa-reports/public-beta/candidate/release-owner-approval.json",
+    "deployment": "qa-reports/public-beta/owner/deployment.json",
+    "operations": "qa-reports/public-beta/owner/operations-readiness.json",
+    "acceptance": "qa-reports/public-beta/owner/external-acceptance-readiness.json",
+    "desktop": "qa-reports/public-beta/owner/desktop-public-release.json"
+  },
+  "manual": {
+    "exposedKeyRotation": {
+      "status": "pending",
+      "allExposedKeysRevoked": false,
+      "replacementsInSecretStore": false,
+      "owner": "",
+      "reviewedAt": "",
+      "reportPath": ""
+    },
+    "cleanInstall": {
+      "status": "pending",
+      "cleanInstall": false,
+      "update": false,
+      "reinstall": false,
+      "tester": "",
+      "testedAt": "",
+      "reportPath": ""
+    },
+    "publicDownload": {
+      "status": "pending",
+      "url": "",
+      "artifactFile": "",
+      "sha256": "",
+      "resolvesToCandidate": false,
+      "reportPath": ""
+    },
+    "legal": {
+      "status": "pending",
+      "approver": "",
+      "approvedAt": "",
+      "privacyUrl": "",
+      "termsUrl": "",
+      "supportUrl": "",
+      "reportPath": ""
+    },
+    "support": {
+      "status": "pending",
+      "owner": "",
+      "channelUrl": "",
+      "responseTarget": "",
+      "reportPath": ""
+    },
+    "launchRoom": {
+      "status": "pending",
+      "incidentCommander": "",
+      "rollbackOwner": "",
+      "securityOwner": "",
+      "supportOwner": "",
+      "channelUrl": "",
+      "reportPath": ""
+    }
+  }
+}

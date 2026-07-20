@@ -28,6 +28,7 @@ const BETA_GATES = Object.freeze([
 
 const PUBLIC_BETA_GATES = Object.freeze([
   ["release.stable_tag", "The public candidate is built from one immutable stable tag", "Release owner"],
+  ["security.credential_rotation", "Every exposed or shared credential is revoked and replacements live only in approved secret stores", "Security"],
   ["deployment.https", "The public web build is deployed behind production HTTPS", "Engineering"],
   ["deployment.exact_origin_cors", "Production CORS allows only intended origins", "Security"],
   ["deployment.security_headers", "CSP and production security headers pass", "Security"],
@@ -50,6 +51,7 @@ const PUBLIC_BETA_GATES = Object.freeze([
 
 const PRODUCT_HUNT_GATES = Object.freeze([
   ["release.stable_tag", "The public candidate is built from one immutable stable tag", "Release owner"],
+  ["security.credential_rotation", "Every exposed or shared credential is revoked and replacements live only in approved secret stores", "Security"],
   ["deployment.https", "The exact candidate is deployed behind production HTTPS", "Engineering"],
   ["deployment.exact_origin_cors", "Production CORS allows only intended origins", "Security"],
   ["deployment.security_headers", "CSP and production security headers pass", "Security"],
@@ -63,7 +65,9 @@ const PRODUCT_HUNT_GATES = Object.freeze([
   ["connectors.visible_oauth", "Every visible OAuth connector passes connect, reload, tools, and disconnect", "Integration QA"],
   ["desktop.signed_notarized", "Public macOS assets are signed, notarized, stapled, and checksum-verified", "Release engineering"],
   ["desktop.clean_install", "The signed desktop app passes clean-install, update, and reinstall acceptance", "Release QA"],
+  ["distribution.public_download", "The public desktop download resolves to the exact signed candidate", "Release engineering"],
   ["product.public_copy_and_legal", "Public copy, privacy policy, terms, and support links are approved", "Product and legal"],
+  ["support.public_beta_channel", "A public support channel and response owner are staffed", "Operations"],
   ["support.launch_room", "Launch-room owners and incident escalation are staffed", "Operations"],
 ]);
 

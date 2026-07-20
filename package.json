@@ -55,6 +55,8 @@
     "test:release-secret-scan": "node scripts/release-secret-scan.test.mjs",
     "certify:public-beta": "node scripts/public-beta-candidate-certifier.mjs",
     "test:public-beta-candidate-certifier": "node scripts/public-beta-candidate-certifier.test.mjs",
+    "public-beta:owner-acceptance": "node scripts/public-beta-owner-acceptance.mjs",
+    "test:public-beta-owner-acceptance": "node scripts/public-beta-owner-acceptance.test.mjs",
     "test:product-hunt-launch-kit": "node scripts/product-hunt-launch-kit.test.mjs",
     "smoke:product-readiness": "node scripts/product-readiness-smoke.mjs --strict --include-generated-media-flow",
     "test:product-readiness-smoke": "node scripts/product-readiness-smoke.test.mjs",

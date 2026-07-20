@@ -25,9 +25,34 @@
         "beta.rollback": { "status": "pending", "evidence": "" }
       }
     },
+    "public-beta": {
+      "gates": {
+        "release.stable_tag": { "status": "pending", "evidence": "" },
+        "security.credential_rotation": { "status": "pending", "evidence": "" },
+        "deployment.https": { "status": "pending", "evidence": "" },
+        "deployment.exact_origin_cors": { "status": "pending", "evidence": "" },
+        "deployment.security_headers": { "status": "pending", "evidence": "" },
+        "deployment.monitoring": { "status": "pending", "evidence": "" },
+        "operations.backup_restore": { "status": "pending", "evidence": "" },
+        "operations.rollback_drill": { "status": "pending", "evidence": "" },
+        "web.authenticated_same_origin": { "status": "pending", "evidence": "" },
+        "web.deployed_two_user_acceptance": { "status": "pending", "evidence": "" },
+        "wallet.metamask_coinbase": { "status": "pending", "evidence": "" },
+        "wallet.phantom_sui": { "status": "pending", "evidence": "" },
+        "wallet.hyperliquid_testnet": { "status": "pending", "evidence": "" },
+        "connectors.visible_oauth": { "status": "pending", "evidence": "" },
+        "desktop.signed_notarized": { "status": "pending", "evidence": "" },
+        "desktop.clean_install": { "status": "pending", "evidence": "" },
+        "distribution.public_download": { "status": "pending", "evidence": "" },
+        "product.public_copy_and_legal": { "status": "pending", "evidence": "" },
+        "support.public_beta_channel": { "status": "pending", "evidence": "" },
+        "support.launch_room": { "status": "pending", "evidence": "" }
+      }
+    },
     "product-hunt": {
       "gates": {
         "release.stable_tag": { "status": "pending", "evidence": "" },
+        "security.credential_rotation": { "status": "pending", "evidence": "" },
         "deployment.https": { "status": "pending", "evidence": "" },
         "deployment.exact_origin_cors": { "status": "pending", "evidence": "" },
         "deployment.security_headers": { "status": "pending", "evidence": "" },
@@ -41,7 +66,9 @@
         "connectors.visible_oauth": { "status": "pending", "evidence": "" },
         "desktop.signed_notarized": { "status": "pending", "evidence": "" },
         "desktop.clean_install": { "status": "pending", "evidence": "" },
+        "distribution.public_download": { "status": "pending", "evidence": "" },
         "product.public_copy_and_legal": { "status": "pending", "evidence": "" },
+        "support.public_beta_channel": { "status": "pending", "evidence": "" },
         "support.launch_room": { "status": "pending", "evidence": "" }
       }
     }
