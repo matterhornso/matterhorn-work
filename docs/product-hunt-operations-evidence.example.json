@@ -1,5 +1,5 @@
 {
-  "version": "matterhorn.product-hunt-operations-evidence.v1",
+  "version": "matterhorn.product-hunt-operations-evidence.v2",
   "commit": "0000000000000000000000000000000000000000",
   "capturedAt": "2026-07-20T00:00:00.000Z",
   "monitoring": {
@@ -26,6 +26,23 @@
     "sourceWorkspaceId": "",
     "targetWorkspaceId": "",
     "verified": false
+  },
+  "userDataRecovery": {
+    "status": "pending",
+    "backupReportPath": "",
+    "restoreReportPath": "",
+    "encrypted": false,
+    "archiveSha256": "",
+    "coverage": {
+      "notes": false,
+      "memory": false,
+      "outputs": false,
+      "taskAndEvidenceState": false,
+      "chatHistory": false
+    },
+    "separateTarget": false,
+    "restoreVerified": false,
+    "sqliteIntegrityVerified": false
   },
   "rollback": {
     "status": "pending",

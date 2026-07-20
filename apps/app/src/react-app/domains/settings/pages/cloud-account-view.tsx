@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import * as React from "react";
 import { ArrowUpRight, Cloud, ExternalLink, SlidersHorizontal } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
@@ -251,6 +251,13 @@ function ProfileReadinessSupportSection({
             Account settings <ExternalLink size={10} />
           </a>
         ) : null}
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-[11px]">
+        <Link className="hover:text-dls-text" to="/privacy">Privacy</Link>
+        <Link className="hover:text-dls-text" to="/terms">Terms</Link>
+        <Link className="hover:text-dls-text" to="/security">Security</Link>
+        <Link className="hover:text-dls-text" to="/support">Support</Link>
+        <Link className="hover:text-dls-text" to="/status">Status</Link>
       </div>
     </section>
   );

@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import process from "node:process";
 
-const VERSION = "matterhorn.product-hunt-operations-evidence.v1";
+const VERSION = "matterhorn.product-hunt-operations-evidence.v2";
 const MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 function parseArgs(argv) {
@@ -65,7 +65,9 @@ function evaluate(input, now) {
   const monitoring = input.monitoring ?? {};
   const alertTest = monitoring.alertTest ?? {};
   const backup = input.backupRestore ?? {};
+  const userDataRecovery = input.userDataRecovery ?? {};
   const rollback = input.rollback ?? {};
+  const requiredUserDataCoverage = ["notes", "memory", "outputs", "taskAndEvidenceState", "chatHistory"];
   const checks = [
     check("evidence_commit", "Evidence identifies the exact candidate commit", /^[a-f0-9]{40}$/i.test(input.commit ?? ""), input.commit),
     check("evidence_fresh", "Evidence is no more than 12 hours old", fresh, input.capturedAt),
@@ -83,13 +85,25 @@ function evaluate(input, now) {
     check("backup_hash", "Backup has a SHA-256 digest", /^[a-f0-9]{64}$/i.test(backup.sha256 ?? ""), backup.sha256),
     check("backup_separate_target", "Restore used a separate workspace", present(backup.sourceWorkspaceId) && present(backup.targetWorkspaceId) && backup.sourceWorkspaceId !== backup.targetWorkspaceId, `${backup.sourceWorkspaceId ?? ""} -> ${backup.targetWorkspaceId ?? ""}`),
     check("backup_verified", "Restored state was verified", backup.verified === true, backup.verified),
+    check("user_data_recovery_status", "Encrypted user-data recovery drill passed", userDataRecovery.status === "pass", userDataRecovery.restoreReportPath),
+    check("user_data_recovery_encrypted", "User-data backup is authenticated and encrypted", userDataRecovery.encrypted === true, userDataRecovery.encrypted),
+    check("user_data_recovery_hash", "Encrypted user-data archive has a SHA-256 digest", /^[a-f0-9]{64}$/i.test(userDataRecovery.archiveSha256 ?? ""), userDataRecovery.archiveSha256),
+    ...requiredUserDataCoverage.map((key) => check(
+      `user_data_recovery_${key}`,
+      `User-data recovery covers ${key}`,
+      userDataRecovery.coverage?.[key] === true,
+      userDataRecovery.coverage?.[key],
+    )),
+    check("user_data_recovery_separate_target", "User data restored to a separate target", userDataRecovery.separateTarget === true, userDataRecovery.separateTarget),
+    check("user_data_recovery_verified", "Every restored user-data file was digest-verified", userDataRecovery.restoreVerified === true, userDataRecovery.restoreVerified),
+    check("user_data_recovery_sqlite", "Restored chat database passed SQLite integrity verification", userDataRecovery.sqliteIntegrityVerified === true, userDataRecovery.sqliteIntegrityVerified),
     check("rollback_status", "Rollback drill passed", rollback.status === "pass", rollback.reportPath),
     check("rollback_refs", "Rollback moved between immutable commits", /^[a-f0-9]{40}$/i.test(rollback.fromCommit ?? "") && /^[a-f0-9]{40}$/i.test(rollback.toCommit ?? "") && rollback.fromCommit !== rollback.toCommit, `${rollback.fromCommit ?? ""} -> ${rollback.toCommit ?? ""}`),
     check("rollback_health", "Health was verified after rollback", rollback.healthVerified === true, rollback.healthVerifiedAt),
     check("rollback_owner", "Rollback owner is named", present(rollback.owner), rollback.owner),
   ];
   const blockers = checks.filter((item) => item.status === "fail").map(({ id, label }) => ({ id, action: label }));
-  return { version: "matterhorn.product-hunt-operations-readiness.v1", decision: blockers.length ? "NO-GO" : "GO", ready: blockers.length === 0, commit: input.commit ?? null, evaluatedAt: now.toISOString(), checks, blockers };
+  return { version: "matterhorn.product-hunt-operations-readiness.v2", decision: blockers.length ? "NO-GO" : "GO", ready: blockers.length === 0, commit: input.commit ?? null, evaluatedAt: now.toISOString(), checks, blockers };
 }
 
 function main() {

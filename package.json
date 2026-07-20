@@ -37,6 +37,8 @@
     "test:product-hunt-deployment-probe": "node scripts/product-hunt-deployment-probe.test.mjs",
     "drill:workspace-backup-restore": "node scripts/workspace-backup-restore-drill.mjs",
     "test:workspace-backup-restore-drill": "node scripts/workspace-backup-restore-drill.test.mjs",
+    "backup:workspace-user-data": "node scripts/workspace-user-data-recovery.mjs",
+    "test:workspace-user-data-recovery": "node scripts/workspace-user-data-recovery.test.mjs",
     "drill:product-hunt-rollback": "node scripts/product-hunt-rollback-rehearsal.mjs",
     "test:product-hunt-rollback-rehearsal": "node scripts/product-hunt-rollback-rehearsal.test.mjs",
     "gate:product-hunt-operations": "node scripts/product-hunt-operations-evidence.mjs --strict",

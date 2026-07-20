@@ -421,6 +421,7 @@ import {
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { serve, type ServeRequestContext, type ServeResult } from "./serve-node.js";
+import { OperationalMetrics } from "./operational-metrics.js";
 import {
   createGoogleWorkspaceConnectFlowManager,
   googleWorkspaceDisconnect,
@@ -848,6 +849,7 @@ function requestExecutionMode(request: Request): MatterhornExecutionMode {
 
 interface Route {
   method: string;
+  path: string;
   regex: RegExp;
   keys: string[];
   auth: AuthMode;
@@ -885,7 +887,8 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     watcherHandle.close();
     watcherHandle = createWatcherHandle();
   };
-  const routes = createRoutes(config, approvals, tokens, env, restartReloadWatchers);
+  const operationalMetrics = new OperationalMetrics();
+  const routes = createRoutes(config, approvals, tokens, env, restartReloadWatchers, operationalMetrics);
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit);
 
   const serverOptions: {
@@ -902,9 +905,19 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       let proxyService: "opencode" | undefined;
       let proxyBaseUrl: string | undefined;
       let errorMessage: string | undefined;
+      let routeTemplate = "unmatched";
+      let rateLimited = false;
 
       const finalize = (response: Response) => {
         const wrapped = withCors(withSecurityHeaders(response), request, config);
+        operationalMetrics.record({
+          method: request.method,
+          route: routeTemplate,
+          status: wrapped.status,
+          durationMs: Date.now() - startedAt,
+          provider: providerForOperationalRoute(routeTemplate, proxyService),
+          rateLimited,
+        });
         if (config.logRequests) {
             logRequest({
               logger,
@@ -922,6 +935,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
 
       const proxyWorkspaceOpencodeMount = async (mount: { workspaceId: string; restPath: string }) => {
         authMode = "client";
+        routeTemplate = "/w/:id/opencode/*";
         try {
           const actor = await requireClient(request, config, tokens);
           assertOpencodeProxyAllowed(actor, request.method, mount.restPath);
@@ -946,6 +960,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       const rateLimit = requestRateLimiter.check(request, url, context.remoteAddress);
       if (!rateLimit.allowed) {
         errorMessage = "rate_limited";
+        rateLimited = true;
         return finalize(new Response(
           JSON.stringify({ code: "rate_limited", message: "Too many requests. Try again shortly." }),
           {
@@ -991,6 +1006,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
 
       if (url.pathname === "/opencode" || url.pathname.startsWith("/opencode/")) {
         authMode = "client";
+        routeTemplate = "/opencode/*";
         proxyBaseUrl = config.workspaces[0]?.baseUrl?.trim() || undefined;
         try {
           const actor = await requireClient(request, config, tokens);
@@ -1014,6 +1030,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       }
 
       authMode = route.auth;
+      routeTemplate = route.path;
       try {
         const actor =
           route.auth === "host-token"
@@ -1086,7 +1103,33 @@ function matchRoute(routes: Route[], method: string, path: string) {
 function addRoute(routes: Route[], method: string, path: string, auth: AuthMode, handler: Route["handler"]) {
   const keys: string[] = [];
   const regex = pathToRegex(path, keys);
-  routes.push({ method, regex, keys, auth, handler });
+  routes.push({ method, path, regex, keys, auth, handler });
+}
+
+function providerForOperationalRoute(route: string, proxyService?: "opencode"): string | undefined {
+  if (proxyService) return proxyService;
+  if (/bittensor/i.test(route)) return "bittensor";
+  if (/hyperliquid/i.test(route)) return "hyperliquid";
+  if (/polymarket/i.test(route)) return "polymarket";
+  if (/\/sui(?:\/|$)/i.test(route)) return "sui";
+  if (/generated-media|image-generation|nft/i.test(route)) return "generated_media";
+  return undefined;
+}
+
+function operationalReadiness(config: ServerConfig) {
+  const workspaceConfigured = config.workspaces.length > 0;
+  const workspaceStorageAvailable = config.workspaces.every((workspace) =>
+    workspace.workspaceType === "remote" || existsSync(workspace.path),
+  );
+  const authConfigured = Boolean(config.token.trim() && config.hostToken.trim());
+  return {
+    ready: workspaceConfigured && workspaceStorageAvailable && authConfigured,
+    checks: {
+      workspaceConfigured,
+      workspaceStorageAvailable,
+      authConfigured,
+    },
+  };
 }
 
 function pathToRegex(path: string, keys: string[]): RegExp {
@@ -5627,6 +5670,7 @@ function createRoutes(
   tokens: TokenService,
   env: EnvService,
   onWorkspacesChanged: () => void,
+  operationalMetrics: OperationalMetrics,
 ): Route[] {
   const routes: Route[] = [];
   const billingRouteContext = createBillingRouteContext(config);
@@ -5684,6 +5728,44 @@ function createRoutes(
 
   addRoute(routes, "GET", "/health", "none", async () => {
     return jsonResponse({ ok: true, version: SERVER_VERSION, opencodeVersion: OPENCODE_VERSION, uptimeMs: Date.now() - config.startedAt });
+  });
+
+  addRoute(routes, "GET", "/health/live", "none", async () => {
+    const response = jsonResponse({
+      ok: true,
+      status: "live",
+      version: SERVER_VERSION,
+      uptimeMs: Date.now() - config.startedAt,
+    });
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "GET", "/health/ready", "none", async () => {
+    const readiness = operationalReadiness(config);
+    const response = jsonResponse({
+      ok: readiness.ready,
+      status: readiness.ready ? "ready" : "not_ready",
+      version: SERVER_VERSION,
+      checks: readiness.checks,
+      uptimeMs: Date.now() - config.startedAt,
+    }, readiness.ready ? 200 : 503);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "GET", "/metrics", "host", async () => {
+    const readiness = operationalReadiness(config);
+    return new Response(operationalMetrics.renderPrometheus({
+      ready: readiness.ready,
+      uptimeMs: Date.now() - config.startedAt,
+    }), {
+      status: 200,
+      headers: {
+        "Content-Type": "text/plain; version=0.0.4; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    });
   });
 
   addRoute(routes, "GET", "/w/:id/health", "none", async () => {

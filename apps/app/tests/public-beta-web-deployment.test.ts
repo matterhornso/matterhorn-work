@@ -73,15 +73,15 @@ describe("public Beta web deployment", () => {
     expect(workspaceModal).toContain("Public web does not accept worker URLs or access tokens.");
   });
 
-  test("keeps signed-out public Beta users behind the sign-in gate", () => {
+  test("keeps signed-out app routes behind sign-in while trust routes remain public", () => {
     const appRoot = readFileSync(
       new URL("../src/react-app/shell/app-root.tsx", import.meta.url),
       "utf8",
     );
 
-    expect(appRoot).toContain(
-      'requireSignin && (denAuth.status === "checking" || !denAuth.isSignedIn)',
-    );
+    expect(appRoot).toContain("!isPublicTrustPath(location.pathname)");
+    expect(appRoot).toContain("requireSignin &&");
+    expect(appRoot).toContain('(denAuth.status === "checking" || !denAuth.isSignedIn)');
   });
 
   test("keeps Cloud connectivity failures actionable without exposing browser internals", () => {

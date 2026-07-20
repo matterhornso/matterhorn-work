@@ -50,6 +50,24 @@ user failure.
 7. Leave Cloud disabled for desktop/local builds, or complete the separate Cloud acceptance flow before setting `VITE_MATTERHORN_CLOUD_ENABLED=1` for public web.
 8. Restart the backend and rebuild the web app after changing server or `VITE_` values.
 
+## Public Trust Surfaces
+
+Every public candidate must expose these same-origin routes without requiring
+an account:
+
+- `/privacy`
+- `/terms`
+- `/security`
+- `/support`
+- `/status`
+
+Privacy and Terms require named owner approval. The support address must be
+staffed for the launch window, and the private vulnerability-reporting URL must
+be enabled before release. `/status` must receive JSON from same-origin
+`/health/live` and `/health/ready`; an HTML SPA fallback or a direct private
+backend URL is a deployment failure. These pages are code-complete, but owner
+approval, staffing, and deployed evidence remain launch gates.
+
 ## Verification
 
 The template contract validates variable names and safe defaults without reading
@@ -118,8 +136,35 @@ pnpm drill:workspace-backup-restore -- \
 ```
 
 The Product Hunt operations gate also requires fresh external monitoring and a
-real rollback rehearsal. Run the reviewed no-shell rollback hook against the
-immutable current and last-known-good commits:
+complete encrypted user-data recovery drill. The portable drill above proves
+configuration recovery only; it does not contain Notes, Memory, Outputs, task
+evidence, or chat history. Back up those stores and restore them into a new
+directory before launch:
+
+```bash
+export MATTERHORN_BACKUP_PASSPHRASE="<from the approved secret manager>"
+
+pnpm backup:workspace-user-data -- \
+  --workspace-root "$MATTERHORN_WORKSPACE_ROOT" \
+  --opencode-db "$OPENCODE_DB" \
+  --output "$MATTERHORN_ENCRYPTED_BACKUP_PATH" \
+  --json-output qa-reports/product-hunt/user-data-backup.json
+
+pnpm backup:workspace-user-data -- \
+  --restore \
+  --workspace-root "$MATTERHORN_WORKSPACE_ROOT" \
+  --archive "$MATTERHORN_ENCRYPTED_BACKUP_PATH" \
+  --restore-to "$MATTERHORN_USER_DATA_RESTORE_ROOT" \
+  --confirm-restore-to "$MATTERHORN_USER_DATA_RESTORE_ROOT" \
+  --json-output qa-reports/product-hunt/user-data-restore.json
+```
+
+Store the passphrase outside the application host and outside the report
+packet. The archive includes private user content and must never be attached to
+the public launch evidence.
+
+Run the reviewed no-shell rollback hook against the immutable current and
+last-known-good commits:
 
 ```bash
 pnpm drill:product-hunt-rollback -- \

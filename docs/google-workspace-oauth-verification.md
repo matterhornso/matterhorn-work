@@ -1,18 +1,43 @@
-# Google Workspace OAuth Verification
+# Matterhorn Desks Google Workspace OAuth Launch Gate
 
-## Project
+Google Workspace is **not a public-beta capability until every item in this
+runbook has current production evidence**. Keep it out of
+`VITE_MATTERHORN_PUBLIC_OAUTH_CONNECTORS` while any value is missing or any test
+is incomplete. The product must show the connector as `Coming soon`, not as a
+working connection.
 
-- Google Cloud project: `OpenWork Google Workspace`
-- Project ID: `noted-victory-497500-f9`
-- OAuth app name: `OpenWork`
-- Support email: `team@openworklabs.com`
-- Homepage: `https://openworklabs.com`
-- Privacy policy: `https://openworklabs.com/privacy`
-- Terms: `https://openworklabs.com/terms`
-- Authorized domain: `openworklabs.com`
-- Desktop OAuth client ID: `929071212606-pmkqimjhm2tnp68kbklnout0irllj99h.apps.googleusercontent.com`
+## Owner-Supplied Consent Identity
 
-## Phase 1 Scopes
+Create or update a Google Cloud project whose visible consent-screen identity
+matches the released product:
+
+| Field | Required value |
+|---|---|
+| Product name | `Matterhorn Desks` |
+| Support email | A monitored `@matterhorn.work` address |
+| Homepage | The reviewed production HTTPS origin |
+| Privacy policy | `<production-origin>/privacy` |
+| Terms | `<production-origin>/terms` |
+| Authorized domain | The verified Matterhorn production domain |
+| Desktop OAuth client | A Matterhorn-owned Desktop client from this project |
+
+Do not reuse a client whose consent screen presents another product or company.
+Record project and client identifiers in the deployment secret manager and
+private acceptance report, not in this public runbook.
+
+Configure the reviewed project through the canonical server-side variables:
+
+```text
+MATTERHORN_GOOGLE_WORKSPACE_OAUTH_CLIENT_ID
+MATTERHORN_GOOGLE_WORKSPACE_OAUTH_CLIENT_SECRET
+MATTERHORN_GOOGLE_WORKSPACE_TOKEN_BROKER_URL
+```
+
+Older installations can still migrate from their previous internal variable
+names, but those compatibility keys must never appear in public UI, consent
+copy, support copy, screenshots, or launch collateral.
+
+## Requested Phase 1 Scopes
 
 ```text
 openid
@@ -23,51 +48,61 @@ https://www.googleapis.com/auth/drive.file
 https://www.googleapis.com/auth/gmail.compose
 ```
 
-## Scope Justifications
+### Identity
 
-### `openid`, `userinfo.email`, `userinfo.profile`
+`openid`, `userinfo.email`, and `userinfo.profile` identify the connected
+Google account and let the user verify that they chose the intended account.
 
-OpenWork uses these scopes to identify the connected Google account in the app, display the signed-in account email to the user, and help users confirm they connected the intended Google account.
+### Calendar
 
-### `calendar.readonly`
+`calendar.readonly` reads upcoming event context only when the user requests
+meeting preparation. It does not create, edit, or delete calendar events.
 
-OpenWork uses this scope to read upcoming Google Calendar events when the user asks for meeting context or meeting preparation. OpenWork does not modify calendars with this scope. The initial Google Workspace integration uses calendar data to show event title, time, attendees, and linked resources so the user can prepare for upcoming meetings.
+### Drive
 
-### `drive.file`
+`drive.file` limits access to files selected, opened, or created through
+Matterhorn Desks. Phase 1 does not request broad Drive read access.
 
-OpenWork uses this scope to access only the specific Google Drive files that the user selects, opens, or creates with OpenWork. OpenWork does not request broad Drive read access in Phase 1. This lets the user ask OpenWork to summarize or use a selected document while keeping the rest of the user's Drive outside the app's access.
+### Gmail
 
-### `gmail.compose`
+`gmail.compose` creates a draft for the user to review in Gmail. Matterhorn
+Desks does not expose automatic email sending in Phase 1.
 
-OpenWork uses this scope to create Gmail drafts for the user to review in Gmail. Phase 1 does not expose an automatic send-email tool. Draft creation is used for workflows like drafting a meeting follow-up after the user asks for it. Users remain in control and send messages themselves from Gmail.
+## Data Use
 
-## Data Use Statement
+Matterhorn Desks uses Google Workspace data only for a user-requested action,
+such as reading calendar context, reading an explicitly selected Drive file, or
+creating a Gmail draft. It does not sell Google user data, use it for
+advertising, or use it to train generalized AI models.
 
-OpenWork uses Google Workspace data only to provide user-requested features, such as reading calendar context, reading explicitly selected Drive files, and creating Gmail drafts. OpenWork does not sell Google user data, use Google user data for advertising, or use Google user data to train generalized AI models. Desktop OAuth tokens are stored locally using encrypted OS storage when available.
+Desktop access and refresh tokens must use protected operating-system storage.
+They must never be committed, logged, included in QA evidence, placed in a
+browser bundle, or passed in a command-line argument.
 
 ## Deployment Modes
 
-### Local-first desktop OAuth
+### Local-first desktop
 
-The default desktop flow uses a Google Desktop OAuth client with PKCE and a loopback redirect. The desktop app exchanges authorization codes directly with Google and stores user tokens locally in encrypted OS storage.
-
-For installed desktop apps, Google may provide both a `client_id` and `client_secret`. In this context, the `client_secret` is client metadata, not a confidential backend secret, because any value shipped in a desktop binary can be extracted. It is acceptable for official OpenWork desktop builds to include the OpenWork-owned Google Desktop OAuth client metadata, while user access tokens and refresh tokens must remain protected and must never be committed.
-
-For local development, pass `OPENWORK_GOOGLE_WORKSPACE_OAUTH_CLIENT_SECRET` from the Google Cloud desktop client metadata instead of committing it to source. This keeps source checkouts and forks from accidentally reusing the official OpenWork OAuth client metadata unless they opt in explicitly.
+The desktop flow uses PKCE and a loopback redirect. The app exchanges the code
+with Google and stores tokens locally in protected operating-system storage.
+Desktop client metadata can be extracted from a shipped binary and must not be
+treated as a confidential server secret.
 
 ### Enterprise token broker
 
-Enterprise deployments can use a hardened token broker by setting `OPENWORK_GOOGLE_WORKSPACE_TOKEN_BROKER_URL`. When this is set, OpenWork Desktop still owns the browser OAuth flow and PKCE verifier, but sends token exchange and refresh requests to the configured broker endpoint instead of calling Google's token endpoint directly.
+An enterprise deployment can set
+`MATTERHORN_GOOGLE_WORKSPACE_TOKEN_BROKER_URL`. The desktop app still owns the
+browser authorization flow and PKCE verifier, while the reviewed broker
+performs token exchange and refresh. The broker must enforce organization
+policy, redact logs, protect refresh tokens, and support revocation.
 
-This lets an enterprise or self-hosted OpenWork deployment keep Google OAuth client metadata on its own server, enforce organization policy, add audit logging, rotate credentials centrally, and avoid distributing Google OAuth client metadata in desktop builds. The broker is also the right place to add domain allowlists, admin approvals, or additional revocation policy for managed environments.
-
-The broker receives JSON `POST` requests shaped like:
+The broker receives an authorization-code request shaped like:
 
 ```json
 {
   "provider": "google-workspace",
   "grantType": "authorization_code",
-  "clientId": "<google-desktop-client-id>",
+  "clientId": "<matterhorn-desktop-client-id>",
   "code": "<authorization-code>",
   "codeVerifier": "<pkce-verifier>",
   "redirectUri": "http://127.0.0.1:<port>/"
@@ -80,72 +115,56 @@ For refresh:
 {
   "provider": "google-workspace",
   "grantType": "refresh_token",
-  "clientId": "<google-desktop-client-id>",
+  "clientId": "<matterhorn-desktop-client-id>",
   "refreshToken": "<refresh-token>"
 }
 ```
 
-The broker should return Google's token response shape, including `access_token`, `expires_in`, optional `refresh_token`, and optional `scope`.
+The broker returns Google's token response shape, including `access_token`,
+`expires_in`, optional `refresh_token`, and optional `scope`.
 
-## Demo Video Script
+## Required Acceptance
 
-Google's verification video should show the OAuth consent flow and each requested sensitive/restricted scope in use.
+Use a dedicated test account and a production-shaped signed desktop build:
 
-1. Start OpenWork Desktop with the Google Workspace desktop OAuth client metadata:
+1. Open `Settings -> Extensions -> Google Workspace`.
+2. Confirm the UI describes Calendar read, Gmail drafts, and selected Drive
+   files without claiming broader access.
+3. Select `Connect with Google`.
+4. Confirm the consent screen says `Matterhorn Desks`, uses the reviewed domain,
+   links to the deployed `/privacy` and `/terms` pages, and shows only the
+   accepted scopes.
+5. Connect the intended test account and return to Matterhorn Desks.
+6. Confirm the exact connected account email is visible.
+7. Run the connection test and verify profile plus Calendar read access.
+8. Run the scope smoke test. It must create and read a clearly labeled
+   Matterhorn Desks Drive smoke-test file and create a clearly labeled Gmail
+   draft without sending it.
+9. Reload the application and repeat one read action to prove token recovery.
+10. Disconnect. Confirm local protected storage is cleared and the token is
+    revoked.
+11. Attempt a tool call after disconnect and confirm it fails closed without
+    leaking token or provider response details.
+12. Revoke Matterhorn Desks from the Google account security page and confirm
+    the application reports a reconnect action instead of a false healthy
+    state.
 
-   ```bash
-   OPENWORK_GOOGLE_WORKSPACE_OAUTH_CLIENT_ID="929071212606-pmkqimjhm2tnp68kbklnout0irllj99h.apps.googleusercontent.com" \
-   OPENWORK_GOOGLE_WORKSPACE_OAUTH_CLIENT_SECRET="<desktop-client-secret-from-google-cloud>" \
-   pnpm dev
-   ```
+Capture sanitized evidence for connect, reload, Calendar read, Drive
+create/read, Gmail draft, disconnect, revoke, and post-revocation failure.
+Never attach tokens, authorization codes, message content, private file
+content, or account recovery information.
 
-2. Open `Settings -> Extensions -> Google Workspace`.
+## Verification and Stop-Ship Rules
 
-3. Show the extension panel describing Phase 1 capabilities:
-   - Calendar read.
-   - Gmail drafts.
-   - Selected Drive files.
+- `gmail.compose` can require restricted-scope verification and an additional
+  Google security review.
+- The production privacy and terms pages must be deployed and owner-approved.
+- The support address must be monitored during the launch window.
+- The Google consent identity must match Matterhorn Desks exactly.
+- The signed build, production redirect, and current scopes must match the
+  submitted verification configuration.
+- Any failed or missing acceptance step keeps the connector hidden.
 
-4. Click `Connect with Google`.
-
-5. Show the Google OAuth consent screen, including the app name `OpenWork` and requested scopes.
-
-6. Approve access with a test account.
-
-7. Return to OpenWork and show the connected account email.
-
-8. Click `Test connection` and show profile + Calendar read access verified.
-
-9. Click `Run scope smoke test` and show the success state, including the created Drive file and Gmail draft IDs. This verifies all requested Phase 1 scopes:
-   - Calendar read through the Calendar API.
-   - Drive selected/app-created file access by creating and reading `OpenWork Google Workspace smoke test.txt`.
-   - Gmail compose access by creating `OpenWork Google Workspace smoke test draft` in Gmail drafts.
-
-10. Open Google Drive and show the created smoke-test file.
-
-11. Open Gmail drafts and show the created smoke-test draft. State that OpenWork created a draft only and did not send email automatically.
-
-12. Click `Disconnect` in OpenWork and state that OpenWork revokes the Google OAuth token and removes the local encrypted token vault entry.
-
-## Daytona Recording Plan
-
-Use Daytona for a clean, repeatable Electron recording:
-
-```bash
-bash .devcontainer/test-on-daytona.sh feature/google-workspace-phase-1 --record-video --recording-name google-workspace-oauth-phase-1
-```
-
-Then open the noVNC URL printed by the script, sign in to the Google test account when the OAuth browser opens, and complete the script above while recording.
-
-If the sandbox does not have the Google OAuth client metadata in the environment, restart Electron with:
-
-```bash
-OPENWORK_GOOGLE_WORKSPACE_OAUTH_CLIENT_ID="929071212606-pmkqimjhm2tnp68kbklnout0irllj99h.apps.googleusercontent.com" \
-OPENWORK_GOOGLE_WORKSPACE_OAUTH_CLIENT_SECRET="<desktop-client-secret-from-google-cloud>" \
-bash /opt/openwork-daytona/start-daytona-electron.sh --detach
-```
-
-## Current Verification Blockers
-
-- `gmail.compose` is a restricted Gmail scope. Google may require restricted-scope verification and possibly additional security review.
-- The privacy policy source includes Google Workspace data-use language, but it must be deployed publicly before submitting verification.
+Only after all evidence is approved may the exact connector server name be
+added to `VITE_MATTERHORN_PUBLIC_OAUTH_CONNECTORS` for a new immutable release
+candidate.

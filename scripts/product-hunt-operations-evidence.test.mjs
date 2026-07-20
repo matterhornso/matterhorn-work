@@ -9,7 +9,7 @@ const dir = mkdtempSync(join(tmpdir(), "matterhorn-operations-evidence-"));
 const path = join(dir, "evidence.json");
 const now = "2026-07-20T12:00:00.000Z";
 const base = {
-  version: "matterhorn.product-hunt-operations-evidence.v1",
+  version: "matterhorn.product-hunt-operations-evidence.v2",
   commit: "d".repeat(40),
   capturedAt: "2026-07-20T11:00:00.000Z",
   monitoring: {
@@ -19,6 +19,17 @@ const base = {
   },
   backupRestore: {
     status: "pass", reportPath: "backup.json", sensitiveMode: "exclude", sha256: "a".repeat(64), sourceWorkspaceId: "ws_prod", targetWorkspaceId: "ws_restore", verified: true,
+  },
+  userDataRecovery: {
+    status: "pass",
+    backupReportPath: "user-data-backup.json",
+    restoreReportPath: "user-data-restore.json",
+    encrypted: true,
+    archiveSha256: "e".repeat(64),
+    coverage: { notes: true, memory: true, outputs: true, taskAndEvidenceState: true, chatHistory: true },
+    separateTarget: true,
+    restoreVerified: true,
+    sqliteIntegrityVerified: true,
   },
   rollback: {
     status: "pass", reportPath: "rollback.json", fromCommit: "b".repeat(40), toCommit: "c".repeat(40), healthVerified: true, healthVerifiedAt: "2026-07-20T11:40:00.000Z", owner: "Release owner",
@@ -41,6 +52,7 @@ try {
   assert.equal(pass.code, 0, pass.stderr || pass.stdout);
   const report = JSON.parse(pass.stdout);
   assert.equal(report.decision, "GO");
+  assert.equal(report.version, "matterhorn.product-hunt-operations-readiness.v2");
   assert.equal(report.ready, true);
   assert.equal(report.commit, base.commit);
   assert.deepEqual(report.blockers, []);
@@ -55,6 +67,16 @@ try {
   const failedAlert = await run({ ...base, monitoring: { ...base.monitoring, alertTest: { ...base.monitoring.alertTest, status: "fail" } } });
   assert.equal(failedAlert.code, 1);
   assert.ok(JSON.parse(failedAlert.stdout).blockers.some((item) => item.id === "monitoring_alert_test"));
+
+  const incompleteRecovery = await run({
+    ...base,
+    userDataRecovery: {
+      ...base.userDataRecovery,
+      coverage: { ...base.userDataRecovery.coverage, chatHistory: false },
+    },
+  });
+  assert.equal(incompleteRecovery.code, 1);
+  assert.ok(JSON.parse(incompleteRecovery.stdout).blockers.some((item) => item.id === "user_data_recovery_chatHistory"));
 
   const secret = await run({ ...base, monitoring: { ...base.monitoring, apiToken: "never" } });
   assert.equal(secret.code, 1);

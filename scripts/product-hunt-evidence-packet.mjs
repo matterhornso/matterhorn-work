@@ -8,7 +8,7 @@ const VERSION = "matterhorn.product-hunt-evidence-packet.v1";
 const SPECS = Object.freeze({
   readiness: { version: "matterhorn.launch-channel-readiness.v1", commit: (value) => value.commit },
   deployment: { version: "matterhorn.product-hunt-deployment-probe.v1", commit: (value) => value.metadata?.expectedCommit },
-  operations: { version: "matterhorn.product-hunt-operations-readiness.v1", commit: (value) => value.commit },
+  operations: { version: "matterhorn.product-hunt-operations-readiness.v2", commit: (value) => value.commit },
   acceptance: { version: "matterhorn.product-hunt-acceptance-readiness.v1", commit: (value) => value.commit },
   desktop: { version: "matterhorn.desktop-public-release-verification.v1", commit: (value) => value.sourceCommit },
 });

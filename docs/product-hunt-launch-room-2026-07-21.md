@@ -85,6 +85,22 @@ pnpm drill:workspace-backup-restore -- \
   --confirm-target "$MATTERHORN_RESTORE_WORKSPACE_ID" \
   --apply --json-output qa-reports/product-hunt-2026-07-21/backup-restore.json
 
+export MATTERHORN_BACKUP_PASSPHRASE="<from the approved secret manager>"
+
+pnpm backup:workspace-user-data -- \
+  --workspace-root "$MATTERHORN_WORKSPACE_ROOT" \
+  --opencode-db "$OPENCODE_DB" \
+  --output "$MATTERHORN_ENCRYPTED_BACKUP_PATH" \
+  --json-output qa-reports/product-hunt-2026-07-21/user-data-backup.json
+
+pnpm backup:workspace-user-data -- \
+  --restore \
+  --workspace-root "$MATTERHORN_WORKSPACE_ROOT" \
+  --archive "$MATTERHORN_ENCRYPTED_BACKUP_PATH" \
+  --restore-to "$MATTERHORN_USER_DATA_RESTORE_ROOT" \
+  --confirm-restore-to "$MATTERHORN_USER_DATA_RESTORE_ROOT" \
+  --json-output qa-reports/product-hunt-2026-07-21/user-data-restore.json
+
 pnpm drill:product-hunt-rollback -- \
   --app-url "$MATTERHORN_APP_URL" \
   --server-url "$MATTERHORN_WORK_SERVER_URL" \
@@ -106,7 +122,10 @@ probe. Do not mutate an existing release artifact or tag.
 2. Confirm monitoring covers health, error rate, latency, and provider failures;
    send one test alert to the staffed owner.
 3. Confirm privacy, terms, support, pricing/availability copy, screenshots,
-   demo, and Product Hunt listing all use the approved launch kit.
+   demo, and Product Hunt listing all use the approved launch kit. Verify
+   `/privacy`, `/terms`, `/security`, `/support`, and `/status` load without an
+   account. The legal owner approves Privacy and Terms; the Support owner proves
+   the published contact is staffed.
 4. Generate the Product Hunt readiness report from fresh evidence.
 5. Bind every evaluated report into the final packet:
 

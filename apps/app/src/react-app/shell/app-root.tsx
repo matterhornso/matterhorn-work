@@ -19,6 +19,7 @@ import { QuickJotProvider, QuickJotGlobal } from "../domains/notes";
 import { workspaceSessionRoute } from "./workspace-routes";
 import { AppErrorBoundary } from "./app-error-boundary";
 import { RemoteConnectDeepLinkHandler } from "./remote-connect-deep-links";
+import { isPublicTrustPath } from "../domains/public/public-trust-content";
 
 const OrgOnboardingPageRoute = lazy(() => import("../domains/cloud/org-onboarding-page").then((module) => ({
   default: module.OrgOnboardingPage,
@@ -26,6 +27,9 @@ const OrgOnboardingPageRoute = lazy(() => import("../domains/cloud/org-onboardin
 const SessionRoute = lazy(() => import("./session-route").then((module) => ({ default: module.SessionRoute })));
 const SettingsRoute = lazy(() => import("./settings-route").then((module) => ({ default: module.SettingsRoute })));
 const WelcomeRoute = lazy(() => import("./welcome-route").then((module) => ({ default: module.WelcomeRoute })));
+const PublicTrustRoute = lazy(() => import("../domains/public/public-trust-route").then((module) => ({
+  default: module.PublicTrustRoute,
+})));
 type DenSigninGateProps = {
   children: ReactNode;
 };
@@ -103,6 +107,7 @@ function DenSigninGate({ children }: DenSigninGateProps) {
     if (denAuth.status === "checking") return;
 
     const path = location.pathname.toLowerCase();
+    if (isPublicTrustPath(path)) return;
     const onSignin = path === "/signin" || path.startsWith("/signin/");
     const explicitCloudSignin = onSignin && isExplicitCloudSignin(location.search);
 
@@ -158,7 +163,11 @@ function DenSigninGate({ children }: DenSigninGateProps) {
     return () => window.removeEventListener(denSessionUpdatedEvent, handler);
   }, [navigate]);
 
-  if (requireSignin && (denAuth.status === "checking" || !denAuth.isSignedIn)) {
+  if (
+    !isPublicTrustPath(location.pathname) &&
+    requireSignin &&
+    (denAuth.status === "checking" || !denAuth.isSignedIn)
+  ) {
     return <ForcedSigninPage developerMode={false} />;
   }
 
@@ -181,6 +190,46 @@ export function AppRoot() {
             <QuickJotProvider>
             <AppErrorBoundary resetKey={`${location.pathname}${location.search}`}>
             <Routes>
+              <Route
+                path="/privacy"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <PublicTrustRoute />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/terms"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <PublicTrustRoute />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/security"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <PublicTrustRoute />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/support"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <PublicTrustRoute />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/status"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <PublicTrustRoute />
+                  </Suspense>
+                }
+              />
               <Route
                 path="/signin"
                 element={

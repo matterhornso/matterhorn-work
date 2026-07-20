@@ -7,12 +7,13 @@ Use the right channel to get faster help:
 - **Questions / usage help**: open a GitHub issue and mark it as a question.
 - **Bug reports**: use the Bug issue template.
 - **Feature requests**: use the Feature issue template.
-- **Security reports**: follow `SECURITY.md` and report privately.
+- **Product support**: email `support@matterhorn.work`.
+- **Security reports**: follow `SECURITY.md` and report privately through GitHub Security Advisories.
 
 ## Before opening an issue
 
 - Search existing issues to avoid duplicates.
-- Include exact Matterhorn Desks/OpenCode versions, OS, and reproduction steps.
+- Include the Matterhorn Desks version, engine version, OS, and reproduction steps.
 - For desktop, worker, or session bugs, open Settings -> Debug and include both:
   - the runtime debug report
   - the developer log export

@@ -9,10 +9,9 @@ the current `dev` branch.
 
 Please do not open public GitHub issues for security vulnerabilities.
 
-Instead, report vulnerabilities privately to:
+Instead, use GitHub private vulnerability reporting:
 
-- Email: `ben@openworklabs.com`
-- Subject: `[Matterhorn Desks security] <short summary>`
+- `https://github.com/matterhornso/matterhorn-work/security/advisories/new`
 
 Please include:
 
@@ -31,3 +30,6 @@ Please include:
 
 Please keep details private until a fix or mitigation is available and maintainers
 confirm public disclosure timing.
+
+For non-security product support, email `support@matterhorn.work` or follow
+`SUPPORT.md`.

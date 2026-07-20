@@ -9,11 +9,16 @@ import type { ServerConfig } from "../types.js";
 
 export const GOOGLE_WORKSPACE_EXTENSION_ID = "google-workspace";
 
-const GOOGLE_WORKSPACE_DESKTOP_CLIENT_ID = "929071212606-pmkqimjhm2tnp68kbklnout0irllj99h.apps.googleusercontent.com";
-const GOOGLE_WORKSPACE_CLIENT_ID_ENV = "OPENWORK_GOOGLE_WORKSPACE_OAUTH_CLIENT_ID";
-const GOOGLE_WORKSPACE_CLIENT_SECRET_ENV = "OPENWORK_GOOGLE_WORKSPACE_OAUTH_CLIENT_SECRET";
-const GOOGLE_WORKSPACE_TOKEN_BROKER_URL_ENV = "OPENWORK_GOOGLE_WORKSPACE_TOKEN_BROKER_URL";
-const GOOGLE_WORKSPACE_ALLOW_PLAINTEXT_VAULT_ENV = "OPENWORK_GOOGLE_WORKSPACE_ALLOW_PLAINTEXT_VAULT";
+const GOOGLE_WORKSPACE_CLIENT_ID_ENV = "MATTERHORN_GOOGLE_WORKSPACE_OAUTH_CLIENT_ID";
+const GOOGLE_WORKSPACE_CLIENT_SECRET_ENV = "MATTERHORN_GOOGLE_WORKSPACE_OAUTH_CLIENT_SECRET";
+const GOOGLE_WORKSPACE_TOKEN_BROKER_URL_ENV = "MATTERHORN_GOOGLE_WORKSPACE_TOKEN_BROKER_URL";
+const GOOGLE_WORKSPACE_ALLOW_PLAINTEXT_VAULT_ENV =
+  "MATTERHORN_GOOGLE_WORKSPACE_ALLOW_PLAINTEXT_VAULT";
+const LEGACY_GOOGLE_WORKSPACE_CLIENT_ID_ENV = "OPENWORK_GOOGLE_WORKSPACE_OAUTH_CLIENT_ID";
+const LEGACY_GOOGLE_WORKSPACE_CLIENT_SECRET_ENV = "OPENWORK_GOOGLE_WORKSPACE_OAUTH_CLIENT_SECRET";
+const LEGACY_GOOGLE_WORKSPACE_TOKEN_BROKER_URL_ENV = "OPENWORK_GOOGLE_WORKSPACE_TOKEN_BROKER_URL";
+const LEGACY_GOOGLE_WORKSPACE_ALLOW_PLAINTEXT_VAULT_ENV =
+  "OPENWORK_GOOGLE_WORKSPACE_ALLOW_PLAINTEXT_VAULT";
 const GOOGLE_WORKSPACE_AUTH_TIMEOUT_MS = 5 * 60 * 1000;
 const GOOGLE_WORKSPACE_API_TIMEOUT_MS = 30_000;
 const GOOGLE_WORKSPACE_SCOPES = [
@@ -126,9 +131,21 @@ function configDir(config: ServerConfig): string {
 }
 
 function googleWorkspaceCredentials() {
-  const clientId = process.env[GOOGLE_WORKSPACE_CLIENT_ID_ENV]?.trim() || process.env.GOOGLE_WORKSPACE_OAUTH_CLIENT_ID?.trim() || GOOGLE_WORKSPACE_DESKTOP_CLIENT_ID;
-  const clientSecret = process.env[GOOGLE_WORKSPACE_CLIENT_SECRET_ENV]?.trim() || process.env.GOOGLE_WORKSPACE_OAUTH_CLIENT_SECRET?.trim() || "";
-  const tokenBrokerUrl = process.env[GOOGLE_WORKSPACE_TOKEN_BROKER_URL_ENV]?.trim() || process.env.GOOGLE_WORKSPACE_TOKEN_BROKER_URL?.trim() || "";
+  const clientId =
+    process.env[GOOGLE_WORKSPACE_CLIENT_ID_ENV]?.trim() ||
+    process.env.GOOGLE_WORKSPACE_OAUTH_CLIENT_ID?.trim() ||
+    process.env[LEGACY_GOOGLE_WORKSPACE_CLIENT_ID_ENV]?.trim() ||
+    "";
+  const clientSecret =
+    process.env[GOOGLE_WORKSPACE_CLIENT_SECRET_ENV]?.trim() ||
+    process.env.GOOGLE_WORKSPACE_OAUTH_CLIENT_SECRET?.trim() ||
+    process.env[LEGACY_GOOGLE_WORKSPACE_CLIENT_SECRET_ENV]?.trim() ||
+    "";
+  const tokenBrokerUrl =
+    process.env[GOOGLE_WORKSPACE_TOKEN_BROKER_URL_ENV]?.trim() ||
+    process.env.GOOGLE_WORKSPACE_TOKEN_BROKER_URL?.trim() ||
+    process.env[LEGACY_GOOGLE_WORKSPACE_TOKEN_BROKER_URL_ENV]?.trim() ||
+    "";
   const missing: string[] = [];
   if (!clientId) missing.push(GOOGLE_WORKSPACE_CLIENT_ID_ENV);
   if (!clientSecret && !tokenBrokerUrl) missing.push(`${GOOGLE_WORKSPACE_CLIENT_SECRET_ENV} or ${GOOGLE_WORKSPACE_TOKEN_BROKER_URL_ENV}`);
@@ -152,7 +169,12 @@ function googleWorkspaceVaultKeyPath(config: ServerConfig): string {
 }
 
 function googleWorkspacePlainTextVaultEnabled() {
-  return process.env.OPENWORK_DEV_MODE === "1" && process.env[GOOGLE_WORKSPACE_ALLOW_PLAINTEXT_VAULT_ENV] === "1";
+  const developerMode =
+    process.env.MATTERHORN_DEV_MODE === "1" || process.env.OPENWORK_DEV_MODE === "1";
+  const explicitlyAllowed =
+    process.env[GOOGLE_WORKSPACE_ALLOW_PLAINTEXT_VAULT_ENV] === "1" ||
+    process.env[LEGACY_GOOGLE_WORKSPACE_ALLOW_PLAINTEXT_VAULT_ENV] === "1";
+  return developerMode && explicitlyAllowed;
 }
 
 function googleWorkspaceVaultMode() {
@@ -174,7 +196,9 @@ function createGoogleWorkspacePkce() {
 }
 
 async function googleWorkspaceVaultKey(config: ServerConfig): Promise<Buffer> {
-  const envKey = process.env.OPENWORK_ENCRYPTION_KEY?.trim();
+  const envKey =
+    process.env.MATTERHORN_ENCRYPTION_KEY?.trim() ||
+    process.env.OPENWORK_ENCRYPTION_KEY?.trim();
   if (envKey) return createHash("sha256").update(envKey).digest();
 
   const keyPath = googleWorkspaceVaultKeyPath(config);
@@ -642,7 +666,7 @@ export function createGoogleWorkspaceConnectFlowManager(config: ServerConfig) {
             flow.account = account;
           } catch (exchangeError) {
             flow.status = "failed";
-            flow.error = `Google authorized OpenWork, but token exchange failed: ${exchangeError instanceof Error ? exchangeError.message : String(exchangeError)}`;
+            flow.error = `Google authorized Matterhorn Desks, but token exchange failed: ${exchangeError instanceof Error ? exchangeError.message : String(exchangeError)}`;
           }
         } catch (callbackError) {
           const flow = flows.get(flowId);

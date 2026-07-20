@@ -158,6 +158,19 @@ async function backendJson(config, path, init = {}) {
   return { response, payload };
 }
 
+async function selectSeededOutput(region, outputPath, outputFileName) {
+  const browseOutputs = region.locator("summary").filter({ hasText: "Browse outputs" });
+  if (await browseOutputs.count()) {
+    await browseOutputs.click();
+    const outputRow = region.getByRole("button").filter({ hasText: outputPath });
+    await outputRow.waitFor({ state: "visible", timeout: 20_000 });
+    if (await outputRow.count() !== 1) throw new Error("Seeded output did not resolve to one Outputs row.");
+    await outputRow.click();
+  }
+
+  await region.getByText(outputFileName, { exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
+}
+
 const config = parseArgs();
 if (config.help) {
   printHelp();
@@ -239,12 +252,7 @@ try {
     await page.waitForFunction(() => (document.querySelector("#root")?.childElementCount ?? 0) > 0, undefined, { timeout: 30_000 });
     const region = page.getByRole("region", { name: "Output preview", exact: true });
     await region.waitFor({ state: "visible", timeout: 20_000 });
-    await region.locator("summary").filter({ hasText: "Browse outputs" }).click();
-    const outputRow = region.getByRole("button").filter({ hasText: outputPath });
-    await outputRow.waitFor({ state: "visible", timeout: 20_000 });
-    if (await outputRow.count() !== 1) throw new Error("Seeded output did not resolve to one Outputs row.");
-    await outputRow.click();
-    await region.getByText(outputFileName, { exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
+    await selectSeededOutput(region, outputPath, outputFileName);
     await region.locator("summary").filter({ hasText: "File details" }).click();
     await region.getByText(outputPath, { exact: true }).first().waitFor({ state: "visible" });
     await region.getByText("Transaction Preview", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -308,10 +316,8 @@ try {
   await stage(report, "delete_output", "Delete only the seeded QA output and verify removal", async () => {
     await page.goto(workspace.sessionUrl("artifacts"), { waitUntil: "load", timeout: 30_000 });
     const region = page.getByRole("region", { name: "Output preview", exact: true });
-    await region.locator("summary").filter({ hasText: "Browse outputs" }).click();
-    const outputRow = region.getByRole("button").filter({ hasText: outputPath });
-    await outputRow.waitFor({ state: "visible", timeout: 20_000 });
-    await outputRow.click();
+    await region.waitFor({ state: "visible", timeout: 20_000 });
+    await selectSeededOutput(region, outputPath, outputFileName);
     const deletePromise = routeResponse(
       page,
       "DELETE",
