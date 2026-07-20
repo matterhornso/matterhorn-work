@@ -21,6 +21,13 @@ assert.equal(
   packageJson.scripts["test:public-beta-owner-acceptance"],
   "node scripts/public-beta-owner-acceptance.test.mjs",
 );
+const separatorHelp = spawnSync(process.execPath, [
+  "scripts/public-beta-owner-acceptance.mjs",
+  "--",
+  "--help",
+], { encoding: "utf8" });
+assert.equal(separatorHelp.status, 0, separatorHelp.stderr || separatorHelp.stdout);
+assert.match(separatorHelp.stdout, /Matterhorn Public Beta owner acceptance/);
 
 const now = "2026-07-20T12:00:00.000Z";
 const commitTime = "2026-07-20T11:00:00.000Z";
