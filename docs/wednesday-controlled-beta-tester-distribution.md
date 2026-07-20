@@ -1,4 +1,4 @@
-# Matterhorn Work Wednesday Controlled Beta Distribution
+# Matterhorn Desks Wednesday Controlled Beta Distribution
 
 Release date: 2026-07-15
 
@@ -41,7 +41,7 @@ are covered by automated safety and contract tests. Real-device acceptance was
 not completed because the required Chrome control extension was unavailable.
 Treat wallet connection as experimental. Never enter or paste a seed phrase,
 private key, mnemonic, raw signature, signed payload, or wallet export into
-Matterhorn Work.
+Matterhorn Desks.
 
 ## Install And Verify
 

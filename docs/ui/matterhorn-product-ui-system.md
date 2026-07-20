@@ -1,11 +1,11 @@
-# Matterhorn Work — Product UI System
+# Matterhorn Desks — Product UI System
 
 > **Current implementation note (2026-07-11):** Use [Matterhorn design system](matterhorn-design-system.md) and [Product surfaces](../product-surfaces.md) as the current source of truth. This broader system document remains useful for product rationale and historical design decisions.
 
 **Spec version:** 1.0
 **Audience:** Design engineers, frontend implementers, agent prompts
-**Scope:** All customer-facing UI in the Matterhorn Work app (market browsing, workflow execution, portfolio tracking, settings)
-**Brand:** Matterhorn Work — Web3-native desktop workspace
+**Scope:** All customer-facing UI in the Matterhorn Desks app (market browsing, workflow execution, portfolio tracking, settings)
+**Brand:** Matterhorn Desks — Web3-native desktop workspace
 
 ---
 
@@ -364,7 +364,7 @@ The UI must NEVER contain:
 
 ## 6. Responsive Strategy
 
-**Desktop-first.** Matterhorn Work is a desktop application. Minimum supported width: 1200px. The UI is designed for a 1440px primary viewport.
+**Desktop-first.** Matterhorn Desks is a desktop application. Minimum supported width: 1200px. The UI is designed for a 1440px primary viewport.
 
 Below 1200px: sidebar collapses to icon-only mode. Market cards stack vertically. Tables become horizontally scrollable.
 

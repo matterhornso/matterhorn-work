@@ -1,12 +1,12 @@
 # Hermes QA Guide: Matterhorn Use-Case Demo Pack
 
-Black-box browser QA for Matterhorn Work use cases. No repo internals required. Test through the running app or a deployed preview.
+Black-box browser QA for Matterhorn Desks use cases. No repo internals required. Test through the running app or a deployed preview.
 
 ---
 
 ## Setup Assumptions
 
-- Matterhorn Work app is running (`pnpm dev` or deployed preview URL)
+- Matterhorn Desks app is running (`pnpm dev` or deployed preview URL)
 - Test wallet: any valid SS58 address (e.g., `5Df67...`) for Bittensor prompts
 - Test Hyperliquid wallet: any valid Hyperliquid wallet address for account prompts
 - Test Polymarket market: any known market ID from polymarket.com

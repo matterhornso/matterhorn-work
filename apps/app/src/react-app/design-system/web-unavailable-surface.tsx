@@ -11,7 +11,7 @@ export type WebUnavailableSurfaceProps = {
 };
 
 const MESSAGE =
-  "This feature is currently unavailable in Matterhorn Work Web, check Matterhorn Work Desktop for full functionality.";
+  "This feature is currently unavailable in Matterhorn Desks Web, check Matterhorn Desks Desktop for full functionality.";
 
 export function WebUnavailableSurface(props: WebUnavailableSurfaceProps) {
   const innerProps = props.unavailable
@@ -42,7 +42,7 @@ export function WebUnavailableSurface(props: WebUnavailableSurfaceProps) {
               rel="noreferrer"
               className="inline-flex items-center gap-1 underline underline-offset-2 hover:no-underline"
             >
-              <span>Download Matterhorn Work Desktop</span>
+              <span>Download Matterhorn Desks Desktop</span>
               <ArrowUpRight size={props.compact ? 12 : 14} />
             </a>
           </div>

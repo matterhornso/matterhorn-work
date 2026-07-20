@@ -1,4 +1,4 @@
-# Matterhorn Work Notes
+# Matterhorn Desks Notes
 
 **Status:** Current implementation guide
 **Updated:** 2026-07-11

@@ -46,7 +46,7 @@ function firstBlockingReason(input: SuiWorkflowAvailabilityInput): {
   reason: string | null;
 } {
   if (!input.clientReady) {
-    return { nextAction: "connect_engine", reason: "Matterhorn Work engine is offline." };
+    return { nextAction: "connect_engine", reason: "Matterhorn Desks engine is offline." };
   }
   if (!input.workspaceReady) {
     return { nextAction: "open_workspace", reason: "Open a workspace before saving Sui evidence." };
@@ -85,7 +85,7 @@ export function getSuiWorkflowAvailability(input: SuiWorkflowAvailabilityInput):
 
   let importReceiptReason: string | null = null;
   if (!input.clientReady) {
-    importReceiptReason = "Matterhorn Work engine is offline.";
+    importReceiptReason = "Matterhorn Desks engine is offline.";
   } else if (!input.workspaceReady) {
     importReceiptReason = "Open a workspace before saving Sui evidence.";
   } else if (!hasValue(input.digest)) {

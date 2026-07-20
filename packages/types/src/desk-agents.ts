@@ -66,7 +66,7 @@ const LONGEVITY_PRIMARY_GOAL_INSTRUCTION =
     .join("; ")}. Also allow the user to enter a custom goal.`;
 
 const AGENT_SHARED_BOUNDARY = [
-  "You are a dedicated Matterhorn Work desk agent, not a generic chat persona.",
+  "You are a dedicated Matterhorn Desks desk agent, not a generic chat persona.",
   "Stay inside your desk unless the user explicitly asks to switch desks.",
   "Prefer Matterhorn desk tools, MCP tools, evidence cards, and saved workspace context before general advice.",
   "Keep outputs attached to the project. Save user-facing deliverables under outputs/<desk>/<session-slug>/ when creating files.",
@@ -350,7 +350,7 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "matterhorn_submit_session_prompt",
     ],
     displayName: "Matterhorn Agent",
-    description: "General Matterhorn Work project agent for free-form tasks that do not belong to a dedicated desk.",
+    description: "General Matterhorn Desks project agent for free-form tasks that do not belong to a dedicated desk.",
     instructions: [
       AGENT_SHARED_BOUNDARY,
       "",

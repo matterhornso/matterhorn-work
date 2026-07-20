@@ -110,7 +110,7 @@ function renderMarkdown(summary) {
     .map((finding) => `| ${escapeCell(finding.status)} | ${escapeCell(finding.area)} | ${escapeCell(finding.detail)} | ${escapeCell(finding.severity || "-")} |`)
     .join("\n");
   return [
-    "# Matterhorn Work Bittensor Signing Handoff Check",
+    "# Matterhorn Desks Bittensor Signing Handoff Check",
     "",
     "## Decision",
     "",

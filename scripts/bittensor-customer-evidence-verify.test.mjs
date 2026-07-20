@@ -32,7 +32,7 @@ const goodSummary = {
   agentControl: { ready: true, detail: "4 passed, 0 failed" },
   ci: {
     total: 3,
-    passed: ["Matterhorn Work Tests", "i18n Audit", "Alpha Channel macOS arm64"],
+    passed: ["Matterhorn Desks Tests", "i18n Audit", "Alpha Channel macOS arm64"],
     failed: [],
     pending: [],
   },
@@ -43,7 +43,7 @@ const goodSummary = {
 };
 
 const goodMarkdown = [
-  "# Matterhorn Work Bittensor Customer Evidence Bundle",
+  "# Matterhorn Desks Bittensor Customer Evidence Bundle",
   "",
   "## Decision",
   "",
@@ -114,7 +114,7 @@ try {
 
   const badCiPath = writeJson("bad-ci.json", {
     ...goodSummary,
-    ci: { total: 2, passed: ["i18n Audit"], failed: ["Matterhorn Work Tests"], pending: [] },
+    ci: { total: 2, passed: ["i18n Audit"], failed: ["Matterhorn Desks Tests"], pending: [] },
   });
   const badCi = run(["--bundle-json", badCiPath, "--strict", "--json"]);
   assert.notEqual(badCi.status, 0, "strict verifier should fail failed CI evidence");

@@ -415,7 +415,7 @@ export const PAYMENTS_PREVIEW_FIXTURES: DecentralizedServicePreview[] = [
     requiresCustomerConfirmation: true,
     warnings: [
       "This is a fixture preview. No provider is connected.",
-      "Customer must complete payment outside Matterhorn Work.",
+      "Customer must complete payment outside Matterhorn Desks.",
     ],
     canExecute: false,
   },

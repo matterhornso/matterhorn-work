@@ -1,6 +1,6 @@
 # Market Submit/Sign Phase 0 Contract
 
-Phase 0 defines the security contract for future Hyperliquid and Polymarket execution through Matterhorn Work chat. It does not enable live submission, signing, custody, or order broadcast.
+Phase 0 defines the security contract for future Hyperliquid and Polymarket execution through Matterhorn Desks chat. It does not enable live submission, signing, custody, or order broadcast.
 
 The current product remains read, preview, external-signer handoff, and public receipt import only. Future execution work must pass this contract before any route is allowed to submit a signed order.
 

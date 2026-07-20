@@ -1,29 +1,29 @@
-# Control Matterhorn Work from any MCP client
+# Control Matterhorn Desks from any MCP client
 
-Matterhorn Work exposes its UI as an MCP server so any MCP-capable app can read what's on screen and run actions — no DOM scraping, no coordinates, no accessibility hacks.
+Matterhorn Desks exposes its UI as an MCP server so any MCP-capable app can read what's on screen and run actions — no DOM scraping, no coordinates, no accessibility hacks.
 
 ## Why this exists
 
 Apps like HandsFree let people control their computers hands-free using AI. But generic computer-use flows (screenshot → click coordinate) are slow, fragile, and need a vision model for every step.
 
-Matterhorn Work takes a different approach: the app itself tells you what actions are available, what the current state is, and lets you execute actions by name. The MCP server wraps that surface so any MCP client gets a first-class, semantic control experience out of the box.
+Matterhorn Desks takes a different approach: the app itself tells you what actions are available, what the current state is, and lets you execute actions by name. The MCP server wraps that surface so any MCP client gets a first-class, semantic control experience out of the box.
 
 This means:
 
-- **HandsFree** can drive Matterhorn Work sessions, composer, navigation, and transcript without guessing pixels.
-- **The Matterhorn Work engine** can automate Matterhorn Work as part of a larger coding workflow.
-- **Claude Desktop, Codex, Cursor**, or any MCP-compatible tool can add Matterhorn Work control with a single config line.
+- **HandsFree** can drive Matterhorn Desks sessions, composer, navigation, and transcript without guessing pixels.
+- **The Matterhorn Desks engine** can automate Matterhorn Desks as part of a larger coding workflow.
+- **Claude Desktop, Codex, Cursor**, or any MCP-compatible tool can add Matterhorn Desks control with a single config line.
 - Your own app can do the same.
 
-> Want to control Matterhorn Work cloud workers and server APIs instead of the desktop UI? Check out the **Matterhorn Work Cloud MCP** (separate package, coming soon).
+> Want to control Matterhorn Desks cloud workers and server APIs instead of the desktop UI? Check out the **Matterhorn Desks Cloud MCP** (separate package, coming soon).
 
 ## Quick start with HandsFree
 
-HandsFree auto-discovers the Matterhorn Work MCP server when both apps are running on the same machine. No config needed.
+HandsFree auto-discovers the Matterhorn Desks MCP server when both apps are running on the same machine. No config needed.
 
-1. Launch **Matterhorn Work** (desktop app).
+1. Launch **Matterhorn Desks** (desktop app).
 2. Launch **HandsFree**.
-3. Open the HandsFree connector panel — you should see **Matterhorn Work** with a green "Connected" status and an action count.
+3. Open the HandsFree connector panel — you should see **Matterhorn Desks** with a green "Connected" status and an action count.
 
 That's it. HandsFree can now list your sessions, read transcripts, type into the composer, send prompts, and navigate the app — all through MCP.
 
@@ -32,8 +32,8 @@ That's it. HandsFree can now list your sessions, read transcripts, type into the
 - `ui_snapshot` — see the current route, status, and available actions.
 - `ui_list_actions` — get every action the app currently exposes (session controls, composer, navigation, etc.).
 - `ui_execute_action` — run an action by ID, e.g. `session.create_task`, `composer.set_text`, `composer.send`.
-- `ui_status` — check if Matterhorn Work is running and the bridge is reachable.
-- `browser_list_actions` — list only semantic `browser.*` actions published by Matterhorn Work.
+- `ui_status` — check if Matterhorn Desks is running and the bridge is reachable.
+- `browser_list_actions` — list only semantic `browser.*` actions published by Matterhorn Desks.
 - `browser_snapshot` — run the published `browser.snapshot` action when available.
 - `browser_open` — open a URL through a published `browser.open` or `browser.navigate` action.
 - `browser_execute_action` — execute a published `browser.*` action by ID, with explicit confirmation required for high-risk actions.
@@ -52,9 +52,9 @@ npx matterhorn-work-ui-mcp
 
 > The package is `matterhorn-work-ui-mcp`. Legacy `openwork-ui-mcp` package names may still appear in older installs as compatibility shims.
 
-## Add to Matterhorn Work Engine
+## Add to Matterhorn Desks Engine
 
-Add the MCP server to your workspace or global `opencode.json`. This is the underlying OpenCode runtime config used by the Matterhorn Work engine:
+Add the MCP server to your workspace or global `opencode.json`. This is the underlying OpenCode runtime config used by the Matterhorn Desks engine:
 
 ```json
 {
@@ -71,7 +71,7 @@ Add the MCP server to your workspace or global `opencode.json`. This is the unde
 Then use the tools in any session:
 
 ```
-> Use ui_snapshot to see what's on screen in Matterhorn Work, then list the available sessions.
+> Use ui_snapshot to see what's on screen in Matterhorn Desks, then list the available sessions.
 ```
 
 ## Add to Claude Desktop or Codex
@@ -93,7 +93,7 @@ Restart the app. The UI tools (`ui_status`, `ui_snapshot`, `ui_list_actions`, `u
 
 ## Add to your own MCP client
 
-If you're building an app that speaks MCP, you can connect to the Matterhorn Work UI server the same way:
+If you're building an app that speaks MCP, you can connect to the Matterhorn Desks UI server the same way:
 
 ```js
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -106,7 +106,7 @@ const transport = new StdioClientTransport({
 const client = new Client({ name: "my-app", version: "1.0.0" });
 await client.connect(transport);
 
-// Check if Matterhorn Work is running
+// Check if Matterhorn Desks is running
 const status = await client.callTool({ name: "ui_status", arguments: {} });
 console.log(status);
 
@@ -125,7 +125,7 @@ await client.callTool({
 
 ### Browser action tools
 
-Matterhorn Work browser/control tools are semantic wrappers over the same action model as `ui_list_actions`. They never invent click coordinates or DOM selectors. If the desktop app has not published a matching `browser.*` action, the tool returns a clear unsupported response.
+Matterhorn Desks browser/control tools are semantic wrappers over the same action model as `ui_list_actions`. They never invent click coordinates or DOM selectors. If the desktop app has not published a matching `browser.*` action, the tool returns a clear unsupported response.
 
 Use them in this order:
 
@@ -136,7 +136,7 @@ Use them in this order:
 
 #### `browser_list_actions`
 
-List the semantic `browser.*` actions currently published by Matterhorn Work. The output includes labels, descriptions, arguments, side-effect policy, disabled state, and example args where the app provides them.
+List the semantic `browser.*` actions currently published by Matterhorn Desks. The output includes labels, descriptions, arguments, side-effect policy, disabled state, and example args where the app provides them.
 
 **No arguments.**
 
@@ -153,7 +153,7 @@ Common browser actions:
 
 #### `browser_snapshot`
 
-Execute `browser.snapshot` if Matterhorn Work exposes it. This is a read-only semantic browser inspection action. If no `browser.snapshot` action is available, the tool refuses instead of falling back to screenshots or coordinates.
+Execute `browser.snapshot` if Matterhorn Desks exposes it. This is a read-only semantic browser inspection action. If no `browser.snapshot` action is available, the tool refuses instead of falling back to screenshots or coordinates.
 
 **No arguments.**
 
@@ -179,21 +179,21 @@ Execute one listed semantic `browser.*` action by id. This tool refuses non-brow
 
 ### `ui_status`
 
-Check if Matterhorn Work is running and reachable. Returns connection status and app info.
+Check if Matterhorn Desks is running and reachable. Returns connection status and app info.
 
 **No arguments.**
 
 Example response:
 
 ```
-Connected to Matterhorn Work
+Connected to Matterhorn Desks
 Bridge: http://127.0.0.1:52431
 Version: 1
 ```
 
 ### `ui_snapshot`
 
-Get the current Matterhorn Work UI state: active route, narration, visible actions, and status. Call this before acting to understand what the user sees.
+Get the current Matterhorn Desks UI state: active route, narration, visible actions, and status. Call this before acting to understand what the user sees.
 
 **No arguments.**
 
@@ -222,7 +222,7 @@ Returns the full list with labels, descriptions, and argument info.
 
 ### `ui_execute_action`
 
-Execute a Matterhorn Work UI action by its id.
+Execute a Matterhorn Desks UI action by its id.
 
 | Argument | Type | Description |
 |----------|------|-------------|
@@ -249,7 +249,7 @@ Example — send the composer prompt:
 
 ## Available actions
 
-The exact list depends on the current Matterhorn Work route and state. Common actions include:
+The exact list depends on the current Matterhorn Desks route and state. Common actions include:
 
 | Action | Description |
 |--------|-------------|
@@ -274,7 +274,7 @@ The exact list depends on the current Matterhorn Work route and state. Common ac
 
 ## Requirements
 
-- **Matterhorn Work desktop** must be running. The MCP server connects to Matterhorn Work's local bridge which starts automatically when the desktop app launches.
+- **Matterhorn Desks desktop** must be running. The MCP server connects to Matterhorn Desks's local bridge which starts automatically when the desktop app launches.
 - **macOS** is the primary supported platform. The bridge uses Electron IPC and writes a discovery file to `~/Library/Application Support/com.matterhorn.work/matterhorn-work-ui-control.json`, with legacy `~/Library/Application Support/com.differentai.openwork/openwork-ui-control.json` discovery still supported.
 - The MCP server runs as a **stdio** process — your MCP client spawns it and communicates over stdin/stdout.
 
@@ -289,11 +289,11 @@ The exact list depends on the current Matterhorn Work route and state. Common ac
 └─────────────┘
 ```
 
-1. Matterhorn Work desktop starts a private localhost HTTP bridge on a random port, protected by a bearer token.
+1. Matterhorn Desks desktop starts a private localhost HTTP bridge on a random port, protected by a bearer token.
 2. It writes a discovery file with the port and token so `matterhorn-work-ui-mcp` can find it.
 3. `matterhorn-work-ui-mcp` reads the discovery file, proxies MCP tool calls to the bridge, and returns structured results.
 4. The bridge calls `window.__openworkControl` inside the Electron renderer to snapshot state and execute actions.
 
 The bridge and discovery file are implementation details — you never need to touch them directly. Just point your MCP client at `matterhorn-work-ui-mcp`.
 
-For the agent-facing browser workflow and smoke-test checklist, see [Matterhorn Work Agent Browser Control](./agent-browser-control.md).
+For the agent-facing browser workflow and smoke-test checklist, see [Matterhorn Desks Agent Browser Control](./agent-browser-control.md).

@@ -42,18 +42,26 @@ for (const required of [
   "x-content-type-options",
   "permissions-policy",
   "cors_untrusted_origin",
+  "app_workspace_proxy",
+  "app_engine_proxy",
   "--allow-loopback-http",
 ]) assert.ok(source.includes(required), `deployment probe missing ${required}`);
 
-const app = await listen((_request, response) => {
-  response.writeHead(200, {
-    "content-type": "text/html",
+let serveSpaFallbackForProxyRoutes = false;
+const app = await listen((request, response) => {
+  const isProxyRoute = request.url === "/workspaces" || request.url === "/opencode/global/health";
+  const status = isProxyRoute && !serveSpaFallbackForProxyRoutes ? 401 : 200;
+  const contentType = isProxyRoute && !serveSpaFallbackForProxyRoutes ? "application/json" : "text/html";
+  response.writeHead(status, {
+    "content-type": contentType,
     "content-security-policy": "frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
     "permissions-policy": "camera=(), microphone=()",
     "referrer-policy": "strict-origin-when-cross-origin",
     "x-content-type-options": "nosniff",
   });
-  response.end("<!doctype html><title>Matterhorn Work</title>");
+  response.end(status === 401
+    ? JSON.stringify({ error: "Authentication required." })
+    : "<!doctype html><title>Matterhorn Desks</title>");
 });
 
 let allowUntrusted = false;
@@ -123,6 +131,24 @@ try {
   assert.equal(fail.code, 1, fail.stderr || fail.stdout);
   const failedReport = JSON.parse(fail.stdout);
   assert.ok(failedReport.failures.some((entry) => entry.id === "cors_untrusted_origin"));
+
+  allowUntrusted = false;
+  serveSpaFallbackForProxyRoutes = true;
+  const missingProxy = await run([
+    "--app-url", app.url,
+    "--server-url", api.url,
+    "--expected-commit", expectedCommit,
+    "--allow-loopback-http",
+    "--json",
+  ]);
+  assert.equal(missingProxy.code, 1, missingProxy.stderr || missingProxy.stdout);
+  const missingProxyReport = JSON.parse(missingProxy.stdout);
+  assert.ok(missingProxyReport.failures.some((entry) => entry.id === "app_workspace_proxy"));
+  assert.ok(missingProxyReport.failures.some((entry) => entry.id === "app_engine_proxy"));
+  assert.match(
+    missingProxyReport.failures.find((entry) => entry.id === "app_workspace_proxy").summary,
+    /text\/html/i,
+  );
 
   const help = await run(["--help"]);
   assert.equal(help.code, 0, help.stderr || help.stdout);

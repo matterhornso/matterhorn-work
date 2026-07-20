@@ -38,7 +38,7 @@ const config = {
   requireReadonlyAdapterCanary: flag("--require-readonly-adapter-canary"),
   requireReceiptCheck: flag("--require-receipt-check"),
   requireWatchAutopilotScheduler: flag("--require-watch-autopilot-scheduler"),
-  title: arg("--title") || "Matterhorn Work Bittensor Customer Evidence Bundle",
+  title: arg("--title") || "Matterhorn Desks Bittensor Customer Evidence Bundle",
 };
 
 function usage() {

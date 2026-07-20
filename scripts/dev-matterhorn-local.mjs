@@ -32,7 +32,7 @@ let shuttingDown = false;
 
 function printHelp() {
   console.log([
-    "Matterhorn Work local stack",
+    "Matterhorn Desks local stack",
     "",
     "Environment:",
     "  MATTERHORN_LOCAL_SERVER_PORT=<port>",
@@ -314,7 +314,7 @@ async function main() {
     serverArgs.push("--opencode-base-url", opencodeBaseUrl);
   }
 
-  console.log("Starting Matterhorn Work local stack...");
+  console.log("Starting Matterhorn Desks local stack...");
   console.log(`Workspace: ${workspaceRoot}`);
   if (opencodeBaseUrl) {
     console.log(`OpenCode engine: ${opencodeBaseUrl}`);
@@ -345,7 +345,7 @@ async function main() {
     String(workspaceList.items?.[0]?.id ?? workspaceList.workspaces?.[0]?.id ?? "").trim();
 
   if (!activeWorkspaceId) {
-    throw new Error("Matterhorn Work server started, but it did not report an active workspace.");
+    throw new Error("Matterhorn Desks server started, but it did not report an active workspace.");
   }
 
   if (opencodeBaseUrl || manageOpencode) {
@@ -382,7 +382,7 @@ async function main() {
   const directUrl = `${appUrl}/workspace/${encodeURIComponent(activeWorkspaceId)}/session`;
   const lines = [
     "",
-    "Matterhorn Work local app is ready.",
+    "Matterhorn Desks local app is ready.",
     `App:       ${directUrl}`,
     `Server:    ${serverUrl}`,
     `Workspace: ${workspaceRoot}`,

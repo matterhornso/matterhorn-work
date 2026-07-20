@@ -1,5 +1,5 @@
 /**
- * Release-channel concept for Matterhorn Work desktop builds.
+ * Release-channel concept for Matterhorn Desks desktop builds.
  *
  * There are two channels users can opt into:
  *

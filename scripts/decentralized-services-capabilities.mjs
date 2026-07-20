@@ -96,7 +96,7 @@ function buildCatalog(config) {
     success: true,
     version: "matterhorn.services.capability-catalog.v1",
     status: "future_contract",
-    summary: "Provider-neutral future contracts for hosting, storage, email, payments, and identity/access through Matterhorn Work chat.",
+    summary: "Provider-neutral future contracts for hosting, storage, email, payments, and identity/access through Matterhorn Desks chat.",
     commands: {
       capabilities: "matterhorn-work services capabilities --json",
       capabilityFilter: "matterhorn-work services capabilities --capability hosting --json",
@@ -153,7 +153,7 @@ function main() {
   const config = parseArgs(process.argv);
   if (config.help) {
     process.stdout.write([
-      "Matterhorn Work decentralized services capability helper",
+      "Matterhorn Desks decentralized services capability helper",
       "",
       "Usage:",
       "  node scripts/decentralized-services-capabilities.mjs [--json] [--capability hosting|storage|email|payments|identity]",

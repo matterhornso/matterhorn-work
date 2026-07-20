@@ -1,8 +1,8 @@
-# Matterhorn Work UI Benchmark: Claude Cowork
+# Matterhorn Desks UI Benchmark: Claude Cowork
 
 Date: 2026-07-10
 
-Purpose: create a practical benchmark for Matterhorn Work's desk/chat UI against Claude Cowork without copying its brand or hiding Matterhorn's stricter Web3 safety boundaries.
+Purpose: create a practical benchmark for Matterhorn Desks's desk/chat UI against Claude Cowork without copying its brand or hiding Matterhorn's stricter Web3 safety boundaries.
 
 ## Source Snapshot
 

@@ -6,6 +6,69 @@ function readReactAppSource(path: string) {
 }
 
 describe("wallet runtime connector contract", () => {
+  test("public authentication defers the wallet runtime until a wallet-capable route opens", () => {
+    const viteSource = readFileSync(
+      new URL("../vite.config.ts", import.meta.url),
+      "utf8",
+    );
+    const providersSource = readReactAppSource("shell/providers.tsx");
+    const appEntrySource = readFileSync(
+      new URL("../src/index.react.tsx", import.meta.url),
+      "utf8",
+    );
+    const publicSigninSource = readReactAppSource(
+      "shell/public-signin-bootstrap.tsx",
+    );
+    const authenticatedAppSource = readReactAppSource(
+      "shell/authenticated-app.tsx",
+    );
+    const lazyProviderSource = readReactAppSource(
+      "shell/LazyWalletRuntimeProvider.tsx",
+    );
+    const walletRuntimeSource = readReactAppSource(
+      "shell/LazyWalletRuntimeShell.tsx",
+    );
+
+    expect(providersSource).toContain("routeNeedsWalletRuntime");
+    expect(providersSource).toContain(
+      "if (requireSignin && !hasCachedAuth && !publicBetaWeb) return false",
+    );
+    expect(providersSource).toContain("readDenBootstrapConfig().requireSignin");
+    expect(providersSource).toContain(
+      "Boolean(readDenSettings().authToken?.trim())",
+    );
+    expect(providersSource).toContain('path === "/signin"');
+    expect(providersSource).toContain('path === "/onboarding"');
+    expect(providersSource).toContain("<LazyWalletRuntimeProvider");
+    expect(appEntrySource).toContain(
+      'import("./react-app/shell/authenticated-app")',
+    );
+    expect(appEntrySource).toContain(
+      'import("./react-app/shell/public-signin-bootstrap")',
+    );
+    expect(appEntrySource).not.toContain(
+      'import { AppProviders } from "./react-app/shell/providers"',
+    );
+    expect(publicSigninSource).not.toContain("AppProviders");
+    expect(publicSigninSource).not.toContain("LazyWalletRuntimeProvider");
+    expect(publicSigninSource).not.toContain("DenAuthProvider");
+    expect(publicSigninSource).not.toContain("DesktopConfigProvider");
+    expect(authenticatedAppSource).toContain("<AppProviders>");
+    expect(providersSource).not.toContain('from "wagmi"');
+    expect(providersSource).not.toContain('from "@mysten/dapp-kit-react"');
+    expect(viteSource).toContain('id.includes("vite/preload-helper")');
+    expect(viteSource.indexOf('id.includes("vite/preload-helper")')).toBeLessThan(
+      viteSource.indexOf('id.includes("node_modules/wagmi")'),
+    );
+    expect(lazyProviderSource).toContain(
+      'lazy(() => import("./LazyWalletRuntimeShell"))',
+    );
+    expect(walletRuntimeSource).toContain("<WagmiProvider");
+    expect(walletRuntimeSource).toContain("<DAppKitProvider");
+    expect(walletRuntimeSource).toContain("<PhantomSuiConnectionProvider>");
+    expect(walletRuntimeSource).toContain("<WalletProvider>");
+  });
+
   test("wagmi config exposes explicit EVM wallet connectors without advertising unconfigured WalletConnect", () => {
     const source = readReactAppSource("infra/wagmi-config.ts");
 
@@ -13,7 +76,7 @@ describe("wallet runtime connector contract", () => {
     expect(source).toContain("connectors:");
     expect(source).toContain('target: "metaMask"');
     expect(source).toContain("coinbaseWallet({");
-    expect(source).toContain('appName: "Matterhorn Work"');
+    expect(source).toContain('appName: "Matterhorn Desks"');
     expect(source).toContain("injected()");
     expect(source).toContain("VITE_WALLETCONNECT_PROJECT_ID");
     expect(source).toContain("walletConnectProjectId");
@@ -58,7 +121,7 @@ describe("wallet runtime connector contract", () => {
     const walletViewSource = readReactAppSource("domains/settings/pages/wallet-view.tsx");
     const suiWorkflowSource = readReactAppSource("domains/wallet/sui-workflow-panel.tsx");
     const phantomProviderSource = readReactAppSource("domains/wallet/phantom-sui-provider.tsx");
-    const providersSource = readReactAppSource("shell/providers.tsx");
+    const walletRuntimeSource = readReactAppSource("shell/LazyWalletRuntimeShell.tsx");
 
     expect(walletViewSource).toContain("<SuiWorkflowPanel");
     expect(walletViewSource).toContain("embedded");
@@ -82,7 +145,7 @@ describe("wallet runtime connector contract", () => {
     expect(phantomProviderSource).toContain("phantom?.sui");
     expect(phantomProviderSource).toContain("requestAccount()");
     expect(phantomProviderSource).toContain("isValidSuiAddress");
-    expect(providersSource).toContain("<PhantomSuiConnectionProvider>");
+    expect(walletRuntimeSource).toContain("<PhantomSuiConnectionProvider>");
     expect(suiWorkflowSource).toContain("props.embedded");
     expect(suiWorkflowSource).not.toContain("Sui wallet workflow");
     expect(suiWorkflowSource).not.toContain("No custody");

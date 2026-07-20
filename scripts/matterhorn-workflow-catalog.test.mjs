@@ -128,7 +128,7 @@ assert.equal(wellness.localArtifactsAvailable, true);
 assert.equal(wellness.canExecuteProviderActions, false);
 assert.equal(wellness.safety.givesMedicalAdvice, false);
 assert.equal(wellness.safety.movesFunds, false);
-assert.ok(wellnessDoc.includes("full Matterhorn Work workflow"), "wellness doc should remain full workflow");
+assert.ok(wellnessDoc.includes("full Matterhorn Desks workflow"), "wellness doc should remain full workflow");
 
 const promptResult = spawnSync(process.execPath, [
   "scripts/matterhorn-workflow-catalog.mjs",

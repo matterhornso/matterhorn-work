@@ -1,6 +1,6 @@
 # Personal Trainer — Offer Packet
 
-*A reproducible reference offer a personal trainer can package and share through Matterhorn Work. Customer-demo safe; artifact-first; nothing is hosted, charged, emailed, or gated.*
+*A reproducible reference offer a personal trainer can package and share through Matterhorn Desks. Customer-demo safe; artifact-first; nothing is hosted, charged, emailed, or gated.*
 
 > This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise program, especially if you have an existing health condition, are pregnant, or take medication.
 

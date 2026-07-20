@@ -48,7 +48,7 @@ const DEFAULT_STATE: BootStateSnapshot = {
 const PHASE_MESSAGES: Record<BootPhaseId, string> = {
   idle: "",
   "bootstrapping-workspaces": "Loading your workspaces",
-  "starting-matterhorn-server": "Starting the Matterhorn Work server",
+  "starting-matterhorn-server": "Starting the Matterhorn Desks server",
   "starting-engine": "Preparing workspace",
   "activating-workspace": "Activating your workspace",
   ready: "Ready",

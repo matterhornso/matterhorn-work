@@ -79,7 +79,7 @@ const goodSummary = {
 };
 
 const goodMarkdown = [
-  "# Matterhorn Work Market Customer Evidence Bundle",
+  "# Matterhorn Desks Market Customer Evidence Bundle",
   "",
   "Result: READY_FOR_TEST_CUSTOMER_QA",
   "",

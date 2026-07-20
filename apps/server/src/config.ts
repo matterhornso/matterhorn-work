@@ -226,6 +226,7 @@ export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
   const configDir = dirname(configPath);
 
   const envWorkspaces = parseList(readMatterhornEnv("WORKSPACES"));
+  const hasWorkspaceOverride = cli.workspaces.length > 0 || envWorkspaces.length > 0;
   let workspaceConfigs: WorkspaceConfig[] =
     cli.workspaces.length > 0
       ? cli.workspaces.map((path) => ({ path }))
@@ -328,10 +329,18 @@ export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
     ...(parsePositiveNumber(readMatterhornEnv("REQUEST_RATE_LIMIT_MAX")) !== undefined
       ? { maxRequests: parsePositiveNumber(readMatterhornEnv("REQUEST_RATE_LIMIT_MAX")) }
       : {}),
+    ...(parsePositiveNumber(readMatterhornEnv("REQUEST_RATE_LIMIT_READ_MAX")) !== undefined
+      ? { readMaxRequests: parsePositiveNumber(readMatterhornEnv("REQUEST_RATE_LIMIT_READ_MAX")) }
+      : {}),
+    ...(parsePositiveNumber(readMatterhornEnv("REQUEST_RATE_LIMIT_WRITE_MAX")) !== undefined
+      ? { writeMaxRequests: parsePositiveNumber(readMatterhornEnv("REQUEST_RATE_LIMIT_WRITE_MAX")) }
+      : {}),
   };
 
   const authorizedRoots =
-    fileConfig.authorizedRoots?.length
+    hasWorkspaceOverride
+      ? workspaces.map((workspace) => workspace.path)
+      : fileConfig.authorizedRoots?.length
       ? fileConfig.authorizedRoots.map((root) => resolve(configDir, root))
       : workspaces.map((workspace) => workspace.path);
 

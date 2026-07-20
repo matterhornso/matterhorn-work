@@ -9,9 +9,9 @@ import { fileURLToPath } from "node:url";
 /**
  * matterhorn-work-mcp
  *
- * Unified MCP server for Matterhorn Work server control. This stdio server is
+ * Unified MCP server for Matterhorn Desks server control. This stdio server is
  * meant for Claude Code, Codex, Cursor, and other agent environments that need
- * to inspect or operate a running Matterhorn Work server without scraping the UI.
+ * to inspect or operate a running Matterhorn Desks server without scraping the UI.
  */
 
 const SERVER =
@@ -46,7 +46,7 @@ const UPSTREAM_OPENWORK_CONFLICT_ZONES = [
   {
     name: "Branding and i18n",
     paths: ["apps/app/src/i18n", "README.md", "docs"],
-    preserve: "Visible product copy should say Matterhorn Work.",
+    preserve: "Visible product copy should say Matterhorn Desks.",
   },
   {
     name: "Env vars and headers",
@@ -61,7 +61,7 @@ const UPSTREAM_OPENWORK_CONFLICT_ZONES = [
   {
     name: "OpenCode abstraction",
     paths: ["apps/app/src", "apps/orchestrator", "docs/opencode-runtime-abstraction.md"],
-    preserve: "User-facing copy should say Matterhorn Work engine while technical docs can name OpenCode.",
+    preserve: "User-facing copy should say Matterhorn Desks engine while technical docs can name OpenCode.",
   },
   {
     name: "Agent control surface",
@@ -93,7 +93,7 @@ const UPSTREAM_OPENWORK_VERIFICATION_COMMANDS = [
 const tools = [
   {
     name: "matterhorn_doctor",
-    description: "Run one unified Matterhorn Work agent-readiness report across server, sessions, files, approvals, browser bridge, and Bittensor.",
+    description: "Run one unified Matterhorn Desks agent-readiness report across server, sessions, files, approvals, browser bridge, and Bittensor.",
     inputSchema: {
       type: "object",
       properties: {
@@ -106,12 +106,12 @@ const tools = [
   },
   {
     name: "matterhorn_status",
-    description: "Read Matterhorn Work server health, status, and capability summary.",
+    description: "Read Matterhorn Desks server health, status, and capability summary.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "matterhorn_upstream_openwork_check",
-    description: "Build a read-only intake plan for reviewing upstream OpenWork updates before bringing them into Matterhorn Work. Does not merge or modify files.",
+    description: "Build a read-only intake plan for reviewing upstream OpenWork updates before bringing them into Matterhorn Desks. Does not merge or modify files.",
     inputSchema: {
       type: "object",
       properties: {
@@ -125,12 +125,12 @@ const tools = [
   },
   {
     name: "matterhorn_list_workspaces",
-    description: "List Matterhorn Work server workspaces visible to the configured client token.",
+    description: "List Matterhorn Desks server workspaces visible to the configured client token.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "matterhorn_create_session",
-    description: "Create a Matterhorn Work chat session in a workspace. Requires a collaborator/owner token and server write access.",
+    description: "Create a Matterhorn Desks chat session in a workspace. Requires a collaborator/owner token and server write access.",
     inputSchema: {
       type: "object",
       properties: {
@@ -142,7 +142,7 @@ const tools = [
   },
   {
     name: "matterhorn_list_sessions",
-    description: "List Matterhorn Work chat sessions in a workspace.",
+    description: "List Matterhorn Desks chat sessions in a workspace.",
     inputSchema: {
       type: "object",
       properties: {
@@ -157,7 +157,7 @@ const tools = [
   },
   {
     name: "matterhorn_get_session",
-    description: "Read one Matterhorn Work chat session by workspace and session id.",
+    description: "Read one Matterhorn Desks chat session by workspace and session id.",
     inputSchema: {
       type: "object",
       properties: {
@@ -169,7 +169,7 @@ const tools = [
   },
   {
     name: "matterhorn_get_session_messages",
-    description: "Read messages for a Matterhorn Work chat session.",
+    description: "Read messages for a Matterhorn Desks chat session.",
     inputSchema: {
       type: "object",
       properties: {
@@ -182,7 +182,7 @@ const tools = [
   },
   {
     name: "matterhorn_submit_session_prompt",
-    description: "Submit a prompt to a Matterhorn Work chat session through the stable server route and normal approval policy.",
+    description: "Submit a prompt to a Matterhorn Desks chat session through the stable server route and normal approval policy.",
     inputSchema: {
       type: "object",
       properties: {
@@ -194,11 +194,11 @@ const tools = [
         model: { type: "object", description: "Optional provider/model selection object." },
         providerID: { type: "string", description: "Optional provider id for compatibility with existing clients." },
         modelID: { type: "string", description: "Optional model id for compatibility with existing clients." },
-        agent: { type: "string", description: "Optional Matterhorn Work agent mode." },
+        agent: { type: "string", description: "Optional Matterhorn Desks agent mode." },
         variant: { type: "string", description: "Optional prompt variant." },
         noReply: { type: "boolean", description: "When true, enqueue the user message without asking the engine for a reply." },
-        tools: { type: "object", description: "Optional tool-mode overrides accepted by the Matterhorn Work server." },
-        system: { type: "string", description: "Optional system instruction accepted by the Matterhorn Work server." },
+        tools: { type: "object", description: "Optional tool-mode overrides accepted by the Matterhorn Desks server." },
+        system: { type: "string", description: "Optional system instruction accepted by the Matterhorn Desks server." },
         reasoningEffort: { type: "string", description: "Optional reasoning-effort hint." },
         reasoning_effort: { type: "string", description: "Optional reasoning-effort hint for snake_case clients." },
       },
@@ -207,7 +207,7 @@ const tools = [
   },
   {
     name: "matterhorn_get_session_status",
-    description: "Poll the current execution status for a Matterhorn Work chat session without fetching the full snapshot.",
+    description: "Poll the current execution status for a Matterhorn Desks chat session without fetching the full snapshot.",
     inputSchema: {
       type: "object",
       properties: {
@@ -219,7 +219,7 @@ const tools = [
   },
   {
     name: "matterhorn_watch_session_events",
-    description: "Read a bounded batch of Matterhorn Work session progress events from the session event stream.",
+    description: "Read a bounded batch of Matterhorn Desks session progress events from the session event stream.",
     inputSchema: {
       type: "object",
       properties: {
@@ -237,7 +237,7 @@ const tools = [
   },
   {
     name: "matterhorn_get_session_snapshot",
-    description: "Read a combined Matterhorn Work chat session snapshot with session, messages, todos, and statuses.",
+    description: "Read a combined Matterhorn Desks chat session snapshot with session, messages, todos, and statuses.",
     inputSchema: {
       type: "object",
       properties: {
@@ -250,7 +250,7 @@ const tools = [
   },
   {
     name: "matterhorn_delete_session",
-    description: "Delete a Matterhorn Work chat session. Requires a collaborator/owner token and server write access.",
+    description: "Delete a Matterhorn Desks chat session. Requires a collaborator/owner token and server write access.",
     inputSchema: {
       type: "object",
       properties: {
@@ -275,7 +275,7 @@ const tools = [
   },
   {
     name: "matterhorn_file_catalog",
-    description: "List files in an existing Matterhorn Work file session.",
+    description: "List files in an existing Matterhorn Desks file session.",
     inputSchema: {
       type: "object",
       properties: {
@@ -290,7 +290,7 @@ const tools = [
   },
   {
     name: "matterhorn_watch_file_events",
-    description: "Read file catalog change events for an existing Matterhorn Work file session.",
+    description: "Read file catalog change events for an existing Matterhorn Desks file session.",
     inputSchema: {
       type: "object",
       properties: {
@@ -339,7 +339,7 @@ const tools = [
   },
   {
     name: "matterhorn_close_file_session",
-    description: "Close a Matterhorn Work file session.",
+    description: "Close a Matterhorn Desks file session.",
     inputSchema: {
       type: "object",
       properties: { sessionId: { type: "string" } },
@@ -348,12 +348,12 @@ const tools = [
   },
   {
     name: "matterhorn_list_approvals",
-    description: "List pending Matterhorn Work host approval requests. Requires MATTERHORN_WORK_HOST_TOKEN.",
+    description: "List pending Matterhorn Desks host approval requests. Requires MATTERHORN_WORK_HOST_TOKEN.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "matterhorn_reply_approval",
-    description: "Approve or deny a pending Matterhorn Work approval request. Requires MATTERHORN_WORK_HOST_TOKEN.",
+    description: "Approve or deny a pending Matterhorn Desks approval request. Requires MATTERHORN_WORK_HOST_TOKEN.",
     inputSchema: {
       type: "object",
       properties: {
@@ -365,7 +365,7 @@ const tools = [
   },
   {
     name: "matterhorn_crypto_chat",
-    description: "Default first Matterhorn Work tool for ordinary crypto requests when the user has not clearly chosen Bittensor, Hyperliquid, or Polymarket. Routes to the safe unified crypto chat workflow; read/preview only and never accepts wallet or exchange secrets.",
+    description: "Default first Matterhorn Desks tool for ordinary crypto requests when the user has not clearly chosen Bittensor, Hyperliquid, or Polymarket. Routes to the safe unified crypto chat workflow; read/preview only and never accepts wallet or exchange secrets.",
     inputSchema: {
       type: "object",
       properties: {
@@ -392,7 +392,7 @@ const tools = [
   },
   {
     name: "matterhorn_crypto_readiness",
-    description: "Read the unified Matterhorn Work crypto customer-readiness report for Bittensor, Hyperliquid, and Polymarket. Server-side read-only summary; no signing, submission, or secrets.",
+    description: "Read the unified Matterhorn Desks crypto customer-readiness report for Bittensor, Hyperliquid, and Polymarket. Server-side read-only summary; no signing, submission, or secrets.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -482,7 +482,7 @@ const tools = [
   },
   {
     name: "matterhorn_services_get_capabilities",
-    description: "Read Matterhorn Work future decentralized service capability contracts for hosting, storage, email, payments, and identity/access. Discovery only: no live provider execution, custody, signing, submission, or secrets.",
+    description: "Read Matterhorn Desks future decentralized service capability contracts for hosting, storage, email, payments, and identity/access. Discovery only: no live provider execution, custody, signing, submission, or secrets.",
     inputSchema: {
       type: "object",
       properties: {
@@ -512,7 +512,7 @@ const tools = [
   },
   {
     name: "matterhorn_workflows_catalog",
-    description: "Read the catalog-only Matterhorn Work workflow registry for longevity creators, Bittensor, markets, decentralized services, and future vertical workflows. Discovery only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
+    description: "Read the catalog-only Matterhorn Desks workflow registry for longevity creators, Bittensor, markets, decentralized services, and future vertical workflows. Discovery only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
     inputSchema: {
       type: "object",
       properties: {
@@ -539,7 +539,7 @@ const tools = [
   },
   {
     name: "matterhorn_workflows_prompt_pack",
-    description: "Read copy-pasteable staged prompts from the Matterhorn Work workflow registry. Prompt-pack only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
+    description: "Read copy-pasteable staged prompts from the Matterhorn Desks workflow registry. Prompt-pack only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
     inputSchema: {
       type: "object",
       properties: {
@@ -562,7 +562,7 @@ const tools = [
   },
   {
     name: "matterhorn_workflows_customer_templates",
-    description: "Read customer-facing Matterhorn Work workflow templates for Bittensor, Hyperliquid, Polymarket, Sui, longevity creators, decentralized services, and blank chat. Template catalog only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
+    description: "Read customer-facing Matterhorn Desks workflow templates for Bittensor, Hyperliquid, Polymarket, Sui, longevity creators, decentralized services, and blank chat. Template catalog only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
     inputSchema: {
       type: "object",
       properties: {
@@ -682,7 +682,7 @@ const tools = [
   },
   {
     name: "matterhorn_hyperliquid_chat",
-    description: "Default first Matterhorn Work tool for ordinary Hyperliquid requests. Read-only plus preview-only; does not submit trades or accept API wallet secrets.",
+    description: "Default first Matterhorn Desks tool for ordinary Hyperliquid requests. Read-only plus preview-only; does not submit trades or accept API wallet secrets.",
     inputSchema: {
       type: "object",
       properties: {
@@ -887,7 +887,7 @@ const tools = [
   },
   {
     name: "matterhorn_polymarket_chat",
-    description: "Default first Matterhorn Work tool for ordinary Polymarket requests. Read-only plus preview-only; does not submit orders or accept API secrets.",
+    description: "Default first Matterhorn Desks tool for ordinary Polymarket requests. Read-only plus preview-only; does not submit orders or accept API secrets.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1069,7 +1069,7 @@ const tools = [
   },
   {
     name: "matterhorn_bittensor_chat",
-    description: "Default first Matterhorn Work tool for ordinary Bittensor requests. Runs the safe chat workflow against the configured server.",
+    description: "Default first Matterhorn Desks tool for ordinary Bittensor requests. Runs the safe chat workflow against the configured server.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1092,7 +1092,7 @@ const tools = [
   },
   {
     name: "matterhorn_bittensor_readiness",
-    description: "Run the Matterhorn Work Bittensor readiness audit on the configured server.",
+    description: "Run the Matterhorn Desks Bittensor readiness audit on the configured server.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -1126,7 +1126,7 @@ const tools = [
   },
   {
     name: "matterhorn_bittensor_list_capabilities",
-    description: "List Bittensor subnet capability manifests from the configured Matterhorn Work server. Use before previewing or invoking any direct subnet service.",
+    description: "List Bittensor subnet capability manifests from the configured Matterhorn Desks server. Use before previewing or invoking any direct subnet service.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -1220,7 +1220,7 @@ const tools = [
     inputSchema: {
       type: "object",
       properties: {
-        handoff: { type: "object", description: "External signer handoff object returned by Matterhorn Work." },
+        handoff: { type: "object", description: "External signer handoff object returned by Matterhorn Desks." },
         expectedSha: { type: "string", description: "Optional expected payload SHA-256 from the unsigned preview." },
         expectedPayloadSha256: { type: "string", description: "Alias for expectedSha." },
         now: { type: "string", description: "Optional ISO timestamp override for deterministic checks." },
@@ -1570,12 +1570,12 @@ async function matterhornDoctor(args = {}) {
   const checks = [];
   checks.push(await doctorServerCheck({
     id: "server.health",
-    label: "Matterhorn Work server health",
+    label: "Matterhorn Desks server health",
     path: "/health",
     required: true,
     auth: "none",
     ok: (payload) => payload?.ok === true || payload?.service === "matterhorn-work-server",
-    hint: "Start Matterhorn Work with `matterhorn-work start` or set MATTERHORN_WORK_SERVER_URL.",
+    hint: "Start Matterhorn Desks with `matterhorn-work start` or set MATTERHORN_WORK_SERVER_URL.",
   }));
 
   if (!CLIENT_TOKEN) {
@@ -1873,7 +1873,7 @@ function matterhornUpstreamOpenWorkCheck(args = {}) {
     },
     guidance: [
       "Review conflict zones before applying upstream OpenWork changes.",
-      "Preserve Matterhorn Work branding, compatibility aliases, CLI names, agent-control contracts, and Bittensor safety gates.",
+      "Preserve Matterhorn Desks branding, compatibility aliases, CLI names, agent-control contracts, and Bittensor safety gates.",
       "Run the verification commands before opening or merging an upstream sync PR.",
     ],
   };
@@ -2705,7 +2705,7 @@ function matterhornCryptoCustomerPacket(args = {}) {
     ...bittensorEvidence.warnings,
   ];
   const packet = {
-    title: args.title || "Matterhorn Work Crypto Customer Packet",
+    title: args.title || "Matterhorn Desks Crypto Customer Packet",
     generatedAt: new Date().toISOString(),
     ready: customerReadySmoke.ready && marketEvidence.ready && marketSdkValidationGuide.ready && bittensorEvidence.ready && errors.length === 0,
     customerReadySmoke,
@@ -3067,7 +3067,7 @@ function matterhornBittensorCustomerEvidenceBundle(args = {}) {
     ok: true,
     ready: summary.ready,
     summary,
-    markdown: renderCustomerEvidenceMarkdown(summary, args.title || "Matterhorn Work Bittensor Customer Evidence Bundle"),
+    markdown: renderCustomerEvidenceMarkdown(summary, args.title || "Matterhorn Desks Bittensor Customer Evidence Bundle"),
     safety: {
       custody: "none",
       acceptsCredentialMaterial: false,
@@ -3136,7 +3136,7 @@ function renderBittensorSigningHandoffMarkdown(summary) {
     .map((finding) => "| " + escapeBittensorHandoffCell(finding.status) + " | " + escapeBittensorHandoffCell(finding.area) + " | " + escapeBittensorHandoffCell(finding.detail) + " | " + escapeBittensorHandoffCell(finding.severity || "-") + " |")
     .join("\n");
   return [
-    "# Matterhorn Work Bittensor Signing Handoff Check",
+    "# Matterhorn Desks Bittensor Signing Handoff Check",
     "",
     "## Decision",
     "",
@@ -3768,4 +3768,4 @@ async function handleMessage(msg) {
   }
 }
 
-process.stderr.write("Matterhorn Work MCP Server v0.1.0 ready\n");
+process.stderr.write("Matterhorn Desks MCP Server v0.1.0 ready\n");

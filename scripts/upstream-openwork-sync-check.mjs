@@ -12,7 +12,7 @@ export const CONFLICT_ZONES = [
   {
     name: "Branding and i18n",
     paths: ["apps/app/src/i18n", "README.md", "docs"],
-    preserve: "Visible product copy should say Matterhorn Work.",
+    preserve: "Visible product copy should say Matterhorn Desks.",
   },
   {
     name: "Env vars and headers",
@@ -27,7 +27,7 @@ export const CONFLICT_ZONES = [
   {
     name: "OpenCode abstraction",
     paths: ["apps/app/src", "apps/orchestrator", "docs/opencode-runtime-abstraction.md"],
-    preserve: "User-facing copy should say Matterhorn Work engine while technical docs can name OpenCode.",
+    preserve: "User-facing copy should say Matterhorn Desks engine while technical docs can name OpenCode.",
   },
   {
     name: "Agent control surface",
@@ -155,7 +155,7 @@ export function buildPlan(options) {
 }
 
 export function printHuman(plan) {
-  console.log("Matterhorn Work upstream OpenWork sync intake");
+  console.log("Matterhorn Desks upstream OpenWork sync intake");
   console.log("");
   console.log(`Upstream: ${plan.upstreamUrl} (${plan.upstreamBranch})`);
   console.log(`Base: ${plan.baseBranch}`);

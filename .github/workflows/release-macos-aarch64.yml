@@ -11,7 +11,7 @@ on:
         required: false
         type: string
       release_name:
-        description: "Release title (defaults to Matterhorn Work <tag>)"
+        description: "Release title (defaults to Matterhorn Desks <tag>)"
         required: false
         type: string
       release_body:
@@ -121,14 +121,14 @@ jobs:
           if [ -n "$RELEASE_NAME_INPUT" ]; then
             RELEASE_NAME="$RELEASE_NAME_INPUT"
           else
-            RELEASE_NAME="Matterhorn Work $TAG"
+            RELEASE_NAME="Matterhorn Desks $TAG"
           fi
 
           RELEASE_BODY_INPUT="${INPUT_RELEASE_BODY:-}"
           if [ -n "$RELEASE_BODY_INPUT" ]; then
             RELEASE_BODY="$RELEASE_BODY_INPUT"
           else
-            printf -v RELEASE_BODY '%s\n\nMatterhorn Work %s desktop release.\n\n%s\n%s' \
+            printf -v RELEASE_BODY '%s\n\nMatterhorn Desks %s desktop release.\n\n%s\n%s' \
               "## What's new" \
               "$TAG" \
               "- Download the attached installer for your platform." \

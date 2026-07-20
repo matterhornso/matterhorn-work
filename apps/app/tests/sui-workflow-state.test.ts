@@ -23,11 +23,11 @@ describe("Sui workflow state", () => {
 
     expect(result).toMatchObject({
       canPreparePreview: false,
-      preparePreviewReason: "Matterhorn Work engine is offline.",
+      preparePreviewReason: "Matterhorn Desks engine is offline.",
       canSignPreview: false,
-      signPreviewReason: "Matterhorn Work engine is offline.",
+      signPreviewReason: "Matterhorn Desks engine is offline.",
       canImportReceipt: false,
-      importReceiptReason: "Matterhorn Work engine is offline.",
+      importReceiptReason: "Matterhorn Desks engine is offline.",
       nextAction: "connect_engine",
     });
   });

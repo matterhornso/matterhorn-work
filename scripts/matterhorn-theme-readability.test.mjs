@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 
 const css = readFileSync("apps/app/src/app/index.css", "utf8");
 const theme = readFileSync("apps/app/src/app/theme.ts", "utf8");
+const indexHtml = readFileSync("apps/app/index.html", "utf8");
+const themeBootstrap = readFileSync("apps/app/public/theme-bootstrap.js", "utf8");
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 
 assert.equal(
@@ -56,5 +58,12 @@ assert.ok(new Set(chartValues).size >= 5, "chart/accent palette should not colla
 assert.ok(theme.includes('"matterhorn-work.react.settings.theme-mode"'), "theme preference key should use Matterhorn-native naming");
 assert.ok(theme.includes('"openwork.react.settings.theme-mode"'), "theme preference should keep legacy OpenWork fallback");
 assert.ok(theme.includes('"openwork.themePref"'), "theme preference should keep older OpenWork fallback");
+assert.ok(
+  indexHtml.includes('<script src="/theme-bootstrap.js"></script>'),
+  "theme bootstrap should load from a same-origin external script under a strict CSP",
+);
+assert.ok(!indexHtml.includes("<script>"), "app index should not require inline script execution");
+assert.ok(themeBootstrap.includes('"openwork.themePref"'), "external theme bootstrap should preserve the current preference key");
+assert.ok(themeBootstrap.includes("document.documentElement.dataset.theme"), "external theme bootstrap should resolve the initial theme");
 
 console.log("Matterhorn theme readability gate passed.");

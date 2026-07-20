@@ -187,7 +187,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
         preview: true,
         signing: "client_wallet",
         supportedChains: ["sui-testnet", "sui-mainnet"],
-        description: "Sui wallet connection is in a limited release. Matterhorn Work never holds keys.",
+        description: "Sui wallet connection is in a limited release. Matterhorn Desks never holds keys.",
         runtimeSupport: {
           web: {
             runtime: "web",

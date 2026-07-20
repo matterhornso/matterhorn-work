@@ -95,14 +95,14 @@ const kindLabel: Record<ExtensionKind, string> = {
   plugin: "Plugin",
   skill: "Skill",
   "ui-control": "UI Control",
-  extension: "Matterhorn Work Extension",
+  extension: "Matterhorn Desks Extension",
 };
 
 const kindDesc: Record<ExtensionKind, string> = {
   mcp: "Connects as a Model Context Protocol server, giving your agent access to external tools and data.",
   plugin: "Extends Matterhorn with additional capabilities managed by your organization.",
   skill: "A reusable workflow that your agent can execute on demand.",
-  "ui-control": "Lets another MCP client inspect and drive this Matterhorn Work desktop UI through a local stdio wrapper.",
+  "ui-control": "Lets another MCP client inspect and drive this Matterhorn Desks desktop UI through a local stdio wrapper.",
   extension: "A Matterhorn extension that adds tools, providers, or integrations to your workspace.",
 };
 
@@ -110,7 +110,7 @@ const uiControlClientConfig = `{
   "mcpServers": {
     "matterhorn-ui": {
       "command": "npx",
-      "args": ["-y", "openwork-ui-mcp"]
+      "args": ["-y", "matterhorn-work-ui-mcp"]
     }
   }
 }`;
@@ -128,13 +128,13 @@ function uiControlOpencodeConfig(command: string[], environment?: Record<string,
   }, null, 2);
 }
 
-const fallbackUiControlCommand = ["npx", "-y", "openwork-ui-mcp"];
+const fallbackUiControlCommand = ["npx", "-y", "matterhorn-work-ui-mcp"];
 
 const fallbackUiControlOpencodeConfig = `{
   "mcp": {
     "matterhorn-ui": {
       "type": "local",
-      "command": ["npx", "-y", "openwork-ui-mcp"],
+      "command": ["npx", "-y", "matterhorn-work-ui-mcp"],
       "enabled": true
     }
   }
@@ -533,8 +533,8 @@ function UiControlConnectionDetails(props: { launchCommand?: string[]; environme
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-2 text-sm leading-relaxed text-muted-foreground">
-            <div>Matterhorn Work desktop starts a private localhost bridge automatically.</div>
-            <div>Your MCP client starts <span className="font-mono text-card-foreground">openwork-ui-mcp</span> over stdio; the wrapper discovers the bridge and proxies UI tools to it.</div>
+            <div>Matterhorn Desks desktop starts a private localhost bridge automatically.</div>
+            <div>Your MCP client starts <span className="font-mono text-card-foreground">matterhorn-work-ui-mcp</span> over stdio; the wrapper discovers the bridge and proxies UI tools to it.</div>
             <div>Do not point clients at the random localhost bridge URL directly.</div>
           </div>
         </CardContent>
@@ -588,28 +588,20 @@ function UiControlConnectionDetails(props: { launchCommand?: string[]; environme
                 </TableRow>
                 <TableRow className="*:border-border hover:bg-transparent [&>:not(:last-child)]:border-r">
                   <TableCell className="bg-muted/50 py-2 text-xs font-medium">
-                    Legacy discovery file
-                  </TableCell>
-                  <TableCell className="py-2 whitespace-normal">
-                    <span className="font-mono text-xs break-all">~/Library/Application Support/com.differentai.openwork/openwork-ui-control.json</span>
-                  </TableCell>
-                </TableRow>
-                <TableRow className="*:border-border hover:bg-transparent [&>:not(:last-child)]:border-r">
-                  <TableCell className="bg-muted/50 py-2 text-xs font-medium">
                     Override
                   </TableCell>
                   <TableCell className="py-2 whitespace-normal">
                     <span className="font-mono text-xs break-all">MATTERHORN_WORK_UI_CONTROL_DISCOVERY=/path/to/matterhorn-work-ui-control.json</span>
                   </TableCell>
                 </TableRow>
-                {props.environment?.MATTERHORN_WORK_UI_CONTROL_DISCOVERY || props.environment?.OPENWORK_UI_CONTROL_DISCOVERY ? (
+                {props.environment?.MATTERHORN_WORK_UI_CONTROL_DISCOVERY ? (
                   <TableRow className="*:border-border hover:bg-transparent [&>:not(:last-child)]:border-r">
                     <TableCell className="bg-muted/50 py-2 text-xs font-medium">
                       Current override
                     </TableCell>
                     <TableCell className="py-2 whitespace-normal">
                       <span className="font-mono text-xs break-all">
-                        {props.environment.MATTERHORN_WORK_UI_CONTROL_DISCOVERY ?? props.environment.OPENWORK_UI_CONTROL_DISCOVERY}
+                        {props.environment.MATTERHORN_WORK_UI_CONTROL_DISCOVERY}
                       </span>
                     </TableCell>
                   </TableRow>

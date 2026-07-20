@@ -8,7 +8,7 @@ const surface = readFileSync("docs/agent-control-surface.md", "utf8");
 const mcpReadme = readFileSync("packages/matterhorn-work-mcp/README.md", "utf8");
 
 for (const snippet of [
-  "# Matterhorn Work Session Event Stream Contract",
+  "# Matterhorn Desks Session Event Stream Contract",
   "GET /workspace/:workspaceId/sessions/:sessionId/events",
   "text/event-stream",
   "Authorization: Bearer <client-token>",

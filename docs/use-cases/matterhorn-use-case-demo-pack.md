@@ -1,6 +1,6 @@
 # Matterhorn Use-Case Demo Pack
 
-A customer-facing overview of what Matterhorn Work enables across Web3 trading, wellness creation, and decentralized services — all through chat, no separate apps required.
+A customer-facing overview of what Matterhorn Desks enables across Web3 trading, wellness creation, and decentralized services — all through chat, no separate apps required.
 
 > **Safety first:** Every use case below is bounded by the [Matterhorn Workflow Contract](../matterhorn-workflow-contract.md). Matterhorn never takes custody or accepts keys and API secrets. Chat, MCP, CLI, watches, and agent prompts never submit. Hyperliquid supports a separate manual connected-wallet order ticket after exact review and wallet approval; Polymarket remains preview-only. Wellness remains artifact/workflow support. Decentralized services remain planned.
 
@@ -181,7 +181,7 @@ A customer-facing overview of what Matterhorn Work enables across Web3 trading, 
 
 ## E. Decentralized Services Operator
 
-**User audience:** Power users and builders who want to understand how Matterhorn Work will eventually surface storage, hosting, email, payments, and identity/access capabilities — without live execution today.
+**User audience:** Power users and builders who want to understand how Matterhorn Desks will eventually surface storage, hosting, email, payments, and identity/access capabilities — without live execution today.
 
 ### Sample Prompts
 

@@ -22,7 +22,7 @@ describe("Matterhorn logo asset contract", () => {
     expect(matterhornIconIndex).toBeGreaterThan(0);
     expect(legacyFaviconIndex).toBeGreaterThan(matterhornIconIndex);
     expect(matterhornIconIndex).toBeGreaterThan(fullMatterhornIconIndex);
-    expect(index).toContain('<title>Matterhorn Work</title>');
+    expect(index).toContain('<title>Matterhorn Desks</title>');
   });
 
   test("web app manifest advertises Matterhorn icons", () => {
@@ -32,8 +32,8 @@ describe("Matterhorn logo asset contract", () => {
       icons: Array<{ src: string; sizes: string; type: string; purpose?: string }>;
     };
 
-    expect(manifest.name).toBe("Matterhorn Work");
-    expect(manifest.short_name).toBe("Matterhorn");
+    expect(manifest.name).toBe("Matterhorn Desks");
+    expect(manifest.short_name).toBe("Desks");
     expect(manifest.icons).toContainEqual({
       src: "/matterhorn-logo.png?v=20260712b",
       sizes: "512x512",
@@ -46,7 +46,7 @@ describe("Matterhorn logo asset contract", () => {
   test("desktop packaging points to Matterhorn icon assets", () => {
     const builder = readRepoFile("apps/desktop/electron-builder.yml");
 
-    expect(builder).toContain("productName: Matterhorn");
+    expect(builder).toContain("productName: Matterhorn Desks");
     expect(builder).toContain("icon: resources/icons/icon.icns");
     expect(builder).toContain("icon: resources/icons/icon.png");
     expect(builder).toContain("icon: resources/icons/icon.ico");

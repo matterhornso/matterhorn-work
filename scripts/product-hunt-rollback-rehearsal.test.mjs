@@ -22,7 +22,7 @@ const server = createServer((request, response) => {
     "content-type": request.url === "/health" ? "application/json" : "text/html",
     "x-matterhorn-build-commit": commit,
   });
-  response.end(request.url === "/health" ? JSON.stringify({ ok: true }) : "<!doctype html><title>Matterhorn Work</title>");
+  response.end(request.url === "/health" ? JSON.stringify({ ok: true }) : "<!doctype html><title>Matterhorn Desks</title>");
 });
 
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));

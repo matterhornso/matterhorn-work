@@ -179,7 +179,7 @@ export function useSessionControlActions(input: UseSessionControlActionsInput) {
       const confirmed = booleanArg(args, "confirmed");
       if (!sessionId) return { ok: false, error: "sessionId is required" };
       if (!confirmed) return { ok: false, error: "Deletion requires confirmed: true after explicit user confirmation" };
-      if (!matterhornClient) return { ok: false, error: "Matterhorn Work server is not connected" };
+      if (!matterhornClient) return { ok: false, error: "Matterhorn Desks server is not connected" };
 
       const targetWorkspace = findSessionWorkspace(workspaces, sessionsByWorkspaceId, sessionId);
       if (!targetWorkspace) return { ok: false, error: "Session was not found in the current session list" };

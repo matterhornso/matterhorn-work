@@ -412,7 +412,7 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     const persisted = await writeWorkspaceMatterhornConfigRecord(nextConfig);
     if (!persisted) {
       throw new Error(
-        "Matterhorn Work server unavailable. Connect to manage imported cloud providers.",
+        "Matterhorn Desks server unavailable. Connect to manage imported cloud providers.",
       );
     }
     setStateField("importedCloudProviders", nextProviders);

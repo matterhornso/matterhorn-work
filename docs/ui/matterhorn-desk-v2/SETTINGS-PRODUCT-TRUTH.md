@@ -335,7 +335,7 @@ No badges needed.
 
 | Instead of | Use |
 |-----------|-----|
-| "OpenWork" as a feature name | "Matterhorn Work" |
+| "OpenWork" as a feature name | "Matterhorn Desks" |
 | "OpenCode" as a feature name | "Matterhorn" |
 | "live trading" | "preview only" or "read-only" |
 | Generic "Services" section | Protocol-specific desk names |

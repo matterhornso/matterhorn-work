@@ -1,4 +1,4 @@
-name: Matterhorn Work Tests
+name: Matterhorn Desks Tests
 
 on:
   pull_request:

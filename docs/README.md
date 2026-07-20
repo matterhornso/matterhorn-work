@@ -1,4 +1,4 @@
-# Matterhorn Work Documentation
+# Matterhorn Desks Documentation
 
 This directory contains implementation guides, contracts, QA runbooks, design specifications, plans, and dated agent handoffs.
 
@@ -20,6 +20,8 @@ Dated handoffs describe the tree at a moment in time. They are valuable evidence
 - [Product surfaces](product-surfaces.md) - current customer-facing navigation and behavior.
 - [Platform safety gate](platform-safety-gate.md) - the required 10-stage verification gate.
 - [Production launch configuration](production-launch-configuration.md) - setup ownership, safe environment defaults, and the release verification path.
+- [Public Beta candidate certification](public-beta-candidate-certification.md) - resumable local engineering gates, redacted evidence, and exact decision semantics.
+- [Public Beta owner handoff - 2026-07-19](public-beta-owner-handoff-2026-07-19.md) - immutable candidate, deploy, sign, integration, and launch-owner sequence.
 - [Public Beta launch](public-beta-launch-2026-07-17.md) - desktop-first scope, authenticated web deployment, required evidence, and stop-ship gates.
 - [Friday production readiness](friday-production-go-live-readiness-2026-07-17.md) - current public-launch decision, evidence, and stop-ship gates.
 - [Friday production execution](friday-production-go-live-execution-2026-07-17.md) - Wednesday-through-Friday freeze, proof, publish, and rollback sequence.
@@ -27,7 +29,7 @@ Dated handoffs describe the tree at a moment in time. They are valuable evidence
 - [Product Hunt launch room](product-hunt-launch-room-2026-07-21.md) - exact-commit proof, owner matrix, recovery drills, final packet, and incident sequence.
 - [Product Hunt measurement and trust](product-hunt-measurement-and-trust-2026-07-21.md) - privacy-safe measurement, public trust surfaces, and support macros.
 - [Matterhorn design system](ui/matterhorn-design-system.md) - production UI rules.
-- [Engine naming boundary](opencode-runtime-abstraction.md) - when to say Matterhorn Work engine vs. OpenCode.
+- [Engine naming boundary](opencode-runtime-abstraction.md) - when to say Matterhorn Desks engine vs. OpenCode.
 
 ## Core Product Guides
 
@@ -82,6 +84,9 @@ The handoff directory intentionally retains parallel-agent reports and historica
 ```bash
 # Complete platform gate
 pnpm test:matterhorn-platform-safety
+
+# Public Beta candidate certification
+pnpm certify:public-beta -- --output-dir qa-reports/public-beta/current --app-url <app-url> --json
 
 # App and server typechecks
 pnpm --filter @matterhorn-work/app exec tsc -p tsconfig.json --noEmit

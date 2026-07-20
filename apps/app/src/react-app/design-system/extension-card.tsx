@@ -52,7 +52,7 @@ const kindLabel: Record<ExtensionKind, string> = {
   plugin: "Plugin",
   skill: "Skill",
   "ui-control": "UI Control",
-  extension: "Matterhorn Work Extension",
+  extension: "Matterhorn Desks Extension",
 };
 
 const kindStyle: Record<ExtensionKind, string> = {

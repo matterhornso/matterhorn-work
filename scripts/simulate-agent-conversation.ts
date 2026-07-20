@@ -257,7 +257,7 @@ if (FAIL === 0) {
   console.log(green("ALL SIMULATED CONVERSATION TESTS PASSED"));
   console.log("");
   console.log("Note: These are simulated tests. For true validation, run the");
-  console.log("Matterhorn Work app and test with a real LLM session.");
+  console.log("Matterhorn Desks app and test with a real LLM session.");
   process.exit(0);
 } else {
   console.log(red("SOME TESTS FAILED"));

@@ -1,15 +1,15 @@
-# Matterhorn Work Platform Architecture
+# Matterhorn Desks Platform Architecture
 
 **Status:** Current implementation guide
 **Updated:** 2026-07-11
 
 ## System Overview
 
-Matterhorn Work is a local-first workspace with four primary runtime layers:
+Matterhorn Desks is a local-first workspace with four primary runtime layers:
 
 1. **React app:** customer UI, routing, session surfaces, settings, wallet controls, Notes, Memory, and Outputs.
 2. **Matterhorn server:** workspace-scoped API, authorization, approvals, data policy, storage, billing, wallet policy, generated media, and audit/evidence routes.
-3. **Matterhorn Work engine:** managed OpenCode runtime for normal chat, tool execution, permissions, model/provider discovery, and session state.
+3. **Matterhorn Desks engine:** managed OpenCode runtime for normal chat, tool execution, permissions, model/provider discovery, and session state.
 4. **Desktop/local perimeter:** Electron trusted IPC, orchestrator processes, MCP stdio servers, and the token-protected local router.
 
 ```mermaid
@@ -33,7 +33,7 @@ Normal chat is not a direct one-shot LLM call.
 4. OpenCode manages model routing, streaming, tool calls, permissions, compaction, and session persistence.
 5. The UI renders the session event stream and local activity state.
 
-The user-facing name is **Matterhorn Work engine**. Use **OpenCode** only for technical compatibility, diagnostics, SDK names, `.opencode/` paths, and configuration.
+The user-facing name is **Matterhorn Desks engine**. Use **OpenCode** only for technical compatibility, diagnostics, SDK names, `.opencode/` paths, and configuration.
 
 ## Direct Provider Paths
 
@@ -57,7 +57,7 @@ The app may also hold an engine directory and OpenCode session ID. Those identif
 
 | Data | Primary owner | Storage |
 | --- | --- | --- |
-| Chat sessions and message/tool state | Matterhorn Work engine | OpenCode runtime store |
+| Chat sessions and message/tool state | Matterhorn Desks engine | OpenCode runtime store |
 | Project Notes | Matterhorn server | `notes/YYYY-MM-DD.md` plus `.matterhorn-work/notes/index.json` |
 | Memory records and suggestions | Memory vault | workspace-scoped vault paths and metadata |
 | Outputs and receipts | Workspace/server | `outputs/` and `.matterhorn-work/outputs/` depending on output class |

@@ -108,10 +108,10 @@ export function ArchitectureMismatchGate({ children }: ArchitectureMismatchGateP
               </div>
               <div className="space-y-4">
                 <h1 className="max-w-2xl text-4xl font-semibold tracking-[-0.04em] text-white sm:text-5xl">
-                  Install the correct Matterhorn Work build
+                  Install the correct Matterhorn Desks build
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-white/72 sm:text-lg">
-                  Your application is running the {info.appArchLabel} version of Matterhorn Work, but this {platformLabel(info.platform)} system is {info.systemArchLabel}. This may cause unpredictable issues.
+                  Your application is running the {info.appArchLabel} version of Matterhorn Desks, but this {platformLabel(info.platform)} system is {info.systemArchLabel}. This may cause unpredictable issues.
                 </p>
               </div>
 
@@ -148,12 +148,12 @@ export function ArchitectureMismatchGate({ children }: ArchitectureMismatchGateP
 
             <aside className="border-t border-white/10 bg-white/[0.03] p-8 sm:p-10 lg:border-l lg:border-t-0 lg:p-12">
               <div className="space-y-5 rounded-lg border border-white/10 bg-black/25 p-6 text-sm leading-6 text-white/68">
-                <div className="text-lg font-semibold text-white">Why Matterhorn Work stopped here</div>
+                <div className="text-lg font-semibold text-white">Why Matterhorn Desks stopped here</div>
                 <p>
-                  Matterhorn Work blocks startup when the installed app architecture does not match the machine architecture. This prevents runtime sidecars, browser tooling, and update downloads from continuing on the wrong build.
+                  Matterhorn Desks blocks startup when the installed app architecture does not match the machine architecture. This prevents runtime sidecars, browser tooling, and update downloads from continuing on the wrong build.
                 </p>
                 <p>
-                  After installing the correct {info.systemArchLabel} build, quit this copy and launch Matterhorn Work again. Your workspaces and settings are kept in the same app data folder.
+                  After installing the correct {info.systemArchLabel} build, quit this copy and launch Matterhorn Desks again. Your workspaces and settings are kept in the same app data folder.
                 </p>
                 <div className="rounded-lg bg-white/[0.06] p-4 font-mono text-xs text-white/55">
                   v{info.version} · {platformLabel(info.platform)} · {info.systemArch}

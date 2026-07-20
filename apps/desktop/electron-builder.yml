@@ -2,9 +2,9 @@
 # the same macOS bundle identifier, keychain entries, Launchpad slot, and TCC
 # permissions. In-place migration from Tauri to Electron depends on this.
 appId: com.differentai.openwork
-productName: Matterhorn
+productName: Matterhorn Desks
 protocols:
-  - name: Matterhorn
+  - name: Matterhorn Desks
     schemes:
       - matterhorn-work
       - openwork
@@ -53,7 +53,7 @@ mac:
     - from: resources/helpers
       to: helpers
       filter:
-        - "Matterhorn Work Automation Helper.app/**"
+        - "Matterhorn Desks Automation Helper.app/**"
   target:
     - dmg
     - zip

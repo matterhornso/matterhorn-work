@@ -1,18 +1,18 @@
-# Matterhorn Work Design Contract
+# Matterhorn Desks Design Contract
 
-Matterhorn Work is a desk-first app for doing useful work through chat. The customer sees desks, not internal categories: Home, Bittensor, Hyperliquid, Polymarket, Longevity, Memory, MCPs, and Settings.
+Matterhorn Desks is a desk-first app for doing useful work through chat. The customer sees desks, not internal categories: Home, Bittensor, Hyperliquid, Polymarket, Longevity, Memory, MCPs, and Settings.
 
 This file mirrors the durable product rules in [docs/ui/matterhorn-design-system.md](docs/ui/matterhorn-design-system.md). Keep both files aligned when changing the shell or protocol desks.
 
 ## Product Shape
 
 - **Home** is the launcher. It creates a session, opens a desk, or starts a workflow with an editable prompt. It never auto-sends.
-- **Bittensor** supports public SS58 wallet reads, subnet discovery, validator comparison, unsigned staking/unstaking/transfer previews, watches, receipt import, and coldkey/hotkey explanations. Live chain submission remains outside Matterhorn Work.
+- **Bittensor** supports public SS58 wallet reads, subnet discovery, validator comparison, unsigned staking/unstaking/transfer previews, watches, receipt import, and coldkey/hotkey explanations. Live chain submission remains outside Matterhorn Desks.
 - **Hyperliquid** supports account/orderbook/funding/open-order reads, watches, previews, receipt evidence, and manual connected-wallet execution in its dedicated trade ticket. Chat, MCP, CLI, and watches never auto-submit. Every order uses explicit review, a short-lived one-time intent, connected-wallet signing, and the deployment kill switch; testnet is the default and mainnet requires an additional typed confirmation.
 - **Polymarket** is preview-only. It supports market discovery, outcome probability context, liquidity/orderbook reads, compliance state, watches, preview handoffs, and receipt evidence. Compliance-blocked previews must not show executable price, size, or share fields.
 - **Longevity** is standalone. It is not Web3, not a market desk, and not medical care. It creates safe offline optimization workflows and client artifacts without diagnosis, prescription, treatment claims, guaranteed outcomes, live payment, live email, live hosting, or token-gating claims.
 - **Memory** is visible and user-controlled. No hidden saves. Every suggestion shows why suggested, source, sensitivity, confidence, and confirm/edit/dismiss controls.
-- **MCPs** explains how to use Matterhorn Work tools outside the app in Codex, Claude Code, Claude Desktop, Cursor, and compatible MCP clients.
+- **MCPs** explains how to use Matterhorn Desks tools outside the app in Codex, Claude Code, Claude Desktop, Cursor, and compatible MCP clients.
 
 ## Visual System
 

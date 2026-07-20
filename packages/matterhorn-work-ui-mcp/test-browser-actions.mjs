@@ -92,7 +92,7 @@ const bridge = createServer(async (req, res) => {
     return json(res, 401, { ok: false, error: "unauthorized" });
   }
   if (req.method === "GET" && url.pathname === "/health") {
-    return json(res, 200, { ok: true, app: "Matterhorn Work", version: 1 });
+    return json(res, 200, { ok: true, app: "Matterhorn Desks", version: 1 });
   }
   if (req.method === "GET" && url.pathname === "/actions") {
     return json(res, 200, { ok: true, actions });

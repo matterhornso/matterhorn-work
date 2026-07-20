@@ -20,7 +20,7 @@ ENV OPENWORK_SIDECAR_DIR=/data/sidecars
 # The workspace is mounted from the host/volume.
 ENV OPENWORK_WORKSPACE=/workspace
 
-# OpenWork host contract surface.
+# Legacy npm-packaged Matterhorn host contract surface.
 EXPOSE 8787
 
 # Optional: opencode-router health (only relevant if you enable the router).
@@ -29,7 +29,7 @@ EXPOSE 3005
 VOLUME ["/workspace", "/data"]
 
 # Defaults:
-# - OpenWork server is published intentionally via --remote-access
+# - Matterhorn Desks server is published intentionally via --remote-access
 # - OpenCode stays internal (127.0.0.1:4096)
 # - OpenWork server proxies OpenCode via localhost
 # - OpenCode Router disabled by default
@@ -42,7 +42,7 @@ CMD [
   "--opencode-host", "127.0.0.1",
   "--opencode-port", "4096",
   "--connect-host", "127.0.0.1",
-  "--cors", "*",
+  "--cors", "http://localhost:5173,http://127.0.0.1:5173",
   "--approval", "manual",
   "--no-opencode-router"
 ]

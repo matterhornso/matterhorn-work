@@ -1,6 +1,6 @@
-# Matterhorn Work Agent Browser Control
+# Matterhorn Desks Agent Browser Control
 
-Matterhorn Work browser control is semantic first. Agent clients should use the desktop UI MCP and the published `browser.*` actions before trying screenshots, DOM scraping, or coordinate clicks.
+Matterhorn Desks browser control is semantic first. Agent clients should use the desktop UI MCP and the published `browser.*` actions before trying screenshots, DOM scraping, or coordinate clicks.
 
 This guide covers Codex, Claude Code, Claude Desktop, Cursor, HandsFree, and other MCP clients that can run `matterhorn-work-ui-mcp`.
 
@@ -51,7 +51,7 @@ The exact set depends on the current route and whether the browser panel is moun
    browser_list_actions
    ```
 
-4. If no browser actions are listed, navigate to a Matterhorn Work session with `ui_list_actions` and `ui_execute_action`, then call `browser_list_actions` again.
+4. If no browser actions are listed, navigate to a Matterhorn Desks session with `ui_list_actions` and `ui_execute_action`, then call `browser_list_actions` again.
 
 5. Open a URL through the semantic browser action:
 
@@ -112,12 +112,12 @@ The smoke test binds a local fake bridge. In restricted sandboxes, run it with l
 
 ## Live Desktop Check
 
-For the complete live desktop checklist, see [Matterhorn Work Browser Control Live QA](./agent-browser-live-qa.md).
+For the complete live desktop checklist, see [Matterhorn Desks Browser Control Live QA](./agent-browser-live-qa.md).
 
-Quick pass with Matterhorn Work desktop running:
+Quick pass with Matterhorn Desks desktop running:
 
 1. Add `matterhorn-work-ui-mcp` to the MCP client.
-2. Open any Matterhorn Work session.
+2. Open any Matterhorn Desks session.
 3. Call `ui_status`.
 4. Call `browser_list_actions`.
 5. Call `browser_open` with a harmless URL such as `https://matterhorn.so`.
@@ -126,8 +126,8 @@ Quick pass with Matterhorn Work desktop running:
 
 ## Related Docs
 
-- [Matterhorn Work Agent Control Surface](./agent-control-surface.md)
-- [Matterhorn Work Agent Action Model](./agent-action-model-contract.md)
-- [Matterhorn Work Browser Control Live QA](./agent-browser-live-qa.md)
-- [Matterhorn Work MCP Install Guide](./agent-mcp-install.md)
-- [Control Matterhorn Work from any MCP client](./mcp-ui-control-profile.md)
+- [Matterhorn Desks Agent Control Surface](./agent-control-surface.md)
+- [Matterhorn Desks Agent Action Model](./agent-action-model-contract.md)
+- [Matterhorn Desks Browser Control Live QA](./agent-browser-live-qa.md)
+- [Matterhorn Desks MCP Install Guide](./agent-mcp-install.md)
+- [Control Matterhorn Desks from any MCP client](./mcp-ui-control-profile.md)

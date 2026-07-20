@@ -41,7 +41,7 @@ try {
     ci,
     JSON.stringify({
       workflow_runs: [
-        { name: "Matterhorn Work Tests", conclusion: "success" },
+        { name: "Matterhorn Desks Tests", conclusion: "success" },
         { name: "i18n Audit", conclusion: "success" },
         { name: "Alpha Channel macOS arm64", conclusion: "success" },
       ],

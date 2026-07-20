@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 
 const dir = mkdtempSync(join(tmpdir(), "matterhorn-public-desktop-"));
 const sourceCommit = "c".repeat(40);
-mkdirSync(join(dir, "mac-arm64", "Matterhorn Work.app"), { recursive: true });
+mkdirSync(join(dir, "mac-arm64", "Matterhorn Desks.app"), { recursive: true });
 const dmg = join(dir, "matterhorn-work-0.13.13-mac-arm64.dmg");
 const zip = join(dir, "matterhorn-work-0.13.13-mac-arm64.zip");
 writeFileSync(dmg, "fixture-dmg");

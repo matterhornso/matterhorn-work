@@ -1,10 +1,10 @@
-# Matterhorn Work Decentralized Services Capability Contract
+# Matterhorn Desks Decentralized Services Capability Contract
 
-> Status: **future contract only**. This document defines safe contracts so future hosting, storage, email, payments, and identity providers can plug into Matterhorn Work through one subscription and one chat interface. It does **not** implement any live provider integration.
+> Status: **future contract only**. This document defines safe contracts so future hosting, storage, email, payments, and identity providers can plug into Matterhorn Desks through one subscription and one chat interface. It does **not** implement any live provider integration.
 
 ## Vision
 
-Matterhorn Work should eventually let users say:
+Matterhorn Desks should eventually let users say:
 
 - "Host this app"
 - "Store this file on decentralized storage"
@@ -38,7 +38,7 @@ capability at `status: "future_contract"`, and reports `canExecute: false` and
 
 ## Chat Planner Layer
 
-Matterhorn Work can also translate ordinary service requests into a
+Matterhorn Desks can also translate ordinary service requests into a
 future-contract plan:
 
 ```bash
@@ -89,9 +89,9 @@ This contract does **not** touch:
 ## Core Principles
 
 1. **Contract first, provider second.** Every capability has a manifest, preview, confirmation, handoff, receipt, and failure/rollback shape before any provider is selected.
-2. **No custody.** Matterhorn Work never accepts private keys, seed phrases, raw signatures, API secrets, or wallet exports for these services.
+2. **No custody.** Matterhorn Desks never accepts private keys, seed phrases, raw signatures, API secrets, or wallet exports for these services.
 3. **Preview before execution.** Every execution-capable flow must produce a safe preview with a SHA-256 hash, a consequence statement, and a confirmation prompt.
-4. **External signer or provider handoff.** Where on-chain signing or third-party authorization is required, the user performs it outside Matterhorn Work using a public handoff packet.
+4. **External signer or provider handoff.** Where on-chain signing or third-party authorization is required, the user performs it outside Matterhorn Desks using a public handoff packet.
 5. **Public receipts only.** Execution results contain public metadata, links, or hashes. No secret material is returned.
 6. **Future-only until explicitly promoted.** Each capability manifest defaults to `status: "future_contract"` and `liveExecutionEnabled: false`.
 
@@ -300,7 +300,7 @@ interface DecentralizedServiceFailureResult {
 **Secret handling rules:**
 
 - Never accept raw file encryption keys or decryption passwords in chat.
-- Encryption happens client-side or provider-side; Matterhorn Work only sees public CIDs and retrieval URLs.
+- Encryption happens client-side or provider-side; Matterhorn Desks only sees public CIDs and retrieval URLs.
 - Access grants use wallet/DID allowlists, not shared secrets.
 
 **Customer-facing artifact outputs:**
@@ -327,7 +327,7 @@ interface DecentralizedServiceFailureResult {
 - `externalSignerOrHandoff`: `false`
 - `outputArtifacts`: `["message_id", "delivery_status", "bounce_report_url", "template_version"]`
 
-**Required auth model:** OAuth2 or API key reference to the email provider. Matterhorn Work never stores SMTP passwords or API keys in chat context.
+**Required auth model:** OAuth2 or API key reference to the email provider. Matterhorn Desks never stores SMTP passwords or API keys in chat context.
 
 **Safe preview step:** Returns a `DecentralizedServicePreview` with recipient count, subject line, template version, sender domain, and consequence: "This will send X emails from your verified domain via provider Y." `canExecute: false`.
 

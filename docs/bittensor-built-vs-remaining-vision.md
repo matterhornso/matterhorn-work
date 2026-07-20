@@ -1,10 +1,10 @@
-# Matterhorn Work Bittensor: Built vs Remaining Vision
+# Matterhorn Desks Bittensor: Built vs Remaining Vision
 
-This is the current Bittensor product stocktake for Matterhorn Work. Use it before starting new Bittensor, agent-control, or upstream OpenWork sync work.
+This is the current Bittensor product stocktake for Matterhorn Desks. Use it before starting new Bittensor, agent-control, or upstream OpenWork sync work.
 
 ## Product Vision
 
-Matterhorn Work should make Bittensor usable through plain chat for non-expert users while staying non-custodial, source-aware, and honest about uncertainty.
+Matterhorn Desks should make Bittensor usable through plain chat for non-expert users while staying non-custodial, source-aware, and honest about uncertainty.
 
 The intended user experience:
 
@@ -75,10 +75,10 @@ The intended user experience:
 
 ### Rename And Upstream OpenWork Intake
 
-- Visible branding moved to Matterhorn Work.
+- Visible branding moved to Matterhorn Desks.
 - Compatibility aliases preserve OpenWork env/header/protocol/storage fallbacks.
 - CLI/package rename with legacy shims.
-- OpenCode user-facing abstraction as Matterhorn Work engine where appropriate.
+- OpenCode user-facing abstraction as Matterhorn Desks engine where appropriate.
 - Upstream OpenWork sync playbook/checker added so upstream improvements can be reviewed without losing Matterhorn product decisions.
 
 ## Remaining Vision
@@ -159,7 +159,7 @@ Build:
 
 - Keep web lightweight and chat-first.
 - Add copy and small UI affordances for Bittensor explain/discover/readiness, but not desktop-only signing or subnet adapter execution.
-- Link users to Matterhorn Work desktop for local agent-control, external signing, and advanced wallet/subnet operations.
+- Link users to Matterhorn Desks desktop for local agent-control, external signing, and advanced wallet/subnet operations.
 
 ## Recommended Next Build Order
 

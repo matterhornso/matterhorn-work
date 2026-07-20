@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Matterhorn Work Crypto MCP Server.
+ * Matterhorn Desks Crypto MCP Server.
  * V1+V2: CoinGecko, DeFiLlama, 1inch swap builder, tx simulation, Hyperliquid, Polymarket.
  * V3: Added security tools — approval manager, calldata decoder, ENS resolver, gas estimator.
  * V4: Added batch builder (crypto_buildBatch) + portfolio tracker (crypto_getPortfolio).
@@ -1708,4 +1708,4 @@ function handleMessage(msg) {
   }
 }
 
-process.stderr.write("Matterhorn Work Crypto MCP Server v0.6.0 ready\n");
+process.stderr.write("Matterhorn Desks Crypto MCP Server v0.6.0 ready\n");

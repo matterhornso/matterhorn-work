@@ -33,7 +33,7 @@ function usage() {
     "  node scripts/bittensor-watch-autopilot-scheduler.mjs --server-url http://127.0.0.1:8787 --token <client-token> --iterations 12 --interval-ms 300000 --jsonl-output /tmp/watch.jsonl --summary-output /tmp/watch-summary.json --strict",
     "",
     "Options:",
-    "  --server-url <url>       Matterhorn Work server URL.",
+    "  --server-url <url>       Matterhorn Desks server URL.",
     "  --token <token>          Optional client bearer token.",
     "  --check-json <path>      Offline fixture used for every iteration.",
     "  --iterations <n>         Number of checks to run. Defaults to 3.",

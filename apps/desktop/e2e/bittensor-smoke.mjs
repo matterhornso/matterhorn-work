@@ -28,7 +28,7 @@ async function assertDevServerReady(url) {
     }
   } catch (error) {
     throw new Error(
-      "Matterhorn Work app dev server is not reachable at " + url + ". " +
+      "Matterhorn Desks app dev server is not reachable at " + url + ". " +
         "Start it first with: pnpm --filter @matterhorn-work/app dev. " +
         "Original error: " + (error instanceof Error ? error.message : String(error)),
     );

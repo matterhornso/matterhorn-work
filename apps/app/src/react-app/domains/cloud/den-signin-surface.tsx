@@ -7,9 +7,10 @@ import {
 } from "lucide-react";
 
 import { t } from "../../../i18n";
-import { DEFAULT_DEN_BASE_URL } from "../../../app/lib/den";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "../../design-system/text-input";
+
+const DEFAULT_MATTERHORN_CLOUD_URL = "https://app.matterhorn.work";
 
 export type DenSignInSurfaceVariant = "panel" | "fullscreen";
 
@@ -75,13 +76,13 @@ function ShowcasePanel() {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h2 className="text-[22px] font-semibold tracking-[-0.01em] text-dls-text">
-            Matterhorn Work
+            Matterhorn Desks
           </h2>
         </div>
         <img
           className="size-12 shrink-0 rounded-lg border border-dls-border bg-[var(--matterhorn-blue)] p-1"
           src="/matterhorn-logo-square.svg"
-          alt="Matterhorn Work"
+          alt="Matterhorn Desks"
         />
       </div>
 
@@ -162,7 +163,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
             onChange={(event) =>
               props.onBaseUrlDraftInput(event.currentTarget.value)
             }
-            placeholder={DEFAULT_DEN_BASE_URL}
+            placeholder={DEFAULT_MATTERHORN_CLOUD_URL}
             hint={cloudControlPlaneHint}
             disabled={props.authBusy || props.baseUrlBusy || props.sessionBusy}
         />
@@ -297,7 +298,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
 
   if (variant === "fullscreen") {
     return (
-      <div className="relative min-h-screen overflow-y-auto bg-dls-background text-dls-text">
+      <main className="relative min-h-screen overflow-y-auto bg-dls-background text-dls-text">
         <div className="absolute inset-x-0 top-0 z-20 h-10 mac:titlebar-drag" />
 
         <div className="relative z-10 grid min-h-screen gap-10 px-6 py-16 lg:grid-cols-[minmax(360px,480px)_minmax(0,640px)] lg:items-center lg:justify-center lg:px-12">
@@ -305,7 +306,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
             <div className="w-full max-w-md space-y-7">
               <div className="space-y-2">
                 <h1 className="text-2xl font-semibold tracking-tight text-dls-text">
-                  Welcome to Matterhorn Work
+                  Welcome to Matterhorn Desks
                 </h1>
                 <p className="text-sm text-dls-secondary">
                   {props.publicBeta
@@ -433,7 +434,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
                     onChange={(event) =>
                       props.onBaseUrlDraftInput(event.currentTarget.value)
                     }
-                    placeholder={DEFAULT_DEN_BASE_URL}
+                    placeholder={DEFAULT_MATTERHORN_CLOUD_URL}
                     hint={cloudControlPlaneHint}
                     disabled={
                       props.authBusy || props.baseUrlBusy || props.sessionBusy
@@ -470,27 +471,14 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
           </div>
 
           <div className="hidden lg:flex lg:items-center lg:justify-center">
-            <div className="relative w-full max-w-xl overflow-hidden rounded-lg border border-[rgba(var(--matterhorn-blue-rgb),0.45)] bg-[var(--matterhorn-blue)] p-2">
-              <div className="pointer-events-none absolute inset-0 opacity-[0.08]">
-                <img
-                  src="/matterhorn-mark.svg"
-                  alt=""
-                  className="absolute -right-8 -top-10 size-56 rotate-12"
-                />
-                <img
-                  src="/matterhorn-mark.svg"
-                  alt=""
-                  className="absolute -bottom-16 left-6 size-64 -rotate-12"
-                />
-              </div>
-
+            <div className="w-full max-w-xl rounded-lg border border-[rgba(var(--matterhorn-blue-rgb),0.45)] bg-[var(--matterhorn-blue)] p-2">
               <div className="relative z-10 rounded-lg border border-dls-border bg-dls-surface p-6">
                 <ShowcasePanel />
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </main>
     );
   }
 

@@ -39,7 +39,7 @@ const config = {
   workspaceId: arg("--workspace-id") || "",
   sessionId: arg("--session-id") || "",
   filePath: arg("--path") || arg("--file-path") || "",
-  prompt: arg("--message") || arg("--prompt") || "Matterhorn Work live QA: reply with a short ok.",
+  prompt: arg("--message") || arg("--prompt") || "Matterhorn Desks live QA: reply with a short ok.",
   title: arg("--title") || `Agent control live QA ${new Date().toISOString()}`,
   maxEvents: Number(arg("--max-events", "5")),
   ttlSeconds: Number(arg("--ttl-seconds", "300")),
@@ -140,9 +140,9 @@ async function runCoreReadiness() {
 
   try {
     const health = await request("/health", { auth: "none" });
-    add("pass", "server.health", "Matterhorn Work server health", { latencyMs: health.latencyMs });
+    add("pass", "server.health", "Matterhorn Desks server health", { latencyMs: health.latencyMs });
   } catch (error) {
-    add("fail", "server.health", "Matterhorn Work server health", { error: error.message });
+    add("fail", "server.health", "Matterhorn Desks server health", { error: error.message });
     return "";
   }
 
@@ -302,7 +302,7 @@ function report() {
 }
 
 function printReport(value) {
-  console.log(`Matterhorn Work agent-control live QA: ${value.ready ? "ready" : "not ready"}`);
+  console.log(`Matterhorn Desks agent-control live QA: ${value.ready ? "ready" : "not ready"}`);
   console.log(`Checks: ${value.summary.pass} pass, ${value.summary.warn} warn, ${value.summary.fail} fail, ${value.summary.skip} skip`);
   for (const item of value.stages) {
     const latency = typeof item.latencyMs === "number" ? ` ${item.latencyMs}ms` : "";

@@ -436,7 +436,7 @@ function HomeWalletRuntimeStatus({
                 );
               }) : (
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Start the Matterhorn Work engine to read wallet-family status.
+                  Start the Matterhorn Desks engine to read wallet-family status.
                 </p>
               )}
               <button
@@ -591,7 +591,7 @@ function WorkflowDeskHomeSurface({
     (startTaskFeature && !startTaskFeature.ready),
   );
   const startTaskBlocker = !matterhornServerClient
-    ? "Matterhorn Work engine is offline."
+    ? "Matterhorn Desks engine is offline."
     : !readinessWorkspaceId
       ? "Open a workspace before starting a desk task."
       : startTaskFeature && !startTaskFeature.ready
@@ -754,7 +754,7 @@ function ProtocolDeskEmptyState({
     staleTime: 30_000,
     retry: false,
     queryFn: async () => {
-      if (!matterhornServerClient) throw new Error("Matterhorn Work engine is offline.");
+      if (!matterhornServerClient) throw new Error("Matterhorn Desks engine is offline.");
       return matterhornServerClient.bittensorSidecarHealth();
     },
   });
@@ -765,7 +765,7 @@ function ProtocolDeskEmptyState({
     (startTaskFeature && !startTaskFeature.ready),
   );
   const startTaskBlocker = !matterhornServerClient
-    ? "Matterhorn Work engine is offline."
+    ? "Matterhorn Desks engine is offline."
     : !readinessWorkspaceId
       ? "Open a workspace before starting a desk task."
       : startTaskFeature && !startTaskFeature.ready
@@ -1656,7 +1656,7 @@ export function SessionPage(props: SessionPageProps) {
         run: null,
         message: props.matterhornServerClient
           ? `Choose a stage to begin. Outputs will save under outputs/${getCustomerProtocolDeskVisual(deskId)?.outputDeskId ?? deskId}/<session-slug>/`
-          : "Matterhorn Work engine is unavailable for this project. Retry the connection or restart Matterhorn Work if it stays offline.",
+          : "Matterhorn Desks engine is unavailable for this project. Retry the connection or restart Matterhorn Desks if it stays offline.",
         intent: visibleUserIntent,
       });
       return;
@@ -1668,7 +1668,7 @@ export function SessionPage(props: SessionPageProps) {
       run: null,
       message: props.matterhornServerClient
         ? `Starting ${options?.title ?? getCustomerProtocolDeskVisual(deskId)?.agentName ?? "workflow"}...`
-        : "Matterhorn Work engine is unavailable for this project. Retry the connection or restart Matterhorn Work if it stays offline.",
+        : "Matterhorn Desks engine is unavailable for this project. Retry the connection or restart Matterhorn Desks if it stays offline.",
       intent: visibleUserIntent,
     };
     setWorkflowLaunchState(baseState);
@@ -1860,7 +1860,7 @@ export function SessionPage(props: SessionPageProps) {
   const openBrowserPanelControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "browser.open_panel",
     label: "Open browser panel",
-    description: "Open the built-in Matterhorn Work browser side panel.",
+    description: "Open the built-in Matterhorn Desks browser side panel.",
     sideEffect: "navigation",
     execute: () => {
       setCurrentSidePanel("browser");
@@ -1872,7 +1872,7 @@ export function SessionPage(props: SessionPageProps) {
   const openBrowserUrlControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "browser.open",
     label: "Open browser URL",
-    description: "Open a URL in the built-in Matterhorn Work browser and reveal the browser panel.",
+    description: "Open a URL in the built-in Matterhorn Desks browser and reveal the browser panel.",
     sideEffect: "navigation",
     requiresArgs: true,
     args: [
@@ -2165,7 +2165,7 @@ export function SessionPage(props: SessionPageProps) {
   const selectedWorkspaceErrorTitle =
     props.selectedWorkspaceDisplay.workspaceType === "remote"
       ? "Remote workspace unavailable"
-      : "Matterhorn Work engine unavailable";
+      : "Matterhorn Desks engine unavailable";
 
   const reactSessionBaseUrl = props.opencodeBaseUrl?.trim() ?? "";
   const reactSessionToken =

@@ -20,10 +20,10 @@ export function OrganizationInviteEmail({
   return (
     <Html>
       <Head />
-      <Preview>{invitedByName} invited you to join {organizationName} on Matterhorn Work</Preview>
+      <Preview>{invitedByName} invited you to join {organizationName} on Matterhorn Desks</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
-          <Text style={styles.eyebrow}>Matterhorn Work invite</Text>
+          <Text style={styles.eyebrow}>Matterhorn Desks invite</Text>
           <Heading style={styles.heading}>Join {organizationName}</Heading>
           <Text style={styles.text}>{inviter} invited you to join {organizationName} as {articleFor(role)} {role}.</Text>
           <Button href={inviteLink} style={styles.button}>Accept invite</Button>

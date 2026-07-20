@@ -1,10 +1,8 @@
 /** @jsxImportSource react */
 import { useEffect, type ReactNode } from "react";
-import { DAppKitProvider } from "@mysten/dapp-kit-react";
-import { WagmiProvider } from "wagmi";
+import { useLocation } from "react-router-dom";
 
-import { wagmiConfig } from "../infra/wagmi-config";
-import { suiDAppKit } from "../infra/sui-dapp-kit";
+import { readDenBootstrapConfig, readDenSettings } from "../../app/lib/den";
 import {
   isPublicBetaWebDeployment,
   isWebDeployment,
@@ -16,7 +14,6 @@ import { BetaAuthProvider } from "../domains/auth";
 import { DesktopConfigProvider } from "../domains/cloud/desktop-config-provider";
 import { RestrictionNoticeProvider } from "../domains/cloud/restriction-notice-provider";
 import { StatusToastsProvider } from "../domains/shell-feedback/status-toasts";
-import { PhantomSuiConnectionProvider } from "../domains/wallet/phantom-sui-provider";
 import { LocalProvider } from "../kernel/local-provider";
 import { ServerProvider } from "../kernel/server-provider";
 import { ArchitectureMismatchGate } from "./architecture-mismatch-gate";
@@ -25,7 +22,7 @@ import { DesktopRuntimeBoot } from "./desktop-runtime-boot";
 import { startDebugLogger, stopDebugLogger } from "./debug-logger";
 import { resolveMatterhornConnection } from "./matterhorn-connection";
 import { ReloadCoordinatorProvider } from "./reload-coordinator";
-import { LazyWalletProvider } from "./LazyWalletProvider";
+import { LazyWalletRuntimeProvider } from "./LazyWalletRuntimeProvider";
 
 function resolveDefaultServerUrl(): string {
   if (isDesktopRuntime()) return "http://127.0.0.1:4096";
@@ -62,8 +59,32 @@ type AppProvidersProps = {
   children: ReactNode;
 };
 
+function routeNeedsWalletRuntime(
+  pathname: string,
+  requireSignin: boolean,
+  hasCachedAuth: boolean,
+  publicBetaWeb: boolean,
+): boolean {
+  // Public required-signin builds only mount this authenticated shell after
+  // their cookie-backed session has been verified by PublicSigninBootstrap.
+  // Desktop required-signin builds still use the cached-token guard.
+  if (requireSignin && !hasCachedAuth && !publicBetaWeb) return false;
+
+  const path = pathname.toLowerCase();
+  return !(
+    path === "/signin" ||
+    path.startsWith("/signin/") ||
+    path === "/onboarding" ||
+    path.startsWith("/onboarding/")
+  );
+}
+
 export function AppProviders({ children }: AppProvidersProps) {
+  const location = useLocation();
   hydrateMatterhornServerSettingsFromEnv();
+  const requireSignin = readDenBootstrapConfig().requireSignin;
+  const hasCachedAuth = Boolean(readDenSettings().authToken?.trim());
+  const publicBetaWeb = isPublicBetaWebDeployment();
 
   useEffect(() => {
     // Start the dev observability forwarder. Reads the current matterhorn-server
@@ -79,33 +100,36 @@ export function AppProviders({ children }: AppProvidersProps) {
 
   const defaultUrl = resolveDefaultServerUrl();
   return (
-    <WagmiProvider config={wagmiConfig}>
-      <DAppKitProvider dAppKit={suiDAppKit}>
-        <PhantomSuiConnectionProvider>
-          <LazyWalletProvider>
-          <BootStateProvider>
-            <ServerProvider defaultUrl={defaultUrl}>
-              <ArchitectureMismatchGate>
-                <DesktopRuntimeBoot />
-                <DenAuthProvider>
-                  <BetaAuthProvider>
-                    <DesktopConfigProvider>
-                      <RestrictionNoticeProvider>
-                        <LocalProvider>
-                          <StatusToastsProvider>
-                            <ReloadCoordinatorProvider>{children}</ReloadCoordinatorProvider>
-                          </StatusToastsProvider>
-                        </LocalProvider>
-                      </RestrictionNoticeProvider>
-                    </DesktopConfigProvider>
-                  </BetaAuthProvider>
-                </DenAuthProvider>
-              </ArchitectureMismatchGate>
-            </ServerProvider>
-          </BootStateProvider>
-          </LazyWalletProvider>
-        </PhantomSuiConnectionProvider>
-      </DAppKitProvider>
-    </WagmiProvider>
+    <LazyWalletRuntimeProvider
+      enabled={routeNeedsWalletRuntime(
+        location.pathname,
+        requireSignin,
+        hasCachedAuth,
+        publicBetaWeb,
+      )}
+    >
+      <BootStateProvider>
+        <ServerProvider defaultUrl={defaultUrl}>
+          <ArchitectureMismatchGate>
+            <DesktopRuntimeBoot />
+            <DenAuthProvider>
+              <BetaAuthProvider>
+                <DesktopConfigProvider>
+                  <RestrictionNoticeProvider>
+                    <LocalProvider>
+                      <StatusToastsProvider>
+                        <ReloadCoordinatorProvider>
+                          {children}
+                        </ReloadCoordinatorProvider>
+                      </StatusToastsProvider>
+                    </LocalProvider>
+                  </RestrictionNoticeProvider>
+                </DesktopConfigProvider>
+              </BetaAuthProvider>
+            </DenAuthProvider>
+          </ArchitectureMismatchGate>
+        </ServerProvider>
+      </BootStateProvider>
+    </LazyWalletRuntimeProvider>
   );
 }

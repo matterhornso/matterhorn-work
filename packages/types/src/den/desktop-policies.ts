@@ -28,16 +28,16 @@ export const desktopPolicyDefinitions = [
     id: "allowCustomProviders",
     name: "Custom providers",
     description:
-      "Allow users to add and use models that are not deployed through Matterhorn Work Cloud.",
+      "Allow users to add and use models that are not deployed through Matterhorn Desks Cloud.",
     userNotice:
       "Your organization administrator has disabled adding custom providers.",
     defaultValue: true,
   },
   {
     id: "allowZenModel",
-    name: "Enable Matterhorn Work hosted models",
-    description: "Allow users to use the built-in models provided through Matterhorn Work.",
-    userNotice: "Your administrator has disabled access to Matterhorn Work hosted models.",
+    name: "Enable Matterhorn Desks hosted models",
+    description: "Allow users to use the built-in models provided through Matterhorn Desks.",
+    userNotice: "Your administrator has disabled access to Matterhorn Desks hosted models.",
     defaultValue: true,
   },
   {
@@ -69,9 +69,9 @@ export const desktopPolicyDefinitions = [
     id: "allowBuiltInExtensions",
     name: "Built-in Extensions",
     description:
-      "Allow users to see and use Matterhorn Work's built-in extensions, including browser, image, and local-provider extensions.",
+      "Allow users to see and use Matterhorn Desks's built-in extensions, including browser, image, and local-provider extensions.",
     userNotice:
-      "Your organization administrator has disabled built-in Matterhorn Work extensions.",
+      "Your organization administrator has disabled built-in Matterhorn Desks extensions.",
     defaultValue: true,
   },
   {

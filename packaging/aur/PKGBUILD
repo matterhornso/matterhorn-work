@@ -1,7 +1,7 @@
 pkgname=openwork
 pkgver=0.13.12
 pkgrel=1 # pkgrel should change when PKGBUILD does. Standard is to change back to 1 next time. Any integer is valid.
-pkgdesc="Matterhorn Work desktop agentic workspace"
+pkgdesc="Matterhorn Desks desktop agentic workspace"
 arch=('x86_64' 'aarch64')
 url="https://github.com/matterhornso/matterhorn-work"
 license=('MIT')
@@ -59,7 +59,7 @@ package() {
   install -d "${pkgdir}/usr/share/applications"
   cat > "${pkgdir}/usr/share/applications/openwork.desktop" <<'EOF'
 [Desktop Entry]
-Name=Matterhorn Work
+Name=Matterhorn Desks
 Comment=Run agents, skills, and MCP workflows
 Exec=openwork %U
 Terminal=false

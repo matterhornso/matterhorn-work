@@ -119,7 +119,7 @@ function GoogleWorkspaceConfig({ matterhornServerClient, onExtensionConnectionCh
       const result = await Promise.race([
         command(),
         new Promise<never>((_, reject) => {
-          window.setTimeout(() => reject(new Error("Google Workspace connection is taking too long. Try again, or restart Matterhorn Work if the browser already said authorization was received.")), DESKTOP_ACTION_TIMEOUT_MS);
+          window.setTimeout(() => reject(new Error("Google Workspace connection is taking too long. Try again, or restart Matterhorn Desks if the browser already said authorization was received.")), DESKTOP_ACTION_TIMEOUT_MS);
         }),
       ]);
       const next = normalizeGoogleWorkspaceAuthStatus(result);
@@ -145,8 +145,8 @@ function GoogleWorkspaceConfig({ matterhornServerClient, onExtensionConnectionCh
       {!serverAvailable ? (
         <Alert variant="warning">
           <ShieldCheck />
-          <AlertTitle>Matterhorn Work server required</AlertTitle>
-          <AlertDescription>Start Matterhorn Work server to connect Google Workspace.</AlertDescription>
+          <AlertTitle>Matterhorn Desks server required</AlertTitle>
+          <AlertDescription>Start Matterhorn Desks server to connect Google Workspace.</AlertDescription>
         </Alert>
       ) : null}
 
@@ -164,7 +164,7 @@ function GoogleWorkspaceConfig({ matterhornServerClient, onExtensionConnectionCh
           <ShieldCheck />
           <AlertTitle>Connect Google Workspace</AlertTitle>
           <AlertDescription>
-            Let Matterhorn Work use your calendar, selected Drive files, and Gmail drafts when you ask it to.
+            Let Matterhorn Desks use your calendar, selected Drive files, and Gmail drafts when you ask it to.
           </AlertDescription>
         </Alert>
       )}
@@ -181,7 +181,7 @@ function GoogleWorkspaceConfig({ matterhornServerClient, onExtensionConnectionCh
         <Alert variant="destructive">
           <XCircle />
           <AlertTitle>Encrypted token vault unavailable</AlertTitle>
-          <AlertDescription>Matterhorn Work cannot securely save your Google connection on this machine right now.</AlertDescription>
+          <AlertDescription>Matterhorn Desks cannot securely save your Google connection on this machine right now.</AlertDescription>
         </Alert>
       ) : null}
 
@@ -203,9 +203,9 @@ function GoogleWorkspaceConfig({ matterhornServerClient, onExtensionConnectionCh
 
       <Card variant="outline" size="sm">
         <CardHeader>
-          <CardTitle>What Matterhorn Work can do</CardTitle>
+          <CardTitle>What Matterhorn Desks can do</CardTitle>
           <CardDescription>
-            Connect Google Workspace so Matterhorn Work can help with meeting prep, selected files, and draft emails.
+            Connect Google Workspace so Matterhorn Desks can help with meeting prep, selected files, and draft emails.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">
@@ -222,7 +222,7 @@ function GoogleWorkspaceConfig({ matterhornServerClient, onExtensionConnectionCh
           <div className="rounded-lg border border-border bg-card p-3">
             <FileText className="mb-2 size-4 text-green-11" />
             <div className="text-sm font-medium text-card-foreground">Selected Drive files</div>
-            <div className="mt-1 text-xs leading-relaxed text-muted-foreground">Read files explicitly selected or created through Matterhorn Work.</div>
+            <div className="mt-1 text-xs leading-relaxed text-muted-foreground">Read files explicitly selected or created through Matterhorn Desks.</div>
           </div>
         </CardContent>
       </Card>

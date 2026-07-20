@@ -294,7 +294,7 @@ export function CloudMarketplacesView({
         <SettingsSectionHeaderContent>
           <SettingsSectionHeaderTitle>Extension Marketplace</SettingsSectionHeaderTitle>
           <SettingsSectionHeaderDescription>
-            Add extensions from Matterhorn Cloud. Claude-compatible plugins are normalized into Matterhorn Work extensions with installable resources such as skills, MCPs, commands, or tools.
+            Add extensions from Matterhorn Cloud. Claude-compatible plugins are normalized into Matterhorn Desks extensions with installable resources such as skills, MCPs, commands, or tools.
           </SettingsSectionHeaderDescription>
         </SettingsSectionHeaderContent>
         <SettingsSectionHeaderActions>

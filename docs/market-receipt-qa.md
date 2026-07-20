@@ -1,6 +1,6 @@
 # Market Receipt QA
 
-Matterhorn Work supports Hyperliquid and Polymarket execution only through a non-custodial loop:
+Matterhorn Desks supports Hyperliquid and Polymarket execution only through a non-custodial loop:
 
 1. Build a read/preview-only order plan.
 2. Create an external-signer handoff.

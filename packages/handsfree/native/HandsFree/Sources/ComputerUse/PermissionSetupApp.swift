@@ -66,7 +66,7 @@ private final class PermissionSetupWindow: NSWindow {
             backing: .buffered,
             defer: false
         )
-        title = "Matterhorn Work Automation Helper"
+        title = "Matterhorn Desks Automation Helper"
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
         isMovableByWindowBackground = true

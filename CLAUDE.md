@@ -1,4 +1,4 @@
-# Matterhorn Work — Cowork for Web3
+# Matterhorn Desks — Cowork for Web3
 
 > Fork of [different-ai/openwork](https://github.com/different-ai/openwork). Desktop agentic workspace with native wallet, on-chain actions, and Web3 skills.
 

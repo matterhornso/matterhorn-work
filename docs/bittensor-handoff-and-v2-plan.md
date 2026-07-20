@@ -205,7 +205,7 @@ This is not a full background scheduler yet, but it gives chat a deterministic m
 
 ## What PR #2 Builds
 
-PR #2 adds a read-only plus quote-only Bittensor MVP to Matterhorn Work.
+PR #2 adds a read-only plus quote-only Bittensor MVP to Matterhorn Desks.
 
 ### Product Surface
 
@@ -286,7 +286,7 @@ Updates `README.md` with:
 
 ## Safety Constraints Already Implemented
 
-Matterhorn Work V1 for Bittensor must remain:
+Matterhorn Desks V1 for Bittensor must remain:
 
 - Read-only for wallet/subnet data.
 - Quote-only for Bittensor actions.
@@ -322,12 +322,12 @@ Passed locally after the latest MCP fix:
 
 Passed on GitHub for latest head at handoff time:
 
-- `Matterhorn Work Tests / openwork-tests (macos-14)`
+- `Matterhorn Desks Tests / openwork-tests (macos-14)`
   - Includes dependency install and `pnpm --filter @matterhorn-work/app test:e2e`.
 
 Still pending on GitHub at handoff time:
 
-- `Matterhorn Work Tests / openwork-tests (blacksmith-4vcpu-ubuntu-2204)`
+- `Matterhorn Desks Tests / openwork-tests (blacksmith-4vcpu-ubuntu-2204)`
 - `i18n Audit / i18n-audit`
 
 Not fully verified locally:

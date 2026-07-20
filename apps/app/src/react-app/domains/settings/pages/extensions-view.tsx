@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { PluginsView, type PluginsExtensionsStore } from "./plugins-view";
+import { mcpServerDisplayName } from "./mcp-display-name";
 
 export type ExtensionsSection = "all" | "mcp" | "skills" | "plugins";
 
@@ -47,16 +48,6 @@ export type ExtensionsViewProps = {
   showHeader?: boolean;
   compact?: boolean;
 };
-
-function mcpServerDisplayName(name: string) {
-  const words = name
-    .trim()
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1));
-  const label = words.join(" ") || "MCP";
-  return /\bmcp\b/i.test(label) ? label : `${label} MCP`;
-}
 
 export function ExtensionsView(props: ExtensionsViewProps) {
   const [view, setView] = useState<"my" | "marketplace">("my");

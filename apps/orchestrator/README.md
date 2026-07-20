@@ -1,6 +1,6 @@
-# Matterhorn Work Orchestrator
+# Matterhorn Desks Orchestrator
 
-Host orchestrator for the Matterhorn Work engine, Matterhorn Work server, and opencode-router. This is a CLI-first way to run host mode without the desktop UI. The engine is backed by the underlying OpenCode runtime.
+Host orchestrator for the Matterhorn Desks engine, Matterhorn Desks server, and opencode-router. This is a CLI-first way to run host mode without the desktop UI. The engine is backed by the underlying OpenCode runtime.
 
 Published on npm as `openwork-orchestrator` for compatibility. It installs the
 canonical `matterhorn-work` command plus the legacy `openwork` shim.
@@ -46,7 +46,7 @@ locally installed `matterhorn-work-server`, legacy `openwork-server`, or `openco
 
 Add `--verbose` (or `OPENWORK_VERBOSE=1`) to print extra diagnostics about resolved binaries.
 
-Matterhorn Work engine hot reload is enabled by default when launched via `matterhorn-work`.
+Matterhorn Desks engine hot reload is enabled by default when launched via `matterhorn-work`.
 Tune it with:
 
 - `--opencode-hot-reload` / `--no-opencode-hot-reload`
@@ -69,12 +69,12 @@ pnpm --filter matterhorn-work-orchestrator dev -- \
   start --workspace /path/to/workspace --approval auto --allow-external
 ```
 
-When `OPENWORK_DEV_MODE=1` is set, orchestrator uses an isolated engine dev state for config, auth, data, cache, and state. Matterhorn Work's repo-level `pnpm dev` commands enable this automatically so local development does not reuse your personal OpenCode environment.
+When `OPENWORK_DEV_MODE=1` is set, orchestrator uses an isolated engine dev state for config, auth, data, cache, and state. Matterhorn Desks's repo-level `pnpm dev` commands enable this automatically so local development does not reuse your personal OpenCode environment.
 
 The command prints pairing URLs by default and withholds live credentials from stdout to avoid leaking them into shell history or collected logs. Use `--json` only when you explicitly need the raw pairing secrets in command output.
 
 Use `--detach` to keep services running and exit the dashboard. The detach summary includes the
-Matterhorn Work URL and a redacted `opencode attach` command, while keeping live credentials out of the detached summary.
+Matterhorn Desks URL and a redacted `opencode attach` command, while keeping live credentials out of the detached summary.
 
 ## Sandbox mode (Docker / Apple container)
 
@@ -117,7 +117,7 @@ Override with `OPENWORK_SANDBOX_MOUNT_ALLOWLIST`.
 
 ## Logging
 
-`matterhorn-work` emits a unified log stream from the Matterhorn Work engine, Matterhorn Work server, and opencode-router. Use JSON format for
+`matterhorn-work` emits a unified log stream from the Matterhorn Desks engine, Matterhorn Desks server, and opencode-router. Use JSON format for
 structured, OpenTelemetry-friendly logs and a stable run id for correlation.
 
 ```bash
@@ -131,12 +131,12 @@ The underlying OpenCode runtime runs at `INFO` by default, which produces large 
 `OPENWORK_OPENCODE_LOG_LEVEL`) to forward `--log-level` to managed `opencode serve` and reduce log
 volume.
 
-Matterhorn Work server logs every request with method, path, status, and duration. Disable this when running
+Matterhorn Desks server logs every request with method, path, status, and duration. Disable this when running
 `matterhorn-work-server` directly by setting `OPENWORK_LOG_REQUESTS=0` or passing `--no-log-requests`.
 
 ## Router daemon (multi-workspace)
 
-The router keeps a single Matterhorn Work engine process alive and switches workspaces JIT using the `directory` parameter.
+The router keeps a single Matterhorn Desks engine process alive and switches workspaces JIT using the `directory` parameter.
 
 ```bash
 matterhorn-work daemon start
@@ -151,8 +151,8 @@ Use `OPENWORK_DATA_DIR` or `--data-dir` to isolate router state in tests.
 
 ## Pairing notes
 
-- Use the **Matterhorn Work connect URL** and **client token** to connect a remote Matterhorn Work client.
-- The Matterhorn Work server advertises the **engine connect URL** plus optional basic auth credentials to the client.
+- Use the **Matterhorn Desks connect URL** and **client token** to connect a remote Matterhorn Desks client.
+- The Matterhorn Desks server advertises the **engine connect URL** plus optional basic auth credentials to the client.
 
 ## Agent MCP config
 
@@ -171,7 +171,7 @@ Use `--profile server` to include only the unified `matterhorn-work-mcp` server-
 
 ## Agent doctor
 
-Run one read-only readiness report before driving Matterhorn Work from Codex, Claude Code, or another agent:
+Run one read-only readiness report before driving Matterhorn Desks from Codex, Claude Code, or another agent:
 
 ```bash
 matterhorn-work doctor \
@@ -185,7 +185,7 @@ Add `--workspace-id <id> --session-id <id>` to probe chat status/snapshot/event 
 
 ## Chat session events
 
-Create a chat session, submit a prompt, and inspect status through the stable Matterhorn Work server routes:
+Create a chat session, submit a prompt, and inspect status through the stable Matterhorn Desks server routes:
 
 ```bash
 matterhorn-work sessions create \
@@ -209,7 +209,7 @@ matterhorn-work sessions status <session-id> \
   --json
 ```
 
-Read bounded progress events for a Matterhorn Work chat session:
+Read bounded progress events for a Matterhorn Desks chat session:
 
 ```bash
 matterhorn-work sessions events <session-id> \
@@ -386,7 +386,7 @@ matterhorn-work files write <session-id> \
   --openwork-url http://<host>:8787 \
   --token <client-token> \
   --path notes/todo.md \
-  --content "hello from Matterhorn Work" \
+  --content "hello from Matterhorn Desks" \
   --json
 
 # Watch change events and close session

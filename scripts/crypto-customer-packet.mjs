@@ -46,7 +46,7 @@ const config = {
   strict: flag("--strict"),
   requireMarketEvidence: flag("--require-market-evidence"),
   requireBittensorEvidence: flag("--require-bittensor-evidence"),
-  title: arg("--title") || "Matterhorn Work Crypto Customer Packet",
+  title: arg("--title") || "Matterhorn Desks Crypto Customer Packet",
 };
 
 function usage() {

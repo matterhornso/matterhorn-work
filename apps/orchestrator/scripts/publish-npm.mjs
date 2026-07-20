@@ -87,7 +87,7 @@ for (const target of targets) {
   writeJson(join(dir, "package.json"), {
     name,
     version,
-    description: "Platform binary for the Matterhorn Work orchestrator",
+    description: "Platform binary for the Matterhorn Desks orchestrator",
     license: "MIT",
     os: [target.os],
     cpu: [target.cpu],
@@ -128,7 +128,7 @@ copyFileSync(constantsSrc, join(meta, "constants.json"))
 writeJson(join(meta, "package.json"), {
   name: "openwork-orchestrator",
   version,
-  description: "Matterhorn Work host orchestrator for opencode + Matterhorn Work server + opencode-router",
+  description: "Matterhorn Desks host orchestrator for opencode + Matterhorn Desks server + opencode-router",
   license: "MIT",
   bin: {
     "matterhorn-work": "./bin/matterhorn-work",

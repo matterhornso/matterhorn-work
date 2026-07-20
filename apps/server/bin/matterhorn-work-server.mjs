@@ -45,6 +45,6 @@ if (existsSync(sourceCli)) {
 }
 
 console.error(
-  `Unable to find a Matterhorn Work server entrypoint in ${basename(packageRoot)}. Build the package or run it from a source checkout with Bun available.`,
+  `Unable to find a Matterhorn Desks server entrypoint in ${basename(packageRoot)}. Build the package or run it from a source checkout with Bun available.`,
 );
 process.exit(1);

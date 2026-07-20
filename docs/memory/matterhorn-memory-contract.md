@@ -1,6 +1,6 @@
 # Matterhorn Memory Contract
 
-Matterhorn Memory is the local-first, inspectable, editable, forgettable memory layer for Matterhorn Work. It lets the app remember useful, user-approved context across Bittensor, Hyperliquid, Polymarket, Wellness, workflows, MCPs, files, and customer artifacts.
+Matterhorn Memory is the local-first, inspectable, editable, forgettable memory layer for Matterhorn Desks. It lets the app remember useful, user-approved context across Bittensor, Hyperliquid, Polymarket, Wellness, workflows, MCPs, files, and customer artifacts.
 
 This document defines the shared type/contract layer. It is intentionally storage-backend and UI agnostic; those layers are owned by other workstreams.
 

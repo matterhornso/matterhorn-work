@@ -16,7 +16,7 @@ function MatterhornBrowserConfig() {
         <MonitorSmartphone className="mt-0.5 size-4 shrink-0 text-blue-11" />
         <div className="space-y-1 text-[13px] leading-relaxed text-dls-secondary">
           <div className="font-medium text-dls-text">Ready by default</div>
-          <div>The Matterhorn Work Browser runs inside the app, opens visibly for browser tasks, and is the supported browser automation path in Matterhorn Work.</div>
+          <div>The Matterhorn Desks Browser runs inside the app, opens visibly for browser tasks, and is the supported browser automation path in Matterhorn Desks.</div>
         </div>
       </div>
     </div>

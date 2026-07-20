@@ -53,7 +53,7 @@ export function MatterhornVoiceConfig(props: MatterhornVoiceConfigProps) {
       <CardHeader>
         <CardTitle>Realtime voice</CardTitle>
         <CardDescription>
-          Voice Mode uses OpenAI Realtime and the same Matterhorn Work UI control surface exposed through Matterhorn Work UI MCP.
+          Voice Mode uses OpenAI Realtime and the same Matterhorn Desks UI control surface exposed through Matterhorn Desks UI MCP.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -62,7 +62,7 @@ export function MatterhornVoiceConfig(props: MatterhornVoiceConfigProps) {
             <Mic2 />
             <AlertTitle>OpenAI key detected</AlertTitle>
             <AlertDescription>
-              Voice Mode will use OPENAI_REALTIME_API_KEY when present, otherwise OPENAI_API_KEY from Matterhorn Work environment variables.
+              Voice Mode will use OPENAI_REALTIME_API_KEY when present, otherwise OPENAI_API_KEY from Matterhorn Desks environment variables.
             </AlertDescription>
           </Alert>
         ) : null}
@@ -78,7 +78,7 @@ export function MatterhornVoiceConfig(props: MatterhornVoiceConfigProps) {
               placeholder="sk-..."
             />
             <FieldDescription>
-              Saved as OPENAI_API_KEY in Matterhorn Work's local env store. The renderer only receives short-lived Realtime client secrets.
+              Saved as OPENAI_API_KEY in Matterhorn Desks's local env store. The renderer only receives short-lived Realtime client secrets.
             </FieldDescription>
           </Field>
         </FieldGroup>

@@ -53,7 +53,7 @@ function parseArgs(argv) {
 
 function printHelp() {
   process.stdout.write([
-    "Matterhorn Work desktop release doctor",
+    "Matterhorn Desks desktop release doctor",
     "",
     "Usage:",
     "  pnpm desktop:release-doctor -- --json",
@@ -153,7 +153,7 @@ async function liveServerChecks(config) {
         "server.health",
         "Local server health",
         "skip",
-        "No --server-url supplied. Start Matterhorn Work and rerun with MATTERHORN_WORK_SERVER_URL when testing the running app.",
+        "No --server-url supplied. Start Matterhorn Desks and rerun with MATTERHORN_WORK_SERVER_URL when testing the running app.",
       ),
     ];
   }
@@ -182,7 +182,7 @@ function markdown(report) {
     .map((item) => `| ${item.id} | ${item.status} | ${item.summary.replace(/\|/g, "\\|")} |`)
     .join("\n");
   return [
-    "# Matterhorn Work Desktop Release Doctor",
+    "# Matterhorn Desks Desktop Release Doctor",
     "",
     `- Git SHA: \`${report.gitSha}\``,
     `- Ready: \`${report.ready}\``,
@@ -273,7 +273,7 @@ const report = {
     logLocations: [
       "~/Library/Logs/Matterhorn/",
       "~/Library/Application Support/Matterhorn/",
-      "apps/desktop/dist-electron/mac-arm64/Matterhorn.app/Contents/Resources/app.asar",
+      "apps/desktop/dist-electron/mac-arm64/Matterhorn Desks.app/Contents/Resources/app.asar",
     ],
     customerBoundary: {
       bittensor: "Bittensor: public read, unsigned preview, and external-signer workflow",

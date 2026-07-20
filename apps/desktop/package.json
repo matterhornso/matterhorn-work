@@ -2,7 +2,7 @@
   "name": "@matterhorn-work/desktop",
   "private": true,
   "version": "0.13.13",
-  "description": "Matterhorn Work desktop shell",
+  "description": "Matterhorn Desks desktop shell",
   "author": {
     "name": "Matterhorn",
     "email": "support@matterhorn.so"

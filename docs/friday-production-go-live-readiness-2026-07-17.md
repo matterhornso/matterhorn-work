@@ -6,7 +6,7 @@
 > machine-readable `launch-channel-readiness.mjs` gate for current decisions.
 > The production stop-ship evidence below remains required for Product Hunt.
 
-This is the decision ledger for the Matterhorn Work public production launch on
+This is the decision ledger for the Matterhorn Desks public production launch on
 Friday, July 17, 2026. It supersedes the Wednesday controlled-beta decision for
 launch purposes. Historical beta reports remain evidence and must not be
 deleted or relabeled as production proof.

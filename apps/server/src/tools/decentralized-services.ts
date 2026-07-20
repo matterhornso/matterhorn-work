@@ -312,7 +312,7 @@ export function buildDecentralizedServicesCapabilityCatalog(input: {
     version: "matterhorn.services.capability-catalog.v1",
     status: "future_contract",
     source: "matterhorn_server_services_discovery",
-    summary: "Provider-neutral future contracts for hosting, storage, email, payments, and identity/access through Matterhorn Work chat.",
+    summary: "Provider-neutral future contracts for hosting, storage, email, payments, and identity/access through Matterhorn Desks chat.",
     safety: {
       ...SAFETY_DEFAULTS,
       allContractsFutureOnly: true,

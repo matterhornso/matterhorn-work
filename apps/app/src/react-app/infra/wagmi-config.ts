@@ -12,7 +12,7 @@ const evmConnectors = [
     target: "metaMask",
   }),
   coinbaseWallet({
-    appName: "Matterhorn Work",
+    appName: "Matterhorn Desks",
   }),
   injected(),
   ...(walletConnectProjectId

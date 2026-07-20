@@ -33,7 +33,7 @@ export function getBackendCapabilitiesResult(
   if (source === "fetch") {
     return {
       data: null,
-      error: options.client ? null : new Error("Matterhorn Work engine client is required to fetch backend capabilities."),
+      error: options.client ? null : new Error("Matterhorn Desks engine client is required to fetch backend capabilities."),
       isLoading: false,
     };
   }
@@ -54,7 +54,7 @@ export function useBackendCapabilities(
     queryKey: ["backend-capabilities", client ? "matterhorn-server" : "missing-client"],
     enabled: source === "fetch" && enabled && Boolean(client),
     queryFn: async () => {
-      if (!client) throw new Error("Matterhorn Work engine client is required to fetch backend capabilities.");
+      if (!client) throw new Error("Matterhorn Desks engine client is required to fetch backend capabilities.");
       return client.backendCapabilities();
     },
     staleTime: 30_000,

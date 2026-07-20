@@ -230,7 +230,7 @@ function describeWorkspaceCreateError(error: unknown) {
     lower.includes("os error 60") ||
     lower.includes("etimedout")
   ) {
-    return `${message}\n\nMatterhorn Work could not read the workspace config before the filesystem timed out. This often happens when the folder is still syncing from iCloud Drive or another remote folder. Wait for the folder to finish downloading, move the workspace to a local folder, or try again.`;
+    return `${message}\n\nMatterhorn Desks could not read the workspace config before the filesystem timed out. This often happens when the folder is still syncing from iCloud Drive or another remote folder. Wait for the folder to finish downloading, move the workspace to a local folder, or try again.`;
   }
   return message;
 }
@@ -1067,7 +1067,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     const workspaceId = runtimeWorkspaceId?.trim() ?? "";
     const resolvedApiKey = apiKey.trim();
     if (!workspaceClient || !workspaceId) {
-      setImageExtensionError("Matterhorn Work server is not connected for this workspace.");
+      setImageExtensionError("Matterhorn Desks server is not connected for this workspace.");
       return;
     }
     if (!resolvedApiKey) {
@@ -1109,7 +1109,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       }
       reloadCoordinator.markReloadRequired("plugins", { type: "plugin", name: "openwork-image-generation", action: "added" });
       setImageExtensionInstalled(true);
-      setImageExtensionStatus("Installed OpenAI image_generate and saved OPENAI_API_KEY through Matterhorn Work environment variables.");
+      setImageExtensionStatus("Installed OpenAI image_generate and saved OPENAI_API_KEY through Matterhorn Desks environment variables.");
     } catch (error) {
       setImageExtensionError(describeRouteError(error));
     } finally {
@@ -1123,7 +1123,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     const apiKey = input.apiKey.trim();
     const prompt = input.prompt.trim();
     if (!client || !workspaceId) {
-      setImageGenerationError("Matterhorn Work server is not connected for this workspace.");
+      setImageGenerationError("Matterhorn Desks server is not connected for this workspace.");
       return;
     }
     if (!apiKey) {
@@ -1173,7 +1173,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
 
   const testVoiceSession = useCallback(async () => {
     if (!matterhornClient) {
-      setVoiceError("Matterhorn Work server is not connected.");
+      setVoiceError("Matterhorn Desks server is not connected.");
       return;
     }
     setVoiceBusy(true);
@@ -1194,7 +1194,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     const workspaceId = runtimeWorkspaceId?.trim() ?? "";
     const modelId = input.modelId.trim();
     if (!client || !workspaceId) {
-      setLocalProviderError("Matterhorn Work server is not connected for this workspace.");
+      setLocalProviderError("Matterhorn Desks server is not connected for this workspace.");
       return;
     }
     if (!modelId) {
@@ -1255,7 +1255,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     }
 
     if (!opencodeClient) {
-      setCudosProviderError("Matterhorn Work engine is not connected for this workspace.");
+      setCudosProviderError("Matterhorn Desks engine is not connected for this workspace.");
       return;
     }
 

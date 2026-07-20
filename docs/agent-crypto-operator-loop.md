@@ -1,4 +1,4 @@
-# Matterhorn Work Crypto Agent Operator Loop
+# Matterhorn Desks Crypto Agent Operator Loop
 
 Use this after the general [Agent Operator Workflow](./agent-operator-workflow.md) is healthy. It is the copy-paste path for Codex, Claude Code, Hermes, Cursor, Claude Desktop, or another MCP-capable agent to operate the crypto surfaces without scraping the UI.
 
@@ -216,7 +216,7 @@ matterhorn-work crypto evidence-bundle \
   --require-sdk-manifest-check \
   --output /tmp/matterhorn-crypto-customer-evidence.md \
   --json-output /tmp/matterhorn-crypto-customer-evidence.json \
-  --title "Matterhorn Work Crypto Customer Evidence" \
+  --title "Matterhorn Desks Crypto Customer Evidence" \
   --strict
 
 matterhorn-work crypto evidence-verify \

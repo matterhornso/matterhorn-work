@@ -33,7 +33,7 @@ function usage() {
     "  node scripts/bittensor-watch-autopilot.mjs --server-url http://127.0.0.1:8787 --token <client-token> --output /tmp/bittensor-watch-autopilot.md --strict",
     "",
     "Options:",
-    "  --server-url <url>        Matterhorn Work server URL. Defaults to MATTERHORN_WORK_SERVER_URL or localhost.",
+    "  --server-url <url>        Matterhorn Desks server URL. Defaults to MATTERHORN_WORK_SERVER_URL or localhost.",
     "  --token <token>           Optional client bearer token.",
     "  --check-json <path>       Offline test/input fixture for a monitoring check response.",
     "  --output, -o <path>       Write Markdown report to a file. Defaults to stdout unless --json is set.",
@@ -185,7 +185,7 @@ function renderMarkdown(summary) {
     ? Object.entries(summary.notificationSummary.intents).map(([intent, count]) => `| ${escapeCell(intent)} | ${escapeCell(count)} |`).join("\n")
     : "| none | 0 |";
   return [
-    "# Matterhorn Work Bittensor Watch Autopilot",
+    "# Matterhorn Desks Bittensor Watch Autopilot",
     "",
     "## Decision",
     "",
@@ -249,7 +249,7 @@ try {
   };
 }
 
-const markdown = summary.ok ? renderMarkdown(summary) : `# Matterhorn Work Bittensor Watch Autopilot\n\n- Result: WATCH_CHECK_FAILED\n- Error: ${summary.error}\n- Safety posture: no action was taken.\n`;
+const markdown = summary.ok ? renderMarkdown(summary) : `# Matterhorn Desks Bittensor Watch Autopilot\n\n- Result: WATCH_CHECK_FAILED\n- Error: ${summary.error}\n- Safety posture: no action was taken.\n`;
 if (config.output) await writeFile(config.output, markdown, "utf8");
 if (config.jsonOutput) await writeFile(config.jsonOutput, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
 if (config.json) console.log(JSON.stringify(summary, null, 2));

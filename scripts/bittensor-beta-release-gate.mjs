@@ -47,7 +47,7 @@ function parseArgs(argv) {
 
 function printHelp() {
   process.stdout.write([
-    "Matterhorn Work Bittensor beta release gate",
+    "Matterhorn Desks Bittensor beta release gate",
     "",
     "Usage:",
     "  pnpm smoke:bittensor-beta",

@@ -768,7 +768,7 @@ function WalletSafetyPolicyControls(props: {
     enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
     queryFn: async () => {
       if (!props.matterhornServerClient || !props.runtimeWorkspaceId) {
-        throw new Error("Matterhorn Work engine is offline.");
+        throw new Error("Matterhorn Desks engine is offline.");
       }
       return props.matterhornServerClient.getWalletSafetyPolicy(props.runtimeWorkspaceId);
     },
@@ -1084,7 +1084,7 @@ function WalletSafetyLedger(props: {
     queryKey: ["wallet-safety-ledger", props.runtimeWorkspaceId],
     enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
     queryFn: async () => {
-      if (!props.matterhornServerClient || !props.runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
+      if (!props.matterhornServerClient || !props.runtimeWorkspaceId) throw new Error("Matterhorn Desks engine is offline.");
       return props.matterhornServerClient.listProjectDataLedger(props.runtimeWorkspaceId, {
         kind: "wallet",
         source: "audit",
@@ -1382,7 +1382,7 @@ export function WalletSettingsView({
     queryKey: ["wallet-backend-capabilities"],
     enabled: Boolean(matterhornServerClient),
     queryFn: async () => {
-      if (!matterhornServerClient) throw new Error("Matterhorn Work engine is offline.");
+      if (!matterhornServerClient) throw new Error("Matterhorn Desks engine is offline.");
       return matterhornServerClient.backendCapabilities();
     },
     staleTime: 30_000,

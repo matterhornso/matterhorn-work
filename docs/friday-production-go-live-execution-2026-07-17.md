@@ -6,7 +6,7 @@
 > execution router. This file remains the stricter public-production evidence
 > checklist and must not be mistaken for Friday Beta authorization.
 
-Use this sequence to turn the verified Matterhorn Work code candidate into a
+Use this sequence to turn the verified Matterhorn Desks code candidate into a
 public production release. Do not compress stages or publish from local
 unsigned artifacts.
 

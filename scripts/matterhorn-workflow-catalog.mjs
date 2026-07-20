@@ -750,7 +750,7 @@ function buildCustomerTemplatesCatalog(config) {
     status: "catalog_only",
     generatedAt: new Date(0).toISOString(),
     summary:
-      "Customer-facing Matterhorn Work workflow templates for chat-first goal selection.",
+      "Customer-facing Matterhorn Desks workflow templates for chat-first goal selection.",
     commands: {
       customerTemplates: "node scripts/matterhorn-workflow-catalog.mjs --customer-templates --json",
       customerTemplateFilter:
@@ -795,7 +795,7 @@ function buildCatalog(config) {
     status: "catalog_only",
     generatedAt: new Date(0).toISOString(),
     summary:
-      "Safe, chat-first Matterhorn Work workflow catalog across Longevity, Bittensor, markets, decentralized services, and future verticals.",
+      "Safe, chat-first Matterhorn Desks workflow catalog across Longevity, Bittensor, markets, decentralized services, and future verticals.",
     commands: {
       catalog: "matterhorn-work workflows catalog --json",
       workflowFilter: "matterhorn-work workflows catalog --workflow wellness_creator_workflow --include-prompts --json",
@@ -865,7 +865,7 @@ function buildPromptPack(config) {
     status: "catalog_only",
     generatedAt: new Date(0).toISOString(),
     summary:
-      "Copy-pasteable Matterhorn Work workflow prompts for agents and operators. Prompt packs do not execute provider actions.",
+      "Copy-pasteable Matterhorn Desks workflow prompts for agents and operators. Prompt packs do not execute provider actions.",
     safety: {
       ...COMMON_SAFETY,
       promptPackOnly: true,
@@ -927,7 +927,7 @@ function printCustomerTemplatesText(catalog) {
 
 function printHelp() {
   process.stdout.write([
-    "Matterhorn Work workflow catalog",
+    "Matterhorn Desks workflow catalog",
     "",
     "Usage:",
     "  node scripts/matterhorn-workflow-catalog.mjs [--json] [--include-prompts]",

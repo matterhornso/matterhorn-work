@@ -1,7 +1,7 @@
 {
-  "name": "Matterhorn Work",
-  "short_name": "Matterhorn",
-  "description": "Matterhorn Work is a desk-first AI workspace with visible non-custodial safety boundaries.",
+  "name": "Matterhorn Desks",
+  "short_name": "Desks",
+  "description": "Matterhorn Desks is a desk-first AI workspace with visible non-custodial safety boundaries.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

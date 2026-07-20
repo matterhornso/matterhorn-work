@@ -1,4 +1,4 @@
-# Matterhorn Work Wednesday Launch Final E2E QA
+# Matterhorn Desks Wednesday Launch Final E2E QA
 
 Date: 2026-07-14 (India time)
 
@@ -93,7 +93,7 @@ The release workflow now:
 - creates every GitHub release as a draft and requires an explicit `publish`
   dispatch after all requested release jobs succeed;
 - uses GitHub-hosted Linux runners instead of the unavailable custom runner;
-- uses Matterhorn Work branding in release titles and notes; and
+- uses Matterhorn Desks branding in release titles and notes; and
 - is covered by `scripts/release-workflow-safety.test.mjs` inside the platform
   safety gate.
 
@@ -124,7 +124,7 @@ Latest second-user exact-source result:
 - Hyperliquid completed in 22.1 seconds;
 - Polymarket completed in 22.6 seconds;
 - Sui completed in 5.6 seconds;
-- connected MCP shown to the user: `Matterhorn Work MCP`.
+- connected MCP shown to the user: `Matterhorn Desks MCP`.
 
 Evidence:
 

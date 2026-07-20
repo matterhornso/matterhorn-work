@@ -3,7 +3,7 @@
 /**
  * Market live read-only smoke harness.
  *
- * Drives a LIVE local Matterhorn Work server across the Hyperliquid and
+ * Drives a LIVE local Matterhorn Desks server across the Hyperliquid and
  * Polymarket read / preview / external-signer-handoff routes only. It never
  * submits an order, never signs, never sends funds, and never accepts or echoes
  * signing material. Every preview/handoff must report `canSubmit: false`.
@@ -55,7 +55,7 @@ function parseArgs(argv) {
 
 function printHelp() {
   process.stdout.write([
-    "Matterhorn Work market live read-only smoke harness",
+    "Matterhorn Desks market live read-only smoke harness",
     "",
     "Usage:",
     "  node scripts/market-live-readonly-smoke.mjs --server-url <url> --token <token> [--strict] [--json]",

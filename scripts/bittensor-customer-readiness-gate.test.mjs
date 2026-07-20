@@ -51,7 +51,7 @@ await writeFile(agentPath, JSON.stringify({
 }), "utf8");
 await writeFile(ciPath, JSON.stringify({
   workflow_runs: [
-    { name: "Matterhorn Work Tests", conclusion: "success" },
+    { name: "Matterhorn Desks Tests", conclusion: "success" },
     { name: "i18n Audit", conclusion: "success" },
     { name: "Alpha Channel macOS arm64", conclusion: "success" },
   ],
@@ -95,7 +95,7 @@ const ok = await run([
 assert.equal(ok.code, 0, ok.stderr || ok.stdout);
 const markdown = await readFile(outputPath, "utf8");
 assert.ok(markdown.includes("READY_FOR_TEST_CUSTOMERS"));
-assert.ok(markdown.includes("Matterhorn Work Tests passed."));
+assert.ok(markdown.includes("Matterhorn Desks Tests passed."));
 assert.ok(markdown.includes("Covered validator comparison."));
 assert.ok(markdown.includes("Scheduled watch autopilot reported ready."));
 assert.ok(markdown.includes("Completed 6 scheduled watch checks."));

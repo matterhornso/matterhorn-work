@@ -1,10 +1,10 @@
-# Matterhorn Work Design System
+# Matterhorn Desks Design System
 
 **Status:** Production contract for the desk-first customer UI  
 **Audience:** Codex, Kimi, Minimax, Claude Code, Stitch, and implementation reviewers  
-**Source:** Matterhorn Work production app, Minimax desk specs, memory specs, and customer beta screenshots
+**Source:** Matterhorn Desks production app, Minimax desk specs, memory specs, and customer beta screenshots
 
-Matterhorn Work is not a generic chat app and it is not a raw crypto dashboard. It is a desk-first workspace where a customer can use Bittensor, Hyperliquid, Polymarket, Longevity workflows, Memory, and Matterhorn MCPs through plain chat with visible safety boundaries.
+Matterhorn Desks is not a generic chat app and it is not a raw crypto dashboard. It is a desk-first workspace where a customer can use Bittensor, Hyperliquid, Polymarket, Longevity workflows, Memory, and Matterhorn MCPs through plain chat with visible safety boundaries.
 
 ## 1. Navigation Model
 

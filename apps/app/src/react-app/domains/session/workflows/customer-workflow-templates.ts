@@ -242,7 +242,7 @@ function safetySummary(template: CustomerWorkflowTemplate): string {
   if (template.routing.chatMode === "services") {
     return "Future-contract planning only. No provider execution or credentials.";
   }
-  return "Matterhorn Work never needs secrets in starter prompts.";
+  return "Matterhorn Desks never needs secrets in starter prompts.";
 }
 
 function buildCustomerWorkflowPromptFromText(template: CustomerWorkflowTemplate, prompt: string): string {

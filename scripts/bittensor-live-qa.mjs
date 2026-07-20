@@ -575,7 +575,7 @@ function report() {
 }
 
 function printReport(value) {
-  console.log(`Matterhorn Work Bittensor live QA: ${value.ready ? "ready" : "not ready"}`);
+  console.log(`Matterhorn Desks Bittensor live QA: ${value.ready ? "ready" : "not ready"}`);
   console.log(`Checks: ${value.summary.pass} pass, ${value.summary.warn} warn, ${value.summary.fail} fail, ${value.summary.skip} skip`);
   for (const item of value.stages) {
     const latency = typeof item.latencyMs === "number" ? ` ${item.latencyMs}ms` : "";

@@ -34,7 +34,7 @@ assert.ok(plan.conflictZones.some((zone) => zone.name === "Bittensor safety"));
 
 const human = run(["--date", "2026-06-12"]);
 assert.equal(human.status, 0, human.stderr);
-assert.ok(human.stdout.includes("Matterhorn Work upstream OpenWork sync intake"));
+assert.ok(human.stdout.includes("Matterhorn Desks upstream OpenWork sync intake"));
 assert.ok(human.stdout.includes("Recommended branch: codex/sync-openwork-2026-06-12"));
 
 const bad = spawnSync("bun", [cliPath, "upstream", "other", "check"], { encoding: "utf8" });

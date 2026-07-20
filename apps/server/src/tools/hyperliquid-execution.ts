@@ -94,7 +94,7 @@ export function buildSignTypedData(
 /**
  * Compatibility stub for the old server-side signing helper.
  *
- * Matterhorn Work is non-custodial: this server module must never accept
+ * Matterhorn Desks is non-custodial: this server module must never accept
  * custody material. Use buildOrder/buildSignTypedData for previews and
  * submitOrder only after an external signer returns a signature.
  */

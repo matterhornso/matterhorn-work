@@ -127,7 +127,7 @@ export function useNotesStore(
 
     if (!client) {
       setNotes([]);
-      setError("Matterhorn Work engine is offline. Check that Matterhorn Work is running and the workspace is connected.");
+      setError("Matterhorn Desks engine is offline. Check that Matterhorn Desks is running and the workspace is connected.");
       return;
     }
 

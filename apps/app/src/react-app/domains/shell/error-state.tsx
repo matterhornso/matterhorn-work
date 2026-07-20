@@ -43,8 +43,8 @@ function classifyError(error: unknown): "connection" | "server" | "unknown" {
 
 const COPY: Record<"connection" | "server" | "unknown", { title: string; detail: string }> = {
   connection: {
-    title: "Matterhorn Work engine is offline",
-    detail: "Check that Matterhorn Work is running and your workspace is connected.",
+    title: "Matterhorn Desks engine is offline",
+    detail: "Check that Matterhorn Desks is running and your workspace is connected.",
   },
   server: {
     title: "Workspace server did not respond",

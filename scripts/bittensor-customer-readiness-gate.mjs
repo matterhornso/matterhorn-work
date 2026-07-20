@@ -40,7 +40,7 @@ const config = {
   requireWallet: flag("--require-wallet"),
   requireWatchAutopilotScheduler: flag("--require-watch-autopilot-scheduler"),
   skipDocCheck: flag("--skip-doc-check"),
-  title: arg("--title") || "Matterhorn Work Bittensor Customer Readiness Gate",
+  title: arg("--title") || "Matterhorn Desks Bittensor Customer Readiness Gate",
 };
 
 function usage() {
@@ -321,7 +321,7 @@ function renderReport({ findings, ready, inputs }) {
     "## Decision",
     "",
     ready
-      ? "Matterhorn Work passes this evidence-backed Bittensor customer-readiness gate."
+      ? "Matterhorn Desks passes this evidence-backed Bittensor customer-readiness gate."
       : "Do not share with test customers until the failing gate items are resolved and rerun.",
     "",
     "## Blockers",

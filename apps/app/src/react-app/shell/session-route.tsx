@@ -337,7 +337,7 @@ function describeWorkspaceCreateError(error: unknown) {
     lower.includes("os error 60") ||
     lower.includes("etimedout")
   ) {
-    return `${message}\n\nMatterhorn Work could not read the workspace config before the filesystem timed out. This often happens when the folder is still syncing from iCloud Drive or another remote folder. Wait for the folder to finish downloading, move the workspace to a local folder, or try again.`;
+    return `${message}\n\nMatterhorn Desks could not read the workspace config before the filesystem timed out. This often happens when the folder is still syncing from iCloud Drive or another remote folder. Wait for the folder to finish downloading, move the workspace to a local folder, or try again.`;
   }
   return message;
 }
@@ -349,7 +349,7 @@ function describeTaskCreateError(error: unknown) {
     lower.includes("opencode_unconfigured") ||
     lower.includes("opencode base url is missing")
   ) {
-    return "The local agent engine is not connected. Start Matterhorn Work with managed engine, or open AI settings to attach an existing engine URL.";
+    return "The local agent engine is not connected. Start Matterhorn Desks with managed engine, or open AI settings to attach an existing engine URL.";
   }
   if (
     lower.includes("failed to fetch") ||
@@ -360,7 +360,7 @@ function describeTaskCreateError(error: unknown) {
     lower.includes("internal_error") ||
     lower.includes("unexpected server error")
   ) {
-    return "The Matterhorn Work engine is unavailable for this workspace. Retry once it restarts, or restart Matterhorn Work if the problem continues.";
+    return "The Matterhorn Desks engine is unavailable for this workspace. Retry once it restarts, or restart Matterhorn Desks if the problem continues.";
   }
   return message;
 }
@@ -420,7 +420,7 @@ function mergeRouteWorkspaces(
   );
 
   // If a server workspace's id matches a desktop workspace marked as remote,
-  // skip the server's view entirely. The local Matterhorn Work server may have stale
+  // skip the server's view entirely. The local Matterhorn Desks server may have stale
   // registrations from earlier (buggy) activate calls that show up here as
   // `workspaceType: "local"`, which would otherwise clobber the desktop's
   // remote routing fields and send workspace-scoped requests back to the
@@ -1663,7 +1663,7 @@ export function SessionRoute() {
 
   // Single source of truth for the selected workspace's server URL/token/id.
   // For remote workspaces this is the worker that owns the workspace; for
-  // local workspaces it's the user's local Matterhorn Work server.
+  // local workspaces it's the user's local Matterhorn Desks server.
   const selectedWorkspaceEndpoint = useMemo(
     () => resolveWorkspaceEndpoint(selectedWorkspace, { baseUrl, token, hostToken }),
     [baseUrl, hostToken, selectedWorkspace, token],
@@ -1717,10 +1717,10 @@ export function SessionRoute() {
   const routeNotFoundMessage = (() => {
     if (loading) return null;
     if (routeError && !client && routeWorkspaceId) {
-      return `Matterhorn Work engine is unavailable for this project. Retry the connection or restart Matterhorn Work if it stays offline. Details: ${routeError}`;
+      return `Matterhorn Desks engine is unavailable for this project. Retry the connection or restart Matterhorn Desks if it stays offline. Details: ${routeError}`;
     }
     if (!client && routeWorkspaceId && workspaces.length === 0) {
-      return "Matterhorn Work engine is unavailable for this project. Retry the connection or create/connect a project from this device.";
+      return "Matterhorn Desks engine is unavailable for this project. Retry the connection or create/connect a project from this device.";
     }
     if (routeWorkspaceId && !selectedWorkspace) {
       return "Workspace was not found. Select a new workspace from the sidebar.";
@@ -2885,7 +2885,7 @@ export function SessionRoute() {
       setRouteError(message);
       setErrorsByWorkspaceId((current) => ({ ...current, [workspaceId]: message }));
       showToast({
-        title: "Matterhorn Work engine unavailable",
+        title: "Matterhorn Desks engine unavailable",
         description: message,
         tone: "error",
         actionLabel: "Retry",
@@ -3275,7 +3275,7 @@ export function SessionRoute() {
             void workspaceSetSelected(workspaceId).catch(() => undefined);
             void workspaceSetRuntimeActive(workspaceId).catch(() => undefined);
           }
-          // Tell the Matterhorn Work server this workspace is now active so it can
+          // Tell the Matterhorn Desks server this workspace is now active so it can
           // emit a config reload event that the OpenCode engine picks up.
           // Without this, the permissions from opencode.jsonc are never
           // applied on the workspace the user is already on at launch. See
@@ -3357,7 +3357,7 @@ export function SessionRoute() {
                 reason: "engine_offline",
               });
               showToast({
-                title: "Matterhorn Work engine is offline",
+                title: "Matterhorn Desks engine is offline",
                 description: "The task could not start because this workspace is not connected to a local engine.",
                 tone: "error",
                 durationMs: 4200,

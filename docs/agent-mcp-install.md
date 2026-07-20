@@ -1,10 +1,10 @@
-# Matterhorn Work MCP Install Guide
+# Matterhorn Desks MCP Install Guide
 
-This guide shows how to connect Matterhorn Work to Codex, Claude Code, Claude Desktop, Cursor, and other MCP-capable clients.
+This guide shows how to connect Matterhorn Desks to Codex, Claude Code, Claude Desktop, Cursor, and other MCP-capable clients.
 
-The default setup uses local stdio MCP servers launched by the client. The server-control MCP (`matterhorn-work-mcp`) talks to a running Matterhorn Work server over `MATTERHORN_WORK_SERVER_URL`.
+The default setup uses local stdio MCP servers launched by the client. The server-control MCP (`matterhorn-work-mcp`) talks to a running Matterhorn Desks server over `MATTERHORN_WORK_SERVER_URL`.
 
-After setup, use [Matterhorn Work Agent Operator Workflow](./agent-operator-workflow.md) for the copy-paste Codex/Claude loop: doctor, session, prompt, event watch, file reads/writes, approvals, and Bittensor chat.
+After setup, use [Matterhorn Desks Agent Operator Workflow](./agent-operator-workflow.md) for the copy-paste Codex/Claude loop: doctor, session, prompt, event watch, file reads/writes, approvals, and Bittensor chat.
 
 ## What “Connected” Means
 
@@ -20,7 +20,7 @@ The product UI should say **MCP server active** rather than **app connected** wh
 
 ## Prerequisites
 
-Start Matterhorn Work locally and copy the client and host tokens from the startup output:
+Start Matterhorn Desks locally and copy the client and host tokens from the startup output:
 
 ```bash
 matterhorn-work start \
@@ -38,7 +38,7 @@ Use the host token only in a trusted local MCP client. Leave it out if the clien
 
 ## Profiles
 
-Generate config with the Matterhorn Work CLI:
+Generate config with the Matterhorn Desks CLI:
 
 ```bash
 matterhorn-work mcp config \

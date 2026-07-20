@@ -1,4 +1,4 @@
-# Matterhorn Work Wednesday Beta Launch Execution
+# Matterhorn Desks Wednesday Beta Launch Execution
 
 Launch date: 2026-07-15
 

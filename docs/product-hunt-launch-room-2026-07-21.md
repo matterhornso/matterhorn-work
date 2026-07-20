@@ -1,4 +1,4 @@
-# Matterhorn Work Product Hunt Launch Room - 2026-07-21
+# Matterhorn Desks Product Hunt Launch Room - 2026-07-21
 
 This runbook is the single decision path for Product Hunt. If this file,
 `launch-channel-readiness.mjs`, and an older launch document disagree, the

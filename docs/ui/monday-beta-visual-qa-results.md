@@ -463,7 +463,7 @@ Inspect any desktop screenshot with a right rail: Do pin and close buttons exist
 
 ## Known Gaps
 
-1. **Production app screenshots not captured.** The MCP bridge for the running Matterhorn Work desktop app (`/Applications/Matterhorn.app`, v0.13.12) is not configured. Screenshots are from the HTML/CSS prototype which represents the target designed state. QA reviewers must compare the production DMG build (`Matterhorn-Work-60a83a15-arm64-unsigned.dmg`) against this prototype.
+1. **Production app screenshots not captured.** The MCP bridge for the running Matterhorn Desks desktop app (`/Applications/Matterhorn.app`, v0.13.12) is not configured. Screenshots are from the HTML/CSS prototype which represents the target designed state. QA reviewers must compare the production DMG build (`Matterhorn-Work-60a83a15-arm64-unsigned.dmg`) against this prototype.
 2. **DMG mount required for production screenshots.** To capture production screenshots: mount the DMG, run the app, use Playwright with the Electron CDP endpoint to capture each screen.
 3. **Playwright script available at** `scripts/visual-qa-screenshot.py` — rerun after production screenshots are captured to update this document.
 

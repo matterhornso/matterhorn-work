@@ -884,7 +884,7 @@ export function DebugView(props: DebugViewProps) {
           <div className="rounded-lg border border-green-7/25 bg-green-3/10 px-3 py-2 text-[12px] leading-relaxed text-green-11">
             Safe default: use <strong>Prepare migration data</strong> first. It writes the Electron snapshot only and does
             not replace, quit, or delete the Tauri app. The install handoff keeps rollback backup at{" "}
-            <code className="font-mono">Matterhorn Work.app.migrate-bak</code>.
+            <code className="font-mono">Matterhorn Desks.app.migrate-bak</code>.
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -955,7 +955,7 @@ export function DebugView(props: DebugViewProps) {
               size="sm"
               onClick={() => void props.onInstallElectronPreviewFromTauri()}
               disabled={props.electronMigrationBusy || !props.electronMigrationUrl.trim()}
-              title="Requires a trusted artifact URL. macOS keeps Matterhorn Work.app.migrate-bak for rollback."
+              title="Requires a trusted artifact URL. macOS keeps Matterhorn Desks.app.migrate-bak for rollback."
             >
               Start install handoff…
             </Button>

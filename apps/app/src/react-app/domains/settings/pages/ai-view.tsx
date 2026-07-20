@@ -127,7 +127,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     staleTime: 30_000,
     queryFn: async () => {
       const client = props.matterhornServerClient;
-      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
+      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Desks engine is offline.");
       return client.workspaceBackendModels(runtimeWorkspaceId);
     },
   });
@@ -137,7 +137,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     staleTime: 30_000,
     queryFn: async () => {
       const client = props.matterhornServerClient;
-      if (!client) throw new Error("Matterhorn Work engine is offline.");
+      if (!client) throw new Error("Matterhorn Desks engine is offline.");
       return client.backendModels();
     },
   });
@@ -147,7 +147,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     staleTime: 30_000,
     queryFn: async () => {
       const client = props.matterhornServerClient;
-      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
+      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Desks engine is offline.");
       return client.workspaceModelSelection(runtimeWorkspaceId);
     },
   });
@@ -156,7 +156,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
       const client = props.matterhornServerClient;
       const providerId = props.defaultModelProviderId?.trim();
       const modelId = props.defaultModelId?.trim();
-      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
+      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Desks engine is offline.");
       if (!providerId || !modelId) throw new Error("Choose a model before saving a workspace default.");
       return client.saveWorkspaceModelSelection(runtimeWorkspaceId, {
         providerId,
@@ -180,7 +180,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
   const clearWorkspaceDefaultMutation = useMutation({
     mutationFn: async () => {
       const client = props.matterhornServerClient;
-      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
+      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Desks engine is offline.");
       return client.clearWorkspaceModelSelection(runtimeWorkspaceId);
     },
     onSuccess: (data) => {
@@ -321,7 +321,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
 
         {catalogQueryFailed && !opencodeSetupMissing ? (
           <SettingsNotice tone="error">
-            Model catalog could not load. Check the local Matterhorn Work engine, then refresh this workspace.
+            Model catalog could not load. Check the local Matterhorn Desks engine, then refresh this workspace.
           </SettingsNotice>
         ) : null}
 

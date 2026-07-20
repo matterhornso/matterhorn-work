@@ -11,7 +11,7 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 const liveProbe = readFileSync("scripts/agent-browser-live-probe.mjs", "utf8");
 
 for (const snippet of [
-  "# Matterhorn Work Browser Control Live QA",
+  "# Matterhorn Desks Browser Control Live QA",
   "matterhorn-work-ui-mcp",
   "ui_status",
   "ui_snapshot",

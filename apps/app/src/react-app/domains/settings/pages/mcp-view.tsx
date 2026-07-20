@@ -66,6 +66,10 @@ import {
   type ConfigScope,
   type McpViewLocalState,
 } from "./mcp-view-state";
+import {
+  matterhornMcpDisplayName,
+  mcpServerDisplayName,
+} from "./mcp-display-name";
 import { ProtocolBrandLogo } from "../../session/workflows/protocol-brand-logo";
 import type { CustomerProtocolDeskId } from "../../session/workflows/protocol-desk-ui";
 
@@ -87,13 +91,7 @@ export type SkillItem = {
 const getSkillHiddenId = (skill: SkillItem) => `skill:${skill.name}`;
 
 function fallbackMcpDisplayName(name: string) {
-  const words = name
-    .trim()
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1));
-  const label = words.join(" ") || "MCP";
-  return /\bmcp\b/i.test(label) ? label : `${label} MCP`;
+  return mcpServerDisplayName(name);
 }
 
 export type McpViewProps = {
@@ -131,7 +129,7 @@ export type McpViewProps = {
   isExtensionConnected?: (entry: McpDirectoryInfo) => boolean;
   /** Enablement context for evaluating extension active state. */
   enablementContext?: import("../../../../app/enablement").EnablementContext;
-  /** Organization policy restriction for Matterhorn Work-provided built-in extensions. */
+  /** Organization policy restriction for Matterhorn Desks-provided built-in extensions. */
   builtInExtensionsDisabled?: boolean;
   detailEntryRequest?: { id: string; requestId: number } | null;
   onDetailEntryRequestHandled?: (requestId: number) => void;
@@ -694,7 +692,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
         {
           title: "How it works",
           items: [
-            "Tools call the running Matterhorn Work server through the configured client token.",
+            "Tools call the running Matterhorn Desks server through the configured client token.",
             "Writable operations use Matterhorn's session and approval model.",
             "Event-watch tools return bounded progress batches for agents that cannot hold an SSE stream.",
           ],
@@ -1103,6 +1101,8 @@ export function McpView(props: McpViewProps) {
   );
   const connectedNames = connectedServers.map((entry) => {
     const resolvedName = displayName(entry.name);
+    const matterhornName = matterhornMcpDisplayName(resolvedName);
+    if (matterhornName) return matterhornName;
     return resolvedName === entry.name ? fallbackMcpDisplayName(entry.name) : resolvedName;
   });
   const customerQuickConnectList = quickConnectList.filter((entry) =>
@@ -1204,7 +1204,7 @@ export function McpView(props: McpViewProps) {
 
       {props.builtInExtensionsDisabled ? (
         <div className="rounded-lg border border-amber-6 bg-amber-2 px-4 py-3 text-xs text-amber-11">
-          Built-in Matterhorn Work extensions are disabled by your organization. Use Show hidden to review blocked built-ins.
+          Built-in Matterhorn Desks extensions are disabled by your organization. Use Show hidden to review blocked built-ins.
         </div>
       ) : null}
 
@@ -2012,7 +2012,7 @@ function McpQuickConnectSection(props: {
               key={getMcpIdentityKey(entry)}
               name={entry.name}
               description={webSupportComingSoon
-                ? "Available in the Matterhorn Work desktop app. Web connection is coming soon."
+                ? "Available in the Matterhorn Desks desktop app. Web connection is coming soon."
                 : oauthComingSoon
                   ? `${entry.description} Account connection is coming soon.`
                 : entry.description
@@ -2260,7 +2260,7 @@ function McpConfiguredServerDetails(props: Parameters<typeof McpConfiguredServer
           <ChevronDown size={10} className="transition-transform group-open:rotate-180" />
         </summary>
         <div className="mt-1.5 break-all rounded-lg bg-dls-hover px-3 py-2 font-mono text-[11px] text-dls-secondary">
-          {managed ? "Managed locally by Matterhorn Work" : props.entry.config.type === "remote" ? props.entry.config.url : props.entry.config.command?.join(" ")}
+          {managed ? "Managed locally by Matterhorn Desks" : props.entry.config.type === "remote" ? props.entry.config.url : props.entry.config.command?.join(" ")}
         </div>
       </details>
       {managed ? (

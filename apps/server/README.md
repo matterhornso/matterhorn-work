@@ -1,6 +1,6 @@
-# Matterhorn Work Server
+# Matterhorn Desks Server
 
-Filesystem-backed API for Matterhorn Work remote clients. This package provides the Matterhorn Work server layer described in `apps/app/pr/openwork-server.md` and is intentionally independent from the desktop app.
+Filesystem-backed API for Matterhorn Desks remote clients. This package provides the Matterhorn Desks server layer described in `apps/app/pr/openwork-server.md` and is intentionally independent from the desktop app.
 
 ## Quick start
 
@@ -129,7 +129,7 @@ Toy UI (static assets served by the server):
 - `GET /w/:id/ui`
 - `GET /ui/assets/*`
 
-Matterhorn Work engine proxy (underlying OpenCode runtime):
+Matterhorn Desks engine proxy (underlying OpenCode runtime):
 
 - `GET|POST|... /opencode/*`
 - `GET|POST|... /w/:id/opencode/*`

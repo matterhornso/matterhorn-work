@@ -2,7 +2,7 @@
   "name": "@matterhorn-work/handsfree",
   "private": true,
   "version": "0.1.0",
-  "description": "macOS semantic AX and background computer-use runtime for Matterhorn Work",
+  "description": "macOS semantic AX and background computer-use runtime for Matterhorn Desks",
   "license": "MIT",
   "type": "module",
   "bin": {

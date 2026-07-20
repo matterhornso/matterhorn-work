@@ -1,8 +1,8 @@
 # Longevity Creator Pilot
 
-A chat-first use case that shows Matterhorn Work doing real creator work — not trading. A personal trainer, gym instructor, dietician, or yoga instructor opens Matterhorn Work, describes the program they want, and the agent produces shareable, sellable client artifacts. Web3 capabilities (decentralized storage, payments, client access, creator subscriptions) attach later as optional rails, never as a requirement to get value on day one.
+A chat-first use case that shows Matterhorn Desks doing real creator work — not trading. A personal trainer, gym instructor, dietician, or yoga instructor opens Matterhorn Desks, describes the program they want, and the agent produces shareable, sellable client artifacts. Web3 capabilities (decentralized storage, payments, client access, creator subscriptions) attach later as optional rails, never as a requirement to get value on day one.
 
-This pilot exists to demonstrate Matterhorn Work beyond crypto markets: chat-first work creation, artifact generation, and agent/MCP usability for non-technical users.
+This pilot exists to demonstrate Matterhorn Desks beyond crypto markets: chat-first work creation, artifact generation, and agent/MCP usability for non-technical users.
 
 > **Status note (read first):** Everything in the "Outputs" section below is live today as chat-generated artifacts. Everything in the "Future Web3 Hooks" section is **planned, not live**. Decentralized storage, on-chain payments, token-gated client access, and creator subscriptions are not enabled in this pilot. Do not tell a user that any Web3 payment or storage rail is active — these are roadmap items only.
 
@@ -94,11 +94,11 @@ These are roadmap items. None are enabled in this pilot. Do not describe any of 
 3. **Token-gated client access (planned).** Gate a premium program or community behind an access token or pass. Not live.
 4. **Creator subscription (planned).** Recurring on-chain subscription so clients pay monthly for ongoing programming. Not live.
 
-The pilot is deliberately useful with **zero** Web3 setup. Web3 is the upgrade path, not the entry fee — consistent with Matterhorn Work's goal of letting normal users do Web3-shaped work through chat without needing to understand wallets, chains, or payments first.
+The pilot is deliberately useful with **zero** Web3 setup. Web3 is the upgrade path, not the entry fee — consistent with Matterhorn Desks's goal of letting normal users do Web3-shaped work through chat without needing to understand wallets, chains, or payments first.
 
 ## Matterhorn Services Bridge (Planned — Not Live)
 
-The pilot delivers value today with zero infrastructure — every output is a chat-generated Matterhorn artifact. As Matterhorn Work's first-party platform services come online, each longevity workflow has a natural upgrade path onto a Matterhorn service. **Every mapping below is planned, not live.** None of these services is enabled in the pilot, and the app must never claim any of them is active.
+The pilot delivers value today with zero infrastructure — every output is a chat-generated Matterhorn artifact. As Matterhorn Desks's first-party platform services come online, each longevity workflow has a natural upgrade path onto a Matterhorn service. **Every mapping below is planned, not live.** None of these services is enabled in the pilot, and the app must never claim any of them is active.
 
 | Longevity workflow (live today) | Future Matterhorn service | Status |
 |---|---|---|
@@ -114,7 +114,7 @@ The pilot delivers value today with zero infrastructure — every output is a ch
 
 Until each service ships, the app must never claim it can host on a live storage service, take a payment, enforce token-gated access, or send email. These remain **planned, not live** capabilities, consistent with the Future Web3 Hooks above.
 
-## How This Demonstrates Matterhorn Work
+## How This Demonstrates Matterhorn Desks
 
 - **Chat-first work creation:** a non-technical creator gets professional output from plain-language prompts.
 - **Artifact generation:** every step produces a reusable, shareable Matterhorn artifact.
@@ -189,7 +189,7 @@ The pilot is go-live ready when all of the following hold:
 
 ## Operator Demo Script
 
-1. **Setup.** Open Matterhorn Work as a normal user — no wallet, chain, file host, or payment account. Run `pnpm test:wellness-creator-pilot` to confirm the gate is green.
+1. **Setup.** Open Matterhorn Desks as a normal user — no wallet, chain, file host, or payment account. Run `pnpm test:wellness-creator-pilot` to confirm the gate is green.
 2. **Run the six canonical prompts in order.** Compare each output against the matching fixture in `docs/wellness-creator-pilot/`.
 3. **Show the safety boundary.** Ask a clinical question (e.g. "diagnose my client's knee pain") and show the agent refusing and referring to a professional.
 4. **Show Web3 honesty.** Ask to "take payment on-chain" and show the agent explaining that on-chain payments are a planned, not-live hook.

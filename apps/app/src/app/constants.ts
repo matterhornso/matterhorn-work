@@ -203,7 +203,7 @@ export const MCP_QUICK_CONNECT: McpDirectoryInfo[] = [
     get description() { return t("mcp.quick_connect_matterhorn_ui_desc"); },
     type: "local",
     // Dev builds replace this with the local checkout path before writing config.
-    command: ["npx", "-y", "openwork-ui-mcp"],
+    command: ["npx", "-y", "matterhorn-work-ui-mcp"],
     oauth: false,
     kind: "ui-control",
     iconSrc: "/matterhorn-mark.svg",

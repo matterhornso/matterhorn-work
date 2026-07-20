@@ -1,6 +1,6 @@
-# Matterhorn Work Agent Control Surface
+# Matterhorn Desks Agent Control Surface
 
-Matterhorn Work should be usable from agent environments such as Claude Code, Codex, Cursor, Claude Desktop, and other MCP-capable clients. The control surface is intentionally layered so agents can choose the safest interface for the job.
+Matterhorn Desks should be usable from agent environments such as Claude Code, Codex, Cursor, Claude Desktop, and other MCP-capable clients. The control surface is intentionally layered so agents can choose the safest interface for the job.
 
 ## Layers
 
@@ -13,11 +13,11 @@ Matterhorn Work should be usable from agent environments such as Claude Code, Co
 | CLI | `matterhorn-work` | Start/serve/status, approvals, workspaces, chat progress, and file sessions |
 | HTTP API | `matterhorn-work-server` | Stable server endpoints for remote clients and MCP wrappers |
 
-See [Matterhorn Work Agent Operator Workflow](./agent-operator-workflow.md) for the copy-paste Codex/Claude workflow that starts Matterhorn, runs the doctor, creates a session, submits prompts, watches events, reads/writes files, and runs Bittensor chat. See [Matterhorn Work Bittensor Operator Playbook](./bittensor-operator-playbook.md) for Bittensor-specific prompt flows, expected cards, clarification behavior, unsupported-adapter handling, and no-custody safety rules. See [Matterhorn Work Bittensor Live QA](./bittensor-live-qa.md) for the repeatable Bittensor operator harness covering wallet clarifications, subnet discovery, validator comparison, unsigned staking previews, and unsupported-adapter behavior. See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-style endpoint contract currently wrapped by `matterhorn-work-mcp`. See [Matterhorn Work Agent Control Coverage Matrix](./agent-control-coverage-matrix.md) for the current HTTP/MCP/CLI coverage and remaining gaps. See [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md) for the planned session-progress stream that will complement status polling. See [Matterhorn Work MCP Install Guide](./agent-mcp-install.md) for Codex, Claude Code, Claude Desktop, Cursor, and generic MCP client setup. See [Matterhorn Work Agent Action Model](./agent-action-model-contract.md) before adding new browser/control tools. See [Matterhorn Work Agent Browser Control](./agent-browser-control.md) and [Matterhorn Work Browser Control Live QA](./agent-browser-live-qa.md) for the semantic browser tool workflow. See [Matterhorn Work Agent Control Live QA](./agent-control-live-qa.md) for the full server/session/file/Bittensor harness.
+See [Matterhorn Desks Agent Operator Workflow](./agent-operator-workflow.md) for the copy-paste Codex/Claude workflow that starts Matterhorn, runs the doctor, creates a session, submits prompts, watches events, reads/writes files, and runs Bittensor chat. See [Matterhorn Desks Bittensor Operator Playbook](./bittensor-operator-playbook.md) for Bittensor-specific prompt flows, expected cards, clarification behavior, unsupported-adapter handling, and no-custody safety rules. See [Matterhorn Desks Bittensor Live QA](./bittensor-live-qa.md) for the repeatable Bittensor operator harness covering wallet clarifications, subnet discovery, validator comparison, unsigned staking previews, and unsupported-adapter behavior. See [Matterhorn Desks Local Agent API](./agent-control-api.md) for the OpenAPI-style endpoint contract currently wrapped by `matterhorn-work-mcp`. See [Matterhorn Desks Agent Control Coverage Matrix](./agent-control-coverage-matrix.md) for the current HTTP/MCP/CLI coverage and remaining gaps. See [Matterhorn Desks Session Event Stream Contract](./agent-session-event-stream.md) for the planned session-progress stream that will complement status polling. See [Matterhorn Desks MCP Install Guide](./agent-mcp-install.md) for Codex, Claude Code, Claude Desktop, Cursor, and generic MCP client setup. See [Matterhorn Desks Agent Action Model](./agent-action-model-contract.md) before adding new browser/control tools. See [Matterhorn Desks Agent Browser Control](./agent-browser-control.md) and [Matterhorn Desks Browser Control Live QA](./agent-browser-live-qa.md) for the semantic browser tool workflow. See [Matterhorn Desks Agent Control Live QA](./agent-control-live-qa.md) for the full server/session/file/Bittensor harness.
 
 ## First Agent Flow
 
-For an executable, end-to-end operator loop, use [Matterhorn Work Agent Operator Workflow](./agent-operator-workflow.md). The short version is:
+For an executable, end-to-end operator loop, use [Matterhorn Desks Agent Operator Workflow](./agent-operator-workflow.md). The short version is:
 
 1. Start a local server:
 
@@ -62,11 +62,11 @@ For an executable, end-to-end operator loop, use [Matterhorn Work Agent Operator
 
 7. Use `matterhorn_list_workspaces`, `matterhorn_list_sessions`, `matterhorn_get_session_snapshot`, `matterhorn_create_file_session`, `matterhorn_file_catalog`, and `matterhorn_read_files` to inspect a workspace.
 
-8. Use `matterhorn_create_session` and `matterhorn_submit_session_prompt` when the user wants Matterhorn Work to act in chat. Prompt submission still goes through the server route and normal approval policy.
+8. Use `matterhorn_create_session` and `matterhorn_submit_session_prompt` when the user wants Matterhorn Desks to act in chat. Prompt submission still goes through the server route and normal approval policy.
 
 9. Use `matterhorn_watch_session_events` for bounded session progress batches, or `matterhorn_get_session_status` to poll whether a submitted prompt is still running before fetching another session snapshot.
 
-10. Use `matterhorn_write_files` only when the user explicitly wants edits. Writes still go through Matterhorn Work file-session APIs and approval policy.
+10. Use `matterhorn_write_files` only when the user explicitly wants edits. Writes still go through Matterhorn Desks file-session APIs and approval policy.
 
 11. Use `matterhorn_bittensor_chat` for ordinary Bittensor requests before lower-level Bittensor tools.
 

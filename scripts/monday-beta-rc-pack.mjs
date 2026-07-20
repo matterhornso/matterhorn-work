@@ -122,7 +122,7 @@ function parseArgs(argv) {
 
 function help() {
   return [
-    "Matterhorn Work launch release-candidate pack",
+    "Matterhorn Desks launch release-candidate pack",
     "",
     "Usage:",
     "  pnpm --silent beta:monday-rc -- --release-profile controlled-beta --output-dir ~/Desktop/matterhorn-wednesday-beta-rc --strict --json",
@@ -469,7 +469,7 @@ function markdown(report) {
     .map((item) => `| ${item.id} | ${item.status} | ${item.summary.replace(/\|/g, "\\|")} |`)
     .join("\n");
   return [
-    "# Matterhorn Work Launch Release Candidate Pack",
+    "# Matterhorn Desks Launch Release Candidate Pack",
     "",
     `- Git SHA: \`${report.git.sha}\``,
     `- Branch: \`${report.git.branch}\``,

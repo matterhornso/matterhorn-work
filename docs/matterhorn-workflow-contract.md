@@ -1,10 +1,10 @@
 # Matterhorn Workflow Contract
 
-> Status: **contract plus local workflow runtime**. Matterhorn Work can stage and track local workflow runs, link them to chat sessions, and persist customer-safe artifacts. It does not perform provider signing, transaction submission, custody, or secrets handling.
+> Status: **contract plus local workflow runtime**. Matterhorn Desks can stage and track local workflow runs, link them to chat sessions, and persist customer-safe artifacts. It does not perform provider signing, transaction submission, custody, or secrets handling.
 
 ## Purpose
 
-Matterhorn Work should let users "do anything through chat." Workflows are reusable, typed, testable contracts rather than one-off docs. A workflow can describe a use case such as:
+Matterhorn Desks should let users "do anything through chat." Workflows are reusable, typed, testable contracts rather than one-off docs. A workflow can describe a use case such as:
 
 - wellness creator services
 - Bittensor operator playbooks
@@ -19,7 +19,7 @@ This contract provides one shared schema so all workflows can be discovered, val
 1. **Contract first.** Every workflow has a manifest, steps, artifacts, service hooks, safety policy, and QA contract before any provider is wired up.
 2. **No secrets in chat.** Workflows never accept private keys, seed phrases, API secrets, raw signatures, signed payloads, wallet exports, passwords, passphrases, or keyfiles.
 3. **Preview before execution.** Any execution-capable step must require a preview and a confirmation.
-4. **External signer or provider handoff.** Where on-chain signing or third-party authorization is required, the user performs the action outside Matterhorn Work.
+4. **External signer or provider handoff.** Where on-chain signing or third-party authorization is required, the user performs the action outside Matterhorn Desks.
 5. **Public receipts only.** Generated artifacts contain public metadata, links, or hashes. No secret material is returned.
 6. **Status-driven.** A workflow explicitly declares its maturity: `live_local`, `planned_not_live`, `preview_only`, `external_handoff_required`, or `blocked_by_policy`.
 

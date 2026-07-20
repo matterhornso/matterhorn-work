@@ -362,7 +362,7 @@ describe("backend capability UI contract", () => {
   test("Wallet settings uses backend wallet family status including Sui", () => {
     const walletSource = readAppSource("react-app/domains/settings/pages/wallet-view.tsx");
     const routeSource = readAppSource("react-app/shell/settings-route.tsx");
-    const providerSource = readAppSource("react-app/shell/providers.tsx");
+    const walletRuntimeSource = readAppSource("react-app/shell/LazyWalletRuntimeShell.tsx");
     expect(walletSource).toContain("matterhornServerClient?: MatterhornServerClient | null");
     expect(walletSource).toContain("wallet-backend-capabilities");
     expect(walletSource).toContain("matterhornServerClient.backendCapabilities()");
@@ -408,8 +408,8 @@ describe("backend capability UI contract", () => {
     expect(walletSource).toContain("runtimeWorkspaceId?: string | null");
     expect(walletSource).toContain('sourceLabel: "Matterhorn engine"');
     expect(routeSource).toContain("runtimeWorkspaceId={runtimeWorkspaceId}");
-    expect(providerSource).toContain("DAppKitProvider");
-    expect(providerSource).toContain("suiDAppKit");
+    expect(walletRuntimeSource).toContain("DAppKitProvider");
+    expect(walletRuntimeSource).toContain("suiDAppKit");
     expect(routeSource).toContain("matterhornServerClient={settingsCapabilityClient}");
   });
 

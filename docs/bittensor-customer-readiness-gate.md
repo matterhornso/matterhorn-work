@@ -1,6 +1,6 @@
-# Matterhorn Work Bittensor Customer Readiness Gate
+# Matterhorn Desks Bittensor Customer Readiness Gate
 
-Use this gate before sharing Matterhorn Work with a Bittensor test customer. It converts the Hermes QA checklist into one evidence-backed pass/fail report.
+Use this gate before sharing Matterhorn Desks with a Bittensor test customer. It converts the Hermes QA checklist into one evidence-backed pass/fail report.
 
 The gate does not sign, broadcast, or invoke real subnet services. It reads reports produced by the existing live QA harnesses and checks that the release-critical evidence is present.
 
@@ -38,7 +38,7 @@ The CI input is intentionally simple. Any of these shapes work:
 ```json
 {
   "workflow_runs": [
-    { "name": "Matterhorn Work Tests", "conclusion": "success" },
+    { "name": "Matterhorn Desks Tests", "conclusion": "success" },
     { "name": "i18n Audit", "conclusion": "success" },
     { "name": "Alpha Channel macOS arm64", "conclusion": "success" }
   ]

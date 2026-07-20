@@ -1,6 +1,6 @@
 # Bittensor Subnet Service Adapter Contracts
 
-This guide defines the contract layer that must exist before Matterhorn Work adds real direct execution against Bittensor subnet services.
+This guide defines the contract layer that must exist before Matterhorn Desks adds real direct execution against Bittensor subnet services.
 
 The product rule remains:
 
@@ -278,7 +278,7 @@ The next safe step is to run one reviewed real-adapter canary against a known pr
 
 ## Canary Outcome Reports
 
-Before Matterhorn Work promotes any direct subnet service adapter beyond mock or manually reviewed canary use, operators need a sanitized outcome artifact. The outcome report is intentionally separate from the approval packet:
+Before Matterhorn Desks promotes any direct subnet service adapter beyond mock or manually reviewed canary use, operators need a sanitized outcome artifact. The outcome report is intentionally separate from the approval packet:
 
 - approval packet: prepares a short-lived reviewed request hash for a canary window.
 - outcome report: records what the preview-confirm-invoke loop produced after the canary or mock rehearsal.

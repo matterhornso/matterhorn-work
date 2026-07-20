@@ -1,6 +1,6 @@
 # Customer-Ready Crypto Build Plan
 
-This plan moves Matterhorn Work from many strong individual crypto surfaces into one customer-ready product loop. The product goal is simple: a user should be able to ask ordinary chat questions about Bittensor, Hyperliquid, or Polymarket and receive safe read data, clear previews, external-signer handoffs, public receipt evidence, and watch/alert follow-through without Matterhorn ever holding signing material.
+This plan moves Matterhorn Desks from many strong individual crypto surfaces into one customer-ready product loop. The product goal is simple: a user should be able to ask ordinary chat questions about Bittensor, Hyperliquid, or Polymarket and receive safe read data, clear previews, external-signer handoffs, public receipt evidence, and watch/alert follow-through without Matterhorn ever holding signing material.
 
 ## Phase 1: Customer Readiness Smoke Pass
 
@@ -102,7 +102,7 @@ Done when:
 
 ## Phase 6: Agent Control Surface Polish
 
-Goal: make Matterhorn Work usable from Codex, Claude Code, Hermes, Cursor, and other agent environments.
+Goal: make Matterhorn Desks usable from Codex, Claude Code, Hermes, Cursor, and other agent environments.
 
 Build:
 
@@ -114,6 +114,6 @@ Build:
 
 Done when:
 
-- An external agent can run Matterhorn Work end to end from the command line without reading the codebase.
+- An external agent can run Matterhorn Desks end to end from the command line without reading the codebase.
 - Customer-ready evidence is reproducible and free of secret-shaped fields.
 - `pnpm test:agent-crypto-operator-loop` proves the crypto operator loop stays connected to the HTTP, MCP, CLI, and safety-gate surfaces.

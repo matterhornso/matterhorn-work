@@ -1,6 +1,6 @@
-# Matterhorn Work
+# Matterhorn Desks
 
-Matterhorn Work is a local-first agent workspace for chat, protocol research, workflow execution, project notes, memory review, generated outputs, and external-signer handoffs.
+Matterhorn Desks is a local-first agent workspace for chat, protocol research, workflow execution, project notes, memory review, generated outputs, and external-signer handoffs.
 
 The customer experience is organized around desks rather than raw tools:
 
@@ -17,7 +17,7 @@ Matterhorn does not ask for seed phrases, private keys, mnemonics, wallet export
 
 | Surface | Current behavior |
 | --- | --- |
-| Chat | OpenCode-backed coding-agent harness with streaming, tools, permissions, and session state. |
+| Chat | Matterhorn Desks engine with streaming, tools, permissions, and session state. OpenCode is the underlying runtime. |
 | Response perspective | Per-session Cautious, Balanced, or Optimistic framing. Safety rules never change with perspective. |
 | Project Home | Start chats, open desks, inspect wallet readiness, view recent activity, and reach notes or outputs. |
 | Wallet | EVM and Sui connection, workspace safety policy, reviewed transaction previews, and an audit-oriented safety ledger. |
@@ -71,7 +71,7 @@ packages/
   skills/              Workspace skills
 ```
 
-Normal chat is routed through the managed OpenCode coding-agent harness. Direct provider APIs are reserved for specialized capabilities such as image generation or realtime voice; they are not the default chat path.
+Normal chat is routed through the managed **Matterhorn Desks engine**, powered by the underlying OpenCode coding-agent runtime. Direct provider APIs are reserved for specialized capabilities such as image generation or realtime voice; they are not the default chat path.
 
 ## Safety And Verification
 

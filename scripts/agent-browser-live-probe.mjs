@@ -119,7 +119,7 @@ function skip(message) {
 
 const discoveryPath = findDiscoveryPath();
 if (!discoveryPath) {
-  skip("No Matterhorn Work UI control discovery file found.");
+  skip("No Matterhorn Desks UI control discovery file found.");
   process.exit(0);
 }
 
@@ -143,7 +143,7 @@ try {
 
   const status = await mcp.send("tools/call", { name: "ui_status", arguments: {} });
   if (isToolError(status)) {
-    skip(`Matterhorn Work UI bridge is not reachable: ${text(status).split("\n")[0]}`);
+    skip(`Matterhorn Desks UI bridge is not reachable: ${text(status).split("\n")[0]}`);
   } else {
     const snapshot = await mcp.send("tools/call", { name: "ui_snapshot", arguments: {} });
     assert.equal(isToolError(snapshot), false, text(snapshot));

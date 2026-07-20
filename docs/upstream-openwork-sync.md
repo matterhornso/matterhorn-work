@@ -1,6 +1,6 @@
 # Upstream OpenWork Sync Playbook
 
-Matterhorn Work can keep absorbing upstream OpenWork runtime, desktop, dependency, and server improvements while preserving Matterhorn-specific product decisions. Upstream syncs must be explicit, reviewed, and tested. They should never bypass the rename, compatibility, Bittensor, or agent-control safety gates.
+Matterhorn Desks can keep absorbing upstream OpenWork runtime, desktop, dependency, and server improvements while preserving Matterhorn-specific product decisions. Upstream syncs must be explicit, reviewed, and tested. They should never bypass the rename, compatibility, Bittensor, or agent-control safety gates.
 
 Default upstream source:
 
@@ -14,12 +14,12 @@ The upstream URL and branch are configurable because the source repository or br
 
 ## Where This Fits
 
-This is a foundation lane in the broader Matterhorn Work plan:
+This is a foundation lane in the broader Matterhorn Desks plan:
 
 1. **Runtime continuity:** bring in upstream OpenWork fixes for the desktop shell, OpenCode runtime integration, router, packaging, and dependency health.
 2. **Compatibility continuity:** preserve `MATTERHORN_WORK_*` names while keeping legacy `OPENWORK_*` fallbacks, protocol aliases, headers, storage migrations, and command shims.
 3. **Product continuity:** protect Matterhorn-specific Bittensor, agent-control, CLI, MCP, browser-control, and future crypto workflows from upstream regressions.
-4. **Review continuity:** land upstream updates as normal Matterhorn Work PRs with clear conflict notes and targeted verification.
+4. **Review continuity:** land upstream updates as normal Matterhorn Desks PRs with clear conflict notes and targeted verification.
 
 ## Sync Cadence
 
@@ -27,7 +27,7 @@ Run the intake check:
 
 - weekly during active development.
 - when upstream OpenWork publishes a release.
-- before a Matterhorn Work desktop alpha if the last upstream check is stale.
+- before a Matterhorn Desks desktop alpha if the last upstream check is stale.
 - when a dependency, Electron, router, or OpenCode integration bug may already be fixed upstream.
 
 ## Intake Check
@@ -100,8 +100,8 @@ The checker prints:
 
 7. Resolve conflicts with Matterhorn decisions intact:
 
-   - visible product copy says Matterhorn Work.
-   - user-facing runtime copy says Matterhorn Work engine.
+   - visible product copy says Matterhorn Desks.
+   - user-facing runtime copy says Matterhorn Desks engine.
    - technical docs may still mention OpenCode as the underlying runtime.
    - public commands are `matterhorn-work` and `matterhorn-work-server`.
    - legacy `openwork` and `openwork-server` shims remain available.
@@ -139,7 +139,7 @@ These areas should be reviewed on every upstream sync:
 | Branding and i18n | Upstream copy can reintroduce OpenWork visible branding or old product positioning. |
 | Env vars and headers | Matterhorn-native aliases must keep priority while legacy OpenWork fallbacks continue to work. |
 | CLI and packaging | Public commands should remain `matterhorn-work` and `matterhorn-work-server`; legacy shims must not break. |
-| OpenCode abstraction | User-facing copy should say Matterhorn Work engine while technical docs can name OpenCode. |
+| OpenCode abstraction | User-facing copy should say Matterhorn Desks engine while technical docs can name OpenCode. |
 | Agent control surface | HTTP, MCP, CLI, browser-control, and event-stream contracts should remain stable for Codex and Claude Code. |
 | Bittensor safety | Wallet, staking, signing, watch, and subnet flows must stay non-custodial and source-aware. |
 | Release automation | Alpha, CI, i18n, and packaging workflows must keep the GitHub runner fallback and Matterhorn names. |

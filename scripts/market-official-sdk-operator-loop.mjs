@@ -242,7 +242,7 @@ export async function runMarketOfficialSdkOperatorLoop(config) {
     customerEvidenceMarkdownPath = join(outputDir, "matterhorn-market-customer-evidence.md");
     customerEvidenceJsonPath = join(outputDir, "matterhorn-market-customer-evidence.json");
     customerBundle = await buildMarketCustomerEvidenceBundle({
-      title: "Matterhorn Work Market Customer Evidence Bundle",
+      title: "Matterhorn Desks Market Customer Evidence Bundle",
       customerReadySmoke: config.customerReadySmoke,
       officialSdkValidation: evidencePath,
       requireOfficialSdkValidated: Boolean(config.requireOfficialSdkValidated),
@@ -273,7 +273,7 @@ export async function runMarketOfficialSdkOperatorLoop(config) {
 
   if (config.customerReadySmoke) {
     customerBundle = await buildMarketCustomerEvidenceBundle({
-      title: "Matterhorn Work Market Customer Evidence Bundle",
+      title: "Matterhorn Desks Market Customer Evidence Bundle",
       customerReadySmoke: config.customerReadySmoke,
       officialSdkValidation: evidencePath,
       operatorSummary: summaryPath,

@@ -1,4 +1,4 @@
-# Matterhorn Work Launch RC Pack
+# Matterhorn Desks Launch RC Pack
 
 Use this pack before sharing a release candidate with test customers. The
 legacy command name remains `beta:monday-rc`, but `ready: true` now requires the
@@ -172,6 +172,6 @@ screenshots, logs, or customer handoff packets:
 - wallet exports
 - real customer funds
 
-Matterhorn Work does not sign, submit, custody, or broadcast Hyperliquid or
+Matterhorn Desks does not sign, submit, custody, or broadcast Hyperliquid or
 Polymarket orders in this beta. Any future change to that boundary requires a
 separate security review and an explicit execution gate.

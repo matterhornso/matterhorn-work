@@ -20,41 +20,37 @@ ARG OPENWORK_ORCHESTRATOR_VERSION
 ARG OPENWORK_SERVER_VERSION
 ARG OPENCODE_VERSION
 ARG OPENCODE_DOWNLOAD_URL=
+ARG OPENCODE_DOWNLOAD_SHA256=
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl tar unzip \
   && rm -rf /var/lib/apt/lists/*
 
+COPY --from=openwork-builder /src/apps/orchestrator/dist/bin/matterhorn-work /usr/local/bin/matterhorn-work
 COPY --from=openwork-builder /src/apps/orchestrator/dist/bin/openwork /usr/local/bin/openwork
+COPY --from=openwork-builder /src/apps/server/dist/bin/matterhorn-work-server /usr/local/bin/matterhorn-work-server
 COPY --from=openwork-builder /src/apps/server/dist/bin/openwork-server /usr/local/bin/openwork-server
 COPY --from=openwork-builder /src/constants.json /usr/local/constants.json
 COPY packaging/docker/microsandbox-entrypoint.sh /usr/local/bin/microsandbox-entrypoint.sh
+COPY packaging/docker/opencode-release-checksums.json /usr/local/share/matterhorn/opencode-release-checksums.json
+COPY scripts/install-pinned-opencode.sh /usr/local/bin/install-pinned-opencode.sh
 
 RUN set -eux; \
   test -n "$OPENWORK_ORCHESTRATOR_VERSION"; \
   test -n "$OPENWORK_SERVER_VERSION"; \
   test -n "$OPENCODE_VERSION"; \
-  arch="$(dpkg --print-architecture)"; \
-  case "$arch" in \
-    amd64) asset="opencode-linux-x64-baseline.tar.gz" ;; \
-    arm64) asset="opencode-linux-arm64.tar.gz" ;; \
-    *) echo "unsupported architecture: $arch" >&2; exit 1 ;; \
-  esac; \
-  url="$OPENCODE_DOWNLOAD_URL"; \
-  if [ -z "$url" ]; then \
-    url="https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/${asset}"; \
-  fi; \
-  tmpdir="$(mktemp -d)"; \
-  curl -fsSL "$url" -o "$tmpdir/$asset"; \
-  tar -xzf "$tmpdir/$asset" -C "$tmpdir"; \
-  binary="$(find "$tmpdir" -type f -name opencode | head -n 1)"; \
-  test -n "$binary"; \
-  install -m 0755 "$binary" /usr/local/bin/opencode; \
+  OPENCODE_CONSTANTS_FILE=/usr/local/constants.json \
+  OPENCODE_CHECKSUM_FILE=/usr/local/share/matterhorn/opencode-release-checksums.json \
+  OPENCODE_INSTALL_DIR=/usr/local/bin \
+  OPENCODE_VERSION="$OPENCODE_VERSION" \
+  OPENCODE_DOWNLOAD_URL="$OPENCODE_DOWNLOAD_URL" \
+  OPENCODE_DOWNLOAD_SHA256="$OPENCODE_DOWNLOAD_SHA256" \
+    /usr/local/bin/install-pinned-opencode.sh; \
   chmod +x /usr/local/bin/microsandbox-entrypoint.sh; \
-  rm -rf "$tmpdir"
+  chmod +x /usr/local/bin/install-pinned-opencode.sh
 
-RUN test "$(openwork --version)" = "$OPENWORK_ORCHESTRATOR_VERSION" \
-  && test "$(openwork-server --version)" = "$OPENWORK_SERVER_VERSION" \
+RUN test "$(matterhorn-work --version)" = "$OPENWORK_ORCHESTRATOR_VERSION" \
+  && test "$(matterhorn-work-server --version)" = "$OPENWORK_SERVER_VERSION" \
   && opencode --version
 
 ENV OPENWORK_DATA_DIR=/data/openwork-orchestrator

@@ -1,9 +1,9 @@
 /**
  * Single source of truth for "where does a workspace's server live?".
  *
- * Every workspace-scoped API call in the app must route to the Matterhorn Work server
+ * Every workspace-scoped API call in the app must route to the Matterhorn Desks server
  * that actually owns that workspace. For local workspaces that's the user's
- * local Matterhorn Work server. For workspaces hosted on a remote Matterhorn Work worker
+ * local Matterhorn Desks server. For workspaces hosted on a remote Matterhorn Desks worker
  * (`id` starts with `rem_` and `workspaceType === "remote"`), it's the
  * `baseUrl`/`matterhornHostUrl` and `matterhornToken` saved on the workspace
  * record, with the workspace addressed by its server-side id (the `rem_`
@@ -29,7 +29,7 @@ import {
 import { isPublicBetaWebDeployment } from "./matterhorn-deployment";
 
 export type ResolvedWorkspaceEndpoint = {
-  /** Host URL of the Matterhorn Work server that owns this workspace (no `/workspace` mount). */
+  /** Host URL of the Matterhorn Desks server that owns this workspace (no `/workspace` mount). */
   baseUrl: string;
   /** Auth token for that server. May be empty for unauthenticated local servers. */
   token: string;
@@ -37,7 +37,7 @@ export type ResolvedWorkspaceEndpoint = {
   hostToken: string;
   /** Workspace id as the owning server expects it in URL paths. No `rem_` prefix. */
   workspaceId: string;
-  /** True when the workspace lives on a remote Matterhorn Work worker, not the user's local server. */
+  /** True when the workspace lives on a remote Matterhorn Desks worker, not the user's local server. */
   isRemote: boolean;
   /** MatterhornServerClient bound to {@link baseUrl}/{@link token}. */
   client: MatterhornServerClient;

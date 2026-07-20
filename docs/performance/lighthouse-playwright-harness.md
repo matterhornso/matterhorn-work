@@ -1,6 +1,6 @@
 # Matterhorn Lighthouse + Playwright Harness
 
-This harness gives Matterhorn Work a repeatable performance, accessibility, best-practices, and SEO evidence path for the production app shell and desk surfaces.
+This harness gives Matterhorn Desks a repeatable performance, accessibility, best-practices, and SEO evidence path for the production app shell and desk surfaces.
 
 It combines:
 

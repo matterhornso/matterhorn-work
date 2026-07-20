@@ -25,7 +25,7 @@ function ShowcasePanel() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold tracking-[-0.01em] text-foreground">
-            Matterhorn Work
+            Matterhorn Desks
           </h2>
           <p className="mt-2 max-w-[46ch] text-sm leading-6 text-muted-foreground">
             A workspace for AI-assisted work that needs judgment, context, and
@@ -35,7 +35,7 @@ function ShowcasePanel() {
         <img
           className="size-12 rounded-md border border-border bg-[var(--matterhorn-blue)]"
           src="/matterhorn-logo-square.svg"
-          alt="Matterhorn Work"
+          alt="Matterhorn Desks"
         />
       </div>
 

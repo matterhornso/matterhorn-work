@@ -330,7 +330,7 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     );
 
     expect(launcherBlock).toContain('title: "Could not start task"');
-    expect(launcherBlock).toContain('title: "Matterhorn Work engine is offline"');
+    expect(launcherBlock).toContain('title: "Matterhorn Desks engine is offline"');
     expect(launcherBlock).toContain("selectedModelUnavailable");
     expect(launcherBlock).toContain("setModelPickerOpen(true)");
     expect(launcherBlock).toContain("Connect or pick an available model, then start the task again.");

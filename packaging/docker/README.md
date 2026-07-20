@@ -1,4 +1,4 @@
-# OpenWork Host (Docker)
+# Matterhorn Desks Host (Docker)
 
 ## Den local stack (Docker)
 
@@ -20,7 +20,7 @@ What it does:
 - Starts **MySQL** for the Den service
 - Starts **Den control plane** on port 8788 inside Docker with `PROVISIONER_MODE=stub`
 - Runs **Den migrations** automatically before the API starts
-- Starts the **OpenWork Cloud web app** on port 3005 inside Docker
+- Starts the **Matterhorn Cloud web app** on port 3005 inside Docker
 - Points the web app's auth + API proxy routes at the local Den service
 - Prints randomized host URLs so multiple stacks can run side by side
 
@@ -69,13 +69,13 @@ Optional env vars (via `.env` or `export`):
 
 If you are iterating on Den locally and do not need the full Dockerized web stack, use the hybrid path instead:
 
-From the OpenWork repo root:
+From the Matterhorn Desks repo root:
 
 ```bash
 pnpm dev:den
 ```
 
-Or from the OpenWork enterprise root:
+Or from the Matterhorn Desks enterprise root:
 
 ```bash
 pnpm --dir _repos/openwork dev:den
@@ -108,7 +108,7 @@ pnpm dev:den:mysql:down
 
 ## Pre-baked Micro-Sandbox Image
 
-For micro-sandbox work, use the pre-baked image that compiles `openwork` and `openwork-server` from source and downloads the pinned `opencode` binary during `docker build`.
+For micro-sandbox work, use the pre-baked image that compiles the Matterhorn Desks host and server from source. The build downloads the version-pinned engine archive and verifies its recorded SHA-256 before installation.
 
 Build it from the repo root:
 
@@ -119,24 +119,32 @@ Build it from the repo root:
 Run it locally:
 
 ```bash
+MATTERHORN_WORK_TOKEN="$(openssl rand -hex 32)"
+MATTERHORN_WORK_HOST_TOKEN="$(openssl rand -hex 32)"
+export MATTERHORN_WORK_TOKEN MATTERHORN_WORK_HOST_TOKEN
+
 docker run --rm -p 8787:8787 \
-  -e OPENWORK_CONNECT_HOST=127.0.0.1 \
-  openwork-microsandbox:dev
+  -e MATTERHORN_WORK_TOKEN \
+  -e MATTERHORN_WORK_HOST_TOKEN \
+  -e MATTERHORN_WORK_APPROVAL_MODE=manual \
+  -e MATTERHORN_WORK_CORS_ORIGINS=http://127.0.0.1:5173 \
+  matterhorn-work-microsandbox:dev
 ```
 
-Defaults:
-- `OPENWORK_TOKEN=microsandbox-token`
-- `OPENWORK_HOST_TOKEN=microsandbox-host-token`
-- `OPENWORK_APPROVAL_MODE=auto`
+Security defaults:
+- Client and host tokens are required and are never printed.
+- Approval mode defaults to `manual`.
+- CORS defaults to local Matterhorn development origins; production must set the exact HTTPS app origin.
 
 Verification:
 - Health: `curl http://127.0.0.1:8787/health`
-- Authenticated API call: `curl -H "Authorization: Bearer microsandbox-token" http://127.0.0.1:8787/workspaces`
+- Authenticated API call: `curl -H "Authorization: Bearer $MATTERHORN_WORK_TOKEN" http://127.0.0.1:8787/workspaces`
 - Docker health: `docker inspect --format '{{json .State.Health}}' <container>`
 
 Useful overrides:
-- `OPENWORK_TOKEN` — set your own client bearer token
-- `OPENWORK_HOST_TOKEN` — set your own host/admin token
+- `MATTERHORN_WORK_TOKEN` — client bearer token from the deployment secret manager
+- `MATTERHORN_WORK_HOST_TOKEN` — host/admin bearer token from the deployment secret manager
+- `MATTERHORN_WORK_CORS_ORIGINS` — exact comma-separated trusted app origins
 - `OPENWORK_CONNECT_HOST` — host name embedded in the printed connect URL
 - `DOCKER_PLATFORM` — optional platform passed to `docker build`
 

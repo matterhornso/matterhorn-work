@@ -1,12 +1,12 @@
-# Matterhorn Work Browser Control Live QA
+# Matterhorn Desks Browser Control Live QA
 
-This checklist verifies that `matterhorn-work-ui-mcp` can drive the built-in Matterhorn Work browser through semantic `browser.*` actions in a real desktop app session.
+This checklist verifies that `matterhorn-work-ui-mcp` can drive the built-in Matterhorn Desks browser through semantic `browser.*` actions in a real desktop app session.
 
 Use this after the local smoke test in `packages/matterhorn-work-ui-mcp/test-browser-actions.mjs` passes. The smoke test proves the MCP wrapper behavior with a fake bridge; this checklist proves the desktop bridge, React action registration, native browser panel, and MCP client path together.
 
 ## Preconditions
 
-- Matterhorn Work desktop is installed or running from a local dev build.
+- Matterhorn Desks desktop is installed or running from a local dev build.
 - A workspace is open with at least one chat session visible.
 - The desktop UI bridge has written a discovery file:
   - macOS production: `~/Library/Application Support/com.matterhorn.work/matterhorn-work-ui-control.json`
@@ -25,7 +25,7 @@ pnpm --dir packages/matterhorn-work-ui-mcp test
 pnpm test:agent-browser-live-probe
 ```
 
-The UI MCP package test starts a fake localhost bridge, so restricted sandboxes may need localhost bind permission. `test:agent-browser-live-probe` talks to the real desktop discovery file when Matterhorn Work is running; it exits as `SKIP` in headless CI. Set `MATTERHORN_WORK_BROWSER_LIVE_REQUIRE=1` or pass `--require` to fail when the live desktop bridge is unavailable. Set `MATTERHORN_WORK_BROWSER_LIVE_OPEN_URL=https://matterhorn.so` or pass `--open-url <url>` to include a real browser navigation check.
+The UI MCP package test starts a fake localhost bridge, so restricted sandboxes may need localhost bind permission. `test:agent-browser-live-probe` talks to the real desktop discovery file when Matterhorn Desks is running; it exits as `SKIP` in headless CI. Set `MATTERHORN_WORK_BROWSER_LIVE_REQUIRE=1` or pass `--require` to fail when the live desktop bridge is unavailable. Set `MATTERHORN_WORK_BROWSER_LIVE_OPEN_URL=https://matterhorn.so` or pass `--open-url <url>` to include a real browser navigation check.
 
 ## Manual QA Script
 
@@ -39,7 +39,7 @@ ui_status
 
 Expected:
 
-- The tool reports Matterhorn Work as connected.
+- The tool reports Matterhorn Desks as connected.
 - The bridge URL is local.
 - No token value is printed.
 - If running the automated probe, `pnpm test:agent-browser-live-probe -- --require` passes.
@@ -54,7 +54,7 @@ ui_snapshot
 
 Expected:
 
-- The current route points at a Matterhorn Work session route.
+- The current route points at a Matterhorn Desks session route.
 - The action list includes session and composer actions.
 - If the desktop browser bridge is available, the action list includes `browser.open_panel` and `browser.open`.
 
@@ -168,7 +168,7 @@ Expected:
 The live browser-control path is acceptable when:
 
 - `ui_status`, `ui_snapshot`, `browser_list_actions`, `browser_open`, `browser_snapshot`, and `browser_execute_action` all work through the same configured MCP client.
-- The browser panel opens visibly in Matterhorn Work.
+- The browser panel opens visibly in Matterhorn Desks.
 - State reported by `browser_snapshot` matches the visible browser panel.
 - Disabled browser actions are represented as disabled and are not executed.
 - No secrets are requested, displayed, logged, or transmitted.
@@ -177,7 +177,7 @@ The live browser-control path is acceptable when:
 
 Record failures with:
 
-- Matterhorn Work build/channel.
+- Matterhorn Desks build/channel.
 - OS and architecture.
 - MCP client used.
 - Exact tool call and response.

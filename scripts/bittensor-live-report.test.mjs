@@ -74,7 +74,7 @@ await writeFile(inputPath, JSON.stringify(sample), "utf8");
 const fromFile = await run(["--input", inputPath, "--output", outputPath, "--strict"]);
 assert.equal(fromFile.code, 0);
 const output = await readFile(outputPath, "utf8");
-assert.ok(output.includes("Matterhorn Work Bittensor Live Readiness Report"));
+assert.ok(output.includes("Matterhorn Desks Bittensor Live Readiness Report"));
 assert.ok(output.includes("| readinessStatus | ready |"));
 
 const failed = await run(["--strict"], JSON.stringify({

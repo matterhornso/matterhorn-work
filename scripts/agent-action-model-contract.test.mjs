@@ -61,9 +61,9 @@ for (const sourceSnippet of [
 }
 
 assert.ok(surface.includes("./agent-action-model-contract.md"), "agent control surface should link the action model contract");
-assert.ok(uiProfile.includes("matterhorn-work-ui-mcp"), "UI control profile should document the Matterhorn Work UI MCP package");
-assert.ok(uiMcp.includes('name: "matterhorn-work-ui"'), "UI MCP server should use Matterhorn Work naming");
-assert.ok(uiPackage.includes('"directory": "packages/matterhorn-work-ui-mcp"'), "UI MCP package metadata should use Matterhorn Work package path");
+assert.ok(uiProfile.includes("matterhorn-work-ui-mcp"), "UI control profile should document the Matterhorn Desks UI MCP package");
+assert.ok(uiMcp.includes('name: "matterhorn-work-ui"'), "UI MCP server should use Matterhorn Desks naming");
+assert.ok(uiPackage.includes('"directory": "packages/matterhorn-work-ui-mcp"'), "UI MCP package metadata should use Matterhorn Desks package path");
 
 for (const browserAction of [
   'id: "browser.open_panel"',

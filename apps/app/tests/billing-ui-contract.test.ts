@@ -177,7 +177,7 @@ describe("Billing settings view", () => {
     expect(html).toContain("$9.99/month");
     expect(html).toContain("$89.99/month");
     expect(html).toContain("Showing the local Matterhorn plan catalog");
-    expect(html).toContain("Connect the Matterhorn Work engine to open checkout");
+    expect(html).toContain("Connect the Matterhorn Desks engine to open checkout");
     expect(html).not.toContain("Billing plans could not load");
     expect(html).toContain("Local preview");
     expect(html).toContain("Plans");
@@ -221,7 +221,7 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("LOCAL_BILLING_PLANS");
     expect(billingViewSource).toContain("usingLocalPlanCatalog");
     expect(billingViewSource).toContain("Showing the local Matterhorn plan catalog");
-    expect(billingViewSource).toContain("Connect the Matterhorn Work engine to open checkout");
+    expect(billingViewSource).toContain("Connect the Matterhorn Desks engine to open checkout");
     expect(billingViewSource).toContain("client?.workspaceBillingStatus(workspaceId)");
     expect(billingViewSource).toContain("status?.setup.checks");
     expect(billingViewSource).toContain("status?.accountLinkage");

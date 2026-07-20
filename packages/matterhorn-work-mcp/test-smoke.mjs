@@ -1209,16 +1209,16 @@ try {
   const schemaText = JSON.stringify(listed.result.tools);
   assert.equal(/seed|mnemonic|privateKey|private_key|wallet export/i.test(schemaText), false);
   const descriptionFor = (name) => listed.result.tools.find((tool) => tool.name === name)?.description || "";
-  assert.match(descriptionFor("matterhorn_crypto_chat"), /Default first Matterhorn Work tool/i);
+  assert.match(descriptionFor("matterhorn_crypto_chat"), /Default first Matterhorn Desks tool/i);
   assert.match(descriptionFor("matterhorn_crypto_readiness"), /customer-readiness report/i);
   assert.match(descriptionFor("matterhorn_memory_search"), /explicit Matterhorn Memory records/i);
   assert.match(descriptionFor("matterhorn_memory_capture"), /user has chosen to remember/i);
   assert.match(descriptionFor("matterhorn_memory_forget"), /Forget one explicit Matterhorn Memory record/i);
   assert.match(descriptionFor("matterhorn_services_get_capabilities"), /future decentralized service capability contracts/i);
   assert.match(descriptionFor("matterhorn_services_chat_plan"), /Plan a future decentralized service workflow/i);
-  assert.match(descriptionFor("matterhorn_workflows_catalog"), /catalog-only Matterhorn Work workflow registry/i);
+  assert.match(descriptionFor("matterhorn_workflows_catalog"), /catalog-only Matterhorn Desks workflow registry/i);
   assert.match(descriptionFor("matterhorn_workflows_prompt_pack"), /copy-pasteable staged prompts/i);
-  assert.match(descriptionFor("matterhorn_workflows_customer_templates"), /customer-facing Matterhorn Work workflow templates/i);
+  assert.match(descriptionFor("matterhorn_workflows_customer_templates"), /customer-facing Matterhorn Desks workflow templates/i);
   assert.match(descriptionFor("matterhorn_crypto_live_public_qa"), /live public-data QA pack/i);
   assert.match(descriptionFor("matterhorn_market_execution_readiness"), /execution-readiness contract/i);
   assert.match(descriptionFor("matterhorn_market_execution_chain"), /safe execution-chain command plan/i);
@@ -1228,7 +1228,7 @@ try {
   assert.match(descriptionFor("matterhorn_hyperliquid_act_on_watch_alert"), /deterministic read-only crypto-chat review/i);
   assert.match(descriptionFor("matterhorn_polymarket_watch_digest"), /agent-facing digest/i);
   assert.match(descriptionFor("matterhorn_polymarket_act_on_watch_alert"), /deterministic read-only crypto-chat review/i);
-  assert.match(descriptionFor("matterhorn_bittensor_chat"), /Default first Matterhorn Work tool/i);
+  assert.match(descriptionFor("matterhorn_bittensor_chat"), /Default first Matterhorn Desks tool/i);
   assert.match(descriptionFor("matterhorn_bittensor_list_capabilities"), /before previewing or invoking/i);
   assert.match(descriptionFor("matterhorn_bittensor_get_subnet_capability"), /before previewing or invoking/i);
   assert.match(descriptionFor("matterhorn_bittensor_preview_subnet_invocation"), /First inspect the subnet capability manifest/i);
@@ -1758,7 +1758,7 @@ try {
   assert.equal(livePublicQa.status, "SKIPPED_WITH_FIXTURE_FALLBACK");
   assert.equal(livePublicQa.safety.liveSubmissionEnabled, false);
   assert.equal(livePublicQa.safety.signsOrSubmits, false);
-  assert.match(livePublicQa.markdown, /Matterhorn Work Live Public-Data QA/);
+  assert.match(livePublicQa.markdown, /Matterhorn Desks Live Public-Data QA/);
   assert.match(livePublicQa.sha256, /matterhorn-live-public-qa\.json/);
   assert.ok(livePublicQa.report.stages.some((stage) => stage.id === "hyperliquid_watch_evidence"));
   assert.ok(livePublicQa.report.stages.some((stage) => stage.id === "polymarket_watch_evidence"));
@@ -1834,7 +1834,7 @@ try {
     },
   };
   const marketCustomerEvidenceMarkdown = [
-    "# Matterhorn Work Market Customer Evidence Bundle",
+    "# Matterhorn Desks Market Customer Evidence Bundle",
     "",
     "Result: READY_FOR_TEST_CUSTOMER_QA",
     "",
@@ -1901,7 +1901,7 @@ try {
       agentControlLiveQa: { ready: true, summary: { pass: 4, fail: 0 } },
       ci: {
         workflow_runs: [
-          { name: "Matterhorn Work Tests", conclusion: "success" },
+          { name: "Matterhorn Desks Tests", conclusion: "success" },
           { name: "i18n Audit", conclusion: "success" },
           { name: "Alpha Channel macOS arm64", conclusion: "success" },
         ],
@@ -1986,7 +1986,7 @@ try {
     arguments: {
       bundle: customerEvidenceBundle.summary,
       markdown: [
-        "# Matterhorn Work Bittensor Customer Evidence Bundle",
+        "# Matterhorn Desks Bittensor Customer Evidence Bundle",
         "",
         "## Decision",
         "",
@@ -2099,7 +2099,7 @@ try {
     name: "matterhorn_bittensor_customer_evidence_bundle",
     arguments: {
       bittensorLiveQa: { ready: true, seedPhrase: "never" },
-      ci: { workflow_runs: [{ name: "Matterhorn Work Tests", conclusion: "success" }] },
+      ci: { workflow_runs: [{ name: "Matterhorn Desks Tests", conclusion: "success" }] },
       readinessGate: "READY_FOR_TEST_CUSTOMERS",
     },
   });
@@ -2109,7 +2109,7 @@ try {
     name: "matterhorn_bittensor_customer_evidence_bundle",
     arguments: {
       bittensorLiveQa: { ready: true, summary: { pass: 1, fail: 0 } },
-      ci: { workflow_runs: [{ name: "Matterhorn Work Tests", conclusion: "success" }] },
+      ci: { workflow_runs: [{ name: "Matterhorn Desks Tests", conclusion: "success" }] },
       readinessGate: "READY_FOR_TEST_CUSTOMERS",
       receiptCheck: { accepted: true, signature: "0x1234" },
     },
@@ -2326,7 +2326,7 @@ try {
   assert.ok(requests.some((request) => request.hostToken === HOST_TOKEN && request.path === "/approvals"));
   assert.ok(requests.some((request) => request.authorization === `Bearer ${CLIENT_TOKEN}` && request.path === "/workspaces"));
 
-  console.log("Matterhorn Work MCP smoke test passed.");
+  console.log("Matterhorn Desks MCP smoke test passed.");
 } finally {
   mcp.child.kill();
   server.close();

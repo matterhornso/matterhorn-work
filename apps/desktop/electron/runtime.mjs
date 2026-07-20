@@ -156,13 +156,13 @@ function snapshotOpenworkServerState(state) {
 
 function assertMatterhornServerReady(snapshot) {
   if (!snapshot?.running) {
-    throw new Error("Matterhorn Work engine did not stay running after startup.");
+    throw new Error("Matterhorn Desks engine did not stay running after startup.");
   }
   if (!snapshot.baseUrl) {
-    throw new Error("Matterhorn Work engine did not report a base URL after startup.");
+    throw new Error("Matterhorn Desks engine did not report a base URL after startup.");
   }
   if (!snapshot.ownerToken && !snapshot.clientToken) {
-    throw new Error("Matterhorn Work engine did not report an access token after startup.");
+    throw new Error("Matterhorn Desks engine did not report an access token after startup.");
   }
   return snapshot;
 }
@@ -1171,7 +1171,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       resolveBinary("openwork-orchestrator") ??
       resolveBinary("openwork");
     if (!orchestratorProgram) {
-      throw new Error("Failed to locate Matterhorn Work orchestrator.");
+      throw new Error("Failed to locate Matterhorn Desks orchestrator.");
     }
 
     const opencodeBinary = resolveOpencodeBinary(options.opencodeBinPath);
@@ -1467,7 +1467,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
         status: -1,
         stdout: "",
         stderr:
-          "Guided install is not supported on Windows yet. Install the Matterhorn engine version manually, then restart Matterhorn Work.",
+          "Guided install is not supported on Windows yet. Install the Matterhorn engine version manually, then restart Matterhorn Desks.",
       };
     }
 
@@ -1676,7 +1676,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       resolveBinary("openwork-orchestrator") ??
       resolveBinary("openwork");
     if (!program) {
-      throw new Error("Failed to locate Matterhorn Work orchestrator.");
+      throw new Error("Failed to locate Matterhorn Desks orchestrator.");
     }
 
     const args = [

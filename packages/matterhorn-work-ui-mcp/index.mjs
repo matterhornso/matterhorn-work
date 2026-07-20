@@ -3,10 +3,10 @@
 /**
  * matterhorn-work-ui-mcp
  *
- * MCP server that exposes Matterhorn Work's UI control surface as MCP tools.
- * Speaks MCP stdio and proxies to the Matterhorn Work desktop bridge HTTP API.
+ * MCP server that exposes Matterhorn Desks's UI control surface as MCP tools.
+ * Speaks MCP stdio and proxies to the Matterhorn Desks desktop bridge HTTP API.
  *
- * Requires Matterhorn Work desktop running with the local UI control bridge active.
+ * Requires Matterhorn Desks desktop running with the local UI control bridge active.
  *
  * Usage:
  *   npx matterhorn-work-ui-mcp
@@ -86,8 +86,8 @@ async function bridgeRequest(path, options = {}) {
   if (!bridge) {
     return {
       ok: false,
-      error: "Matterhorn Work is not running. Launch the Matterhorn Work desktop app first.",
-      hint: "The MCP server connects to a running Matterhorn Work instance via its local bridge.",
+      error: "Matterhorn Desks is not running. Launch the Matterhorn Desks desktop app first.",
+      hint: "The MCP server connects to a running Matterhorn Desks instance via its local bridge.",
     };
   }
   const url = `${bridge.baseUrl}${path}`;
@@ -180,7 +180,7 @@ async function listBridgeActions() {
 
 function browserActionUnavailableText(actionId) {
   return [
-    `No semantic ${actionId} action is available from Matterhorn Work right now.`,
+    `No semantic ${actionId} action is available from Matterhorn Desks right now.`,
     "Use browser_list_actions to inspect published browser.* actions, or use the generic ui_* tools.",
     "Do not fall back to raw coordinates for destructive, external, financial, or signing actions.",
   ].join("\n");
@@ -227,7 +227,7 @@ const server = new McpServer({
 // ── ui.snapshot ──
 server.tool(
   "ui_snapshot",
-  "Get a snapshot of the current Matterhorn Work UI state: active route, narration, visible actions, and status. Use this before taking action to understand what the user sees.",
+  "Get a snapshot of the current Matterhorn Desks UI state: active route, narration, visible actions, and status. Use this before taking action to understand what the user sees.",
   {},
   async () => {
     const result = await bridgeRequest("/snapshot");
@@ -247,14 +247,14 @@ server.tool(
         lines.push(`  ${action.id} — ${action.label || action.description || ""}${args}`);
       }
     }
-    return { content: [{ type: "text", text: lines.join("\n") || "Matterhorn Work is reachable, but it did not return visible UI state." }] };
+    return { content: [{ type: "text", text: lines.join("\n") || "Matterhorn Desks is reachable, but it did not return visible UI state." }] };
   }
 );
 
 // ── ui.list_actions ──
 server.tool(
   "ui_list_actions",
-  "List all UI control actions currently available in Matterhorn Work: session navigation, composer control, transcript access, and more. Each action has an id you can pass to ui_execute_action.",
+  "List all UI control actions currently available in Matterhorn Desks: session navigation, composer control, transcript access, and more. Each action has an id you can pass to ui_execute_action.",
   {},
   async () => {
     const result = await bridgeRequest("/actions");
@@ -262,7 +262,7 @@ server.tool(
       return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
     }
     if (!Array.isArray(result.actions) || result.actions.length === 0) {
-      return { content: [{ type: "text", text: "No actions available. Is Matterhorn Work on the main screen?" }] };
+      return { content: [{ type: "text", text: "No actions available. Is Matterhorn Desks on the main screen?" }] };
     }
     const text = result.actions.map(formatActionLine).join("\n\n");
     return { content: [{ type: "text", text: `${result.actions.length} actions:\n\n${text}` }] };
@@ -272,7 +272,7 @@ server.tool(
 // ── ui.execute_action ──
 server.tool(
   "ui_execute_action",
-  "Execute a Matterhorn Work UI action by its id. Use ui_list_actions first to see available actions and their required arguments.",
+  "Execute a Matterhorn Desks UI action by its id. Use ui_list_actions first to see available actions and their required arguments.",
   {
     actionId: z.string().describe("The action id from ui_list_actions, e.g. 'session.create_task' or 'composer.set_text'"),
     args: z.record(z.unknown()).optional().describe("JSON arguments for the action, if required"),
@@ -292,7 +292,7 @@ server.tool(
 // ── browser.list_actions ──
 server.tool(
   "browser_list_actions",
-  "List semantic browser.* actions currently published by Matterhorn Work. Use this before browser_snapshot, browser_open, or browser_execute_action.",
+  "List semantic browser.* actions currently published by Matterhorn Desks. Use this before browser_snapshot, browser_open, or browser_execute_action.",
   {},
   async () => {
     const { result, actions } = await listBridgeActions();
@@ -305,7 +305,7 @@ server.tool(
         content: [{
           type: "text",
           text: [
-            "No semantic browser.* actions are currently published by Matterhorn Work.",
+            "No semantic browser.* actions are currently published by Matterhorn Desks.",
             "Use ui_snapshot and ui_list_actions for app control. Use low-level browser fallback only for safe read-only inspection when no semantic action exists.",
           ].join("\n"),
         }],
@@ -323,7 +323,7 @@ server.tool(
 // ── browser.snapshot ──
 server.tool(
   "browser_snapshot",
-  "Run the published browser.snapshot action when Matterhorn Work exposes one. This refuses coordinate or DOM fallbacks.",
+  "Run the published browser.snapshot action when Matterhorn Desks exposes one. This refuses coordinate or DOM fallbacks.",
   {},
   async () => {
     const { error, action } = await findBrowserAction("browser.snapshot");
@@ -340,7 +340,7 @@ server.tool(
 // ── browser.open ──
 server.tool(
   "browser_open",
-  "Open or navigate a browser target using Matterhorn Work's semantic browser.open or browser.navigate action. Refuses raw coordinate fallback.",
+  "Open or navigate a browser target using Matterhorn Desks's semantic browser.open or browser.navigate action. Refuses raw coordinate fallback.",
   {
     url: z.string().describe("The URL to open or navigate to."),
     newTab: z.boolean().optional().describe("When supported by the published action, open in a new tab."),
@@ -391,20 +391,20 @@ server.tool(
 // ── ui.status ──
 server.tool(
   "ui_status",
-  "Check if Matterhorn Work is running and the bridge is reachable. Returns connection status and app info.",
+  "Check if Matterhorn Desks is running and the bridge is reachable. Returns connection status and app info.",
   {},
   async () => {
     const bridge = await discoverBridge();
     if (!bridge) {
-      return { content: [{ type: "text", text: "Matterhorn Work is not running.\nLaunch the Matterhorn Work desktop app to enable UI control." }], isError: true };
+      return { content: [{ type: "text", text: "Matterhorn Desks is not running.\nLaunch the Matterhorn Desks desktop app to enable UI control." }], isError: true };
     }
     try {
       const response = await fetch(`${bridge.baseUrl}/health`, { signal: AbortSignal.timeout(3000) });
       const data = await response.json();
-      return { content: [{ type: "text", text: `Connected to ${data.app || "Matterhorn Work"}\nBridge: ${bridge.baseUrl}\nVersion: ${data.version ?? "?"}` }] };
+      return { content: [{ type: "text", text: `Connected to ${data.app || "Matterhorn Desks"}\nBridge: ${bridge.baseUrl}\nVersion: ${data.version ?? "?"}` }] };
     } catch (error) {
       clearBridgeCache();
-      return { content: [{ type: "text", text: `Bridge file found but not reachable: ${error.message}\nMatterhorn Work may have quit. Relaunch it.` }], isError: true };
+      return { content: [{ type: "text", text: `Bridge file found but not reachable: ${error.message}\nMatterhorn Desks may have quit. Relaunch it.` }], isError: true };
     }
   }
 );

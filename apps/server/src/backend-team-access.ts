@@ -97,7 +97,7 @@ export function buildBackendTeamAccessConnection(config: ServerConfig): Matterho
     authScheme: "bearer_token",
     tokenFieldLabel: "Access token",
     instructions: [
-      "Open Matterhorn Work on the teammate device.",
+      "Open Matterhorn Desks on the teammate device.",
       "Choose Connect custom remote.",
       "Paste this server URL and the one-time local access token.",
     ],

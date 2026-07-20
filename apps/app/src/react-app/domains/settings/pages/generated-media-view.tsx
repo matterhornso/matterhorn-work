@@ -518,7 +518,7 @@ function GeneratedMediaWorkspaceState(props: { engineConnected: boolean }) {
       <p className="mt-2 text-sm leading-6 text-dls-secondary">
         {props.engineConnected
           ? "Choose a workspace from the sidebar to review its images, NFT drafts, publishing readiness, and data controls."
-          : "Reconnect the Matterhorn Work engine, then open a workspace to manage generated media."}
+          : "Reconnect the Matterhorn Desks engine, then open a workspace to manage generated media."}
       </p>
       <p className="mt-3 text-xs leading-5 text-dls-muted">
         Generated media is workspace-scoped so files, receipts, and deletion controls stay attached to the correct project.
@@ -546,7 +546,7 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
     staleTime: 30_000,
     queryFn: async () => {
       const client = props.matterhornServerClient;
-      if (!client) throw new Error("Matterhorn Work engine is offline.");
+      if (!client) throw new Error("Matterhorn Desks engine is offline.");
       return client.backendCapabilities();
     },
   });
@@ -811,7 +811,7 @@ export function GeneratedMediaSettingsView(props: GeneratedMediaSettingsViewProp
 
         {capabilitiesQuery.isError ? (
           <SettingsNotice tone="error">
-            Generated media capabilities could not load. Check the local Matterhorn Work engine.
+            Generated media capabilities could not load. Check the local Matterhorn Desks engine.
           </SettingsNotice>
         ) : null}
 

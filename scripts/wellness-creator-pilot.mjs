@@ -202,7 +202,7 @@ const DEMO_GUARANTEES = [
 ];
 
 const HERMES_QA_CHECKLIST = [
-  "Setup: open Matterhorn Work as a normal user; no wallet, key, or payment account is needed.",
+  "Setup: open Matterhorn Desks as a normal user; no wallet, key, or payment account is needed.",
   "Run `node scripts/wellness-creator-pilot.mjs --json` and read the demoPacket section.",
   "Run the six canonical prompts in order and collect each artifact.",
   "Compare each artifact against its reference fixture under docs/wellness-creator-pilot/.",

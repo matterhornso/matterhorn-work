@@ -1,6 +1,6 @@
 # Hermes QA Guide: Hyperliquid Read, Preview, and Manual Execution Pass
 
-This guide is for a Hermes or Codex agent doing an end-to-end usability and security pass on the Matterhorn Work Hyperliquid surface. Chat, HTTP planning routes, MCP, CLI, watches, and agent prompts remain **read-only plus preview-only**. The separate web order ticket supports manual connected-wallet submission after exact review and a fresh wallet signature. Every path remains non-custodial.
+This guide is for a Hermes or Codex agent doing an end-to-end usability and security pass on the Matterhorn Desks Hyperliquid surface. Chat, HTTP planning routes, MCP, CLI, watches, and agent prompts remain **read-only plus preview-only**. The separate web order ticket supports manual connected-wallet submission after exact review and a fresh wallet signature. Every path remains non-custodial.
 
 ## Scope
 
@@ -32,7 +32,7 @@ Do not recommend rollout of the Hyperliquid surface unless all of these are true
 
 ## Built Surface Inventory
 
-Verify Matterhorn Work exposes these Hyperliquid capabilities through chat:
+Verify Matterhorn Desks exposes these Hyperliquid capabilities through chat:
 
 - Beginner explanation: "What can you do with Hyperliquid?" → read/preview-only explanation, no secret requests.
 - Market discovery: "List Hyperliquid markets." → read-only market summaries with source/freshness.
@@ -55,7 +55,7 @@ Expected behavior:
 
 ## Live-Read Commands (HTTP API)
 
-Run against a local Matterhorn Work server, adjusting the port.
+Run against a local Matterhorn Desks server, adjusting the port.
 
 ```bash
 curl -sS "$MATTERHORN_WORK_SERVER_URL/api/hyperliquid/markets?limit=5" \

@@ -10,7 +10,7 @@ const packagePath = resolve(repoRoot, "packages", "handsfree", "native", "HandsF
 const iconPath = resolve(desktopRoot, "resources", "icons", "icon.icns");
 const productName = "HandsFreeComputerUse";
 const helperExecutableName = "ComputerUse";
-const helperAppName = "Matterhorn Work Automation Helper.app";
+const helperAppName = "Matterhorn Desks Automation Helper.app";
 const legacyHelperAppName = "OpenWork Computer Use.app";
 const bundleIdentifier = "com.differentai.openwork.computer-use";
 
@@ -45,13 +45,26 @@ function run(command, args, options = {}) {
 
 function signHelperApp() {
   if (process.platform !== "darwin") return;
+  const cleanup = spawnSync("xattr", ["-cr", appPath], {
+    encoding: "utf8",
+    stdio: "pipe",
+  });
+  if (cleanup.error) {
+    if (cleanup.error.code === "ENOENT") {
+      throw new Error("xattr is required to prepare the Matterhorn Desks automation helper app");
+    }
+    throw cleanup.error;
+  }
+  if (cleanup.status !== 0) {
+    throw new Error(`Failed to clear extended attributes from ${appPath}: ${cleanup.stderr?.trim() ?? "unknown error"}`);
+  }
   const result = spawnSync("codesign", ["--force", "--deep", "--sign", "-", appPath], {
     encoding: "utf8",
     stdio: "pipe",
   });
   if (result.error) {
     if (result.error.code === "ENOENT") {
-      throw new Error("codesign is required to prepare the Matterhorn Work automation helper app");
+      throw new Error("codesign is required to prepare the Matterhorn Desks automation helper app");
     }
     throw result.error;
   }
@@ -68,7 +81,7 @@ function infoPlist() {
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>Matterhorn Work Automation Helper</string>
+  <string>Matterhorn Desks Automation Helper</string>
   <key>CFBundleExecutable</key>
   <string>${helperExecutableName}</string>
   <key>CFBundleIdentifier</key>
@@ -78,7 +91,7 @@ function infoPlist() {
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>Matterhorn Work Automation Helper</string>
+  <string>Matterhorn Desks Automation Helper</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

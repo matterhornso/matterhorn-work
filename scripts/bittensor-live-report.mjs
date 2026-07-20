@@ -15,7 +15,7 @@ const flag = (name) => args.includes(name);
 const config = {
   input: arg("--input") || arg("-i") || "",
   output: arg("--output") || arg("-o") || "",
-  title: arg("--title") || "Matterhorn Work Bittensor Live Readiness Report",
+  title: arg("--title") || "Matterhorn Desks Bittensor Live Readiness Report",
   strict: flag("--strict"),
 };
 

@@ -1,7 +1,7 @@
-# Matterhorn Work: Build Plan (Current)
+# Matterhorn Desks: Build Plan (Current)
 
 > **Use cases (in order):** (1) Hyperliquid trading strategies / market making, (2) Polymarket prediction market bots
-> **Approach:** Agent blueprints inside Matterhorn Work. Not "separate features" — these are the agent skills that run inside the workspace.
+> **Approach:** Agent blueprints inside Matterhorn Desks. Not "separate features" — these are the agent skills that run inside the workspace.
 > **Status:** ~85% P0 complete. Server tools + MCPs verified end-to-end. Build green (UI 8.7s, typecheck 0 errors). 2,888 commits. Remaining: swap builder needs 1inch API key for full testing, blueprints wired to marketplace UI, system prompt battle-tested, Hyperliquid E2E with real wallet.
 > **Last updated:** June 7, 2026
 
@@ -151,7 +151,7 @@
 
 ## Subsystem 4: Agent Blueprints + Marketplace (P0 scaffold, P2 real)
 
-**Current state:** `blueprints.ts` and `mcpSkills.ts` exist in the Matterhorn-Agent source. Need to port into Matterhorn Work.
+**Current state:** `blueprints.ts` and `mcpSkills.ts` exist in the Matterhorn-Agent source. Need to port into Matterhorn Desks.
 
 ### 4.1 Port Blueprints into App
 - **Where:** `apps/app/src/react-app/domains/settings/data/agent-blueprints.ts`

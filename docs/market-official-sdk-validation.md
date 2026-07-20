@@ -1,6 +1,6 @@
 # Market Official SDK Validation Track
 
-Matterhorn Work supports Hyperliquid and Polymarket reads, previews, external-signer handoffs, and public receipts. Hyperliquid also has a separate connected-wallet execution ticket in the web app. This validation track covers only public/redacted preview and handoff parity; it never signs, submits, or grants execution permission.
+Matterhorn Desks supports Hyperliquid and Polymarket reads, previews, external-signer handoffs, and public receipts. Hyperliquid also has a separate connected-wallet execution ticket in the web app. This validation track covers only public/redacted preview and handoff parity; it never signs, submits, or grants execution permission.
 
 ## Scope
 

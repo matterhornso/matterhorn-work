@@ -1,6 +1,6 @@
 # Market Execution-Readiness Security Gate
 
-This document defines the security boundary for market execution. Matterhorn Work supports connected-wallet Hyperliquid execution in the web app. Polymarket remains read/preview only. Agent, MCP, CLI, watch, and chat surfaces do not submit orders.
+This document defines the security boundary for market execution. Matterhorn Desks supports connected-wallet Hyperliquid execution in the web app. Polymarket remains read/preview only. Agent, MCP, CLI, watch, and chat surfaces do not submit orders.
 
 ## Current Enforcement
 

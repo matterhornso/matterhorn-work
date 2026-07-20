@@ -158,7 +158,7 @@ const ensureOpenworkServer = async () => {
     }
     if (!autoBuildEnabled) {
       logLine(
-        `[dev:headless-web] Missing Matterhorn Work server binary at ${openworkServerBin}`,
+        `[dev:headless-web] Missing Matterhorn Desks server binary at ${openworkServerBin}`,
       );
       logLine(
         "[dev:headless-web] Auto-build disabled (OPENWORK_DEV_HEADLESS_WEB_AUTOBUILD=0)",
@@ -173,7 +173,7 @@ const ensureOpenworkServer = async () => {
     }
 
     logLine(
-      `[dev:headless-web] Missing Matterhorn Work server binary at ${openworkServerBin}`,
+      `[dev:headless-web] Missing Matterhorn Desks server binary at ${openworkServerBin}`,
     );
     logLine(
       "[dev:headless-web] Auto-building: pnpm --filter matterhorn-work-server build:bin",

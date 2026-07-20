@@ -1,10 +1,10 @@
-# Matterhorn Work Agent Operator Workflow
+# Matterhorn Desks Agent Operator Workflow
 
-This is the copy-paste workflow for running Matterhorn Work from Codex, Claude Code, Claude Desktop, Cursor, or any MCP-capable agent.
+This is the copy-paste workflow for running Matterhorn Desks from Codex, Claude Code, Claude Desktop, Cursor, or any MCP-capable agent.
 
 Use it when an external agent needs to:
 
-- start Matterhorn Work;
+- start Matterhorn Desks;
 - run a readiness doctor;
 - create a chat session;
 - submit a prompt;
@@ -14,7 +14,7 @@ Use it when an external agent needs to:
 
 The workflow is intentionally non-custodial. Do not paste seed phrases, mnemonics, private keys, wallet exports, host tokens in URLs, or signed transaction payloads into chat prompts or MCP tool arguments.
 
-## 1. Start Matterhorn Work
+## 1. Start Matterhorn Desks
 
 Run this in a trusted local terminal:
 
@@ -180,7 +180,7 @@ export MATTERHORN_WORK_WRITE_SESSION_ID="$(
 
 matterhorn-work files write "$MATTERHORN_WORK_WRITE_SESSION_ID" \
   --path docs/agent-notes.md \
-  --content "Agent note: verified through Matterhorn Work file session." \
+  --content "Agent note: verified through Matterhorn Desks file session." \
   --json
 ```
 
@@ -193,7 +193,7 @@ matterhorn-work files session close "$MATTERHORN_WORK_WRITE_SESSION_ID" --json
 
 ## 5. Bittensor Chat From CLI
 
-Use [Matterhorn Work Bittensor Operator Playbook](./bittensor-operator-playbook.md) for the full Bittensor-specific operator flow, including expected behavior for wallet reads, subnet discovery, validator comparison, staking previews, missing-context clarifications, and unsupported subnet adapters.
+Use [Matterhorn Desks Bittensor Operator Playbook](./bittensor-operator-playbook.md) for the full Bittensor-specific operator flow, including expected behavior for wallet reads, subnet discovery, validator comparison, staking previews, missing-context clarifications, and unsupported subnet adapters.
 
 Start with readiness:
 
@@ -239,7 +239,7 @@ matterhorn-work bittensor chat \
 After the MCP server is configured, ask the agent to follow this exact sequence:
 
 ```text
-Use the Matterhorn Work MCP server.
+Use the Matterhorn Desks MCP server.
 
 1. Call matterhorn_doctor.
 2. Call matterhorn_list_workspaces and choose the active or requested workspace.

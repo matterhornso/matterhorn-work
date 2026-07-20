@@ -39,7 +39,7 @@ async function check(label: string, fn: () => Promise<boolean>, onPass?: (r: any
 
 console.log("");
 console.log("========================================");
-console.log("  Matterhorn Work — E2E Crypto Tests");
+console.log("  Matterhorn Desks — E2E Crypto Tests");
 console.log("========================================");
 console.log("");
 

@@ -1,6 +1,6 @@
 # Customer-Ready Crypto Smoke
 
-Run this before putting Matterhorn Work in front of a test customer. It combines the existing Bittensor, Hyperliquid, Polymarket, receipt, readiness, and safety checks into one operator loop.
+Run this before putting Matterhorn Desks in front of a test customer. It combines the existing Bittensor, Hyperliquid, Polymarket, receipt, readiness, and safety checks into one operator loop.
 
 The smoke pass is non-custodial:
 
@@ -36,7 +36,7 @@ This gate treats Bittensor as the customer-facing launch surface. Hyperliquid an
 [`docs/bittensor-beta-launch.md`](./bittensor-beta-launch.md).
 
 CI also runs this smoke pass through the `customer-crypto-gates` job in the
-Matterhorn Work Tests workflow. That job now runs `pnpm test:agent-control-mcp`
+Matterhorn Desks Tests workflow. That job now runs `pnpm test:agent-control-mcp`
 before `pnpm smoke:customer-ready-crypto`, so the MCP customer evidence tools
 and the consolidated smoke gates are both visible on pull requests instead of
 remaining local-only.
@@ -69,7 +69,7 @@ matterhorn-work crypto customer-smoke --offline --strict \
 
 The JSON report includes `metadata.generatedAt`, `metadata.gitSha`, and
 `metadata.gitBranch` so a reviewer can tie the customer packet back to the exact
-Matterhorn Work checkout that produced the evidence.
+Matterhorn Desks checkout that produced the evidence.
 
 ## Default Offline Checks
 
@@ -136,7 +136,7 @@ This prints the current preview/handoff, testnet external sign-request, public/r
 
 ## Optional Local Server Smoke
 
-When a local Matterhorn Work server is running, include read/preview/handoff-only live route checks:
+When a local Matterhorn Desks server is running, include read/preview/handoff-only live route checks:
 
 ```bash
 node scripts/customer-ready-crypto-smoke.mjs \

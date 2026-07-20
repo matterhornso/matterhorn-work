@@ -3,7 +3,7 @@
 /**
  * Wellness Creator Workflow — offline contract + self-check.
  *
- * This is a full Matterhorn Work workflow (not a pilot, not a custom vertical
+ * This is a full Matterhorn Desks workflow (not a pilot, not a custom vertical
  * UI): a chat-first, end-to-end flow that lets a wellness creator design a
  * program, generate client artifacts, package a service, plan delivery, manage
  * customers, and export the whole thing as a Matterhorn / MCP artifact.
@@ -150,7 +150,7 @@ const STAGES = [
     id: "export",
     name: "MCP / artifact export",
     description:
-      "Export the workflow so it runs through Matterhorn Work, Claude Code, Codex, or as a shared artifact.",
+      "Export the workflow so it runs through Matterhorn Desks, Claude Code, Codex, or as a shared artifact.",
     prompt: "Export this as a Matterhorn workflow / MCP artifact",
     artifacts: ["Matterhorn workflow / MCP export"],
   },
@@ -217,7 +217,7 @@ const DELIVERY_GUARANTEES = [
 
 // ---- Wellness Creator Customer Offer Builder ----
 // A complete, customer-safe layer for trainers, yoga instructors, and
-// dieticians to package and deliver their services through Matterhorn Work.
+// dieticians to package and deliver their services through Matterhorn Desks.
 // Everything is artifact-first and offline: no payment, email, hosting, or
 // access action happens.
 const OFFER_PERSONAS = ["personal_trainer", "yoga_instructor", "dietician", "hybrid_coach"];
@@ -421,7 +421,7 @@ function buildDemoPacketExport(persona = "wellness_creator") {
 }
 
 const DEMO_CHECKLIST = [
-  "Setup: open Matterhorn Work as a normal user; no wallet, key, or payment account is needed.",
+  "Setup: open Matterhorn Desks as a normal user; no wallet, key, or payment account is needed.",
   "Run `node scripts/wellness-creator-workflow.mjs --json` and read the full workflow contract.",
   "Run the seven canonical prompts in order, one per workflow stage.",
   "Confirm every generated artifact carries its mandatory non-medical disclaimer.",
@@ -431,7 +431,7 @@ const DEMO_CHECKLIST = [
 ];
 
 const HERMES_QA_CHECKLIST = [
-  "Confirm the workflow is framed as a full Matterhorn Work workflow, not a pilot and not a custom UI.",
+  "Confirm the workflow is framed as a full Matterhorn Desks workflow, not a pilot and not a custom UI.",
   "Walk all seven stages: intake, program design, client artifacts, service packaging, delivery plan, customer management, export.",
   "Confirm each canonical prompt produces its expected, client-safe artifacts.",
   "Confirm mandatory disclaimers appear on the program, nutrition, and client artifacts.",
@@ -1188,7 +1188,7 @@ function buildContract() {
     version: VERSION,
     ok: true,
     workflow: "Longevity Creator Workflow",
-    framing: "A full Matterhorn Work workflow, not a pilot and not a custom vertical UI.",
+    framing: "A full Matterhorn Desks workflow, not a pilot and not a custom vertical UI.",
     fullWorkflow: true,
     isPilot: false,
     nonTrading: true,

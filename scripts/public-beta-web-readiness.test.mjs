@@ -10,10 +10,26 @@ assert.equal(packageJson.scripts["test:public-beta-web-readiness"], "node script
 const publicBetaLaunchDoc = readFileSync("docs/public-beta-launch-2026-07-17.md", "utf8");
 const productionLaunchDoc = readFileSync("docs/production-launch-configuration.md", "utf8");
 const gateSource = readFileSync("scripts/public-beta-web-readiness.mjs", "utf8");
+const vercelConfig = JSON.parse(readFileSync("apps/app/vercel.json", "utf8"));
 for (const source of [publicBetaLaunchDoc, productionLaunchDoc, gateSource]) {
   assert.doesNotMatch(source, /pnpm (?:gate:public-beta-web|launch:readiness) --(?: |\s*\\)/);
 }
 assert.match(gateSource, /pnpm gate:public-beta-web --json/);
+
+const vercelHeaders = Object.fromEntries(
+  vercelConfig.headers
+    .find((entry) => entry.source === "/(.*)")
+    .headers
+    .map((header) => [header.key.toLowerCase(), header.value]),
+);
+assert.match(vercelHeaders["content-security-policy"], /frame-ancestors 'none'/);
+assert.match(vercelHeaders["content-security-policy"], /base-uri 'none'/);
+assert.match(vercelHeaders["content-security-policy"], /object-src 'none'/);
+assert.equal(vercelHeaders["cross-origin-opener-policy"], "same-origin-allow-popups");
+assert.equal(vercelHeaders["permissions-policy"], "camera=(), microphone=(), geolocation=()");
+assert.equal(vercelHeaders["referrer-policy"], "strict-origin-when-cross-origin");
+assert.equal(vercelHeaders["x-content-type-options"], "nosniff");
+assert.equal(vercelHeaders["x-frame-options"], "DENY");
 
 const managedKeys = [
   "VITE_MATTERHORN_DEPLOYMENT",
@@ -23,6 +39,7 @@ const managedKeys = [
   "VITE_MATTERHORN_CLOUD_URL",
   "VITE_MATTERHORN_CLOUD_API_URL",
   "MATTERHORN_APP_URL",
+  "MATTERHORN_PUBLIC_PROXY_MODE",
   "VITE_MATTERHORN_WORK_TOKEN",
   "VITE_MATTERHORN_WORK_HOST_TOKEN",
   "VITE_OPENWORK_TOKEN",
@@ -50,6 +67,7 @@ function publicWebEnvironment(overrides = {}) {
     VITE_MATTERHORN_CLOUD_URL: "https://app.matterhorn.example",
     VITE_MATTERHORN_CLOUD_API_URL: "https://api.matterhorn.example",
     MATTERHORN_APP_URL: "https://app.matterhorn.example",
+    MATTERHORN_PUBLIC_PROXY_MODE: "same-origin",
     ...overrides,
   };
 }
@@ -84,6 +102,10 @@ assert.ok(JSON.parse(directBackend.stdout).blockers.some((blocker) => blocker.id
 const rawEngine = run({ VITE_OPENCODE_URL: "https://engine.matterhorn.example" });
 assert.notEqual(rawEngine.status, 0);
 assert.ok(JSON.parse(rawEngine.stdout).blockers.some((blocker) => blocker.id === "web.same_origin_proxy"));
+
+const missingProxyDeclaration = run({ MATTERHORN_PUBLIC_PROXY_MODE: "" });
+assert.notEqual(missingProxyDeclaration.status, 0);
+assert.ok(JSON.parse(missingProxyDeclaration.stdout).blockers.some((blocker) => blocker.id === "web.proxy_configured"));
 
 const noSignin = run({ VITE_MATTERHORN_REQUIRE_SIGNIN: "0" });
 assert.notEqual(noSignin.status, 0);

@@ -25,7 +25,7 @@ function hasUsableConnection(url: string, token: string) {
 }
 
 /**
- * Resolve the Matterhorn Work server connection for routes that consume the server API.
+ * Resolve the Matterhorn Desks server connection for routes that consume the server API.
  *
  * Local desktop-hosted servers expose ephemeral loopback ports and freshly
  * minted tokens on every boot, so live runtime info is the source of truth

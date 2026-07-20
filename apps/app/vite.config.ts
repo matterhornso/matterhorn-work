@@ -120,13 +120,23 @@ export default defineConfig({
       },
       output: {
         manualChunks(id: string): string | undefined {
-          // Core vendor libraries that change rarely
+          // Keep Vite's dynamic-import preloader in a neutral core chunk.
+          // If Rollup places it inside a route-deferred vendor chunk, every
+          // dynamic import makes that otherwise-lazy chunk an eager dependency.
+          if (id.includes("vite/preload-helper")) {
+            return "vendor-loader";
+          }
+          // React is needed by every entry, including the signed-out public
+          // gate. Keep the router separate so authentication does not download
+          // workspace navigation before a session is verified.
           if (
             id.includes("node_modules/react/") ||
-            id.includes("node_modules/react-dom/") ||
-            id.includes("node_modules/react-router-dom")
+            id.includes("node_modules/react-dom/")
           ) {
-            return "vendor-core";
+            return "vendor-react";
+          }
+          if (id.includes("node_modules/react-router-dom")) {
+            return "vendor-router";
           }
           // Syntax highlighting (heavy WASM)
           if (
@@ -143,11 +153,20 @@ export default defineConfig({
           ) {
             return "vendor-markdown";
           }
+          // React Query is part of the core application runtime. Keep it out
+          // of the route-deferred wallet chunk so public authentication does
+          // not download the Web3 stack simply to initialize the query cache.
+          if (id.includes("node_modules/@tanstack/react-query")) {
+            return "vendor-query";
+          }
           // Wallet + Web3 stack
           if (
             id.includes("node_modules/wagmi") ||
             id.includes("node_modules/viem") ||
-            id.includes("node_modules/@tanstack/react-query")
+            id.includes("node_modules/@mysten") ||
+            id.includes("node_modules/@wallet-standard") ||
+            id.includes("node_modules/@walletconnect") ||
+            id.includes("node_modules/@coinbase")
           ) {
             return "vendor-wallet";
           }

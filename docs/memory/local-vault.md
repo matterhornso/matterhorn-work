@@ -55,7 +55,7 @@ The API is designed so later API, CLI, MCP, and app UI layers can build against 
 
 ## Server Routes
 
-The Matterhorn Work server exposes the vault through explicit, client-token-protected routes. These routes do not auto-capture chat. A caller must provide a full memory record or an explicit record id.
+The Matterhorn Desks server exposes the vault through explicit, client-token-protected routes. These routes do not auto-capture chat. A caller must provide a full memory record or an explicit record id.
 
 ```text
 GET    /api/memory/search?q=<text>&kind=<kind>&scope=<scope>&tags=a,b&limit=20
@@ -78,7 +78,7 @@ Every write path runs the shared memory safety contract and the local vault safe
 
 ## CLI
 
-Agents and operators can use the same server-backed surface through the Matterhorn Work CLI:
+Agents and operators can use the same server-backed surface through the Matterhorn Desks CLI:
 
 ```bash
 matterhorn-work memory search --query "bittensor wallet" --json

@@ -206,7 +206,7 @@ describe("testRemoteWorkspaceConnection", () => {
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("Token is missing");
-    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Desks host");
     expect(result.state.message).toContain("support@matterhorn.work");
   });
 
@@ -221,7 +221,7 @@ describe("testRemoteWorkspaceConnection", () => {
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("unhealthy response");
-    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Desks host");
     expect(result.state.message).toContain("support@matterhorn.work");
   });
 
@@ -257,7 +257,7 @@ describe("testRemoteWorkspaceConnection", () => {
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("Token was rejected by worker.example.com");
-    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Desks host");
     expect(result.state.message).toContain("support@matterhorn.work");
   });
 
@@ -274,7 +274,7 @@ describe("testRemoteWorkspaceConnection", () => {
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("Workspace ws_remote was not found");
-    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Desks host");
     expect(result.state.message).toContain("support@matterhorn.work");
   });
 
@@ -322,7 +322,7 @@ describe("testRemoteWorkspaceConnection", () => {
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("Token was rejected by worker.example.com");
-    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Desks host");
     expect(result.state.message).toContain("support@matterhorn.work");
   });
 
@@ -339,7 +339,7 @@ describe("testRemoteWorkspaceConnection", () => {
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("is not authorized");
-    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Desks host");
     expect(result.state.message).toContain("support@matterhorn.work");
   });
 
@@ -356,7 +356,7 @@ describe("testRemoteWorkspaceConnection", () => {
     expect(result.ok).toBe(false);
     expect(result.state.status).toBe("error");
     expect(result.state.message).toContain("Cannot reach worker.example.com");
-    expect(result.state.message).toContain("Upgrade the Matterhorn Work host");
+    expect(result.state.message).toContain("Upgrade the Matterhorn Desks host");
     expect(result.state.message).toContain("support@matterhorn.work");
   });
 

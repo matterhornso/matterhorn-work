@@ -56,12 +56,12 @@ function isOpenworkServerReady(info?: BootMatterhornServerInfo) {
 /**
  * On desktop (Tauri) startup:
  *   1) bootstrap the workspace list
- *   2) if a local workspace is selected, restart the embedded Matterhorn Work server
+ *   2) if a local workspace is selected, restart the embedded Matterhorn Desks server
  *   3) start the OpenCode engine pointed at the workspace
- *   4) activate the workspace on the running Matterhorn Work server
+ *   4) activate the workspace on the running Matterhorn Desks server
  *   5) notify React routes that fresh desktop runtime info is available. Electron
  *      routes read live runtime info directly instead of persisting ephemeral
- *      localhost ports/tokens into Matterhorn Work settings.
+ *      localhost ports/tokens into Matterhorn Desks settings.
  *
  * Safe to call multiple times — gated by a `didBoot` ref so it runs once per mount.
  */
@@ -136,7 +136,7 @@ export function useDesktopRuntimeBoot() {
           }
 
           if (!boot.skipped && !isOpenworkServerReady(boot.matterhornServer)) {
-            setError("Matterhorn Work server did not finish starting. Please restart Matterhorn Work.");
+            setError("Matterhorn Desks server did not finish starting. Please restart Matterhorn Desks.");
             return;
           }
 

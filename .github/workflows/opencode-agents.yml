@@ -33,10 +33,10 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - name: Install opencode
+      - name: Install pinned OpenCode
         run: |
-          version="$(node -e "const fs=require('fs'); const parsed=JSON.parse(fs.readFileSync('constants.json','utf8')); process.stdout.write(String(parsed.opencodeVersion||'').trim().replace(/^v/,''));")"
-          curl -fsSL https://opencode.ai/install | bash -s -- --version "$version" --no-modify-path
+          OPENCODE_INSTALL_DIR="$HOME/.opencode/bin" bash scripts/install-pinned-opencode.sh
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
 
       - name: Triage issue
         env:
@@ -69,10 +69,10 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - name: Install opencode
+      - name: Install pinned OpenCode
         run: |
-          version="$(node -e "const fs=require('fs'); const parsed=JSON.parse(fs.readFileSync('constants.json','utf8')); process.stdout.write(String(parsed.opencodeVersion||'').trim().replace(/^v/,''));")"
-          curl -fsSL https://opencode.ai/install | bash -s -- --version "$version" --no-modify-path
+          OPENCODE_INSTALL_DIR="$HOME/.opencode/bin" bash scripts/install-pinned-opencode.sh
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
 
       - name: Build prompt
         env:

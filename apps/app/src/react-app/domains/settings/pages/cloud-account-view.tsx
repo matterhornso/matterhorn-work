@@ -278,7 +278,7 @@ export function CloudAccountView({
     enabled: Boolean(matterhornServerClient),
     staleTime: 30_000,
     queryFn: async () => {
-      if (!matterhornServerClient) throw new Error("Matterhorn Work engine is offline.");
+      if (!matterhornServerClient) throw new Error("Matterhorn Desks engine is offline.");
       if (workspaceIdForBackend) {
         const snapshot = await matterhornServerClient.workspaceBackendControlPlane(workspaceIdForBackend);
         return snapshot.capabilities;

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Matterhorn Work Wallet MCP Server.
+ * Matterhorn Desks Wallet MCP Server.
  * V1: Real chain reads + structured tx/signature responses.
  */
 
@@ -210,4 +210,4 @@ async function handleMessage(msg) {
   }
 }
 
-process.stderr.write("Matterhorn Work Wallet MCP Server v0.2.1 ready\n");
+process.stderr.write("Matterhorn Desks Wallet MCP Server v0.2.1 ready\n");

@@ -35,7 +35,7 @@ function usage() {
     "  node scripts/bittensor-adapter-canary-gate.mjs --netuid 14 --allowed-hosts api.example.com --strict",
     "",
     "Options:",
-    "  --server-url <url>          Matterhorn Work server URL.",
+    "  --server-url <url>          Matterhorn Desks server URL.",
     "  --token <token>             Optional client bearer token.",
     "  --netuid <n>                Subnet netuid to inspect.",
     "  --capability-json <path>    Offline capability fixture for tests or canary evidence review.",
@@ -193,7 +193,7 @@ function escapeCell(value) {
 function renderMarkdown(summary) {
   const rows = summary.findings.map((finding) => `| ${escapeCell(finding.status)} | ${escapeCell(finding.area)} | ${escapeCell(finding.detail)} | ${escapeCell(finding.severity || "-")} |`).join("\n");
   return [
-    "# Matterhorn Work Bittensor Adapter Canary Gate",
+    "# Matterhorn Desks Bittensor Adapter Canary Gate",
     "",
     "## Decision",
     "",

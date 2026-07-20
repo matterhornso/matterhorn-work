@@ -74,7 +74,10 @@ export interface ApprovalConfig {
 export interface RequestRateLimitConfig {
   enabled?: boolean;
   windowMs?: number;
+  /** Legacy shared fallback used when a class-specific limit is omitted. */
   maxRequests?: number;
+  readMaxRequests?: number;
+  writeMaxRequests?: number;
 }
 
 export interface ServerConfig {

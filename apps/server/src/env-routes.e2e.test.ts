@@ -285,7 +285,7 @@ describe("env routes", () => {
     expect(put.status).toBe(400);
     const body = (await put.json()) as { code: string; message: string };
     expect(body.code).toBe("reserved_env_key");
-    expect(body.message).toBe("Environment variable name is reserved for OpenWork internals");
+    expect(body.message).toBe("Environment variable name is reserved for Matterhorn Desks internals");
     expect(body.message).not.toContain("OPENWORK_TOKEN");
   });
 
@@ -360,10 +360,10 @@ describe("env routes", () => {
       clientSecret: "rt-secret",
       expiresAt: 123,
     });
-    expect(JSON.stringify(observedSessionRequest)).toContain("Matterhorn Work Voice Mode");
-    expect(JSON.stringify(observedSessionRequest)).toContain("semantic Matterhorn Work UI tools");
+    expect(JSON.stringify(observedSessionRequest)).toContain("Matterhorn Desks Voice Mode");
+    expect(JSON.stringify(observedSessionRequest)).toContain("semantic Matterhorn Desks UI tools");
     expect(JSON.stringify(observedSessionRequest)).toContain("openwork_snapshot");
-    expect(JSON.stringify(observedSessionRequest)).toContain("compatibility tool IDs control Matterhorn Work");
+    expect(JSON.stringify(observedSessionRequest)).toContain("compatibility tool IDs control Matterhorn Desks");
     expect(JSON.stringify(observedSessionRequest)).not.toContain("OpenWork Voice Mode");
     expect(JSON.stringify(observedSessionRequest)).not.toContain("semantic OpenWork UI tools");
   });
@@ -382,7 +382,7 @@ describe("env routes", () => {
     const body = await response.json() as { message?: string };
 
     expect(response.status).toBe(400);
-    expect(body.message).toContain("Matterhorn Work environment variables");
+    expect(body.message).toContain("Matterhorn Desks environment variables");
     expect(body.message).not.toContain("OpenWork Environment Variables");
   });
 

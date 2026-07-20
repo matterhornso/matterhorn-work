@@ -65,7 +65,7 @@ describe("Matterhorn route error boundary", () => {
     const html = renderToStaticMarkup(boundary.render() as React.ReactElement);
 
     expect(html).toContain("This Matterhorn view stopped working");
-    expect(html).not.toContain("Matterhorn Work engine is offline");
+    expect(html).not.toContain("Matterhorn Desks engine is offline");
     expect(html).not.toContain("Failed to fetch while rendering");
   });
 

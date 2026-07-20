@@ -30,7 +30,7 @@ assert.match(serverSource, /"service\.name": "matterhorn-work-server"/);
 assert.match(serverSource, /\[matterhorn-work-server\] Unhandled error:/);
 
 const toyUi = readText("apps/server/src/toy-ui.ts");
-assert.match(toyUi, /Matterhorn Work Local UI/);
+assert.match(toyUi, /Matterhorn Desks Local UI/);
 assert.match(toyUi, /\/ui\/assets\/matterhorn-mark\.svg/);
 assert.doesNotMatch(toyUi, /OpenWork Toy UI/);
 
@@ -88,7 +88,7 @@ assert.match(headlessWeb, /matterhorn-work-server/);
 assert.match(headlessWeb, /--matterhorn-work-server-bin/);
 
 const releaseWorkflow = readText(".github/workflows/release-macos-aarch64.yml");
-assert.match(releaseWorkflow, /Release title \(defaults to Matterhorn Work <tag>\)/);
+assert.match(releaseWorkflow, /Release title \(defaults to Matterhorn Desks <tag>\)/);
 assert.doesNotMatch(releaseWorkflow, /Release title \(defaults to OpenWork <tag>\)/);
 
 console.log("CLI packaging rename smoke checks passed.");

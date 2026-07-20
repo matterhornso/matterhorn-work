@@ -37,13 +37,13 @@ const TAURI_APP_IDENTIFIER = "com.differentai.openwork";
 const DEV_APP_IDENTIFIER = "com.differentai.openwork.dev";
 const DESKTOP_PROTOCOL_SCHEMES = ["matterhorn-work", "openwork"];
 const isDevMode = process.env.OPENWORK_DEV_MODE === "1";
-const APP_NAME = isDevMode ? "Matterhorn - Dev" : "Matterhorn";
+const APP_NAME = isDevMode ? "Matterhorn Desks - Dev" : "Matterhorn Desks";
 const APP_IDENTIFIER = isDevMode ? DEV_APP_IDENTIFIER : TAURI_APP_IDENTIFIER;
 const RELEASE_DOWNLOAD_BASE_URL = "https://github.com/matterhornso/matterhorn-work/releases/latest/download";
 const RELEASE_PAGE_URL = "https://github.com/matterhornso/matterhorn-work/releases/latest";
 const DOCS_PAGE_URL = "https://github.com/matterhornso/matterhorn-work/tree/dev/docs";
 const BROWSER_PLUGIN = "opencode-chrome-devtools";
-const COMPUTER_USE_HELPER_APP_NAME = "Matterhorn Work Automation Helper.app";
+const COMPUTER_USE_HELPER_APP_NAME = "Matterhorn Desks Automation Helper.app";
 const COMPUTER_USE_HELPER_EXECUTABLE = "ComputerUse";
 
 function computerUseHelperExecutablePath() {
@@ -73,7 +73,7 @@ function getComputerUseMcpCommand() {
   if (helperExecutable) return [helperExecutable, "mcp"];
 
   if (app.isPackaged) {
-    throw new Error("Matterhorn Work automation helper is missing from this Matterhorn build.");
+    throw new Error("Matterhorn Desks automation helper is missing from this Matterhorn build.");
   }
 
   if (process.env.OPENWORK_DEV_MODE === "1") {
@@ -515,7 +515,7 @@ function isTrustedMainWindowIpcEvent(event) {
 function requireTrustedMainWindowIpcEvent(event, channel) {
   if (isTrustedMainWindowIpcEvent(event)) return;
   console.warn(`[desktop-ipc] blocked ${channel} from untrusted renderer`);
-  throw new Error("This desktop action is only available from the Matterhorn Work window.");
+  throw new Error("This desktop action is only available from the Matterhorn Desks window.");
 }
 
 function trustedMainWindowHandler(channel, handler) {
@@ -2148,13 +2148,13 @@ async function disposeRuntimeBeforeQuit() {
 
 function assertMatterhornServerReady(info) {
   if (!info?.running) {
-    throw new Error("Matterhorn Work engine did not stay running after startup.");
+    throw new Error("Matterhorn Desks engine did not stay running after startup.");
   }
   if (!info.baseUrl) {
-    throw new Error("Matterhorn Work engine did not report a base URL after startup.");
+    throw new Error("Matterhorn Desks engine did not report a base URL after startup.");
   }
   if (!info.ownerToken && !info.clientToken) {
-    throw new Error("Matterhorn Work engine did not report an access token after startup.");
+    throw new Error("Matterhorn Desks engine did not report an access token after startup.");
   }
   return info;
 }
@@ -2651,8 +2651,8 @@ async function handleDesktopInvoke(event, command, ...args) {
         if (!discovered?.id) {
           throw new Error(
             directory
-              ? `Matterhorn Work engine has no workspace matching ${directory}.`
-              : "Matterhorn Work engine returned no workspaces.",
+              ? `Matterhorn Desks engine has no workspace matching ${directory}.`
+              : "Matterhorn Desks engine returned no workspaces.",
           );
         }
         resolvedOpenworkWorkspaceId = String(discovered.id).trim();
@@ -2730,8 +2730,8 @@ async function handleDesktopInvoke(event, command, ...args) {
             if (!discovered?.id) {
               throw new Error(
                 directory
-                  ? `Matterhorn Work engine has no workspace matching ${directory}.`
-                  : "Matterhorn Work engine returned no workspaces.",
+                  ? `Matterhorn Desks engine has no workspace matching ${directory}.`
+                  : "Matterhorn Desks engine returned no workspaces.",
               );
             }
             remoteWorkspaceId = String(discovered.id).trim();
@@ -2911,9 +2911,9 @@ async function handleDesktopInvoke(event, command, ...args) {
       return null;
     case "getOpenworkUiMcpCommand": {
       if (process.env.OPENWORK_DEV_MODE === "1") {
-        return ["node", path.resolve(__dirname, "../../..", "packages/openwork-ui-mcp/index.mjs")];
+        return ["node", path.resolve(__dirname, "../../..", "packages/matterhorn-work-ui-mcp/index.mjs")];
       }
-      return ["npx", "-y", "openwork-ui-mcp"];
+      return ["npx", "-y", "matterhorn-work-ui-mcp"];
     }
     case "getComputerUseMcpCommand": {
       return getComputerUseMcpCommand();

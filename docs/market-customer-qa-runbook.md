@@ -6,7 +6,7 @@ Scope:
 
 - Bittensor remains the mature flow: wallet reads, validator/subnet intelligence, watch/autopilot, unsigned previews, external-signer handoff, and receipt evidence.
 - Hyperliquid provides read/preview/external-signer flows plus a separate web-only, wallet-approved execution ticket. Polymarket remains read/preview/external-signer only.
-- Matterhorn Work must never ask for, store, log, or transmit private keys, seed phrases, API secrets, raw signatures, or signed payloads.
+- Matterhorn Desks must never ask for, store, log, or transmit private keys, seed phrases, API secrets, raw signatures, or signed payloads.
 - No chat, MCP, CLI, watch, workflow, or agent prompt may submit an order. Hyperliquid submission is allowed only through the guarded web ticket after the connected wallet signs an exact, expiring server intent; Polymarket submission is unavailable.
 
 ## 1. Static Safety Gates
@@ -56,7 +56,7 @@ Expected result:
 
 ## 3. Local Server Smoke
 
-Start Matterhorn Work locally, then run read-only server calls. Use a test server token only.
+Start Matterhorn Desks locally, then run read-only server calls. Use a test server token only.
 
 ```bash
 export MATTERHORN_WORK_SERVER_URL="http://localhost:8787"

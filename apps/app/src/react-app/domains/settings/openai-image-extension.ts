@@ -72,10 +72,10 @@ export const MatterhornImageGeneration = async () => ({
       async execute(args, context) {
         const { mkdir, writeFile } = await import("node:fs/promises")
         const { join } = await import("node:path")
-        const prompt = String(args.prompt || "").trim() || "Matterhorn Work image"
+        const prompt = String(args.prompt || "").trim() || "Matterhorn Desks image"
         const root = context.directory || context.worktree || process.cwd()
         const config = await readConfig(root)
-        if (!config.apiKey) throw new Error("OpenAI API key missing. Configure the OpenAI Image Generation extension in Matterhorn Work.")
+        if (!config.apiKey) throw new Error("OpenAI API key missing. Configure the OpenAI Image Generation extension in Matterhorn Desks.")
         const payload = await generateImage({ apiKey: config.apiKey, prompt })
         const first = payload?.data?.[0]
         if (!first?.b64_json) throw new Error("OpenAI did not return image data")

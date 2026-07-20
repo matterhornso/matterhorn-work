@@ -59,7 +59,7 @@ for (const phrase of [
   'outcome: "Receipt status"',
   "This button creates an unsigned preview only.",
   "Matterhorn server did not answer",
-  "instead of JSON. Reconnect the Matterhorn Work server",
+  "instead of JSON. Reconnect the Matterhorn Desks server",
   "Dynamic subnet list from the Matterhorn Bittensor API",
   "The subnet browser is live-data backed, not hardcoded.",
 ]) {

@@ -1,6 +1,6 @@
-# Help Translate Matterhorn Work
+# Help Translate Matterhorn Desks
 
-We are actively looking for contributors to translate Matterhorn Work to your own native language.
+We are actively looking for contributors to translate Matterhorn Desks to your own native language.
 
 ## README translations
 

@@ -14,7 +14,7 @@ function assertPng(path, width, height) {
 
 function assertSvgUsesMatterhornLogo(path) {
   const svg = read(path);
-  assert.match(svg, /<title>Matterhorn Work<\/title>/, `${path} should identify Matterhorn Work`);
+  assert.match(svg, /<title>Matterhorn Desks<\/title>/, `${path} should identify Matterhorn Desks`);
   assert.match(svg, /id="matterhorn-mark"/, `${path} should contain the Matterhorn mark path`);
   assert.match(svg, /#D1F2FF/, `${path} should use Matterhorn blue`);
   assert.match(svg, /#0C0C0C/, `${path} should use Matterhorn ink`);

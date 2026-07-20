@@ -58,7 +58,8 @@ function help() {
     "  node scripts/product-hunt-deployment-probe.mjs --app-url $MATTERHORN_APP_URL --server-url $MATTERHORN_WORK_SERVER_URL --strict --json-output deployment.json",
     "",
     "Required in strict mode:",
-    "  HTTPS app and API, successful responses, defensive security headers, exact-origin CORS, and rejection of an untrusted origin.",
+    "  HTTPS app and API, authenticated same-origin /workspaces and /opencode routing, successful responses,",
+    "  defensive security headers, exact-origin CORS, and rejection of an untrusted origin.",
     "  --allow-loopback-http is only for local contract tests and can never produce production-ready evidence.",
   ].join("\n");
 }
@@ -84,6 +85,12 @@ function healthUrlFor(serverUrl, healthPath) {
   }
   const url = new URL(healthPath, serverUrl.origin);
   if (url.origin !== serverUrl.origin) throw new Error("--health-path must stay on the configured API origin.");
+  return url;
+}
+
+function appOriginUrlFor(appUrl, path) {
+  const url = new URL(path, appUrl.origin);
+  if (url.origin !== appUrl.origin) throw new Error(`${path} must stay on the configured app origin.`);
   return url;
 }
 
@@ -133,6 +140,38 @@ async function fetchWithTimeout(url, init = {}, timeoutMs = 12_000) {
   }
 }
 
+async function probeUnauthenticatedProxyRoute(checks, appUrl, path, id, label) {
+  const url = appOriginUrlFor(appUrl, path);
+  try {
+    const response = await fetchWithTimeout(url, {
+      headers: {
+        accept: "application/json",
+      },
+    });
+    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+    const denied = response.status === 401 || response.status === 403;
+    checks.push(check(
+      `${id}_origin`,
+      `${label} origin`,
+      new URL(response.url).origin === appUrl.origin,
+      `${label} stays on the public application origin.`,
+      { statusCode: response.status },
+    ));
+    checks.push(check(
+      id,
+      label,
+      denied && contentType.includes("application/json"),
+      denied && contentType.includes("application/json")
+        ? `${path} is routed and denies the unauthenticated probe with JSON (HTTP ${response.status}).`
+        : `${path} returned HTTP ${response.status} with ${contentType || "no content type"}; expected a routed JSON 401 or 403.`,
+      { statusCode: response.status },
+    ));
+  } catch (error) {
+    checks.push(check(`${id}_origin`, `${label} origin`, false, `${label} origin could not be verified.`));
+    checks.push(check(id, label, false, `${path} request failed: ${error instanceof Error ? error.message : String(error)}`));
+  }
+}
+
 async function runProbe(config) {
   const appUrl = cleanUrl(config.appUrl, "--app-url");
   const serverUrl = cleanUrl(config.serverUrl, "--server-url");
@@ -162,6 +201,21 @@ async function runProbe(config) {
     checks.push(check("app_response", "App response", false, `App request failed: ${error instanceof Error ? error.message : String(error)}`));
     checks.push(check("app_response_origin", "App response origin", false, "The app response origin could not be verified."));
   }
+
+  await probeUnauthenticatedProxyRoute(
+    checks,
+    appUrl,
+    "/workspaces",
+    "app_workspace_proxy",
+    "Same-origin Matterhorn API proxy",
+  );
+  await probeUnauthenticatedProxyRoute(
+    checks,
+    appUrl,
+    "/opencode/global/health",
+    "app_engine_proxy",
+    "Same-origin engine proxy",
+  );
 
   const healthUrl = healthUrlFor(serverUrl, config.healthPath);
   try {

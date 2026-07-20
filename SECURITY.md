@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Matterhorn Work is under active development and we prioritize fixes on the latest release and
+Matterhorn Desks is under active development and we prioritize fixes on the latest release and
 the current `dev` branch.
 
 ## Reporting a vulnerability
@@ -12,7 +12,7 @@ Please do not open public GitHub issues for security vulnerabilities.
 Instead, report vulnerabilities privately to:
 
 - Email: `ben@openworklabs.com`
-- Subject: `[Matterhorn Work security] <short summary>`
+- Subject: `[Matterhorn Desks security] <short summary>`
 
 Please include:
 

@@ -1,4 +1,4 @@
-# Matterhorn Work Settings
+# Matterhorn Desks Settings
 
 **Status:** Current implementation overview
 **Updated:** 2026-07-17

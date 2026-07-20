@@ -20,6 +20,12 @@ const managedEnvKeys = [
   "OPENWORK_REQUEST_RATE_LIMIT_WINDOW_MS",
   "MATTERHORN_WORK_REQUEST_RATE_LIMIT_MAX",
   "OPENWORK_REQUEST_RATE_LIMIT_MAX",
+  "MATTERHORN_WORK_REQUEST_RATE_LIMIT_READ_MAX",
+  "OPENWORK_REQUEST_RATE_LIMIT_READ_MAX",
+  "MATTERHORN_WORK_REQUEST_RATE_LIMIT_WRITE_MAX",
+  "OPENWORK_REQUEST_RATE_LIMIT_WRITE_MAX",
+  "MATTERHORN_WORK_WORKSPACES",
+  "OPENWORK_WORKSPACES",
 ] as const;
 
 const originalEnv = new Map<string, string | undefined>(
@@ -53,7 +59,7 @@ afterEach(() => {
   }
 });
 
-describe("Matterhorn Work env aliases", () => {
+describe("Matterhorn Desks env aliases", () => {
   test("defaults CORS to loopback-only development origins", async () => {
     const config = await resolveServerConfig(baseCli(makeConfigPath()));
 
@@ -85,6 +91,8 @@ describe("Matterhorn Work env aliases", () => {
     process.env.OPENWORK_REQUEST_RATE_LIMIT_ENABLED = "false";
     process.env.OPENWORK_REQUEST_RATE_LIMIT_WINDOW_MS = "120000";
     process.env.OPENWORK_REQUEST_RATE_LIMIT_MAX = "400";
+    process.env.OPENWORK_REQUEST_RATE_LIMIT_READ_MAX = "800";
+    process.env.OPENWORK_REQUEST_RATE_LIMIT_WRITE_MAX = "200";
 
     const config = await resolveServerConfig(baseCli(makeConfigPath()));
 
@@ -96,6 +104,50 @@ describe("Matterhorn Work env aliases", () => {
       enabled: false,
       windowMs: 120000,
       maxRequests: 400,
+      readMaxRequests: 800,
+      writeMaxRequests: 200,
     });
+  });
+
+  test("explicit workspaces replace stale file authorized roots", async () => {
+    const configPath = makeConfigPath();
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        workspaces: [{ path: "./stale-workspace" }],
+        authorizedRoots: ["./stale-workspace"],
+      }),
+      "utf8",
+    );
+    const workspacePath = join(configPath, "..", "launch-workspace");
+
+    const config = await resolveServerConfig({
+      ...baseCli(configPath),
+      workspaces: [workspacePath],
+    });
+
+    expect(config.workspaces).toHaveLength(1);
+    expect(config.workspaces[0]?.path).toBe(workspacePath);
+    expect(config.authorizedRoots).toEqual([workspacePath]);
+  });
+
+  test("environment workspaces replace stale file authorized roots", async () => {
+    const configPath = makeConfigPath();
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        workspaces: [{ path: "./stale-workspace" }],
+        authorizedRoots: ["./stale-workspace"],
+      }),
+      "utf8",
+    );
+    const workspacePath = join(configPath, "..", "environment-workspace");
+    process.env.MATTERHORN_WORK_WORKSPACES = workspacePath;
+
+    const config = await resolveServerConfig(baseCli(configPath));
+
+    expect(config.workspaces).toHaveLength(1);
+    expect(config.workspaces[0]?.path).toBe(workspacePath);
+    expect(config.authorizedRoots).toEqual([workspacePath]);
   });
 });

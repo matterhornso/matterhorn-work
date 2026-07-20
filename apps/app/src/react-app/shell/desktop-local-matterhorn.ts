@@ -76,7 +76,7 @@ export async function ensureDesktopLocalMatterhornConnection(
 
     const info = await matterhornServerInfo() as MatterhornServerInfo | null;
     if (!info?.baseUrl) {
-      throw new Error("Matterhorn Work server did not report a base URL after activation.");
+      throw new Error("Matterhorn Desks server did not report a base URL after activation.");
     }
 
     writeMatterhornServerSettings({

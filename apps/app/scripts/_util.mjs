@@ -71,13 +71,13 @@ export async function spawnOpencodeServe({
   if (!executableExists(engineBin)) {
     if (configuredEngineBin) {
       throw new Error(
-        `Configured Matterhorn Work engine binary was not found: ${engineBin}. ` +
+        `Configured Matterhorn Desks engine binary was not found: ${engineBin}. ` +
           "Update MATTERHORN_WORK_ENGINE_BIN or OPENCODE_BIN.",
       );
     }
 
     console.log(
-      "SKIP: Matterhorn Work engine binary is unavailable. " +
+      "SKIP: Matterhorn Desks engine binary is unavailable. " +
         "Install the engine or set MATTERHORN_WORK_ENGINE_BIN/OPENCODE_BIN to run live app smoke tests.",
     );
     process.exit(0);

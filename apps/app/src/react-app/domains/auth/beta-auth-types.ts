@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 
 /**
- * Clerk-compatible auth types for the Matterhorn Work Monday beta.
+ * Clerk-compatible auth types for the Matterhorn Desks Monday beta.
  *
  * This file defines a subset of the Clerk API surface so that beta UI code can
  * be written against a stable, provider-agnostic contract. The current

@@ -46,7 +46,7 @@ assert.equal(contract.fullWorkflow, true, "Contract must declare fullWorkflow: t
 assert.equal(contract.isPilot, false, "Contract must declare isPilot: false");
 assert.ok(/full/i.test(contract.framing), "Contract framing should describe a full workflow");
 assert.ok(/not a pilot/i.test(contract.framing), "Contract framing should say not a pilot");
-assert.ok(doc.includes("full Matterhorn Work workflow"), "Doc should frame this as a full Matterhorn Work workflow");
+assert.ok(doc.includes("full Matterhorn Desks workflow"), "Doc should frame this as a full Matterhorn Desks workflow");
 assert.ok(doc.includes("not a pilot"), "Doc should state this is not a pilot");
 
 // 5. Personas (all four).

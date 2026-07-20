@@ -38,7 +38,7 @@ assert.ok(plan.nextCommands.some((command) => command.includes("git fetch openwo
 
 const human = run(["--date", "2026-06-12"]);
 assert.equal(human.status, 0, human.stderr);
-assert.ok(human.stdout.includes("Matterhorn Work upstream OpenWork sync intake"));
+assert.ok(human.stdout.includes("Matterhorn Desks upstream OpenWork sync intake"));
 assert.ok(human.stdout.includes("Recommended branch: codex/sync-openwork-2026-06-12"));
 
 const help = run(["--help"]);

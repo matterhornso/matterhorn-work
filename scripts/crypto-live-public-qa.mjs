@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Matterhorn Work live public-data QA pack.
+ * Matterhorn Desks live public-data QA pack.
  *
  * Builds a customer-safe evidence bundle for Bittensor + Hyperliquid +
  * Polymarket live-read demos. Missing public live inputs are treated as a
@@ -43,7 +43,7 @@ function fail(message) {
 
 function printHelp() {
   process.stdout.write([
-    "Matterhorn Work live public-data QA pack",
+    "Matterhorn Desks live public-data QA pack",
     "",
     "Usage:",
     "  node scripts/crypto-live-public-qa.mjs --output-dir <dir> [--strict] [--json]",
@@ -444,7 +444,7 @@ function stageFromAttachment(id, label, path) {
 
 function renderMarkdown(report) {
   const lines = [
-    "# Matterhorn Work Live Public-Data QA",
+    "# Matterhorn Desks Live Public-Data QA",
     "",
     `- Status: ${report.status}`,
     `- Generated: ${report.generatedAt}`,
@@ -935,7 +935,7 @@ async function main() {
   if (outputJson) {
     process.stdout.write(json);
   } else {
-    process.stdout.write(`Matterhorn Work live public-data QA: ${status}\n`);
+    process.stdout.write(`Matterhorn Desks live public-data QA: ${status}\n`);
     process.stdout.write(`Evidence: ${report.files.json}\n`);
   }
 

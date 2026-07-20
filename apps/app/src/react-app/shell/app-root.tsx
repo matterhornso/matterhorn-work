@@ -7,7 +7,6 @@ import { readDenBootstrapConfig, readDenSettings } from "../../app/lib/den";
 import { denSettingsChangedEvent, denSessionUpdatedEvent } from "../../app/lib/den-session-events";
 import { useDenAuth } from "../domains/cloud/den-auth-provider";
 import { ForcedSigninPage } from "../domains/cloud/forced-signin-page";
-import { OrgOnboardingPage } from "../domains/cloud/org-onboarding-page";
 import { NewProvidersToast } from "./new-providers-toast";
 import { useDesktopFontZoomBehavior } from "./font-zoom";
 import { LoadingOverlay } from "./loading-overlay";
@@ -38,7 +37,7 @@ function RouteFallback() {
       role="status"
       aria-live="polite"
     >
-      Loading Matterhorn Work...
+      Loading Matterhorn Desks...
     </div>
   );
 }

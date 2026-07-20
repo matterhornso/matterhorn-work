@@ -169,7 +169,7 @@ function main() {
   const config = parseArgs(process.argv);
   if (config.help) {
     process.stdout.write([
-      "Matterhorn Work decentralized services chat planner",
+      "Matterhorn Desks decentralized services chat planner",
       "",
       "Usage:",
       "  node scripts/decentralized-services-chat-plan.mjs --message <text> [--capability hosting|storage|email|payments|identity] [--json]",

@@ -1,7 +1,7 @@
 {
   "name": "matterhorn-work-wallet-mcp",
   "version": "0.1.0",
-  "description": "MCP server for Matterhorn Work wallet — real chain reads & structured tx responses",
+  "description": "MCP server for Matterhorn Desks wallet — real chain reads & structured tx responses",
   "type": "module",
   "bin": {
     "matterhorn-work-wallet-mcp": "index.mjs"

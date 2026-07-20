@@ -1,4 +1,4 @@
-# Matterhorn Work Live Public-Data QA
+# Matterhorn Desks Live Public-Data QA
 
 This QA pack builds a customer-safe evidence bundle for a demo that uses only public read data. It combines Bittensor live-read checks, Hyperliquid/Polymarket read-only smoke checks, and existing customer crypto smoke evidence when those inputs are available.
 
@@ -29,7 +29,7 @@ This writes:
 
 ## Live Public Inputs
 
-When a local Matterhorn Work server is running, add only public inputs:
+When a local Matterhorn Desks server is running, add only public inputs:
 
 ```bash
 matterhorn-work crypto live-public-qa \

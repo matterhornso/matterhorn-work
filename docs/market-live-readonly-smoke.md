@@ -1,6 +1,6 @@
 # Market Live Read-Only Smoke
 
-A focused smoke harness that exercises a **live local Matterhorn Work server** across the Hyperliquid and Polymarket **read / preview / external-signer-handoff** routes only.
+A focused smoke harness that exercises a **live local Matterhorn Desks server** across the Hyperliquid and Polymarket **read / preview / external-signer-handoff** routes only.
 
 It is strictly non-custodial and **never submits an order, never signs, never moves funds, and never accepts or echoes signing material**. Every preview and handoff must report `canSubmit: false`. There is no submit/sign/exchange route in scope.
 

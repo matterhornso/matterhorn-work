@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a problem in Matterhorn Work
+description: Report a problem in Matterhorn Desks
 title: "[Bug]: "
 labels:
   - bug
@@ -47,12 +47,12 @@ body:
   - type: textarea
     id: desktop_info
     attributes:
-      label: Matterhorn Work version & desktop info (optional)
+      label: Matterhorn Desks version & desktop info (optional)
       description: |
-        Include OS and Matterhorn Work version if possible.
-        Matterhorn Work version: Settings > General.
+        Include OS and Matterhorn Desks version if possible.
+        Matterhorn Desks version: Settings > General.
       placeholder: |
-        - Matterhorn Work version: [e.g. 0.13.12]
+        - Matterhorn Desks version: [e.g. 0.13.12]
         - OS: [e.g. macOS Tahoe 26.2]
     validations:
       required: false

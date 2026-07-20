@@ -11,7 +11,7 @@ const sessionPage = readFileSync("apps/app/src/react-app/domains/session/chat/se
 const browserPanel = readFileSync("apps/app/src/react-app/domains/session/browser/browser-panel.tsx", "utf8");
 
 for (const snippet of [
-  "# Matterhorn Work Agent Browser Control",
+  "# Matterhorn Desks Agent Browser Control",
   "matterhorn-work-ui-mcp",
   "ui_status",
   "ui_snapshot",

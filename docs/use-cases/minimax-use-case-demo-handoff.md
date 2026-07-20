@@ -2,7 +2,7 @@
 
 ## What This PR Adds
 
-- `docs/use-cases/matterhorn-use-case-demo-pack.md` — Customer-facing overview of all five Matterhorn Work use cases (Bittensor, Hyperliquid, Polymarket, Wellness Creator, Decentralized Services). Each use case includes audience, sample prompts, expected returns, artifacts produced, safety boundary, current status, and future path.
+- `docs/use-cases/matterhorn-use-case-demo-pack.md` — Customer-facing overview of all five Matterhorn Desks use cases (Bittensor, Hyperliquid, Polymarket, Wellness Creator, Decentralized Services). Each use case includes audience, sample prompts, expected returns, artifacts produced, safety boundary, current status, and future path.
 - `docs/use-cases/hermes-use-case-demo-qa.md` — Black-box browser QA guide for Hermes or any non-coding tester. Includes setup assumptions, step-by-step prompts per use case, expected answer shapes, forbidden behavior checklist, issue ledger format, and pass/fail rubric.
 - `scripts/use-case-demo-pack.test.mjs` — Standalone Node test script (not added to `package.json`). Validates that all five use cases are present in the demo pack doc, that each includes required fields, that all safety phrases are present, and that forbidden affirmative claims are absent.
 

@@ -83,7 +83,7 @@ export function ComputerUseConfig(props: ComputerUseConfigProps) {
   // Spawn --check → fresh TCC read. Works whether or not the GUI is open.
   const verify = useCallback(async () => {
     if (!hasDesktopBridge()) {
-      setError("Desktop automation setup requires the Matterhorn Work desktop app on macOS.");
+      setError("Desktop automation setup requires the Matterhorn Desks desktop app on macOS.");
       return;
     }
     setBusy(true);
@@ -106,7 +106,7 @@ export function ComputerUseConfig(props: ComputerUseConfigProps) {
   // Open the setup GUI then immediately re-verify.
   const grant = async () => {
     if (!hasDesktopBridge()) {
-      setError("Matterhorn Work desktop is required.");
+      setError("Matterhorn Desks desktop is required.");
       return;
     }
     setBusy(true);

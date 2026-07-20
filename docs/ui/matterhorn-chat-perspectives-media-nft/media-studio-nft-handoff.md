@@ -1,6 +1,6 @@
 # Matterhorn Media Studio & NFT Handoff
 
-**Design specification for the Media Studio surface in Matterhorn Work.**
+**Design specification for the Media Studio surface in Matterhorn Desks.**
 
 ---
 

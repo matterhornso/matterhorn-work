@@ -1,12 +1,12 @@
-# Matterhorn Work Engine Naming
+# Matterhorn Desks Engine Naming
 
-Matterhorn Work presents its local agent runtime as the **Matterhorn Work engine** in user-facing copy.
+Matterhorn Desks presents its local agent runtime as the **Matterhorn Desks engine** in user-facing copy.
 
 OpenCode remains the underlying runtime and should still be named when the surface is technical, diagnostic, or compatibility-sensitive.
 
-## Use Matterhorn Work Engine
+## Use Matterhorn Desks Engine
 
-Use **Matterhorn Work engine** in:
+Use **Matterhorn Desks engine** in:
 
 - app settings labels and recovery actions
 - startup errors and permission prompts

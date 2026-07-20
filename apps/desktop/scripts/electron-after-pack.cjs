@@ -5,7 +5,7 @@ const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
 const Module = require("node:module");
 
-const computerUseHelperAppName = "Matterhorn Work Automation Helper.app";
+const computerUseHelperAppName = "Matterhorn Desks Automation Helper.app";
 
 const sidecarBases = [
   "opencode",
@@ -177,7 +177,7 @@ function signComputerUseHelper(context) {
 
   const helperPath = path.join(appPath, "Contents", "Resources", "helpers", computerUseHelperAppName);
   if (!fs.existsSync(helperPath)) {
-    throw new Error(`Missing Matterhorn Work automation helper app at ${helperPath}`);
+    throw new Error(`Missing Matterhorn Desks automation helper app at ${helperPath}`);
   }
 
   const identity = process.env.OPENWORK_COMPUTER_USE_CODESIGN_IDENTITY
@@ -191,7 +191,7 @@ function signComputerUseHelper(context) {
   const result = spawnSync("codesign", args, { stdio: "inherit" });
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`codesign failed for Matterhorn Work automation helper app with status ${result.status}`);
+    throw new Error(`codesign failed for Matterhorn Desks automation helper app with status ${result.status}`);
   }
 }
 
@@ -202,7 +202,7 @@ function copyComputerUseHelper(context) {
 
   const sourcePath = path.resolve(__dirname, "..", "resources", "helpers", computerUseHelperAppName);
   if (!fs.existsSync(sourcePath)) {
-    throw new Error(`Matterhorn Work automation helper source is missing: ${sourcePath}`);
+    throw new Error(`Matterhorn Desks automation helper source is missing: ${sourcePath}`);
   }
 
   const helpersDir = path.join(appPath, "Contents", "Resources", "helpers");

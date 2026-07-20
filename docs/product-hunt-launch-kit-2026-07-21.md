@@ -1,4 +1,4 @@
-# Matterhorn Work Product Hunt Launch Kit - 2026-07-21
+# Matterhorn Desks Product Hunt Launch Kit - 2026-07-21
 
 This is the canonical public-copy and media brief for the Tuesday, July 21,
 2026 Product Hunt launch. It does not authorize publication. The launch remains
@@ -7,14 +7,14 @@ commit and the launch-room owner records all four sign-offs.
 
 ## Positioning
 
-**Product name:** Matterhorn Work
+**Product name:** Matterhorn Desks
 
 **Tagline:** Your AI workspace for serious Web3 work
 
 **One-line description:** Chat, research protocols, review wallet actions, and
 keep notes, memory, and receipts together in one focused workspace.
 
-**Short description:** Matterhorn Work turns complex Web3 work into clear,
+**Short description:** Matterhorn Desks turns complex Web3 work into clear,
 reviewable flows. Use protocol desks for Bittensor, Hyperliquid, Polymarket, and
 Sui; keep project context in Notes and explicit Memory; and inspect outputs and
 receipts without handing private keys to an agent.
@@ -51,7 +51,7 @@ Web3 work rarely lives in one place. Research is in a chat, wallet actions are
 in a browser extension, project context is in notes, and receipts disappear
 into folders.
 
-Matterhorn Work brings those steps into one focused AI workspace. Start a
+Matterhorn Desks brings those steps into one focused AI workspace. Start a
 project chat, open a protocol desk, compare options, prepare a wallet action,
 and keep the resulting notes, memory, files, and receipts attached to the same
 project.
@@ -66,7 +66,7 @@ plus the everyday project surfaces needed to keep the work understandable.
 
 ### Maker comment
 
-We built Matterhorn Work because serious Web3 tasks were spread across chat,
+We built Matterhorn Desks because serious Web3 tasks were spread across chat,
 wallets, dashboards, notes, and folders with no durable project trail.
 
 Our goal is not to hide risk behind a magic button. Matterhorn makes the steps
@@ -148,11 +148,11 @@ support@matterhorn.work without including credentials or signing material.
 
 ## Promotion Copy
 
-**Short post:** Matterhorn Work is an AI workspace for serious Web3 work. Chat,
+**Short post:** Matterhorn Desks is an AI workspace for serious Web3 work. Chat,
 research protocols, review wallet actions, and keep notes, memory, outputs, and
 receipts together. Signing stays in your wallet.
 
-**Long post:** We are launching Matterhorn Work: a focused AI workspace for
+**Long post:** We are launching Matterhorn Desks: a focused AI workspace for
 Web3 operators, researchers, and builders. It brings project chat, protocol
 desks, wallet review, Notes, explicit Memory, and Outputs into one trail you can
 return to. Matterhorn prepares and explains; your wallet signs. We would love

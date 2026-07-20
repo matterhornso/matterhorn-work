@@ -1,6 +1,6 @@
 # Longevity Creator Workflow
 
-A **full Matterhorn Work workflow** — **not a pilot and not a custom vertical UI.** A personal trainer, gym instructor, yoga instructor, or dietician uses Matterhorn Work entirely through chat to design a program, generate client artifacts, package a sellable service, plan delivery, manage customers, and export the whole thing as a Matterhorn / MCP artifact.
+A **full Matterhorn Desks workflow** — **not a pilot and not a custom vertical UI.** A personal trainer, gym instructor, yoga instructor, or dietician uses Matterhorn Desks entirely through chat to design a program, generate client artifacts, package a sellable service, plan delivery, manage customers, and export the whole thing as a Matterhorn / MCP artifact.
 
 This is a use case on the universal chat-first platform. It deliberately blurs the Web2/Web3 boundary: the creator gets full value on day one with zero crypto setup, and the Web3-shaped capabilities (storage, payments, identity/access, email) attach later as planned hooks — never as a requirement, never described as live.
 
@@ -8,7 +8,7 @@ This is a use case on the universal chat-first platform. It deliberately blurs t
 
 ## Why This Is a Full Workflow, Not a Pilot
 
-The earlier Longevity Creator *Pilot* proved a handful of canonical prompts end-to-end. This workflow is the productised version: a complete, seven-stage operating flow a creator runs from first idea to a packaged, exportable service. It is framed as a first-class Matterhorn Work workflow — the same shape the platform uses for any other use case — not a one-off demo and not a bespoke longevity app.
+The earlier Longevity Creator *Pilot* proved a handful of canonical prompts end-to-end. This workflow is the productised version: a complete, seven-stage operating flow a creator runs from first idea to a packaged, exportable service. It is framed as a first-class Matterhorn Desks workflow — the same shape the platform uses for any other use case — not a one-off demo and not a bespoke longevity app.
 
 ## Reusable Matterhorn Workflow Pattern
 
@@ -73,7 +73,7 @@ Ongoing client retention, deepened with a recurring progress check-in.
 **Client progress check-in** — a reusable weekly check-in, with a reproducible reference at [`docs/wellness-creator-workflow/progress-check-in.md`](./wellness-creator-workflow/progress-check-in.md). It tracks sessions, adherence, energy, sleep, soreness, optional self-reported bodyweight, wins, and blockers, with coach adjustments for the next week. It is **educational progress tracking only, not a medical assessment** — pain, injury, or health concerns are referred to a qualified professional.
 
 ### 7. MCP / artifact export
-How the workflow runs through **Matterhorn Work, Claude Code, Codex, or a shared artifact output**, so the creator re-runs it for the next client.
+How the workflow runs through **Matterhorn Desks, Claude Code, Codex, or a shared artifact output**, so the creator re-runs it for the next client.
 - Prompt: `Export this as a Matterhorn workflow / MCP artifact`
 - Artifact: Matterhorn workflow / MCP export.
 
@@ -109,7 +109,7 @@ Beyond the seven stage prompts, the same pattern handles ad-hoc, role-specific r
 - **Template registry:** registered as `wellness_creator_service_workflow` in [`packages/types/src/matterhorn-workflows.ts`](../packages/types/src/matterhorn-workflows.ts).
 - **Shared contract:** conforms to [`docs/matterhorn-workflow-contract.md`](./matterhorn-workflow-contract.md) (`matterhorn.workflow.manifest.v1`).
 
-The same surfaces serve Bittensor operator playbooks, market previews, and decentralized-service planners. Longevity is simply one reusable workflow among them — proof that Matterhorn Work can help **any professional service provider operate through chat.** The helper's `--json` output carries a `genericSurfaces` block with these identifiers.
+The same surfaces serve Bittensor operator playbooks, market previews, and decentralized-service planners. Longevity is simply one reusable workflow among them — proof that Matterhorn Desks can help **any professional service provider operate through chat.** The helper's `--json` output carries a `genericSurfaces` block with these identifiers.
 
 ### CLI / Operator Examples
 
@@ -133,7 +133,7 @@ Each returns `safe: true`, `disclaimerRequired: true`, `paymentProcessed: false`
 
 ## Any Prompt, One Workflow (Free-Form Support)
 
-The canonical and example prompts are **starting points, not a closed list.** A creator can ask for **anything** in plain chat — a training plan, a diet plan, a custom strength block, a mobility routine, a habit or recovery plan, a client handout, "whatever they want to create" — and the workflow produces a client-safe artifact with the mandatory disclaimers. This is the Web2 / real-world use case of Matterhorn Work: ordinary service professionals doing real work through chat.
+The canonical and example prompts are **starting points, not a closed list.** A creator can ask for **anything** in plain chat — a training plan, a diet plan, a custom strength block, a mobility routine, a habit or recovery plan, a client handout, "whatever they want to create" — and the workflow produces a client-safe artifact with the mandatory disclaimers. This is the Web2 / real-world use case of Matterhorn Desks: ordinary service professionals doing real work through chat.
 
 Any free-form request is routed to the closest artifact type and always handled within the same safety envelope:
 
@@ -263,7 +263,7 @@ Reproducible full-lifecycle reference walk-throughs (customer-demo safe, with no
 
 ## Customer Offer Builder
 
-The **Longevity Creator Customer Offer Builder** lets a personal trainer, yoga instructor, dietician, or hybrid coach **package and deliver a service** as client-safe artifacts — proof that Matterhorn Work is a general work platform beyond Web3. It is artifact-first and offline: nothing is hosted, charged, emailed, or gated.
+The **Longevity Creator Customer Offer Builder** lets a personal trainer, yoga instructor, dietician, or hybrid coach **package and deliver a service** as client-safe artifacts — proof that Matterhorn Desks is a general work platform beyond Web3. It is artifact-first and offline: nothing is hosted, charged, emailed, or gated.
 
 - **Personas:** `personal_trainer`, `yoga_instructor`, `dietician`, `hybrid_coach`.
 - **Offer types:** 4-week starter, 8-week transformation, group cohort, corporate longevity, habit reset.

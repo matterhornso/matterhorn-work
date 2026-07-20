@@ -17,7 +17,7 @@ const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=Matterhorn%20Den%20remot
 
 /**
  * Small inline link rendered inside the remote-worker error card. When clicked,
- * it opens a dialog explaining the Matterhorn Work Den upgrade situation and how to
+ * it opens a dialog explaining the Matterhorn Desks Den upgrade situation and how to
  * reach support.
  */
 export function MatterhornDenHelpLink() {
@@ -40,7 +40,7 @@ export function MatterhornDenHelpLink() {
             <DialogDescription>
               We recently upgraded our servers. If your remote worker was
               provisioned before that upgrade, it may no longer be compatible
-              with the current Matterhorn Work app.
+              with the current Matterhorn Desks app.
             </DialogDescription>
           </DialogHeader>
 

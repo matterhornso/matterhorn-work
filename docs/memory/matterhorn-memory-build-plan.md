@@ -1,6 +1,6 @@
 # Matterhorn Memory Build Plan
 
-Matterhorn Memory is the local-first memory layer for Matterhorn Work. It should let the app remember useful, user-approved context across Bittensor, Hyperliquid, Polymarket, Wellness, workflows, MCPs, files, and customer artifacts while staying inspectable, editable, exportable, and forgettable.
+Matterhorn Memory is the local-first memory layer for Matterhorn Desks. It should let the app remember useful, user-approved context across Bittensor, Hyperliquid, Polymarket, Wellness, workflows, MCPs, files, and customer artifacts while staying inspectable, editable, exportable, and forgettable.
 
 The product rule is simple: memory is a trust surface, not a hidden personalization trick. Users must be able to see what Matterhorn remembers, why it remembers it, where it came from, how it is used, and how to delete it.
 
@@ -36,7 +36,7 @@ The product rule is simple: memory is a trust surface, not a hidden personalizat
 Initial local vault:
 
 ```text
-~/Library/Application Support/Matterhorn Work/memory/
+~/Library/Application Support/Matterhorn Desks/memory/
   People/
   Projects/
   Protocols/

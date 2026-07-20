@@ -1,7 +1,7 @@
 {
   "name": "matterhorn-work-mcp",
   "version": "0.1.0",
-  "description": "Unified MCP server for Matterhorn Work server control: status, workspaces, approvals, file sessions, and Bittensor chat",
+  "description": "Unified MCP server for Matterhorn Desks server control: status, workspaces, approvals, file sessions, and Bittensor chat",
   "type": "module",
   "bin": {
     "matterhorn-work-mcp": "index.mjs"

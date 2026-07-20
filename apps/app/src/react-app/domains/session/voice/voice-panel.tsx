@@ -129,7 +129,7 @@ function safeJson(value: unknown) {
 }
 
 function humanToolLabel(toolName?: string) {
-  if (!toolName) return "Matterhorn Work action";
+  if (!toolName) return "Matterhorn Desks action";
   return TOOL_LABELS[toolName] ?? toolName.replace(/_/g, " ");
 }
 
@@ -180,7 +180,7 @@ function waitForDataChannelOpen(channel: RTCDataChannel) {
 
 async function executeOpenWorkTool(name: string, args: Record<string, unknown>) {
   const control = window.__openworkControl;
-  if (!control) return { ok: false, error: "Matterhorn Work control surface is not available." };
+  if (!control) return { ok: false, error: "Matterhorn Desks control surface is not available." };
 
   if (name === "matterhorn_snapshot") return { ok: true, snapshot: control.snapshot() };
   if (name === "matterhorn_list_actions") return { ok: true, actions: control.listActions() };
@@ -312,7 +312,7 @@ export function VoicePanel(props: VoicePanelProps) {
       statusText: text ?? (
         nextStatus === "connecting" ? "Connecting to OpenAI Realtime..." :
           nextStatus === "listening" ? "Listening. Ask Matterhorn to act." :
-            nextStatus === "speaking" ? "Matterhorn Work is speaking..." :
+            nextStatus === "speaking" ? "Matterhorn Desks is speaking..." :
               nextStatus === "muted" ? "Connected, microphone muted." :
                 nextStatus === "error" ? "Voice Mode needs attention." :
                   "Ready for voice control."
@@ -441,7 +441,7 @@ export function VoicePanel(props: VoicePanelProps) {
 
   const connectRealtime = useCallback(async (audioInput = true) => {
     const client = props.client;
-    if (!client) throw new Error("Matterhorn Work host connection is not ready.");
+    if (!client) throw new Error("Matterhorn Desks host connection is not ready.");
     if (audioInput && !navigator.mediaDevices?.getUserMedia) throw new Error("Microphone capture is unavailable in this runtime.");
 
     disconnectRealtime(true);
@@ -695,7 +695,7 @@ export function VoicePanel(props: VoicePanelProps) {
             <Radio className="text-primary" />
             Voice Mode
           </div>
-          <div className="truncate text-xs text-muted-foreground">Realtime voice over Matterhorn Work UI MCP controls</div>
+          <div className="truncate text-xs text-muted-foreground">Realtime voice over Matterhorn Desks UI MCP controls</div>
         </div>
         <Button variant="ghost" size="icon-sm" onClick={props.onClose} aria-label="Close Voice Mode">
           <X />
@@ -750,7 +750,7 @@ export function VoicePanel(props: VoicePanelProps) {
                 <CardTitle>Host connection required</CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
-                Voice Mode needs the local Matterhorn Work server so it can mint short-lived Realtime client secrets without exposing your API key to the renderer.
+                Voice Mode needs the local Matterhorn Desks server so it can mint short-lived Realtime client secrets without exposing your API key to the renderer.
               </CardContent>
             </Card>
           ) : null}

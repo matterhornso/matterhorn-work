@@ -68,7 +68,7 @@ const help = spawnSync(process.execPath, ["scripts/dev-matterhorn-local.mjs", "-
 });
 assert.equal(help.status, 0, help.stderr || "dev:matterhorn-local --help should exit successfully");
 assert.match(help.stdout, /MATTERHORN_LOCAL_SERVER_CONFIG/);
-assert.doesNotMatch(help.stdout, /Starting Matterhorn Work local stack/);
+assert.doesNotMatch(help.stdout, /Starting Matterhorn Desks local stack/);
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 assert.equal(

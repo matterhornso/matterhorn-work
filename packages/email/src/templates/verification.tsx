@@ -8,12 +8,12 @@ export function VerificationEmail({ verificationCode }: VerificationEmailProps) 
   return (
     <Html>
       <Head />
-      <Preview>Your Matterhorn Work verification code is {verificationCode}</Preview>
+      <Preview>Your Matterhorn Desks verification code is {verificationCode}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
-          <Text style={styles.eyebrow}>Matterhorn Work</Text>
+          <Text style={styles.eyebrow}>Matterhorn Desks</Text>
           <Heading style={styles.heading}>Verify your email</Heading>
-          <Text style={styles.text}>Enter this code to finish signing in to Matterhorn Work.</Text>
+          <Text style={styles.text}>Enter this code to finish signing in to Matterhorn Desks.</Text>
           <Section style={styles.codeBox}>
             <Text style={styles.code}>{verificationCode}</Text>
           </Section>

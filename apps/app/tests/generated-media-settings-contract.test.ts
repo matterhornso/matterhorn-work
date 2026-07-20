@@ -125,7 +125,7 @@ describe("Generated media settings surface", () => {
       ),
     );
     expect(html).toContain("Generated media is unavailable");
-    expect(html).toContain("Reconnect the Matterhorn Work engine");
+    expect(html).toContain("Reconnect the Matterhorn Desks engine");
     expect(html).toContain("Generated media is workspace-scoped");
     expect(html).not.toContain("Loading publishing readiness");
     expect(html).not.toContain("Loading generated media");

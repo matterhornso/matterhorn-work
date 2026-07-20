@@ -1,29 +1,32 @@
 /** @jsxImportSource react */
 import * as React from "react";
 import ReactDOM from "react-dom/client";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, HashRouter } from "react-router-dom";
 
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { initializeDenBootstrapConfig } from "./app/lib/den";
-import { getMatterhornDeployment } from "./app/lib/matterhorn-deployment";
-import { bootstrapTheme } from "./app/theme";
-import { isDesktopRuntime } from "./app/utils";
-import { initLocale } from "./i18n";
-import { getReactQueryClient } from "./react-app/infra/query-client";
 import {
-  createDefaultPlatform,
-  PlatformProvider,
-} from "./react-app/kernel/platform";
-import { AppProviders } from "./react-app/shell/providers";
-import { AppRoot } from "./react-app/shell/app-root";
-import { startDeepLinkBridge } from "./react-app/shell/startup-deep-links";
-import "./app/index.css";
+  getMatterhornDeployment,
+  isPublicBetaWebDeployment,
+} from "./app/lib/matterhorn-deployment";
+import { readPublicCloudConfig } from "./app/lib/public-cloud-config";
+import { bootstrapTheme } from "./app/theme";
+import { initLocale } from "./i18n";
+import "./app/bootstrap.css";
 
 bootstrapTheme();
 initLocale();
-startDeepLinkBridge();
-await initializeDenBootstrapConfig();
+const publicBetaWeb = isPublicBetaWebDeployment();
+const publicCloudConfig = readPublicCloudConfig();
+const bootstrapConfig = publicBetaWeb
+  ? publicCloudConfig
+  : await import("./app/lib/den").then((module) =>
+      module.initializeDenBootstrapConfig(),
+    );
+
+const AuthenticatedApp = React.lazy(
+  () => import("./react-app/shell/authenticated-app"),
+);
+const PublicSigninBootstrap = React.lazy(
+  () => import("./react-app/shell/public-signin-bootstrap"),
+);
 
 const root = document.getElementById("root");
 
@@ -33,22 +36,47 @@ if (!root) {
 
 root.dataset.matterhornDeployment = getMatterhornDeployment();
 
-const platform = createDefaultPlatform();
-const queryClient = getReactQueryClient();
-const Router = isDesktopRuntime() ? HashRouter : BrowserRouter;
+function AppLoadingFallback() {
+  return (
+    <main
+      className="matterhorn-entry-fallback"
+      role="status"
+      aria-live="polite"
+    >
+      Opening Matterhorn Desks...
+    </main>
+  );
+}
+
+function MatterhornEntry() {
+  const publicSigninGate =
+    publicBetaWeb && bootstrapConfig.requireSignin;
+  const [publicSessionVerified, setPublicSessionVerified] =
+    React.useState(!publicSigninGate);
+  const markPublicSessionVerified = React.useCallback(() => {
+    setPublicSessionVerified(true);
+  }, []);
+
+  if (!publicSessionVerified) {
+    return (
+      <React.Suspense fallback={<AppLoadingFallback />}>
+        <PublicSigninBootstrap
+          config={publicCloudConfig}
+          onSignedIn={markPublicSessionVerified}
+        />
+      </React.Suspense>
+    );
+  }
+
+  return (
+    <React.Suspense fallback={<AppLoadingFallback />}>
+      <AuthenticatedApp />
+    </React.Suspense>
+  );
+}
 
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <PlatformProvider value={platform}>
-          <AppProviders>
-            <Router>
-              <AppRoot />
-            </Router>
-          </AppProviders>
-        </PlatformProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <MatterhornEntry />
   </React.StrictMode>,
 );

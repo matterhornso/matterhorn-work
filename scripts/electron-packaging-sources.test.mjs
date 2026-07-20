@@ -37,7 +37,7 @@ assert.equal(
 );
 
 assert.match(electronBuilderConfig, /afterPack: scripts\/electron-after-pack\.cjs/);
-assert.match(electronBuilderConfig, /Matterhorn Work Automation Helper\.app\/\*\*/);
+assert.match(electronBuilderConfig, /Matterhorn Desks Automation Helper\.app\/\*\*/);
 assert.match(afterPack, /function loadAsar/);
 assert.match(afterPack, /loaded\.minimatch/);
 assert.match(afterPack, /function resolveResourcesDir/);
@@ -51,11 +51,11 @@ assert.match(afterPack, /electron\/main\.mjs/);
 assert.match(afterPack, /server\/dist\/server\.js/);
 assert.match(afterPack, /ElectronAsarIntegrity:Resources\/app\.asar:hash/);
 assert.match(afterPack, /crypto\.createHash\("sha256"\)/);
-assert.match(afterPack, /Matterhorn Work Automation Helper\.app/);
+assert.match(afterPack, /Matterhorn Desks Automation Helper\.app/);
 assert.match(afterPack, /fs\.cpSync\(sourcePath, targetPath, \{ recursive: true \}\)/);
 assert.match(afterPack, /copyComputerUseHelper\(context\)/);
-assert.match(afterSign, /Matterhorn Work Automation Helper\.app/);
-assert.match(desktopMain, /Matterhorn Work Automation Helper\.app/);
+assert.match(afterSign, /Matterhorn Desks Automation Helper\.app/);
+assert.match(desktopMain, /Matterhorn Desks Automation Helper\.app/);
 assert.match(desktopMain, /MATTERHORN_WORK_AUTOMATION_HELPER_BINARY/);
 assert.match(desktopMain, /MATTERHORN_WORK_AUTOMATION_HELPER_APP/);
 assert.match(desktopMain, /matterhornso\/matterhorn-work\/tree\/dev\/docs/);
@@ -214,7 +214,13 @@ assert.equal(
   false,
   "desktop-managed child processes must not launch with wildcard CORS",
 );
-assert.match(helperPrep, /Matterhorn Work Automation Helper\.app/);
+assert.match(helperPrep, /Matterhorn Desks Automation Helper\.app/);
+assert.match(helperPrep, /spawnSync\("xattr", \["-cr", appPath\]/);
+assert.ok(
+  helperPrep.indexOf('spawnSync("xattr", ["-cr", appPath]') <
+    helperPrep.indexOf('spawnSync("codesign", ["--force", "--deep", "--sign", "-", appPath]'),
+  "automation helper extended attributes must be cleared before codesign",
+);
 assert.match(helperPrep, /legacyHelperAppName = "OpenWork Computer Use\.app"/);
 assert.match(helperPrep, /rmSync\(legacyAppPath, \{ recursive: true, force: true \}\)/);
 assert.match(helperPrep, /MATTERHORN_WORK_AUTOMATION_HELPER_FORCE_BUILD/);
@@ -231,7 +237,7 @@ assert.equal(
     desktopMain,
   ].some((text) => text.includes("OpenWork Computer Use")),
   false,
-  "packaged helper runtime naming should use Matterhorn Work branding",
+  "packaged helper runtime naming should use Matterhorn Desks branding",
 );
 
 for (const forbiddenOpenworkCopy of [

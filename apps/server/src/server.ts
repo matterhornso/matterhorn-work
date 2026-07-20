@@ -451,19 +451,19 @@ const OPENWORK_VOICE_REALTIME_TOOLS = [
   {
     type: "function",
     name: "openwork_snapshot",
-    description: "Read the current Matterhorn Work UI control snapshot: route, status, narration, and visible action metadata.",
+    description: "Read the current Matterhorn Desks UI control snapshot: route, status, narration, and visible action metadata.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     type: "function",
     name: "openwork_list_actions",
-    description: "List semantic Matterhorn Work UI actions. Call this before openwork_execute_action when you do not know the exact action id.",
+    description: "List semantic Matterhorn Desks UI actions. Call this before openwork_execute_action when you do not know the exact action id.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     type: "function",
     name: "openwork_execute_action",
-    description: "Execute a semantic Matterhorn Work UI action by id. Prefer this over screen coordinates or DOM guessing.",
+    description: "Execute a semantic Matterhorn Desks UI action by id. Prefer this over screen coordinates or DOM guessing.",
     parameters: {
       type: "object",
       properties: {
@@ -503,12 +503,12 @@ async function resolveOpenAiRealtimeApiKey(env: EnvService): Promise<string> {
 function openworkVoiceRealtimeInstructions() {
   return `# Role and Objective
 
-You are Matterhorn Work Voice Mode, a voice-first control layer inside Matterhorn Work.
-Help the user control Matterhorn Work by using the semantic Matterhorn Work UI tools.
+You are Matterhorn Desks Voice Mode, a voice-first control layer inside Matterhorn Desks.
+Help the user control Matterhorn Desks by using the semantic Matterhorn Desks UI tools.
 
 # Tool Policy
 
-- Prefer openwork_snapshot, openwork_list_actions, and openwork_execute_action over visual guessing. These compatibility tool IDs control Matterhorn Work.
+- Prefer openwork_snapshot, openwork_list_actions, and openwork_execute_action over visual guessing. These compatibility tool IDs control Matterhorn Desks.
 - If the user asks to write or draft something, use composer.set_text.
 - If the user asks to send or run the current prompt, use composer.send.
 - For navigation, settings, session, transcript, and composer work, inspect the action list first if the action id is unknown.
@@ -519,7 +519,7 @@ Help the user control Matterhorn Work by using the semantic Matterhorn Work UI t
 
 - Be concise, calm, and direct.
 - If audio is unclear, ask the user to repeat it instead of guessing.
-- Ignore background speech that is not addressed to Matterhorn Work.
+- Ignore background speech that is not addressed to Matterhorn Desks.
 - Summarize tool results briefly and offer the next useful step.`;
 }
 
@@ -542,7 +542,7 @@ async function createOpenAiRealtimeVoiceSession(env: EnvService, input: unknown)
     throw new ApiError(
       400,
       "openai_api_key_missing",
-      "OpenAI API key missing. Save OPENAI_API_KEY in Matterhorn Work environment variables or configure the Voice Mode extension.",
+      "OpenAI API key missing. Save OPENAI_API_KEY in Matterhorn Desks environment variables or configure the Voice Mode extension.",
     );
   }
 
@@ -701,7 +701,8 @@ function logRequest(input: {
 }
 
 const DEFAULT_RATE_LIMIT_WINDOW_MS = 60_000;
-const DEFAULT_RATE_LIMIT_MAX_REQUESTS = 1_200;
+const DEFAULT_RATE_LIMIT_READ_MAX_REQUESTS = 4_800;
+const DEFAULT_RATE_LIMIT_WRITE_MAX_REQUESTS = 1_200;
 
 type RequestRateLimiter = {
   check: (
@@ -714,7 +715,14 @@ type RequestRateLimiter = {
 function createRequestRateLimiter(config: RequestRateLimitConfig | undefined): RequestRateLimiter {
   const enabled = config?.enabled !== false;
   const windowMs = Math.max(1_000, Math.floor(config?.windowMs ?? DEFAULT_RATE_LIMIT_WINDOW_MS));
-  const maxRequests = Math.max(1, Math.floor(config?.maxRequests ?? DEFAULT_RATE_LIMIT_MAX_REQUESTS));
+  const readMaxRequests = Math.max(
+    1,
+    Math.floor(config?.readMaxRequests ?? config?.maxRequests ?? DEFAULT_RATE_LIMIT_READ_MAX_REQUESTS),
+  );
+  const writeMaxRequests = Math.max(
+    1,
+    Math.floor(config?.writeMaxRequests ?? config?.maxRequests ?? DEFAULT_RATE_LIMIT_WRITE_MAX_REQUESTS),
+  );
   const buckets = new Map<string, { resetAt: number; count: number }>();
   let lastSweepAt = 0;
 
@@ -733,7 +741,10 @@ function createRequestRateLimiter(config: RequestRateLimitConfig | undefined): R
       // from exhausting the budget used by user-triggered writes such as
       // image generation, notes, approvals, and wallet evidence.
       const requestClass = request.method === "GET" || request.method === "HEAD" ? "read" : "write";
-      const key = `${client}:${url.origin}:${requestClass}`;
+      const workspaceMatch = url.pathname.match(/^\/(?:w|workspace)\/([^/]+)/);
+      const workspaceScope = workspaceMatch?.[1] ? `workspace:${workspaceMatch[1]}` : "global";
+      const maxRequests = requestClass === "read" ? readMaxRequests : writeMaxRequests;
+      const key = `${client}:${url.origin}:${workspaceScope}:${requestClass}`;
       let bucket = buckets.get(key);
       if (!bucket || now >= bucket.resetAt) {
         bucket = { resetAt: now + windowMs, count: 0 };
@@ -2724,7 +2735,7 @@ function backendSettingsSections(input: {
   });
   return [
     base("overview", capability("working", "Overview", "Workspace overview is available from local server state.")),
-    base("profile", capability("working", "Local profile", "Local profile preferences and workspace access are available from this Matterhorn Work engine.")),
+    base("profile", capability("working", "Local profile", "Local profile preferences and workspace access are available from this Matterhorn Desks engine.")),
     base("models", capability(input.modelStatus, "Models", "Models are selected through local engine provider discovery.")),
     base("providers", capability(input.providerStatus, "Providers", "Provider setup is managed by the local engine and optional Matterhorn Cloud imports.")),
     base("wallet", capability(input.walletStatus, "Wallet", "EVM and Sui can connect in web; Bittensor uses public reads and external signing.")),
@@ -4131,7 +4142,7 @@ function readinessActionForCheck(
       actionId: "open-authorized-workspace",
       kind: "open_authorized_workspace",
       label: "Open an authorized workspace",
-      description: "Choose a workspace folder inside an authorized Matterhorn Work root, then retry the action.",
+      description: "Choose a workspace folder inside an authorized Matterhorn Desks root, then retry the action.",
       surface: "workspace",
     };
   }
@@ -4141,7 +4152,7 @@ function readinessActionForCheck(
       actionId: "restart-writable-engine",
       kind: "restart_writable_engine",
       label: "Restart with writes enabled",
-      description: "The local engine is running read-only. Restart Matterhorn Work without read-only mode before saving notes, memory, or task runs.",
+      description: "The local engine is running read-only. Restart Matterhorn Desks without read-only mode before saving notes, memory, or task runs.",
       surface: "terminal",
       command: "matterhorn-work serve",
     };
@@ -4273,7 +4284,7 @@ async function buildWorkspaceReadiness(
       checkId: "workspace_authorized",
       status: "working",
       label: "Workspace authorized",
-      description: "The workspace path is inside an authorized Matterhorn Work root.",
+      description: "The workspace path is inside an authorized Matterhorn Desks root.",
       requiredFor: ["start_chat", "start_desk_task", "save_notes", "review_memory", "save_memory", "export_evidence"],
     }),
     workspace_writable: readinessCheck({
@@ -4584,7 +4595,7 @@ function resolveInboxMaxBytes(): number {
 }
 
 // The legacy Toy UI is retained only as an explicit developer escape hatch.
-// Matterhorn Work ships the React application instead, so do not expose this
+// Matterhorn Desks ships the React application instead, so do not expose this
 // unauthenticated compatibility surface unless an operator deliberately asks for it.
 export function resolveToyUiEnabled(value = process.env.OPENWORK_TOY_UI): boolean {
   const raw = (value ?? "").trim().toLowerCase();
@@ -6272,7 +6283,7 @@ function createRoutes(
           400,
           error.code,
           error.code === "reserved_env_key"
-            ? "Environment variable name is reserved for OpenWork internals"
+            ? "Environment variable name is reserved for Matterhorn Desks internals"
             : "Invalid environment variable name",
         );
       }
@@ -6429,7 +6440,7 @@ function createRoutes(
       actor: ctx.actor ?? { type: "host" },
       action: "workspace.delete",
       target: "workspace",
-      summary: "Deleted workspace from OpenWork server",
+      summary: "Deleted workspace from Matterhorn Desks server",
       timestamp: Date.now(),
     });
 
@@ -9393,7 +9404,7 @@ function createRoutes(
       const workspace = await resolveWorkspace(config, ctx.params.id);
       const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
       assertWorkspaceMemoryRecord(await workspaceVault.getRecord(ctx.params.memoryId), workspace);
-      const result = await workspaceVault.forgetRecord(ctx.params.memoryId, "Deleted through Matterhorn Work workspace memory API.");
+      const result = await workspaceVault.forgetRecord(ctx.params.memoryId, "Deleted through Matterhorn Desks workspace memory API.");
       await recordMemoryMutationAudit(workspace, ctx, {
         action: "memory.record.forget",
         target: ctx.params.memoryId,
@@ -9803,7 +9814,7 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     try {
       const auditWorkspace = await resolveMemoryMutationWorkspace(config, {});
-      const result = await memoryVault.forgetRecord(ctx.params.id, "Deleted through Matterhorn Work memory API.");
+      const result = await memoryVault.forgetRecord(ctx.params.id, "Deleted through Matterhorn Desks memory API.");
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
         action: "memory.record.forget",
         target: ctx.params.id,

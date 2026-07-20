@@ -306,7 +306,7 @@ export function AdvancedConnectionSection(props: AdvancedConnectionSectionProps)
 
       <LayoutSectionItem className="gap-3">
         <div className="space-y-1">
-          <div className="text-xs font-medium text-gray-11">Matterhorn Work engine endpoint</div>
+          <div className="text-xs font-medium text-gray-11">Matterhorn Desks engine endpoint</div>
           <div className="break-all font-mono text-xs text-gray-8">{formatEngineEndpoint(props.baseUrl)}</div>
         </div>
         <div className="flex flex-wrap gap-2 pt-2">

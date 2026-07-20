@@ -200,7 +200,7 @@ export function StatusBar(props: StatusBarProps) {
   const feedbackControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "status.feedback.open",
     label: "Send feedback",
-    description: "Open the Matterhorn Work feedback surface from the status bar.",
+    description: "Open the Matterhorn Desks feedback surface from the status bar.",
     sideEffect: "external",
     targetRef: feedbackButtonRef,
     execute: props.onSendFeedback,

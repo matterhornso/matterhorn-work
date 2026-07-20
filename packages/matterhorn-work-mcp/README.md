@@ -1,6 +1,6 @@
-# Matterhorn Work MCP
+# Matterhorn Desks MCP
 
-Unified MCP server for controlling a running Matterhorn Work server from Claude Code, Codex, Cursor, Claude Desktop, or another MCP-capable agent.
+Unified MCP server for controlling a running Matterhorn Desks server from Claude Code, Codex, Cursor, Claude Desktop, or another MCP-capable agent.
 
 This package is the server/control complement to:
 
@@ -22,7 +22,7 @@ npx matterhorn-work-mcp
 
 ## Configure
 
-Point the MCP server at a running Matterhorn Work server:
+Point the MCP server at a running Matterhorn Desks server:
 
 ```bash
 export MATTERHORN_WORK_SERVER_URL="http://127.0.0.1:8787"
@@ -128,5 +128,5 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 - No seed phrases, mnemonics, private keys, or wallet exports are accepted by any tool schema.
 - Memory tools do not auto-capture hidden context. `matterhorn_memory_capture` is for explicit, user-confirmed records only, and the server rejects credential-shaped or unsafe memory content before writing.
 - Approval tools require the host token separately from the normal client token.
-- Write tools go through Matterhorn Work file-session APIs and existing approval policy.
+- Write tools go through Matterhorn Desks file-session APIs and existing approval policy.
 - Bittensor actions remain non-custodial and rely on the existing unsigned-preview/external-signing flow.

@@ -38,7 +38,7 @@ function usage() {
     "  node scripts/bittensor-adapter-readonly-canary.mjs --netuid 14 --allowed-hosts adapter.example.com --confirm-invoke --allow-real-adapter-call --strict",
     "",
     "Options:",
-    "  --server-url <url>              Matterhorn Work server URL.",
+    "  --server-url <url>              Matterhorn Desks server URL.",
     "  --token <token>                 Optional client bearer token.",
     "  --netuid <n>                    Subnet netuid.",
     "  --intent <intent>               Defaults to service_call.",
@@ -138,7 +138,7 @@ function escapeCell(value) {
 
 function renderMarkdown(summary) {
   return [
-    "# Matterhorn Work Bittensor Read-Only Adapter Canary",
+    "# Matterhorn Desks Bittensor Read-Only Adapter Canary",
     "",
     "## Decision",
     "",

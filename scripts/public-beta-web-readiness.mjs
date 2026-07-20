@@ -95,6 +95,7 @@ function evaluate() {
   const appUrl = readEnv("MATTERHORN_APP_URL");
   const cloudUrl = readEnv("VITE_MATTERHORN_CLOUD_URL");
   const cloudApiUrl = readEnv("VITE_MATTERHORN_CLOUD_API_URL");
+  const publicProxyMode = readEnv("MATTERHORN_PUBLIC_PROXY_MODE").toLowerCase();
 
   const checks = [
     check(
@@ -157,12 +158,19 @@ function evaluate() {
     ),
     check(
       "web.same_origin_proxy",
-      "The public web build uses its authenticated same-origin proxy instead of a direct backend URL",
+      "No public build variable bypasses the authenticated same-origin proxy",
       "Security",
       !configuredDirectBackend,
       configuredDirectBackend
         ? `Remove these public-build variables: ${configuredDirectBackend}.`
         : "No direct backend build variables are configured.",
+    ),
+    check(
+      "web.proxy_configured",
+      "The deployment declares authenticated same-origin API and engine proxy routing",
+      "Platform",
+      publicProxyMode === "same-origin",
+      "MATTERHORN_PUBLIC_PROXY_MODE must be same-origin after /workspaces and /opencode routes are configured. The live deployment probe supplies the proof.",
     ),
   ];
   const blockers = checks.filter((entry) => !entry.passed);

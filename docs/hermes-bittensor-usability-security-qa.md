@@ -1,10 +1,10 @@
 # Hermes QA Guide: Bittensor Customer-Readiness Pass
 
-This guide is for a Hermes or Codex agent doing an end-to-end usability, security, and release-readiness pass before Matterhorn Work is shared with test customers.
+This guide is for a Hermes or Codex agent doing an end-to-end usability, security, and release-readiness pass before Matterhorn Desks is shared with test customers.
 
 ## Scope
 
-Test the Bittensor-first Matterhorn Work experience across:
+Test the Bittensor-first Matterhorn Desks experience across:
 
 - chat-native Bittensor workflows
 - wallet and staking reads
@@ -20,7 +20,7 @@ Do not test Hyperliquid or Polymarket in this pass. Those remain out of scope un
 
 Do not recommend test-customer rollout unless all of these are true:
 
-- GitHub checks are green on `dev`: Matterhorn Work Tests, i18n Audit, and Alpha Channel.
+- GitHub checks are green on `dev`: Matterhorn Desks Tests, i18n Audit, and Alpha Channel.
 - No P0 or P1 security findings remain open.
 - The desktop app launches and the main chat path is usable.
 - Bittensor requests never ask for or accept seed phrases, private keys, mnemonics, wallet exports, or keyfiles.
@@ -29,7 +29,7 @@ Do not recommend test-customer rollout unless all of these are true:
 
 ## Built Surface Inventory
 
-Verify that Matterhorn Work exposes these Bittensor capabilities:
+Verify that Matterhorn Desks exposes these Bittensor capabilities:
 
 - Beginner explanation: "I'm new to Bittensor, explain it."
 - Subnet discovery: "Which subnet helps with image generation?"
@@ -75,7 +75,7 @@ Pass criteria:
 - action context and external signer marker are present;
 - no seed phrase, mnemonic, private key, keyfile, wallet export, signature, signed extrinsic, or signed payload fields appear.
 
-This check never signs, submits, or broadcasts. It is an operator/customer trust gate before the user leaves Matterhorn Work for an external signer.
+This check never signs, submits, or broadcasts. It is an operator/customer trust gate before the user leaves Matterhorn Desks for an external signer.
 
 ### Receipt Check
 
@@ -246,8 +246,8 @@ Test on desktop viewport first.
 
 | Surface | Test | Expected result |
 | --- | --- | --- |
-| App launch | Start Matterhorn Work and open the main workspace. | App opens, no blank screen, no blocking console errors. |
-| Branding | Scan landing/workspace/settings/debug surfaces. | Visible user copy says Matterhorn Work. OpenWork/OpenCode appears only when clearly technical. |
+| App launch | Start Matterhorn Desks and open the main workspace. | App opens, no blank screen, no blocking console errors. |
+| Branding | Scan landing/workspace/settings/debug surfaces. | Visible user copy says Matterhorn Desks. OpenWork/OpenCode appears only when clearly technical. |
 | Chat composer | Submit ordinary Bittensor prompts. | Prompt sends once, response streams or appears, no layout shift breaking cards. |
 | Bittensor cards | Trigger wallet, subnet, validator, quote, adapter, and readiness cards. | Cards fit without overflow at common desktop sizes. |
 | Clarifications | Omit required SS58/hotkey/netuid. | One useful question, not a fake payload. |

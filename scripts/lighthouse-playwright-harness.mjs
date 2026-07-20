@@ -175,7 +175,10 @@ function thresholdFailures(scores, thresholds) {
   return CATEGORIES.flatMap((category) => {
     const score = scores[category];
     const threshold = thresholds[category];
-    if (typeof score !== "number" || score >= threshold) return [];
+    if (typeof score !== "number") {
+      return [{ category, score: null, threshold, reason: "missing_score" }];
+    }
+    if (score >= threshold) return [];
     return [{ category, score, threshold }];
   });
 }
@@ -341,6 +344,8 @@ async function runOne({ url, formFactor, outputDir, thresholds }) {
       scores,
       metrics: metricSummary(runnerResult.lhr),
       failures,
+      runtimeError: runnerResult.lhr.runtimeError ?? null,
+      runWarnings: runnerResult.lhr.runWarnings ?? [],
       consoleErrors,
       pageErrors,
       artifacts: {

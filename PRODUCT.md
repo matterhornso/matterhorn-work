@@ -6,11 +6,11 @@ product
 
 ## Users
 
-Matterhorn Work is for non-expert customers who want to use Web3 protocols, AI workflows, and agent tools through plain language. Launch users include Bittensor operators, crypto-curious traders who need safe previews, longevity creators packaging offline optimization workflows, and agent operators using Matterhorn tools from Codex, Claude Code, Claude Desktop, Cursor, and compatible MCP clients.
+Matterhorn Desks is for non-expert customers who want to use Web3 protocols, AI workflows, and agent tools through plain language. Launch users include Bittensor operators, crypto-curious traders who need safe previews, longevity creators packaging offline optimization workflows, and agent operators using Matterhorn tools from Codex, Claude Code, Claude Desktop, Cursor, and compatible MCP clients.
 
 ## Product Purpose
 
-Matterhorn Work turns complex protocol and workflow operations into desk-first chat surfaces. Users should be able to open a focused desk, ask in normal language, see trustworthy read or preview cards, understand what is safe, and hand off serious actions to external signers or clients only when explicitly reviewed. Success means the app feels simple enough for a test customer while preserving non-custodial boundaries, safety evidence, and clear escalation paths.
+Matterhorn Desks turns complex protocol and workflow operations into desk-first chat surfaces. Users should be able to open a focused desk, ask in normal language, see trustworthy read or preview cards, understand what is safe, and hand off serious actions to external signers or clients only when explicitly reviewed. Success means the app feels simple enough for a test customer while preserving non-custodial boundaries, safety evidence, and clear escalation paths.
 
 ## Brand Personality
 

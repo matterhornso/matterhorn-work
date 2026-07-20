@@ -7,6 +7,8 @@ const files = {
   sessionPage: "apps/app/src/react-app/domains/session/chat/session-page.tsx",
   extensionsView: "apps/app/src/react-app/domains/settings/pages/extensions-view.tsx",
   orchestratorCli: "apps/orchestrator/src/cli.ts",
+  serverCli: "apps/server/src/cli.ts",
+  server: "apps/server/src/server.ts",
   runtimeDoc: "docs/opencode-runtime-abstraction.md",
   readme: "README.md",
 };
@@ -17,26 +19,26 @@ const checks = [
   {
     path: files.english,
     mustContain: [
-      '"config.engine_reload_desc": "Restart the Matterhorn Work engine for this workspace."',
-      '"settings.opencode_engine_label": "Matterhorn Work engine"',
-      '"settings.opencode_engine_sidecar_desc": "Local engine process managed by Matterhorn Work. Technical runtime: OpenCode."',
+      '"config.engine_reload_desc": "Restart the Matterhorn Desks engine for this workspace."',
+      '"settings.opencode_engine_label": "Matterhorn Desks engine"',
+      '"settings.opencode_engine_sidecar_desc": "Local engine process managed by Matterhorn Desks. Technical runtime: OpenCode."',
       '"settings.debug_opencode_version": "Underlying OpenCode runtime: {version}"',
       '"settings.restart_opencode": "Restart engine"',
-      '"system.reload_body_default": "Matterhorn Work detected changes that require reloading the engine instance."',
+      '"system.reload_body_default": "Matterhorn Desks detected changes that require reloading the engine instance."',
     ],
     mustNotContain: [
       '"settings.opencode_engine_label": "OpenCode engine"',
       '"settings.opencode_section_label": "OpenCode"',
       '"settings.restart_opencode": "Restart OpenCode"',
       '"session.permission_message": "OpenCode is requesting permission to continue."',
-      '"system.reload_body_default": "Matterhorn Work detected changes that require reloading the OpenCode instance."',
+      '"system.reload_body_default": "Matterhorn Desks detected changes that require reloading the OpenCode instance."',
     ],
   },
   {
     path: files.sessionRoute,
     mustContain: [
-      "The Matterhorn Work engine is unavailable for this workspace.",
-      'title: "Matterhorn Work engine unavailable"',
+      "The Matterhorn Desks engine is unavailable for this workspace.",
+      'title: "Matterhorn Desks engine unavailable"',
       'lower.includes("opencode_unconfigured")',
     ],
     mustNotContain: [
@@ -47,7 +49,7 @@ const checks = [
   {
     path: files.sessionPage,
     mustContain: [
-      '"Matterhorn Work engine unavailable"',
+      '"Matterhorn Desks engine unavailable"',
     ],
     mustNotContain: [
       '"OpenCode unavailable"',
@@ -63,10 +65,10 @@ const checks = [
     mustContain: [
       '"matterhorn-work"',
       '"  matterhorn-work start [--workspace <path>] [options]"',
-      '"  start                   Start Matterhorn Work engine + server + OpenCodeRouter"',
+      '"  start                   Start Matterhorn Desks engine + server + OpenCodeRouter"',
       '"  --opencode-bin <path>     Path to underlying opencode binary (requires --allow-external)"',
-      "`Matterhorn Work engine: ${payload.opencode.baseUrl}`",
-      'console.log("Matterhorn Work orchestrator running")',
+      "`Matterhorn Desks engine: ${payload.opencode.baseUrl}`",
+      'console.log("Matterhorn Desks orchestrator running")',
     ],
     mustNotContain: [
       '"openwork",\n    "",\n    "Usage:"',
@@ -77,9 +79,25 @@ const checks = [
     ],
   },
   {
+    path: files.serverCli,
+    mustContain: ["`Matterhorn Desks server listening on ${url}`"],
+    mustNotContain: ["`OpenWork server listening on ${url}`"],
+  },
+  {
+    path: files.server,
+    mustContain: [
+      '"Environment variable name is reserved for Matterhorn Desks internals"',
+      'summary: "Deleted workspace from Matterhorn Desks server"',
+    ],
+    mustNotContain: [
+      '"Environment variable name is reserved for OpenWork internals"',
+      'summary: "Deleted workspace from OpenWork server"',
+    ],
+  },
+  {
     path: files.runtimeDoc,
     mustContain: [
-      "Matterhorn Work presents its local agent runtime as the **Matterhorn Work engine**",
+      "Matterhorn Desks presents its local agent runtime as the **Matterhorn Desks engine**",
       "OpenCode remains the underlying runtime",
       "Keep **OpenCode** or `opencode` in:",
     ],
@@ -87,16 +105,16 @@ const checks = [
   {
     path: files.readme,
     mustContain: [
-      "**Matterhorn Work engine**",
-      "[docs/opencode-runtime-abstraction.md](docs/opencode-runtime-abstraction.md)",
+      "**Matterhorn Desks engine**",
+      "[Engine/OpenCode naming boundary](docs/opencode-runtime-abstraction.md)",
     ],
     mustNotContain: ["**OpenCode integration**"],
   },
   {
     path: "docs/mcp-ui-control-profile.md",
     mustContain: [
-      "# Control Matterhorn Work from any MCP client",
-      "Matterhorn Work exposes its UI as an MCP server",
+      "# Control Matterhorn Desks from any MCP client",
+      "Matterhorn Desks exposes its UI as an MCP server",
     ],
     mustNotContain: [
       "# Control OpenWork from any MCP client",

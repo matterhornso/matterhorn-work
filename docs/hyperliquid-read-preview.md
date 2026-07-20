@@ -1,6 +1,6 @@
 # Hyperliquid Read, Preview, And Wallet Execution
 
-Matterhorn Work supports Hyperliquid research, previews, and connected-wallet perpetual order execution. Chat, MCP, CLI, and watch surfaces remain read/preview only; live orders are available only in the dedicated web trade ticket.
+Matterhorn Desks supports Hyperliquid research, previews, and connected-wallet perpetual order execution. Chat, MCP, CLI, and watch surfaces remain read/preview only; live orders are available only in the dedicated web trade ticket.
 
 ## Supported
 

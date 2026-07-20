@@ -1,6 +1,6 @@
 # Production Launch Configuration
 
-This guide is the authoritative operator path from a local Matterhorn Work build
+This guide is the authoritative operator path from a local Matterhorn Desks build
 to a launch candidate. Use the root [`.env.example`](../.env.example) as the
 variable-name contract. It contains placeholders only; real credentials belong
 in the deployment secret manager and must never be committed or attached to QA
@@ -31,7 +31,7 @@ user failure.
 - Keep Sui publishing on `sui-testnet` until reviewed mainnet packages and a separate money-path review exist.
 - Keep Matterhorn Cloud disabled unless its full acceptance flow has passed.
 - Public Beta web traffic must use the authenticated same-origin deployment
-  proxy. Never put a Matterhorn Work URL, client bearer token, host token, or
+  proxy. Never put a Matterhorn Desks URL, client bearer token, host token, or
   raw engine URL in a public `VITE_` variable.
 - Keep public OAuth connectors in `Coming soon` state unless every visible
   connector has passed connect, reload, tool-call, disconnect, and revoked
@@ -42,9 +42,9 @@ user failure.
 ## Configuration Order
 
 1. Copy the root `.env.example` into the deployment secret/config system. Replace placeholders there, not in the repository.
-2. Configure the backend workspace, client token, host token, exact CORS origin, request limits, and attached Matterhorn Work engine. Set `MATTERHORN_BUILD_COMMIT` to the exact 40-character release SHA.
+2. Configure the backend workspace, client token, host token, exact CORS origin, request limits, and attached Matterhorn Desks engine. Set `MATTERHORN_BUILD_COMMIT` to the exact 40-character release SHA.
 3. For a private or local web bridge, configure `VITE_MATTERHORN_WORK_URL` only in its protected deployment configuration. It is never a public browser credential path.
-4. For Public Beta web, set `VITE_MATTERHORN_DEPLOYMENT=web`, `VITE_MATTERHORN_PUBLIC_BETA=1`, `VITE_MATTERHORN_REQUIRE_SIGNIN=1`, and the reviewed Matterhorn Cloud URLs. Leave every browser-side Matterhorn Work URL and token variable unset so requests use the same-origin proxy.
+4. For Public Beta web, route `/workspaces` and `/opencode` from the app origin to the authenticated Matterhorn backend. This is the required same-origin proxy. Then set `MATTERHORN_PUBLIC_PROXY_MODE=same-origin`, `VITE_MATTERHORN_DEPLOYMENT=web`, `VITE_MATTERHORN_PUBLIC_BETA=1`, `VITE_MATTERHORN_REQUIRE_SIGNIN=1`, and the reviewed Matterhorn Cloud URLs. Leave every browser-side Matterhorn Desks URL and token variable unset. The deployment probe must confirm both proxy routes return a JSON `401` or `403` without authentication; an HTML SPA fallback is a launch blocker.
 5. Configure Stripe test credentials, webhook secret, Plus/Max test prices, and a test customer.
 6. Configure OpenAI image generation, public HTTPS Walrus endpoints, and reviewed Sui testnet package IDs.
 7. Leave Cloud disabled for desktop/local builds, or complete the separate Cloud acceptance flow before setting `VITE_MATTERHORN_CLOUD_ENABLED=1` for public web.

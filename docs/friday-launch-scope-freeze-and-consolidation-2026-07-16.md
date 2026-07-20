@@ -1,6 +1,6 @@
 # Friday Launch Scope Freeze And Dirty-Tree Consolidation - 2026-07-16
 
-This document freezes the public Matterhorn Work scope for the Friday,
+This document freezes the public Matterhorn Desks scope for the Friday,
 July 17, 2026 production candidate and defines how the intentionally dirty
 release tree is consolidated. It supplements the readiness and execution
 ledgers; it does not replace their stop-ship gates.
@@ -251,7 +251,7 @@ Completed on July 16 against the live local candidate:
   workspace identifier rather than the frontend route identifier, removing a
   false `Profile status unavailable` state;
 - OpenAI Image Gen and Matterhorn Cloud Control were absent from the stable MCP
-  catalog while Matterhorn Work UI Control remained visible;
+  catalog while Matterhorn Desks UI Control remained visible;
 - desktop and 390x844 acceptance passed for Project home, Outputs, Memory,
   Wallet, MCPs & Tools, and Profile without horizontal overflow; historical
   mock-image outputs render a truthful placeholder instead of a broken image;

@@ -1,6 +1,6 @@
 # Core Agent MCP
 
-Use the Core Agent MCP when an external agent needs to work with a running Matterhorn Work server: workspaces, sessions, files, approvals, and event streams.
+Use the Core Agent MCP when an external agent needs to work with a running Matterhorn Desks server: workspaces, sessions, files, approvals, and event streams.
 
 ## What It Does
 

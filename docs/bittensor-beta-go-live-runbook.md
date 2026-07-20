@@ -200,7 +200,7 @@ If any P0/P1/P2 issue appears:
 3. Rebuild without `VITE_MATTERHORN_BITTENSOR_BETA=1`.
 4. Keep `MARKETS_LIVE_SUBMIT_ENABLED=false` and
    `EXPERIMENTAL_MARKET_EXECUTION=false`.
-5. Move customers back to the previous stable Matterhorn Work build.
+5. Move customers back to the previous stable Matterhorn Desks build.
 6. Preserve the packet JSON, Markdown, SHA file, browser screenshots, and issue
    ledger.
 7. Fix on `dev`, rerun `pnpm smoke:bittensor-beta`, regenerate the packet, and

@@ -1,6 +1,6 @@
 # Matterhorn MCP Docs
 
-These docs describe the built-in Matterhorn Work MCP groups shown in Settings -> MCPs & Tools. Keep these files in sync with:
+These docs describe the built-in Matterhorn Desks MCP groups shown in Settings -> MCPs & Tools. Keep these files in sync with:
 
 - `apps/app/src/react-app/domains/settings/pages/mcp-view.tsx`
 - `packages/matterhorn-work-mcp/index.mjs`

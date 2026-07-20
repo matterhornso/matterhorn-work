@@ -155,7 +155,7 @@ function PaymentReadinessSummary(props: {
         : "Local plan preview"
       : "Platform setup";
   const checkoutDetail = !props.hasClient
-    ? "Connect the Matterhorn Work engine to open checkout."
+    ? "Connect the Matterhorn Desks engine to open checkout."
     : !props.hasWorkspace
       ? "Billing checkout is tied to a workspace so subscriptions can reconcile."
     : !props.status
@@ -526,7 +526,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
   const plans = serverPlans.length ? serverPlans : LOCAL_BILLING_PLANS;
   const usingLocalPlanCatalog = serverPlans.length === 0;
   const status = statusQuery.data?.status;
-  const billingLoadError = plansQuery.error ?? statusQuery.error ?? (!client ? "Matterhorn Work engine is offline" : null);
+  const billingLoadError = plansQuery.error ?? statusQuery.error ?? (!client ? "Matterhorn Desks engine is offline" : null);
   const currentPlanId = status?.subscription.planId ?? plansQuery.data?.currentPlanId ?? "free";
   const pendingPlan = status?.pendingCheckout?.planId
     ? plans.find((plan) => plan.id === status.pendingCheckout?.planId)
@@ -660,7 +660,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
         </div>
         {usingLocalPlanCatalog ? (
           <div className="rounded-lg bg-dls-surface-muted/[0.08] px-3 py-2 text-xs leading-5 text-muted-foreground">
-            Showing the local Matterhorn plan catalog. Connect the Matterhorn Work engine to open checkout,
+            Showing the local Matterhorn plan catalog. Connect the Matterhorn Desks engine to open checkout,
             refresh usage, or manage a subscription.
           </div>
         ) : null}
@@ -681,7 +681,7 @@ export function BillingSettingsView(props: BillingSettingsViewProps) {
               className="sm:col-span-2 lg:col-span-3"
               error={billingLoadError ?? "Billing plans are not available."}
               title="Billing plans could not load"
-              detail={client ? "Retry once the workspace engine is available." : "Connect the Matterhorn Work engine to view plans."}
+              detail={client ? "Retry once the workspace engine is available." : "Connect the Matterhorn Desks engine to view plans."}
               onRetry={client ? () => {
                 void plansQuery.refetch();
                 void statusQuery.refetch();

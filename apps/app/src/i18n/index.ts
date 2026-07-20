@@ -1,13 +1,4 @@
 import en from "./locales/en";
-import ja from "./locales/ja";
-import zh from "./locales/zh";
-import vi from "./locales/vi";
-import ptBR from "./locales/pt-BR";
-import th from "./locales/th";
-import fr from "./locales/fr";
-import ca from "./locales/ca";
-import es from "./locales/es";
-import ru from "./locales/ru";
 import { LANGUAGE_PREF_KEY } from "../app/constants";
 
 /**
@@ -45,6 +36,10 @@ export function resolveLanguageOptions(env: Record<string, unknown> | undefined)
 export const MATTERHORN_EXPERIMENTAL_LOCALES_ENABLED =
   resolveLanguageOptions(BUILD_ENV).length > 1;
 
+const experimentalTranslations = MATTERHORN_EXPERIMENTAL_LOCALES_ENABLED
+  ? (await import("./experimental-translations")).default
+  : {};
+
 /**
  * Stable launch builds are English-only until every customer-facing locale has
  * completed the Matterhorn terminology and onboarding review.
@@ -71,17 +66,9 @@ export const pluralSuffix = (locale: Language, count: number): string => {
 /**
  * Translation maps
  */
-const TRANSLATIONS: Record<Language, Record<string, string>> = {
+const TRANSLATIONS: Partial<Record<Language, Record<string, string>>> = {
   en,
-  ja,
-  zh,
-  vi,
-  "pt-BR": ptBR,
-  th,
-  fr,
-  ca,
-  es,
-  ru,
+  ...experimentalTranslations,
 };
 
 /**

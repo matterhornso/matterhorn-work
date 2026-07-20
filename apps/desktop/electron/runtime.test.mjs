@@ -28,7 +28,7 @@ describe("createRuntimeManager", () => {
       getPath(name) {
         if (name === "userData") return path.join(root, "userData");
         if (name === "home") return root;
-        if (name === "exe") return path.join(root, "Matterhorn.app", "Contents", "MacOS", "Matterhorn");
+        if (name === "exe") return path.join(root, "Matterhorn Desks.app", "Contents", "MacOS", "Matterhorn Desks");
         return root;
       },
     };

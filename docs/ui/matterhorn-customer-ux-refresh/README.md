@@ -1,14 +1,14 @@
-# Matterhorn Work — Customer UX Refresh
+# Matterhorn Desks — Customer UX Refresh
 
 **Version:** 1.0
-**Purpose:** Production-ready design spec and HTML prototype for the Matterhorn Work customer-facing UI
+**Purpose:** Production-ready design spec and HTML prototype for the Matterhorn Desks customer-facing UI
 **Brand:** `#0C0C0C` background · `#D1F2FF` accent · Aeonik-style font · Premium calm tone
 
 ---
 
 ## What This Is
 
-This package delivers a complete customer-facing UI design refresh for Matterhorn Work's market execution features:
+This package delivers a complete customer-facing UI design refresh for Matterhorn Desks's market execution features:
 
 - **Product UI System** (`docs/ui/matterhorn-product-ui-system.md`) — the canonical design spec
 - **HTML Prototype** (`index.html`) — a 16-screen interactive showcase

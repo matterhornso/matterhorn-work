@@ -37,7 +37,7 @@ function help() {
   return [
     "Matterhorn generated-media smoke launcher",
     "",
-    "Starts a local Matterhorn Work app wired to:",
+    "Starts a local Matterhorn Desks app wired to:",
     "- a fake loopback OpenCode engine for browser chat sessions",
     "- mock image generation",
     "- a fake loopback Walrus publisher/relay",
@@ -137,7 +137,7 @@ function serverCommand() {
   }
   const binary = path.join(rootDir, "apps", "server", "dist", "bin", "matterhorn-work-server");
   if (existsSync(binary)) return { command: binary, args: [] };
-  throw new Error("Bun or a built Matterhorn Work server binary is required.");
+  throw new Error("Bun or a built Matterhorn Desks server binary is required.");
 }
 
 function appCommand(appPort) {
@@ -659,7 +659,7 @@ async function main() {
     String(workspaceList.items?.[0]?.id ?? workspaceList.workspaces?.[0]?.id ?? "").trim();
 
   if (!activeWorkspaceId) {
-    throw new Error("Matterhorn Work server started, but it did not report an active workspace.");
+    throw new Error("Matterhorn Desks server started, but it did not report an active workspace.");
   }
 
   const billingStatus = await waitForJson(

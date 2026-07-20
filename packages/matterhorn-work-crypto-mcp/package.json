@@ -1,7 +1,7 @@
 {
   "name": "matterhorn-work-crypto-mcp",
   "version": "0.2.0",
-  "description": "MCP server for Matterhorn Work crypto tools — research + execution (CoinGecko, DeFiLlama, 1inch, Hyperliquid, Polymarket)",
+  "description": "MCP server for Matterhorn Desks crypto tools — research + execution (CoinGecko, DeFiLlama, 1inch, Hyperliquid, Polymarket)",
   "type": "module",
   "bin": {
     "matterhorn-work-crypto-mcp": "index.mjs"

@@ -389,7 +389,7 @@ export function createClient(baseUrl: string, directory?: string, auth?: Opencod
       ? createMatterhornServerClient({ baseUrl: matterhornMount.baseUrl, token: auth.token })
       : null;
   // TODO(2026-04-12): remove the old-server compatibility path here once all
-  // Matterhorn Work servers expose the workspace-scoped session read APIs.
+  // Matterhorn Desks servers expose the workspace-scoped session read APIs.
   const sessionOverrides = session as any as {
     list: (parameters?: SessionListParameters, options?: { throwOnError?: boolean }) => Promise<FieldsResult<Session[]>>;
     get: (parameters: SessionLookupParameters, options?: { throwOnError?: boolean }) => Promise<FieldsResult<Session>>;

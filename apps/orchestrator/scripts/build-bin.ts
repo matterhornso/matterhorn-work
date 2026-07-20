@@ -30,7 +30,7 @@ await mkdir(targetDir, { recursive: true });
 const serverBin = existsSync(canonicalServerBin) ? canonicalServerBin : legacyServerBin;
 if (!existsSync(serverBin)) {
   throw new Error(
-    `Matterhorn Work server binary not found. Expected ${canonicalServerBin} or legacy ${legacyServerBin}.`,
+    `Matterhorn Desks server binary not found. Expected ${canonicalServerBin} or legacy ${legacyServerBin}.`,
   );
 }
 await copyFile(serverBin, resolve(targetDir, "matterhorn-work-server"));

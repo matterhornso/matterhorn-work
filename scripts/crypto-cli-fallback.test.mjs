@@ -1166,14 +1166,14 @@ async function main() {
       ready: true,
       bittensor: { ready: true, detail: "7 passed, 0 failed", passedStages: ["Wallet snapshot"], failedStages: [] },
       agentControl: { ready: true, detail: "4 passed, 0 failed" },
-      ci: { total: 3, passed: ["Matterhorn Work Tests"], failed: [], pending: [] },
+      ci: { total: 3, passed: ["Matterhorn Desks Tests"], failed: [], pending: [] },
       readinessGate: { ready: true, detail: "Readiness gate says ready" },
       readonlyAdapterCanary: { ready: true },
       receiptCheck: { ready: true },
       watchAutopilotScheduler: { ready: true },
     }));
     writeFileSync(bittensorBundleMarkdownPath, [
-      "# Matterhorn Work Bittensor Customer Evidence Bundle",
+      "# Matterhorn Desks Bittensor Customer Evidence Bundle",
       "",
       "## Decision",
       "",

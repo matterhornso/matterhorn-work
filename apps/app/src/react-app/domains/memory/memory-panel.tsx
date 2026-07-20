@@ -324,7 +324,7 @@ function useMemoryRecords(client: MatterhornServerClient | null, workspaceId: st
   const refresh = useCallback(async () => {
     if (!client) {
       setRecords([]);
-      setError("Matterhorn Work engine is offline. Check that Matterhorn Work is running and the workspace is connected.");
+      setError("Matterhorn Desks engine is offline. Check that Matterhorn Desks is running and the workspace is connected.");
       return;
     }
     setLoading(true);

@@ -184,7 +184,7 @@ export function ProjectFeedbackDialog(props: ProjectFeedbackDialogProps) {
 
           {!canSubmit ? (
             <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-200">
-              Connect the Matterhorn Work engine and open a workspace to save feedback locally.
+              Connect the Matterhorn Desks engine and open a workspace to save feedback locally.
             </p>
           ) : null}
           {error ? (

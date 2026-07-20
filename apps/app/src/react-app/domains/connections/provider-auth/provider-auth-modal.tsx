@@ -48,7 +48,7 @@ type ProviderOAuthSession = ProviderOAuthStartResult & {
 };
 
 const PROVIDER_LABELS: Record<string, string> = {
-  matterhorn: "Matterhorn Work",
+  matterhorn: "Matterhorn Desks",
   opencode: "Matterhorn-Code Zen",
   openai: "OpenAI",
   anthropic: "Anthropic",
@@ -202,7 +202,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
       return [
         {
           id: OPENWORK_MODELS_PROVIDER_ID,
-          name: "Matterhorn Work",
+          name: "Matterhorn Desks",
           methods: [{ type: "cloud", label: "Subscribe" }],
           connected: connectedToMatterhorn,
           env: [],
@@ -905,7 +905,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                     </div>
                   ) : null}
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-[11px] text-gray-9">Keys are stored locally by Matterhorn Work engine.</div>
+                    <div className="text-[11px] text-gray-9">Keys are stored locally by Matterhorn Desks engine.</div>
                     <Button
                       onClick={handleApiSubmit}
                       disabled={actionDisabled || !apiKeyInput.trim()}

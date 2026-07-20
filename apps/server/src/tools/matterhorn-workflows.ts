@@ -844,7 +844,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
   {
     id: "blank_chat_workflow",
     name: "Chat",
-    summary: "Start a flexible chat session with the Matterhorn Work engine.",
+    summary: "Start a flexible chat session with the Matterhorn Desks engine.",
     promise: "Open-ended assistance. You choose the goal.",
     category: "future",
     examplePrompts: ["What can you do?", "Help me think through a problem", "Draft an email"],
@@ -872,7 +872,7 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "blank",
       accent: "neutral",
-      shortDescription: "Start a flexible chat with the Matterhorn Work engine.",
+      shortDescription: "Start a flexible chat with the Matterhorn Desks engine.",
     },
     routing: {
       chatMode: "general",
@@ -963,7 +963,7 @@ export function buildMatterhornWorkflowCatalog(input: MatterhornWorkflowCatalogF
     generatedAt: new Date(0).toISOString(),
     source: "matterhorn_server_workflow_catalog",
     summary:
-      "Safe, chat-first Matterhorn Work workflow catalog across longevity, Bittensor, markets, decentralized services, and future verticals.",
+      "Safe, chat-first Matterhorn Desks workflow catalog across longevity, Bittensor, markets, decentralized services, and future verticals.",
     commands: {
       catalog: "matterhorn-work workflows catalog --json",
       workflowFilter: "matterhorn-work workflows catalog --workflow wellness_creator_workflow --include-prompts --json",
@@ -1010,7 +1010,7 @@ export function buildMatterhornCustomerWorkflowTemplates(
     status: "catalog_only",
     generatedAt: new Date(0).toISOString(),
     source: "matterhorn_server_customer_workflow_templates",
-    summary: "Customer-facing Matterhorn Work workflow templates for chat-first goal selection.",
+    summary: "Customer-facing Matterhorn Desks workflow templates for chat-first goal selection.",
     commands: {
       customerTemplates: "matterhorn-work workflows templates --json",
       customerTemplateFilter: "matterhorn-work workflows templates --customer-template bittensor_operator --json",
@@ -1068,7 +1068,7 @@ export function buildMatterhornWorkflowPromptPack(
     generatedAt: new Date(0).toISOString(),
     source: "matterhorn_server_workflow_catalog",
     summary:
-      "Copy-pasteable Matterhorn Work workflow prompts for agents and operators. Prompt packs do not execute provider actions.",
+      "Copy-pasteable Matterhorn Desks workflow prompts for agents and operators. Prompt packs do not execute provider actions.",
     safety: {
       ...COMMON_SAFETY,
       promptPackOnly: true as const,

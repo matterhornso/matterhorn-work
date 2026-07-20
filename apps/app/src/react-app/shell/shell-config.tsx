@@ -36,7 +36,7 @@ export type ShellConfig = {
 /* ------------------------------------------------------------------ */
 
 export const DEFAULT_SHELL_CONFIG: ShellConfig = {
-  appName: "Matterhorn Work",
+  appName: "Matterhorn Desks",
   statusBar: true,
   sidebar: true,
   docsButton: true,

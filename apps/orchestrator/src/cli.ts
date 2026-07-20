@@ -1300,14 +1300,14 @@ function resolveManagedOpencodeCredentials(args: ParsedArgs): {
       (!requestedUsername && requestedPassword))
   ) {
     throw new Error(
-      "Matterhorn Work engine credentials must include both username and password.",
+      "Matterhorn Desks engine credentials must include both username and password.",
     );
   }
 
   if (requestedUsername && requestedPassword && hasExplicitCredentialFlags) {
     if (!allowInjectedCredentials) {
       throw new Error(
-        "Matterhorn Work engine credentials are managed by Matterhorn Work. Custom --opencode-username/--opencode-password values are not supported.",
+        "Matterhorn Desks engine credentials are managed by Matterhorn Desks. Custom --opencode-username/--opencode-password values are not supported.",
       );
     }
     return {
@@ -1335,7 +1335,7 @@ function assertManagedOpencodeAuth(args: ParsedArgs) {
   );
   if (!authEnabled) {
     throw new Error(
-      "Matterhorn Work engine basic auth is always enabled when Matterhorn Work launches the underlying OpenCode runtime.",
+      "Matterhorn Desks engine basic auth is always enabled when Matterhorn Desks launches the underlying OpenCode runtime.",
     );
   }
 }
@@ -1345,7 +1345,7 @@ function resolveManagedOpencodeHost(requestedHost?: string): string {
   if (!normalized) return "127.0.0.1";
   if (!isLoopbackHost(normalized)) {
     throw new Error(
-      `The Matterhorn Work engine must stay on loopback. Unsupported --opencode-host value: ${normalized}`,
+      `The Matterhorn Desks engine must stay on loopback. Unsupported --opencode-host value: ${normalized}`,
     );
   }
   return normalized === "localhost" ? "127.0.0.1" : normalized;
@@ -2637,7 +2637,7 @@ async function resolveOpenworkServerBin(options: {
       (await resolveBundledBinary(options.manifest, "openwork-server"));
     if (!bundled) {
       throw new Error(
-        "Bundled Matterhorn Work server binary missing. Build with pnpm --filter matterhorn-work-orchestrator build:bin:bundled.",
+        "Bundled Matterhorn Desks server binary missing. Build with pnpm --filter matterhorn-work-orchestrator build:bin:bundled.",
       );
     }
     return { bin: bundled, source: "bundled", expectedVersion };
@@ -2650,7 +2650,7 @@ async function resolveOpenworkServerBin(options: {
     });
     if (!downloaded) {
       throw new Error(
-        "Matterhorn Work server download failed. Check sidecar manifest or base URL.",
+        "Matterhorn Desks server download failed. Check sidecar manifest or base URL.",
       );
     }
     return downloaded;
@@ -2679,7 +2679,7 @@ async function resolveOpenworkServerBin(options: {
 
   if (!options.allowExternal) {
     throw new Error(
-      "Bundled Matterhorn Work server binary missing and download failed. Use --allow-external or --sidecar-source external.",
+      "Bundled Matterhorn Desks server binary missing and download failed. Use --allow-external or --sidecar-source external.",
     );
   }
 
@@ -3733,7 +3733,7 @@ async function waitForOpencodeHealthy(
 
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
-  throw new Error(lastError ?? "Timed out waiting for Matterhorn Work engine health");
+  throw new Error(lastError ?? "Timed out waiting for Matterhorn Desks engine health");
 }
 
 /**
@@ -3781,7 +3781,7 @@ async function waitForHealthyViaProxy(
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
   throw new Error(
-    lastError ?? "Timed out waiting for Matterhorn Work engine health via proxy",
+    lastError ?? "Timed out waiting for Matterhorn Desks engine health via proxy",
   );
 }
 
@@ -3873,7 +3873,7 @@ function printHelp(): void {
     "  openwork               Compatibility shim for matterhorn-work",
     "",
     "Commands:",
-    "  start                   Start Matterhorn Work engine + server + OpenCodeRouter",
+    "  start                   Start Matterhorn Desks engine + server + OpenCodeRouter",
     "  serve                   Start services and stream logs (no TUI)",
     "  daemon                  Run orchestrator router daemon (multi-workspace)",
     "  workspace               Manage workspaces (add/list/switch/path)",
@@ -3913,7 +3913,7 @@ function printHelp(): void {
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
-    "  status                  Check Matterhorn Work engine/server health",
+    "  status                  Check Matterhorn Desks engine/server health",
     "",
     "Options:",
     "  --workspace <path>        Workspace directory (default: cwd)",
@@ -3925,15 +3925,15 @@ function printHelp(): void {
     "  --opencode-port <port>    Port for underlying opencode serve (default: random)",
     "  --opencode-workdir <p>    Workdir for router-managed opencode serve",
     "  --opencode-log-level <l>  Log level for opencode serve (DEBUG, INFO, WARN, ERROR; default: opencode default)",
-    "  --opencode-auth           Matterhorn Work engine basic auth is always enabled",
-    "  --opencode-hot-reload     Enable Matterhorn Work engine hot reload (default: true)",
+    "  --opencode-auth           Matterhorn Desks engine basic auth is always enabled",
+    "  --opencode-hot-reload     Enable Matterhorn Desks engine hot reload (default: true)",
     "  --opencode-hot-reload-debounce-ms <ms>  Debounce window for hot reload triggers (default: 700)",
     "  --opencode-hot-reload-cooldown-ms <ms>  Minimum interval between hot reloads (default: 1500)",
     "  --opencode-username <u>   Internal-only override for managed engine auth username",
     "  --opencode-password <p>   Internal-only override for managed engine auth password",
     "  --openwork-host <host>    Bind host for openwork-server (default: 127.0.0.1)",
     "  --openwork-port <port>    Port for openwork-server (default: 8787)",
-    "  --remote-access           Expose Matterhorn Work on 0.0.0.0 for remote sharing",
+    "  --remote-access           Expose Matterhorn Desks on 0.0.0.0 for remote sharing",
     "  --openwork-token <token>  Client token for openwork-server",
     "  --openwork-host-token <t> Host token for approvals",
     "  --workspace-id <id>       Workspace id for file session commands",
@@ -4009,18 +4009,18 @@ function printHelp(): void {
     "  --recursive               Recursive delete for files delete",
     "  --approval <mode>         manual | auto (default: manual)",
     "  --approval-timeout <ms>   Approval timeout in ms",
-    "  --read-only               Start Matterhorn Work server in read-only mode",
+    "  --read-only               Start Matterhorn Desks server in read-only mode",
     "  --cors <origins>          Comma-separated CORS origins or *",
     "  --connect-host <host>     Override LAN host used for pairing URLs",
-    "  --matterhorn-work-server-bin <p> Path to Matterhorn Work server binary (requires --allow-external)",
+    "  --matterhorn-work-server-bin <p> Path to Matterhorn Desks server binary (requires --allow-external)",
     "  --openwork-server-bin <p> Legacy alias for --matterhorn-work-server-bin",
     "  --opencode-router-bin <path>     Path to opencodeRouter binary (requires --allow-external)",
     "  --opencode-router-health-port <p> Health server port for opencodeRouter (default: random)",
     "  --target <name>          MCP config target: codex | claude | claude-desktop | cursor | json | env",
     "  --profile <name>         MCP config profile: server | full (default: full)",
-    "  --server-url <url>       Matterhorn Work server URL for MCP config",
-    "  --token <token>          Matterhorn Work client token for MCP config",
-    "  --host-token <token>     Matterhorn Work host token for approval MCP tools",
+    "  --server-url <url>       Matterhorn Desks server URL for MCP config",
+    "  --token <token>          Matterhorn Desks client token for MCP config",
+    "  --host-token <token>     Matterhorn Desks host token for approval MCP tools",
     "  --opencode-router                Enable opencodeRouter sidecar (default from workspace messaging config)",
     "  --no-opencode-router             Disable opencodeRouter sidecar",
     "  --opencode-router-required       Exit if opencodeRouter stops",
@@ -5071,7 +5071,7 @@ async function verifyOpencodeVersion(
   const actual = await readCliVersion(binary.bin);
   // When the binary was explicitly provided via --opencode-bin (source "external"),
   // a strict version check would break desktop app users whenever a new opencode
-  // release ships on GitHub before Matterhorn Work updates its bundled binary. Log a
+  // release ships on GitHub before Matterhorn Desks updates its bundled binary. Log a
   // warning instead of throwing so the caller can still proceed.
   if (
     binary.source === "external" &&
@@ -5117,7 +5117,7 @@ async function verifyOpenworkServer(input: {
     ? (workspaces.items as Array<Record<string, unknown>>)
     : [];
   if (!items.length) {
-    throw new Error("Matterhorn Work server returned no workspaces");
+    throw new Error("Matterhorn Desks server returned no workspaces");
   }
 
   const expectedPath = normalizeWorkspacePath(input.expectedWorkspace);
@@ -5140,7 +5140,7 @@ async function verifyOpenworkServer(input: {
 
   if (!matched) {
     throw new Error(
-      `Matterhorn Work server workspace mismatch. Expected ${expectedPath}.`,
+      `Matterhorn Desks server workspace mismatch. Expected ${expectedPath}.`,
     );
   }
 
@@ -5150,7 +5150,7 @@ async function verifyOpenworkServer(input: {
     opencode?.baseUrl !== input.expectedOpencodeBaseUrl
   ) {
     throw new Error(
-      `Matterhorn Work server engine base URL mismatch: expected ${input.expectedOpencodeBaseUrl}, got ${opencode?.baseUrl ?? "<missing>"}.`,
+      `Matterhorn Desks server engine base URL mismatch: expected ${input.expectedOpencodeBaseUrl}, got ${opencode?.baseUrl ?? "<missing>"}.`,
     );
   }
   if (
@@ -5158,20 +5158,20 @@ async function verifyOpenworkServer(input: {
     opencode?.directory !== input.expectedOpencodeDirectory
   ) {
     throw new Error(
-      `Matterhorn Work server engine directory mismatch: expected ${input.expectedOpencodeDirectory}, got ${opencode?.directory ?? "<missing>"}.`,
+      `Matterhorn Desks server engine directory mismatch: expected ${input.expectedOpencodeDirectory}, got ${opencode?.directory ?? "<missing>"}.`,
     );
   }
   if (
     input.expectedOpencodeUsername &&
     opencode?.username !== input.expectedOpencodeUsername
   ) {
-    throw new Error("Matterhorn Work server engine username mismatch.");
+    throw new Error("Matterhorn Desks server engine username mismatch.");
   }
   if (
     input.expectedOpencodePassword &&
     opencode?.password !== input.expectedOpencodePassword
   ) {
-    throw new Error("Matterhorn Work server engine password mismatch.");
+    throw new Error("Matterhorn Desks server engine password mismatch.");
   }
 
   const hostHeaders = { "X-Matterhorn-Host-Token": input.hostToken, "X-OpenWork-Host-Token": input.hostToken };
@@ -5225,7 +5225,7 @@ async function runChecks(input: {
   const hostHeaders = { "X-Matterhorn-Host-Token": input.hostToken, "X-OpenWork-Host-Token": input.hostToken };
   const workspaces = await fetchJson(`${baseUrl}/workspaces`, { headers });
   if (!workspaces?.items?.length) {
-    throw new Error("Matterhorn Work server returned no workspaces");
+    throw new Error("Matterhorn Desks server returned no workspaces");
   }
 
   const workspaceId = workspaces.items[0].id as string;
@@ -5278,7 +5278,7 @@ async function runChecks(input: {
   }
 
   const created = await input.opencodeClient.session.create({
-    title: "Matterhorn Work headless check",
+    title: "Matterhorn Desks headless check",
   });
   const createdSession = unwrap(created);
   unwrap(
@@ -5309,7 +5309,7 @@ async function runChecks(input: {
 
     unwrap(
       await input.opencodeClient.session.create({
-        title: "Matterhorn Work headless check events",
+        title: "Matterhorn Desks headless check events",
       }),
     );
     await new Promise((resolve) => setTimeout(resolve, 1200));
@@ -5439,7 +5439,7 @@ async function fetchJson(url: string, init?: RequestInit): Promise<any> {
 async function issueOpenworkOwnerToken(
   baseUrl: string,
   hostToken: string,
-  label = "Matterhorn Work owner token",
+  label = "Matterhorn Desks owner token",
 ): Promise<string> {
   const payload = await fetchJson(`${baseUrl.replace(/\/$/, "")}/tokens`, {
     method: "POST",
@@ -5452,7 +5452,7 @@ async function issueOpenworkOwnerToken(
   });
   const token = typeof payload?.token === "string" ? payload.token.trim() : "";
   if (!token) {
-    throw new Error("Matterhorn Work server did not return an owner token");
+    throw new Error("Matterhorn Desks server did not return an owner token");
   }
   return token;
 }
@@ -6961,13 +6961,13 @@ async function runDoctorReport(args: ParsedArgs) {
   checks.push(
     await doctorHttpCheck({
       id: "server.health",
-      label: "Matterhorn Work server health",
+      label: "Matterhorn Desks server health",
       baseUrl,
       path: "/health",
       required: true,
       timeoutMs,
       ok: (payload) => payload?.ok === true || payload?.service === "matterhorn-work-server",
-      hint: "Start Matterhorn Work with `matterhorn-work start` or pass --openwork-url.",
+      hint: "Start Matterhorn Desks with `matterhorn-work start` or pass --openwork-url.",
     }),
   );
 
@@ -7179,7 +7179,7 @@ async function runDoctorReport(args: ParsedArgs) {
 }
 
 function printDoctorReport(report: Awaited<ReturnType<typeof runDoctorReport>>): void {
-  console.log(`Matterhorn Work doctor: ${report.ready ? "ready" : "not ready"}`);
+  console.log(`Matterhorn Desks doctor: ${report.ready ? "ready" : "not ready"}`);
   console.log(`Server: ${report.serverUrl}`);
   console.log(
     `Checks: ${report.summary.pass} pass, ${report.summary.warn} warn, ${report.summary.fail} fail, ${report.summary.skip} skip`,
@@ -7268,7 +7268,7 @@ function assertNoHyperliquidSecrets(args: ParsedArgs): void {
   for (const key of forbiddenFlags) {
     if (args.flags.has(key)) {
       throw new Error(
-        `Hyperliquid ${key} is not accepted by Matterhorn Work CLI. Use read/preview commands only; signing and API wallet custody are not enabled.`,
+        `Hyperliquid ${key} is not accepted by Matterhorn Desks CLI. Use read/preview commands only; signing and API wallet custody are not enabled.`,
       );
     }
   }
@@ -7660,7 +7660,7 @@ function assertNoPolymarketSecrets(args: ParsedArgs): void {
   for (const key of forbiddenFlags) {
     if (args.flags.has(key)) {
       throw new Error(
-        `Polymarket ${key} is not accepted by Matterhorn Work CLI. Use read/preview commands only; signing and API key custody are not enabled.`,
+        `Polymarket ${key} is not accepted by Matterhorn Desks CLI. Use read/preview commands only; signing and API key custody are not enabled.`,
       );
     }
   }
@@ -7955,7 +7955,7 @@ function assertNoCryptoSecrets(args: ParsedArgs): void {
   for (const key of forbiddenFlags) {
     if (args.flags.has(key)) {
       throw new Error(
-        `Crypto ${key} is not accepted by Matterhorn Work CLI. The unified crypto chat is read/preview only; signing, submission, and wallet/exchange custody are not enabled.`,
+        `Crypto ${key} is not accepted by Matterhorn Desks CLI. The unified crypto chat is read/preview only; signing, submission, and wallet/exchange custody are not enabled.`,
       );
     }
   }
@@ -8742,7 +8742,7 @@ function assertNoServicesSecrets(args: ParsedArgs): void {
   for (const key of forbiddenFlags) {
     if (args.flags.has(key)) {
       throw new Error(
-        `Decentralized services ${key} is not accepted by Matterhorn Work CLI. Services are future-contract only; live provider execution and secret handling are not enabled.`,
+        `Decentralized services ${key} is not accepted by Matterhorn Desks CLI. Services are future-contract only; live provider execution and secret handling are not enabled.`,
       );
     }
   }
@@ -8821,7 +8821,7 @@ function assertNoWorkflowSecrets(args: ParsedArgs): void {
   for (const key of forbiddenFlags) {
     if (args.flags.has(key)) {
       throw new Error(
-        `Matterhorn workflow ${key} is not accepted by Matterhorn Work CLI. Workflow catalog commands are public metadata only; secrets, signing material, and live execution are not enabled.`,
+        `Matterhorn workflow ${key} is not accepted by Matterhorn Desks CLI. Workflow catalog commands are public metadata only; secrets, signing material, and live execution are not enabled.`,
       );
     }
   }
@@ -8913,7 +8913,7 @@ function assertNoMemorySecrets(args: ParsedArgs): void {
   for (const key of forbiddenFlags) {
     if (args.flags.has(key)) {
       throw new Error(
-        `Matterhorn memory ${key} is not accepted by Matterhorn Work CLI. Memory records cannot store seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, or exchange secrets.`,
+        `Matterhorn memory ${key} is not accepted by Matterhorn Desks CLI. Memory records cannot store seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, or exchange secrets.`,
       );
     }
   }
@@ -8981,7 +8981,7 @@ function buildMemoryRecordFromCli(args: ParsedArgs): Record<string, unknown> {
       confidence: readNumber(args.flags, "confidence", 0.9),
       reasonRemembered:
         readFlag(args.flags, "reason") ??
-        "User explicitly captured this memory through the Matterhorn Work CLI.",
+        "User explicitly captured this memory through the Matterhorn Desks CLI.",
     },
     sensitivity: readFlag(args.flags, "sensitivity") ?? "private",
     createdAt: now,
@@ -9068,7 +9068,7 @@ async function runMemory(args: ParsedArgs) {
 
     if (subcommand === "forget" || subcommand === "delete" || subcommand === "remove" || subcommand === "rm") {
       const id = readMemoryId(args);
-      const reason = readFlag(args.flags, "reason") ?? "User requested deletion from the Matterhorn Work CLI.";
+      const reason = readFlag(args.flags, "reason") ?? "User requested deletion from the Matterhorn Desks CLI.";
       outputResult(
         await fetchJson(`${baseUrl}/api/memory/forget`, {
           method: "POST",
@@ -10125,7 +10125,7 @@ async function runStatus(args: ParsedArgs) {
         error?: string;
       };
       console.log(
-        `Matterhorn Work server: ${openwork.ok ? "ok" : "error"} (${openwork.url})`,
+        `Matterhorn Desks server: ${openwork.ok ? "ok" : "error"} (${openwork.url})`,
       );
       if (openwork.error) console.log(`  ${openwork.error}`);
     }
@@ -10136,7 +10136,7 @@ async function runStatus(args: ParsedArgs) {
         error?: string;
       };
       console.log(
-        `Matterhorn Work engine: ${opencode.ok ? "ok" : "error"} (${opencode.url})`,
+        `Matterhorn Desks engine: ${opencode.ok ? "ok" : "error"} (${opencode.url})`,
       );
       if (opencode.error) console.log(`  ${opencode.error}`);
     }
@@ -10741,7 +10741,7 @@ async function runStart(args: ParsedArgs) {
 
   const attachCommand =
     sandboxMode !== "none"
-      ? `Matterhorn Work engine is proxied via ${opencodeConnectUrl} (requires Matterhorn Work token)`
+      ? `Matterhorn Desks engine is proxied via ${opencodeConnectUrl} (requires Matterhorn Desks token)`
       : buildAttachCommand({
           url: opencodeConnectUrl,
           workspace: resolvedWorkspace,
@@ -11159,10 +11159,10 @@ async function runStart(args: ParsedArgs) {
             `Stop: ${sandboxStopCommand} ${sandboxContainerName}`,
           ]
         : []),
-      `Matterhorn Work URL: ${openworkConnectUrl}`,
+      `Matterhorn Desks URL: ${openworkConnectUrl}`,
       "Credentials withheld from detached stdout.",
-      ...(openworkOwnerToken ? ["Matterhorn Work owner token issued."] : []),
-      `Matterhorn Work engine URL: ${opencodeConnectUrl}`,
+      ...(openworkOwnerToken ? ["Matterhorn Desks owner token issued."] : []),
+      `Matterhorn Desks engine URL: ${opencodeConnectUrl}`,
       `Attach: ${redactSensitiveString(attachCommand)}`,
       "Use `--json` only when you explicitly need the raw tokens or passwords in command output.",
     ].join("\n");
@@ -11678,7 +11678,7 @@ async function runStart(args: ParsedArgs) {
       openworkOwnerToken = await issueOpenworkOwnerToken(
         openworkBaseUrl,
         openworkHostToken,
-        "Matterhorn Work sandbox owner token",
+        "Matterhorn Desks sandbox owner token",
       );
       tui?.setConnectInfo({ ownerToken: openworkOwnerToken });
       logVerbose(
@@ -11919,7 +11919,7 @@ async function runStart(args: ParsedArgs) {
       openworkOwnerToken = await issueOpenworkOwnerToken(
         openworkBaseUrl,
         openworkHostToken,
-        "Matterhorn Work owner token",
+        "Matterhorn Desks owner token",
       );
       tui?.setConnectInfo({ ownerToken: openworkOwnerToken });
       logVerbose(
@@ -12115,25 +12115,25 @@ async function runStart(args: ParsedArgs) {
         "openwork-orchestrator",
       );
     } else {
-      console.log("Matterhorn Work orchestrator running");
+      console.log("Matterhorn Desks orchestrator running");
       console.log(`Run ID: ${runId}`);
       console.log(`Workspace: ${payload.workspace}`);
-      console.log(`Matterhorn Work engine: ${payload.opencode.baseUrl}`);
-      console.log(`Matterhorn Work engine connect URL: ${payload.opencode.connectUrl}`);
+      console.log(`Matterhorn Desks engine: ${payload.opencode.baseUrl}`);
+      console.log(`Matterhorn Desks engine connect URL: ${payload.opencode.connectUrl}`);
       if (payload.opencode.username && payload.opencode.password) {
-        console.log("Matterhorn Work engine auth: managed credentials configured (withheld from stdout)");
+        console.log("Matterhorn Desks engine auth: managed credentials configured (withheld from stdout)");
       }
-      console.log(`Matterhorn Work server: ${payload.openwork.baseUrl}`);
-      console.log(`Matterhorn Work connect URL: ${payload.openwork.connectUrl}`);
-      console.log("Matterhorn Work collaborator token: issued (withheld from stdout)");
+      console.log(`Matterhorn Desks server: ${payload.openwork.baseUrl}`);
+      console.log(`Matterhorn Desks connect URL: ${payload.openwork.connectUrl}`);
+      console.log("Matterhorn Desks collaborator token: issued (withheld from stdout)");
       console.log("  Routine remote access for shared workers.");
       if (payload.openwork.ownerToken) {
-        console.log("Matterhorn Work owner token: issued (withheld from stdout)");
+        console.log("Matterhorn Desks owner token: issued (withheld from stdout)");
         console.log(
           "  Use this when the remote client must answer permission prompts.",
         );
       }
-      console.log("Matterhorn Work host admin token: issued (withheld from stdout)");
+      console.log("Matterhorn Desks host admin token: issued (withheld from stdout)");
       console.log(
         "  Internal host/admin token for approvals CLI and host-only APIs.",
       );

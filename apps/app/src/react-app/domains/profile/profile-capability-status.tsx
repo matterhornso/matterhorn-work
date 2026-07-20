@@ -106,7 +106,7 @@ export function ProfileCapabilityStatus(props: ProfileCapabilityStatusProps) {
           <div className="rounded-md px-3 py-2.5">
             <p className="text-[13px] font-medium leading-5 text-dls-text">Preferences and workspace access</p>
             <p className="mt-0.5 text-[12px] leading-5 text-dls-secondary">
-              Available from this Matterhorn Work engine.
+              Available from this Matterhorn Desks engine.
             </p>
           </div>
           <div className="rounded-md px-3 py-2.5">
@@ -186,7 +186,7 @@ export function ProfileCapabilityStatus(props: ProfileCapabilityStatusProps) {
           compact={props.compact}
           label="Local teammate access"
           status={localTeamStatus}
-          hint="Local workspace sharing uses scoped tokens and the Matterhorn Work engine. It is not cloud collaboration."
+          hint="Local workspace sharing uses scoped tokens and the Matterhorn Desks engine. It is not cloud collaboration."
           value={<ProfileStatusText status={localTeamStatus} label={capabilityStatusLabel(localTeamStatus)} />}
         />
         {!cloudDisabled ? <ProfileStatusRow

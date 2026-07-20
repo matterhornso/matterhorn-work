@@ -50,7 +50,7 @@ const config = {
   requireSdkManifestCheck: flag("--require-sdk-manifest-check"),
   requireReceiptCheck: flag("--require-receipt-check"),
   requireArtifactReconciliation: flag("--require-artifact-reconciliation"),
-  title: arg("--title") || "Matterhorn Work Market Customer Evidence Bundle",
+  title: arg("--title") || "Matterhorn Desks Market Customer Evidence Bundle",
 };
 
 function usage() {

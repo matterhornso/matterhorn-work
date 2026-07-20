@@ -586,7 +586,7 @@ async function fetchMatterhornApiJson<T>(path: string, init?: RequestInit): Prom
     const contentType = response.headers.get("content-type") ?? "";
     if (contentType.includes("text/html") || preview.startsWith("<")) {
       throw new Error(
-        `Matterhorn server did not answer ${path}. The app received an HTML page from ${source} instead of JSON. Reconnect the Matterhorn Work server from Profile & Settings, then refresh this desk.`,
+        `Matterhorn server did not answer ${path}. The app received an HTML page from ${source} instead of JSON. Reconnect the Matterhorn Desks server from Profile & Settings, then refresh this desk.`,
       );
     }
     throw new Error(
@@ -776,7 +776,7 @@ function formatBittensorProviderError(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error || "");
   const message = raw.trim();
   if (/unexpected token|not valid json|doctype|html/i.test(message)) {
-    return "Matterhorn server did not answer the Bittensor request with JSON. Reconnect the Matterhorn Work server, then refresh the Bittensor desk.";
+    return "Matterhorn server did not answer the Bittensor request with JSON. Reconnect the Matterhorn Desks server, then refresh the Bittensor desk.";
   }
   if (/failed to fetch|network|load failed|econnrefused|timeout/i.test(message)) {
     return "Matterhorn could not reach the Bittensor provider. Check the local server connection, then refresh the Bittensor desk.";
@@ -1197,7 +1197,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             : "Local Matterhorn API unavailable for /api/bittensor/readiness.",
         }],
         warnings: ["This is a local server/auth availability check, not a Bittensor wallet or subnet failure."],
-        nextActions: ["Restart or reconnect the Matterhorn Work local server, then refresh readiness."],
+        nextActions: ["Restart or reconnect the Matterhorn Desks local server, then refresh readiness."],
       });
     } finally {
       setReadinessLoading(false);
@@ -1222,7 +1222,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             : "Local Matterhorn API unavailable for /api/crypto/readiness.",
         }],
         warnings: ["This blocks live customer evidence collection until the local server/auth token is healthy, but it is not a protocol or wallet failure."],
-        nextActions: ["Run pnpm smoke:customer-ready-crypto or restart Matterhorn Work, then refresh this panel."],
+        nextActions: ["Run pnpm smoke:customer-ready-crypto or restart Matterhorn Desks, then refresh this panel."],
       });
     } finally {
       setCryptoReadinessLoading(false);
@@ -1249,7 +1249,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             ? `Local Matterhorn API unavailable for /api/crypto/market-execution-readiness: ${err.message}`
             : "Local Matterhorn API unavailable for /api/crypto/market-execution-readiness.",
         }],
-        nextActions: ["Restart or reconnect the Matterhorn Work local server, then refresh market execution readiness before production use."],
+        nextActions: ["Restart or reconnect the Matterhorn Desks local server, then refresh market execution readiness before production use."],
         safety: {
           nonCustodial: true,
           liveSubmissionEnabled: false,
@@ -1468,7 +1468,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   };
 
   const askAgentAboutSubnet = async (subnet: BittensorSubnetSummary) => {
-    const prompt = `Bittensor Agent task: Explain subnet ${subnet.netuid} (${subnet.name}) in beginner language, then tell me how it could help my Matterhorn Work tasks. Include utility, risks, metagraph context, whether Matterhorn can directly invoke this subnet, and which actions require external Bittensor signing.`;
+    const prompt = `Bittensor Agent task: Explain subnet ${subnet.netuid} (${subnet.name}) in beginner language, then tell me how it could help my Matterhorn Desks tasks. Include utility, risks, metagraph context, whether Matterhorn can directly invoke this subnet, and which actions require external Bittensor signing.`;
     await sendToChat(prompt, { netuid: subnet.netuid, subnet });
   };
 
@@ -2165,7 +2165,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 ) : null}
                 {localReadinessApiUnavailable ? (
                   <Notice tone="info" icon={<Shield className="size-4" />} title="Local API check">
-                    The protocol desks are installed, but the desktop panel cannot reach the local readiness API yet. This usually means the Matterhorn Work server/auth token is still starting or stale; restart or reconnect, then refresh. You can still copy the evidence commands below for a terminal check.
+                    The protocol desks are installed, but the desktop panel cannot reach the local readiness API yet. This usually means the Matterhorn Desks server/auth token is still starting or stale; restart or reconnect, then refresh. You can still copy the evidence commands below for a terminal check.
                   </Notice>
                 ) : null}
                 {/* Right-rail command groups stay single-column; viewport breakpoints are too wide for this side panel. */}
@@ -2500,7 +2500,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <LoadingLabel label="Loading subnets" />
               ) : error && subnets.length === 0 ? (
                 <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Subnet list unavailable">
-                  The subnet browser is live-data backed, not hardcoded. Reconnect the Matterhorn Work server or refresh this desk, then the full subnet list will appear here with search by netuid, name, symbol, category, or utility.
+                  The subnet browser is live-data backed, not hardcoded. Reconnect the Matterhorn Desks server or refresh this desk, then the full subnet list will appear here with search by netuid, name, symbol, category, or utility.
                 </Notice>
               ) : filteredSubnets.length === 0 ? (
                 <Notice tone="info" icon={<Search className="size-4" />} title="No matching subnets">

@@ -72,7 +72,7 @@ for (const phrase of [
   "submitSignedAllowedByContract: false",
   "hash-bound to the sign request",
   "canSubmit: false",
-  "Matterhorn Work Crypto Customer QA Report",
+  "Matterhorn Desks Crypto Customer QA Report",
   "Readiness",
   "Try prompts",
   "Evidence",

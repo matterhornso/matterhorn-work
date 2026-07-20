@@ -1,6 +1,6 @@
-# Matterhorn Work Local Agent API
+# Matterhorn Desks Local Agent API
 
-This is the stable local HTTP surface used by `matterhorn-work-mcp`. It is meant for Claude Code, Codex, Cursor, Claude Desktop, and other agent environments that need to inspect or operate a running Matterhorn Work server without scraping the UI.
+This is the stable local HTTP surface used by `matterhorn-work-mcp`. It is meant for Claude Code, Codex, Cursor, Claude Desktop, and other agent environments that need to inspect or operate a running Matterhorn Desks server without scraping the UI.
 
 The API is local-first and non-custodial. It does not accept seed phrases, mnemonics, private keys, or wallet exports.
 
@@ -172,7 +172,7 @@ Returns all workspaces visible to the token.
   "items": [
     {
       "id": "ws_1",
-      "name": "Matterhorn Work",
+      "name": "Matterhorn Desks",
       "path": "/Users/me/project",
       "workspaceType": "local"
     }
@@ -184,7 +184,7 @@ Returns all workspaces visible to the token.
 
 ## Chat Session Routes
 
-Chat session routes expose stable read-side access to the Matterhorn Work engine's sessions through the Matterhorn Work server. Agents should use these routes to inspect existing work before opening file sessions or asking the user to approve changes.
+Chat session routes expose stable read-side access to the Matterhorn Desks engine's sessions through the Matterhorn Desks server. Agents should use these routes to inspect existing work before opening file sessions or asking the user to approve changes.
 
 ### `POST /workspace/:workspaceId/sessions`
 
@@ -371,7 +371,7 @@ Returns a combined snapshot with the session, messages, todos, and status data w
 
 Auth: `client`
 
-Streams session progress over Server-Sent Events using the envelope in [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md). MCP agents can use `matterhorn_watch_session_events` for bounded progress batches, `GET /workspace/:workspaceId/sessions/:sessionId/status` for lightweight polling, and `GET /workspace/:workspaceId/sessions/:sessionId/snapshot` for recovery.
+Streams session progress over Server-Sent Events using the envelope in [Matterhorn Desks Session Event Stream Contract](./agent-session-event-stream.md). MCP agents can use `matterhorn_watch_session_events` for bounded progress batches, `GET /workspace/:workspaceId/sessions/:sessionId/status` for lightweight polling, and `GET /workspace/:workspaceId/sessions/:sessionId/snapshot` for recovery.
 
 ### `DELETE /workspace/:workspaceId/sessions/:sessionId`
 
@@ -833,4 +833,4 @@ Expected behavior:
 
 ## Not Yet Stable
 
-Browser control and desktop UI automation are not part of this HTTP contract yet. Session event streaming is documented in [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md), and MCP clients can use `matterhorn_watch_session_events` when they need bounded progress events instead of polling only.
+Browser control and desktop UI automation are not part of this HTTP contract yet. Session event streaming is documented in [Matterhorn Desks Session Event Stream Contract](./agent-session-event-stream.md), and MCP clients can use `matterhorn_watch_session_events` when they need bounded progress events instead of polling only.

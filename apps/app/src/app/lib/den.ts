@@ -54,7 +54,7 @@ const LEGACY_STORAGE_KEYS = [
 const ORG_PROXY_HEADER = "x-matterhorn-legacy-org-id";
 const DEFAULT_DEN_TIMEOUT_MS = 12_000;
 
-export const DEFAULT_DEN_AUTH_NAME = "Matterhorn Work User";
+export const DEFAULT_DEN_AUTH_NAME = "Matterhorn Desks User";
 const EXPLICIT_DEN_BASE_URL =
   (typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_MATTERHORN_CLOUD_URL === "string"
     ? import.meta.env.VITE_MATTERHORN_CLOUD_URL
@@ -207,7 +207,7 @@ export type DenOrgPlugin = {
   memberCount: number;
   updatedAt: string | null;
   componentCounts: Record<string, number>;
-  /** Preferred Den surface: plugins are normalized into Matterhorn Work extensions. */
+  /** Preferred Den surface: plugins are normalized into Matterhorn Desks extensions. */
   extension?: DenOrgExtensionProjection | null;
 };
 

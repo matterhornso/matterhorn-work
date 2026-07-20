@@ -13,7 +13,7 @@ assert.equal(packageJson.scripts?.["test:monday-beta-rc-pack"], "node scripts/mo
 
 const docs = readFileSync("docs/monday-beta-rc-pack.md", "utf8");
 for (const phrase of [
-  "Matterhorn Work Launch RC Pack",
+  "Matterhorn Desks Launch RC Pack",
   "pnpm --silent beta:monday-rc",
   "matterhorn-monday-beta-rc.json",
   "matterhorn-monday-beta-rc.md",
@@ -148,7 +148,7 @@ assert.ok(existsSync(shaPath), "RC pack should write SHA evidence");
 
 const markdown = readFileSync(mdPath, "utf8");
 for (const phrase of [
-  "# Matterhorn Work Launch Release Candidate Pack",
+  "# Matterhorn Desks Launch Release Candidate Pack",
   "Production evidence complete: `false`",
   "Bittensor: beta-ready",
   "Hyperliquid: preview/external-signer/public-receipt only",

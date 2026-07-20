@@ -151,13 +151,13 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
   {
     schemaVersion: 1,
     id: "matterhorn-browser",
-    name: "Matterhorn Work Browser",
-    description: "Automate the built-in browser panel that stays visible inside Matterhorn Work.",
+    name: "Matterhorn Desks Browser",
+    description: "Automate the built-in browser panel that stays visible inside Matterhorn Desks.",
     source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
     icon: { src: "/matterhorn-mark.svg" },
-    composer: { prompt: "Use the Matterhorn Work Browser extension to " },
+    composer: { prompt: "Use the Matterhorn Desks Browser extension to " },
     setup: {
-      instructions: "Matterhorn Work Browser is ready by default in desktop workspaces.",
+      instructions: "Matterhorn Desks Browser is ready by default in desktop workspaces.",
       primaryCta: "Enable browser automation",
     },
     resources: [
@@ -171,7 +171,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     contributions: [
       { type: "settings-panel", ref: "matterhorn.browser.settings", location: "settings-detail" },
       { type: "session-side-panel", ref: "matterhorn.browser.panel", location: "session-right-pane" },
-      { type: "composer-prompt", prompt: "Use the Matterhorn Work Browser extension to ", location: "composer" },
+      { type: "composer-prompt", prompt: "Use the Matterhorn Desks Browser extension to ", location: "composer" },
     ],
     enablement: [
       { type: "toggle-enabled", ref: "matterhorn-browser", label: "Enabled" },
@@ -388,13 +388,13 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     schemaVersion: 1,
     id: "matterhorn-voice",
     name: "Voice Mode",
-    description: "Talk to Matterhorn Work through a Realtime voice panel that drives the same semantic UI controls as Matterhorn Work UI MCP.",
+    description: "Talk to Matterhorn Desks through a Realtime voice panel that drives the same semantic UI controls as Matterhorn Desks UI MCP.",
     preview: true,
     source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
     icon: { src: "/matterhorn-mark.svg" },
     composer: { prompt: "Use Voice Mode to " },
     setup: {
-      instructions: "Voice Mode uses OpenAI Realtime. Save an OpenAI API key in Matterhorn Work env vars, then open the session rail panel and speak or send a typed voice command.",
+      instructions: "Voice Mode uses OpenAI Realtime. Save an OpenAI API key in Matterhorn Desks env vars, then open the session rail panel and speak or send a typed voice command.",
       primaryCta: "Save OpenAI key",
       secondaryCta: "Test Realtime",
       requiredEnv: ["OPENAI_REALTIME_API_KEY", "OPENAI_API_KEY"],
@@ -424,13 +424,13 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     schemaVersion: 1,
     id: "google-workspace",
     name: "Google Workspace",
-    description: "Let Matterhorn Work help with meetings, selected Drive files, and Gmail drafts.",
+    description: "Let Matterhorn Desks help with meetings, selected Drive files, and Gmail drafts.",
     preview: true,
     source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
     icon: { simpleIconSlug: "google" },
     composer: { prompt: "Use Google Workspace to " },
     setup: {
-      instructions: "Connect your Google account to use Calendar, Drive, and Gmail drafts in Matterhorn Work.",
+      instructions: "Connect your Google account to use Calendar, Drive, and Gmail drafts in Matterhorn Desks.",
       primaryCta: "Connect Google Workspace",
       secondaryCta: "Test connection",
       testActionRef: "matterhorn.googleWorkspace.testConnection",

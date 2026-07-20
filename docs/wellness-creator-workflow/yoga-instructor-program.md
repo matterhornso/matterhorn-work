@@ -1,6 +1,6 @@
 # Yoga Instructor — Program Packet
 
-*A reproducible reference program a yoga instructor can package and share through Matterhorn Work. Customer-demo safe; general longevity education only; artifact-first.*
+*A reproducible reference program a yoga instructor can package and share through Matterhorn Desks. Customer-demo safe; general longevity education only; artifact-first.*
 
 > This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise program, especially if you have an existing health condition, are pregnant, or take medication.
 

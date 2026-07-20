@@ -57,7 +57,7 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("profileCapability?.description");
     expect(source).toContain("<CapabilityBadge status={profileCapability.status}");
     expect(source).toContain('"Local profile and workspace access readiness."');
-    expect(source).not.toContain("You are not signed in to a Matterhorn Work account.");
+    expect(source).not.toContain("You are not signed in to a Matterhorn Desks account.");
     expect(source).not.toContain("<StatusBadge tone=\"setup\">Signed out</StatusBadge>");
     expect(source).toContain("function UnavailableStatus(props: { label?: string })");
     expect(source).toContain('{props.label ?? "Engine offline"}');
@@ -65,6 +65,17 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("text-red-10");
     expect(source).toContain("bg-red-9");
     expect(source).not.toContain('<StatusBadge tone="error">Unavailable</StatusBadge>');
+  });
+
+  test("keeps healthy engine state quiet and hides technical detail by default", () => {
+    const source = readAppSource("domains/settings/pages/overview-view.tsx");
+
+    expect(source).toContain('if (status === "working") return null;');
+    expect(source).toContain('className="group/backend-details"');
+    expect(source).toContain("Technical readiness details");
+    expect(source).toContain("<CollapsibleContent");
+    expect(source).not.toContain('status={<StatusBadge tone="ready">Ready</StatusBadge>}');
+    expect(source).not.toContain('status={<StatusBadge tone="ready">Boundaries visible</StatusBadge>}');
   });
 
   test("renders data policy from workspace data-map instead of static copy", () => {

@@ -31,4 +31,4 @@ assert.doesNotMatch(
   "apps/app/vite.config.ts must not reintroduce the old browser target list that breaks destructuring transforms in Vite dev.",
 );
 
-console.log("Matterhorn Work UI dev Vite target regression check passed.");
+console.log("Matterhorn Desks UI dev Vite target regression check passed.");

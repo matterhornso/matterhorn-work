@@ -1,6 +1,6 @@
-# Matterhorn Work Agent Action Model
+# Matterhorn Desks Agent Action Model
 
-This contract defines the shared language for Matterhorn Work control actions across:
+This contract defines the shared language for Matterhorn Desks control actions across:
 
 - the desktop UI bridge exposed through `matterhorn-work-ui-mcp`
 - the stable server HTTP/MCP control surface exposed through `matterhorn-work-mcp`

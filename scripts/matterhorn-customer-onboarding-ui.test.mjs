@@ -74,7 +74,7 @@ for (const phrase of [
   "Keep risky work review-first, with safety boundaries visible before action.",
   "Turn useful conversations into saved project context, files, and receipts.",
   "/matterhorn-logo-square.svg",
-  'alt="Matterhorn Work"',
+  'alt="Matterhorn Desks"',
   "var(--matterhorn-blue)",
 ]) {
   assert.ok(`${welcome}\n${english}`.includes(phrase), `welcome experience should include Matterhorn-native copy: ${phrase}`);
@@ -128,7 +128,18 @@ assert.equal(
 assert.equal(
   denSigninSurface.includes("Your computer,"),
   false,
-  "sign-in image should explain Matterhorn Work instead of generic computer automation",
+  "sign-in image should explain Matterhorn Desks instead of generic computer automation",
+);
+assert.ok(
+  denSigninSurface.includes(
+    '<main className="relative min-h-screen overflow-y-auto bg-dls-background text-dls-text">',
+  ),
+  "full-screen sign-in should expose one semantic main landmark",
+);
+assert.equal(
+  denSigninSurface.includes("/matterhorn-mark.svg"),
+  false,
+  "full-screen sign-in should not load decorative Matterhorn marks ahead of authentication controls",
 );
 
 for (const phrase of [
@@ -549,7 +560,7 @@ assert.equal(sessionPage.includes("matterhorn-desk-launcher group flex min-h-[96
 assert.equal(sessionPage.includes("grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3"), false, "home desk launchers should not fall back to the old box grid");
 
 for (const phrase of [
-  "Matterhorn Work Beta Go-Live Checklist For First 10 Users",
+  "Matterhorn Desks Beta Go-Live Checklist For First 10 Users",
   "Bittensor Desk",
   "Hyperliquid Desk",
   "Polymarket Desk",
@@ -732,8 +743,8 @@ for (const phrase of [
 for (const phrase of [
   "MATTERHORN_ORIENTATION_PATTERNS",
   "\\bwhat can i do\\b",
-  "## Matterhorn Work Orientation",
-  "Answer as Matterhorn Work, not as a generic code assistant.",
+  "## Matterhorn Desks Orientation",
+  "Answer as Matterhorn Desks, not as a generic code assistant.",
   "If the workspace is empty, do not lead with internal runtime files such as opencode.json or .opencode/.",
   "Bittensor: explain subnets",
   "Hyperliquid: read markets/orderbooks/account exposure",
@@ -1029,7 +1040,7 @@ assert.equal(constants.includes("https://app.openworklabs.com/mcp"), false, "Mat
 
 for (const phrase of [
   "Parallel Web Systems web search",
-  "Matterhorn Work engine endpoint",
+  "Matterhorn Desks engine endpoint",
   "formatEngineEndpoint",
 ]) {
   assert.ok(`${english}\n${advancedSettings}`.includes(phrase), `advanced settings should use Matterhorn customer-safe wording: ${phrase}`);

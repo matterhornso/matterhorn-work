@@ -1,13 +1,13 @@
 # Stitch AI Prompts — Matterhorn Customer UI
 
-Use these prompts to guide Stitch AI agents through implementing the Matterhorn Work customer UI from the design spec.
+Use these prompts to guide Stitch AI agents through implementing the Matterhorn Desks customer UI from the design spec.
 
 ---
 
 ## Prompt 1: Bootstrap Design System
 
 ```
-You are building a React + TypeScript + Tailwind UI for Matterhorn Work, a Web3-native desktop workspace.
+You are building a React + TypeScript + Tailwind UI for Matterhorn Desks, a Web3-native desktop workspace.
 
 Set up the design system using the CSS custom properties defined in docs/ui/matterhorn-customer-ux-refresh/styles.css.
 
@@ -105,7 +105,7 @@ Requirements:
 ## Prompt 6: Safety Badge Component Library
 
 ```
-Create a reusable SafetyBadge component for Matterhorn Work.
+Create a reusable SafetyBadge component for Matterhorn Desks.
 
 Variants:
 - live: green background (#22C55E), white text. Shows a 6px green dot.

@@ -18,7 +18,7 @@ async function test(name, fn) {
 }
 
 async function main() {
-  console.log("Matterhorn Work — E2E Test Suite\n");
+  console.log("Matterhorn Desks — E2E Test Suite\n");
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });

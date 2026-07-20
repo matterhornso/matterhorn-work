@@ -1,10 +1,10 @@
-# Matterhorn Work Bittensor Operator Playbook
+# Matterhorn Desks Bittensor Operator Playbook
 
-This playbook is the Bittensor-specific workflow for Codex, Claude Code, Claude Desktop, Cursor, or any MCP-capable agent operating Matterhorn Work.
+This playbook is the Bittensor-specific workflow for Codex, Claude Code, Claude Desktop, Cursor, or any MCP-capable agent operating Matterhorn Desks.
 
-Use the general [Agent Operator Workflow](./agent-operator-workflow.md) first to start Matterhorn Work, run the doctor, configure MCP, and confirm the server is healthy. Then use this playbook for Bittensor tasks.
+Use the general [Agent Operator Workflow](./agent-operator-workflow.md) first to start Matterhorn Desks, run the doctor, configure MCP, and confirm the server is healthy. Then use this playbook for Bittensor tasks.
 
-For a repeatable pass/fail probe of this playbook, run [Matterhorn Work Bittensor Live QA](./bittensor-live-qa.md).
+For a repeatable pass/fail probe of this playbook, run [Matterhorn Desks Bittensor Live QA](./bittensor-live-qa.md).
 
 For direct subnet service execution planning, use [Bittensor Subnet Service Adapter Contracts](./bittensor-subnet-service-adapter-contracts.md). Matterhorn must pass the adapter contract gate before it can call any configured subnet service.
 
@@ -46,7 +46,7 @@ Expected behavior:
 - the packet explicitly requires an external signer;
 - no seed phrase, mnemonic, private key, keyfile, wallet export, signature, signed extrinsic, or signed payload field is present.
 
-This check never signs, submits, or broadcasts. It is an operator/customer trust gate before the user leaves Matterhorn Work for an external signer.
+This check never signs, submits, or broadcasts. It is an operator/customer trust gate before the user leaves Matterhorn Desks for an external signer.
 
 ## Receipt Evidence Bundle
 
@@ -1219,7 +1219,7 @@ Expected operator handoff behavior:
 - names blockers and next actions without embedding raw metadata, task text, adapter output, endpoint URLs, full hashes, or credentials;
 - repeats that real adapter execution still requires separate preview, exact request SHA-256 confirmation, short-lived approval, and explicit operator/user confirmation.
 
-Start Matterhorn Work with mock adapters enabled in the trusted local shell:
+Start Matterhorn Desks with mock adapters enabled in the trusted local shell:
 
 ```bash
 export BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS=1
@@ -1411,7 +1411,7 @@ MCP equivalent:
 Ask Codex or Claude to follow this exact Bittensor sequence:
 
 ```text
-Use the Matterhorn Work MCP server for Bittensor.
+Use the Matterhorn Desks MCP server for Bittensor.
 
 1. Call matterhorn_bittensor_readiness.
 2. For beginner questions, call matterhorn_bittensor_chat with:

@@ -1,11 +1,11 @@
-# Matterhorn Work Product Surfaces
+# Matterhorn Desks Product Surfaces
 
 **Status:** Current customer-facing behavior
 **Updated:** 2026-07-11
 
 ## Product Model
 
-Matterhorn Work is a workspace with chat at the center and contextual project surfaces around it. It is not a collection of disconnected admin pages.
+Matterhorn Desks is a workspace with chat at the center and contextual project surfaces around it. It is not a collection of disconnected admin pages.
 
 The primary loop is:
 
@@ -32,7 +32,7 @@ Healthy states should stay quiet. Readiness details belong behind the informatio
 Chat is the primary work surface. It includes:
 
 - OpenCode-backed sessions and streaming;
-- model/provider routing through the Matterhorn Work engine;
+- model/provider routing through the Matterhorn Desks engine;
 - tool and MCP calls;
 - permission and approval surfaces;
 - generated-media entry points;

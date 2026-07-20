@@ -55,7 +55,7 @@ describe("Matterhorn server client error contract", () => {
       expect(error).toBeInstanceOf(MatterhornServerError);
       expect((error as MatterhornServerError).status).toBe(200);
       expect((error as MatterhornServerError).code).toBe("invalid_response");
-      expect((error as Error).message).toBe("Matterhorn Work engine returned an unreadable response.");
+      expect((error as Error).message).toBe("Matterhorn Desks engine returned an unreadable response.");
       expect((error as Error).message).not.toContain("privateKey");
     }
   });

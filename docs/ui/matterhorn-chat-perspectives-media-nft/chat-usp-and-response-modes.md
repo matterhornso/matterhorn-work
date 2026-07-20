@@ -64,7 +64,7 @@ Matterhorn is not "a chat interface." It is a **contextual action surface** wher
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Matterhorn Work                                      [Memory] [⚙] │
+│  Matterhorn Desks                                      [Memory] [⚙] │
 ├──────────┬──────────────────────────────────┬───────────────────────┤
 │          │                                  │                       │
 │ Sidebar  │   Chat Surface                   │   Side Desk Panel     │

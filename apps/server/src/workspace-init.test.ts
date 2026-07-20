@@ -27,12 +27,16 @@ describe("ensureWorkspaceFiles", () => {
       const longevityAgent = await readFile(join(root, ".opencode", "agents", "matterhorn-longevity.md"), "utf8");
       const config = await readFile(join(root, "opencode.jsonc"), "utf8");
       const outputsDir = await stat(join(root, "outputs"));
-      expect(agent).toContain("You are Matterhorn Work.");
-      expect(agent).toContain("Matterhorn Work Artifacts");
+      expect(agent).toContain("You are Matterhorn Desks.");
+      expect(agent).toContain("Matterhorn Desks Artifacts");
       expect(agent).toContain("Do not lead with internal runtime files");
       expect(agent).toContain("outputs/<desk>/<session-slug>");
       expect(agent).toContain("outputs/longevity/client-program/program.md");
       expect(agent).toContain("outputs/");
+      expect(agent).toContain("<!-- MATTERHORN_ARTIFACTS_START -->");
+      expect(agent).toContain("<!-- MATTERHORN_BROWSER_START -->");
+      expect(agent.toLowerCase()).not.toContain("openwork");
+      expect(bittensorAgent.toLowerCase()).not.toContain("openwork");
       expect(bittensorAgent).toContain("Bittensor Agent");
       expect(bittensorAgent).toContain("matterhorn_desk_agent: v1");
       expect(bittensorAgent).toContain("matterhorn_desk_id: bittensor");
@@ -93,9 +97,43 @@ describe("ensureWorkspaceFiles", () => {
       const agent = await readFile(join(root, ".opencode", "agents", "matterhorn.md"), "utf8");
       const deskAgent = await readFile(join(root, ".opencode", "agents", "matterhorn-bittensor.md"), "utf8");
       expect(agent).toContain("Old instructions");
-      expect(agent).toContain("Matterhorn Work Artifacts");
+      expect(agent).toContain("Matterhorn Desks Artifacts");
       expect(deskAgent).toContain("Bittensor Agent");
       expect(result.reloadReasons.sort()).toEqual(["agents", "config"]);
+    });
+  });
+
+  test("migrates legacy generated guidance without replacing user instructions", async () => {
+    await withWorkspace(async (root) => {
+      await mkdir(join(root, ".opencode", "agents"), { recursive: true });
+      await writeFile(
+        join(root, ".opencode", "agents", "matterhorn.md"),
+        [
+          "---",
+          "description: Existing Matterhorn agent",
+          "---",
+          "",
+          "Keep this user instruction.",
+          "",
+          "<!-- OPENWORK_BROWSER_START -->",
+          "Old browser guidance",
+          "<!-- OPENWORK_BROWSER_END -->",
+          "",
+          "<!-- OPENWORK_ARTIFACTS_START -->",
+          "Old artifact guidance",
+          "<!-- OPENWORK_ARTIFACTS_END -->",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      await ensureWorkspaceFiles(root, "starter");
+      const agent = await readFile(join(root, ".opencode", "agents", "matterhorn.md"), "utf8");
+
+      expect(agent).toContain("Keep this user instruction.");
+      expect(agent).toContain("<!-- MATTERHORN_BROWSER_START -->");
+      expect(agent).toContain("<!-- MATTERHORN_ARTIFACTS_START -->");
+      expect(agent.toLowerCase()).not.toContain("openwork");
     });
   });
 

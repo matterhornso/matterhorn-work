@@ -1,7 +1,7 @@
 {
   "name": "matterhorn-work-orchestrator",
   "version": "0.13.13",
-  "description": "Matterhorn Work host orchestrator for opencode + server + opencode-router",
+  "description": "Matterhorn Desks host orchestrator for opencode + server + opencode-router",
   "private": true,
   "type": "module",
   "scripts": {

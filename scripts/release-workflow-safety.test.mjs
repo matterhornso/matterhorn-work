@@ -4,7 +4,15 @@ import { readFileSync } from "node:fs";
 
 const releaseWorkflow = readFileSync(".github/workflows/release-macos-aarch64.yml", "utf8");
 const daytonaWorkflow = readFileSync(".github/workflows/release-daytona-snapshot.yml", "utf8");
+const agentWorkflow = readFileSync(".github/workflows/opencode-agents.yml", "utf8");
 const releaseReview = readFileSync("scripts/release/review.mjs", "utf8");
+const pinnedEngineInstaller = readFileSync("scripts/install-pinned-opencode.sh", "utf8");
+const microSandboxDockerfile = readFileSync("packaging/docker/Dockerfile.microsandbox", "utf8");
+const microSandboxEntrypoint = readFileSync("packaging/docker/microsandbox-entrypoint.sh", "utf8");
+const productionCompose = readFileSync("packaging/docker/docker-compose.yml", "utf8");
+const legacyDockerfile = readFileSync("packaging/docker/Dockerfile", "utf8");
+const engineChecksums = JSON.parse(readFileSync("packaging/docker/opencode-release-checksums.json", "utf8"));
+const constants = JSON.parse(readFileSync("constants.json", "utf8"));
 
 for (const phrase of [
   'orchestratorPkg.dependencies?.["matterhorn-work-server"]',
@@ -15,7 +23,7 @@ for (const phrase of [
 }
 
 for (const phrase of [
-  'RELEASE_NAME="Matterhorn Work $TAG"',
+  'RELEASE_NAME="Matterhorn Desks $TAG"',
   'if [[ "$TAG" == *-* ]]',
   'prerelease="true"',
   'if [ "$prerelease" = "true" ]',
@@ -70,6 +78,84 @@ function jobBlock(jobName) {
   const nextJob = tail.search(/\n  [a-z0-9-]+:\n/);
   return nextJob >= 0 ? tail.slice(0, nextJob) : tail;
 }
+
+assert.equal(
+  agentWorkflow.includes("https://opencode.ai/install"),
+  false,
+  "agent workflows must not pipe a remote installer into the runner shell",
+);
+assert.ok(
+  agentWorkflow.match(/bash scripts\/install-pinned-opencode\.sh/g)?.length === 2,
+  "both agent jobs must use the repository-pinned engine installer",
+);
+for (const phrase of [
+  "curl --proto '=https' --tlsv1.2",
+  "sha256sum -c -",
+  "opencode-release-checksums.json",
+  "OPENCODE_DOWNLOAD_SHA256 is required",
+]) {
+  assert.ok(pinnedEngineInstaller.includes(phrase), `pinned engine installer missing integrity policy: ${phrase}`);
+}
+const engineVersion = String(constants.opencodeVersion ?? "").replace(/^v/, "");
+assert.ok(engineChecksums[engineVersion], `checksums must cover the pinned engine version ${engineVersion}`);
+for (const asset of [
+  "opencode-linux-arm64.tar.gz",
+  "opencode-linux-x64-baseline.tar.gz",
+]) {
+  assert.match(
+    engineChecksums[engineVersion][asset] ?? "",
+    /^[a-f0-9]{64}$/,
+    `checksums must include a SHA-256 for ${asset}`,
+  );
+}
+assert.ok(
+  microSandboxDockerfile.includes("/usr/local/bin/install-pinned-opencode.sh"),
+  "micro-sandbox Docker builds must use the verified engine installer",
+);
+assert.doesNotMatch(
+  microSandboxEntrypoint,
+  /microsandbox-(?:host-)?token/,
+  "micro-sandbox entrypoint must not ship fixed bearer credentials",
+);
+assert.doesNotMatch(
+  microSandboxEntrypoint,
+  /(?:client|host) token:.*\$/i,
+  "micro-sandbox entrypoint must not print bearer credentials",
+);
+assert.ok(
+  microSandboxEntrypoint.includes("MATTERHORN_WORK_APPROVAL_MODE:-${OPENWORK_APPROVAL_MODE:-manual}"),
+  "micro-sandbox approval mode must default to manual",
+);
+assert.ok(
+  microSandboxEntrypoint.includes("Set MATTERHORN_WORK_TOKEN using the deployment secret manager"),
+  "micro-sandbox must require a client secret",
+);
+assert.ok(
+  microSandboxEntrypoint.includes("Set MATTERHORN_WORK_HOST_TOKEN using the deployment secret manager"),
+  "micro-sandbox must require a host secret",
+);
+assert.doesNotMatch(
+  microSandboxEntrypoint,
+  /CORS_ORIGINS[^\n]*:-\*}/,
+  "micro-sandbox CORS must not default to wildcard",
+);
+assert.ok(
+  productionCompose.includes("dockerfile: packaging/docker/Dockerfile.microsandbox"),
+  "production compose must use the source-built, checksum-verified image",
+);
+assert.ok(
+  productionCompose.includes("MATTERHORN_WORK_TOKEN: ${MATTERHORN_WORK_TOKEN:?"),
+  "production compose must require the client token",
+);
+assert.ok(
+  productionCompose.includes("MATTERHORN_WORK_HOST_TOKEN: ${MATTERHORN_WORK_HOST_TOKEN:?"),
+  "production compose must require the host token",
+);
+assert.doesNotMatch(
+  legacyDockerfile,
+  /"--cors", "\*"/,
+  "legacy container defaults must not grant wildcard CORS",
+);
 
 for (const jobName of [
   "release-orchestrator-sidecars",

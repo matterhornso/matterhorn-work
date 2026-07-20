@@ -1,6 +1,6 @@
-# Matterhorn Work Public Beta Launch
+# Matterhorn Desks Public Beta Launch
 
-This is the release contract for a public, desktop-first Matterhorn Work Beta
+This is the release contract for a public, desktop-first Matterhorn Desks Beta
 with an authenticated web companion. It is intentionally stricter than a
 named-tester Beta: a public download or browser link is not a go signal until
 every required gate has fresh evidence for one immutable candidate.
@@ -25,7 +25,7 @@ every required gate has fresh evidence for one immutable candidate.
 
 ## What Public Beta Includes
 
-- Signed Matterhorn Work desktop builds for the approved public platforms.
+- Signed Matterhorn Desks desktop builds for the approved public platforms.
 - A web app that requires a Matterhorn Cloud sign-in before private workspace
   access.
 - The stable chat, project, desk, notes, memory, output, wallet-read, and
@@ -48,7 +48,7 @@ every required gate has fresh evidence for one immutable candidate.
 ## Public Web Architecture
 
 The public web app is an authenticated client, not a public remote-control
-surface for a shared Matterhorn Work engine.
+surface for a shared Matterhorn Desks engine.
 
 1. A visitor creates an account or signs in with Matterhorn Cloud.
 2. Matterhorn Cloud returns to the exact allowlisted app URL with a secure,
@@ -57,7 +57,7 @@ surface for a shared Matterhorn Work engine.
 4. The same-origin proxy authorizes the user for a workspace and proxies both
    root Matterhorn API calls and `/opencode` calls upstream.
 5. Any upstream service credentials remain server-side. The browser receives
-   neither a Matterhorn Work bearer token nor a host token.
+   neither a Matterhorn Desks bearer token nor a host token.
 
 The browser return target is `${MATTERHORN_APP_URL}/session` (or its deployed
 equivalent) and must be allowlisted by Matterhorn Cloud. If the Cloud API is on
@@ -74,6 +74,7 @@ VITE_MATTERHORN_DEPLOYMENT=web
 VITE_MATTERHORN_PUBLIC_BETA=1
 VITE_MATTERHORN_REQUIRE_SIGNIN=1
 VITE_MATTERHORN_CLOUD_ENABLED=1
+MATTERHORN_PUBLIC_PROXY_MODE=same-origin
 VITE_MATTERHORN_CLOUD_URL=https://app.matterhorn.example
 VITE_MATTERHORN_CLOUD_API_URL=https://api.matterhorn.example
 MATTERHORN_APP_URL=https://app.matterhorn.example

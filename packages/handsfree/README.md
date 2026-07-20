@@ -1,6 +1,6 @@
-# Matterhorn Work Automation Helper
+# Matterhorn Desks Automation Helper
 
-Native macOS automation runtime for Matterhorn Work.
+Native macOS automation runtime for Matterhorn Desks.
 Packaged Matterhorn builds wrap this runtime in a bundled automation helper app
 helper so macOS Accessibility and Screen Recording permissions belong to the
 helper app instead of a transient Node or Swift process.

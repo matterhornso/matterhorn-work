@@ -7,7 +7,7 @@ import path from "node:path";
 
 function parseArgs(argv) {
   const options = {
-    app: "apps/desktop/dist-electron/mac-arm64/Matterhorn.app",
+    app: "apps/desktop/dist-electron/mac-arm64/Matterhorn Desks.app",
     artifactDir: "",
     timeoutMs: 45_000,
     strict: false,
@@ -46,7 +46,7 @@ Usage:
   node scripts/desktop-packaged-clean-profile-smoke.mjs [options]
 
 Options:
-  --app <path>          Matterhorn.app to launch.
+  --app <path>          Matterhorn Desks.app to launch.
   --artifact-dir <dir>  Tester artifact directory containing the ZIP manifest.
   --server-url <url>    Optional Matterhorn backend for remote-connect checks.
   --token <token>       Client token paired with --server-url.
@@ -130,7 +130,7 @@ try {
     extractionDir = await mkdtemp(path.join(os.tmpdir(), "matterhorn-packaged-artifact-"));
     const extracted = spawnSync("ditto", ["-x", "-k", zipFile, extractionDir], { encoding: "utf8" });
     if (extracted.status !== 0) throw new Error(`Could not extract tester artifact ZIP: ${extracted.stderr || extracted.stdout}`);
-    appBundle = path.join(extractionDir, "Matterhorn.app");
+    appBundle = path.join(extractionDir, "Matterhorn Desks.app");
     artifactSource = zipFile;
   }
   executable = path.join(appBundle, "Contents", "MacOS", "Matterhorn");

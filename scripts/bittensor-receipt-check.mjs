@@ -109,7 +109,7 @@ function count(findings, status) {
 function renderMarkdown(summary) {
   const rows = summary.findings.map((finding) => `| ${escapeCell(finding.status)} | ${escapeCell(finding.area)} | ${escapeCell(finding.detail)} | ${escapeCell(finding.severity || "-")} |`).join("\n");
   return [
-    "# Matterhorn Work Bittensor Receipt Check",
+    "# Matterhorn Desks Bittensor Receipt Check",
     "",
     "## Decision",
     "",

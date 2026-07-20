@@ -1,6 +1,6 @@
 # Polymarket Read/Preview Foundation
 
-This is Matterhorn Work's first Polymarket slice. It is intentionally read-only plus preview-only and follows the Hyperliquid read/preview pattern (provider interface, deterministic planner, chat workflow, non-submittable previews, credential rejection).
+This is Matterhorn Desks's first Polymarket slice. It is intentionally read-only plus preview-only and follows the Hyperliquid read/preview pattern (provider interface, deterministic planner, chat workflow, non-submittable previews, credential rejection).
 
 Prediction-market prices are treated as risk-bearing information, never as betting or investment advice.
 

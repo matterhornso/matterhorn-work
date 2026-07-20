@@ -1,4 +1,4 @@
-# Matterhorn Work Agent Control Live QA
+# Matterhorn Desks Agent Control Live QA
 
 Use this harness after `matterhorn-work doctor` is ready and you want one end-to-end pass/fail report for the local agent-control surface.
 
@@ -24,7 +24,7 @@ The harness checks:
 - optional host approval listing;
 - cleanup for the temporary chat and file sessions.
 
-By default, the prompt asks Matterhorn Work to reply. Add `--skip-reply` when you only want to test the stable prompt route without asking the engine to continue. Add `--keep-session` to preserve the temporary chat session for manual inspection.
+By default, the prompt asks Matterhorn Desks to reply. Add `--skip-reply` when you only want to test the stable prompt route without asking the engine to continue. Add `--keep-session` to preserve the temporary chat session for manual inspection.
 
 Useful options:
 

@@ -1,8 +1,8 @@
-# Matterhorn Work Market Parallel Roadmap
+# Matterhorn Desks Market Parallel Roadmap
 
-This roadmap coordinates the next Matterhorn Work build across Bittensor, Hyperliquid, and Polymarket without letting parallel agents collide.
+This roadmap coordinates the next Matterhorn Desks build across Bittensor, Hyperliquid, and Polymarket without letting parallel agents collide.
 
-Matterhorn Work is becoming a chat-first Web3 operating layer. Bittensor remains the most mature path and must stay non-custodial. Hyperliquid and Polymarket start as read-only plus preview-only product surfaces. Live trading, betting, signing, or API-wallet execution is out of scope until a separate security review and explicit approval.
+Matterhorn Desks is becoming a chat-first Web3 operating layer. Bittensor remains the most mature path and must stay non-custodial. Hyperliquid and Polymarket start as read-only plus preview-only product surfaces. Live trading, betting, signing, or API-wallet execution is out of scope until a separate security review and explicit approval.
 
 ## Current State
 

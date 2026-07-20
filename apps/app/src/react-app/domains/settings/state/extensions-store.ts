@@ -550,7 +550,7 @@ export function createExtensionsStore(options: {
     });
     const persisted = await writeWorkspaceMatterhornConfigRecord(nextConfig);
     if (!persisted) {
-      throw new Error("Matterhorn Work server unavailable. Connect to manage imported cloud skill hubs.");
+      throw new Error("Matterhorn Desks server unavailable. Connect to manage imported cloud skill hubs.");
     }
     setStateField("importedCloudSkillHubs", nextSkillHubs);
   };
@@ -564,7 +564,7 @@ export function createExtensionsStore(options: {
     });
     const persisted = await writeWorkspaceMatterhornConfigRecord(nextConfig);
     if (!persisted) {
-      throw new Error("Matterhorn Work server unavailable. Connect to manage imported cloud skills.");
+      throw new Error("Matterhorn Desks server unavailable. Connect to manage imported cloud skills.");
     }
     setStateField("importedCloudSkills", nextSkills);
   };
@@ -578,7 +578,7 @@ export function createExtensionsStore(options: {
     });
     const persisted = await writeWorkspaceMatterhornConfigRecord(nextConfig);
     if (!persisted) {
-      throw new Error("Matterhorn Work server unavailable. Connect to manage imported cloud plugins.");
+      throw new Error("Matterhorn Desks server unavailable. Connect to manage imported cloud plugins.");
     }
     setStateField("importedCloudPlugins", nextPlugins);
   };
@@ -624,7 +624,7 @@ export function createExtensionsStore(options: {
     }
 
     if (isRemoteWorkspace) {
-      throw new Error("Matterhorn Work server unavailable. Connect to import skills.");
+      throw new Error("Matterhorn Desks server unavailable. Connect to import skills.");
     }
 
     if (!isDesktopRuntime()) {
@@ -694,7 +694,7 @@ export function createExtensionsStore(options: {
     }
 
     if (isRemoteWorkspace) {
-      throw new Error("Matterhorn Work server unavailable. Connect to remove skills.");
+      throw new Error("Matterhorn Desks server unavailable. Connect to remove skills.");
     }
 
     if (!isDesktopRuntime()) {
@@ -914,7 +914,7 @@ export function createExtensionsStore(options: {
       await matterhornClient.addMcp(matterhornWorkspaceId, { name, config });
       return;
     }
-    throw new Error("Matterhorn Work server unavailable. Connect to import MCP servers into this workspace.");
+    throw new Error("Matterhorn Desks server unavailable. Connect to import MCP servers into this workspace.");
   };
 
   const deletePluginMcpConfig = async (name: string) => {
@@ -930,7 +930,7 @@ export function createExtensionsStore(options: {
       await matterhornClient.removeMcp(matterhornWorkspaceId, name);
       return;
     }
-    throw new Error("Matterhorn Work server unavailable. Connect to remove imported MCP servers from this workspace.");
+    throw new Error("Matterhorn Desks server unavailable. Connect to remove imported MCP servers from this workspace.");
   };
 
   const pluginReloadReason = (objectType: string): ReloadReason => {
@@ -961,7 +961,7 @@ export function createExtensionsStore(options: {
       await matterhornClient.writeWorkspaceFile(matterhornWorkspaceId, { path, content, force: true });
       return;
     }
-    throw new Error("Matterhorn Work server unavailable. Connect to import plugin files into this workspace.");
+    throw new Error("Matterhorn Desks server unavailable. Connect to import plugin files into this workspace.");
   };
 
   const applyCloudOrgPluginImport = async (
@@ -1615,8 +1615,8 @@ export function createExtensionsStore(options: {
       matterhornSnapshot.matterhornServerCapabilities?.hub?.skills?.install;
 
     if (!canUseMatterhornServer) {
-      if (isRemoteWorkspace) return { ok: false, message: "Matterhorn Work server unavailable. Connect to install skills." };
-      return { ok: false, message: "Hub install requires Matterhorn Work server." };
+      if (isRemoteWorkspace) return { ok: false, message: "Matterhorn Desks server unavailable. Connect to install skills." };
+      return { ok: false, message: "Hub install requires Matterhorn Desks server." };
     }
 
     options.setBusy(true);
@@ -1838,7 +1838,7 @@ export function createExtensionsStore(options: {
       mutateState((current) => ({
         ...current,
         skills: [],
-        skillsStatus: "Matterhorn Work server unavailable. Connect to load skills.",
+        skillsStatus: "Matterhorn Desks server unavailable. Connect to load skills.",
       }));
       return;
     }
@@ -1973,9 +1973,9 @@ export function createExtensionsStore(options: {
     if (!isLocalWorkspace && !canUseMatterhornServer) {
       mutateState((current) => ({
         ...current,
-        pluginStatus: "Matterhorn Work server unavailable. Connect to manage plugins.",
+        pluginStatus: "Matterhorn Desks server unavailable. Connect to manage plugins.",
         pluginList: [],
-        sidebarPluginStatus: "Connect a Matterhorn Work server to load plugins.",
+        sidebarPluginStatus: "Connect a Matterhorn Desks server to load plugins.",
         sidebarPluginList: [],
       }));
       refreshPluginsInFlight = false;
@@ -2102,7 +2102,7 @@ export function createExtensionsStore(options: {
     }
 
     if (!isLocalWorkspace && !canUseMatterhornServer) {
-      setStateField("pluginStatus", "Matterhorn Work server unavailable. Connect to manage plugins.");
+      setStateField("pluginStatus", "Matterhorn Desks server unavailable. Connect to manage plugins.");
       return;
     }
 
@@ -2190,7 +2190,7 @@ export function createExtensionsStore(options: {
     }
 
     if (!isLocalWorkspace && !canUseMatterhornServer) {
-      setStateField("pluginStatus", "Matterhorn Work server unavailable. Connect to manage plugins.");
+      setStateField("pluginStatus", "Matterhorn Desks server unavailable. Connect to manage plugins.");
       return;
     }
 
@@ -2303,7 +2303,7 @@ export function createExtensionsStore(options: {
     }
 
     if (isRemoteWorkspace) {
-      const message = "Matterhorn Work server unavailable. Connect to install skills.";
+      const message = "Matterhorn Desks server unavailable. Connect to install skills.";
       setStateField("skillsStatus", message);
       return { ok: false, message };
     }
@@ -2451,7 +2451,7 @@ export function createExtensionsStore(options: {
     }
 
     if (isRemoteWorkspace) {
-      setStateField("skillsStatus", "Matterhorn Work server unavailable. Connect to view skills.");
+      setStateField("skillsStatus", "Matterhorn Desks server unavailable. Connect to view skills.");
       return null;
     }
     if (!isDesktopRuntime()) {
@@ -2516,7 +2516,7 @@ export function createExtensionsStore(options: {
     }
 
     if (isRemoteWorkspace) {
-      setStateField("skillsStatus", "Matterhorn Work server unavailable. Connect to edit skills.");
+      setStateField("skillsStatus", "Matterhorn Desks server unavailable. Connect to edit skills.");
       return;
     }
     if (!isDesktopRuntime()) {

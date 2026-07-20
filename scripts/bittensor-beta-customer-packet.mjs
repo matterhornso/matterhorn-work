@@ -54,7 +54,7 @@ const config = {
 
 function usage() {
   return [
-    "Matterhorn Work Bittensor beta customer packet",
+    "Matterhorn Desks Bittensor beta customer packet",
     "",
     "Usage:",
     "  node scripts/bittensor-beta-customer-packet.mjs --output-dir /tmp/matterhorn-bittensor-beta-rc --fixture --json",
@@ -262,7 +262,7 @@ function summarizeBrowserQa(markdown) {
 
 function renderMarkdown(packet) {
   const lines = [
-    "# Matterhorn Work Bittensor Beta Release Candidate Packet",
+    "# Matterhorn Desks Bittensor Beta Release Candidate Packet",
     "",
     `Result: ${packet.ready ? "READY_FOR_TEST_CUSTOMER_QA" : "NOT_READY"}`,
     "",
@@ -304,7 +304,7 @@ function renderMarkdown(packet) {
     "- Turn off `VITE_MATTERHORN_BITTENSOR_BETA` in the app build.",
     "- Turn off `BITTENSOR_BETA_ENABLED` in runtime config.",
     "- Keep `MARKETS_LIVE_SUBMIT_ENABLED=false` and `EXPERIMENTAL_MARKET_EXECUTION=false`.",
-    "- Revert customer testers to the previous stable Matterhorn Work build.",
+    "- Revert customer testers to the previous stable Matterhorn Desks build.",
     "- Preserve the packet JSON/Markdown and issue ledger for postmortem.",
   ];
   if (packet.errors.length) {

@@ -9,7 +9,7 @@
  * - Data-map / evidence route non-leakage of secrets
  *
  * These tests are integration tests against a live in-process server.
- * They do NOT require a running Matterhorn Work process.
+ * They do NOT require a running Matterhorn Desks process.
  */
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
@@ -850,6 +850,64 @@ describe("Security capability classification", () => {
       body: "{}",
     });
     expect(writeAfterReadLimit.status).toBe(404);
+  });
+
+  test("server enforces independent read and write request budgets", async () => {
+    const { base, ownerToken } = await boot(false, {
+      requestRateLimit: {
+        enabled: true,
+        windowMs: 60_000,
+        maxRequests: 1,
+        readMaxRequests: 3,
+        writeMaxRequests: 4,
+      },
+    });
+
+    const reads = await Promise.all(Array.from({ length: 3 }, () =>
+      jsonFetch(base, "/api/backend/capabilities", ownerToken),
+    ));
+    expect(reads.every((result) => result.response.status === 200)).toBe(true);
+
+    const blockedRead = await jsonFetch(base, "/api/backend/capabilities", ownerToken);
+    expect(blockedRead.response.status).toBe(429);
+    expect(blockedRead.response.headers.get("Retry-After")).toMatch(/^\d+$/);
+
+    const writes = await Promise.all(Array.from({ length: 2 }, () =>
+      fetch(`${base}/not-a-route`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ownerToken}`,
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      }),
+    ));
+    expect(writes.map((response) => response.status)).toEqual([404, 404]);
+
+    const blockedWrite = await fetch(`${base}/not-a-route`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ownerToken}`,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(blockedWrite.status).toBe(429);
+    expect(blockedWrite.headers.get("Retry-After")).toMatch(/^\d+$/);
+  });
+
+  test("server isolates request budgets between workspaces", async () => {
+    const { base, ownerToken } = await boot(false, {
+      requestRateLimit: { enabled: true, windowMs: 60_000, readMaxRequests: 1 },
+    });
+
+    const firstWorkspace = await jsonFetch(base, "/workspace/ws_e2e/config", ownerToken);
+    const blockedFirstWorkspace = await jsonFetch(base, "/workspace/ws_e2e/config", ownerToken);
+    const secondWorkspace = await jsonFetch(base, "/workspace/ws_other/config", ownerToken);
+
+    expect(firstWorkspace.response.status).not.toBe(429);
+    expect(blockedFirstWorkspace.response.status).toBe(429);
+    expect(secondWorkspace.response.status).not.toBe(429);
   });
 
   test("GET /api/backend/capabilities exists and returns shape", async () => {

@@ -1441,7 +1441,7 @@ function parseJsonResponse(text: string, status: number): any {
   } catch {
     const message = status >= 500
       ? "Workspace server returned an unreadable response."
-      : "Matterhorn Work engine returned an unreadable response.";
+      : "Matterhorn Desks engine returned an unreadable response.";
     throw new MatterhornServerError(status, "invalid_response", message);
   }
 }

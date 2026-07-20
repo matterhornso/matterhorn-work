@@ -42,7 +42,7 @@ const MANAGED_MCP_TOOLS: ManagedMcpTool[] = [
   {
     name: "matterhorn_status",
     title: "Matterhorn status",
-    description: "Read the local Matterhorn Work engine status and capability summary.",
+    description: "Read the local Matterhorn Desks engine status and capability summary.",
     inputSchema: objectSchema({}),
     request: () => ({ path: "/status" }),
   },

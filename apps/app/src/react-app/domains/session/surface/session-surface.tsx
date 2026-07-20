@@ -599,7 +599,7 @@ export type SessionSurfaceProps = {
 };
 
 function messageToReadableText(message: UIMessage) {
-  const header = message.role === "user" ? "You" : message.role === "assistant" ? "Matterhorn Work" : message.role;
+  const header = message.role === "user" ? "You" : message.role === "assistant" ? "Matterhorn Desks" : message.role;
   const body = message.parts
     .flatMap((part) => {
       if (part.type === "text") return [part.text];
@@ -2037,7 +2037,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     } catch (error) {
       setNotice({
         title: "Could not save Bittensor output",
-        description: error instanceof Error ? error.message : "Try again after the Matterhorn Work engine is available.",
+        description: error instanceof Error ? error.message : "Try again after the Matterhorn Desks engine is available.",
         tone: "warning",
       });
       recordInspectorEvent("bittensor.evidence.save_failed", {

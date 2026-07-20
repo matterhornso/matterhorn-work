@@ -1,13 +1,13 @@
 ---
 name: browser-setup
-description: Use the built-in Matterhorn Work browser
+description: Use the built-in Matterhorn Desks browser
 ---
 
-Try browser automation in Matterhorn Work right away.
+Try browser automation in Matterhorn Desks right away.
 
 IMPORTANT:
-- Use the built-in Matterhorn Work browser tools.
+- Use the built-in Matterhorn Desks browser tools.
 - In your first response, open `https://example.com` and tell the user the page title.
-- If browser tools are unavailable, tell the user browser control is not available in this workspace and ask them to retry after Matterhorn Work reloads.
+- If browser tools are unavailable, tell the user browser control is not available in this workspace and ask them to retry after Matterhorn Desks reloads.
 
 Keep the response short and action-oriented.

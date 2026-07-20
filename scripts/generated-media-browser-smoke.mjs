@@ -6,7 +6,7 @@ import { chromium } from "playwright";
 const repoRoot = resolve(import.meta.dirname, "..");
 const DEFAULT_URL = "http://127.0.0.1:5182/workspace/ws_d6a5b5572860/session";
 const DEFAULT_OUTPUT_DIR = "qa-reports/generated-media-browser-smoke";
-const DEFAULT_PROMPT_BASE = "sleek Matterhorn Work console showing generated media receipt cards";
+const DEFAULT_PROMPT_BASE = "sleek Matterhorn Desks console showing generated media receipt cards";
 const SMOKE_NFT_OBJECT_ID = "0x7777777777777777777777777777777777777777777777777777777777777777";
 const SMOKE_MINT_DIGEST = "smokeMintDigest111111111111111111111111111111111111111111";
 const SMOKE_LISTING_DIGEST = "smokeListingDigest222222222222222222222222222222222222222";

@@ -366,6 +366,7 @@ describe("Shared primitives UI contract", () => {
 
   test("compact MCP settings use selection and disclosure instead of a long card document", () => {
     const source = readAppSource("domains/settings/pages/mcp-view.tsx");
+    const displayNameSource = readAppSource("domains/settings/pages/mcp-display-name.ts");
     const extensionsSource = readAppSource("domains/settings/pages/extensions-view.tsx");
     const settingsRoute = readAppSource("shell/settings-route.tsx");
     const english = readFileSync(new URL("../src/i18n/locales/en.ts", import.meta.url), "utf8");
@@ -387,6 +388,11 @@ describe("Shared primitives UI contract", () => {
     expect(source).not.toContain('"grid gap-0.5 rounded-lg bg-dls-surface-muted/[0.055] p-1"');
     expect(source).toContain("const connectedNames = connectedServers.map");
     expect(source).toContain("fallbackMcpDisplayName(entry.name)");
+    expect(source).toContain("matterhornMcpDisplayName(resolvedName)");
+    expect(displayNameSource).toContain('"matterhorn-work": "Matterhorn Desks MCP"');
+    expect(displayNameSource).toContain('"matterhorn-work-mcp": "Matterhorn Desks MCP"');
+    expect(displayNameSource).toContain('"matterhorn-work-ui": "Matterhorn Desks UI Control"');
+    expect(extensionsSource).toContain('import { mcpServerDisplayName } from "./mcp-display-name"');
     expect(source).toContain("Connected MCP servers:");
     expect(source).toContain('props.connectedNames.join(" · ")');
     expect(source).toContain("<McpConfiguredServersSection");

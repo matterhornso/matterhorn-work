@@ -2,7 +2,7 @@
 
 Live Bittensor end-to-end test run, 2026-06-12.
 Repo: `matterhornso/matterhorn-work` @ `1cff5e79` (origin/dev).
-Run by: Hermes agent (CLI session) on behalf of the Matterhorn Work team.
+Run by: Hermes agent (CLI session) on behalf of the Matterhorn Desks team.
 Sidecar mode: Python SDK (live Finney public reads, no signing).
 Working tree: `~/Downloads/matterhorn-work` (fresh clone, not the local
 `session-event-deltas` worktree referenced in the operator playbook).
@@ -54,7 +54,7 @@ the next operator does not hit the same friction.
     --json
   ```
   Without `--allow-external` the start fails with:
-  `Bundled Matterhorn Work server binary missing and download failed. Use --allow-external or --sidecar-source external.`
+  `Bundled Matterhorn Desks server binary missing and download failed. Use --allow-external or --sidecar-source external.`
 - The orchestrator picks a random free port for the Matterhorn server
   (saw 50498 in this run; 50287 in an earlier one). The doc assumes
   `8787`. Capture the actual port from the `--json` startup output.

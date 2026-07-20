@@ -482,11 +482,11 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       const env = await updaterEnvironmentCmd() as { appBundlePath?: string };
       const appBundlePath = env.appBundlePath?.trim();
       if (!appBundlePath) {
-        setElectronMigrationStatus("Could not resolve the current Matterhorn Work.app bundle path.");
+        setElectronMigrationStatus("Could not resolve the current Matterhorn Desks.app bundle path.");
         return;
       }
       await revealDesktopItemInDir(`${appBundlePath}.migrate-bak`);
-      setElectronMigrationStatus("Requested Finder reveal for Matterhorn Work.app.migrate-bak. The backup exists after an install handoff completes.");
+      setElectronMigrationStatus("Requested Finder reveal for Matterhorn Desks.app.migrate-bak. The backup exists after an install handoff completes.");
     } catch (error) {
       setElectronMigrationStatus(error instanceof Error ? error.message : safeStringify(error));
     }
@@ -744,7 +744,7 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       });
       setOpenworkServiceStatus({
         tone: "success",
-        message: t("settings.restart_succeeded_template", { service: "Matterhorn Work server" }),
+        message: t("settings.restart_succeeded_template", { service: "Matterhorn Desks server" }),
       });
       pushDeveloperLog("Restarted matterhorn-server");
       await matterhornServerStore.reconnectOpenworkServer();
@@ -752,7 +752,7 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       const message = error instanceof Error ? error.message : safeStringify(error);
       setOpenworkServiceStatus({
         tone: "error",
-        message: `${t("settings.restart_failed_template", { service: "Matterhorn Work server" })} ${message}`,
+        message: `${t("settings.restart_failed_template", { service: "Matterhorn Desks server" })} ${message}`,
       });
       setServiceRestartError(message);
     } finally {
@@ -817,7 +817,7 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
     }
     try {
       await navigator.clipboard.writeText(text);
-      setMatterhornLogStatus(t("settings.copied_service_logs", { service: "Matterhorn Work server" }));
+      setMatterhornLogStatus(t("settings.copied_service_logs", { service: "Matterhorn Desks server" }));
     } catch (error) {
       setMatterhornLogStatus(error instanceof Error ? error.message : safeStringify(error));
     }
@@ -849,7 +849,7 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       if (!isDesktopRuntime()) return;
       const message =
         mode === "all"
-          ? "Reset ALL Matterhorn Work app data? Open sessions and workspaces will be removed."
+          ? "Reset ALL Matterhorn Desks app data? Open sessions and workspaces will be removed."
           : "Reset onboarding state only?";
       if (typeof window !== "undefined" && !window.confirm(message)) {
         return;
@@ -861,7 +861,7 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
           clearOpenworkLocalStorageForReset(mode);
           setResetStatus(
             mode === "all"
-              ? "Reset Matterhorn Work state. Restart the app to see changes."
+              ? "Reset Matterhorn Desks state. Restart the app to see changes."
               : "Reset onboarding state. Restart the app to see changes.",
           );
           pushDeveloperLog(`reset_matterhorn_state mode=${mode}`);
@@ -882,7 +882,7 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       typeof window === "undefined"
         ? true
         : window.confirm(
-            "Delete ALL local Matterhorn Work engine config and quit? This cannot be undone.",
+            "Delete ALL local Matterhorn Desks engine config and quit? This cannot be undone.",
           );
     if (!confirmed) return;
     setNukeConfigBusy(true);

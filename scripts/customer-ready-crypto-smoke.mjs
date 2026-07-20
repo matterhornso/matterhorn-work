@@ -87,7 +87,7 @@ function parseArgs(argv) {
 
 function printHelp() {
   process.stdout.write([
-    "Matterhorn Work customer-ready crypto smoke",
+    "Matterhorn Desks customer-ready crypto smoke",
     "",
     "Usage:",
     "  node scripts/customer-ready-crypto-smoke.mjs --dry-run --json",
@@ -241,7 +241,7 @@ function buildMetadata() {
 }
 
 function printHuman(report) {
-  process.stdout.write(`Matterhorn Work customer-ready crypto smoke: ${report.ready ? "READY" : "NOT_READY"}\n`);
+  process.stdout.write(`Matterhorn Desks customer-ready crypto smoke: ${report.ready ? "READY" : "NOT_READY"}\n`);
   for (const stage of report.stages) {
     const suffix = stage.status === "skip" ? ` (${stage.reason})` : "";
     process.stdout.write(`- ${stage.status.toUpperCase()} ${stage.id}: ${stage.label}${suffix}\n`);

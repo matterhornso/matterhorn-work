@@ -1,8 +1,8 @@
 # Bittensor Advanced AI Interface Plan
 
-Matterhorn Work's Bittensor direction is to make Bittensor usable through plain chat while keeping the system non-custodial, source-aware, and honest about uncertainty.
+Matterhorn Desks's Bittensor direction is to make Bittensor usable through plain chat while keeping the system non-custodial, source-aware, and honest about uncertainty.
 
-For the current implementation stocktake and remaining build sequence, see [Matterhorn Work Bittensor: Built vs Remaining Vision](./bittensor-built-vs-remaining-vision.md).
+For the current implementation stocktake and remaining build sequence, see [Matterhorn Desks Bittensor: Built vs Remaining Vision](./bittensor-built-vs-remaining-vision.md).
 
 The advanced interface should feel like a Bittensor analyst, wallet copilot, staking planner, subnet operator, and safety officer in one workflow. Chat remains the primary interface. Cards, APIs, MCP tools, and CLI commands exist to make the chat decisions inspectable and repeatable.
 
@@ -156,7 +156,7 @@ Current implementation:
 
 ## Cross-Cutting: Upstream OpenWork Update Intake
 
-Goal: keep Matterhorn Work current with useful OpenWork upstream improvements without losing Matterhorn-specific product, branding, Bittensor, and agent-control decisions.
+Goal: keep Matterhorn Desks current with useful OpenWork upstream improvements without losing Matterhorn-specific product, branding, Bittensor, and agent-control decisions.
 
 Build:
 

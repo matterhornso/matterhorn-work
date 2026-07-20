@@ -28,7 +28,7 @@ check() {
 
 echo ""
 echo "========================================"
-echo "  Matterhorn Work — E2E Crypto Tests"
+echo "  Matterhorn Desks — E2E Crypto Tests"
 echo "========================================"
 echo ""
 

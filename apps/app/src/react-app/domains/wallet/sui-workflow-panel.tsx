@@ -215,7 +215,7 @@ export function SuiWorkflowPanel(props: {
 
   const preparePreview = useCallback(async () => {
     if (!client) {
-      setError("Matterhorn Work engine is offline.");
+      setError("Matterhorn Desks engine is offline.");
       return;
     }
     if (!workspaceId) {
@@ -248,7 +248,7 @@ export function SuiWorkflowPanel(props: {
 
   const importReceipt = useCallback(async () => {
     if (!client) {
-      setError("Matterhorn Work engine is offline.");
+      setError("Matterhorn Desks engine is offline.");
       return;
     }
     if (!workspaceId) {
@@ -295,7 +295,7 @@ export function SuiWorkflowPanel(props: {
 
   const signPreviewInWallet = useCallback(async () => {
     if (!client) {
-      setError("Matterhorn Work engine is offline.");
+      setError("Matterhorn Desks engine is offline.");
       return;
     }
     if (!workspaceId) {

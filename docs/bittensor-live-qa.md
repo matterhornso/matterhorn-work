@@ -1,4 +1,4 @@
-# Matterhorn Work Bittensor Live QA
+# Matterhorn Desks Bittensor Live QA
 
 Use this harness after the general [Agent Control Live QA](./agent-control-live-qa.md) passes and you want a Bittensor-specific operator check for chat-first TAO workflows.
 
@@ -67,7 +67,7 @@ The full run still does not sign or broadcast anything. It adds watch-only walle
 
 | Option | Purpose |
 | --- | --- |
-| `--server-url <url>` | Matterhorn Work server URL. Defaults to `MATTERHORN_WORK_SERVER_URL` or `http://127.0.0.1:8787`. |
+| `--server-url <url>` | Matterhorn Desks server URL. Defaults to `MATTERHORN_WORK_SERVER_URL` or `http://127.0.0.1:8787`. |
 | `--token <token>` | Client bearer token. Defaults to `MATTERHORN_WORK_TOKEN`. |
 | `--ss58-address <address>` | Public coldkey address for watch-only wallet and stake-position reads. |
 | `--coldkey <address>` | Public coldkey label for staking preview context. Defaults to `--ss58-address` when omitted. |

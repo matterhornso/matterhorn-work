@@ -136,7 +136,7 @@ writeFileSync(join(outputDir, "matterhorn-electron-local-tester-artifact.json"),
 if (args.json) {
   process.stdout.write(`${JSON.stringify(manifest, null, 2)}\n`);
 } else {
-  console.log(`Matterhorn Work unsigned tester artifacts written to ${outputDir}`);
+  console.log(`Matterhorn Desks unsigned tester artifacts written to ${outputDir}`);
   for (const artifact of copied) {
     console.log(`- ${artifact.name} ${artifact.sha256}`);
   }

@@ -115,8 +115,8 @@ for (const forbiddenCopy of [
 
 for (const requiredCopy of [
   '"settings.services_section_title": "Local runtime"',
-  '"settings.opencode_engine_label": "Matterhorn Work engine"',
-  '"settings.opencode_section_label": "Matterhorn Work engine"',
+  '"settings.opencode_engine_label": "Matterhorn Desks engine"',
+  '"settings.opencode_section_label": "Matterhorn Desks engine"',
 ]) {
   assert.ok(
     englishCopy.includes(requiredCopy),

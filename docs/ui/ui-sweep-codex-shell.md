@@ -40,7 +40,7 @@ Why it hurts:
 That is a developer-only recovery path and makes the local web app feel broken or misrouted for normal testers.
 
 Fix:
-Replaced the dev command with a customer-facing engine-unavailable message that points to retrying the connection, restarting Matterhorn Work, or creating/connecting a project.
+Replaced the dev command with a customer-facing engine-unavailable message that points to retrying the connection, restarting Matterhorn Desks, or creating/connecting a project.
 
 Files:
 - `apps/app/src/react-app/shell/session-route.tsx`

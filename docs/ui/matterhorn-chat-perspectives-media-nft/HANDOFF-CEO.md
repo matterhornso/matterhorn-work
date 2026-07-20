@@ -102,7 +102,7 @@ Token ID:   [assigned on mint]
 Wallet:     [user's connected wallet, truncated]
 Timestamp:  [UTC]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Matterhorn Work — matterhorn.so
+Matterhorn Desks — matterhorn.so
 ```
 
 Receipt is non-interactive. It is a record, not a claim.
@@ -139,7 +139,7 @@ Metadata JSON follows OpenSea's standard:
 ```json
 {
   "name": "Mountain Solitude — Dawn",
-  "description": "AI-generated meditation audio, prepared by Matterhorn Work.",
+  "description": "AI-generated meditation audio, prepared by Matterhorn Desks.",
   "image": "ipfs://Qm.../image.png",
   "animation_url": "ipfs://Qm.../audio.mp3",
   "attributes": [

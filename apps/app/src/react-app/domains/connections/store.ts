@@ -357,7 +357,7 @@ export function createConnectionsStore(options: {
     if (isRemoteWorkspace) {
       mutateState((current) => ({
         ...current,
-        mcpStatus: "Matterhorn Work server unavailable. MCP config is read-only.",
+        mcpStatus: "Matterhorn Desks server unavailable. MCP config is read-only.",
         mcpServers: [],
         mcpStatuses: {},
       }));
@@ -474,7 +474,7 @@ export function createConnectionsStore(options: {
       await resolveWritableOpenworkTarget();
 
     if (isRemoteWorkspace && !canUseMatterhornServer) {
-      setStateField("mcpStatus", "Matterhorn Work server unavailable. MCP config is read-only.");
+      setStateField("mcpStatus", "Matterhorn Desks server unavailable. MCP config is read-only.");
       finishPerf(options.developerMode(), "mcp.connect", "blocked", startedAt, {
         reason: "matterhorn-server-unavailable",
       });
@@ -545,7 +545,7 @@ export function createConnectionsStore(options: {
 
       if (entryType === "remote") {
         if (!resolvedUrl) {
-          throw new Error("Missing MCP URL. Is the Matterhorn Work desktop app running?");
+          throw new Error("Missing MCP URL. Is the Matterhorn Desks desktop app running?");
         }
         mcpEntryConfig["url"] = resolvedUrl;
         if (resolvedHeaders) {
@@ -610,11 +610,11 @@ export function createConnectionsStore(options: {
       }
 
       if (canUseMatterhornServer && matterhornClient && matterhornWorkspaceId) {
-        // The Matterhorn Work server is the source of truth for workspace-scoped MCP
+        // The Matterhorn Desks server is the source of truth for workspace-scoped MCP
         // config in the React port. Avoid also calling the OpenCode SDK's MCP
         // hot-add endpoint here: when the SDK client is rooted at the aggregate
         // `/opencode` route it can resolve to an internal `local_*` workspace
-        // id that the Matterhorn Work server does not expose, producing a confusing
+        // id that the Matterhorn Desks server does not expose, producing a confusing
         // `workspace_not_found` after the config write already succeeded.
         setStateField("mcpStatuses", filterConfiguredStatuses(snapshot.mcpStatuses, snapshot.mcpServers));
       } else {
@@ -714,7 +714,7 @@ export function createConnectionsStore(options: {
       await resolveWritableOpenworkTarget();
 
     if (isRemoteWorkspace && !canUseMatterhornServer) {
-      setStateField("mcpStatus", "Matterhorn Work server unavailable. MCP auth is read-only.");
+      setStateField("mcpStatus", "Matterhorn Desks server unavailable. MCP auth is read-only.");
       return;
     }
 

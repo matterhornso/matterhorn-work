@@ -56,7 +56,7 @@ export function walletFamilySigningCopy(family: MatterhornWalletFamilyCapability
     if (family.directConnect && family.signing === "client_wallet") {
       return {
         label: family.status === "working" ? "Connect here" : capabilityStatusLabel(family.status),
-        hint: "Connect your own EVM wallet. Matterhorn Work never holds your keys.",
+        hint: "Connect your own EVM wallet. Matterhorn Desks never holds your keys.",
       };
     }
     return {

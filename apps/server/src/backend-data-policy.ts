@@ -119,7 +119,7 @@ export function buildWorkspaceDataPolicyResponse(workspace: WorkspaceInfo): Matt
       modelTraining: {
         status: "unsupported",
         label: "Model training disabled",
-        description: "Matterhorn Work does not use workspace chats, notes, outputs, memory, wallet evidence, or feedback for RL or model training.",
+        description: "Matterhorn Desks does not use workspace chats, notes, outputs, memory, wallet evidence, or feedback for RL or model training.",
         configurable: false,
         rlTraining: false,
       },

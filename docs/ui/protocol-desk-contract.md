@@ -1,6 +1,6 @@
 # Protocol Desk Visual Contract
 
-> **Status:** contract and fixtures only. This document defines the typed visual contract for protocol desks in Matterhorn Work so that UI implementation can render desks from a single source of truth.
+> **Status:** contract and fixtures only. This document defines the typed visual contract for protocol desks in Matterhorn Desks so that UI implementation can render desks from a single source of truth.
 
 ## Purpose
 

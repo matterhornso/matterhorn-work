@@ -44,7 +44,7 @@ function parseArgs(argv) {
 
 function printHelp() {
   console.log([
-    "Matterhorn Work Hyperliquid read/preview QA",
+    "Matterhorn Desks Hyperliquid read/preview QA",
     "",
     "Usage:",
     "  node scripts/hyperliquid-read-preview-qa.mjs --server-url <url> --token <token> --asset BTC --side buy --size 0.1 --price 65000 --json --strict",

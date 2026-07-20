@@ -1,6 +1,6 @@
 # Hyperliquid Read/Preview QA
 
-This harness verifies the first Matterhorn Work Hyperliquid milestone without trading.
+This harness verifies the first Matterhorn Desks Hyperliquid milestone without trading.
 
 It checks:
 
@@ -26,7 +26,7 @@ node scripts/hyperliquid-read-preview-qa.mjs --self-test --strict --json
 
 ## Live Local Server
 
-Run against a local Matterhorn Work server:
+Run against a local Matterhorn Desks server:
 
 ```bash
 node scripts/hyperliquid-read-preview-qa.mjs \

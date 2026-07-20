@@ -1,7 +1,7 @@
-# Matterhorn Work Desktop Release First-Run
+# Matterhorn Desks Desktop Release First-Run
 
 This guide is for validating an unsigned local macOS release candidate before
-the signed and notarized Matterhorn Work package is published. It is written
+the signed and notarized Matterhorn Desks package is published. It is written
 for Codex, Claude Code, Kimi, Hermes, and human release reviewers.
 
 The desktop release candidate is not a custody surface. Do not
@@ -119,7 +119,7 @@ may block first launch.
 3. Try opening the app once.
 4. If macOS blocks it, open **System Settings > Privacy & Security** and allow
    the app you just attempted to open.
-5. Reopen Matterhorn Work.
+5. Reopen Matterhorn Desks.
 
 Do not use this unsigned build as a public release artifact. It is for internal
 QA and release validation only.

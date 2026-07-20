@@ -1,6 +1,6 @@
 # Bittensor Beta Launch
 
-This is the release contract for launching a Matterhorn Work beta where
+This is the release contract for launching a Matterhorn Desks beta where
 Bittensor is the customer-facing hero product. Hyperliquid and Polymarket can
 continue to develop on separate market branches, but they are not part of the
 Bittensor beta launch promise.
@@ -87,7 +87,7 @@ non-execution safety gates.
 
 ## Customer Demo Flow
 
-1. Open Matterhorn Work with `VITE_MATTERHORN_BITTENSOR_BETA=1`.
+1. Open Matterhorn Desks with `VITE_MATTERHORN_BITTENSOR_BETA=1`.
 2. Open the Bittensor panel and use the Demo tab.
 3. Refresh readiness.
 4. Run `pnpm smoke:bittensor-beta`.

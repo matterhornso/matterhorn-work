@@ -13,7 +13,7 @@ This plan is gated. Hyperliquid and Polymarket execution work should not start u
 
 ## Foundation Lane: Upstream OpenWork Intake
 
-Matterhorn Work should continue to benefit from upstream OpenWork runtime, desktop, server, dependency, and packaging updates without losing Matterhorn-specific product direction. Upstream updates are integrated through a reviewed sync lane, not by direct auto-merge.
+Matterhorn Desks should continue to benefit from upstream OpenWork runtime, desktop, server, dependency, and packaging updates without losing Matterhorn-specific product direction. Upstream updates are integrated through a reviewed sync lane, not by direct auto-merge.
 
 The sync lane is documented in [Upstream OpenWork Sync Playbook](./upstream-openwork-sync.md) and checked by:
 
@@ -24,7 +24,7 @@ pnpm test:upstream-openwork-sync
 
 Every upstream sync PR must preserve:
 
-- Matterhorn Work branding and engine abstraction.
+- Matterhorn Desks branding and engine abstraction.
 - `matterhorn-work` and `matterhorn-work-server` commands with legacy OpenWork shims.
 - `MATTERHORN_WORK_*` aliases with `OPENWORK_*` fallbacks.
 - Bittensor non-custodial safety contracts.

@@ -305,7 +305,7 @@ function buildPlan() {
 
 function printText(plan) {
   process.stdout.write([
-    "# Matterhorn Work Hermes Customer QA Commands",
+    "# Matterhorn Desks Hermes Customer QA Commands",
     "",
     `Commit: ${plan.git.sha ?? "unknown"}`,
     `Branch: ${plan.git.branch ?? "unknown"}`,
@@ -333,7 +333,7 @@ function printText(plan) {
 try {
   if (readFlag("--help") || readFlag("-h")) {
     process.stdout.write([
-      "Matterhorn Work Hermes customer QA helper",
+      "Matterhorn Desks Hermes customer QA helper",
       "",
       "Usage:",
       "  node scripts/hermes-crypto-customer-qa.mjs --dry-run --json",

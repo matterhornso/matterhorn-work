@@ -266,6 +266,7 @@ function CapabilityBadge(props: { status?: string | null }) {
     props.status === "error"
       ? props.status
       : "error";
+  if (status === "working") return null;
   return <StatusBadge tone={backendCapabilityTone(status)}>{backendCapabilityLabel(status)}</StatusBadge>;
 }
 
@@ -934,13 +935,13 @@ function teamAccessInviteText(input: {
   };
 }) {
   return [
-    "Matterhorn Work local access",
+    "Matterhorn Desks local access",
     `Server: ${input.connection.serverUrl}`,
     `Access token: ${input.token.token}`,
     `Scope: ${input.token.scope}`,
     input.token.label ? `Label: ${input.token.label}` : null,
     "",
-    "Open Matterhorn Work, choose Connect custom remote, then paste the server URL and access token.",
+    "Open Matterhorn Desks, choose Connect custom remote, then paste the server URL and access token.",
     MATTERHORN_LAUNCH_FEATURES.cloud
       ? "This is local server access, not durable Matterhorn Cloud team membership."
       : "This is scoped local server access. It does not create an online account.",
@@ -1168,7 +1169,7 @@ function TeamAccessControls(props: {
             {connection.serverUrl}
           </code>
           <p>
-            Teammates should open Matterhorn Work, choose Connect custom remote, then paste this URL and the one-time token.
+            Teammates should open Matterhorn Desks, choose Connect custom remote, then paste this URL and the one-time token.
           </p>
           <p>
             {MATTERHORN_LAUNCH_FEATURES.cloud
@@ -1361,7 +1362,7 @@ export function SettingsOverviewView(props: {
     enabled: Boolean(props.matterhornServerClient && (!backendWorkspaceId || workspaceBackendControlPlaneQuery.isError)),
     queryFn: async () => {
       const client = props.matterhornServerClient;
-      if (!client) throw new Error("Matterhorn Work engine is offline.");
+      if (!client) throw new Error("Matterhorn Desks engine is offline.");
       return client.backendCapabilities();
     },
     staleTime: 30_000,
@@ -1624,18 +1625,9 @@ export function SettingsOverviewView(props: {
         <SettingsCard
           icon={<CircleUser size={18} />}
           title="Profile"
-            description={MATTERHORN_LAUNCH_FEATURES.cloud
-              ? "Account, local profile, and Cloud readiness."
-              : "Local profile and workspace access readiness."}
-          status={
-            profileCapability ? (
-              <CapabilityBadge status={profileCapability.status} />
-            ) : backendCapabilitiesLoading ? (
-              <StatusBadge>Loading</StatusBadge>
-            ) : (
-              <UnavailableStatus />
-            )
-          }
+          description={MATTERHORN_LAUNCH_FEATURES.cloud
+            ? "Account, local profile, and Cloud readiness."
+            : "Local profile and workspace access readiness."}
         >
           <Row
             label={profileCapability?.label ?? "Profile status"}
@@ -1663,7 +1655,7 @@ export function SettingsOverviewView(props: {
         <SettingsCard
           icon={<ShieldCheck size={18} />}
           title="Backend status"
-          description="What the local Matterhorn Work engine reports for this workspace."
+          description="What the local Matterhorn Desks engine reports for this workspace."
           status={
             backendCapabilities ? (
               <CapabilityBadge status={backendCapabilities.security.memoryWriteGuards.status} />
@@ -1676,184 +1668,192 @@ export function SettingsOverviewView(props: {
         >
           {backendCapabilities ? (
             <>
-              <Row
-                label="Model routing"
-                hint={`Default: ${summarizeModelSource(backendCapabilities)}. ${summarizeModelRoutingPolicy(backendCapabilities)}`}
-                value={<CapabilityBadge status={backendCapabilities.models.status} />}
-              />
-              <Row
-                label="Workspace readiness"
-                hint={
-                  workspaceReadiness
-                    ? `${workspaceReadiness.summary.readyFeatures}/${workspaceReadiness.summary.totalFeatures} actions ready. ${
-                        workspaceReadiness.summary.blockingChecks.length
-                          ? `Blocked by ${workspaceReadiness.summary.blockingChecks.join(", ")}.`
-                          : "No blockers reported."
-                      }`
-                    : workspaceReadinessLoading
-                      ? "Checking workspace readiness."
-                      : "Readiness is unavailable until the workspace engine responds."
-                }
-                value={
-                  workspaceReadiness ? (
-                    <CapabilityBadge status={workspaceReadiness.summary.status} />
-                  ) : workspaceReadinessLoading ? (
-                    <StatusBadge>Loading</StatusBadge>
-                  ) : (
-                    <UnavailableStatus label="Workspace unavailable" />
-                  )
-                }
-              />
-              {workspaceReadiness?.summary.recommendedActions.length ? (
-                <div className="px-1 py-3">
-                  <p className="text-sm font-medium text-dls-text">Next step</p>
-                  <div className="mt-2 flex flex-col gap-2">
-                    {workspaceReadiness.summary.recommendedActions.slice(0, 3).map((action) => (
-                      <div key={action.actionId} className="flex flex-col gap-1 text-sm leading-5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                        <div className="min-w-0">
-                          <p className="font-medium text-dls-text">{action.label}</p>
-                          <p className="text-xs leading-5 text-dls-secondary">{action.description}</p>
-                        </div>
-                        {action.command ? (
-                          <code className="shrink-0 rounded-md bg-dls-surface px-2 py-1 font-mono text-[11px] text-dls-secondary">
-                            {action.command}
-                          </code>
-                        ) : null}
+              <Collapsible className="group/backend-details">
+                <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5 text-left text-sm font-medium text-dls-text transition-colors hover:bg-dls-surface-muted/[0.14]">
+                  <span>Technical readiness details</span>
+                  <ChevronDown className="size-4 text-dls-secondary transition-transform group-data-[state=open]/backend-details:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2 flex flex-col gap-1">
+                  <Row
+                    label="Model routing"
+                    hint={`Default: ${summarizeModelSource(backendCapabilities)}. ${summarizeModelRoutingPolicy(backendCapabilities)}`}
+                    value={<CapabilityBadge status={backendCapabilities.models.status} />}
+                  />
+                  <Row
+                    label="Workspace readiness"
+                    hint={
+                      workspaceReadiness
+                        ? `${workspaceReadiness.summary.readyFeatures}/${workspaceReadiness.summary.totalFeatures} actions ready. ${
+                            workspaceReadiness.summary.blockingChecks.length
+                              ? `Blocked by ${workspaceReadiness.summary.blockingChecks.join(", ")}.`
+                              : "No blockers reported."
+                          }`
+                        : workspaceReadinessLoading
+                          ? "Checking workspace readiness."
+                          : "Readiness is unavailable until the workspace engine responds."
+                    }
+                    value={
+                      workspaceReadiness ? (
+                        <CapabilityBadge status={workspaceReadiness.summary.status} />
+                      ) : workspaceReadinessLoading ? (
+                        <StatusBadge>Loading</StatusBadge>
+                      ) : (
+                        <UnavailableStatus label="Workspace unavailable" />
+                      )
+                    }
+                  />
+                  {workspaceReadiness?.summary.recommendedActions.length ? (
+                    <div className="px-1 py-3">
+                      <p className="text-sm font-medium text-dls-text">Next step</p>
+                      <div className="mt-2 flex flex-col gap-2">
+                        {workspaceReadiness.summary.recommendedActions.slice(0, 3).map((action) => (
+                          <div key={action.actionId} className="flex flex-col gap-1 text-sm leading-5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                            <div className="min-w-0">
+                              <p className="font-medium text-dls-text">{action.label}</p>
+                              <p className="text-xs leading-5 text-dls-secondary">{action.description}</p>
+                            </div>
+                            {action.command ? (
+                              <code className="shrink-0 rounded-md bg-dls-surface px-2 py-1 font-mono text-[11px] text-dls-secondary">
+                                {action.command}
+                              </code>
+                            ) : null}
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              {MATTERHORN_LAUNCH_FEATURES.generatedMedia && publishingReadiness.length ? (
-                <div className="px-1 py-3">
-                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-dls-text">Image and NFT publishing</p>
-                      <p className="mt-0.5 text-xs leading-5 text-dls-secondary">
-                        Generated images, public storage, Sui minting, and marketplace listing readiness.
-                      </p>
                     </div>
-                    {publishingStatus ? <CapabilityBadge status={publishingStatus} /> : null}
-                  </div>
-                  <NftPublishingReadinessRows items={publishingReadiness} />
-                  <NftPublishingSetupRows
-                    requirements={publishingSetupRequirements}
-                    className="mt-3"
-                    description="These are backend setup gates only. Wallet signing still happens in the user's Sui wallet."
+                  ) : null}
+                  {MATTERHORN_LAUNCH_FEATURES.generatedMedia && publishingReadiness.length ? (
+                    <div className="px-1 py-3">
+                      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-dls-text">Image and NFT publishing</p>
+                          <p className="mt-0.5 text-xs leading-5 text-dls-secondary">
+                            Generated images, public storage, Sui minting, and marketplace listing readiness.
+                          </p>
+                        </div>
+                        {publishingStatus ? <CapabilityBadge status={publishingStatus} /> : null}
+                      </div>
+                      <NftPublishingReadinessRows items={publishingReadiness} />
+                      <NftPublishingSetupRows
+                        requirements={publishingSetupRequirements}
+                        className="mt-3"
+                        description="These are backend setup gates only. Wallet signing still happens in the user's Sui wallet."
+                      />
+                    </div>
+                  ) : null}
+                  <Row
+                    label="Notes and memory"
+                    hint={`Notes: ${summarizeCapability(backendCapabilities.notes)} Memory: ${summarizeCapability(backendCapabilities.memory)}`}
+                    value={
+                      <div className="flex flex-wrap justify-end gap-1.5">
+                        <CapabilityBadge status={backendCapabilities.notes.status} />
+                        <CapabilityBadge status={backendCapabilities.memory.status} />
+                      </div>
+                    }
                   />
-                </div>
-              ) : null}
-              <Row
-                label="Notes and memory"
-                hint={`Notes: ${summarizeCapability(backendCapabilities.notes)} Memory: ${summarizeCapability(backendCapabilities.memory)}`}
-                value={
-                  <div className="flex flex-wrap justify-end gap-1.5">
-                    <CapabilityBadge status={backendCapabilities.notes.status} />
-                    <CapabilityBadge status={backendCapabilities.memory.status} />
-                  </div>
-                }
-              />
-              <Row
-                label="Evidence ledger"
-                hint={`Sources: ${backendCapabilities.evidence.sources.join(", ")}.`}
-                value={<CapabilityBadge status={backendCapabilities.evidence.status} />}
-              />
-              <Row
-                label="Project ledger"
-                hint={
-                  projectDataLedgerQuery.data
-                    ? `${projectDataLedgerQuery.data.summary.redacted} redacted. Feedback is eval/routing/product-quality only. Append-only history remains exportable for accountability.`
-                    : projectDataLedgerQuery.isLoading
-                      ? "Loading ledger policy and counts."
-                      : "Ledger counts are unavailable until the workspace engine responds."
-                }
-                value={
-                  <ProjectLedgerControlSummary
-                    ledger={projectDataLedgerQuery.data}
-                    loading={projectDataLedgerQuery.isLoading}
+                  <Row
+                    label="Evidence ledger"
+                    hint={`Sources: ${backendCapabilities.evidence.sources.join(", ")}.`}
+                    value={<CapabilityBadge status={backendCapabilities.evidence.status} />}
                   />
-                }
-              />
-              <div className="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs leading-5 text-dls-secondary">
-                  Download redacted project evidence or copy a support report with backend, billing, wallet, and data-policy readiness.
-                </p>
-                <div className="flex flex-wrap items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
-                    onClick={() => void copySupportReport()}
-                    disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId}
-                  >
-                    <Copy className="size-3.5" />
-                    Copy report
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
-                    onClick={() => void exportSupportReport()}
-                    disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId}
-                  >
-                    <Download className="size-3.5" />
-                    Support report
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
-                    onClick={() => void exportProjectLedger()}
-                    disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId || projectDataLedgerQuery.isLoading}
-                  >
-                    <Download className="size-3.5" />
-                    Ledger JSON
-                  </Button>
-                </div>
-              </div>
-              <InlineActionStatus status={supportReportStatus ?? ledgerExportStatus} />
-              <Row
-                label="Wallet families"
-                hint={walletFamilySummary(backendCapabilities)
-                  .map((wallet) => `${wallet.family}: ${backendCapabilityLabel(wallet.status)}`)
-                  .join(" · ")}
-                value={<CapabilityBadge status={backendCapabilities.wallets.status} />}
-              />
-              <Row
-                label="Teams"
-                hint={teamAccessSummaryQuery.data
-                  ? `${teamAccessSummaryQuery.data.sharingMode.label}. ${teamAccessSummaryQuery.data.localAccess.tokenCount} local access tokens. Owners ${teamAccessSummaryQuery.data.localAccess.byScope.owner}; collaborators ${teamAccessSummaryQuery.data.localAccess.byScope.collaborator}; viewers ${teamAccessSummaryQuery.data.localAccess.byScope.viewer}.${MATTERHORN_LAUNCH_FEATURES.cloud ? ` Cloud teams: ${backendCapabilityLabel(teamAccessSummaryQuery.data.cloudTeams.status)}.` : ""}`
-                  : teamAccessSummaryQuery.isLoading
-                    ? "Loading local access status."
-                  : summarizeCapability(backendCapabilities.teams)}
-                value={<CapabilityBadge status={backendCapabilities.teams.status} />}
-              />
-              <TeamAccessControls
-                client={props.matterhornServerClient}
-                workspaceId={backendWorkspaceId}
-                summary={teamAccessSummaryQuery.data}
-                data={teamAccessQuery.data}
-                billingStatus={workspaceBillingStatusQuery.data?.status}
-                error={teamAccessQuery.error}
-                isError={teamAccessQuery.isError}
-                isLoading={teamAccessQuery.isLoading}
-                isOpen={teamTokenManagementOpen}
-                onOpen={() => setTeamTokenManagementOpen(true)}
-                onOpenBilling={MATTERHORN_LAUNCH_FEATURES.billing ? () => onSelectTab("billing") : undefined}
-                refetch={teamAccessQuery.refetch}
-                refetchBilling={workspaceBillingStatusQuery.refetch}
-              />
-              <Row
-                label="Write guards"
-                hint={summarizeCapability(backendCapabilities.security.memoryWriteGuards)}
-                value={<CapabilityBadge status={backendCapabilities.security.memoryWriteGuards.status} />}
-              />
+                  <Row
+                    label="Project ledger"
+                    hint={
+                      projectDataLedgerQuery.data
+                        ? `${projectDataLedgerQuery.data.summary.redacted} redacted. Feedback is eval/routing/product-quality only. Append-only history remains exportable for accountability.`
+                        : projectDataLedgerQuery.isLoading
+                          ? "Loading ledger policy and counts."
+                          : "Ledger counts are unavailable until the workspace engine responds."
+                    }
+                    value={
+                      <ProjectLedgerControlSummary
+                        ledger={projectDataLedgerQuery.data}
+                        loading={projectDataLedgerQuery.isLoading}
+                      />
+                    }
+                  />
+                  <div className="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs leading-5 text-dls-secondary">
+                      Download redacted project evidence or copy a support report with backend, billing, wallet, and data-policy readiness.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
+                        onClick={() => void copySupportReport()}
+                        disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId}
+                      >
+                        <Copy className="size-3.5" />
+                        Copy report
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
+                        onClick={() => void exportSupportReport()}
+                        disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId}
+                      >
+                        <Download className="size-3.5" />
+                        Support report
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
+                        onClick={() => void exportProjectLedger()}
+                        disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId || projectDataLedgerQuery.isLoading}
+                      >
+                        <Download className="size-3.5" />
+                        Ledger JSON
+                      </Button>
+                    </div>
+                  </div>
+                  <InlineActionStatus status={supportReportStatus ?? ledgerExportStatus} />
+                  <Row
+                    label="Wallet families"
+                    hint={walletFamilySummary(backendCapabilities)
+                      .map((wallet) => `${wallet.family}: ${backendCapabilityLabel(wallet.status)}`)
+                      .join(" · ")}
+                    value={<CapabilityBadge status={backendCapabilities.wallets.status} />}
+                  />
+                  <Row
+                    label="Teams"
+                    hint={teamAccessSummaryQuery.data
+                      ? `${teamAccessSummaryQuery.data.sharingMode.label}. ${teamAccessSummaryQuery.data.localAccess.tokenCount} local access tokens. Owners ${teamAccessSummaryQuery.data.localAccess.byScope.owner}; collaborators ${teamAccessSummaryQuery.data.localAccess.byScope.collaborator}; viewers ${teamAccessSummaryQuery.data.localAccess.byScope.viewer}.${MATTERHORN_LAUNCH_FEATURES.cloud ? ` Cloud teams: ${backendCapabilityLabel(teamAccessSummaryQuery.data.cloudTeams.status)}.` : ""}`
+                      : teamAccessSummaryQuery.isLoading
+                        ? "Loading local access status."
+                        : summarizeCapability(backendCapabilities.teams)}
+                    value={<CapabilityBadge status={backendCapabilities.teams.status} />}
+                  />
+                  <TeamAccessControls
+                    client={props.matterhornServerClient}
+                    workspaceId={backendWorkspaceId}
+                    summary={teamAccessSummaryQuery.data}
+                    data={teamAccessQuery.data}
+                    billingStatus={workspaceBillingStatusQuery.data?.status}
+                    error={teamAccessQuery.error}
+                    isError={teamAccessQuery.isError}
+                    isLoading={teamAccessQuery.isLoading}
+                    isOpen={teamTokenManagementOpen}
+                    onOpen={() => setTeamTokenManagementOpen(true)}
+                    onOpenBilling={MATTERHORN_LAUNCH_FEATURES.billing ? () => onSelectTab("billing") : undefined}
+                    refetch={teamAccessQuery.refetch}
+                    refetchBilling={workspaceBillingStatusQuery.refetch}
+                  />
+                  <Row
+                    label="Write guards"
+                    hint={summarizeCapability(backendCapabilities.security.memoryWriteGuards)}
+                    value={<CapabilityBadge status={backendCapabilities.security.memoryWriteGuards.status} />}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
             </>
           ) : (
             <div className="px-1 py-3 text-sm leading-6 text-dls-secondary">
               {backendCapabilitiesLoading
                 ? "Loading backend status..."
-                : "The Matterhorn Work engine is offline or did not return a capability report."}
+                : "The Matterhorn Desks engine is offline or did not return a capability report."}
             </div>
           )}
         </SettingsCard>
@@ -1978,7 +1978,7 @@ export function SettingsOverviewView(props: {
           icon={<Archive size={18} />}
           title="Memory"
           description="Review pending suggestions and manage saved memories."
-          status={<StatusBadge tone={memoryOverviewQuery.data?.pending ? "setup" : "ready"}>Memory review</StatusBadge>}
+          status={memoryOverviewQuery.data?.pending ? <StatusBadge tone="setup">{memoryOverviewQuery.data.pending} to review</StatusBadge> : null}
         >
           <Row
             label="Pending suggestions"
@@ -2069,7 +2069,6 @@ export function SettingsOverviewView(props: {
           icon={<Palette size={18} />}
           title="Appearance"
           description="Theme, accent, and text density."
-          status={<StatusBadge tone="ready">Ready</StatusBadge>}
         >
           <Row
             label="Theme"
@@ -2125,15 +2124,15 @@ export function SettingsOverviewView(props: {
         <SettingsCard
           icon={<ShieldCheck size={18} />}
           title="Safety & Wallets"
-          description="How Matterhorn Work keeps Web3 actions safe."
-          status={<StatusBadge tone="setup">Wallet setup</StatusBadge>}
+          description="How Matterhorn Desks keeps Web3 actions safe."
+          status={backendCapabilities ? <CapabilityBadge status={backendCapabilities.wallets.status} /> : null}
         >
           <p className="text-sm leading-6 text-dls-secondary">
-            Matterhorn Work is <span className="font-medium text-dls-text">non-custodial</span>. It never holds your keys, signs silently, or moves funds on your behalf. You stay in control of every on-chain action.
+            Matterhorn Desks is <span className="font-medium text-dls-text">non-custodial</span>. It never holds your keys, signs silently, or moves funds on your behalf. You stay in control of every on-chain action.
           </p>
           <ul className="flex list-none flex-col gap-1 text-sm leading-6 text-dls-secondary">
             <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
-              <span className="font-medium text-dls-text">Bittensor:</span> actions are prepared as previews. Anything on-chain is signed in your own external Bittensor-compatible signer — Matterhorn Work cannot sign or broadcast.
+              <span className="font-medium text-dls-text">Bittensor:</span> actions are prepared as previews. Anything on-chain is signed in your own external Bittensor-compatible signer — Matterhorn Desks cannot sign or broadcast.
             </li>
             <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
               <span className="font-medium text-dls-text">Hyperliquid:</span> manual orders use a separate trade ticket. Matterhorn submits only after you review the exact terms and sign a short-lived intent in your connected wallet; agents and watches cannot submit.
@@ -2142,7 +2141,7 @@ export function SettingsOverviewView(props: {
               <span className="font-medium text-dls-text">Polymarket:</span> Matterhorn reads market data and prepares drafts for you to review and submit in your own eligible client.
             </li>
             <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
-              <span className="font-medium text-dls-text">No secret storage:</span> Matterhorn Work never asks for or stores seed phrases, private keys, or API secrets.
+              <span className="font-medium text-dls-text">No secret storage:</span> Matterhorn Desks never asks for or stores seed phrases, private keys, or API secrets.
             </li>
           </ul>
         </SettingsCard>
@@ -2152,7 +2151,6 @@ export function SettingsOverviewView(props: {
           icon={<Network size={18} />}
           title="Protocols"
           description="Status of each Web3 workspace."
-          status={<StatusBadge tone="ready">Boundaries visible</StatusBadge>}
         >
           <Row label="Bittensor" hint="TAO, subnets, validators, and staking previews (external signer required)." value={<StatusBadge tone="ready">Read and preview</StatusBadge>} />
           <Row label="Hyperliquid" hint="Manual execution uses a separate exact-order review and connected-wallet signature. Agents and watches cannot submit." value={<StatusBadge tone="preview">Review and sign</StatusBadge>} />
@@ -2167,10 +2165,9 @@ export function SettingsOverviewView(props: {
           icon={<Boxes size={18} />}
           title="MCPs &amp; Connectors"
           description="Connected protocol tools, app connectors, and custom MCP servers."
-          status={<StatusBadge tone="ready">Ready</StatusBadge>}
         >
           <p className="text-sm leading-6 text-dls-secondary">
-            Connect Model Context Protocol (MCP) servers, protocol tools, and app connectors so Matterhorn Work can use them from chat. Some tools may be unavailable until their connector is configured or signed in.
+            Connect Model Context Protocol (MCP) servers, protocol tools, and app connectors so Matterhorn Desks can use them from chat. Some tools may be unavailable until their connector is configured or signed in.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => onSelectTab("extensions")}>
@@ -2187,7 +2184,6 @@ export function SettingsOverviewView(props: {
           icon={<FolderCog size={18} />}
           title="Workspaces"
           description="Local and shared workspaces, and diagnostics."
-          status={<StatusBadge tone="ready">Ready</StatusBadge>}
         >
           <p className="text-sm leading-6 text-dls-secondary">
             A workspace is a folder on your machine the agent can work in. <span className="font-medium text-dls-text">Local</span> workspaces stay on your computer. <span className="font-medium text-dls-text">Remote / shared</span> workspaces connect to a hosted worker so you can run work in the cloud.
@@ -2225,7 +2221,7 @@ export function SettingsOverviewView(props: {
           icon={<Lock size={18} />}
           title="Privacy &amp; Data"
           description="Where your data lives, and what is never stored."
-          status={workspaceDataMap ? <StatusBadge tone="ready">Workspace mapped</StatusBadge> : <StatusBadge>Local first</StatusBadge>}
+          status={workspaceDataMap ? null : <StatusBadge>Local first</StatusBadge>}
         >
           {workspaceDataMap ? (
             <>
@@ -2255,7 +2251,7 @@ export function SettingsOverviewView(props: {
                 value={<CapabilityBadge status={workspaceDataMap.policy.export.status} />}
               />
               <p className="px-1 py-3 text-xs leading-5 text-dls-secondary">
-                Matterhorn Work never asks for or stores seed phrases, private keys, API secrets, raw signatures, or wallet exports.
+                Matterhorn Desks never asks for or stores seed phrases, private keys, API secrets, raw signatures, or wallet exports.
               </p>
             </>
           ) : (
@@ -2279,10 +2275,9 @@ export function SettingsOverviewView(props: {
         <SettingsCard
           icon={<Info size={18} />}
           title="About"
-          description="Matterhorn Work version and resources."
-          status={<StatusBadge tone="ready">Ready</StatusBadge>}
+          description="Matterhorn Desks version and resources."
         >
-          <Row label="Matterhorn Work" value={<span className="font-mono text-xs">{APP_VERSION ? `v${APP_VERSION}` : "developer build"}</span>} />
+          <Row label="Matterhorn Desks" value={<span className="font-mono text-xs">{APP_VERSION ? `v${APP_VERSION}` : "developer build"}</span>} />
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => onSelectTab("updates")}>
               Check for updates

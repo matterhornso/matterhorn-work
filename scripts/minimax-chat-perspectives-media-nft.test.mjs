@@ -353,12 +353,12 @@ for (const phrase of ["seed phrase input", "private key input", "raw signature i
 // ── 9. Brand language ─────────────────────────────────────────
 
 const brandChecks = [
-  ["Matterhorn Work", true],
+  ["Matterhorn Desks", true],
   ["Matterhorn Perspectives", true],
   ["matterhorn-work engine", false], // forbidden
 ];
-if (html.includes("Matterhorn Work")) pass("Prototype: uses 'Matterhorn Work'");
-else fail("Prototype: uses 'Matterhorn Work'", "missing");
+if (html.includes("Matterhorn Desks")) pass("Prototype: uses 'Matterhorn Desks'");
+else fail("Prototype: uses 'Matterhorn Desks'", "missing");
 
 if (html.includes("Matterhorn Perspectives")) pass("Prototype: uses 'Matterhorn Perspectives'");
 else fail("Prototype: uses 'Matterhorn Perspectives'", "missing");

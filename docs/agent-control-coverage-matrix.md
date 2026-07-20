@@ -1,4 +1,4 @@
-# Matterhorn Work Agent Control Coverage Matrix
+# Matterhorn Desks Agent Control Coverage Matrix
 
 This matrix tracks the current local agent-control surface for Codex, Claude Code, Cursor, Claude Desktop, and other MCP-capable clients.
 
