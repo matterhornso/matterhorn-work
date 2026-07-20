@@ -1,6 +1,6 @@
 {
   "name": "matterhorn-work-server",
-  "version": "0.13.13",
+  "version": "0.13.14",
   "description": "Filesystem-backed API for Matterhorn Desks remote clients",
   "type": "module",
   "bin": {

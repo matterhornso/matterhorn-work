@@ -94,9 +94,15 @@ function updateMacAsarIntegrity(context, asarPath) {
   }
 }
 
+function normalizeArchiveEntry(archiveEntry) {
+  return archiveEntry.replaceAll("\\", "/").replace(/^\/+/, "");
+}
+
 function archiveHasEntry(archiveEntries, requiredArchivePath) {
-  const normalized = requiredArchivePath.replace(/^\/+/, "");
-  return archiveEntries.has(normalized) || archiveEntries.has(`/${normalized}`);
+  const normalizedRequiredPath = normalizeArchiveEntry(requiredArchivePath);
+  return [...archiveEntries].some(
+    (archiveEntry) => normalizeArchiveEntry(archiveEntry) === normalizedRequiredPath,
+  );
 }
 
 function assertArchiveHasEntries(asar, asarPath, requiredArchivePaths) {
@@ -106,7 +112,10 @@ function assertArchiveHasEntries(asar, asarPath, requiredArchivePaths) {
 
     const basename = path.basename(requiredArchivePath);
     const nearbyEntries = [...archiveEntries]
-      .filter((entry) => entry.endsWith(`/${basename}`) || entry.endsWith(basename))
+      .filter((entry) => {
+        const normalizedEntry = normalizeArchiveEntry(entry);
+        return normalizedEntry.endsWith(`/${basename}`) || normalizedEntry.endsWith(basename);
+      })
       .slice(0, 5);
     throw new Error(
       `Packaged app.asar is missing ${requiredArchivePath}; nearby entries: ${nearbyEntries.join(", ") || "none"}`,
@@ -289,3 +298,4 @@ async function afterPack(context) {
 
 module.exports = afterPack;
 module.exports.default = afterPack;
+module.exports.archiveHasEntry = archiveHasEntry;

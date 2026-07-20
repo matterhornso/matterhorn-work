@@ -24,6 +24,10 @@ assert.equal(
   "release-engineering",
 );
 assert.equal(
+  classifyCandidatePath("pnpm-lock.yaml"),
+  "release-engineering",
+);
+assert.equal(
   classifyCandidatePath("apps/app/src/react-app/domains/cloud/public-web-signin.tsx"),
   "public-web-security",
 );

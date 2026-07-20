@@ -38,6 +38,7 @@ const BUCKETS = Object.freeze([
       /(?:^|\/)(?:electron-builder|vercel|vite)\.(?:ya?ml|json|[cm]?[jt]s)$/,
       /(?:^|\/)(?:Dockerfile|docker-compose\.ya?ml)$/,
       /(?:^|\/)package\.json$/,
+      /^(?:pnpm-lock\.yaml|package-lock\.json|yarn\.lock|bun\.lockb?)$/,
       /^\.env\.example$/,
     ],
   },

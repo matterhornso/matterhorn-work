@@ -59,6 +59,8 @@ mac:
     - zip
 linux:
   icon: resources/icons/icon.png
+  executableName: matterhorn-desks
+  syncDesktopName: true
   extraResources:
     - from: resources/sidecars
       to: sidecars

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 
+const require = createRequire(import.meta.url);
 const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
 const desktopPackage = JSON.parse(readFileSync("apps/desktop/package.json", "utf8"));
 const electronBuilderConfig = readFileSync("apps/desktop/electron-builder.yml", "utf8");
@@ -13,6 +15,7 @@ const desktopMigration = readFileSync("apps/desktop/electron/migration.mjs", "ut
 const desktopUpdater = readFileSync("apps/desktop/electron/updater.mjs", "utf8");
 const helperPrep = readFileSync("apps/desktop/scripts/prepare-computer-use-helper.mjs", "utf8");
 const sidecarPrep = readFileSync("apps/desktop/scripts/prepare-sidecar.mjs", "utf8");
+const { archiveHasEntry } = require("../apps/desktop/scripts/electron-after-pack.cjs");
 
 assert.equal(
   rootPackage.scripts["test:electron-packaging-sources"],
@@ -35,8 +38,15 @@ assert.equal(
   "3.2.0",
   "desktop package should pin the asar helper used to repair app.asar",
 );
+assert.equal(
+  desktopPackage.desktopName,
+  "Matterhorn Desks",
+  "desktop package should declare the Linux desktop entry name",
+);
 
 assert.match(electronBuilderConfig, /afterPack: scripts\/electron-after-pack\.cjs/);
+assert.match(electronBuilderConfig, /linux:[\s\S]*executableName: matterhorn-desks/);
+assert.match(electronBuilderConfig, /linux:[\s\S]*syncDesktopName: true/);
 assert.match(electronBuilderConfig, /Matterhorn Desks Automation Helper\.app\/\*\*/);
 assert.match(afterPack, /function loadAsar/);
 assert.match(afterPack, /loaded\.minimatch/);
@@ -51,6 +61,16 @@ assert.match(afterPack, /electron\/main\.mjs/);
 assert.match(afterPack, /server\/dist\/server\.js/);
 assert.match(afterPack, /ElectronAsarIntegrity:Resources\/app\.asar:hash/);
 assert.match(afterPack, /crypto\.createHash\("sha256"\)/);
+assert.equal(
+  archiveHasEntry(new Set(["\\electron\\main.mjs"]), "electron/main.mjs"),
+  true,
+  "Windows ASAR entries should use the same normalized path contract as POSIX entries",
+);
+assert.equal(
+  archiveHasEntry(new Set(["/server/dist/server.js"]), "server/dist/server.js"),
+  true,
+  "leading slashes in ASAR entries should not change archive membership",
+);
 assert.match(afterPack, /Matterhorn Desks Automation Helper\.app/);
 assert.match(afterPack, /fs\.cpSync\(sourcePath, targetPath, \{ recursive: true \}\)/);
 assert.match(afterPack, /copyComputerUseHelper\(context\)/);
