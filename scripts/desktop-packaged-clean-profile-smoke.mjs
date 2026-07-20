@@ -133,12 +133,16 @@ try {
     appBundle = path.join(extractionDir, "Matterhorn Desks.app");
     artifactSource = zipFile;
   }
-  executable = path.join(appBundle, "Contents", "MacOS", "Matterhorn");
-  if (!existsSync(executable)) throw new Error(`Packaged Matterhorn executable not found: ${executable}`);
   const plistPath = path.join(appBundle, "Contents", "Info.plist");
   const plistResult = spawnSync("plutil", ["-convert", "json", "-o", "-", plistPath], { encoding: "utf8" });
   if (plistResult.status !== 0) throw new Error("Could not inspect the packaged Matterhorn URL schemes.");
   const plist = JSON.parse(plistResult.stdout);
+  const executableName = typeof plist.CFBundleExecutable === "string"
+    ? plist.CFBundleExecutable.trim()
+    : "";
+  if (!executableName) throw new Error("Packaged Matterhorn bundle does not declare CFBundleExecutable.");
+  executable = path.join(appBundle, "Contents", "MacOS", executableName);
+  if (!existsSync(executable)) throw new Error(`Packaged Matterhorn executable not found: ${executable}`);
   const protocolSchemes = (plist.CFBundleURLTypes ?? []).flatMap((entry) => entry?.CFBundleURLSchemes ?? []);
   if (!protocolSchemes.includes("matterhorn-work")) {
     throw new Error("Packaged Matterhorn does not register the matterhorn-work URL scheme.");
@@ -173,8 +177,8 @@ try {
   }, options.timeoutMs, "packaged first-run control bridge");
 
   const health = await fetchJson(`${discovery.baseUrl}/health`);
-  if (!health.response.ok || health.body?.ok !== true || health.body?.app !== "Matterhorn") {
-    throw new Error("Packaged first-run control health did not report Matterhorn ready.");
+  if (!health.response.ok || health.body?.ok !== true || health.body?.app !== "Matterhorn Desks") {
+    throw new Error("Packaged first-run control health did not report Matterhorn Desks ready.");
   }
   checks.push({ id: "control.health", status: "pass" });
 

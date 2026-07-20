@@ -19,6 +19,8 @@ for (const required of [
   "MATTERHORN_WORK_ELECTRON_USERDATA",
   "matterhorn-work-ui-control.json",
   "matterhorn-electron-local-tester-artifact.json",
+  "CFBundleExecutable",
+  'health.body?.app !== "Matterhorn Desks"',
   "control.auth",
   "protocol.matterhorn_work",
   "first_run.welcome",
