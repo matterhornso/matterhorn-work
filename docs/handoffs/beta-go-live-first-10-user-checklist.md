@@ -1,11 +1,11 @@
-# Matterhorn Work Beta Go-Live Checklist For First 10 Users
+# Matterhorn Desks Beta Go-Live Checklist For First 10 Users
 
-Use this checklist for the first external beta sessions. The goal is to verify that Matterhorn Work feels honest, usable, and safe before expanding beyond the first 10 users.
+Use this checklist for the first external beta sessions. The goal is to verify that Matterhorn Desks feels honest, usable, and safe before expanding beyond the first 10 users.
 
 ## 1. Before The Call
 
 - Install the latest beta build from the current release artifact.
-- Start Matterhorn Work from a clean local project folder.
+- Start Matterhorn Desks from a clean local project folder.
 - Keep test inputs public or redacted only.
 - Do not paste seed phrases, private keys, mnemonics, raw signatures, signed payloads, API secrets, wallet exports, or customer funds.
 - Capture screenshots for Home, Bittensor, Hyperliquid, Polymarket, Longevity, MCPs, Memory, Profile, Wallet, and Settings.
@@ -99,4 +99,3 @@ Do not proceed to the next beta user if any of these happen:
 - Matterhorn asks for or stores wallet secrets.
 - A Settings or MCP page presents a static/demo feature as production-ready.
 - Sign-in, Wallet, Profile, or New Project flows are visibly broken.
-

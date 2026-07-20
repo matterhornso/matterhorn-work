@@ -122,6 +122,10 @@ const workflow = readFileSync(".github/workflows/ci-tests.yml", "utf8");
 assert.ok(workflow.includes("matterhorn-platform-safety"), "CI should include a Matterhorn platform safety job");
 assert.ok(workflow.includes("pnpm test:matterhorn-platform-safety"), "CI should run the platform safety package script");
 assert.ok(workflow.includes("oven-sh/setup-bun@v2"), "CI should install Bun for focused server/app tests");
+assert.ok(
+  workflow.includes("pnpm rebuild better-sqlite3"),
+  "CI should explicitly build the approved SQLite binding after the script-free install",
+);
 assert.ok(workflow.includes("pnpm test:production-cors-readiness"), "CI should validate production CORS readiness wiring");
 assert.ok(workflow.includes("pnpm smoke:production-cors-readiness"), "CI should run production CORS readiness");
 assert.ok(workflow.includes("pnpm test:product-readiness-smoke"), "CI should validate product readiness smoke wiring");

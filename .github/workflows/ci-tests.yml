@@ -212,6 +212,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts --prefer-offline
 
+      - name: Build approved SQLite binding
+        run: pnpm rebuild better-sqlite3
+
       - name: Typecheck web app
         run: pnpm --filter @matterhorn-work/app typecheck
 

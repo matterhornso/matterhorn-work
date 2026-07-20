@@ -13,7 +13,7 @@ const REQUIRED_DOCS = [
   "docs/agent-control-coverage-matrix.md",
 ];
 const REQUIRED_CI_CHECKS = [
-  /matterhorn work tests/i,
+  /matterhorn desks tests/i,
   /i18n audit/i,
   /alpha channel/i,
 ];

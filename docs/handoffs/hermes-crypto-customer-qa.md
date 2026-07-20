@@ -1,10 +1,10 @@
 # Hermes Handoff: Crypto Customer QA Pass
 
-Use this after Codex or Claude Code says the latest crypto PRs are merged into `dev`. This is the single black-box QA pass before Matterhorn Work is shown to a test customer.
+Use this after Codex or Claude Code says the latest crypto PRs are merged into `dev`. This is the single black-box QA pass before Matterhorn Desks is shown to a test customer.
 
 ## Goal
 
-Prove that Matterhorn Work can safely operate Bittensor, Hyperliquid, and Polymarket through chat, HTTP, MCP, and CLI without holding custody or submitting live market actions.
+Prove that Matterhorn Desks can safely operate Bittensor, Hyperliquid, and Polymarket through chat, HTTP, MCP, and CLI without holding custody or submitting live market actions.
 
 ## Read First
 
@@ -18,9 +18,9 @@ Prove that Matterhorn Work can safely operate Bittensor, Hyperliquid, and Polyma
 
 ## Non-Negotiable Safety
 
-Do not paste seed phrases, mnemonics, private keys, API secrets, keyfiles, wallet exports, raw signatures, signed payloads, signed extrinsics, or exchange API credentials into Matterhorn Work, MCP tools, CLI flags, HTTP bodies, screenshots, logs, or reports.
+Do not paste seed phrases, mnemonics, private keys, API secrets, keyfiles, wallet exports, raw signatures, signed payloads, signed extrinsics, or exchange API credentials into Matterhorn Desks, MCP tools, CLI flags, HTTP bodies, screenshots, logs, or reports.
 
-Matterhorn Work must not:
+Matterhorn Desks must not:
 
 - sign a Bittensor transaction;
 - broadcast a Bittensor transaction unless explicitly operating on public externally signed evidence;
@@ -422,7 +422,7 @@ Report P0/P1 if cards overflow, hidden warnings cause unsafe interpretation, but
 Create one Markdown report with:
 
 ```markdown
-# Matterhorn Work Crypto Customer QA Report
+# Matterhorn Desks Crypto Customer QA Report
 
 - Tested commit:
 - Tested PRs:
