@@ -123,7 +123,7 @@ assert.ok(workflow.includes("matterhorn-platform-safety"), "CI should include a 
 assert.ok(workflow.includes("pnpm test:matterhorn-platform-safety"), "CI should run the platform safety package script");
 assert.ok(workflow.includes("oven-sh/setup-bun@v2"), "CI should install Bun for focused server/app tests");
 assert.ok(
-  workflow.includes("pnpm rebuild better-sqlite3"),
+  workflow.includes("pnpm rebuild better-sqlite3 --pending"),
   "CI should explicitly build the approved SQLite binding after the script-free install",
 );
 assert.ok(workflow.includes("pnpm test:production-cors-readiness"), "CI should validate production CORS readiness wiring");

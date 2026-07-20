@@ -213,7 +213,7 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts --prefer-offline
 
       - name: Build approved SQLite binding
-        run: pnpm rebuild better-sqlite3
+        run: pnpm rebuild better-sqlite3 --pending
 
       - name: Typecheck web app
         run: pnpm --filter @matterhorn-work/app typecheck
