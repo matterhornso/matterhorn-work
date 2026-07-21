@@ -227,7 +227,7 @@ export function QuestionPanel(props: QuestionPanelProps) {
                     value: event.currentTarget.value,
                   })
                 }
-                className="w-full px-4 py-3 rounded-lg bg-dls-surface border border-dls-border focus:border-dls-accent focus:ring-4 focus:ring-[rgba(var(--dls-accent-rgb),0.2)] focus:outline-none text-sm text-dls-text placeholder:text-dls-secondary transition-shadow"
+                className="w-full px-4 py-3 rounded-lg bg-dls-surface border border-dls-border focus:border-dls-accent focus:ring-4 focus:ring-[rgb(var(--dls-accent-rgb)/0.2)] focus:outline-none text-sm text-dls-text placeholder:text-dls-secondary transition-shadow"
                 placeholder={t("question_modal.custom_answer_placeholder")}
                 disabled={props.busy}
                 onKeyDown={(event) => {

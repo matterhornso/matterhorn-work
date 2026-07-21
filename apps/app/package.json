@@ -1,7 +1,7 @@
 {
   "name": "@matterhorn-work/app",
   "private": true,
-  "version": "0.13.14",
+  "version": "0.13.15",
   "type": "module",
   "scripts": {
     "dev": "OPENWORK_DEV_MODE=1 vite",
@@ -47,6 +47,7 @@
     "@codemirror/language": "^6.11.0",
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.0",
+    "@coinbase/wallet-sdk": "^4.3.6",
     "@fontsource-variable/geist": "^5.2.8",
     "@fontsource-variable/ibm-plex-sans": "^5.2.8",
     "@heroicons/react": "^2.2.0",

@@ -256,11 +256,13 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
 
   test("focused desk close cannot overwrite a newly opened task session", () => {
     const src = readAppSource("domains/session/chat/session-page.tsx");
+    const routeState = readAppSource("shell/session-panel-route.ts");
 
     expect(src).toContain('const currentLocation = typeof window !== "undefined" ? window.location : location');
-    expect(src).toContain("new URLSearchParams(currentLocation.search)");
+    expect(src).toContain("resolveSessionPanelNavigation(currentLocation.search, panel)");
     expect(src).toContain("pathname: currentLocation.pathname");
     expect(src).toContain("hash: currentLocation.hash");
+    expect(routeState).toContain("new URLSearchParams(search)");
   });
 
   test("desk launchers run tasks while Home New chat stays blank", () => {

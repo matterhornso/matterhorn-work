@@ -105,9 +105,9 @@ const SUGGESTION_INBOX_FILTERS: Array<{
 const SAVED_SUGGESTION_STATUSES = new Set<MatterhornMemorySuggestionStatus>(["confirmed", "edited"]);
 const NOT_SAVED_SUGGESTION_STATUSES = new Set<MatterhornMemorySuggestionStatus>(["dismissed", "expired", "blocked"]);
 const MEMORY_FIELD_CLASS =
-  "border-transparent bg-dls-surface-raised shadow-none placeholder:text-dls-secondary/80 hover:bg-dls-surface-muted/[0.34] focus-visible:border-[rgba(var(--dls-accent-rgb),0.45)] focus-visible:bg-dls-surface-muted/[0.38] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.22)] dark:bg-dls-surface-raised";
+  "border-transparent bg-dls-surface-raised shadow-none placeholder:text-dls-secondary/80 hover:bg-dls-surface-muted/[0.34] focus-visible:border-[rgb(var(--dls-accent-rgb)/0.45)] focus-visible:bg-dls-surface-muted/[0.38] focus-visible:ring-1 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.22)] dark:bg-dls-surface-raised";
 const MEMORY_SELECT_CLASS =
-  "h-10 rounded-md border border-transparent bg-dls-surface-raised px-3 text-sm outline-none transition-colors hover:bg-dls-surface-muted/[0.34] focus:border-[rgba(var(--dls-accent-rgb),0.45)] focus:bg-dls-surface-muted/[0.38] focus:ring-1 focus:ring-[rgba(var(--dls-accent-rgb),0.22)]";
+  "h-10 rounded-md border border-transparent bg-dls-surface-raised px-3 text-sm outline-none transition-colors hover:bg-dls-surface-muted/[0.34] focus:border-[rgb(var(--dls-accent-rgb)/0.45)] focus:bg-dls-surface-muted/[0.38] focus:ring-1 focus:ring-[rgb(var(--dls-accent-rgb)/0.22)]";
 const MEMORY_MUTED_BADGE_CLASS = "border-transparent bg-transparent px-0 text-dls-secondary";
 const MEMORY_ICON_ACTION_CLASS =
   "bg-dls-surface-raised text-dls-secondary shadow-none hover:bg-dls-surface-muted/[0.42] hover:text-dls-text";
@@ -141,7 +141,7 @@ function suggestionStatusMeta(status: MatterhornMemorySuggestionStatus) {
       title: "Edited + saved",
       description: "Saved only after the user reviewed and changed it.",
       className: "border-transparent bg-transparent px-0 text-primary",
-      cardClassName: "bg-[rgba(var(--matterhorn-blue-rgb),0.06)]",
+      cardClassName: "bg-[rgb(var(--matterhorn-blue-rgb)/0.06)]",
     };
   }
   if (status === "dismissed") {
@@ -786,7 +786,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
         </section>
 
         {visibleSelectedRecords.length ? (
-          <section className="rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3.5">
+          <section className="rounded-lg bg-[rgb(var(--matterhorn-blue-rgb)/0.08)] p-3.5">
             <div className="flex flex-col gap-3">
               <div>
                 <div className="text-sm font-semibold">Using memories in chat</div>

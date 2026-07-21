@@ -292,7 +292,13 @@ describe("Billing settings view", () => {
     expect(billingViewSource).toContain("Local workspace control stays available");
     expect(billingViewSource).toContain("Chat, local notes, memory review, protocol reads, exports, and settings are not blocked by billing.");
     expect(billingViewSource).toContain("Mint previews require Plus or Max; Walrus upload and marketplace listing require Max.");
-    expect(settingsRouteSource).toContain("<BillingSettingsView matterhornServerClient={settingsCapabilityClient} runtimeWorkspaceId={runtimeWorkspaceId} />");
+    expect(settingsRouteSource).toContain("<BillingSettingsView");
+    expect(settingsRouteSource).toContain(
+      "matterhornServerClient={settingsCapabilityClient}",
+    );
+    expect(settingsRouteSource).toContain(
+      "runtimeWorkspaceId={runtimeWorkspaceId}",
+    );
     expect(readFileSync(
       join(import.meta.dir, "../src/react-app/domains/settings/shell/settings-page.tsx"),
       "utf8",

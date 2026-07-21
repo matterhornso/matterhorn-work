@@ -66,7 +66,7 @@ export function CreateWorkspaceSharedPanel(
           <div
             className={`${surfaceCardClass} w-full max-w-[420px] p-8 text-center`}
           >
-            <div className="mx-auto flex size-14 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.13)] text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+            <div className="mx-auto flex size-14 items-center justify-center rounded-lg bg-[rgb(var(--matterhorn-blue-rgb)/0.13)] text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
               <Cloud size={24} />
             </div>
             <div className="mt-5 text-[20px] font-semibold tracking-[-0.3px] text-dls-text">

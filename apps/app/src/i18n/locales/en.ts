@@ -1152,7 +1152,7 @@ export default {
   "settings.quit_hint": "Matterhorn Desks quits immediately after cleanup so the next launch starts from a blank local state for this mode.",
   "settings.recent_events": "Recent events",
   "settings.reconnect_failed": "Reconnect failed. Check server URL/token and try again.",
-  "settings.reconnect_server": "Reconnecting...",
+  "settings.reconnect_server": "Reconnect server",
   "settings.reconnect_server_failed": "Failed to reconnect Matterhorn Desks server.",
   "settings.reconnected": "Reconnected to Matterhorn Desks server.",
   "settings.reconnecting": "Reconnecting...",

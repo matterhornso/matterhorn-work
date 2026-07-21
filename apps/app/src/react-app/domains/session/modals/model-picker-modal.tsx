@@ -264,7 +264,7 @@ export function ModelPickerModal(props: ModelPickerModalProps) {
             <input
               ref={searchInputRef}
               type="text"
-              className="h-10 w-full rounded-lg border border-dls-border bg-dls-surface pl-9 pr-3 text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.2)]"
+              className="h-10 w-full rounded-lg border border-dls-border bg-dls-surface pl-9 pr-3 text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dls-accent-rgb)/0.2)]"
               placeholder="Search providers and models..."
               value={props.query}
               onChange={(e) => props.setQuery(e.target.value)}

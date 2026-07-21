@@ -171,14 +171,14 @@
   --status-blocked: #f87171;
   --status-blocked-rgb: 248 113 113;
   --dls-surface: #0b0f14;
-  --dls-sidebar: #17202a;
+  --dls-sidebar: #101720;
   --dls-app-bg: #05070b;
   --dls-background: #05070b;
   --dls-canvas: #1b2530;
   --dls-surface-muted: #263442;
   --dls-surface-raised: #151d26;
   --dls-surface-overlay: #1d2834;
-  --dls-border: rgba(var(--matterhorn-blue-rgb), 0.28);
+  --dls-border: rgb(var(--matterhorn-blue-rgb) / 0.14);
   --dls-accent: var(--matterhorn-blue);
   --dls-accent-hover: #e7f8ff;
   --dls-accent-fg: var(--matterhorn-ink);
@@ -192,7 +192,7 @@
   --dls-card-shadow: 0 10px 28px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.045);
   --dls-overlay-shadow: 0 24px 72px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.065);
   --dls-glass-bg: var(--dls-surface);
-  --dls-glass-border: rgba(var(--matterhorn-blue-rgb), 0.18);
+  --dls-glass-border: rgb(var(--matterhorn-blue-rgb) / 0.12);
   --dls-glow: none;
 }
 
@@ -391,7 +391,7 @@ body {
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(135deg, rgba(var(--matterhorn-blue-rgb), 0.72), rgba(var(--matterhorn-blue-rgb), 0.12));
+  background: linear-gradient(135deg, rgb(var(--matterhorn-blue-rgb)/0.72), rgb(var(--matterhorn-blue-rgb)/0.12));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
@@ -530,7 +530,7 @@ body {
 
 .ow-input:focus {
   outline: none;
-  box-shadow: inset 0 0 0 1px rgba(var(--dls-accent-rgb), 0.28), 0 0 0 3px rgba(var(--dls-accent-rgb), 0.08);
+  box-shadow: inset 0 0 0 1px rgb(var(--dls-accent-rgb)/0.28), 0 0 0 3px rgb(var(--dls-accent-rgb)/0.08);
 }
 
 /* Global clickable elements pointer */
@@ -611,29 +611,29 @@ select:disabled {
    "awaiting first token", and any idle-but-alive hint. */
 @keyframes ow-dot-ticker {
   0% {
-    background-color: rgba(var(--dls-secondary-rgb, 120, 120, 120), 0.22);
-    box-shadow: 0 0 0 rgba(var(--dls-accent-rgb), 0);
+    background-color: rgb(var(--dls-secondary-rgb, 120 120 120) / 0.22);
+    box-shadow: 0 0 0 rgb(var(--dls-accent-rgb)/0);
   }
   20% {
-    background-color: rgba(var(--dls-accent-rgb), 0.95);
-    box-shadow: 0 0 8px rgba(var(--dls-accent-rgb), 0.45);
+    background-color: rgb(var(--dls-accent-rgb)/0.95);
+    box-shadow: 0 0 8px rgb(var(--dls-accent-rgb)/0.45);
   }
   55%,
   100% {
-    background-color: rgba(var(--dls-secondary-rgb, 120, 120, 120), 0.22);
-    box-shadow: 0 0 0 rgba(var(--dls-accent-rgb), 0);
+    background-color: rgb(var(--dls-secondary-rgb, 120 120 120) / 0.22);
+    box-shadow: 0 0 0 rgb(var(--dls-accent-rgb)/0);
   }
 }
 
 .ow-dot-ticker {
   animation: ow-dot-ticker 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  background-color: rgba(var(--dls-secondary-rgb, 120, 120, 120), 0.22);
+  background-color: rgb(var(--dls-secondary-rgb, 120 120 120) / 0.22);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ow-dot-ticker {
     animation: none;
-    background-color: rgba(var(--dls-accent-rgb), 0.6);
+    background-color: rgb(var(--dls-accent-rgb)/0.6);
   }
 }
 
@@ -655,21 +655,21 @@ select:disabled {
   --accent-foreground: #fafcff;
   --destructive: var(--red-9);
   --warning: var(--amber-11);
-  --border: rgba(var(--matterhorn-blue-rgb), 0.28);
-  --input: rgba(var(--matterhorn-blue-rgb), 0.38);
+  --border: rgb(var(--matterhorn-blue-rgb) / 0.14);
+  --input: rgb(var(--matterhorn-blue-rgb) / 0.22);
   --ring: var(--matterhorn-sky);
   --chart-1: var(--matterhorn-sky);
   --chart-2: var(--matterhorn-emerald);
   --chart-3: var(--matterhorn-amber);
   --chart-4: var(--matterhorn-rose);
   --chart-5: var(--matterhorn-violet);
-  --sidebar: #17202a;
+  --sidebar: #101720;
   --sidebar-foreground: #fafcff;
   --sidebar-primary: var(--matterhorn-blue);
   --sidebar-primary-foreground: var(--matterhorn-ink);
   --sidebar-accent: #263442;
   --sidebar-accent-foreground: #fafcff;
-  --sidebar-border: rgba(var(--matterhorn-blue-rgb), 0.26);
+  --sidebar-border: rgb(var(--matterhorn-blue-rgb) / 0.12);
   --sidebar-ring: var(--matterhorn-sky);
 }
 

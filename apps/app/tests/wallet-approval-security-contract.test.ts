@@ -2,13 +2,18 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 function readAppSource(path: string) {
-  return readFileSync(new URL(`../src/react-app/${path}`, import.meta.url), "utf8");
+  return readFileSync(
+    new URL(`../src/react-app/${path}`, import.meta.url),
+    "utf8",
+  );
 }
 
 describe("Wallet approval security contract", () => {
   test("approved transactions are submitted on the reviewed chain", () => {
     const source = readAppSource("domains/wallet/useSessionWallet.ts");
-    const reviewedSendSource = readAppSource("domains/wallet/lib/reviewed-wallet-send.ts");
+    const reviewedSendSource = readAppSource(
+      "domains/wallet/lib/reviewed-wallet-send.ts",
+    );
     const stateSource = readAppSource("domains/wallet/state/wallet-store.ts");
     const modalSource = readAppSource("domains/wallet/TransactionApproval.tsx");
 
@@ -19,19 +24,27 @@ describe("Wallet approval security contract", () => {
     expect(source).toContain("chainId: targetChainId");
     expect(stateSource).toContain("Switch your wallet to");
     expect(modalSource).toContain("chainMismatch");
-    expect(modalSource).toContain("Matterhorn will not send on the wrong chain");
+    expect(modalSource).toContain(
+      "Matterhorn will not send on the wrong chain",
+    );
   });
 
   test("approval modal does not clear or confirm before async wallet send succeeds", () => {
     const source = readAppSource("domains/wallet/TransactionApproval.tsx");
-    const sessionSource = readAppSource("domains/session/chat/session-page.tsx");
+    const sessionSource = readAppSource(
+      "domains/session/chat/session-page.tsx",
+    );
 
     expect(source).toContain("const [approvalBusy, setApprovalBusy]");
     expect(source).toContain("await onApprove(pending)");
     expect(source).toContain("setApprovalError(message)");
     expect(source).toContain("sanitizeApprovalError");
-    expect(source).not.toContain("dispatchTxApprovalResponse(true);\n              onApprove(pending);\n              store.clearApproval();");
-    expect(sessionSource).toContain("onApprove={() => sessionWallet.approveTx()}");
+    expect(source).not.toContain(
+      "dispatchTxApprovalResponse(true);\n              onApprove(pending);\n              store.clearApproval();",
+    );
+    expect(sessionSource).toContain(
+      "onApprove={() => sessionWallet.approveTx()}",
+    );
   });
 
   test("approval modal displays normalized ETH value instead of raw wei", () => {
@@ -47,8 +60,12 @@ describe("Wallet approval security contract", () => {
     const source = readAppSource("domains/wallet/TransactionApproval.tsx");
 
     expect(source).toContain("function ApprovalStatusSummary");
-    expect(source).toContain("const reviewNotices = [...blockingNotices, ...cautionNotices]");
-    expect(source).toContain("<ApprovalStatusSummary blocked={isBlocked || Boolean(approvalError)} notices={reviewNotices} />");
+    expect(source).toContain(
+      "const reviewNotices = [...blockingNotices, ...cautionNotices]",
+    );
+    expect(source).toContain(
+      "<ApprovalStatusSummary blocked={isBlocked || Boolean(approvalError)} notices={reviewNotices} />",
+    );
     expect(source).toContain("matterhorn-raised-surface");
     expect(source).toContain("text-2xl font-semibold tabular-nums");
     expect(source).toContain("more details");
@@ -61,9 +78,15 @@ describe("Wallet approval security contract", () => {
     expect(source).toContain("walletSafetyPolicyFromSnapshot");
     expect(source).toContain("evaluateWalletApprovalAgainstPolicy");
     expect(source).toContain("approvalPolicyFromSafetyPolicy");
-    expect(stateSource).toContain("input.valueUSD > input.maxPerTransactionUSD");
-    expect(stateSource).toContain("input.valueUSD + input.dailySpendUSD > input.maxDailySpendUSD");
-    expect(stateSource).toContain("input.sessionSwapCount >= MAX_SWAPS_PER_HOUR");
+    expect(stateSource).toContain(
+      "input.valueUSD > input.maxPerTransactionUSD",
+    );
+    expect(stateSource).toContain(
+      "input.valueUSD + input.dailySpendUSD > input.maxDailySpendUSD",
+    );
+    expect(stateSource).toContain(
+      "input.sessionSwapCount >= MAX_SWAPS_PER_HOUR",
+    );
     expect(stateSource).toContain("matterhorn.wallet.safety-policy.v1");
     expect(source).toContain('"limit_hit"');
     expect(source).toContain('"rate_limit_hit"');
@@ -93,20 +116,35 @@ describe("Wallet approval security contract", () => {
 
   test("approval modal uses workspace transaction simulation before approval", () => {
     const modalSource = readAppSource("domains/wallet/TransactionApproval.tsx");
-    const sessionSource = readAppSource("domains/session/chat/session-page.tsx");
-    const clientSource = readFileSync(new URL("../src/app/lib/matterhorn-server.ts", import.meta.url), "utf8");
+    const sessionSource = readAppSource(
+      "domains/session/chat/session-page.tsx",
+    );
+    const clientSource = readFileSync(
+      new URL("../src/app/lib/matterhorn-server.ts", import.meta.url),
+      "utf8",
+    );
 
     expect(clientSource).toContain("simulateWalletTransaction");
     expect(clientSource).toContain("/wallet/simulate-transaction");
-    expect(sessionSource).toContain("simulateWalletTransaction(outputReceiptWorkspaceId, input)");
+    expect(sessionSource).toContain(
+      "simulateWalletTransaction(outputReceiptWorkspaceId, input)",
+    );
     expect(sessionSource).toContain("onSimulateTransaction=");
     expect(modalSource).toContain("onSimulateTransaction");
-    expect(modalSource).toContain("setSimulation({ status: \"checking\" })");
-    expect(modalSource).toContain("action: \"simulation_failed\"");
-    expect(modalSource).toContain("Matterhorn will not send a transaction that fails simulation");
-    expect(modalSource).toContain("Matterhorn will not send this transaction until simulation is available");
-    expect(modalSource).toContain("const simulationUnavailable = simulation.status === \"unavailable\"");
-    expect(modalSource).toContain("const simulationBlocked = simulationFailed || simulationUnavailable");
+    expect(modalSource).toContain('setSimulation({ status: "checking" })');
+    expect(modalSource).toContain('action: "simulation_failed"');
+    expect(modalSource).toContain(
+      "Matterhorn will not send a transaction that fails simulation",
+    );
+    expect(modalSource).toContain(
+      "Matterhorn will not send this transaction until simulation is available",
+    );
+    expect(modalSource).toContain(
+      'const simulationUnavailable = simulation.status === "unavailable"',
+    );
+    expect(modalSource).toContain(
+      "const simulationBlocked = simulationFailed || simulationUnavailable",
+    );
     expect(modalSource).toContain("simulationChecking || isBlocked");
   });
 
@@ -114,7 +152,10 @@ describe("Wallet approval security contract", () => {
     const logSource = readAppSource("domains/wallet/state/security-log.ts");
     const panelSource = readAppSource("domains/wallet/WalletPanel.tsx");
     const hookSource = readAppSource("domains/wallet/useSessionWallet.ts");
-    const clientSource = readFileSync(new URL("../src/app/lib/matterhorn-server.ts", import.meta.url), "utf8");
+    const clientSource = readFileSync(
+      new URL("../src/app/lib/matterhorn-server.ts", import.meta.url),
+      "utf8",
+    );
 
     expect(logSource).toContain("SECURITY_LOG_UPDATED_EVENT");
     expect(logSource).toContain("WalletSafetyReviewTrail");
@@ -134,63 +175,131 @@ describe("Wallet approval security contract", () => {
   });
 
   test("wallet settings safety boundaries are workspace-backed when a server is available", () => {
-    const walletViewSource = readAppSource("domains/settings/pages/wallet-view.tsx");
+    const walletViewSource = readAppSource(
+      "domains/settings/pages/wallet-view.tsx",
+    );
 
     expect(walletViewSource).toContain("WalletSafetyPolicyControls");
     expect(walletViewSource).toContain("getWalletSafetyPolicy");
     expect(walletViewSource).toContain("updateWalletSafetyPolicy");
     expect(walletViewSource).toContain("Safety boundaries saved");
     expect(walletViewSource).toContain("Safety boundaries applied locally");
-    expect(walletViewSource).toContain("Future Base transaction reviews will use this workspace policy.");
-    expect(walletViewSource).toContain("EVM transaction limits");
-    expect(walletViewSource).toContain("Applied to Base transactions before they reach your browser wallet.");
-    expect(walletViewSource).toContain("Other wallets use their own review checks before you finish an action.");
+    expect(walletViewSource).toContain(
+      "Future Base transaction reviews will use this workspace policy.",
+    );
+    expect(walletViewSource).toContain("Base transaction limits");
+    expect(walletViewSource).toContain(
+      "Applied before a Base transaction reaches your browser wallet.",
+    );
+    expect(walletViewSource).toMatch(
+      /Sui and\s+Bittensor use their own wallet review checks\./,
+    );
+    expect(walletViewSource).toContain("What these limits cover");
+    expect(walletViewSource).toContain(
+      "aria-pressed={form.preferredNetwork === value}",
+    );
+    expect(walletViewSource).toContain("aria-pressed={form.mainnetEnabled}");
+    expect(walletViewSource).toContain(
+      "Per-transaction limit must be between $1 and $1,000,000.",
+    );
+    expect(walletViewSource).toContain(
+      "Daily limit must be between $1 and $10,000,000.",
+    );
+    expect(walletViewSource).toContain(
+      "Max slippage must be a whole number between 1 and 10,000 bps.",
+    );
+    expect(walletViewSource).toContain('title: "Check safety boundaries"');
     expect(walletViewSource).toContain("Reviewed");
     expect(walletViewSource).toContain("Sent");
     expect(walletViewSource).toContain("shortWalletAuditText");
+    expect(walletViewSource).toContain('row.riskLevel !== "low"');
+    expect(walletViewSource).toContain("No safety events yet");
   });
 
   test("market handoff approvals cannot imply Matterhorn signs or submits", () => {
-    const approvalSource = readAppSource("domains/wallet/TransactionApproval.tsx");
+    const approvalSource = readAppSource(
+      "domains/wallet/TransactionApproval.tsx",
+    );
 
     expect(approvalSource).toContain("Hyperliquid Handoff");
     expect(approvalSource).toContain("Review before external execution");
-    expect(approvalSource).toContain("Matterhorn does not sign, submit, or hold exchange credentials.");
+    expect(approvalSource).toContain(
+      "Matterhorn does not sign, submit, or hold exchange credentials.",
+    );
     expect(approvalSource).toContain("Mark reviewed");
     expect(approvalSource).not.toContain("Sign & Submit");
-    expect(approvalSource).not.toContain("onApprove(pending as unknown as TxApprovalRequest)");
+    expect(approvalSource).not.toContain(
+      "onApprove(pending as unknown as TxApprovalRequest)",
+    );
   });
 
   test("Hyperliquid execution is exact-intent, wallet-signed, and never agent automatic", () => {
-    const panelSource = readAppSource("domains/wallet/pages/BittensorPanel.tsx");
-    const serverSource = readFileSync(new URL("../../server/src/server.ts", import.meta.url), "utf8");
-    const executionSource = readFileSync(new URL("../../server/src/tools/hyperliquid-live-execution.ts", import.meta.url), "utf8");
-    const readinessSource = readFileSync(new URL("../../server/src/tools/market-execution-readiness.ts", import.meta.url), "utf8");
-    const cryptoMcpSource = readFileSync(new URL("../../../packages/matterhorn-work-crypto-mcp/index.mjs", import.meta.url), "utf8");
+    const panelSource = readAppSource(
+      "domains/wallet/pages/BittensorPanel.tsx",
+    );
+    const serverSource = readFileSync(
+      new URL("../../server/src/server.ts", import.meta.url),
+      "utf8",
+    );
+    const executionSource = readFileSync(
+      new URL(
+        "../../server/src/tools/hyperliquid-live-execution.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const readinessSource = readFileSync(
+      new URL(
+        "../../server/src/tools/market-execution-readiness.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const cryptoMcpSource = readFileSync(
+      new URL(
+        "../../../packages/matterhorn-work-crypto-mcp/index.mjs",
+        import.meta.url,
+      ),
+      "utf8",
+    );
 
     expect(panelSource).toContain("Place a perpetual order");
     expect(panelSource).toContain("signTypedDataAsync(intent.typedData)");
     expect(panelSource).toContain("/api/hyperliquid/orders/execution-intent");
     expect(panelSource).toContain("/api/hyperliquid/orders/submit");
     expect(panelSource).toContain("Agent prompts never auto-execute");
-    expect(readinessSource).toContain("MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED");
+    expect(readinessSource).toContain(
+      "MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED",
+    );
     expect(serverSource).toContain("isHyperliquidExecutionEnabled()");
     expect(serverSource).toContain("hyperliquid_execution_disabled");
     expect(executionSource).toContain("recoverTypedDataAddress");
-    expect(executionSource).toContain("Wallet signature does not authorize this exact order intent");
+    expect(executionSource).toContain(
+      "Wallet signature does not authorize this exact order intent",
+    );
     expect(executionSource).toContain("oneTimeSubmission: true");
     expect(executionSource).toContain("privateKeysAccepted: false");
     expect(executionSource).toContain("apiSecretsAccepted: false");
-    expect(executionSource).toContain("expiresAfter: Date.parse(intent.expiresAt)");
-    expect(executionSource).toContain("hashHyperliquidAction(action, nonce, null, expiresAtMs)");
+    expect(executionSource).toContain(
+      "expiresAfter: Date.parse(intent.expiresAt)",
+    );
+    expect(executionSource).toContain(
+      "hashHyperliquidAction(action, nonce, null, expiresAtMs)",
+    );
     expect(cryptoMcpSource).not.toContain("hl_submitOrder");
   });
 
   test("batch wallet steps are audited when approved or blocked", () => {
     const hookSource = readAppSource("domains/wallet/useSessionWallet.ts");
-    const reviewedSendSource = readAppSource("domains/wallet/lib/reviewed-wallet-send.ts");
-    const approvalSource = readAppSource("domains/wallet/TransactionApproval.tsx");
-    const batchSource = readAppSource("domains/wallet/components/TransactionBatch.tsx");
+    const reviewedSendSource = readAppSource(
+      "domains/wallet/lib/reviewed-wallet-send.ts",
+    );
+    const approvalSource = readAppSource(
+      "domains/wallet/TransactionApproval.tsx",
+    );
+    const batchSource = readAppSource(
+      "domains/wallet/components/TransactionBatch.tsx",
+    );
 
     expect(hookSource).toContain("sendReviewedWalletTransaction");
     expect(hookSource).toContain("Batch step blocked:");
@@ -200,29 +309,47 @@ describe("Wallet approval security contract", () => {
     expect(reviewedSendSource).toContain('action: "tx_approved"');
     expect(approvalSource).toContain("stepGuards");
     expect(approvalSource).toContain("plannedDailySpendUSD");
-    expect(approvalSource).toContain("This batch step could not be decoded safely.");
+    expect(approvalSource).toContain(
+      "This batch step could not be decoded safely.",
+    );
     expect(batchSource).toContain("nextStepBlocked");
     expect(batchSource).toContain("Step blocked");
     expect(batchSource).toContain("if (guard?.blockers.length) return;");
-    expect(batchSource).toContain("disabled={busy || nextStep === null || nextStepBlocked}");
+    expect(batchSource).toContain(
+      "disabled={busy || nextStep === null || nextStepBlocked}",
+    );
   });
 
   test("approval overlays expose dialog semantics", () => {
-    const approvalSource = readAppSource("domains/wallet/TransactionApproval.tsx");
-    const batchSource = readAppSource("domains/wallet/components/TransactionBatch.tsx");
+    const approvalSource = readAppSource(
+      "domains/wallet/TransactionApproval.tsx",
+    );
+    const batchSource = readAppSource(
+      "domains/wallet/components/TransactionBatch.tsx",
+    );
 
-    expect(approvalSource.match(/role=\"dialog\"/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
-    expect(approvalSource.match(/aria-modal=\"true\"/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(
+      approvalSource.match(/role=\"dialog\"/g)?.length ?? 0,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      approvalSource.match(/aria-modal=\"true\"/g)?.length ?? 0,
+    ).toBeGreaterThanOrEqual(2);
     expect(approvalSource).toContain("matterhorn-transaction-approval-title");
-    expect(approvalSource).toContain("matterhorn-hyperliquid-order-approval-title");
+    expect(approvalSource).toContain(
+      "matterhorn-hyperliquid-order-approval-title",
+    );
     expect(batchSource).toContain('role="dialog"');
     expect(batchSource).toContain('aria-modal="true"');
     expect(batchSource).toContain("matterhorn-batch-approval-title");
   });
 
   test("ENS resolution cannot reuse a stale previous recipient", () => {
-    const hookSource = readAppSource("domains/wallet/hooks/useEnsResolution.ts");
-    const transferSource = readAppSource("domains/wallet/pages/TransferPanel.tsx");
+    const hookSource = readAppSource(
+      "domains/wallet/hooks/useEnsResolution.ts",
+    );
+    const transferSource = readAppSource(
+      "domains/wallet/pages/TransferPanel.tsx",
+    );
     const bridgeSource = readAppSource("domains/wallet/pages/BridgePanel.tsx");
     const ensSource = readAppSource("domains/wallet/lib/ens.ts");
 

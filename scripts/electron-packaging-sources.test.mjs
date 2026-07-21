@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import fs, { readFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
@@ -15,7 +17,10 @@ const desktopMigration = readFileSync("apps/desktop/electron/migration.mjs", "ut
 const desktopUpdater = readFileSync("apps/desktop/electron/updater.mjs", "utf8");
 const helperPrep = readFileSync("apps/desktop/scripts/prepare-computer-use-helper.mjs", "utf8");
 const sidecarPrep = readFileSync("apps/desktop/scripts/prepare-sidecar.mjs", "utf8");
-const { archiveHasEntry } = require("../apps/desktop/scripts/electron-after-pack.cjs");
+const {
+  archiveHasEntry,
+  assertPackagedRendererUsesRelativeAssets,
+} = require("../apps/desktop/scripts/electron-after-pack.cjs");
 
 assert.equal(
   rootPackage.scripts["test:electron-packaging-sources"],
@@ -51,6 +56,9 @@ assert.match(electronBuilderConfig, /Matterhorn Desks Automation Helper\.app\/\*
 assert.match(afterPack, /function loadAsar/);
 assert.match(afterPack, /loaded\.minimatch/);
 assert.match(afterPack, /function resolveResourcesDir/);
+assert.match(afterPack, /function assertPackagedRendererUsesRelativeAssets/);
+assert.match(afterPack, /OPENWORK_ELECTRON_BUILD=1/);
+assert.match(afterPack, /assertPackagedRendererUsesRelativeAssets\(context\)/);
 assert.match(afterPack, /function copyComputerUseHelper/);
 assert.match(afterPack, /async function repairPackagedAppAsar/);
 assert.match(afterPack, /asar\.extractAll/);
@@ -71,6 +79,34 @@ assert.equal(
   true,
   "leading slashes in ASAR entries should not change archive membership",
 );
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "matterhorn-relative-renderer-"));
+  const resourcesDir = path.join(root, "resources");
+  const appDistDir = path.join(resourcesDir, "app-dist");
+  fs.mkdirSync(appDistDir, { recursive: true });
+  const context = {
+    electronPlatformName: "linux",
+    appOutDir: root,
+  };
+  try {
+    fs.writeFileSync(
+      path.join(appDistDir, "index.html"),
+      '<script type="module" src="./assets/app.js"></script><link href="./assets/app.css" rel="stylesheet">',
+    );
+    assert.doesNotThrow(() => assertPackagedRendererUsesRelativeAssets(context));
+
+    fs.writeFileSync(
+      path.join(appDistDir, "index.html"),
+      '<script type="module" src="/assets/app.js"></script>',
+    );
+    assert.throws(
+      () => assertPackagedRendererUsesRelativeAssets(context),
+      /root-relative asset/,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
 assert.match(afterPack, /Matterhorn Desks Automation Helper\.app/);
 assert.match(afterPack, /fs\.cpSync\(sourcePath, targetPath, \{ recursive: true \}\)/);
 assert.match(afterPack, /copyComputerUseHelper\(context\)/);

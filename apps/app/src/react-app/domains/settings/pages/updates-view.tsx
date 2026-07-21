@@ -3,7 +3,11 @@ import { CircleAlert, Info } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
+import {
+  Progress,
+  ProgressLabel,
+  ProgressValue,
+} from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -41,7 +45,9 @@ type UpdateDownloadProgressProps = {
 function UpdateDownloadProgress(props: UpdateDownloadProgressProps) {
   const downloadedBytes = props.downloadedBytes ?? 0;
   const progressPercent =
-    props.totalBytes != null && props.totalBytes > 0 ? Math.min(100, Math.round((downloadedBytes / props.totalBytes) * 100)) : 0;
+    props.totalBytes != null && props.totalBytes > 0
+      ? Math.min(100, Math.round((downloadedBytes / props.totalBytes) * 100))
+      : 0;
   const progressLabel = (
     <>
       {formatBytes(downloadedBytes)}
@@ -51,7 +57,9 @@ function UpdateDownloadProgress(props: UpdateDownloadProgressProps) {
 
   return (
     <Progress value={progressPercent} className="w-full">
-      <ProgressLabel className="text-sm text-muted-foreground font-normal">{progressLabel}</ProgressLabel>
+      <ProgressLabel className="text-sm text-muted-foreground font-normal">
+        {progressLabel}
+      </ProgressLabel>
       <ProgressValue className="text-sm" />
     </Progress>
   );
@@ -96,6 +104,8 @@ export function UpdatesView(props: UpdatesViewProps) {
   const updateTotalBytes = props.updateStatus?.totalBytes ?? null;
   const updateErrorMessage = props.updateStatus?.message ?? null;
   const updateNotes = props.updateStatus?.notes ?? null;
+  const updateChecksUnavailable =
+    props.webDeployment || props.updateEnv?.supported === false;
 
   const updateRestartBlockedMessage =
     updateState === "ready" && props.anyActiveRuns
@@ -108,111 +118,139 @@ export function UpdatesView(props: UpdatesViewProps) {
         <LayoutSectionItem>
           <LayoutSectionItemHeader>
             <LayoutSectionItemTitle>Current version</LayoutSectionItemTitle>
-            <LayoutSectionItemDescription className="font-mono">v{props.appVersion}</LayoutSectionItemDescription>
+            <LayoutSectionItemDescription className="font-mono">
+              v{props.appVersion}
+            </LayoutSectionItemDescription>
           </LayoutSectionItemHeader>
         </LayoutSectionItem>
       ) : null}
       <LayoutSectionItem>
-              <LayoutSectionItemHeader>
-                <LayoutSectionItemTitle>
-                  {updateState === "checking"
-                    ? t("settings.update_checking")
-                    : updateState === "available"
-                      ? t("settings.update_available_version", undefined, { version: updateVersion ?? "" })
-                      : updateState === "downloading"
-                        ? t("settings.update_downloading")
-                        : updateState === "ready"
-                          ? t("settings.update_ready_version", undefined, { version: updateVersion ?? "" })
-                          : updateState === "error"
-                            ? t("settings.update_check_failed")
-                            : t("settings.update_uptodate")}
-                </LayoutSectionItemTitle>
-                <LayoutSectionItemDescription>
-                  {updateState === "idle" && updateLastCheckedAt
-                    ? t("settings.update_last_checked", undefined, {
-                        time: formatRelativeTime(updateLastCheckedAt),
+        <LayoutSectionItemHeader>
+          <LayoutSectionItemTitle>
+            {updateState === "checking"
+              ? t("settings.update_checking")
+              : updateState === "available"
+                ? t("settings.update_available_version", undefined, {
+                    version: updateVersion ?? "",
+                  })
+                : updateState === "downloading"
+                  ? t("settings.update_downloading")
+                  : updateState === "ready"
+                    ? t("settings.update_ready_version", undefined, {
+                        version: updateVersion ?? "",
                       })
-                    : updateState === "available" && updateDate
-                      ? t("settings.update_published", undefined, { date: updateDate })
-                      : null}
-                </LayoutSectionItemDescription>
-                <LayoutSectionItemHeaderActions>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => void props.checkForUpdates()}
-                      disabled={props.busy || updateState === "checking" || updateState === "downloading"}
-                    >
-                      {updateState === "checking" ? <Spinner className="size-4" /> : null}
-                      {t("settings.update_check_button")}
-                    </Button>
+                    : updateState === "error"
+                      ? t("settings.update_check_failed")
+                      : t("settings.update_uptodate")}
+          </LayoutSectionItemTitle>
+          <LayoutSectionItemDescription>
+            {updateState === "idle" && updateLastCheckedAt
+              ? t("settings.update_last_checked", undefined, {
+                  time: formatRelativeTime(updateLastCheckedAt),
+                })
+              : updateState === "available" && updateDate
+                ? t("settings.update_published", undefined, {
+                    date: updateDate,
+                  })
+                : null}
+          </LayoutSectionItemDescription>
+          <LayoutSectionItemHeaderActions>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => void props.checkForUpdates()}
+                disabled={
+                  props.busy ||
+                  updateChecksUnavailable ||
+                  updateState === "checking" ||
+                  updateState === "downloading"
+                }
+                title={
+                  props.webDeployment
+                    ? t("settings.updates_desktop_only")
+                    : (props.updateEnv?.reason ?? "")
+                }
+              >
+                {updateState === "checking" ? (
+                  <Spinner className="size-4" />
+                ) : null}
+                {t("settings.update_check_button")}
+              </Button>
 
-                    {updateState === "available" ? (
-                      <Button
-                        variant="secondary"
-                        onClick={() => void props.downloadUpdate()}
-                        disabled={props.busy}
-                      >
-                        {t("settings.update_download_button")}
-                      </Button>
-                    ) : null}
-
-                    {updateState === "ready" ? (
-                      <Button
-                        variant="secondary"
-                        onClick={() => void props.installUpdateAndRestart()}
-                        disabled={props.busy || props.anyActiveRuns}
-                        title={updateRestartBlockedMessage ?? ""}
-                      >
-                        {t("settings.update_install_button")}
-                      </Button>
-                    ) : null}
-                  </div>
-                </LayoutSectionItemHeaderActions>
-              </LayoutSectionItemHeader>
-
-              {updateState === "downloading" ? (
-                <UpdateDownloadProgress downloadedBytes={updateDownloadedBytes} totalBytes={updateTotalBytes} />
+              {updateState === "available" ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => void props.downloadUpdate()}
+                  disabled={props.busy}
+                >
+                  {t("settings.update_download_button")}
+                </Button>
               ) : null}
 
-              {updateState === "error" && updateErrorMessage ? (
-                <Alert variant="destructive">
-                  <CircleAlert />
-                  <AlertDescription>{updateErrorMessage}</AlertDescription>
-                </Alert>
+              {updateState === "ready" ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => void props.installUpdateAndRestart()}
+                  disabled={props.busy || props.anyActiveRuns}
+                  title={updateRestartBlockedMessage ?? ""}
+                >
+                  {t("settings.update_install_button")}
+                </Button>
               ) : null}
+            </div>
+          </LayoutSectionItemHeaderActions>
+        </LayoutSectionItemHeader>
 
-              {updateRestartBlockedMessage ? (
-                <Alert>
-                  <Info />
-                  <AlertDescription>{updateRestartBlockedMessage}</AlertDescription>
-                </Alert>
-              ) : null}
-            </LayoutSectionItem>
+        {updateState === "downloading" ? (
+          <UpdateDownloadProgress
+            downloadedBytes={updateDownloadedBytes}
+            totalBytes={updateTotalBytes}
+          />
+        ) : null}
 
-            {updateState === "available" && updateNotes ? (
-              <LayoutSectionItem className="max-h-40 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
-                {updateNotes}
-              </LayoutSectionItem>
-            ) : null}
+        {updateState === "error" && updateErrorMessage ? (
+          <Alert variant="destructive">
+            <CircleAlert />
+            <AlertDescription>{updateErrorMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {updateRestartBlockedMessage ? (
+          <Alert>
+            <Info />
+            <AlertDescription>{updateRestartBlockedMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+      </LayoutSectionItem>
+
+      {updateState === "available" && updateNotes ? (
+        <LayoutSectionItem className="max-h-40 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
+          {updateNotes}
+        </LayoutSectionItem>
+      ) : null}
 
       {props.webDeployment ? (
         <Alert>
-          <AlertDescription>{t("settings.updates_desktop_only")}</AlertDescription>
+          <AlertDescription>
+            {t("settings.updates_desktop_only")}
+          </AlertDescription>
         </Alert>
       ) : props.updateEnv && props.updateEnv.supported === false ? (
         <Alert>
-          <AlertDescription>{props.updateEnv.reason ?? t("settings.updates_not_supported")}</AlertDescription>
+          <AlertDescription>
+            {props.updateEnv.reason ?? t("settings.updates_not_supported")}
+          </AlertDescription>
         </Alert>
       ) : (
         <>
-        <Separator />
+          <Separator />
           {props.alphaChannelSupported && props.releaseChannel ? (
             <LayoutSectionItem>
               <LayoutSectionItemHeader>
                 <LayoutSectionItemTitle>Release channel</LayoutSectionItemTitle>
                 <LayoutSectionItemDescription>
-                  Stable gets fully tested releases. Alpha includes the very latest changes but may be less polished (macOS only).
+                  Stable gets fully tested releases. Alpha includes the very
+                  latest changes but may be less polished (macOS only).
                 </LayoutSectionItemDescription>
                 <LayoutSectionItemHeaderActions>
                   <Select
@@ -225,7 +263,10 @@ export function UpdatesView(props: UpdatesViewProps) {
                     }}
                     disabled={!props.onReleaseChannelChange}
                   >
-                    <SelectTrigger aria-label="Release channel" className="w-48">
+                    <SelectTrigger
+                      aria-label="Release channel"
+                      className="w-48"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -243,36 +284,42 @@ export function UpdatesView(props: UpdatesViewProps) {
             </LayoutSectionItem>
           ) : null}
 
-            <LayoutSectionItem>
-              <LayoutSectionItemHeader>
-                <LayoutSectionItemTitle>{t("settings.background_checks_title")}</LayoutSectionItemTitle>
-                <LayoutSectionItemDescription>{t("settings.background_checks_desc")}</LayoutSectionItemDescription>
-                <LayoutSectionItemHeaderActions>
-                  <Switch
-                    aria-label={t("settings.background_checks_title")}
-                    checked={props.updateAutoCheck}
-                    onCheckedChange={props.toggleUpdateAutoCheck}
-                  />
-                </LayoutSectionItemHeaderActions>
-              </LayoutSectionItemHeader>
-            </LayoutSectionItem>
+          <LayoutSectionItem>
+            <LayoutSectionItemHeader>
+              <LayoutSectionItemTitle>
+                {t("settings.background_checks_title")}
+              </LayoutSectionItemTitle>
+              <LayoutSectionItemDescription>
+                {t("settings.background_checks_desc")}
+              </LayoutSectionItemDescription>
+              <LayoutSectionItemHeaderActions>
+                <Switch
+                  aria-label={t("settings.background_checks_title")}
+                  checked={props.updateAutoCheck}
+                  onCheckedChange={props.toggleUpdateAutoCheck}
+                />
+              </LayoutSectionItemHeaderActions>
+            </LayoutSectionItemHeader>
+          </LayoutSectionItem>
 
-            <LayoutSectionItem>
-              <LayoutSectionItemHeader>
-                <LayoutSectionItemTitle>{t("settings.auto_update_title")}</LayoutSectionItemTitle>
-                <LayoutSectionItemDescription>{t("settings.auto_update_desc")}</LayoutSectionItemDescription>
-                <LayoutSectionItemHeaderActions>
-                  <Switch
-                    aria-label={t("settings.auto_update_title")}
-                    checked={props.updateAutoDownload}
-                    onCheckedChange={props.toggleUpdateAutoDownload}
-                  />
-                </LayoutSectionItemHeaderActions>
-              </LayoutSectionItemHeader>
-            </LayoutSectionItem>
-
-
-          </>
+          <LayoutSectionItem>
+            <LayoutSectionItemHeader>
+              <LayoutSectionItemTitle>
+                {t("settings.auto_update_title")}
+              </LayoutSectionItemTitle>
+              <LayoutSectionItemDescription>
+                {t("settings.auto_update_desc")}
+              </LayoutSectionItemDescription>
+              <LayoutSectionItemHeaderActions>
+                <Switch
+                  aria-label={t("settings.auto_update_title")}
+                  checked={props.updateAutoDownload}
+                  onCheckedChange={props.toggleUpdateAutoDownload}
+                />
+              </LayoutSectionItemHeaderActions>
+            </LayoutSectionItemHeader>
+          </LayoutSectionItem>
+        </>
       )}
     </LayoutStack>
   );

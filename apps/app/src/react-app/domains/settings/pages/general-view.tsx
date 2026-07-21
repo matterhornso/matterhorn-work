@@ -125,7 +125,7 @@ const projectSurfaceCards: ProjectSurfaceCard[] = [
 ];
 
 const FEEDBACK_ACTION_CLASS =
-  "matterhorn-feedback-action inline-flex items-center gap-1.5 rounded-md px-0.5 py-1 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--matterhorn-blue-rgb),0.28)]";
+  "matterhorn-feedback-action inline-flex items-center gap-1.5 rounded-md px-0.5 py-1 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--matterhorn-blue-rgb)/0.28)]";
 const SETTINGS_HUB_SECTION_CLASS = "rounded-lg bg-dls-surface-muted/[0.06] p-3";
 const SETTINGS_HUB_GRID_CLASS = "grid grid-cols-1 gap-1 @lg/settings-general:grid-cols-2";
 
@@ -176,9 +176,9 @@ function SettingsCard(props: {
     <button
       type="button"
       onClick={props.onClick}
-      className="group grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-dls-surface-muted/[0.065] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.12] focus:outline-none focus-visible:bg-dls-surface-muted/[0.12] focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+      className="group grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-dls-surface-muted/[0.065] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.12] focus:outline-none focus-visible:bg-dls-surface-muted/[0.12] focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)]"
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.10)] text-dls-text transition-colors group-hover:bg-[rgba(var(--dls-accent-rgb),0.16)]">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--dls-accent-rgb)/0.10)] text-dls-text transition-colors group-hover:bg-[rgb(var(--dls-accent-rgb)/0.16)]">
         <props.icon size={16} />
       </div>
       <div className="min-w-0">
@@ -237,7 +237,7 @@ function ProjectSurfaceRow(props: {
     <button
       type="button"
       onClick={props.onClick}
-      className="group flex min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/[0.065] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.12] focus:outline-none focus-visible:bg-dls-surface-muted/[0.12] focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.34)]"
+      className="group flex min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/[0.065] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.12] focus:outline-none focus-visible:bg-dls-surface-muted/[0.12] focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.34)]"
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-dls-hover/55 text-dls-text transition-colors group-hover:bg-dls-hover">
         <props.icon size={16} />
@@ -311,8 +311,8 @@ function TaskLogsSection(props: {
             <ListChecks size={16} />
           </div>
           <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-dls-text">Task Logs</div>
-            <p className="mt-0.5 text-[12px] leading-5 text-dls-text">Recent desk runs, outputs, and wait states.</p>
+            <div className="text-[13px] font-semibold text-dls-text">Workflow task log</div>
+            <p className="mt-0.5 text-[12px] leading-5 text-dls-text">Tracked workflow runs and wait states for this workspace.</p>
           </div>
         </div>
         <span className="shrink-0 pt-0.5 text-[11px] font-medium text-dls-secondary">
@@ -346,7 +346,7 @@ function TaskLogsSection(props: {
             </div>
           ))
         ) : (
-          <div className="py-3 text-[12px] leading-5 text-dls-secondary">Desk tasks will appear here when they start, wait, finish, or save outputs.</div>
+          <div className="py-3 text-[12px] leading-5 text-dls-secondary">Tracked workflow tasks will appear here when they start, wait, or finish.</div>
         )}
       </div>
     </section>

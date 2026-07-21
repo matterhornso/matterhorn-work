@@ -74,6 +74,27 @@ function resolveResourcesDir(context) {
   return path.join(context.appOutDir, "resources");
 }
 
+function assertPackagedRendererUsesRelativeAssets(context) {
+  const resourcesDir = resolveResourcesDir(context);
+  if (!resourcesDir) {
+    throw new Error("Could not resolve packaged resources for the Matterhorn renderer.");
+  }
+
+  const indexPath = path.join(resourcesDir, "app-dist", "index.html");
+  if (!fs.existsSync(indexPath)) {
+    throw new Error(`Missing packaged Matterhorn renderer entrypoint at ${indexPath}`);
+  }
+
+  const html = fs.readFileSync(indexPath, "utf8");
+  const rootRelativeAsset = html.match(/\b(?:href|src)=["']\/(?!\/)[^"']*["']/i);
+  if (rootRelativeAsset) {
+    throw new Error(
+      `Packaged Matterhorn renderer contains a root-relative asset (${rootRelativeAsset[0]}). `
+      + "Build it with OPENWORK_ELECTRON_BUILD=1 before running electron-builder.",
+    );
+  }
+}
+
 function updateMacAsarIntegrity(context, asarPath) {
   if (context.electronPlatformName !== "darwin") return;
 
@@ -251,6 +272,7 @@ function copyExecutableTargetToAlias(sidecarsDir, targetName, aliasName) {
 
 async function afterPack(context) {
   await repairPackagedAppAsar(context);
+  assertPackagedRendererUsesRelativeAssets(context);
   copyComputerUseHelper(context);
 
   const triple = targetTriple(context.electronPlatformName, context.arch);
@@ -298,4 +320,5 @@ async function afterPack(context) {
 
 module.exports = afterPack;
 module.exports.default = afterPack;
+module.exports.assertPackagedRendererUsesRelativeAssets = assertPackagedRendererUsesRelativeAssets;
 module.exports.archiveHasEntry = archiveHasEntry;

@@ -4,6 +4,10 @@ import type {
   MatterhornBackendModelRouting,
   MatterhornBackendModelsResponse,
 } from "@matterhorn-work/types/backend-models";
+import {
+  resolveModelDisplayName,
+  resolveProviderDisplayName,
+} from "../../../../app/utils";
 
 export type ModelReadinessTone = "ready" | "warning" | "neutral";
 
@@ -44,18 +48,25 @@ type BuildModelReadinessSummaryInput = {
   hasLocalModelOverride?: boolean;
   backendModels?: MatterhornBackendModelsResponse | null;
   workspaceSelection?: MatterhornBackendModelsResponse["workspaceSelection"];
-  effectiveWorkspaceModel?: MatterhornBackendModelRef & { source?: string } | null;
+  effectiveWorkspaceModel?:
+    | (MatterhornBackendModelRef & { source?: string })
+    | null;
   catalogQueryFailed?: boolean;
   connectedProviderCount: number;
   connectedModelCount: number;
 };
 
-function modelRefLabel(model: MatterhornBackendModelRef | null | undefined): string {
-  if (!model?.providerId?.trim() || !model.modelId?.trim()) return "Not available";
-  return `${model.providerId}/${model.modelId}`;
+function modelRefLabel(
+  model: MatterhornBackendModelRef | null | undefined,
+): string {
+  if (!model?.providerId?.trim() || !model.modelId?.trim())
+    return "Not available";
+  return `${resolveProviderDisplayName(model.providerId)} / ${resolveModelDisplayName(model.modelId)}`;
 }
 
-function answerPathLabel(routing: MatterhornBackendModelRouting | undefined): string {
+function answerPathLabel(
+  routing: MatterhornBackendModelRouting | undefined,
+): string {
   if (routing?.answerPath.transport === "opencode_session_prompt_async") {
     return "Local session prompts";
   }
@@ -66,17 +77,27 @@ function providerListLabel(
   routing: MatterhornBackendModelRouting | undefined,
   catalog: MatterhornBackendModelCatalogSnapshot | undefined,
 ): string {
-  if (routing?.registry.source === "matterhorn_backend_registry") return "Matterhorn model registry";
-  if (routing?.registry.source === "opencode_provider_list" || catalog?.source === "opencode_provider_list") {
+  if (routing?.registry.source === "matterhorn_backend_registry")
+    return "Matterhorn model registry";
+  if (
+    routing?.registry.source === "opencode_provider_list" ||
+    catalog?.source === "opencode_provider_list"
+  ) {
     return "Local provider list";
   }
   return routing?.registry.label ?? "Connect an agent engine";
 }
 
-function providerCatalogDetail(catalog: MatterhornBackendModelCatalogSnapshot | undefined): string {
-  if (!catalog) return "Using the app provider list until the engine reports a workspace catalog.";
+function providerCatalogDetail(
+  catalog: MatterhornBackendModelCatalogSnapshot | undefined,
+): string {
+  if (!catalog)
+    return "Using the app provider list until the engine reports a workspace catalog.";
   if (catalog.serverFetched) {
-    const availableProviderCount = Math.max(0, catalog.providerCount - catalog.connectedProviderCount);
+    const availableProviderCount = Math.max(
+      0,
+      catalog.providerCount - catalog.connectedProviderCount,
+    );
     return availableProviderCount > 0
       ? `Fetched from the local workspace engine. ${availableProviderCount} more provider${availableProviderCount === 1 ? " is" : "s are"} available through Connect provider.`
       : "Fetched from the local workspace engine.";
@@ -93,8 +114,10 @@ function statusForCatalog(
 ): { label: string; tone: ModelReadinessTone } {
   if (catalogQueryFailed) return { label: "Start engine", tone: "warning" };
   if (catalog?.status === "working") return { label: "Working", tone: "ready" };
-  if (catalog?.status === "needs_setup") return { label: "Connect provider", tone: "warning" };
-  if (catalog?.status === "preview") return { label: "Preview", tone: "neutral" };
+  if (catalog?.status === "needs_setup")
+    return { label: "Connect provider", tone: "warning" };
+  if (catalog?.status === "preview")
+    return { label: "Preview", tone: "neutral" };
   return { label: "Provider status unavailable", tone: "neutral" };
 }
 
@@ -114,7 +137,9 @@ function sampleModelList(modelIds: string[], modelCount: number): string {
   if (!modelIds.length) return "No models reported";
   const shown = modelIds.slice(0, 4);
   const remaining = Math.max(0, modelCount - shown.length);
-  return remaining > 0 ? `${shown.join(", ")} +${remaining} more` : shown.join(", ");
+  return remaining > 0
+    ? `${shown.join(", ")} +${remaining} more`
+    : shown.join(", ");
 }
 
 export function buildModelCatalogRows(
@@ -126,16 +151,18 @@ export function buildModelCatalogRows(
   return catalog.providers
     .filter((provider) => !options.connectedOnly || provider.connected)
     .map((provider) => {
-    const samples = provider.sampleModels.length ? provider.sampleModels : provider.modelIds;
-    return {
-      providerId: provider.id,
-      providerName: provider.name || provider.id,
-      sourceLabel: sourceLabel(provider.source),
-      connectedLabel: provider.connected ? "Connected" : "Available",
-      modelCountLabel: formatModelCount(provider.modelCount),
-      defaultModel: catalog.defaultModels[provider.id] ?? "Not set",
-      sampleModels: sampleModelList(samples, provider.modelCount),
-    };
+      const samples = provider.sampleModels.length
+        ? provider.sampleModels
+        : provider.modelIds;
+      return {
+        providerId: provider.id,
+        providerName: resolveProviderDisplayName(provider.id, provider.name),
+        sourceLabel: sourceLabel(provider.source),
+        connectedLabel: provider.connected ? "Connected" : "Available",
+        modelCountLabel: formatModelCount(provider.modelCount),
+        defaultModel: catalog.defaultModels[provider.id] ?? "Not set",
+        sampleModels: sampleModelList(samples, provider.modelCount),
+      };
     });
 }
 
@@ -148,32 +175,41 @@ export function countConnectedCatalogModels(
     .reduce((total, provider) => total + provider.modelCount, 0);
 }
 
-export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInput): ModelReadinessSummary {
+export function buildModelReadinessSummary(
+  input: BuildModelReadinessSummaryInput,
+): ModelReadinessSummary {
   const backendModels = input.backendModels ?? null;
   const routing = backendModels?.routing;
   const catalog = backendModels?.catalog;
-  const workspaceSelection = input.workspaceSelection ?? backendModels?.workspaceSelection ?? null;
-  const effectiveModel = input.effectiveWorkspaceModel ?? backendModels?.defaultModel ?? null;
+  const workspaceSelection =
+    input.workspaceSelection ?? backendModels?.workspaceSelection ?? null;
+  const effectiveModel =
+    input.effectiveWorkspaceModel ?? backendModels?.defaultModel ?? null;
   const status = statusForCatalog(catalog, input.catalogQueryFailed);
-  const providerCount = catalog?.serverFetched ? catalog.connectedProviderCount : input.connectedProviderCount;
-  const modelCount = catalog?.serverFetched ? countConnectedCatalogModels(catalog) : input.connectedModelCount;
+  const providerCount = catalog?.serverFetched
+    ? catalog.connectedProviderCount
+    : input.connectedProviderCount;
+  const modelCount = catalog?.serverFetched
+    ? countConnectedCatalogModels(catalog)
+    : input.connectedModelCount;
   const currentModelRef = input.currentModelRef.trim();
   const hasLocalModelOverride =
     input.hasLocalModelOverride ??
     Boolean(currentModelRef && currentModelRef.toLowerCase() !== "default");
   const currentChoiceValue = hasLocalModelOverride
-    ? currentModelRef || "Local picker"
+    ? input.currentModelLabel.trim() || currentModelRef || "Local picker"
     : workspaceSelection
       ? "Workspace default"
       : "Engine fallback";
-  const currentChoiceLabel = hasLocalModelOverride
-    ? input.currentModelLabel.trim() || currentChoiceValue
-    : currentChoiceValue;
-  const workspaceDefaultValue = workspaceSelection ? modelRefLabel(workspaceSelection) : "Not saved";
+  const currentChoiceLabel = currentChoiceValue;
+  const workspaceDefaultValue = workspaceSelection
+    ? modelRefLabel(workspaceSelection)
+    : "Not saved";
   const effectiveModelValue = modelRefLabel(effectiveModel);
   const providerListValue = providerListLabel(routing, catalog);
   const answerPathValue = answerPathLabel(routing);
-  const preferenceStore = routing?.selection.preferenceStore === "server" ? "Workspace" : "Local app";
+  const preferenceStore =
+    routing?.selection.preferenceStore === "server" ? "Workspace" : "Local app";
 
   return {
     statusLabel: status.label,
@@ -197,12 +233,14 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
     effectiveModel: {
       label: "Fallback model",
       value: effectiveModelValue,
-      detail: "Used when this app has no local picker choice or saved workspace default.",
+      detail:
+        "Used when this app has no local picker choice or saved workspace default.",
     },
     answerPath: {
       label: "Agent answers",
       value: answerPathValue,
-      detail: "Chats and desk tasks call session.promptAsync. Requests include providerID/modelID when a picker choice or workspace default exists.",
+      detail:
+        "Chats and desk tasks call session.promptAsync. Requests include providerID/modelID when a picker choice or workspace default exists.",
     },
     providerList: {
       label: "Model list",
@@ -231,13 +269,16 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
     details: [
       {
         label: "Request field",
-        value: routing?.answerPath.requestModelField === "model.providerID_modelID"
-          ? "model.providerID + model.modelID"
-          : "Engine did not report",
+        value:
+          routing?.answerPath.requestModelField === "model.providerID_modelID"
+            ? "model.providerID + model.modelID"
+            : "Engine did not report",
       },
       {
         label: "Provider import",
-        value: routing?.registry.cloudProviderImport ? "Cloud provider import supported" : "Local providers only",
+        value: routing?.registry.cloudProviderImport
+          ? "Cloud provider import supported"
+          : "Local providers only",
       },
       {
         label: "Catalog source",
@@ -245,7 +286,7 @@ export function buildModelReadinessSummary(input: BuildModelReadinessSummaryInpu
       },
       {
         label: "User selectable",
-        value: routing?.selection.userSelectable ?? true ? "Yes" : "No",
+        value: (routing?.selection.userSelectable ?? true) ? "Yes" : "No",
       },
     ],
   };

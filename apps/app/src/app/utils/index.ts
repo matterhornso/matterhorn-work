@@ -34,7 +34,7 @@ export function modelEquals(a: ModelRef, b: ModelRef) {
  * Used when the backend doesn't return a provider name.
  */
 export const FRIENDLY_PROVIDER_LABELS: Record<string, string> = {
-  opencode: "OpenCode",
+  opencode: "Matterhorn Models",
   openai: "OpenAI",
   anthropic: "Anthropic",
   google: "Google",
@@ -126,8 +126,20 @@ export function resolveModelDisplayName(modelID: string): string {
 /**
  * Resolve a friendly display name for a provider ID.
  */
-export function resolveProviderDisplayName(providerID: string): string {
-  return FRIENDLY_PROVIDER_LABELS[providerID.trim().toLowerCase()] ?? humanizeModelLabel(providerID);
+export function resolveProviderDisplayName(
+  providerID: string,
+  providerName?: string | null,
+): string {
+  const normalizedId = providerID.trim().toLowerCase();
+  const normalizedName = providerName?.trim().toLowerCase() ?? "";
+  if (normalizedId === "opencode" || normalizedName.includes("opencode")) {
+    return FRIENDLY_PROVIDER_LABELS.opencode;
+  }
+  return (
+    providerName?.trim() ||
+    FRIENDLY_PROVIDER_LABELS[normalizedId] ||
+    humanizeModelLabel(providerID)
+  );
 }
 
 const humanizeModelLabel = (value: string) => {
@@ -152,18 +164,27 @@ const humanizeModelLabel = (value: string) => {
     .join(" ");
 };
 
-export function formatModelLabel(model: ModelRef, providers: ProviderListItem[] = []) {
+export function formatModelLabel(
+  model: ModelRef,
+  providers: ProviderListItem[] = [],
+) {
   const provider = providers.find((p) => p.id === model.providerID);
   const modelInfo = provider?.models?.[model.modelID];
 
-  const providerLabel = provider?.name ?? resolveProviderDisplayName(model.providerID);
+  const providerLabel = resolveProviderDisplayName(
+    model.providerID,
+    provider?.name,
+  );
   const modelLabel = modelInfo?.name ?? resolveModelDisplayName(model.modelID);
 
   return `${providerLabel} · ${modelLabel}`;
 }
 
 export function isElectronRuntime() {
-  return typeof window !== "undefined" && (window as Window).__OPENWORK_ELECTRON__ != null;
+  return (
+    typeof window !== "undefined" &&
+    (window as Window).__OPENWORK_ELECTRON__ != null
+  );
 }
 
 export function isDesktopRuntime() {
@@ -286,7 +307,10 @@ export function safeStringify(value: unknown) {
 export function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"] as const;
-  const idx = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  const idx = Math.min(
+    units.length - 1,
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+  );
   const value = bytes / Math.pow(1024, idx);
   const rounded = idx === 0 ? Math.round(value) : Math.round(value * 10) / 10;
   return `${rounded} ${units[idx]}`;
@@ -320,7 +344,9 @@ export function normalizeDirectoryQueryPath(input?: string | null) {
 export function normalizeDirectoryPath(input?: string | null) {
   const normalized = normalizeDirectoryQueryPath(input);
   if (!normalized) return "";
-  return isWindowsPlatform() || isMacPlatform() ? normalized.toLowerCase() : normalized;
+  return isWindowsPlatform() || isMacPlatform()
+    ? normalized.toLowerCase()
+    : normalized;
 }
 
 export function normalizeEvent(raw: unknown): OpencodeEvent | null {
@@ -358,15 +384,21 @@ export function formatRelativeTime(timestampMs: number) {
   }
 
   if (delta < 60_000) {
-    return t("time.seconds_ago", { count: Math.max(1, Math.round(delta / 1000)) });
+    return t("time.seconds_ago", {
+      count: Math.max(1, Math.round(delta / 1000)),
+    });
   }
 
   if (delta < 60 * 60_000) {
-    return t("time.minutes_ago", { count: Math.max(1, Math.round(delta / 60_000)) });
+    return t("time.minutes_ago", {
+      count: Math.max(1, Math.round(delta / 60_000)),
+    });
   }
 
   if (delta < 24 * 60 * 60_000) {
-    return t("time.hours_ago", { count: Math.max(1, Math.round(delta / (60 * 60_000))) });
+    return t("time.hours_ago", {
+      count: Math.max(1, Math.round(delta / (60 * 60_000))),
+    });
   }
 
   return new Date(timestampMs).toLocaleDateString();
@@ -382,7 +414,10 @@ export function addOpencodeCacheHint(message: string) {
     "opencode cache",
   ];
 
-  if (cacheSignals.some((signal) => lower.includes(signal)) && lower.includes("enoent")) {
+  if (
+    cacheSignals.some((signal) => lower.includes(signal)) &&
+    lower.includes("enoent")
+  ) {
     return `${message}\n\nOpenCode cache looks corrupted. Use Repair cache in Settings to rebuild it.`;
   }
 
@@ -442,28 +477,42 @@ export function isRemoteConnectionErrorMessage(message?: string | null) {
 
 export function redactTokenLikeText(value: string): string {
   return value
-    .replace(/([?&](?:access_token|api_key|key|password|token)=)[^&\s]+/gi, "$1[redacted]")
+    .replace(
+      /([?&](?:access_token|api_key|key|password|token)=)[^&\s]+/gi,
+      "$1[redacted]",
+    )
     .replace(/\b(authorization:\s*bearer\s+)[^\s,]+/gi, "$1[redacted]")
     .replace(/\b(bearer\s+)[a-z0-9._~+/=-]+/gi, "$1[redacted]")
     .replace(/\bowt_[a-z0-9_-]+\b/gi, "owt_[redacted]");
 }
 
-export function getWorkspaceTaskLoadErrorDisplay(workspace: WorkspaceInfo, error?: string | null) {
+export function getWorkspaceTaskLoadErrorDisplay(
+  workspace: WorkspaceInfo,
+  error?: string | null,
+) {
   const raw = redactTokenLikeText(error?.trim() ?? "");
   const fallbackTitle = raw || "Failed to load tasks";
   if (!raw || !isSandboxWorkspace(workspace)) {
     return {
       tone: "error" as const,
       label: "Error",
-      message: raw && workspace.workspaceType === "remote" ? raw : "Failed to load tasks",
+      message:
+        raw && workspace.workspaceType === "remote"
+          ? raw
+          : "Failed to load tasks",
       title: fallbackTitle,
     };
   }
 
   const normalized = raw.toLowerCase();
-  const hasDockerHint = SANDBOX_DOCKER_OFFLINE_HINTS.some((hint) => normalized.includes(hint));
-  const hasNetworkHint = SANDBOX_NETWORK_HINTS.some((hint) => normalized.includes(hint));
-  const host = `${workspace.baseUrl ?? ""} ${workspace.matterhornHostUrl ?? ""}`.toLowerCase();
+  const hasDockerHint = SANDBOX_DOCKER_OFFLINE_HINTS.some((hint) =>
+    normalized.includes(hint),
+  );
+  const hasNetworkHint = SANDBOX_NETWORK_HINTS.some((hint) =>
+    normalized.includes(hint),
+  );
+  const host =
+    `${workspace.baseUrl ?? ""} ${workspace.matterhornHostUrl ?? ""}`.toLowerCase();
   const localHost = host.includes("localhost") || host.includes("127.0.0.1");
 
   if (!hasDockerHint && !(localHost && hasNetworkHint)) {
@@ -475,7 +524,8 @@ export function getWorkspaceTaskLoadErrorDisplay(workspace: WorkspaceInfo, error
     };
   }
 
-  const message = "Sandbox is offline. Start Docker Desktop, then test connection.";
+  const message =
+    "Sandbox is offline. Start Docker Desktop, then test connection.";
   return {
     tone: "offline" as const,
     label: "Offline",
@@ -494,7 +544,7 @@ export function parseTemplateFrontmatter(raw: string) {
   const data: Record<string, string> = {};
 
   const unescapeValue = (value: string) => {
-    if (value.startsWith("\"") && value.endsWith("\"")) {
+    if (value.startsWith('"') && value.endsWith('"')) {
       const inner = value.slice(1, -1);
       return inner.replace(/\\(\\|\"|n|r|t)/g, (_match, code) => {
         switch (code) {
@@ -506,8 +556,8 @@ export function parseTemplateFrontmatter(raw: string) {
             return "\t";
           case "\\":
             return "\\";
-          case "\"":
-            return "\"";
+          case '"':
+            return '"';
           default:
             return code;
         }
@@ -564,11 +614,14 @@ export function modelFromUserMessage(info: MessageInfo): ModelRef | null {
   const providerID = (model as any).providerID;
   const modelID = (model as any).modelID;
 
-  if (typeof providerID !== "string" || typeof modelID !== "string") return null;
+  if (typeof providerID !== "string" || typeof modelID !== "string")
+    return null;
   return { providerID, modelID };
 }
 
-export function lastUserModelFromMessages(list: MessageWithParts[]): ModelRef | null {
+export function lastUserModelFromMessages(
+  list: MessageWithParts[],
+): ModelRef | null {
   for (let i = list.length - 1; i >= 0; i -= 1) {
     const model = modelFromUserMessage(list[i]?.info);
     if (model) return model;
@@ -590,15 +643,28 @@ export function isVisibleTextPart(part: Part) {
   return part.type === "text" && isUserVisiblePart(part);
 }
 
-const EXPLORATION_TOOL_NAMES = new Set(["read", "glob", "grep", "search", "list", "list_files"]);
+const EXPLORATION_TOOL_NAMES = new Set([
+  "read",
+  "glob",
+  "grep",
+  "search",
+  "list",
+  "list_files",
+]);
 
 function isExplorationToolPart(part: Part) {
   if (part.type !== "tool") return false;
-  const tool = typeof (part as any).tool === "string" ? String((part as any).tool).toLowerCase() : "";
+  const tool =
+    typeof (part as any).tool === "string"
+      ? String((part as any).tool).toLowerCase()
+      : "";
   return EXPLORATION_TOOL_NAMES.has(tool);
 }
 
-export function groupMessageParts(parts: Part[], messageId: string): MessageGroup[] {
+export function groupMessageParts(
+  parts: Part[],
+  messageId: string,
+): MessageGroup[] {
   const groups: MessageGroup[] = [];
   const explorationSteps: Part[] = [];
   let textBuffer = "";
@@ -630,7 +696,10 @@ export function groupMessageParts(parts: Part[], messageId: string): MessageGrou
 
   const flushExplorationSteps = () => {
     if (!explorationSteps.length) return;
-    pushSteps(explorationSteps.splice(0, explorationSteps.length), "exploration");
+    pushSteps(
+      explorationSteps.splice(0, explorationSteps.length),
+      "exploration",
+    );
   };
 
   parts.forEach((part) => {
@@ -653,7 +722,11 @@ export function groupMessageParts(parts: Part[], messageId: string): MessageGrou
     if (part.type === "file") {
       flushExplorationSteps();
       flushText();
-      groups.push({ kind: "text", part, segment: sawExecution ? "result" : "intent" });
+      groups.push({
+        kind: "text",
+        part,
+        segment: sawExecution ? "result" : "intent",
+      });
       return;
     }
 
@@ -685,17 +758,61 @@ export function groupMessageParts(parts: Part[], messageId: string): MessageGrou
 }
 
 /** Classify a tool name into a semantic category for icon selection */
-export function classifyTool(toolName: string): "read" | "edit" | "write" | "search" | "terminal" | "glob" | "task" | "skill" | "tool" {
+export function classifyTool(
+  toolName: string,
+):
+  | "read"
+  | "edit"
+  | "write"
+  | "search"
+  | "terminal"
+  | "glob"
+  | "task"
+  | "skill"
+  | "tool" {
   const lower = toolName.toLowerCase();
   if (lower === "skill") return "skill";
-  if (lower.includes("read") || lower.includes("cat") || lower.includes("fetch")) return "read";
+  if (
+    lower.includes("read") ||
+    lower.includes("cat") ||
+    lower.includes("fetch")
+  )
+    return "read";
   if (lower === "apply_patch") return "write";
-  if (lower.includes("edit") || lower.includes("replace") || lower.includes("update")) return "edit";
-  if (lower.includes("write") || lower.includes("create") || lower.includes("patch")) return "write";
-  if (lower.includes("grep") || lower.includes("search") || lower.includes("find")) return "search";
-  if (lower.includes("bash") || lower.includes("shell") || lower.includes("exec") || lower.includes("command") || lower.includes("run")) return "terminal";
-  if (lower.includes("glob") || lower.includes("list") || lower.includes("ls")) return "glob";
-  if (lower.includes("task") || lower.includes("agent") || lower.includes("todo")) return "task";
+  if (
+    lower.includes("edit") ||
+    lower.includes("replace") ||
+    lower.includes("update")
+  )
+    return "edit";
+  if (
+    lower.includes("write") ||
+    lower.includes("create") ||
+    lower.includes("patch")
+  )
+    return "write";
+  if (
+    lower.includes("grep") ||
+    lower.includes("search") ||
+    lower.includes("find")
+  )
+    return "search";
+  if (
+    lower.includes("bash") ||
+    lower.includes("shell") ||
+    lower.includes("exec") ||
+    lower.includes("command") ||
+    lower.includes("run")
+  )
+    return "terminal";
+  if (lower.includes("glob") || lower.includes("list") || lower.includes("ls"))
+    return "glob";
+  if (
+    lower.includes("task") ||
+    lower.includes("agent") ||
+    lower.includes("todo")
+  )
+    return "task";
   return "tool";
 }
 
@@ -720,11 +837,16 @@ function cleanReasoningText(value: string): string {
 }
 
 function truncateStepText(value: string, max = 80): string {
-  return value.length > max ? `${value.slice(0, Math.max(0, max - 3))}...` : value;
+  return value.length > max
+    ? `${value.slice(0, Math.max(0, max - 3))}...`
+    : value;
 }
 
 function isPathLike(value: string): boolean {
-  return /^(?:[A-Za-z]:[\\/]|~[\\/]|\/|\.\.?[\\/])/.test(value) || /[\\/]/.test(value);
+  return (
+    /^(?:[A-Za-z]:[\\/]|~[\\/]|\/|\.\.?[\\/])/.test(value) ||
+    /[\\/]/.test(value)
+  );
 }
 
 function normalizePathToken(value: string): string {
@@ -738,13 +860,16 @@ function formatAgentLabel(value: string): string {
   if (!clean) return "";
   return clean
     .split(/\s+/)
-    .flatMap((segment) => segment ? [segment.charAt(0).toUpperCase() + segment.slice(1)] : [])
+    .flatMap((segment) =>
+      segment ? [segment.charAt(0).toUpperCase() + segment.slice(1)] : [],
+    )
     .join(" ");
 }
 
 function getToolInput(state: any): Record<string, unknown> {
   const input = state?.input;
-  if (input && typeof input === "object") return input as Record<string, unknown>;
+  if (input && typeof input === "object")
+    return input as Record<string, unknown>;
   return {};
 }
 
@@ -793,7 +918,9 @@ function buildToolTitle(state: any, toolName: string): string {
 
   if (lower === "grep" || lower === "glob" || lower === "search") {
     const pattern = pick("pattern", "query");
-    return pattern ? `Searched ${truncateStepText(pattern, 44)}` : "Searched code";
+    return pattern
+      ? `Searched ${truncateStepText(pattern, 44)}`
+      : "Searched code";
   }
 
   if (lower === "bash") {
@@ -842,7 +969,10 @@ function buildToolTitle(state: any, toolName: string): string {
 
   const stateTitle = normalizeStepText(state?.title);
   if (stateTitle) {
-    return truncateStepText(isPathLike(stateTitle) ? normalizePathToken(stateTitle) : stateTitle, 56);
+    return truncateStepText(
+      isPathLike(stateTitle) ? normalizePathToken(stateTitle) : stateTitle,
+      56,
+    );
   }
 
   const fallback = normalizeStepText(toolName)
@@ -885,10 +1015,14 @@ function buildToolDetail(state: any, toolName: string): string | undefined {
   }
 
   if (lower === "question") {
-    const questions = Array.isArray(input.questions) ? input.questions.length : 0;
+    const questions = Array.isArray(input.questions)
+      ? input.questions.length
+      : 0;
     const answers = Array.isArray(state?.output)
       ? state.output
-      : state?.output && typeof state.output === "object" && Array.isArray(state.output.answers)
+      : state?.output &&
+          typeof state.output === "object" &&
+          Array.isArray(state.output.answers)
         ? state.output.answers
         : null;
     if (answers) return "Answered";
@@ -919,7 +1053,9 @@ function buildToolDetail(state: any, toolName: string): string | undefined {
   // For edits that report updated files, show filename(s)
   const files = state?.files;
   if (Array.isArray(files) && files.length > 0) {
-    const names = files.flatMap((f: any) => typeof f === "string" ? [extractFilename(f)] : []);
+    const names = files.flatMap((f: any) =>
+      typeof f === "string" ? [extractFilename(f)] : [],
+    );
     if (names.length === 1) return names[0];
     if (names.length > 1) return `${names[0]} +${names.length - 1} more`;
   }
@@ -945,11 +1081,13 @@ function buildToolDetail(state: any, toolName: string): string | undefined {
   }
 
   // For completed tools with output, show a very short summary
-  const outputRaw = typeof state?.output === "string" ? state.output.trim() : "";
+  const outputRaw =
+    typeof state?.output === "string" ? state.output.trim() : "";
   if (outputRaw) {
     if (lower === "read") return undefined;
 
-    const output = outputRaw.length > 3000 ? outputRaw.slice(0, 3000) : outputRaw;
+    const output =
+      outputRaw.length > 3000 ? outputRaw.slice(0, 3000) : outputRaw;
 
     // Extract just the first meaningful line (skip line numbers and raw file markers)
     const lines = output.split("\n").filter((l: string) => {
@@ -1027,7 +1165,14 @@ type DeriveArtifactsOptions = {
   maxMessages?: number;
 };
 
-export function summarizeStep(part: Part): { title: string; detail?: string; isSkill?: boolean; skillName?: string; toolCategory?: string; status?: string } {
+export function summarizeStep(part: Part): {
+  title: string;
+  detail?: string;
+  isSkill?: boolean;
+  skillName?: string;
+  toolCategory?: string;
+  status?: string;
+} {
   if (part.type === "tool") {
     const record = part as any;
     const toolName = record.tool ? String(record.tool) : "Tool";
@@ -1037,28 +1182,39 @@ export function summarizeStep(part: Part): { title: string; detail?: string; isS
     const status = state.status ? String(state.status) : undefined;
     const detail = buildToolDetail(state, toolName);
     const normalizedTitle = normalizeStepText(title).toLowerCase();
-    const finalDetail = detail && normalizeStepText(detail).toLowerCase() !== normalizedTitle ? detail : undefined;
-    
+    const finalDetail =
+      detail && normalizeStepText(detail).toLowerCase() !== normalizedTitle
+        ? detail
+        : undefined;
+
     // Detect skill trigger
     if (category === "skill") {
-      const skillName = state.metadata?.name || title.replace(/^(Loaded skill:\s*|Load skill\s+)/i, "");
-      return { title, isSkill: true, skillName, detail: finalDetail, toolCategory: category, status };
+      const skillName =
+        state.metadata?.name ||
+        title.replace(/^(Loaded skill:\s*|Load skill\s+)/i, "");
+      return {
+        title,
+        isSkill: true,
+        skillName,
+        detail: finalDetail,
+        toolCategory: category,
+        status,
+      };
     }
-    
+
     return { title, detail: finalDetail, toolCategory: category, status };
   }
 
   if (part.type === "reasoning") {
     const record = part as any;
-    const text = typeof record.text === "string" ? cleanReasoningText(record.text) : "";
+    const text =
+      typeof record.text === "string" ? cleanReasoningText(record.text) : "";
     if (!text) return { title: "Reasoning", toolCategory: "tool" };
 
-    const lines = text
-      .split(/\r?\n/)
-      .flatMap((line: string) => {
-        const trimmed = line.trim();
-        return trimmed ? [trimmed] : [];
-      });
+    const lines = text.split(/\r?\n/).flatMap((line: string) => {
+      const trimmed = line.trim();
+      return trimmed ? [trimmed] : [];
+    });
     if (/^(?:thinking|reasoning)\s*(?::|-|–|—)?\s*$/i.test(lines[0] ?? "")) {
       lines.shift();
     }
@@ -1080,7 +1236,9 @@ export function summarizeStep(part: Part): { title: string; detail?: string; isS
       }
     }
 
-    headline = headline.replace(/^(?:thinking|reasoning)\s*(?::|-|–|—)\s*/i, "").trim();
+    headline = headline
+      .replace(/^(?:thinking|reasoning)\s*(?::|-|–|—)\s*/i, "")
+      .trim();
     const title = truncateStepText(headline || "Reasoning", 96);
     return { title, detail: detail || undefined, toolCategory: "tool" };
   }
@@ -1097,13 +1255,21 @@ export function summarizeStep(part: Part): { title: string; detail?: string; isS
   return { title: "Step", toolCategory: "tool" };
 }
 
-export function deriveArtifacts(list: MessageWithParts[], options: DeriveArtifactsOptions = {}): ArtifactItem[] {
+export function deriveArtifacts(
+  list: MessageWithParts[],
+  options: DeriveArtifactsOptions = {},
+): ArtifactItem[] {
   const results = new Map<string, ArtifactItem>();
   const maxMessages =
-    typeof options.maxMessages === "number" && Number.isFinite(options.maxMessages) && options.maxMessages > 0
+    typeof options.maxMessages === "number" &&
+    Number.isFinite(options.maxMessages) &&
+    options.maxMessages > 0
       ? Math.floor(options.maxMessages)
       : null;
-  const source = maxMessages && list.length > maxMessages ? list.slice(list.length - maxMessages) : list;
+  const source =
+    maxMessages && list.length > maxMessages
+      ? list.slice(list.length - maxMessages)
+      : list;
 
   source.forEach((message) => {
     const messageId = String((message.info as any)?.id ?? "");
@@ -1140,11 +1306,14 @@ export function deriveArtifacts(list: MessageWithParts[], options: DeriveArtifac
           : "";
       const titleText = typeof state.title === "string" ? state.title : "";
       const outputText =
-        typeof state.output === "string" && !ARTIFACT_OUTPUT_SKIP_TOOLS.has(toolName)
+        typeof state.output === "string" &&
+        !ARTIFACT_OUTPUT_SKIP_TOOLS.has(toolName)
           ? state.output.slice(0, ARTIFACT_OUTPUT_SCAN_LIMIT)
           : "";
 
-      const text = [titleText, outputText].flatMap((value) => value ? [value] : []).join(" ");
+      const text = [titleText, outputText]
+        .flatMap((value) => (value ? [value] : []))
+        .join(" ");
 
       if (text) {
         ARTIFACT_PATH_PATTERN.lastIndex = 0;

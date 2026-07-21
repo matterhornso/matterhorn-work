@@ -212,7 +212,7 @@ function ProfileReadinessSupportSection({
 }) {
   const { docsUrl, feedbackUrl, issueUrl, accountUrl } = readiness.supportLinks;
   const actionClass =
-    "inline-flex items-center gap-1.5 rounded-md bg-dls-surface-muted/[0.18] px-2.5 py-1.5 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:bg-dls-surface-muted/[0.30] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--matterhorn-blue-rgb),0.28)]";
+    "inline-flex items-center gap-1.5 rounded-md bg-dls-surface-muted/[0.18] px-2.5 py-1.5 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:bg-dls-surface-muted/[0.30] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--matterhorn-blue-rgb)/0.28)]";
   return (
     <section className={cn(
       "flex flex-col gap-2 text-xs leading-5 text-dls-secondary",

@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 function readAppSource(path: string) {
-  return readFileSync(new URL(`../src/react-app/${path}`, import.meta.url), "utf8");
+  return readFileSync(
+    new URL(`../src/react-app/${path}`, import.meta.url),
+    "utf8",
+  ).replace(/\s+/g, " ");
 }
 
 describe("Settings overview backend capability integration", () => {
@@ -14,7 +17,7 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("summarizeModelSource");
     expect(source).toContain("summarizeModelRoutingPolicy");
     expect(source).toContain("walletFamilySummary");
-    expect(source).toContain("storageLocationLabel");
+    expect(source).toContain("settingsStorageLocationLabel");
     expect(source).toContain("workspaceDataPolicySummary");
     expect(source).toContain("buildNftPublishingReadinessItems");
     expect(source).toContain("buildNftPublishingSetupRequirements");
@@ -27,8 +30,12 @@ describe("Settings overview backend capability integration", () => {
     const source = readAppSource("domains/settings/pages/overview-view.tsx");
 
     expect(source).toContain("settings-workspace-backend-control-plane");
-    expect(source).toContain("client.workspaceBackendControlPlane(backendWorkspaceId)");
-    expect(source).toContain("workspaceBackendControlPlaneQuery.data?.capabilities");
+    expect(source).toContain(
+      "client.workspaceBackendControlPlane(backendWorkspaceId)",
+    );
+    expect(source).toContain(
+      "workspaceBackendControlPlaneQuery.data?.capabilities",
+    );
     expect(source).toContain("settings-backend-capabilities");
     expect(source).toContain("client.backendCapabilities()");
     expect(source).toContain("workspaceReadiness.summary.recommendedActions");
@@ -40,12 +47,18 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("client.workspaceDataControls(workspaceId)");
     expect(source).toContain("settings-workspace-data-policy");
     expect(source).toContain("client.workspaceDataPolicy(workspaceId)");
-    expect(source).toContain("client.updateWorkspaceDataPolicy(workspaceId, { feedbackUse })");
+    expect(source).toContain(
+      "client.updateWorkspaceDataPolicy(workspaceId, { feedbackUse })",
+    );
     expect(source).toContain("Backend status");
     expect(source).toContain("Image and NFT publishing");
-    expect(source).toContain("Generated images, public storage, Sui minting, and marketplace listing readiness.");
+    expect(source).toContain(
+      "Generated images, public storage, Sui minting, and marketplace listing readiness.",
+    );
     expect(source).toContain("These are backend setup gates only.");
-    expect(source).toContain("MATTERHORN_LAUNCH_FEATURES.generatedMedia && publishingReadiness.length");
+    expect(source).toContain(
+      "MATTERHORN_LAUNCH_FEATURES.generatedMedia && publishingReadiness.length",
+    );
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
   });
@@ -53,18 +66,36 @@ describe("Settings overview backend capability integration", () => {
   test("renders profile overview status from backend capability instead of hardcoded sign-out copy", () => {
     const source = readAppSource("domains/settings/pages/overview-view.tsx");
 
-    expect(source).toContain('settingsCapability(backendCapabilities, "profile")');
+    expect(source).toContain(
+      'settingsCapability(backendCapabilities, "profile")',
+    );
     expect(source).toContain("profileCapability?.description");
-    expect(source).toContain("<CapabilityBadge status={profileCapability.status}");
+    expect(source).toContain(
+      "<CapabilityBadge status={profileCapability.status}",
+    );
     expect(source).toContain('"Local profile and workspace access readiness."');
-    expect(source).not.toContain("You are not signed in to a Matterhorn Desks account.");
-    expect(source).not.toContain("<StatusBadge tone=\"setup\">Signed out</StatusBadge>");
-    expect(source).toContain("function UnavailableStatus(props: { label?: string })");
+    expect(source).not.toContain(
+      "You are not signed in to a Matterhorn Desks account.",
+    );
+    expect(source).not.toContain(
+      '<StatusBadge tone="setup">Signed out</StatusBadge>',
+    );
+    expect(source).toContain(
+      "function UnavailableStatus(props: { label?: string })",
+    );
     expect(source).toContain('{props.label ?? "Engine offline"}');
-    expect(source).toContain('<UnavailableStatus label="Workspace unavailable" />');
+    expect(source).toContain(
+      '<UnavailableStatus label="Workspace unavailable" />',
+    );
     expect(source).toContain("text-red-10");
     expect(source).toContain("bg-red-9");
-    expect(source).not.toContain('<StatusBadge tone="error">Unavailable</StatusBadge>');
+    expect(source).not.toContain(
+      '<StatusBadge tone="error">Unavailable</StatusBadge>',
+    );
+    expect(source).toContain(
+      'MATTERHORN_LAUNCH_FEATURES.cloud ? "cloud-account" : "preferences"',
+    );
+    expect(source).toContain('"Open workspace preferences"');
   });
 
   test("keeps healthy engine state quiet and hides technical detail by default", () => {
@@ -74,8 +105,12 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain('className="group/backend-details"');
     expect(source).toContain("Technical readiness details");
     expect(source).toContain("<CollapsibleContent");
-    expect(source).not.toContain('status={<StatusBadge tone="ready">Ready</StatusBadge>}');
-    expect(source).not.toContain('status={<StatusBadge tone="ready">Boundaries visible</StatusBadge>}');
+    expect(source).not.toContain(
+      'status={<StatusBadge tone="ready">Ready</StatusBadge>}',
+    );
+    expect(source).not.toContain(
+      'status={<StatusBadge tone="ready">Boundaries visible</StatusBadge>}',
+    );
   });
 
   test("renders data policy from workspace data-map instead of static copy", () => {
@@ -89,27 +124,38 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain('"walletEvidence"');
     expect(source).toContain("Object.values(props.dataMap.stores)");
     expect(source).toContain("orderedIds.has(store.id)");
-    expect(source).toContain("storageLocationLabel(store)");
+    expect(source).toContain("settingsStorageLocationLabel(store)");
     expect(source).toContain("controlQuickActions(props.controls)");
+    expect(source).toContain(
+      '!MATTERHORN_LAUNCH_FEATURES.billing && action.href.includes("/settings/billing")',
+    );
     expect(source).toContain("dataControlActionTone(action)");
-    expect(source).toContain("controlSummary(props.controls, store, \"export\")");
-    expect(source).toContain("controlSummary(props.controls, store, \"deletion\")");
+    expect(source).toContain('controlSummary(props.controls, store, "export")');
+    expect(source).toContain(
+      'controlSummary(props.controls, store, "deletion")',
+    );
     expect(source).toContain("controlAppRoute(control)");
     expect(source).toContain("onOpenControlRoute");
     expect(source).toContain("retentionLabel(store.retention)");
     expect(source).toContain("secretsLabel(store.containsSecrets)");
     expect(source).toContain("Workspace data policy");
     expect(source).toContain("Model training");
-    expect(source).toContain("Workspace data is not used for RL or model training.");
+    expect(source).toContain(
+      "Workspace data is not used for RL or model training.",
+    );
     expect(source).toContain("Feedback collection");
     expect(source).toContain("Toggle workspace feedback collection");
     expect(source).toContain("Export and delete");
     expect(source).toContain("Manage data");
-    expect(source).toContain("Open the owning surface for review, export, or deletion controls.");
+    expect(source).toContain(
+      "Open the owning surface for review, export, or deletion controls.",
+    );
     expect(source).toContain("Storage locations, routes, and controls");
     expect(source).toContain("Use the Manage links for user-controlled stores");
     expect(source).toContain("retentionPolicy.summary");
-    expect(source).toContain("Where workspace data lives, what can be exported, and what can be deleted.");
+    expect(source).toContain(
+      "Where workspace data lives, what can be exported, and what can be deleted.",
+    );
   });
 
   test("keeps truthful wallet copy constraints", () => {
@@ -123,8 +169,27 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("agents and watches cannot submit");
     expect(source).toContain("Polymarket:");
     expect(source).toContain("No secret storage");
-    expect(source).toContain("Wallet signing still happens in the user's Sui wallet.");
+    expect(source).toContain(
+      "Wallet signing still happens in the user's Sui wallet.",
+    );
     expect(source).not.toContain("direct-connect");
+  });
+
+  test("derives protocol availability from runtime truth and distinguishes labels from actions", () => {
+    const source = readAppSource("domains/settings/pages/overview-view.tsx");
+
+    expect(source).toContain("backendCapabilities?.wallets.families.bittensor");
+    expect(source).toContain("liveProviderConfigured === true");
+    expect(source).toContain('dataMode === "curated_fallback"');
+    expect(source).toContain("Live reads · Preview");
+    expect(source).toContain("Fallback reads · Preview");
+    expect(source).toContain("Manual wallet approval");
+    expect(source).toContain("Preview only");
+    expect(source).toContain(
+      "These labels describe what each desk can do; they are not action buttons.",
+    );
+    expect(source).not.toContain(">Review and sign</StatusBadge>");
+    expect(source).not.toContain(">Compliance gated</StatusBadge>");
   });
 
   test("surfaces billing team-seat limits before local token creation", () => {
@@ -134,13 +199,27 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("client.workspaceBillingStatus(workspaceId)");
     expect(source).toContain("teamSeatUsageText");
     expect(source).toContain("teamLimitReached");
-    expect(source).toContain("Team seats are full on this plan. Open Billing to upgrade before creating teammate tokens.");
-    expect(source).toContain("Upgrade to Matterhorn Max to create teammate tokens.");
-    expect(source).toContain("MATTERHORN_LAUNCH_FEATURES.billing && props.matterhornServerClient");
-    expect(source).toContain('onOpenBilling={MATTERHORN_LAUNCH_FEATURES.billing ? () => onSelectTab("billing") : undefined}');
-    expect(source).toContain('MATTERHORN_LAUNCH_FEATURES.cloud ? ` Cloud teams:');
-    expect(source).toContain("Contact the workspace owner before creating another teammate token.");
-    expect(source).toContain("refetchBilling={workspaceBillingStatusQuery.refetch}");
+    expect(source).toContain(
+      "Team seats are full on this plan. Open Billing to upgrade before creating teammate tokens.",
+    );
+    expect(source).toContain(
+      "Upgrade to Matterhorn Max to create teammate tokens.",
+    );
+    expect(source).toContain(
+      "MATTERHORN_LAUNCH_FEATURES.billing && props.matterhornServerClient",
+    );
+    expect(source).toContain(
+      'MATTERHORN_LAUNCH_FEATURES.billing ? () => onSelectTab("billing") : undefined',
+    );
+    expect(source).toContain(
+      "MATTERHORN_LAUNCH_FEATURES.cloud ? ` Cloud teams:",
+    );
+    expect(source).toContain(
+      "Contact the workspace owner before creating another teammate token.",
+    );
+    expect(source).toContain(
+      "refetchBilling={workspaceBillingStatusQuery.refetch}",
+    );
   });
 
   test("keeps prepared, running, and waiting task states visually distinct", () => {
@@ -151,6 +230,34 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain('status === "waiting"');
     expect(source).toContain('label: "Waiting"');
     expect(source).toContain('label: "Running"');
+  });
+
+  test("exposes selected state and honest clipboard feedback for overview controls", () => {
+    const source = readAppSource("domains/settings/pages/overview-view.tsx");
+
+    expect(source).toContain("copyTextWithFallback");
+    expect(source).toContain("copyTextWithSelection");
+    expect(source).toContain("CLIPBOARD_WRITE_TIMEOUT_MS");
+    expect(source).toContain("before the first await");
+    expect(source).toContain("Promise.race([clipboardWrite, timeout])");
+    expect(source).toContain('"Copy failed"');
+    expect(source).toContain("RELEASE_DOCTOR_COMMAND");
+    expect(source).toContain("select-all break-all");
+    expect(source).toContain('aria-pressed={filter === "all"}');
+    expect(source).toContain("aria-pressed={theme === option.id}");
+    expect(source).toContain('aria-pressed={density === "comfortable"}');
+    expect(source).toContain('label="Brand palette"');
+    expect(source).toContain("<span>Fixed</span>");
+  });
+
+  test("labels an idle reconnect action differently from its busy state", () => {
+    const en = readFileSync(
+      new URL("../src/i18n/locales/en.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(en).toContain('"settings.reconnect_server": "Reconnect server"');
+    expect(en).toContain('"settings.reconnecting": "Reconnecting..."');
   });
 });
 

@@ -127,8 +127,8 @@ export function DeskWorkflowStagePanel({
   return (
     <div className="w-full space-y-3 px-2 py-3 sm:px-3 sm:py-4" style={deskToneStyle(deskId)}>
       {/* Agent header */}
-      <div className="flex min-w-0 items-start gap-3 rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.06)] px-3.5 py-3.5">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+      <div className="flex min-w-0 items-start gap-3 rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.06)] px-3.5 py-3.5">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[rgb(var(--matterhorn-desk-rgb)/0.14)] text-[var(--matterhorn-desk-color)]">
           <ProtocolDeskMark id={deskId} size={30} />
         </span>
         <div className="min-w-0 flex-1">
@@ -287,7 +287,7 @@ export function DeskWorkflowStagePanel({
               }}
               variant="secondary"
               size="xs"
-              className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)] bg-[rgba(var(--matterhorn-desk-rgb),0.14)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.22)] focus-visible:ring-[var(--matterhorn-desk-color)]"
+              className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)] bg-[rgb(var(--matterhorn-desk-rgb)/0.14)] hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.22)] focus-visible:ring-[var(--matterhorn-desk-color)]"
             >
               Next action
             </Button>

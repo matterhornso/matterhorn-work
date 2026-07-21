@@ -10,7 +10,7 @@ export const interactiveCardClass =
   "rounded-lg border border-dls-border bg-dls-surface p-5 text-left shadow-sm transition-colors hover:bg-dls-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
 
 export const iconTileClass =
-  "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.13)] text-primary";
+  "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--matterhorn-blue-rgb)/0.13)] text-primary";
 
 export const sectionTitleClass =
   "text-[15px] font-medium tracking-[-0.2px] text-dls-text";

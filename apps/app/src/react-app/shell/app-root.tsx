@@ -20,6 +20,7 @@ import { workspaceSessionRoute } from "./workspace-routes";
 import { AppErrorBoundary } from "./app-error-boundary";
 import { RemoteConnectDeepLinkHandler } from "./remote-connect-deep-links";
 import { isPublicTrustPath } from "../domains/public/public-trust-content";
+import { UnknownRouteRecovery } from "./route-recovery";
 
 const OrgOnboardingPageRoute = lazy(() => import("../domains/cloud/org-onboarding-page").then((module) => ({
   default: module.OrgOnboardingPage,
@@ -339,7 +340,7 @@ export function AppRoot() {
               {/* Default + fallback: land on the session view. Users open
                   settings deliberately via the sidebar or command palette. */}
               <Route path="/" element={<Navigate to="/session" replace />} />
-              <Route path="*" element={<Navigate to="/session" replace />} />
+              <Route path="*" element={<UnknownRouteRecovery />} />
             </Routes>
             </AppErrorBoundary>
             <QuickJotGlobal />

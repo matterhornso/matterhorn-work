@@ -231,7 +231,7 @@ export function StatusBar(props: StatusBarProps) {
   useControlAction(walletControlAction);
 
   return (
-    <div className="bg-dls-surface/92 shadow-[0_-1px_0_rgba(var(--matterhorn-blue-rgb),0.10)]">
+    <div className="bg-dls-surface/92 shadow-[0_-1px_0_rgb(var(--matterhorn-blue-rgb)/0.10)]">
       <div className="flex h-8 min-w-0 items-center justify-between gap-2 px-3 md:gap-3 md:px-6">
         <StatusIndicator
           clientConnected={props.clientConnected}

@@ -166,6 +166,16 @@ describe("Project Activity contract tests", () => {
       expect(source).not.toContain("Jot note");
     });
 
+    test("web workspace home keeps absolute local paths inside the desktop runtime", () => {
+      const source = readAppSource("domains/session/chat/session-page.tsx");
+
+      expect(source).toContain("const canExposeLocalPaths = isDesktopRuntime();");
+      expect(source).toContain('"Stored by your local Matterhorn engine"');
+      expect(source).toContain('"Stored with this project"');
+      expect(source).toContain("canExposeLocalPaths ? homeOutputsPath");
+      expect(source).toContain("{canExposeLocalPaths ? (");
+    });
+
     test("session-page imports RecentActivitySection", () => {
       const source = readAppSource("domains/session/chat/session-page.tsx");
       expect(source).toContain("RecentActivitySection");

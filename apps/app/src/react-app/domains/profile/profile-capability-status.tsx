@@ -18,11 +18,11 @@ export interface ProfileCapabilityStatusProps {
 }
 
 const profileStatusToneClasses = {
-  ready: "text-emerald-300",
-  setup: "text-sky-300",
-  preview: "text-amber-300",
+  ready: "text-emerald-11",
+  setup: "text-sky-11",
+  preview: "text-amber-12 dark:text-amber-11",
   neutral: "text-dls-secondary",
-  error: "text-red-300",
+  error: "text-red-11",
 } as const;
 
 function ProfileStatusText(props: { status: CapabilityUiStatus; label?: string }) {
@@ -155,7 +155,7 @@ export function ProfileCapabilityStatus(props: ProfileCapabilityStatusProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--dls-accent-rgb)/0.12)] text-dls-text">
           <CircleUser size={18} />
         </div>
         <div className="min-w-0 flex-1">

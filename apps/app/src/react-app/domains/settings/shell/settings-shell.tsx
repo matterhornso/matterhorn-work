@@ -64,7 +64,7 @@ export function SettingsShell(props: SettingsShellProps) {
     const ActiveIcon = getSettingsTabIcon(props.activeTab);
     return (
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-dls-background">
-        <header className="flex h-11 shrink-0 items-center justify-between gap-2 px-3 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.08)] mac:titlebar-drag">
+        <header className="flex h-11 shrink-0 items-center justify-between gap-2 px-3 shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)] mac:titlebar-drag">
           <div className="flex min-w-0 items-center gap-2 mac:titlebar-no-drag">
             <ActiveIcon className="size-4 shrink-0 text-dls-secondary" />
             <span className="truncate text-sm font-semibold text-dls-text">{title}</span>

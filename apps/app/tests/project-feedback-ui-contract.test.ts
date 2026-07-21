@@ -51,7 +51,8 @@ describe("project feedback UI contract", () => {
     const source = readReactSource("domains/settings/pages/overview-view.tsx");
 
     expect(source).toContain("exportProjectLedger");
-    expect(source).toContain("client.exportProjectDataLedger(workspaceId, { limit: 300 })");
+    expect(source).toContain("client.exportProjectDataLedger(workspaceId, {");
+    expect(source).toContain("limit: 300");
     expect(source).toContain("exportPayload.manifest.itemCount");
     expect(source).toContain("exportSupportReport");
     expect(source).toContain("client.workspaceBackendSupportReport(workspaceId)");

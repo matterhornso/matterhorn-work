@@ -505,7 +505,7 @@ export function SessionImageGenerationPanel(props: SessionImageGenerationPanelPr
       <div className="flex min-w-0 items-center">
         <button
           type="button"
-          className="inline-flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-[12px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover/45 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--matterhorn-blue-rgb),0.28)]"
+          className="inline-flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-[12px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover/45 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--matterhorn-blue-rgb)/0.28)]"
           onClick={() => setOpen((current) => !current)}
           aria-expanded={open}
           aria-controls={panelId}

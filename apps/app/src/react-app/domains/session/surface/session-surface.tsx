@@ -214,9 +214,9 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint];
   const agent = getMatterhornDeskAgent(mode);
   return (
-    <div style={deskToneStyle(iconHint)} className="mb-1 rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.05)] px-3 py-2.5">
+    <div style={deskToneStyle(iconHint)} className="mb-1 rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.05)] px-3 py-2.5">
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
+        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgb(var(--matterhorn-desk-rgb)/0.12)] text-[var(--matterhorn-desk-color)]">
           {copy.id === "bittensor" || copy.id === "hyperliquid" || copy.id === "polymarket" ? (
             <ProtocolLogo iconHint={copy.id} size={22} />
           ) : (
@@ -289,10 +289,10 @@ function MatterhornDeskFocusedEmptyState({
       style={deskToneStyle(iconHint)}
     >
       <section className="w-full space-y-3">
-        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
+        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.14)] text-[var(--matterhorn-desk-color)]">
                 {visual ? <ProtocolLogo iconHint={iconHint} size={34} /> : <Icon className="size-5" />}
               </span>
               <div className="min-w-0">
@@ -321,7 +321,7 @@ function MatterhornDeskFocusedEmptyState({
             <button
               key={item.id}
               type="button"
-              className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-3.5 py-3 text-left transition duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-3.5 py-3 text-left transition duration-150 hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
               onClick={() => void onUsePrompt(item.prompt)}
             >
               <span className="min-w-0">
@@ -384,10 +384,10 @@ function LongevityDeskEmptyState({
   return (
     <div className="min-w-0 w-full px-2 py-3 sm:px-3 sm:py-4" style={deskToneStyle("wellness")}>
       <section className="w-full space-y-3">
-        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
+        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.14)] text-[var(--matterhorn-desk-color)]">
                 {visual ? <ProtocolLogo iconHint="wellness" size={34} /> : <Icon className="size-5" />}
               </span>
               <div className="min-w-0">
@@ -423,7 +423,7 @@ function LongevityDeskEmptyState({
                 key={choice.label}
                 type="button"
                 onClick={() => void onUsePrompt(choice.prompt)}
-                className="rounded-md bg-dls-surface-muted/42 px-2.5 py-2 text-left text-[12px] font-medium text-dls-text transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                className="rounded-md bg-dls-surface-muted/42 px-2.5 py-2 text-left text-[12px] font-medium text-dls-text transition-colors hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
               >
                 {choice.label}
               </button>
@@ -445,7 +445,7 @@ function LongevityDeskEmptyState({
               <button
                 type="button"
                 onClick={() => void onUsePrompt(item.prompt)}
-                className="rounded-md px-2 py-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                className="rounded-md px-2 py-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] transition-colors hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
               >
                 Stage task
               </button>
@@ -461,7 +461,7 @@ function LongevityDeskEmptyState({
                 key={card.title}
                 type="button"
                 onClick={() => void onUsePrompt(card.prompt)}
-                className="group flex items-center justify-between rounded-md bg-dls-surface-muted/42 px-3 py-2 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                className="group flex items-center justify-between rounded-md bg-dls-surface-muted/42 px-3 py-2 text-left transition-colors hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
               >
                 <span className="min-w-0">
                   <span className="block text-[12px] font-semibold text-dls-text">{card.title}</span>
@@ -473,7 +473,7 @@ function LongevityDeskEmptyState({
           </div>
         </div>
 
-        <div className="rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.24)] bg-[rgba(var(--matterhorn-desk-rgb),0.06)] px-3 py-2.5">
+        <div className="rounded-lg border border-[rgb(var(--matterhorn-desk-rgb)/0.24)] bg-[rgb(var(--matterhorn-desk-rgb)/0.06)] px-3 py-2.5">
           <p className="text-[11px] leading-4 text-dls-secondary">
             <span className="font-semibold text-dls-text">Safety boundary:</span> Educational only, not medical advice.
             No diagnosis, prescription, treatment, or guaranteed outcomes. Storage/hosting, payments, email, and
@@ -918,7 +918,11 @@ function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker }
 }) {
   return (
     <div className="mx-auto max-w-[720px] px-3 py-3 sm:px-5">
-        <div className="rounded-lg bg-red-3/15 px-5 py-4 ring-1 ring-red-6/25">
+      <div
+        role="alert"
+        aria-atomic="true"
+        className="rounded-lg bg-red-3/15 px-5 py-4 ring-1 ring-red-6/25"
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-red-11">{error.message}</div>
@@ -988,7 +992,7 @@ function BittensorContextStrip(props: { context: BittensorSessionContext; onClea
 
 function MemoryContextStrip(props: { context: MatterhornSessionMemoryContext; onClear: () => void; onRemove: (recordId: string) => void }) {
   return (
-    <div className="border-b border-dls-border bg-[rgba(var(--matterhorn-blue-rgb),0.08)] px-4 py-2">
+    <div className="border-b border-dls-border bg-[rgb(var(--matterhorn-blue-rgb)/0.08)] px-4 py-2">
       <div className="flex min-w-0 items-start justify-between gap-3 text-xs">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 font-medium text-dls-text">
@@ -2393,7 +2397,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                             key={item.id}
                             type="button"
                             style={deskToneStyle(item.iconHint)}
-                            className="group grid min-h-[64px] min-w-0 grid-cols-[32px_minmax(0,1fr)] gap-2.5 rounded-md bg-dls-surface-muted/42 px-2.5 py-2 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                            className="group grid min-h-[64px] min-w-0 grid-cols-[32px_minmax(0,1fr)] gap-2.5 rounded-md bg-dls-surface-muted/42 px-2.5 py-2 text-left transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                             onClick={() => startStarterTask(item)}
                           >
                             <span className="flex size-8 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
@@ -2454,7 +2458,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
               {!chatStreaming && sessionScroll.topClippedMessageId ? (
                 <button
                   type="button"
-                  className="inline-flex h-7 items-center gap-1 rounded px-2 text-[11px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover/70 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                  className="inline-flex h-7 items-center gap-1 rounded px-2 text-[11px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover/70 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)]"
                   onClick={() => {
                     sessionScroll.jumpToStartOfMessage("smooth");
                   }}
@@ -2468,7 +2472,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
               {!sessionScroll.isAtBottom ? (
                 <button
                   type="button"
-                  className="inline-flex h-7 items-center gap-1 rounded bg-dls-hover/65 px-2 text-[11px] font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.32)]"
+                  className="inline-flex h-7 items-center gap-1 rounded bg-dls-hover/65 px-2 text-[11px] font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.32)]"
                   onClick={() => {
                     sessionScroll.jumpToLatest("smooth");
                   }}

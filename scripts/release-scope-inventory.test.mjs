@@ -43,6 +43,7 @@ try {
   write("src/app.ts", "export const app = false;\n");
   write(".opencode/package-lock.json", "{\"local\":true}\n");
   write("notes/private.txt", "preserve\n");
+  write("outputs/generated.json", "{}\n");
   write("qa-reports/run/output.json", "{}\n");
   write(".matterhorn-work/runtime.json", "{}\n");
   write("src/new.ts", "export const next = true;\n");
@@ -58,6 +59,7 @@ try {
   assert.ok(blockedReport.candidateReview.some((entry) => entry.path === "src/app.ts"));
   assert.ok(blockedReport.candidateReview.some((entry) => entry.path === "src/new.ts"));
   assert.ok(blockedReport.candidateReview.every((entry) => !entry.path.startsWith("notes/")));
+  assert.ok(blockedReport.candidateReview.every((entry) => !entry.path.startsWith("outputs/")));
   assert.ok(blockedReport.candidateReview.every((entry) => !entry.path.startsWith("qa-reports/")));
 
   git(["reset", "-q", "HEAD", "--", ".opencode/package-lock.json"]);
@@ -68,7 +70,7 @@ try {
   assert.equal(allowedReport.readyToStage, true);
   assert.equal(allowedReport.stagedProtectedPaths.length, 0);
   assert.equal(allowedReport.totals.candidateReview, 2);
-  assert.equal(allowedReport.totals.preserveOnly, 5);
+  assert.equal(allowedReport.totals.preserveOnly, 6);
 
   console.log("Release scope inventory contract passed.");
 } finally {

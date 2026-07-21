@@ -486,8 +486,13 @@ async function runSmoke(config) {
       await page.getByRole("button", { name: "New chat", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
       await page.getByRole("button", { name: "New note", exact: true }).waitFor({ state: "visible", timeout: 15_000 });
       await page.getByText("Open a desk", { exact: true }).waitFor({ state: "visible", timeout: 15_000 });
-      await page.getByLabel("Copy project path").waitFor({ state: "visible", timeout: 15_000 });
-      await page.getByLabel("Open outputs folder").waitFor({ state: "visible", timeout: 15_000 });
+      await page.getByLabel("Jot a note about outputs").waitFor({ state: "visible", timeout: 15_000 });
+      if (await page.getByLabel("Copy project path").count()) {
+        throw new Error("The web workspace home exposed a local project path control.");
+      }
+      if (await page.getByLabel("Open outputs folder").count()) {
+        throw new Error("The web workspace home exposed a local outputs-folder control.");
+      }
     });
 
     await stage(report, "wallet_readiness", "Check compact wallet readiness", async () => {
@@ -697,17 +702,15 @@ async function runSmoke(config) {
     await stage(report, "settings_ai_models", "Check AI provider and model picker", async () => {
       await page.goto(workspaceUrl(config.url, "settings/ai"), { waitUntil: "load", timeout: 30_000 });
       await page.getByRole("heading", { name: "Agent model", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("opencode/big-pickle", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      const providersSection = page.locator("[data-section]", {
-        has: page.getByRole("heading", { name: "Providers", exact: true }),
-      });
-      await providersSection.getByText(/1 provider connected/).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Matterhorn Models / Big Pickle", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByRole("heading", { name: "Included models ready Available", exact: true })
+        .waitFor({ state: "visible", timeout: 20_000 });
       await page.getByRole("button", { name: "Change model", exact: true }).click();
       const modelDialog = page.getByRole("dialog", { name: "Models" });
       await modelDialog.waitFor({ state: "visible", timeout: 20_000 });
-      const openCodeProvider = modelDialog.getByRole("button", { name: /^OpenCode/i }).first();
-      await openCodeProvider.waitFor({ state: "visible", timeout: 20_000 });
-      await openCodeProvider.click();
+      const includedProvider = modelDialog.getByText("Matterhorn Models", { exact: true });
+      await includedProvider.waitFor({ state: "visible", timeout: 20_000 });
+      await includedProvider.click();
       await modelDialog.getByRole("button", { name: /Big Pickle/ }).waitFor({ state: "visible", timeout: 20_000 });
       await modelDialog.getByRole("button", { name: "Close", exact: true }).click();
       report.artifacts.aiSettingsUrl = page.url();

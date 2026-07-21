@@ -6,6 +6,7 @@ import type {
   MatterhornMemorySuggestionAction,
   MatterhornMemorySuggestionLifecycle,
   MatterhornMemorySuggestionStatus,
+  MarketExecutionReadinessResponse,
   MatterhornNote,
   MatterhornNoteCreateRequest,
   MatterhornNoteListOptions,
@@ -1540,6 +1541,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     capabilities: () => requestJson<MatterhornServerCapabilities>(baseUrl, "/capabilities", { token, hostToken, timeoutMs: timeouts.capabilities }),
     backendCapabilities: () =>
       requestJson<MatterhornBackendCapabilitiesResponse>(baseUrl, "/api/backend/capabilities", {
+        token,
+        hostToken,
+        timeoutMs: timeouts.capabilities,
+      }),
+    marketExecutionReadiness: () =>
+      requestJson<MarketExecutionReadinessResponse>(baseUrl, "/api/crypto/market-execution-readiness", {
         token,
         hostToken,
         timeoutMs: timeouts.capabilities,

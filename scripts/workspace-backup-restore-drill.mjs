@@ -5,6 +5,13 @@ import { basename, join } from "node:path";
 import process from "node:process";
 
 const REPORT_VERSION = "matterhorn.workspace-backup-restore-drill.v1";
+const RESTORE_MODE = Object.freeze({
+  opencode: "replace",
+  openwork: "replace",
+  skills: "replace",
+  commands: "replace",
+  files: "replace",
+});
 
 function parseArgs(argv) {
   const config = {
@@ -105,6 +112,10 @@ function portableDigest(value) {
   return sha256(JSON.stringify(stableValue(portablePayload(value))));
 }
 
+function buildRestorePayload(backup) {
+  return { ...backup, mode: RESTORE_MODE };
+}
+
 function safeFilename(value) {
   const sanitized = value.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, "");
   return sanitized.slice(0, 120) || "workspace";
@@ -179,11 +190,12 @@ async function runDrill(config) {
   const timestamp = new Date(startedAt).toISOString().replaceAll(":", "-");
   const backupPath = join(config.outputDir, `${safeFilename(config.sourceWorkspaceId)}-${timestamp}.json`);
   writeFileSync(backupPath, backupSerialized);
+  const restorePayload = buildRestorePayload(backup);
 
   const preview = await requestJson(`${serverUrl}/workspace/${targetId}/import/preview`, {
     method: "POST",
     headers: clientHeaders(config),
-    body: JSON.stringify(backup),
+    body: JSON.stringify(restorePayload),
   }, "Restore preview");
 
   let approvalCompleted = false;
@@ -197,7 +209,7 @@ async function runDrill(config) {
     const importPromise = requestJson(`${serverUrl}/workspace/${targetId}/import`, {
       method: "POST",
       headers: clientHeaders(config),
-      body: JSON.stringify({ ...backup, previewFingerprint: preview.fingerprint }),
+      body: JSON.stringify({ ...restorePayload, previewFingerprint: preview.fingerprint }),
     }, "Restore import").finally(() => { importState.done = true; });
     approvalCompleted = await approveMatchingImport(
       config,
@@ -218,7 +230,7 @@ async function runDrill(config) {
     const verificationPreview = await requestJson(`${serverUrl}/workspace/${targetId}/import/preview`, {
       method: "POST",
       headers: clientHeaders(config),
-      body: JSON.stringify(backup),
+      body: JSON.stringify(restorePayload),
     }, "Restored workspace verification preview");
     verificationSummary = verificationPreview.summary;
     verified = Boolean(
@@ -253,6 +265,7 @@ async function runDrill(config) {
     },
     restore: {
       applied: config.apply,
+      mode: "replace",
       approvalCompleted,
       verified,
       portableDigest: restoredDigest,

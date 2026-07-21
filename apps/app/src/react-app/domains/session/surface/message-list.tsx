@@ -495,7 +495,7 @@ function MessageActionIconButton(props: {
       title={props.title}
       aria-label={props["aria-label"]}
       onClick={() => void props.onClick()}
-      className="inline-flex size-7 items-center justify-center rounded-md text-dls-secondary transition-colors duration-150 hover:bg-dls-hover/55 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+      className="inline-flex size-7 items-center justify-center rounded-md text-dls-secondary transition-colors duration-150 hover:bg-dls-hover/55 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)]"
     >
       {props.children}
     </button>

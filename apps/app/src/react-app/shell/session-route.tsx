@@ -184,6 +184,7 @@ import {
 } from "../domains/settings/model-selection-events";
 import { legacySessionRoute, workspaceNotesRoute, workspaceRunHistoryRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
 import { GLOBAL_HOME_SIDE_PANEL_KEY, useUiStateStore } from "./ui-state-store";
+import { unavailableWorkspaceToast } from "./route-recovery";
 import { WorkspaceProvider } from "./workspace-provider";
 import type { OpenTarget } from "../domains/session/artifacts/open-target";
 import type { SettingsSurfaceProps } from "./settings-route";
@@ -671,6 +672,7 @@ export function SessionRoute() {
   const sessionsByWorkspaceIdRef = useRef<Record<string, any[]>>({});
   const pendingCreatedSessionIdsRef = useRef<Record<string, Record<string, number>>>({});
   const staleSessionRecoveryRef = useRef("");
+  const staleWorkspaceRecoveryRef = useRef("");
   const startupRetryTimerRef = useRef<number | null>(null);
   const [retryingWorkspaceIds, setRetryingWorkspaceIds] = useState<string[]>([]);
   const launchActivatedWorkspaceIdsRef = useRef(new Set<string>());
@@ -1505,14 +1507,22 @@ export function SessionRoute() {
   useEffect(() => {
     if (loading) return;
     if (routeWorkspaceId && workspaces.length > 0 && !workspaces.some((workspace) => workspace.id === routeWorkspaceId)) {
-      const fallbackWorkspaceId = workspaces.some((workspace) => workspace.id === legacySelectedWorkspaceId)
-        ? legacySelectedWorkspaceId
-        : workspaces[0]?.id || "";
-      if (fallbackWorkspaceId) {
-        navigateToWorkspaceSession(fallbackWorkspaceId, selectedSessionId, { replace: true });
+      const fallbackWorkspace = workspaces.find((workspace) => workspace.id === legacySelectedWorkspaceId)
+        ?? workspaces[0]
+        ?? null;
+      if (fallbackWorkspace) {
+        if (staleWorkspaceRecoveryRef.current !== routeWorkspaceId) {
+          staleWorkspaceRecoveryRef.current = routeWorkspaceId;
+          showToast(unavailableWorkspaceToast(routeWorkspaceId, workspaceLabel(fallbackWorkspace)));
+        }
+        navigate(
+          `${workspaceSessionRoute(fallbackWorkspace.id, selectedSessionId)}${location.search}`,
+          { replace: true },
+        );
       }
       return;
     }
+    if (routeWorkspaceId) staleWorkspaceRecoveryRef.current = "";
     if (!routeWorkspaceId && selectedWorkspaceId) {
       navigate(`${workspaceSessionRoute(selectedWorkspaceId, selectedSessionId)}${location.search}`, { replace: true });
       return;
@@ -1524,10 +1534,10 @@ export function SessionRoute() {
     legacySelectedWorkspaceId,
     location.search,
     navigate,
-    navigateToWorkspaceSession,
     routeWorkspaceId,
     selectedSessionId,
     selectedWorkspaceId,
+    showToast,
     workspaces,
   ]);
 

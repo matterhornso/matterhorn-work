@@ -316,7 +316,7 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("backendModels?.catalog");
     expect(source).toContain('catalog?.errorCode === "opencode_unconfigured"');
     expect(source).toContain("The local agent engine is not running");
-    expect(source).toContain("Start Matterhorn with its managed engine");
+    expect(source).toContain("managed engine");
     expect(source).toContain("attach an existing engine URL");
     expect(source).toContain("buildModelReadinessSummary");
     expect(source).toContain("Agent model");
@@ -340,7 +340,8 @@ describe("backend capability UI contract", () => {
     expect(routeSource).toContain("connectedModelCount");
     expect(routeSource).toContain("defaultModelLabel={defaultModelLabel}");
     expect(routeSource).toContain("defaultModelRef={defaultModelRef}");
-    expect(routeSource).toContain("defaultModelProviderId={local.prefs.defaultModel?.providerID ?? null}");
+    expect(routeSource).toContain("defaultModelProviderId={");
+    expect(routeSource).toContain("local.prefs.defaultModel?.providerID ?? null");
     expect(routeSource).toContain("defaultModelId={local.prefs.defaultModel?.modelID ?? null}");
     expect(routeSource).toContain("hasLocalModelOverride={Boolean(local.prefs.defaultModel)}");
     expect(routeSource).toContain("onUseWorkspaceDefault={() =>");
@@ -368,19 +369,25 @@ describe("backend capability UI contract", () => {
     expect(walletSource).toContain("matterhornServerClient.backendCapabilities()");
     expect(walletSource).toContain('wallet.family === "Sui"');
     expect(walletSource).toContain("Sui wallet");
-    expect(walletSource).toContain("Connect EVM and Sui wallets where this runtime supports direct wallet connect.");
+    expect(walletSource).toContain("Connect EVM or Sui. Bittensor uses an external signer.");
     expect(walletSource).toContain("Connect an EVM or Sui wallet.");
-    expect(walletSource).toContain("prepare Sui actions and import receipts");
+    expect(walletSource).toContain("Prepare Sui actions");
     expect(walletSource).toContain('"Prepare only"');
-    expect(walletSource).toContain("Review &amp; submit</span> still requires your approval in a connected wallet");
-    expect(walletSource).toContain("Prepare only</span> creates a draft for you to finish elsewhere");
-    expect(walletSource).toContain("Limited release</span> means wallet compatibility is still expanding");
+    expect(walletSource).toContain("Review &amp; submit");
+    expect(walletSource).toContain("still requires your approval in a connected wallet; agents and");
+    expect(walletSource).toContain("Prepare only");
+    expect(walletSource).toContain("creates a draft for you to finish elsewhere");
+    expect(walletSource).toContain("Limited release");
+    expect(walletSource).toContain("means wallet compatibility is still expanding");
     expect(walletSource).not.toContain('"Handoff only"');
-    expect(walletSource).toContain("Matterhorn either completes the action here or prepares it for you to finish elsewhere.");
+    expect(walletSource).toContain("Status guide");
+    expect(walletSource).toContain("Signing &amp; privacy");
+    expect(walletSource).not.toContain("Matterhorn either completes the action here or prepares it for you to finish elsewhere.");
     expect(walletSource).not.toContain("Current read, preview, and signing limits.");
     expect(walletSource).toContain("useWallets");
     expect(walletSource).toContain("connectSuiWallet");
-    expect(walletSource).toContain("matterhornServerClient.suiAccount(suiAddress");
+    expect(walletSource).toContain("matterhornServerClient.suiAccount(");
+    expect(walletSource).toContain("suiAddress,");
     expect(walletSource).toContain("account?.address ?? phantomSui.address");
     expect(walletSource).toContain("SuiWorkflowPanel");
     expect(walletSource).toContain("WalletSafetyLedger");
@@ -570,8 +577,8 @@ describe("backend capability UI contract", () => {
       },
     } as MatterhornWorkspaceDataMapResponse;
 
-    expect(storageLocationLabel(dataMap.stores.chat)).toBe("/tmp/opencode.db");
-    expect(storageLocationLabel({ ...dataMap.stores.chat, path: undefined })).toBe("Chat runtime");
+    expect(storageLocationLabel(dataMap.stores.chat)).toBe("Managed chat history on this device");
+    expect(storageLocationLabel({ ...dataMap.stores.chat, path: undefined })).toBe("Managed chat history on this device");
     expect(storageLocationLabel(dataMap.stores.notes)).toBe("/tmp/project/notes");
     expect(workspaceDataPolicySummary(dataMap)).toBe("No training use by default.");
   });

@@ -21,6 +21,7 @@ const protectedRules = [
   { root: ".opencode/package-lock.json", matches: (path) => path === ".opencode/package-lock.json" },
   { root: ".matterhorn-work/", matches: (path) => path === ".matterhorn-work" || path.startsWith(".matterhorn-work/") },
   { root: "notes/", matches: (path) => path === "notes" || path.startsWith("notes/") },
+  { root: "outputs/", matches: (path) => path === "outputs" || path.startsWith("outputs/") },
   { root: "qa-reports/", matches: (path) => path === "qa-reports" || path.startsWith("qa-reports/") },
   { root: "apps/desktop/dist-electron 2/", matches: (path) => path.startsWith("apps/desktop/dist-electron 2/") },
   { root: "apps/desktop/server 2/", matches: (path) => path.startsWith("apps/desktop/server 2/") },

@@ -66,8 +66,7 @@ for (const visibleText of [
   "New chat",
   "New note",
   "Open a desk",
-  "Copy project path",
-  "Open outputs folder",
+  "Jot a note about outputs",
   "Wallet readiness",
   "Wallet readiness details",
   "review and sign every transaction in your wallet",
@@ -120,9 +119,9 @@ for (const visibleText of [
   "Sui wallet",
   "Limited release",
   "Agent model",
-  "opencode/big-pickle",
-  "1 provider connected",
-  "OpenCode",
+  "Matterhorn Models / Big Pickle",
+  "Included models ready",
+  "Matterhorn Models",
   "Big Pickle",
   "Billing",
   "Matterhorn Plus",
@@ -138,6 +137,15 @@ for (const visibleText of [
 ]) {
   assert.ok(script.includes(visibleText), `product browser smoke should exercise ${visibleText}`);
 }
+
+assert.ok(
+  script.includes('getByLabel("Copy project path").count()'),
+  "product browser smoke should reject exposed local project path controls on the web",
+);
+assert.ok(
+  script.includes('getByLabel("Open outputs folder").count()'),
+  "product browser smoke should reject exposed local outputs-folder controls on the web",
+);
 
 assert.ok(
   script.includes("waitForEvent(\"download\"") &&

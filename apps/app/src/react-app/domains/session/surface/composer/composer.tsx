@@ -1504,7 +1504,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                   <button
                     type="button"
                     onClick={props.onStop}
-                    className="inline-flex h-8 max-h-8 items-center gap-1.5 rounded-md bg-dls-hover/70 px-2.5 text-[12px] font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                    className="inline-flex h-8 max-h-8 items-center gap-1.5 rounded-md bg-dls-hover/70 px-2.5 text-[12px] font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)]"
                     title={t("composer.stop")}
                   >
                     <Square size={10} fill="currentColor" />
@@ -1537,7 +1537,7 @@ export function ReactSessionComposer(props: ComposerProps) {
             {props.executionModesEnabled ? <div ref={modeMenuRef} className="relative">
               <button
                 type="button"
-                className="inline-flex min-h-8 items-center gap-1.5 rounded-md bg-dls-surface-muted/[0.18] px-2 text-[12px] font-medium text-dls-text transition-colors duration-150 hover:bg-dls-surface-muted/[0.28] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.3)] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none"
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-md bg-dls-surface-muted/[0.18] px-2 text-[12px] font-medium text-dls-text transition-colors duration-150 hover:bg-dls-surface-muted/[0.28] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none"
                 onClick={() => setModeMenuOpen((value) => !value)}
                 disabled={props.busy}
                 aria-haspopup="menu"
@@ -1564,7 +1564,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                         role="menuitemradio"
                         aria-checked={active}
                         className={cn(
-                          "flex w-full items-start gap-3 rounded-md px-2.5 py-2.5 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgba(var(--dls-accent-rgb),0.3)] motion-reduce:transition-none",
+                          "flex w-full items-start gap-3 rounded-md px-2.5 py-2.5 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] motion-reduce:transition-none",
                           active ? "bg-dls-surface-muted/[0.3]" : "hover:bg-dls-surface-muted/[0.2]",
                         )}
                         onClick={() => {
@@ -1594,7 +1594,7 @@ export function ReactSessionComposer(props: ComposerProps) {
               <button
                 type="button"
                 onClick={() => props.onExecutionModeChange("work")}
-                className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-dls-accent transition-colors hover:bg-dls-surface-muted/[0.2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.3)]"
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-dls-accent transition-colors hover:bg-dls-surface-muted/[0.2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)]"
                 title="Keep this plan in context and switch to Work mode"
               >
                 <Play size={12} fill="currentColor" aria-hidden="true" />
@@ -1625,7 +1625,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                       title={option.description}
                       disabled={props.busy}
                       className={cn(
-                        "min-h-7 rounded-[5px] px-2 text-[11px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.3)] motion-reduce:transition-none",
+                        "min-h-7 rounded-[5px] px-2 text-[11px] font-medium transition-[background-color,color,box-shadow] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)] motion-reduce:transition-none",
                         active
                           ? "bg-dls-canvas text-dls-text shadow-[0_1px_3px_rgba(0,0,0,0.24)]"
                           : "text-dls-secondary hover:bg-dls-surface-muted/[0.2] hover:text-dls-text",

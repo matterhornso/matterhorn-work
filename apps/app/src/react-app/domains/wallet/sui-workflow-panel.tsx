@@ -63,8 +63,8 @@ function fieldId(name: string) {
 }
 
 const SUI_PANEL_SECTION_CLASS = "matterhorn-rail-section grid gap-3 py-2";
-const SUI_PANEL_INPUT_CLASS = "h-8 rounded-md border-0 bg-dls-surface-muted/[0.10] px-2.5 text-sm text-dls-text shadow-none outline-none placeholder:text-dls-muted transition-colors dark:bg-dls-surface-muted/[0.12] focus-visible:bg-dls-surface-muted/[0.16] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.22)] dark:focus-visible:bg-dls-surface-muted/[0.18]";
-const SUI_PANEL_TEXTAREA_CLASS = "min-h-[4.5rem] rounded-md border-0 bg-dls-surface-muted/[0.10] px-2.5 py-2 text-sm leading-6 text-dls-text shadow-none outline-none placeholder:text-dls-muted transition-colors dark:bg-dls-surface-muted/[0.12] focus-visible:bg-dls-surface-muted/[0.16] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.22)] dark:focus-visible:bg-dls-surface-muted/[0.18]";
+const SUI_PANEL_INPUT_CLASS = "h-8 rounded-md border-0 bg-dls-surface-muted/[0.10] px-2.5 text-sm text-dls-text shadow-none outline-none placeholder:text-dls-muted transition-colors dark:bg-dls-surface-muted/[0.12] focus-visible:bg-dls-surface-muted/[0.16] focus-visible:ring-1 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.22)] dark:focus-visible:bg-dls-surface-muted/[0.18]";
+const SUI_PANEL_TEXTAREA_CLASS = "min-h-[4.5rem] rounded-md border-0 bg-dls-surface-muted/[0.10] px-2.5 py-2 text-sm leading-6 text-dls-text shadow-none outline-none placeholder:text-dls-muted transition-colors dark:bg-dls-surface-muted/[0.12] focus-visible:bg-dls-surface-muted/[0.16] focus-visible:ring-1 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.22)] dark:focus-visible:bg-dls-surface-muted/[0.18]";
 
 export type SuiWorkflowRuntime = "web" | "desktop" | "electron" | "unknown";
 

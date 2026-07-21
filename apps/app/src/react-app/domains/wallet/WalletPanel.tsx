@@ -148,7 +148,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
         <Suspense fallback={
           <div className="flex h-full items-center justify-center">
             <div className="flex flex-col items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[rgba(var(--matterhorn-blue-rgb),0.14)] animate-skeleton" />
+              <div className="w-8 h-8 rounded-full bg-[rgb(var(--matterhorn-blue-rgb)/0.14)] animate-skeleton" />
               <span className="text-sm text-dls-secondary">Loading protocol workspace...</span>
             </div>
           </div>
@@ -358,7 +358,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
           <Suspense fallback={
             <div className="flex h-full items-center justify-center">
               <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-[rgba(var(--matterhorn-blue-rgb),0.14)] animate-skeleton" />
+                <div className="w-8 h-8 rounded-full bg-[rgb(var(--matterhorn-blue-rgb)/0.14)] animate-skeleton" />
                 <span className="text-sm text-dls-secondary">Loading crypto workspace...</span>
               </div>
             </div>

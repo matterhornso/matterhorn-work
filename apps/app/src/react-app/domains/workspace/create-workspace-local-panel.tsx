@@ -144,7 +144,7 @@ export function CreateWorkspaceLocalPanel(
                 onChange={(event) => props.onManualFolderChange?.(event.currentTarget.value)}
                 disabled={props.submitting}
                 placeholder="/Users/you/Projects/matterhorn-workspace"
-                className="h-11 w-full rounded-lg border border-transparent bg-dls-hover/75 px-3 font-mono text-[13px] text-dls-text outline-none placeholder:text-dls-secondary focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.12)]"
+                className="h-11 w-full rounded-lg border border-transparent bg-dls-hover/75 px-3 font-mono text-[13px] text-dls-text outline-none placeholder:text-dls-secondary focus:ring-2 focus:ring-[rgb(var(--dls-accent-rgb)/0.12)]"
               />
               <span className="mt-1.5 block text-[11px] leading-4 text-dls-secondary">
                 Use this if the native folder picker does not open in browser mode.
