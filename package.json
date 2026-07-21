@@ -150,6 +150,7 @@
     "test:upstream-openwork-cli": "node scripts/upstream-openwork-cli.test.mjs",
     "upstream:openwork:check": "node scripts/upstream-openwork-sync-check.mjs",
     "test:orchestrator": "pnpm --filter matterhorn-work-orchestrator test:router",
+    "test:orchestrator-workspace-redaction": "node scripts/orchestrator-workspace-redaction-contract.test.mjs",
     "bump:patch": "pnpm --filter @matterhorn-work/app bump:patch",
     "bump:minor": "pnpm --filter @matterhorn-work/app bump:minor",
     "bump:major": "pnpm --filter @matterhorn-work/app bump:major",
