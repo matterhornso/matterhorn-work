@@ -183,7 +183,7 @@ async function sha256File(path) {
   return hash.digest("hex");
 }
 
-async function collectFiles(sourceRoot, sourcePath, archivePrefix, kind, output) {
+async function collectFiles(sourceRoot, sourcePath, archivePrefix, kind, output, options = {}) {
   if (!(await pathExists(sourcePath))) return;
   const sourceStat = await lstat(sourcePath);
   if (sourceStat.isSymbolicLink()) throw new Error(`Symlinks are not allowed in backups: ${sourcePath}`);
@@ -194,11 +194,12 @@ async function collectFiles(sourceRoot, sourcePath, archivePrefix, kind, output)
   for (const entry of entries) {
     const child = join(sourcePath, entry.name);
     const childRelative = relative(sourceRoot, child).split(sep).join("/");
+    if (options.exclude?.(childRelative, entry)) continue;
     const archivePath = ensureSafeRelativePath(`${archivePrefix}/${childRelative}`);
     const childStat = await lstat(child);
     if (childStat.isSymbolicLink()) throw new Error(`Symlinks are not allowed in backups: ${child}`);
     if (childStat.isDirectory()) {
-      await collectFiles(sourceRoot, child, archivePrefix, kind, output);
+      await collectFiles(sourceRoot, child, archivePrefix, kind, output, options);
       continue;
     }
     if (!childStat.isFile()) throw new Error(`Unsupported backup entry: ${child}`);
@@ -257,6 +258,12 @@ async function archiveEntries(config, tempDir) {
     "workspace/.matterhorn-work",
     "matterhorn_state",
     files,
+    {
+      // Restore drills live under .matterhorn-work so they remain scoped to the
+      // workspace, but they are QA scratch rather than customer state. They can
+      // contain dependency symlinks and must never be copied into user backups.
+      exclude: (relativePath) => /^qa-restore-target(?:-|$)/.test(relativePath.split("/")[0] ?? ""),
+    },
   );
   const databaseSnapshot = await snapshotOpencodeDatabase(config.opencodeDb, tempDir);
   const databaseStat = await stat(databaseSnapshot);
