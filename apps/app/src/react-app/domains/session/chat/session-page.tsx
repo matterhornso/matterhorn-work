@@ -1196,6 +1196,8 @@ function writeHiddenAccessibleTargetIds(workspaceId: string | null | undefined, 
 export function SessionPage(props: SessionPageProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const liveLocationRef = useRef(location);
+  liveLocationRef.current = location;
   const { config: shellConfig } = useShellConfig();
   const wallet = useWallet();
   const sessionWallet = useSessionWallet(wallet.store);
@@ -1535,9 +1537,9 @@ export function SessionPage(props: SessionPageProps) {
     setSidePanelState(sidePanelScopeId, panel === "voice" ? null : panel);
 
     // Async task launches can navigate before their desk-close callback runs.
-    // Read the live URL so a stale render closure cannot send the user back to
-    // workspace home after the new session is already open.
-    const currentLocation = typeof window !== "undefined" ? window.location : location;
+    // React Router owns the live path in both BrowserRouter and desktop
+    // HashRouter, so keep its latest value without closing over an old render.
+    const currentLocation = liveLocationRef.current;
     const transition = resolveSessionPanelNavigation(currentLocation.search, panel);
     if (!transition) return;
     navigate(
@@ -1548,7 +1550,7 @@ export function SessionPage(props: SessionPageProps) {
       },
       { replace: transition.replace },
     );
-  }, [location.hash, location.pathname, location.search, navigate, setSidePanelState, sidePanelScopeId]);
+  }, [navigate, setSidePanelState, sidePanelScopeId]);
 
   useEffect(() => {
     // The URL is the shareable source of truth. This effect only mirrors it to

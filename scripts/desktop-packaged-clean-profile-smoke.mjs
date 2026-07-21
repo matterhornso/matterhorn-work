@@ -117,6 +117,9 @@ let stdout = "";
 let stderr = "";
 let userDataDir = null;
 let failure = null;
+let browserOpenResult = null;
+let lastControlSnapshotResult = null;
+let lastBrowserSnapshotResult = null;
 
 try {
   if (process.platform !== "darwin") throw new Error("Packaged clean-profile smoke currently requires macOS.");
@@ -276,16 +279,20 @@ try {
         args: { url: browserTargetUrl, newTab: true },
       }),
     });
+    browserOpenResult = openedBrowser.body;
     if (!openedBrowser.response.ok || openedBrowser.body?.ok !== true) {
       throw new Error("Packaged embedded browser could not open its loopback health target.");
     }
 
     const browserState = await waitFor(async () => {
+      const controlSnapshot = await fetchJson(`${discovery.baseUrl}/snapshot`, { headers });
+      lastControlSnapshotResult = controlSnapshot.body;
       const snapshot = await fetchJson(`${discovery.baseUrl}/execute`, {
         method: "POST",
         headers,
         body: JSON.stringify({ actionId: "browser.snapshot", args: {} }),
       });
+      lastBrowserSnapshotResult = snapshot.body;
       const state = snapshot.body?.result;
       const tabs = Array.isArray(state?.tabs) ? state.tabs : [];
       return tabs.some((tab) => tab?.url === browserTargetUrl) ? state : null;
@@ -333,6 +340,11 @@ const report = {
   summary: { pass: checks.length, fail: failure ? 1 : 0 },
   checks,
   error: failure,
+  diagnostics: {
+    browserOpenResult,
+    lastControlSnapshotResult,
+    lastBrowserSnapshotResult,
+  },
   userDataRemoved: Boolean(userDataDir && !options.keepUserData),
 };
 
