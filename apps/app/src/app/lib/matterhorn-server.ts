@@ -2624,11 +2624,13 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     // User-level env vars (host-auth only — desktop shell is the sole caller).
     // See apps/server/src/env-file.ts and apps/app/pr/environment-variables.md.
     listUserEnvKeys: () =>
-      requestJson<{ keys: string[] }>(
-        baseUrl,
-        "/env/keys",
-        { token, hostToken, timeoutMs: timeouts.config },
-      ),
+      hostToken
+        ? requestJson<{ keys: string[] }>(
+            baseUrl,
+            "/env/keys",
+            { token, hostToken, timeoutMs: timeouts.config },
+          )
+        : Promise.resolve({ keys: [] }),
 
     listUserEnv: () =>
       requestJson<{ items: Array<{ key: string; value: string; updatedAt: number }> }>(

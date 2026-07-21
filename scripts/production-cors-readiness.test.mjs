@@ -44,6 +44,7 @@ for (const required of [
   "--require-production",
   "apps/server/src/config.ts",
   "scripts/dev-matterhorn-local.mjs",
+  "scripts/dev-headless-web.ts",
   "scripts/dev-generated-media-smoke.mjs",
   "MATTERHORN_WORK_CORS_ORIGINS",
   "OPENWORK_CORS_ORIGINS",
@@ -58,6 +59,10 @@ assert.match(serverConfig, /\?\?\s*\["loopback"\]/, "server config should defaul
 const localDev = readFileSync("scripts/dev-matterhorn-local.mjs", "utf8");
 assert.match(localDev, /"--cors",\s*"loopback"/, "dev:matterhorn-local should pass --cors loopback");
 assert.ok(!/"--cors",\s*"\*"/.test(localDev), "dev:matterhorn-local must not pass wildcard CORS");
+
+const headlessWebDev = readFileSync("scripts/dev-headless-web.ts", "utf8");
+assert.match(headlessWebDev, /"--cors",\s*"loopback"/, "dev:headless-web should pass --cors loopback");
+assert.ok(!/"--cors",\s*"\*"/.test(headlessWebDev), "dev:headless-web must not pass wildcard CORS");
 
 const generatedMediaDev = readFileSync("scripts/dev-generated-media-smoke.mjs", "utf8");
 assert.match(generatedMediaDev, /"--cors",\s*"loopback"/, "generated media smoke should pass --cors loopback");

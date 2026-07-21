@@ -16,6 +16,21 @@ function mockFetch(response: Response) {
 }
 
 describe("Matterhorn server client error contract", () => {
+  test("does not probe host-only environment keys without a host credential", async () => {
+    let requested = false;
+    globalThis.fetch = (async () => {
+      requested = true;
+      throw new Error("host-only request must not be sent");
+    }) as typeof fetch;
+    const client = createMatterhornServerClient({
+      baseUrl: "http://127.0.0.1:4096",
+      token: "collaborator-token",
+    });
+
+    await expect(client.listUserEnvKeys()).resolves.toEqual({ keys: [] });
+    expect(requested).toBe(false);
+  });
+
   test("reads live market execution readiness from the guarded backend route", async () => {
     let requestedUrl = "";
     globalThis.fetch = (async (input) => {
