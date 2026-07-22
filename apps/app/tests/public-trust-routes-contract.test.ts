@@ -7,10 +7,15 @@ import {
   MATTERHORN_SUPPORT_EMAIL,
   PUBLIC_TRUST_PATHS,
   isPublicTrustPath,
+  shouldGatePublicWebEntry,
 } from "../src/react-app/domains/public/public-trust-content";
 
 const appRootSource = readFileSync(
   resolve(import.meta.dir, "../src/react-app/shell/app-root.tsx"),
+  "utf8",
+);
+const entrySource = readFileSync(
+  resolve(import.meta.dir, "../src/index.react.tsx"),
   "utf8",
 );
 const trustRouteSource = readFileSync(
@@ -40,9 +45,36 @@ describe("public trust routes", () => {
     expect(isPublicTrustPath("/privacy/export")).toBe(false);
   });
 
+  test("bypasses the outer public-web sign-in bootstrap only for trust pages", () => {
+    for (const pathname of PUBLIC_TRUST_PATHS) {
+      expect(shouldGatePublicWebEntry({
+        publicBetaWeb: true,
+        requireSignin: true,
+        pathname,
+      })).toBe(false);
+    }
+
+    expect(shouldGatePublicWebEntry({
+      publicBetaWeb: true,
+      requireSignin: true,
+      pathname: "/session",
+    })).toBe(true);
+    expect(shouldGatePublicWebEntry({
+      publicBetaWeb: false,
+      requireSignin: true,
+      pathname: "/session",
+    })).toBe(false);
+    expect(shouldGatePublicWebEntry({
+      publicBetaWeb: true,
+      requireSignin: false,
+      pathname: "/session",
+    })).toBe(false);
+  });
+
   test("keeps trust pages outside the forced sign-in block", () => {
     expect(appRootSource).toContain("if (isPublicTrustPath(path)) return;");
     expect(appRootSource).toContain("!isPublicTrustPath(location.pathname)");
+    expect(entrySource).toContain("shouldGatePublicWebEntry({");
   });
 
   test("uses Matterhorn public identity and safe support channels", () => {

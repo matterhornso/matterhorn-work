@@ -9,6 +9,7 @@ import {
 import { readPublicCloudConfig } from "./app/lib/public-cloud-config";
 import { bootstrapTheme } from "./app/theme";
 import { initLocale } from "./i18n";
+import { shouldGatePublicWebEntry } from "./react-app/domains/public/public-trust-content";
 import "./app/bootstrap.css";
 
 bootstrapTheme();
@@ -49,8 +50,11 @@ function AppLoadingFallback() {
 }
 
 function MatterhornEntry() {
-  const publicSigninGate =
-    publicBetaWeb && bootstrapConfig.requireSignin;
+  const publicSigninGate = shouldGatePublicWebEntry({
+    publicBetaWeb,
+    requireSignin: bootstrapConfig.requireSignin,
+    pathname: window.location.pathname,
+  });
   const [publicSessionVerified, setPublicSessionVerified] =
     React.useState(!publicSigninGate);
   const markPublicSessionVerified = React.useCallback(() => {
