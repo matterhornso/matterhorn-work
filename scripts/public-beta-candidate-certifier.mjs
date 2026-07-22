@@ -322,8 +322,12 @@ export function buildStages(config) {
       join(outputDir, "release-secret-scan.json"),
     ]),
     stage("dependency_audit", "Locked dependency vulnerability audit", [
-      "pnpm",
-      "audit:dependencies",
+      "node",
+      "scripts/dependency-bulk-audit.mjs",
+      "--lockfile",
+      "pnpm-lock.yaml",
+      "--audit-level",
+      "low",
     ]),
     stage("app_tests", "Complete app test suite", [
       "pnpm",

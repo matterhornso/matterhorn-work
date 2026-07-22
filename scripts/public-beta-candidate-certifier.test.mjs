@@ -66,6 +66,17 @@ const stages = buildStages({
 assert.ok(stages.some((item) => item.id === "scope_inventory"));
 assert.ok(stages.some((item) => item.id === "candidate_manifest"));
 assert.ok(stages.some((item) => item.id === "secret_scan"));
+assert.deepEqual(
+  stages.find((item) => item.id === "dependency_audit").command,
+  [
+    "node",
+    "scripts/dependency-bulk-audit.mjs",
+    "--lockfile",
+    "pnpm-lock.yaml",
+    "--audit-level",
+    "low",
+  ],
+);
 assert.ok(stages.some((item) => item.id === "app_tests"));
 assert.ok(stages.some((item) => item.id === "server_tests"));
 assert.ok(stages.some((item) => item.id === "production_build"));
