@@ -14,6 +14,19 @@ if (!tag) {
 }
 
 const version = tag.startsWith("v") ? tag.slice(1) : tag;
+const versionMatch = version.match(
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/,
+);
+
+if (!versionMatch) {
+  console.error(`Invalid release tag ${tag}. Expected vX.Y.Z or a SemVer prerelease tag.`);
+  process.exit(1);
+}
+
+const baseVersion = `${versionMatch[1]}.${versionMatch[2]}.${versionMatch[3]}`;
+const expectedVersions = versionMatch[4]
+  ? new Set([version, baseVersion])
+  : new Set([version]);
 
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 const readText = (path) => readFileSync(path, "utf8");
@@ -33,8 +46,9 @@ const check = (label, actual) => {
     mismatches.push(`${label} missing`);
     return;
   }
-  if (actual !== version) {
-    mismatches.push(`${label}=${actual} (expected ${version})`);
+  if (!expectedVersions.has(actual)) {
+    const expected = [...expectedVersions].join(" or ");
+    mismatches.push(`${label}=${actual} (expected ${expected})`);
   }
 };
 
@@ -52,4 +66,4 @@ if (mismatches.length) {
   process.exit(1);
 }
 
-console.log(`Release tag ${tag} matches app/desktop/openwork-orchestrator versions.`);
+console.log(`Release tag ${tag} matches all release package versions.`);
