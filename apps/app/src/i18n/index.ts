@@ -26,8 +26,12 @@ const BUILD_ENV = typeof import.meta !== "undefined"
 
 export function resolveLanguageOptions(env: Record<string, unknown> | undefined) {
   const value = env?.VITE_MATTERHORN_EXPERIMENTAL_LOCALES_ENABLED;
+  const mode = typeof env?.MODE === "string" ? env.MODE.trim().toLowerCase() : "";
+  const developmentBuild = env?.DEV === true || mode === "development";
   const experimentalLocalesEnabled =
-    typeof value === "string" && /^(1|true|yes|on)$/i.test(value.trim());
+    developmentBuild
+    && typeof value === "string"
+    && /^(1|true|yes|on)$/i.test(value.trim());
   return experimentalLocalesEnabled
     ? ALL_LANGUAGE_OPTIONS
     : ALL_LANGUAGE_OPTIONS.filter((option) => option.value === "en");
@@ -41,8 +45,9 @@ const experimentalTranslations = MATTERHORN_EXPERIMENTAL_LOCALES_ENABLED
   : {};
 
 /**
- * Stable launch builds are English-only until every customer-facing locale has
- * completed the Matterhorn terminology and onboarding review.
+ * Production builds remain English-only until every customer-facing locale has
+ * completed the Matterhorn terminology and onboarding review. Experimental
+ * translations can only be previewed in development builds.
  */
 export const LANGUAGE_OPTIONS = resolveLanguageOptions(BUILD_ENV);
 

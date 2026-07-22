@@ -56,9 +56,20 @@ describe("customer workflow template launch cards", () => {
     expect(bittensor?.prompt).toContain("Do not ask for seed phrases");
     expect(bittensor?.prompt).toContain("private keys");
 
-    expect(hyperliquid?.prompt).toContain("Actual execution happens only in the Hyperliquid desk");
-    expect(hyperliquid?.prompt).toContain("connected-wallet signing");
-    expect(hyperliquid?.prompt).toContain("Never request keys or API secrets");
+    expect(hyperliquid?.prompt).toContain("never claim Matterhorn placed it");
+    expect(hyperliquid?.prompt).toContain("Finish any real order in your own reviewed Hyperliquid client");
+    expect(hyperliquid?.prompt).toContain("Never request keys, signatures, or API secrets");
+    expect(hyperliquid?.statusLabel).toBe("Read and preview");
+    expect(hyperliquid?.description).not.toContain("place orders");
+
+    const hyperliquidTemplate = FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES.find((template) => template.id === "hyperliquid_trader");
+    expect(hyperliquidTemplate?.safetyBoundaries).toMatchObject({
+      canSubmit: false,
+      liveExecutionEnabled: false,
+      canExecute: false,
+      requiresExternalSigner: true,
+      allowsRealFunds: false,
+    });
 
     expect(polymarket?.prompt).toContain("Can submit: No");
     expect(polymarket?.prompt).toContain("Live submission: Off");

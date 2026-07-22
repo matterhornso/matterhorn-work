@@ -303,19 +303,30 @@ describe("Shared primitives UI contract", () => {
     expect(settingsPage).toContain('case "ai":\n      return Cpu;');
     expect(settingsPage).not.toContain('case "ai":\n      return Zap;');
     expect(settingsPage).toContain("SETTINGS_SIDEBAR_STYLE");
-    expect(settingsPage).toContain('"--sidebar": "var(--dls-sidebar)"');
+    expect(settingsPage).toContain('"--sidebar": "var(--matterhorn-ink)"');
+    expect(settingsPage).toContain('"--sidebar-foreground": "#f4fbff"');
     expect(settingsPage).toContain(
-      '"--sidebar-border": "rgb(var(--matterhorn-blue-rgb) / 0.12)"',
+      '"--sidebar-accent-foreground": "var(--matterhorn-blue)"',
     );
     expect(settingsPage).toContain(
-      'borderColor: "rgb(var(--matterhorn-blue-rgb) / 0.12)"',
+      '"--sidebar-border": "rgb(var(--matterhorn-blue-rgb) / 0.16)"',
     );
+    expect(settingsPage).toContain(
+      '"--sidebar-ring": "var(--matterhorn-blue)"',
+    );
+    expect(settingsPage).toContain(
+      'borderColor: "rgb(var(--matterhorn-blue-rgb) / 0.16)"',
+    );
+    expect(settingsPage).toContain("matterhorn-settings-sidebar");
     expect(settingsPage).toContain('src="/matterhorn-logo-square.svg"');
     expect(settingsPage).toContain(
-      "data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.08)]",
+      "data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)]",
     );
     expect(settingsPage).toContain(
-      "data-active:[&_svg]:text-[rgb(var(--matterhorn-blue-rgb))]",
+      "data-active:text-[var(--matterhorn-blue)]",
+    );
+    expect(settingsPage).toContain(
+      "data-active:[&_svg]:text-[var(--matterhorn-blue)]",
     );
     expect(settingsPage).toContain("shouldDisplaySettingsReadinessStatus");
     expect(settingsPage).toContain('"Preview",');

@@ -5,7 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const mcpPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "index.mjs");
-const child = spawn(process.execPath, [mcpPath], { stdio: ["pipe", "pipe", "pipe"] });
+const child = spawn(process.execPath, [mcpPath], {
+  stdio: ["pipe", "pipe", "pipe"],
+  env: { ...process.env, MATTERHORN_MCP_DEBUG: "0" },
+});
 
 let nextId = 1;
 let buffer = "";
@@ -133,7 +136,80 @@ try {
     name: "security_decodeCalldata",
     arguments: { data: "not-hex" },
   });
-  assert.equal(badCalldata.error?.message, "data must be hex encoded");
+  assert.equal(badCalldata.error?.message, "data must be even-length hex encoded data");
+
+  const badBatchAddress = await ask("tools/call", {
+    name: "crypto_buildBatch",
+    arguments: {
+      chainId: 8453,
+      from: "0x1111111111111111111111111111111111111111",
+      steps: [{ to: "0x0", data: "0x", value: "0" }],
+    },
+  });
+  assert.deepEqual(textPayload(badBatchAddress), {
+    success: false,
+    error: "steps[0].to must be a valid EVM address",
+  });
+
+  const badBatchData = await ask("tools/call", {
+    name: "crypto_buildBatch",
+    arguments: {
+      chainId: 8453,
+      from: "0x1111111111111111111111111111111111111111",
+      steps: [{ to: "0x2222222222222222222222222222222222222222", data: "0xabc", value: "0" }],
+    },
+  });
+  assert.deepEqual(textPayload(badBatchData), {
+    success: false,
+    error: "steps[0].data must be even-length hex encoded data",
+  });
+
+  const goodBatch = await ask("tools/call", {
+    name: "crypto_buildBatch",
+    arguments: {
+      chainId: 8453,
+      from: "0x1111111111111111111111111111111111111111",
+      steps: [{
+        id: "approve",
+        type: "approval",
+        description: "Review token approval",
+        to: "0x2222222222222222222222222222222222222222",
+        data: "0x095ea7b30000000000000000000000003333333333333333333333333333333333333333",
+        value: "0",
+      }],
+    },
+  });
+  assert.deepEqual(textPayload(goodBatch), {
+    success: true,
+    steps: [{
+      id: "approve",
+      type: "approval",
+      description: "Review token approval",
+      to: "0x2222222222222222222222222222222222222222",
+      data: "0x095ea7b30000000000000000000000003333333333333333333333333333333333333333",
+      value: "0",
+      selector: "0x095ea7b3",
+    }],
+    chainId: 8453,
+    from: "0x1111111111111111111111111111111111111111",
+    canSubmit: false,
+    requiresSimulation: true,
+  });
+
+  const hyperliquidOrder = await ask("tools/call", {
+    name: "hl_placeOrder",
+    arguments: {
+      asset: "ETH",
+      isBuy: true,
+      sz: "0.123456789",
+      limitPx: "2500",
+      reduceOnly: false,
+    },
+  });
+  assert.equal(textPayload(hyperliquidOrder).status, "needs_signature");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(stderr.includes("hl_placeOrder"), false);
+  assert.equal(stderr.includes("0.123456789"), false);
 
   console.log("Matterhorn crypto MCP security smoke test passed.");
 } finally {

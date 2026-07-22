@@ -66,6 +66,10 @@ describe("customer-facing Matterhorn Desks branding", () => {
     expect(index).toContain("<title>Matterhorn Desks</title>");
     expect(manifest).toMatchObject({ name: "Matterhorn Desks", short_name: "Desks" });
     expect(publicSignIn).toContain("<span>Matterhorn Desks</span>");
+    expect(publicSignIn).toContain("Serious work deserves more than a chat.");
+    expect(publicSignIn).toContain(
+      "Work inside focused AI desks that understand context, use tools,",
+    );
     expect(welcome).toContain("Matterhorn Desks");
     expect(builder).toContain("productName: Matterhorn Desks");
     expect(desktopMain).toContain('const APP_NAME = isDevMode ? "Matterhorn Desks - Dev" : "Matterhorn Desks";');

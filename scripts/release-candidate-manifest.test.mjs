@@ -28,6 +28,10 @@ assert.equal(
   "release-engineering",
 );
 assert.equal(
+  classifyCandidatePath("patches/@solidjs__router@0.15.4.patch"),
+  "release-engineering",
+);
+assert.equal(
   classifyCandidatePath("apps/app/src/react-app/domains/cloud/public-web-signin.tsx"),
   "public-web-security",
 );

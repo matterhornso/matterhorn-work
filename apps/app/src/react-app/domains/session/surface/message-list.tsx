@@ -1457,14 +1457,14 @@ function OpenTargetIcon(props: { target: OpenTarget }) {
 
   if (props.target.preview === "sheet") {
     return (
-      <span className="inline-flex h-3.5 min-w-5 shrink-0 items-center justify-center rounded-[3px] border border-emerald-500/30 bg-emerald-500/10 px-0.5 text-[6px] font-bold leading-none text-emerald-700">
+      <span className="inline-flex h-4 min-w-6 shrink-0 items-center justify-center rounded-[3px] border border-emerald-500/30 bg-emerald-500/10 px-1 text-[10px] font-bold leading-none text-emerald-700">
         XLS
       </span>
     );
   }
   if (props.target.preview === "markdown") {
     return (
-      <span className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border border-primary/25 bg-primary/10 text-[7px] font-bold leading-none text-primary">
+      <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-[3px] border border-primary/25 bg-primary/10 text-[10px] font-bold leading-none text-primary">
         MD
       </span>
     );

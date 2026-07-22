@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { Shield, X, AlertTriangle, CheckCircle2, XCircle, TrendingUp, Fuel, FileCode } from "lucide-react";
-import { useEffect, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,7 @@ const TRUSTED_APPROVAL_ERROR_PREFIXES = [
   "Wallet not connected",
   "This transaction exceeds",
   "Swap rate limit reached",
+  "Matterhorn cannot verify",
 ];
 
 function decodeSelector(data: string): { selector: string; signature: string | null } {
@@ -187,6 +188,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
   const [simulation, setSimulation] = useState<SimulationReviewState>({ status: "idle" });
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [approvalError, setApprovalError] = useState<string | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
 
   // Countdown delay for mainnet transactions
   useEffect(() => {
@@ -229,6 +231,51 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [pending, store, onReject]);
+
+  useEffect(() => {
+    if (!pending) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusableSelector = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+    const frame = window.requestAnimationFrame(() => {
+      const dialog = overlayRef.current?.querySelector<HTMLElement>("[role='dialog']");
+      if (!dialog) return;
+      const safeAction = dialog.querySelector<HTMLElement>("[data-approval-cancel]");
+      const firstAction = dialog.querySelector<HTMLElement>(focusableSelector);
+      (safeAction ?? firstAction ?? dialog).focus();
+    });
+
+    function trapFocus(event: KeyboardEvent) {
+      if (event.key !== "Tab") return;
+      const dialog = overlayRef.current?.querySelector<HTMLElement>("[role='dialog']");
+      if (!dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+        .filter((element) => element.getAttribute("aria-hidden") !== "true");
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    window.addEventListener("keydown", trapFocus);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("keydown", trapFocus);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, [pending]);
 
   // Gas estimation + ENS reverse lookup + calldata decode
   useEffect(() => {
@@ -336,11 +383,12 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
     const type = pending.limitPx !== undefined ? `Limit @ ${pending.limitPx}` : "Market";
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200 motion-reduce:animate-none motion-reduce:backdrop-blur-none">
+      <div ref={overlayRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200 motion-reduce:animate-none motion-reduce:backdrop-blur-none">
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="matterhorn-hyperliquid-order-approval-title"
+          tabIndex={-1}
           className="matterhorn-overlay-surface mx-4 max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-lg p-6 ring-1 ring-dls-border/45 animate-in fade-in zoom-in-95 duration-200 motion-reduce:animate-none"
         >
           {/* Header */}
@@ -356,6 +404,8 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
             </div>
             <button
               type="button"
+              data-approval-cancel
+              aria-label="Close Hyperliquid handoff review"
               className="rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover hover:text-dls-text transition-colors"
               onClick={() => {
                 dispatchTxApprovalResponse(false);
@@ -406,6 +456,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
           {/* Actions */}
           <div className="flex gap-3">
             <Button
+              data-approval-cancel
               variant="outline"
               className="flex-1 gap-1.5 h-10"
               onClick={() => {
@@ -469,6 +520,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
         warnings.push(...analysis.warnings);
         blockers.push(...evaluateWalletApprovalAgainstPolicy({
           valueUSD,
+          valueUSDIsKnown: analysis.valueUSDIsKnown,
           policy: { ...safetyPolicy, dailySpendUSD: plannedDailySpendUSD },
           isSwap: analysis.isSwap,
         }));
@@ -488,7 +540,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
     });
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200 motion-reduce:animate-none motion-reduce:backdrop-blur-none">
+      <div ref={overlayRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200 motion-reduce:animate-none motion-reduce:backdrop-blur-none">
         <TransactionBatch
           plan={{
             steps: pending.steps.map(s => ({
@@ -543,6 +595,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
   const usdValue = analysis.valueUSD;
   const policyReasons = evaluateWalletApprovalAgainstPolicy({
     valueUSD: usdValue,
+    valueUSDIsKnown: analysis.valueUSDIsKnown,
     policy: safetyPolicy,
     isSwap: analysis.isSwap,
   });
@@ -551,7 +604,11 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
   const simulationUnavailable = simulation.status === "unavailable";
   const simulationBlocked = simulationFailed || simulationUnavailable;
   const isBlocked = walletUnavailable || chainMismatch || mainnetBlocked || policyReasons.length > 0 || simulationBlocked;
-  const usdLabel = analysis.tokenAction?.isUnlimitedApproval ? "Unlimited allowance" : `~$${usdValue.toFixed(2)} USD`;
+  const usdLabel = analysis.tokenAction?.isUnlimitedApproval
+    ? "Unlimited allowance"
+    : analysis.valueUSDIsKnown
+      ? `~$${usdValue.toFixed(2)} USD`
+      : "USD value unavailable";
   const blockingNotices = [
     approvalError,
     walletUnavailable
@@ -583,11 +640,12 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
   const reviewNotices = [...blockingNotices, ...cautionNotices];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200 motion-reduce:animate-none motion-reduce:backdrop-blur-none">
+    <div ref={overlayRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200 motion-reduce:animate-none motion-reduce:backdrop-blur-none">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="matterhorn-transaction-approval-title"
+        tabIndex={-1}
         className="matterhorn-overlay-surface mx-4 max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-lg p-6 ring-1 ring-dls-border/45 animate-in fade-in zoom-in-95 duration-200 motion-reduce:animate-none"
       >
         {/* Header */}
@@ -603,6 +661,8 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
           </div>
           <button
             type="button"
+            data-approval-cancel
+            aria-label="Close transaction approval"
             className="rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover hover:text-dls-text transition-colors"
             onClick={() => {
               dispatchTxApprovalResponse(false);
@@ -619,7 +679,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
         <div className="matterhorn-raised-surface mb-4 rounded-lg px-4 py-4 text-center ring-1 ring-dls-border/25">
           <p className="text-xs font-medium text-dls-secondary">Transaction value</p>
           <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-dls-text">{analysis.displayValue}</p>
-          {usdValue > 0 || analysis.tokenAction?.isUnlimitedApproval ? (
+          {usdValue > 0 || !analysis.valueUSDIsKnown || analysis.tokenAction?.isUnlimitedApproval ? (
             <p className="mt-1 font-mono text-sm tabular-nums text-dls-secondary">{usdLabel}</p>
           ) : null}
         </div>
@@ -751,6 +811,7 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
         {/* Actions */}
         <div className="flex gap-3">
           <Button
+            data-approval-cancel
             variant="outline"
             className="flex-1 gap-1.5 h-10"
             onClick={() => {

@@ -5,7 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const mcpPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "index.mjs");
-const child = spawn(process.execPath, [mcpPath], { stdio: ["pipe", "pipe", "pipe"] });
+const child = spawn(process.execPath, [mcpPath], {
+  stdio: ["pipe", "pipe", "pipe"],
+  env: { ...process.env, MATTERHORN_MCP_DEBUG: "0" },
+});
 
 let nextId = 1;
 let buffer = "";
@@ -93,6 +96,20 @@ try {
   const payload = JSON.parse(goodTx.result.content[0].text);
   assert.equal(payload.status, "pending_approval");
   assert.equal(payload.needs_approval, true);
+
+  const signMessage = await ask("tools/call", {
+    name: "wallet_signMessage",
+    arguments: {
+      message: "matterhorn-security-log-canary",
+      description: "Security smoke signature",
+    },
+  });
+  assert.equal(JSON.parse(signMessage.result.content[0].text).status, "pending_approval");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(stderr.includes("0x1111111111111111111111111111111111111111"), false);
+  assert.equal(stderr.includes("matterhorn-security-log-canary"), false);
+  assert.equal(stderr.includes("tx_approval"), false);
+  assert.equal(stderr.includes("sign_message"), false);
 
   console.log("Matterhorn wallet MCP security smoke test passed.");
 } finally {

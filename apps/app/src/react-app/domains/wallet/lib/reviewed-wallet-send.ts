@@ -22,12 +22,20 @@ export type ReviewedWalletSendResult = {
   analysis: PreparedWalletSendRequest["analysis"];
 };
 
+export type ReviewedWalletSendSimulationResult = {
+  status: "passed" | "failed" | "unavailable";
+  error?: string;
+};
+
 export type ReviewedWalletSendInput = {
   approval: ReviewedWalletSendApproval;
   connectedChainId: number | null | undefined;
   forceTestnet?: boolean;
   policy: Omit<WalletApprovalPolicyInput, "valueUSD">;
   chainName?: (chainId: number) => string;
+  simulateTransaction?: (
+    request: PreparedWalletSendRequest["request"],
+  ) => Promise<ReviewedWalletSendSimulationResult>;
   sendTransaction: (request: PreparedWalletSendRequest["request"]) => Promise<`0x${string}`>;
   now?: () => number;
   blockedReasonPrefix?: string;
@@ -120,6 +128,30 @@ export async function sendReviewedWalletTransaction(input: ReviewedWalletSendInp
       review: reviewTrailForApproval(approval, fallbackAnalysis),
     });
     throw error;
+  }
+
+  let simulation: ReviewedWalletSendSimulationResult;
+  try {
+    simulation = input.simulateTransaction
+      ? await input.simulateTransaction(prepared.request)
+      : { status: "unavailable", error: "Simulation service is unavailable." };
+  } catch {
+    simulation = { status: "unavailable", error: "Simulation service is unavailable." };
+  }
+  if (simulation.status !== "passed") {
+    const reason = simulation.error
+      ?? (simulation.status === "failed" ? "Transaction simulation failed." : "Simulation service is unavailable.");
+    input.onSecurityLog?.({
+      timestamp,
+      action: "simulation_failed",
+      chainId: approval.chainId,
+      to: approval.to,
+      valueUSD: prepared.analysis.valueUSD,
+      riskLevel: approval.riskLevel,
+      reason,
+      review: reviewTrailForApproval(approval, prepared.analysis),
+    });
+    throw new Error(reason);
   }
 
   const hash = await input.sendTransaction(prepared.request);

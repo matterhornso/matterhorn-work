@@ -34,6 +34,7 @@ const BUCKETS = Object.freeze([
     patterns: [
       /^\.github\//,
       /^packaging\//,
+      /^patches\//,
       /^scripts\/(?:release|public-beta|product-hunt|launch-channel|production|dependency|desktop|electron|lighthouse|matterhorn-platform|matterhorn-product-browser|matterhorn-full-platform|generated-media-browser|workspace-backup|rollback)/,
       /(?:^|\/)(?:electron-builder|vercel|vite)\.(?:ya?ml|json|[cm]?[jt]s)$/,
       /(?:^|\/)(?:Dockerfile|docker-compose\.ya?ml)$/,

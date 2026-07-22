@@ -385,15 +385,16 @@ function SettingsTabReadinessBadge(props: { status: SettingsReadinessStatus | nu
 }
 
 const SETTINGS_SIDEBAR_ITEM_CLASS =
-  "rounded-md px-3 text-dls-secondary transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-blue-rgb)/0.055)] hover:text-dls-text data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.08)] data-active:font-semibold data-active:text-dls-text data-active:[&_svg]:text-[rgb(var(--matterhorn-blue-rgb))] dark:mac:data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.08)]";
+  "rounded-md px-3 text-[rgb(var(--matterhorn-blue-rgb)/0.78)] transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-blue-rgb)/0.07)] hover:text-[var(--matterhorn-blue)] data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)] data-active:font-semibold data-active:text-[var(--matterhorn-blue)] data-active:[&_svg]:text-[var(--matterhorn-blue)] mac:data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)] dark:mac:data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)]";
 
 const SETTINGS_SIDEBAR_STYLE = {
-  "--sidebar": "var(--dls-sidebar)",
-  "--sidebar-foreground": "var(--dls-text-primary)",
+  "--sidebar": "var(--matterhorn-ink)",
+  "--sidebar-foreground": "#f4fbff",
   "--sidebar-accent": "rgb(var(--matterhorn-blue-rgb) / 0.08)",
-  "--sidebar-accent-foreground": "var(--dls-text-primary)",
-  "--sidebar-border": "rgb(var(--matterhorn-blue-rgb) / 0.12)",
-  borderColor: "rgb(var(--matterhorn-blue-rgb) / 0.12)",
+  "--sidebar-accent-foreground": "var(--matterhorn-blue)",
+  "--sidebar-border": "rgb(var(--matterhorn-blue-rgb) / 0.16)",
+  "--sidebar-ring": "var(--matterhorn-blue)",
+  borderColor: "rgb(var(--matterhorn-blue-rgb) / 0.16)",
 } as React.CSSProperties;
 
 type SettingsPageProps = {
@@ -433,7 +434,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
 
   return (
     <Sidebar
-      className="border-[rgb(var(--matterhorn-blue-rgb)/0.12)] mac:**:data-[sidebar=sidebar]:bg-transparent"
+      className="matterhorn-settings-sidebar border-[rgb(var(--matterhorn-blue-rgb)/0.16)] mac:**:data-[sidebar=sidebar]:bg-transparent"
       style={SETTINGS_SIDEBAR_STYLE}
     >
       <div className="hidden h-10 mac:block mac:titlebar-drag" />

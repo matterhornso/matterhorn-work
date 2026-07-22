@@ -44,7 +44,11 @@ import { MatterhornGeneratedImageStore, imageFilePath } from "./generated-image-
 import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
 import { MatterhornBillingAccountStore } from "./billing-account-store.js";
 import { resolveNftEnvironmentConfig, type NftEnvironmentConfig } from "./image-nft-capabilities.js";
-import { recordAudit } from "./audit.js";
+import { countAuditEntries, recordAudit } from "./audit.js";
+import {
+  billingPeriodEpochRange,
+  countDurableGeneratedImageUsage,
+} from "./generated-media-usage.js";
 import { recordTaskEvent } from "./task-events.js";
 import { shortId } from "./utils.js";
 import { uploadBlobToWalrus, WalrusUploadError } from "./walrus-storage.js";
@@ -171,7 +175,8 @@ export function addGeneratedMediaRoutes(
     const input = validateImageGenerationInput(body);
     const store = new MatterhornGeneratedImageStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     const billingContext = await resolveGeneratedMediaBillingContext(workspace);
-    const imageUsage = (await store.list()).filter((image) => isBillingUsageTimestampInPeriod(image.createdAt, billingContext.usagePeriod)).length;
+    const storedImages = await store.list();
+    const imageUsage = await countDurableGeneratedImageUsage(workspace, storedImages, billingContext.usagePeriod);
     await requireGeneratedMediaEntitlement(workspace, "image_generation", imageUsage, billingContext, ctx.actor);
 
     if (detectSecretShapedInput(input.prompt)) {
@@ -553,7 +558,7 @@ export function addGeneratedMediaRoutes(
     await requireGeneratedMediaEntitlement(
       workspace,
       "nft_mint_preview",
-      await countMintPreviewUsage(store, draft.id, billingContext.usagePeriod),
+      await countMintPreviewUsage(workspace, store, draft.id, billingContext.usagePeriod),
       billingContext,
       ctx.actor,
     );
@@ -728,7 +733,7 @@ export function addGeneratedMediaRoutes(
     await requireGeneratedMediaEntitlement(
       workspace,
       "nft_marketplace_listing",
-      await countMarketplaceListingUsage(store, draft.id, billingContext.usagePeriod),
+      await countMarketplaceListingUsage(workspace, store, draft.id, billingContext.usagePeriod),
       billingContext,
       ctx.actor,
     );
@@ -1028,31 +1033,47 @@ async function countWalrusStorageUsage(store: MatterhornImageNftDraftStore, curr
 }
 
 async function countMintPreviewUsage(
+  workspace: WorkspaceInfo,
   store: MatterhornImageNftDraftStore,
   currentDraftId: string,
   period: BillingUsagePeriod,
 ): Promise<number> {
-  return (await store.list()).filter((draft) => {
+  const artifactUsage = (await store.list()).filter((draft) => {
     if (draft.id === currentDraftId) return false;
     if (!isBillingUsageTimestampInPeriod(draft.updatedAt, period)) return false;
     return draft.mint.status === "preview_ready"
       || draft.mint.status === "confirmed"
       || Boolean(draft.mint.packageId || draft.mint.objectId || draft.mint.transactionDigest);
   }).length;
+  const auditUsage = await countAuditEntries(workspace.path, workspace.id, {
+    actions: ["workspace.nft.mint_preview_prepared"],
+    excludeTargetContains: [currentDraftId],
+    uniqueTargets: true,
+    ...billingPeriodEpochRange(period),
+  });
+  return Math.max(artifactUsage, auditUsage);
 }
 
 async function countMarketplaceListingUsage(
+  workspace: WorkspaceInfo,
   store: MatterhornImageNftDraftStore,
   currentDraftId: string,
   period: BillingUsagePeriod,
 ): Promise<number> {
-  return (await store.list()).filter((draft) => {
+  const artifactUsage = (await store.list()).filter((draft) => {
     if (draft.id === currentDraftId) return false;
     if (!isBillingUsageTimestampInPeriod(draft.updatedAt, period)) return false;
     return draft.listing.status === "preview_ready"
       || draft.listing.status === "listed"
       || Boolean(draft.listing.kioskId || draft.listing.transferPolicyId);
   }).length;
+  const auditUsage = await countAuditEntries(workspace.path, workspace.id, {
+    actions: ["workspace.nft.listing_preview_prepared"],
+    excludeTargetContains: [currentDraftId],
+    uniqueTargets: true,
+    ...billingPeriodEpochRange(period),
+  });
+  return Math.max(artifactUsage, auditUsage);
 }
 
 function formatRequiredPlanNames(planIds: string[]): string {

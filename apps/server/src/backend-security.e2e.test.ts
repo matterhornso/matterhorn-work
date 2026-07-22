@@ -584,6 +584,49 @@ describe("Memory write permissions by token scope", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Scope A.5: Protocol watch and baseline mutations
+// ---------------------------------------------------------------------------
+
+describe("Protocol state mutations enforce client scope and workspace mode", () => {
+  const mutationPaths = [
+    "/api/hyperliquid/watches",
+    "/api/hyperliquid/watches/act",
+    "/api/polymarket/watches",
+    "/api/polymarket/watches/act",
+    "/api/bittensor/wallet/timeline/clear",
+    "/api/bittensor/monitoring/watchlist",
+  ];
+
+  test("viewer tokens cannot mutate protocol watches or wallet baselines", async () => {
+    const { base, viewerToken } = await boot();
+
+    for (const path of mutationPaths) {
+      const result = await jsonFetch(base, path, viewerToken, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+
+      expect(result.response.status, path).toBe(403);
+      expect(result.payload.code, path).toBe("forbidden");
+    }
+  });
+
+  test("read-only workspaces block protocol watch and wallet baseline mutations", async () => {
+    const { base, ownerToken } = await boot(true);
+
+    for (const path of mutationPaths) {
+      const result = await jsonFetch(base, path, ownerToken, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+
+      expect(result.response.status, path).toBe(403);
+      expect(result.payload.code, path).toBe("read_only");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Scope B: Read-only workspace blocks memory writes
 // ---------------------------------------------------------------------------
 

@@ -16,11 +16,12 @@
  */
 
 import { join } from "node:path";
-import { appendFile, readFile } from "node:fs/promises";
+import { appendFile } from "node:fs/promises";
 import { homedir } from "node:os";
 
 import type { MatterhornTaskEvent, MatterhornTaskRun } from "./types.js";
 import { ensureDir, exists } from "./utils.js";
+import { readRecentJsonl } from "./jsonl-tail.js";
 
 function expandHome(value: string): string {
   if (value.startsWith("~/")) {
@@ -67,20 +68,8 @@ export async function readTaskEvents(
 ): Promise<MatterhornTaskEvent[]> {
   const path = taskEventsPath(workspaceId);
   if (!(await exists(path))) return [];
-  const content = await readFile(path, "utf8");
-  const rawLines = content.trim().split("\n").filter(Boolean);
-  if (!rawLines.length) return [];
-  // Always read the last `limit` lines and return in reverse (newest first)
-  const slice = rawLines.slice(-Math.max(1, limit));
-  const events: MatterhornTaskEvent[] = [];
-  for (let i = slice.length - 1; i >= 0; i--) {
-    try {
-      events.push(JSON.parse(slice[i]) as MatterhornTaskEvent);
-    } catch {
-      // ignore malformed lines
-    }
-  }
-  return events;
+  const { items } = await readRecentJsonl<MatterhornTaskEvent>(path, limit);
+  return items;
 }
 
 /**

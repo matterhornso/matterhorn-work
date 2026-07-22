@@ -8969,6 +8969,8 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/hyperliquid/watches", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
     const forbidden = findForbiddenHyperliquidCredentialInput(body);
     if (forbidden) {
@@ -9014,6 +9016,8 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/hyperliquid/watches/act", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
     rejectCustomWatchActionPrompt(body, "Hyperliquid");
     const forbidden = findForbiddenHyperliquidCredentialInput(body);
@@ -10321,6 +10325,8 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/polymarket/watches", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
     const forbidden = findForbiddenPolymarketCredentialInput(body);
     if (forbidden) {
@@ -10364,6 +10370,8 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/polymarket/watches/act", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
     rejectCustomWatchActionPrompt(body, "Polymarket");
     const forbidden = findForbiddenPolymarketCredentialInput(body);
@@ -10729,6 +10737,8 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/bittensor/wallet/timeline/clear", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
     const ss58Address = typeof body.ss58Address === "string" ? body.ss58Address : "";
     if (!isValidSs58Address(ss58Address)) throw new ApiError(400, "invalid_ss58", "valid SS58 address is required");
@@ -11812,6 +11822,8 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/bittensor/monitoring/watchlist", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
     const watchKind: BittensorWatch["kind"] =
       typeof body.kind === "string" && ["subnet", "wallet", "validator", "emissions", "slippage"].includes(body.kind)

@@ -8,6 +8,13 @@
 
 import { createServer } from "node:http";
 
+const MCP_DEBUG = /^(1|true|yes|on)$/i.test(process.env.MATTERHORN_MCP_DEBUG?.trim() ?? "");
+
+function debugEvent(event, details) {
+  if (!MCP_DEBUG) return;
+  process.stderr.write(`${JSON.stringify({ event, ...details })}\n`);
+}
+
 // =========================================================
 // Clients
 // =========================================================
@@ -179,8 +186,54 @@ function normalizeUint256(value, label = "amount", { allowZero = false } = {}) {
 }
 
 function normalizeHexData(value, label = "data") {
-  if (typeof value !== "string" || !/^0x[a-fA-F0-9]*$/.test(value)) throw new Error(`${label} must be hex encoded`);
-  return value;
+  if (typeof value !== "string" || !/^0x(?:[a-fA-F0-9]{2})*$/.test(value)) {
+    throw new Error(`${label} must be even-length hex encoded data`);
+  }
+  return value.toLowerCase();
+}
+
+function normalizeBatchText(value, fallback, label, maxLength) {
+  const text = typeof value === "string" && value.trim() ? value.trim() : fallback;
+  if (text.length > maxLength) throw new Error(`${label} must be ${maxLength} characters or fewer`);
+  return text;
+}
+
+function normalizeBatchSteps(steps) {
+  if (!Array.isArray(steps) || steps.length === 0) throw new Error("steps must contain at least one transaction");
+  if (steps.length > 20) throw new Error("steps cannot contain more than 20 transactions");
+
+  const normalized = steps.map((step, index) => {
+    if (!step || typeof step !== "object" || Array.isArray(step)) {
+      throw new Error(`steps[${index}] must be an object`);
+    }
+    const id = normalizeBatchText(step.id, `step-${index + 1}`, `steps[${index}].id`, 80);
+    const data = normalizeHexData(step.data ?? "0x", `steps[${index}].data`);
+    const dependsOn = step.dependsOn === undefined
+      ? undefined
+      : normalizeBatchText(step.dependsOn, "", `steps[${index}].dependsOn`, 80);
+    return {
+      id,
+      type: normalizeBatchText(step.type, "custom", `steps[${index}].type`, 40),
+      description: normalizeBatchText(step.description, `Step ${index + 1}`, `steps[${index}].description`, 240),
+      to: normalizeAddress(step.to, `steps[${index}].to`),
+      data,
+      value: normalizeUint256(step.value ?? "0", `steps[${index}].value`, { allowZero: true }),
+      selector: data.length >= 10 ? data.slice(0, 10) : "native_transfer",
+      dependsOn,
+    };
+  });
+
+  const ids = new Set();
+  for (const step of normalized) {
+    if (ids.has(step.id)) throw new Error(`Duplicate batch step id: ${step.id}`);
+    ids.add(step.id);
+  }
+  for (const step of normalized) {
+    if (!step.dependsOn) continue;
+    if (step.dependsOn === step.id) throw new Error(`Batch step ${step.id} cannot depend on itself`);
+    if (!ids.has(step.dependsOn)) throw new Error(`Batch step ${step.id} depends on unknown step ${step.dependsOn}`);
+  }
+  return normalized;
 }
 
 function getRegistryForChain(chainId) {
@@ -1442,7 +1495,38 @@ const tools = [
 
   // -- portfolio / batch --
   { name: "crypto_getPortfolio", description: "Get aggregated portfolio for an address: balances, positions, yields.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, address: { type: "string" } }, required: ["chainId", "address"] } },
-  { name: "crypto_buildBatch", description: "Build a multi-step DeFi batch (swap -> approve -> supply). Returns steps in order.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, from: { type: "string" }, steps: { type: "array" } }, required: ["chainId", "from", "steps"] } },
+  {
+    name: "crypto_buildBatch",
+    description: "Validate and build a review-only multi-step DeFi batch (swap -> approve -> supply). Returns normalized steps and selectors; every step still requires simulation, review, and wallet approval.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        chainId: { type: "integer" },
+        from: { type: "string", pattern: "^0x[a-fA-F0-9]{40}$" },
+        steps: {
+          type: "array",
+          minItems: 1,
+          maxItems: 20,
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", maxLength: 80 },
+              type: { type: "string", maxLength: 40 },
+              description: { type: "string", maxLength: 240 },
+              to: { type: "string", pattern: "^0x[a-fA-F0-9]{40}$" },
+              data: { type: "string", pattern: "^0x(?:[a-fA-F0-9]{2})*$" },
+              value: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
+              dependsOn: { type: "string", maxLength: 80 },
+            },
+            required: ["to", "data"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["chainId", "from", "steps"],
+      additionalProperties: false,
+    },
+  },
 
   // -- cow protocol --
   { name: "crypto_cowQuote", description: "Get a CoW Protocol MEV-protected swap quote.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, sellToken: { type: "string" }, buyToken: { type: "string" }, sellAmount: { type: "string" }, receiver: { type: "string" } }, required: ["chainId", "sellToken", "buyToken", "sellAmount", "receiver"] } },
@@ -1484,7 +1568,8 @@ process.stdin.on("data", (chunk) => {
       const msg = JSON.parse(trimmed);
       handleMessage(msg);
     } catch {
-      process.stderr.write(`MCP parse error: ${trimmed.slice(0, 200)}\n`);
+      debugEvent("parse_error", { inputLength: trimmed.length });
+      process.stderr.write("MCP parse error\n");
     }
   }
 });
@@ -1534,7 +1619,7 @@ function handleMessage(msg) {
         case "hl_summarizeOrder": return respond(textResult({ summary: summarizeOrder({ asset: args.asset, isBuy: args.isBuy, sz: args.sz, limitPx: args.limitPx }) }));
         case "hl_placeOrder": {
           const order = buildOrder({ asset: args.asset, isBuy: args.isBuy, sz: args.sz, limitPx: args.limitPx, reduceOnly: args.reduceOnly });
-          process.stderr.write(JSON.stringify({ event: "hl_placeOrder", order }) + "\n");
+          debugEvent("hl_placeOrder", { order });
           return respond(textResult({ status: "needs_signature", message: "Hyperliquid orders require EIP-712 signing via wallet_signTypedData.", order }));
         }
 
@@ -1634,16 +1719,11 @@ function handleMessage(msg) {
         }
         case "crypto_buildBatch": {
           try {
-            const steps = (args.steps || []).map((s, i) => ({
-              id: s.id || `step-${i + 1}`,
-              type: s.type || "custom",
-              description: s.description || `Step ${i + 1}`,
-              to: s.to,
-              data: s.data,
-              value: s.value || "0",
-              dependsOn: s.dependsOn || undefined,
-            }));
-            return respond(textResult({ success: true, steps, chainId: args.chainId, from: args.from }));
+            const chainId = Number(args.chainId);
+            getRegistryForChain(chainId);
+            const from = normalizeAddress(args.from, "from");
+            const steps = normalizeBatchSteps(args.steps);
+            return respond(textResult({ success: true, steps, chainId, from, canSubmit: false, requiresSimulation: true }));
           } catch (err) {
             return respond(textResult({ success: false, error: err.message || "Batch build failed" }));
           }

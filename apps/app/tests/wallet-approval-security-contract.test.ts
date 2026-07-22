@@ -47,6 +47,18 @@ describe("Wallet approval security contract", () => {
     );
   });
 
+  test("approval dialogs contain focus, start on a safe action, and restore focus", () => {
+    const source = readAppSource("domains/wallet/TransactionApproval.tsx");
+
+    expect(source).toContain("const overlayRef = useRef<HTMLDivElement | null>(null)");
+    expect(source).toContain("data-approval-cancel");
+    expect(source).toContain('event.key !== "Tab"');
+    expect(source).toContain("dialog.contains(document.activeElement)");
+    expect(source).toContain("previouslyFocused?.isConnected");
+    expect(source).toContain("previouslyFocused.focus()");
+    expect(source).toContain("tabIndex={-1}");
+  });
+
   test("approval modal displays normalized ETH value instead of raw wei", () => {
     const source = readAppSource("domains/wallet/TransactionApproval.tsx");
 
@@ -103,6 +115,8 @@ describe("Wallet approval security contract", () => {
     expect(stateSource).toContain("0x095ea7b3");
     expect(stateSource).toContain("USDC_DECIMALS");
     expect(modalSource).toContain("analysis.tokenAction");
+    expect(stateSource).toContain("valueUSDIsKnown");
+    expect(stateSource).toContain("cannot verify this transaction's USD value");
   });
 
   test("gas estimation errors are sanitized before display", () => {

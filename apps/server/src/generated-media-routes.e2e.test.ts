@@ -876,6 +876,44 @@ describe("Generated media billing entitlements", () => {
     expect(status.payload.status.usage.generatedImages.resetsAt).toEqual(expect.any(String));
   });
 
+  test("deleting generated files does not restore the current-period image allowance", async () => {
+    const { base } = await boot();
+    let firstImageId = "";
+
+    for (let index = 0; index < 10; index += 1) {
+      const generated = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+        method: "POST",
+        body: JSON.stringify({ prompt: `durable allowance image ${index}` }),
+      });
+      expect(generated.response.status).toBe(200);
+      if (index === 0) firstImageId = generated.payload.image.id;
+    }
+
+    const deleted = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/${firstImageId}`, {
+      method: "DELETE",
+    });
+    expect(deleted.response.status).toBe(200);
+
+    const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
+    expect(status.response.status).toBe(200);
+    expect(status.payload.status.usage.generatedImages).toMatchObject({
+      used: 10,
+      limit: 10,
+    });
+
+    const blocked = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/images/generate`, {
+      method: "POST",
+      body: JSON.stringify({ prompt: "deletion must not restore allowance" }),
+    });
+    expect(blocked.response.status).toBe(429);
+    expect(blocked.payload.details).toMatchObject({
+      entitlementKey: "image_generation",
+      used: 10,
+      limit: 10,
+      reason: "limit_reached",
+    });
+  });
+
   test("workspace checkout preview keeps image allowance on the current plan", async () => {
     const { base } = await boot();
 

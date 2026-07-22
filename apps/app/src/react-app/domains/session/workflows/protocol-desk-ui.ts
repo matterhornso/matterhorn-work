@@ -87,7 +87,6 @@ const STATUS_LABELS: Record<ProtocolDeskVisualStatus, string> = {
 };
 
 const MARKET_STATUS_LABELS: Partial<Record<CustomerProtocolDeskId, string>> = {
-  hyperliquid: "Wallet-approved execution",
   polymarket: "Compliance-gated handoff",
 };
 
@@ -165,7 +164,7 @@ function railTitle(manifest: ProtocolDeskManifest): string {
     return "Bittensor: TAO wallet reads, subnets, validators, watches, receipts, and unsigned staking previews";
   }
   if (manifest.id === "hyperliquid") {
-    return "Hyperliquid: orderbooks, exposure, funding, watches, and wallet-approved orders";
+    return "Hyperliquid: orderbooks, exposure, funding, watches, and order previews";
   }
   if (manifest.id === "polymarket") {
     return "Polymarket: markets, outcomes, liquidity, compliance, watches, and trade handoffs";
