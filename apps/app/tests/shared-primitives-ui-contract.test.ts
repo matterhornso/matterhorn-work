@@ -693,6 +693,20 @@ describe("Shared primitives UI contract", () => {
     expect(source).not.toContain('"border-blue-7 bg-blue-2 shadow-sm"');
   });
 
+  test("configured Matterhorn MCP uses the branded mark and customer-facing name", () => {
+    const source = readAppSource("domains/settings/pages/mcp-view.tsx");
+
+    expect(source).toContain("function isMatterhornDesksMcp");
+    expect(source).toContain(
+      'return matterhornMcpDisplayName(name) === "Matterhorn Desks MCP";',
+    );
+    expect(source).toContain(
+      "return matterhornMcpDisplayName(resolvedName) ?? resolvedName;",
+    );
+    expect(source).toContain('src="/matterhorn-logo-square.svg"');
+    expect(source).toContain("const showMatterhornLogo = isMatterhornDesksMcp");
+  });
+
   test("compact MCP settings use selection and disclosure instead of a long card document", () => {
     const source = readAppSource("domains/settings/pages/mcp-view.tsx");
     const compactSource = source.replace(/\s+/g, " ");
@@ -712,6 +726,14 @@ describe("Shared primitives UI contract", () => {
     expect(source).toContain("const [selectedCardId, setSelectedCardId]");
     expect(source).toContain('useState<ExtensionFilter>("mcp")');
     expect(source).toContain('aria-label="MCP client"');
+    expect(source).toContain("Config command copied");
+    expect(source).toContain("Could not copy config command");
+    expect(source).toContain(
+      "Open Setup details and copy the command manually.",
+    );
+    expect(source).not.toContain(
+      "navigator.clipboard?.writeText(command).catch(() => undefined)",
+    );
     expect(source).toContain("aria-expanded={expanded}");
     expect(source).toContain("setSelectedCardId(expanded ? null : card.id)");
     expect(source).toContain("props.compact");

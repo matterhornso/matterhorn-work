@@ -109,7 +109,11 @@ export interface Capabilities {
   schemaVersion: number;
   serverVersion: string;
   opencodeVersion: string;
-  skills: { read: boolean; write: boolean; source: "openwork" | "opencode" };
+  skills: {
+    read: boolean;
+    write: boolean;
+    source: "matterhorn" | "openwork" | "opencode";
+  };
   hub: {
     skills: {
       read: boolean;

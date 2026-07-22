@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { updateJsoncPath } from "./jsonc.js";
+import { updateJsoncExternalDirectoryPermission, updateJsoncPath } from "./jsonc.js";
 
 describe("updateJsoncPath", () => {
   test("patches nested values without replacing sibling config", async () => {
@@ -24,9 +24,14 @@ describe("updateJsoncPath", () => {
       "utf8",
     );
 
-    await updateJsoncPath(file, ["permission", "external_directory"], {
-      "/next/*": "allow",
-    });
+    await updateJsoncExternalDirectoryPermission(
+      file,
+      {
+        clipboard: "ask",
+        external_directory: { "/old/*": "allow" },
+      },
+      { "/next/*": "allow" },
+    );
 
     const next = await readFile(file, "utf8");
     expect(next).toContain('"clipboard": "ask"');
@@ -51,10 +56,46 @@ describe("updateJsoncPath", () => {
       "utf8",
     );
 
-    await updateJsoncPath(file, ["permission"], undefined);
+    await updateJsoncExternalDirectoryPermission(
+      file,
+      { external_directory: { "/old/*": "allow" } },
+      undefined,
+    );
 
     const next = await readFile(file, "utf8");
     expect(next).not.toContain('"permission"');
+  });
+
+  test("preserves scalar permission semantics when adding an external directory", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "openwork-jsonc-"));
+    const file = join(dir, "opencode.jsonc");
+    await writeFile(
+      file,
+      `{
+  "permission": "allow"
+}
+`,
+      "utf8",
+    );
+
+    await updateJsoncExternalDirectoryPermission(file, "allow", {
+      "/next/*": "allow",
+    });
+
+    const next = await readFile(file, "utf8");
+    expect(next).toContain('"*": "allow"');
+    expect(next).toContain('"/next/*": "allow"');
+    expect(next).toContain('"external_directory"');
+  });
+
+  test("does not remove an existing scalar permission when no external directory exists", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "openwork-jsonc-"));
+    const file = join(dir, "opencode.jsonc");
+    await writeFile(file, '{\n  "permission": "ask"\n}\n', "utf8");
+
+    await updateJsoncExternalDirectoryPermission(file, "ask", undefined);
+
+    expect(await readFile(file, "utf8")).toContain('"permission": "ask"');
   });
 
   test("adds a nested provider without replacing existing providers", async () => {

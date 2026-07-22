@@ -343,7 +343,13 @@ import { deleteSkill, listSkills, upsertSkill } from "./skills.js";
 import { installHubSkill, listHubSkills } from "./skill-hub.js";
 import { deleteCommand, listCommands, repairCommands, upsertCommand } from "./commands.js";
 import { ApiError, formatError } from "./errors.js";
-import { readJsoncFile, updateJsoncPath, updateJsoncTopLevel, writeJsoncFile } from "./jsonc.js";
+import {
+  readJsoncFile,
+  updateJsoncExternalDirectoryPermission,
+  updateJsoncPath,
+  updateJsoncTopLevel,
+  writeJsoncFile,
+} from "./jsonc.js";
 import { auditLogPath, recordAudit, readAuditEntries, readLastAudit } from "./audit.js";
 import { deriveTaskRuns, readTaskEvents, recordTaskEvent, taskEventsPath } from "./task-events.js";
 import { ReloadEventStore } from "./events.js";
@@ -2587,7 +2593,7 @@ function buildCapabilities(config: ServerConfig): Capabilities {
     schemaVersion,
     serverVersion: SERVER_VERSION,
     opencodeVersion: OPENCODE_VERSION,
-    skills: { read: true, write: writeEnabled, source: "openwork" },
+    skills: { read: true, write: writeEnabled, source: "matterhorn" },
     hub: {
       skills: {
         read: true,
@@ -7372,19 +7378,11 @@ function createRoutes(
       const permissionUpdate = ensurePlainObject(permission);
       if (Object.prototype.hasOwnProperty.call(permissionUpdate, "external_directory")) {
         const existingOpencode = await readOpencodeConfig(workspace.path);
-        const existingPermission = ensurePlainObject(existingOpencode.permission);
-        const nextExternalDirectory = permissionUpdate.external_directory;
-        const existingPermissionKeys = Object.keys(existingPermission);
-        const removePermissionParent =
-          typeof nextExternalDirectory === "undefined" &&
-          (existingPermissionKeys.length === 0 ||
-            (existingPermissionKeys.length === 1 && Object.prototype.hasOwnProperty.call(existingPermission, "external_directory")));
-
-        if (removePermissionParent) {
-          await updateJsoncPath(configPath, ["permission"], undefined);
-        } else {
-          await updateJsoncPath(configPath, ["permission", "external_directory"], nextExternalDirectory);
-        }
+        await updateJsoncExternalDirectoryPermission(
+          configPath,
+          existingOpencode.permission,
+          permissionUpdate.external_directory,
+        );
       }
     }
     if (openwork) {

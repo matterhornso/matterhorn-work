@@ -83,7 +83,7 @@ const workspaceCards: SettingsHubCard[] = [
 ];
 
 const globalCards: SettingsHubCard[] = [
-  { tab: "ai", icon: Cpu, title: "AI Providers", desc: "Connect model providers.", status: "Connect provider" },
+  { tab: "ai", icon: Cpu, title: "Models", desc: "Choose models and connect providers.", status: "Connect provider" },
   { tab: "cloud-account", icon: Cloud, title: "Matterhorn Cloud", desc: "Account and organization.", status: "Configure cloud" },
   { tab: "appearance", icon: Paintbrush, title: "Appearance", desc: "Theme and text size.", status: "Working" },
   { tab: "updates", icon: RefreshCcw, title: "Updates", desc: "Version and update channel.", status: "Desktop only" },

@@ -29,7 +29,7 @@ describe("AI provider UI contract", () => {
 
     expect(viewSource).toContain("catalog?.providers ?? []");
     expect(viewSource).toContain("catalogProviderById.get(provider.id)");
-    expect(viewSource).toContain("Checking provider connections");
+    expect(viewSource).toContain("Checking models...");
     expect(viewSource).toContain("provider.modelCount");
     expect(viewSource).toContain("countConnectedCatalogModels(catalog)");
     expect(viewSource).not.toContain(
@@ -68,7 +68,7 @@ describe("AI provider UI contract", () => {
     );
   });
 
-  test("presents the bundled runtime as included Matterhorn models instead of a disconnectable account", () => {
+  test("separates the included catalog from optional external providers", () => {
     const viewSource = readReactSource("domains/settings/pages/ai-view.tsx");
     const summarySource = readReactSource(
       "domains/settings/state/model-readiness-summary.ts",
@@ -76,12 +76,32 @@ describe("AI provider UI contract", () => {
     const routeSource = readReactSource("shell/settings-route.tsx");
 
     expect(viewSource).toContain("isMatterhornManagedProvider");
-    expect(viewSource).toContain('"Included model service"');
-    expect(viewSource).toContain('label="Included"');
-    expect(viewSource).toContain('"Included models ready"');
+    expect(viewSource).toContain("<LayoutSectionTitle>Model</LayoutSectionTitle>");
+    expect(viewSource).toContain("<LayoutSectionTitle>Included models</LayoutSectionTitle>");
+    expect(viewSource).toContain("<LayoutSectionTitle>External providers</LayoutSectionTitle>");
+    expect(viewSource).toContain("Included catalog");
+    expect(viewSource).toContain("Browse models");
+    expect(viewSource).toContain("Add provider");
+    expect(viewSource).toContain("Provider details");
+    expect(viewSource).not.toContain('"Included models ready"');
+    expect(viewSource).not.toContain('label="Included"');
+    expect(viewSource).not.toContain("Matterhorn Models");
     expect(summarySource).toContain("resolveProviderDisplayName");
     expect(routeSource).toContain(
       "resolveProviderDisplayName(provider.id, provider.name)",
+    );
+  });
+
+  test("uses the Matterhorn brand mark for the included model catalog", () => {
+    const providerIconSource = readReactSource(
+      "design-system/provider-icon.tsx",
+    );
+
+    expect(providerIconSource).toContain(
+      'const isMatterhorn = hasProviderFamily("matterhorn")',
+    );
+    expect(providerIconSource).toContain(
+      'src="/matterhorn-logo-square.svg"',
     );
   });
 });

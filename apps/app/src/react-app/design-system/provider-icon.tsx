@@ -23,6 +23,7 @@ export function ProviderIcon(props: ProviderIconProps) {
   const isAnthropic = hasProviderFamily("anthropic");
   const isOpenAI = hasProviderFamily("openai");
   const isOpenCode = hasProviderFamily("opencode");
+  const isMatterhorn = hasProviderFamily("matterhorn");
 
   const fallbackLetters = (() => {
     if (normalizedId === "openrouter") return "OR";
@@ -39,7 +40,14 @@ export function ProviderIcon(props: ProviderIconProps) {
       }`}
       style={{ width: `${size}px`, height: `${size}px` }}
     >
-      {isOpenAI ? (
+      {isMatterhorn ? (
+        <img
+          src="/matterhorn-logo-square.svg"
+          alt=""
+          aria-hidden="true"
+          className="h-full w-full rounded object-contain"
+        />
+      ) : isOpenAI ? (
         <svg
           role="img"
           viewBox="0 0 24 24"

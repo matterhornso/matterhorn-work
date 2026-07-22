@@ -72,6 +72,14 @@ assert.ok(
   "wallet approval browser smoke should use the real transaction approval event, modal, and simulation gate",
 );
 assert.ok(
+  script.includes("SAFETY_EVENT_ROUTE_GLOB") &&
+    script.includes("/wallet/safety-events") &&
+    script.includes("persists synthetic wallet events to the selected workspace ledger") &&
+    script.includes("request.postDataJSON()") &&
+    script.includes("safetyAction: input.action"),
+  "wallet approval browser smoke should keep synthetic safety events out of the selected workspace ledger",
+);
+assert.ok(
   script.includes("REVIEWED_TO") &&
     script.includes("REVIEWED_VALUE_WEI") &&
     script.includes("REVIEWED_VALUE_DISPLAY") &&

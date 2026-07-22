@@ -63,6 +63,39 @@ export async function updateJsoncPath(path: string, jsonPath: (string | number)[
   await writeFile(path, content.endsWith("\n") ? content : content + "\n", "utf8");
 }
 
+export async function updateJsoncExternalDirectoryPermission(
+  path: string,
+  existingPermission: unknown,
+  nextExternalDirectory: unknown,
+): Promise<void> {
+  if (typeof existingPermission === "string") {
+    if (typeof nextExternalDirectory === "undefined") return;
+    await updateJsoncPath(path, ["permission"], {
+      "*": existingPermission,
+      external_directory: nextExternalDirectory,
+    });
+    return;
+  }
+
+  const existingPermissionObject =
+    existingPermission && typeof existingPermission === "object" && !Array.isArray(existingPermission)
+      ? (existingPermission as Record<string, unknown>)
+      : {};
+  const existingPermissionKeys = Object.keys(existingPermissionObject);
+  const removePermissionParent =
+    typeof nextExternalDirectory === "undefined" &&
+    (existingPermissionKeys.length === 0 ||
+      (existingPermissionKeys.length === 1 &&
+        Object.prototype.hasOwnProperty.call(existingPermissionObject, "external_directory")));
+
+  if (removePermissionParent) {
+    await updateJsoncPath(path, ["permission"], undefined);
+    return;
+  }
+
+  await updateJsoncPath(path, ["permission", "external_directory"], nextExternalDirectory);
+}
+
 export async function writeJsoncFile(path: string, value: unknown): Promise<void> {
   await ensureDir(dirname(path));
   const content = JSON.stringify(value, null, 2) + "\n";

@@ -1135,6 +1135,9 @@ describe("Security capability classification", () => {
       expect(serialized).not.toContain("\"username\"");
       expect(serialized).not.toContain("\"password\"");
       expect(serialized).not.toContain("\"openworkToken\"");
+      if (path.endsWith("/capabilities")) {
+        expect(result.payload.skills?.source).toBe("matterhorn");
+      }
     }
   });
 

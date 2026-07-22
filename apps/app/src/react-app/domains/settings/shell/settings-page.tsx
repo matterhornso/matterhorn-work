@@ -119,7 +119,7 @@ export function getSettingsTabLabel(tab: SettingsTab) {
     case "overview":
       return "Overview";
     case "ai":
-      return "AI Providers";
+      return "Models";
     case "preferences":
       return "Preferences";
     case "shell":
@@ -170,7 +170,7 @@ export function getSettingsTabDescription(tab: SettingsTab) {
     case "overview":
       return "Profile, safety, protocols, and diagnostics";
     case "ai":
-      return "Connect model providers";
+      return "Choose models and connect providers";
     case "preferences":
       return "Model and reasoning controls";
     case "shell":

@@ -113,6 +113,27 @@ describe("Settings overview backend capability integration", () => {
     );
   });
 
+  test("makes feedback filters and memory commands visibly interactive", () => {
+    const source = readAppSource("domains/settings/pages/overview-view.tsx");
+
+    expect(source).toContain('aria-label="Filter feedback"');
+    expect(source).toContain('role="group"');
+    expect(source).toContain(
+      'variant={filter === "all" ? "default" : "outline"}',
+    );
+    expect(source).toContain(
+      'variant={filter === kind ? "default" : "outline"}',
+    );
+    expect(source).toContain("Open Memory review");
+    expect(source).toContain(
+      '<ArrowRight className="size-3.5" aria-hidden="true" />',
+    );
+    expect(source).toContain("Export memory bundle");
+    expect(source).toContain(
+      '<Download className="size-3.5" aria-hidden="true" />',
+    );
+  });
+
   test("renders data policy from workspace data-map instead of static copy", () => {
     const source = readAppSource("domains/settings/pages/overview-view.tsx");
 
@@ -126,6 +147,8 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("orderedIds.has(store.id)");
     expect(source).toContain("settingsStorageLocationLabel(store)");
     expect(source).toContain("controlQuickActions(props.controls)");
+    expect(source).toContain("seenLabels.has(labelKey)");
+    expect(source).toContain("seenRoutes.has(routeKey)");
     expect(source).toContain(
       '!MATTERHORN_LAUNCH_FEATURES.billing && action.href.includes("/settings/billing")',
     );
@@ -147,6 +170,7 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("Toggle workspace feedback collection");
     expect(source).toContain("Export and delete");
     expect(source).toContain("Manage data");
+    expect(source).toContain('<ArrowRight size={13} aria-hidden="true" />');
     expect(source).toContain(
       "Open the owning surface for review, export, or deletion controls.",
     );
@@ -178,12 +202,18 @@ describe("Settings overview backend capability integration", () => {
   test("derives protocol availability from runtime truth and distinguishes labels from actions", () => {
     const source = readAppSource("domains/settings/pages/overview-view.tsx");
 
+    expect(source).toContain('queryKey: ["settings-market-execution-readiness"]');
+    expect(source).toContain("client.marketExecutionReadiness()");
     expect(source).toContain("backendCapabilities?.wallets.families.bittensor");
     expect(source).toContain("liveProviderConfigured === true");
     expect(source).toContain('dataMode === "curated_fallback"');
+    expect(source).toContain('venue.venue === "hyperliquid"');
+    expect(source).toContain('venue.venue === "polymarket"');
     expect(source).toContain("Live reads · Preview");
     expect(source).toContain("Fallback reads · Preview");
-    expect(source).toContain("Manual wallet approval");
+    expect(source).toContain("Wallet-approved execution");
+    expect(source).toContain("Live submission is enabled only through the exact-order trade ticket");
+    expect(source).toContain("Live submission is disabled by the deployment execution switch");
     expect(source).toContain("Preview only");
     expect(source).toContain(
       "These labels describe what each desk can do; they are not action buttons.",

@@ -238,7 +238,7 @@ function customerWorkspaceLabelPart(value: string | null | undefined) {
 }
 
 const ROUTE_OPENWORK_CAPABILITIES: MatterhornServerCapabilities = {
-  skills: { read: true, write: true, source: "openwork" },
+  skills: { read: true, write: true, source: "matterhorn" },
   plugins: { read: true, write: true },
   mcp: { read: true, write: true },
   commands: { read: true, write: true },

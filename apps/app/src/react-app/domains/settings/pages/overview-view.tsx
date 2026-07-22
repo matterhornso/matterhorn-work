@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   Archive,
+  ArrowRight,
   Ban,
   Boxes,
   BrainCircuit,
@@ -537,7 +538,8 @@ function controlQuickActions(
       "audit",
       "dataPolicy",
     ];
-  const seen = new Set<string>();
+  const seenLabels = new Set<string>();
+  const seenRoutes = new Set<string>();
   return order
     .flatMap((storeId) => {
       const control = controls.stores[storeId];
@@ -550,9 +552,11 @@ function controlQuickActions(
             action.href.includes("/settings/billing")
           )
             return false;
-          const key = `${action.label}:${action.href}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
+          const labelKey = action.label.trim().toLocaleLowerCase();
+          const routeKey = action.href.trim();
+          if (seenLabels.has(labelKey) || seenRoutes.has(routeKey)) return false;
+          seenLabels.add(labelKey);
+          seenRoutes.add(routeKey);
           return true;
         },
       );
@@ -864,18 +868,21 @@ function DataPolicySection(props: {
             </div>
             <div className="flex flex-wrap gap-1.5 sm:justify-end">
               {quickActions.map((action) => (
-                <button
+                <Button
                   key={action.id}
                   type="button"
+                  variant="outline"
+                  size="sm"
                   className={cn(
-                    "rounded-md px-1.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                    "h-8 gap-1.5 border border-dls-border bg-dls-surface-muted/60 px-3 text-xs shadow-none hover:bg-dls-surface-muted/85",
                     dataControlActionTone(action),
                   )}
                   title={action.description}
                   onClick={() => props.onOpenControlRoute?.(action.href ?? "")}
                 >
                   {action.label}
-                </button>
+                  <ArrowRight size={13} aria-hidden="true" />
+                </Button>
               ))}
             </div>
           </div>
@@ -1165,11 +1172,20 @@ function FeedbackReviewSection(props: {
   return (
     <div className="px-1 py-3">
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-1.5">
+        <div
+          className="flex w-fit flex-wrap gap-1 rounded-md border border-dls-border/45 bg-dls-surface-muted/30 p-1"
+          role="group"
+          aria-label="Filter feedback"
+        >
           <Button
-            variant={filter === "all" ? "default" : "ghost"}
+            variant={filter === "all" ? "default" : "outline"}
             size="sm"
-            className="h-7 px-2 text-xs"
+            className={cn(
+              "h-7 border px-2.5 text-xs",
+              filter === "all"
+                ? "border-primary/30 shadow-sm"
+                : "border-transparent bg-transparent text-dls-secondary hover:border-dls-border/50 hover:bg-dls-surface-muted/70 hover:text-dls-text",
+            )}
             onClick={() => setFilter("all")}
             aria-pressed={filter === "all"}
           >
@@ -1178,9 +1194,14 @@ function FeedbackReviewSection(props: {
           {MATTERHORN_PROJECT_FEEDBACK_KINDS.map((kind) => (
             <Button
               key={kind}
-              variant={filter === kind ? "default" : "ghost"}
+              variant={filter === kind ? "default" : "outline"}
               size="sm"
-              className="h-7 px-2 text-xs"
+              className={cn(
+                "h-7 border px-2.5 text-xs",
+                filter === kind
+                  ? "border-primary/30 shadow-sm"
+                  : "border-transparent bg-transparent text-dls-secondary hover:border-dls-border/50 hover:bg-dls-surface-muted/70 hover:text-dls-text",
+              )}
               onClick={() => setFilter(kind)}
               aria-pressed={filter === kind}
             >
@@ -1835,6 +1856,17 @@ export function SettingsOverviewView(props: {
     staleTime: 30_000,
   });
 
+  const marketExecutionReadinessQuery = useQuery({
+    queryKey: ["settings-market-execution-readiness"],
+    enabled: Boolean(props.matterhornServerClient),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client) throw new Error("Matterhorn Desks engine is offline.");
+      return client.marketExecutionReadiness();
+    },
+    staleTime: 30_000,
+  });
+
   const workspaceReadinessQuery = useQuery({
     queryKey: ["settings-workspace-readiness", props.runtimeWorkspaceId],
     enabled: Boolean(
@@ -1914,6 +1946,13 @@ export function SettingsOverviewView(props: {
     bittensorCapability?.details?.liveProviderConfigured === true;
   const bittensorUsesFallbackData =
     bittensorCapability?.details?.dataMode === "curated_fallback";
+  const marketExecutionReport = marketExecutionReadinessQuery.data?.report;
+  const hyperliquidExecution = marketExecutionReport?.venues.find(
+    (venue) => venue.venue === "hyperliquid",
+  );
+  const polymarketExecution = marketExecutionReport?.venues.find(
+    (venue) => venue.venue === "polymarket",
+  );
   const workspaceReadiness =
     workspaceBackendControlPlaneQuery.data?.readiness ??
     workspaceReadinessQuery.data;
@@ -2718,21 +2757,23 @@ export function SettingsOverviewView(props: {
             />
             <div className="flex flex-wrap gap-2 px-1 py-3">
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
-                className="gap-1.5 text-xs"
+                className="gap-1.5 border border-dls-border/45 bg-dls-surface-muted/80 px-3 text-xs text-dls-text shadow-sm hover:bg-dls-surface-muted"
                 onClick={openMemoryReview}
                 disabled={!notesWorkspaceId}
               >
                 Open Memory review
+                <ArrowRight className="size-3.5" aria-hidden="true" />
               </Button>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="gap-1.5 text-xs text-dls-secondary"
+                className="gap-1.5 border border-dls-border/45 bg-dls-surface-muted/35 px-3 text-xs text-dls-text hover:border-dls-border/70 hover:bg-dls-surface-muted/65"
                 onClick={() => void exportMemory()}
                 disabled={!props.matterhornServerClient}
               >
+                <Download className="size-3.5" aria-hidden="true" />
                 Export memory bundle
               </Button>
             </div>
@@ -2954,15 +2995,51 @@ export function SettingsOverviewView(props: {
             />
             <Row
               label="Hyperliquid"
-              hint="Manual execution uses a separate exact-order review and connected-wallet signature. Agents and watches cannot submit."
+              hint={
+                hyperliquidExecution?.canSubmit
+                  ? "Live submission is enabled only through the exact-order trade ticket after connected-wallet approval. Agents and watches cannot submit."
+                  : hyperliquidExecution
+                    ? "Read and preview are available. Live submission is disabled by the deployment execution switch."
+                    : "Execution readiness is unavailable."
+              }
               value={
-                <StatusBadge tone="preview">Manual wallet approval</StatusBadge>
+                marketExecutionReadinessQuery.isLoading ? (
+                  <StatusBadge>Checking</StatusBadge>
+                ) : hyperliquidExecution ? (
+                  <StatusBadge
+                    tone={hyperliquidExecution.canSubmit ? "ready" : "preview"}
+                  >
+                    {hyperliquidExecution.canSubmit
+                      ? "Wallet-approved execution"
+                      : "Preview only"}
+                  </StatusBadge>
+                ) : (
+                  <UnavailableStatus label="Status unavailable" />
+                )
               }
             />
             <Row
               label="Polymarket"
-              hint="Live market discovery, odds, and compliance checks are available. Matterhorn prepares previews but never submits a trade."
-              value={<StatusBadge tone="preview">Preview only</StatusBadge>}
+              hint={
+                polymarketExecution
+                  ? "Live market discovery, odds, and compliance checks are available. Matterhorn prepares previews but live submission is disabled."
+                  : "Execution readiness is unavailable."
+              }
+              value={
+                marketExecutionReadinessQuery.isLoading ? (
+                  <StatusBadge>Checking</StatusBadge>
+                ) : polymarketExecution ? (
+                  <StatusBadge
+                    tone={polymarketExecution.canSubmit ? "ready" : "preview"}
+                  >
+                    {polymarketExecution.canSubmit
+                      ? "Wallet-approved execution"
+                      : "Preview only"}
+                  </StatusBadge>
+                ) : (
+                  <UnavailableStatus label="Status unavailable" />
+                )
+              }
             />
             <p className="text-xs leading-5 text-dls-secondary">
               These labels describe what each desk can do; they are not action

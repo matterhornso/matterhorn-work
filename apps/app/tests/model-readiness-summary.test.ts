@@ -291,7 +291,7 @@ describe("model readiness summary", () => {
       },
       {
         providerId: "opencode",
-        providerName: "Matterhorn Models",
+        providerName: "Included models",
         sourceLabel: "Config",
         connectedLabel: "Available",
         modelCountLabel: "1 model",

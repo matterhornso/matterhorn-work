@@ -253,6 +253,10 @@ describe("wallet runtime connector contract", () => {
     const walletViewSource = readReactAppSource(
       "domains/settings/pages/wallet-view.tsx",
     );
+    const phantomIconSource = readFileSync(
+      new URL("../public/wallet-phantom.svg", import.meta.url),
+      "utf8",
+    );
     const suiWorkflowSource = readReactAppSource(
       "domains/wallet/sui-workflow-panel.tsx",
     );
@@ -290,6 +294,14 @@ describe("wallet runtime connector contract", () => {
     expect(walletViewSource).toContain("phantomSui.detected");
     expect(walletViewSource).toContain("walletStandardPhantom");
     expect(walletViewSource).toContain("otherSuiWallets");
+    expect(walletViewSource).toContain("function PhantomWalletMark");
+    expect(walletViewSource).toContain('"/wallet-phantom.svg"');
+    expect(walletViewSource).toContain(
+      "<PhantomWalletMark icon={walletStandardPhantom?.icon} />",
+    );
+    expect(walletViewSource).toContain("<PhantomWalletMark />");
+    expect(phantomIconSource).toContain('fill="#AB9FF2"');
+    expect(phantomIconSource).toContain('fill="#FFFDF8"');
     expect(walletViewSource).toContain("Connect Phantom for Sui");
     expect(walletViewSource).toContain("Install or enable Phantom for Sui");
     expect(walletViewSource).toContain("https://phantom.app/download");

@@ -63,6 +63,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ConfirmModal } from "../../../design-system/modals/confirm-modal";
 import { AddMcpModal } from "../../connections/modals/add-mcp-modal";
+import { useStatusToasts } from "../../shell-feedback/status-toasts";
 import {
   isMatterhornExtensionEnabled,
   isMatterhornExtensionHidden,
@@ -102,6 +103,10 @@ const getSkillHiddenId = (skill: SkillItem) => `skill:${skill.name}`;
 
 function fallbackMcpDisplayName(name: string) {
   return mcpServerDisplayName(name);
+}
+
+function isMatterhornDesksMcp(name: string) {
+  return matterhornMcpDisplayName(name) === "Matterhorn Desks MCP";
 }
 
 export type McpViewProps = {
@@ -963,6 +968,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
 ];
 
 export function McpView(props: McpViewProps) {
+  const { showToast } = useStatusToasts();
   const showHeader = props.showHeader !== false;
   const [detailEntry, setDetailEntry] = useState<McpDirectoryInfo | null>(null);
   const [detailSkill, setDetailSkill] = useState<SkillItem | null>(null);
@@ -1195,8 +1201,10 @@ export function McpView(props: McpViewProps) {
       );
     });
 
-  const displayName = (name: string) =>
-    resolveQuickConnectMatch(name)?.name ?? name;
+  const displayName = (name: string) => {
+    const resolvedName = resolveQuickConnectMatch(name)?.name ?? name;
+    return matterhornMcpDisplayName(resolvedName) ?? resolvedName;
+  };
 
   const quickConnectStatus = (entry: McpDirectoryInfo) =>
     props.mcpStatuses[getMcpIdentityKey(entry)];
@@ -1297,8 +1305,30 @@ export function McpView(props: McpViewProps) {
   };
 
   const copyMatterhornMcpCommand = (command: string) => {
-    if (typeof navigator === "undefined") return;
-    void navigator.clipboard?.writeText(command).catch(() => undefined);
+    if (!command.trim()) return;
+    void (async () => {
+      try {
+        if (
+          typeof navigator === "undefined" ||
+          !navigator.clipboard?.writeText
+        ) {
+          throw new Error("Clipboard unavailable");
+        }
+        await navigator.clipboard.writeText(command);
+        showToast({
+          title: "Config command copied",
+          tone: "success",
+          durationMs: 1800,
+        });
+      } catch {
+        showToast({
+          title: "Could not copy config command",
+          description: "Open Setup details and copy the command manually.",
+          tone: "error",
+          durationMs: 3200,
+        });
+      }
+    })();
   };
 
   const confirmLogout = async () => {
@@ -2855,6 +2885,7 @@ function McpConfiguredServerRow(props: {
   onToggleBusy: (value: SetStateAction<string | null>) => void;
 }) {
   const Icon = serviceIcon(props.entry.name);
+  const showMatterhornLogo = isMatterhornDesksMcp(props.entry.name);
   return (
     <div
       className={
@@ -2885,7 +2916,12 @@ function McpConfiguredServerRow(props: {
         <div className="flex items-center gap-3">
           <div
             className={
-              props.compact
+              showMatterhornLogo
+                ? cn(
+                    "flex shrink-0 items-center justify-center overflow-hidden bg-transparent",
+                    props.compact ? "size-7 rounded-md" : "size-8 rounded-md",
+                  )
+                : props.compact
                 ? cn(
                     "flex size-7 shrink-0 items-center justify-center rounded-md",
                     props.status === "connected"
@@ -2898,16 +2934,25 @@ function McpConfiguredServerRow(props: {
                       ? "bg-green-3"
                       : "bg-dls-surface-muted/[0.34]",
                   )
-            }
-          >
-            <Icon
-              size={15}
-              className={
-                props.status === "connected"
-                  ? "text-green-11"
-                  : serviceColor(props.entry.name)
               }
-            />
+          >
+            {showMatterhornLogo ? (
+              <img
+                src="/matterhorn-logo-square.svg"
+                alt=""
+                aria-hidden="true"
+                className="size-full rounded-[4px]"
+              />
+            ) : (
+              <Icon
+                size={15}
+                className={
+                  props.status === "connected"
+                    ? "text-green-11"
+                    : serviceColor(props.entry.name)
+                }
+              />
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium text-dls-text">

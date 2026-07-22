@@ -701,18 +701,17 @@ async function runSmoke(config) {
 
     await stage(report, "settings_ai_models", "Check AI provider and model picker", async () => {
       await page.goto(workspaceUrl(config.url, "settings/ai"), { waitUntil: "load", timeout: 30_000 });
-      await page.getByRole("heading", { name: "Agent model", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("Matterhorn Models / Big Pickle", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByRole("heading", { name: "Included models ready Available", exact: true })
+      await page.getByRole("heading", { name: "Model", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByRole("heading", { name: "Included models", exact: true })
         .waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByRole("button", { name: "Change model", exact: true }).click();
+      await page.getByRole("button", { name: "Browse models", exact: true }).click();
       const modelDialog = page.getByRole("dialog", { name: "Models" });
       await modelDialog.waitFor({ state: "visible", timeout: 20_000 });
-      const includedProvider = modelDialog.getByText("Matterhorn Models", { exact: true });
+      const includedProvider = modelDialog.getByText("Included models", { exact: true });
       await includedProvider.waitFor({ state: "visible", timeout: 20_000 });
       await includedProvider.click();
       await modelDialog.getByRole("button", { name: /Big Pickle/ }).waitFor({ state: "visible", timeout: 20_000 });
-      await modelDialog.getByRole("button", { name: "Close", exact: true }).click();
+      await modelDialog.getByRole("button", { name: "Done", exact: true }).click();
       report.artifacts.aiSettingsUrl = page.url();
     });
 

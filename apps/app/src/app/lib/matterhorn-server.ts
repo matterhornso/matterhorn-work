@@ -94,7 +94,11 @@ import { isDesktopRuntime } from "../utils";
 import type { ExecResult, OpencodeConfigFile, WorkspaceInfo, WorkspaceList } from "./desktop";
 
 export type MatterhornServerCapabilities = {
-  skills: { read: boolean; write: boolean; source: "openwork" | "opencode" };
+  skills: {
+    read: boolean;
+    write: boolean;
+    source: "matterhorn" | "openwork" | "opencode";
+  };
   hub?: {
     skills?: {
       read: boolean;

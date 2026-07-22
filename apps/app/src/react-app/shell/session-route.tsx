@@ -307,7 +307,7 @@ function workspaceLabel(workspace: MatterhornWorkspaceInfo) {
 function customerModelProviderLabel(provider: ProviderListItem) {
   const raw = provider.name?.trim() || provider.id;
   if (/opencode/i.test(raw) || /opencode/i.test(provider.id)) {
-    return "Matterhorn Models";
+    return "Included models";
   }
   return raw;
 }

@@ -34,7 +34,7 @@ export function modelEquals(a: ModelRef, b: ModelRef) {
  * Used when the backend doesn't return a provider name.
  */
 export const FRIENDLY_PROVIDER_LABELS: Record<string, string> = {
-  opencode: "Matterhorn Models",
+  opencode: "Included models",
   openai: "OpenAI",
   anthropic: "Anthropic",
   google: "Google",

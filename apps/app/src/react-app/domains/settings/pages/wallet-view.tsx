@@ -469,6 +469,16 @@ function WalletProtocolSupportMap(props: {
   );
 }
 
+function PhantomWalletMark({ icon }: { icon?: string | null }) {
+  return (
+    <img
+      src={icon?.trim() || "/wallet-phantom.svg"}
+      alt=""
+      className="size-8 shrink-0 rounded-md object-cover"
+    />
+  );
+}
+
 function SuiWalletPreviewSection(props: {
   compact?: boolean;
   matterhornServerClient?: MatterhornServerClient | null;
@@ -713,9 +723,7 @@ function SuiWalletPreviewSection(props: {
                 void phantomSui.connect();
               }}
             >
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-[#ab9ff2]/15 text-[#c9c2ff]">
-                <Wallet className="size-4" />
-              </span>
+              <PhantomWalletMark icon={walletStandardPhantom?.icon} />
               <span className="min-w-0 text-left">
                 <span className="block truncate text-sm font-medium">
                   Phantom
@@ -738,9 +746,7 @@ function SuiWalletPreviewSection(props: {
                 "flex min-w-0 items-center gap-3 px-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ab9ff2]",
               )}
             >
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-[#ab9ff2]/15 text-[#c9c2ff]">
-                <Wallet className="size-4" />
-              </span>
+              <PhantomWalletMark />
               <span className="min-w-0 text-left">
                 <span className="block truncate text-sm font-medium">
                   Phantom
