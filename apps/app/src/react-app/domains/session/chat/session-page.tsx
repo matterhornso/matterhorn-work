@@ -17,6 +17,7 @@ import {
   Home,
   Info,
   Mic2,
+  NotebookPen,
   PanelRightClose,
   PencilLine,
   Settings2,
@@ -2335,7 +2336,7 @@ export function SessionPage(props: SessionPageProps) {
                   title={t("notes.quick_jot_button_title")}
                   aria-label={t("notes.quick_jot_button_title")}
                 >
-                  <PencilLine className="size-3.5" />
+                  <NotebookPen className="size-3.5" />
                 </Button>
               ) : null}
               {/* Revert/redo moved to per-message actions */}
@@ -2700,7 +2701,7 @@ export function SessionPage(props: SessionPageProps) {
                                     })
                                   }
                                 >
-                                  <PencilLine className="size-3.5" />
+                                  <NotebookPen className="size-3.5" />
                                 </WorkspaceHomeIconAction>
                               </span>
                             </div>
@@ -3078,7 +3079,7 @@ export function SessionPage(props: SessionPageProps) {
                 aria-label={t("notes.rail_title")}
                 aria-pressed={notesRailActive}
               >
-                <PencilLine size={17} />
+                <NotebookPen size={17} />
                 <span className={RAIL_LABEL_CLASS}>{t("notes.rail_label")}</span>
               </Button>
             ) : null}

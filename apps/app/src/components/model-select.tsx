@@ -270,7 +270,20 @@ export function ModelSelect({
       >
         <Command items={groups} value={search} onValueChange={setSearch}>
           <CommandHeader>
-            <CommandInput ref={searchInputRef} placeholder="Search models..." />
+            <CommandInput
+              ref={searchInputRef}
+              placeholder="Search models..."
+              onKeyDown={(event) => {
+                if (event.key !== "Escape") {
+                  return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+                setSearch("");
+                onOpenChange(false);
+              }}
+            />
           </CommandHeader>
           <CommandEmpty>No models found.</CommandEmpty>
           <CommandList>

@@ -39,6 +39,23 @@ describe("Shared primitives UI contract", () => {
     expect(source).not.toContain("before:shadow");
   });
 
+  test("compact model picker closes from its focused search field", () => {
+    const source = readAppPackageSource("components/model-select.tsx");
+
+    expect(source).toContain('if (event.key !== "Escape")');
+    expect(source).toContain("event.preventDefault()");
+    expect(source).toContain("event.stopPropagation()");
+    expect(source).toContain("onOpenChange(false)");
+  });
+
+  test("session note actions remain visually distinct from rename", () => {
+    const source = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(source).toContain('<PencilLine className="size-3.5" />');
+    expect(source).toContain('<NotebookPen className="size-3.5" />');
+    expect(source).toContain("<NotebookPen size={17} />");
+  });
+
   test("tabs avoid oversized radius and heavy rings", () => {
     const source = readUiSource("tabs.tsx");
     expect(source).not.toContain("rounded-2xl");
