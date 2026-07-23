@@ -334,6 +334,44 @@ try {
   assert.equal(passingReport.launchReadiness.blocked, 0);
   assert.ok(readFileSync(join(outputDir, "launch-readiness.md"), "utf8").includes("**Decision:** GO"));
 
+  const noOauthAcceptancePath = writeJson("acceptance-no-oauth.json", {
+    version: "matterhorn.product-hunt-acceptance-readiness.v1",
+    ready: false,
+    decision: "NO-GO",
+    commit,
+    evaluatedAt: commitTime,
+    acceptedOauthConnectors: [],
+    checks: [
+      passingCheck("evidence_fresh", commitTime),
+      passingCheck("oauth_visible_set", "none"),
+      { id: "deployed_https", status: "fail", evidence: null },
+      { id: "newUser_journey", status: "fail", evidence: null },
+      { id: "existingUser_journey", status: "fail", evidence: null },
+      { id: "metamask_journey", status: "fail", evidence: null },
+      { id: "coinbase_journey", status: "fail", evidence: null },
+      { id: "phantom_sui_journey", status: "fail", evidence: null },
+      { id: "hyperliquid_testnet_journey", status: "fail", evidence: null },
+    ],
+  });
+  const noOauth = run({
+    ...baseInput,
+    expectedOauthConnectors: [],
+    reports: {
+      ...baseInput.reports,
+      acceptance: noOauthAcceptancePath,
+    },
+  });
+  assert.equal(noOauth.status, 1);
+  const noOauthReport = JSON.parse(noOauth.stdout);
+  assert.equal(
+    noOauthReport.checks.find(({ id }) => id === "oauth_acceptance")?.status,
+    "pass",
+  );
+  assert.equal(
+    noOauthReport.checks.find(({ id }) => id === "evm_wallet_acceptance")?.status,
+    "fail",
+  );
+
   const blocked = run({
     ...baseInput,
     manual: {
