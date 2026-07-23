@@ -82,7 +82,7 @@ describe("Backend capability status helpers", () => {
 describe("Backend capability fixtures", () => {
   test("working fixture preserves product truths", () => {
     const f = backendCapabilitiesWorkingFixture;
-    expect(f.models.defaultModel).toEqual({ providerId: "opencode", modelId: "big-pickle" });
+    expect(f.models.defaultModel).toEqual({ providerId: "opencode", modelId: "mimo-v2.5-free" });
     expect(f.models.providerListSource).toBe("opencode");
     expect(f.memory.scope).toBe("machine_global");
     expect(f.notes.scope).toBe("workspace");
@@ -209,7 +209,7 @@ describe("Backend capabilities section renders all capability states", () => {
   test("working state", () => {
     const html = renderCapabilitiesSection(backendCapabilitiesWorkingFixture);
     expect(html).toContain("Working");
-    expect(html).toContain("opencode/big-pickle");
+    expect(html).toContain("opencode/mimo-v2.5-free");
     expect(html).toContain("Image and NFT publishing");
     expect(html).toContain("Image generation");
     expect(html).toContain("mock/mock-image-1");

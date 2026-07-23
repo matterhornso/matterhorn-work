@@ -28,7 +28,7 @@ describe("session activity timing", () => {
     expect(secondStartedAt).toBeGreaterThan(firstStartedAt ?? 0);
   });
 
-  test("turns an empty model abort into a retryable prompt failure", () => {
+  test("treats an empty model abort as a neutral cancellation with the prompt available", () => {
     const snapshot = {
       messages: [
         {
@@ -52,7 +52,10 @@ describe("session activity timing", () => {
       name: "MessageAbortedError",
       completedAt: 130,
       retryMessage: "Find useful subnets",
-      error: { message: "Matterhorn did not receive a model response. Your prompt is ready to retry." },
+      error: {
+        kind: "cancelled",
+        message: "Generation stopped. Your prompt is still available to edit or send again.",
+      },
     });
   });
 
