@@ -38,6 +38,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { ConfirmModal } from "../../design-system/modals/confirm-modal";
 import { ErrorState } from "../shell/error-state";
 import {
   applyMatterhornMemoryDeskPolicyDefaults,
@@ -444,6 +445,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
   const [suggestionEditDraft, setSuggestionEditDraft] = useState<SuggestionEditDraft | null>(null);
   const [suggestionStatusFilter, setSuggestionStatusFilter] = useState<SuggestionInboxFilter>("needs_review");
   const [manualCaptureOpen, setManualCaptureOpen] = useState(false);
+  const [recordPendingForget, setRecordPendingForget] = useState<MatterhornMemoryRecord | null>(null);
 
   useEffect(() => {
     const handleSuggestions = (event: Event) => {
@@ -548,6 +550,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
       }
       setRecords((current) => current.filter((item) => item.id !== record.id));
       setSelectedRecords((current) => current.filter((item) => item.id !== record.id));
+      setRecordPendingForget(null);
     } catch (nextError) {
       setCaptureError(nextError instanceof Error ? nextError.message : "Could not forget memory.");
     }
@@ -1130,7 +1133,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     size="sm"
                     className={MEMORY_SECONDARY_ACTION_CLASS}
                     disabled={!record.canDelete}
-                    onClick={() => void handleForget(record)}
+                    onClick={() => setRecordPendingForget(record)}
                   >
                     <Trash2 className="mr-2 size-3.5" />
                     Forget
@@ -1242,6 +1245,22 @@ export function MemoryPanel(props: MemoryPanelProps) {
           {exportStatus ? <div className="mt-3 text-xs text-dls-secondary">{exportStatus}</div> : null}
         </section>
       </div>
+      <ConfirmModal
+        open={Boolean(recordPendingForget)}
+        title="Forget this memory?"
+        message={
+          recordPendingForget
+            ? `"${recordPendingForget.title}" will be removed from this workspace and will no longer be available in chat.`
+            : "This memory will be removed from this workspace."
+        }
+        confirmLabel="Forget memory"
+        cancelLabel="Keep memory"
+        variant="danger"
+        onConfirm={() => {
+          if (recordPendingForget) void handleForget(recordPendingForget);
+        }}
+        onCancel={() => setRecordPendingForget(null)}
+      />
     </div>
   );
 }

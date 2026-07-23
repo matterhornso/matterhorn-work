@@ -435,7 +435,7 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(surfaceSrc).toContain("Taking longer than usual. You can stop this run at any time.");
     expect(surfaceSrc).toContain("latestSessionSnapshotFailure");
     expect(surfaceSrc).toContain("snapshotQuery.refetch()");
-    expect(surfaceSrc).toContain("Matterhorn did not receive a model response. Your prompt is ready to retry.");
+    expect(surfaceSrc).toContain("Matterhorn could not complete this response. Your prompt is ready to retry.");
     expect(surfaceSrc).toContain("suppressNextAbortFailureRef");
     expect(surfaceSrc).not.toContain("(!chatStreaming && awaitingAssistantBaseline === null)");
     expect(surfaceSrc).toContain("isError: snapshotQuery.isError,");

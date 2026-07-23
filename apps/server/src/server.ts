@@ -369,6 +369,8 @@ import {
   buildBackendModels,
   buildWorkspaceModelSelectionResponse,
   clearWorkspaceModelSelection,
+  MATTERHORN_RELEASE_DEFAULT_MODEL_ID,
+  MATTERHORN_RELEASE_DEFAULT_PROVIDER_ID,
   normalizeModelSelectionRequest,
   readWorkspaceModelSelection,
   workspaceModelSelectionPath,
@@ -3062,7 +3064,10 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
         },
         opencodeConfigured ? undefined : [connectOpenCodeAction],
       ),
-      defaultModel: { providerId: "opencode", modelId: "big-pickle" },
+      defaultModel: {
+        providerId: MATTERHORN_RELEASE_DEFAULT_PROVIDER_ID,
+        modelId: MATTERHORN_RELEASE_DEFAULT_MODEL_ID,
+      },
       providerListSource: "opencode",
       selectedModelSource: "local_preferences",
       routing: {

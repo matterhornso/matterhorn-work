@@ -12,6 +12,9 @@ import { atomicWriteTextFile } from "./atomic-file.js";
 import type { Actor, WorkspaceInfo } from "./types.js";
 import { exists } from "./utils.js";
 
+export const MATTERHORN_RELEASE_DEFAULT_PROVIDER_ID = "opencode";
+export const MATTERHORN_RELEASE_DEFAULT_MODEL_ID = "mimo-v2.5-free";
+
 function capability(status: MatterhornCapability["status"], label: string, description: string): MatterhornCapability {
   return { status, label, description };
 }
@@ -36,11 +39,21 @@ function fallbackCatalog(catalog?: MatterhornBackendModelCatalogSnapshot): Matte
 
 function defaultModelForCatalog(catalog?: MatterhornBackendModelCatalogSnapshot): MatterhornBackendModelsResponse["defaultModel"] {
   const fallback = {
-    providerId: "opencode",
-    modelId: "big-pickle",
+    providerId: MATTERHORN_RELEASE_DEFAULT_PROVIDER_ID,
+    modelId: MATTERHORN_RELEASE_DEFAULT_MODEL_ID,
     source: "server_default" as const,
   };
   if (!catalog?.serverFetched) return fallback;
+
+  const releaseProvider = catalog.providers.find(
+    (provider) =>
+      provider.id === MATTERHORN_RELEASE_DEFAULT_PROVIDER_ID &&
+      provider.connected &&
+      provider.modelIds.includes(MATTERHORN_RELEASE_DEFAULT_MODEL_ID),
+  );
+  if (releaseProvider) {
+    return fallback;
+  }
 
   const providerIds = [
     ...catalog.connectedProviderIds,

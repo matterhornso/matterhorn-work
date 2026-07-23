@@ -57,6 +57,61 @@ describe("managed OpenCode Matterhorn MCP", () => {
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_sui_preview_transfer");
   });
 
+  test("advertises the Sui preview contract accepted by the backend", async () => {
+    const result = await handleManagedOpencodeMcp({
+      payload: { jsonrpc: "2.0", id: 3, method: "tools/list" },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+    });
+    const body = result.body as {
+      result: {
+        tools: Array<{
+          name: string;
+          inputSchema: {
+            properties: Record<string, { enum?: string[] }>;
+            required?: string[];
+          };
+        }>;
+      };
+    };
+    const tool = body.result.tools.find((item) => item.name === "matterhorn_sui_preview_transfer");
+    expect(tool?.inputSchema.required).toContain("amountSui");
+    expect(tool?.inputSchema.properties).not.toHaveProperty("amount");
+    expect(tool?.inputSchema.properties).not.toHaveProperty("coinType");
+    expect(tool?.inputSchema.properties.network?.enum).toEqual(["mainnet", "testnet"]);
+  });
+
+  test("forwards the Sui decimal amount using amountSui", async () => {
+    let observedBody: unknown = null;
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0",
+        id: 4,
+        method: "tools/call",
+        params: {
+          name: "matterhorn_sui_preview_transfer",
+          arguments: {
+            network: "testnet",
+            sender: `0x${"1".repeat(64)}`,
+            recipient: `0x${"2".repeat(64)}`,
+            amountSui: "0.01",
+          },
+        },
+      },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+      fetchImpl: (async (_url, init) => {
+        observedBody = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ success: true, preview: { amountSui: "0.01" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }) as typeof fetch,
+    });
+    expect(observedBody).toMatchObject({ amountSui: "0.01" });
+    expect(result).toMatchObject({ status: 200 });
+  });
+
   test("forwards tool calls with the local client token", async () => {
     let observedUrl = "";
     let observedAuth = "";

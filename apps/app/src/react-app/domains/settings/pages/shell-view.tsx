@@ -108,7 +108,7 @@ function ShellWireframe({ config }: { config: ShellConfig }) {
 
         {/* Model picker */}
         {config.modelPicker ? (
-          <text x={cx + 14} y="174" fontSize="4.5" fill="var(--dls-text-secondary)" opacity="0.3">big-pickle</text>
+          <text x={cx + 14} y="174" fontSize="4.5" fill="var(--dls-text-secondary)" opacity="0.3">mimo-v2.5-free</text>
         ) : null}
 
         {/* Status bar */}

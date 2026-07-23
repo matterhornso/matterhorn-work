@@ -291,7 +291,7 @@ describe("backend control plane routes", () => {
     expect(result.payload.version).toBe("matterhorn.backend.capabilities.v1");
     expect(result.payload.models.status).toBe("needs_setup");
     expect(result.payload.models.label).toBe("Local engine not connected");
-    expect(result.payload.models.defaultModel).toEqual({ providerId: "opencode", modelId: "big-pickle" });
+    expect(result.payload.models.defaultModel).toEqual({ providerId: "opencode", modelId: "mimo-v2.5-free" });
     expect(result.payload.models.providerListSource).toBe("opencode");
     expect(result.payload.models.routing.answerPath).toBe("opencode_session_prompt_async");
     expect(result.payload.models.routing.modelListTool).toBe("opencode_provider_list");
@@ -438,7 +438,7 @@ describe("backend control plane routes", () => {
     expect(result.payload.version).toBe("matterhorn.backend.models.v1");
     expect(result.payload.defaultModel).toMatchObject({
       providerId: "opencode",
-      modelId: "big-pickle",
+      modelId: "mimo-v2.5-free",
       source: "server_default",
     });
     expect(result.payload.routing.answerPath.transport).toBe("opencode_session_prompt_async");
@@ -589,6 +589,31 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
     expect(serialized).not.toContain("Basic ");
+  });
+
+  test("GET /workspace/:id/backend/models prefers the verified included release model", async () => {
+    const opencodeBaseUrl = await startProviderCatalogServer({
+      all: [{
+        id: "opencode",
+        name: "OpenCode",
+        source: "config",
+        models: {
+          "big-pickle": { name: "Big Pickle" },
+          "mimo-v2.5-free": { name: "MiMo V2.5 Free" },
+        },
+      }],
+      default: { opencode: "big-pickle" },
+      connected: ["opencode"],
+    });
+    const { base } = await boot({ opencodeBaseUrl });
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/models");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.defaultModel).toMatchObject({
+      providerId: "opencode",
+      modelId: "mimo-v2.5-free",
+      source: "server_default",
+    });
   });
 
   test("workspace model selection persists, clears, audits, and enforces write guards", async () => {
@@ -961,7 +986,7 @@ describe("backend control plane routes", () => {
     expect(result.payload.readiness.features.start_desk_task.ready).toBe(false);
     expect(result.payload.models.defaultModel).toMatchObject({
       providerId: "opencode",
-      modelId: "big-pickle",
+      modelId: "mimo-v2.5-free",
     });
     expect(result.payload.models.routing.answerPath.transport).toBe("opencode_session_prompt_async");
     expect(result.payload.models.routing.selection.preferenceStore).toBe("local_preferences");

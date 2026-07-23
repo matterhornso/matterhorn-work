@@ -63,6 +63,9 @@ describe("ensureWorkspaceFiles", () => {
       expect(suiAgent).toContain("matterhorn_desk_id: sui");
       expect(suiAgent).toContain("task: deny");
       expect(suiAgent).toContain('"matterhorn-work_matterhorn_sui_preview_transfer": true');
+      expect(suiAgent).toContain("amountSui as a positive decimal string");
+      expect(suiAgent).toContain("no valid preview was generated");
+      expect(suiAgent).toContain("Never invent a gas budget");
       expect(suiAgent).toContain("outputs/sui/<session-slug>");
       expect(longevityAgent).toContain("Longevity Agent");
       expect(longevityAgent).toContain("7-stage workflow");

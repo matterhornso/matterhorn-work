@@ -229,7 +229,7 @@ describe("Shared primitives UI contract", () => {
       "domains/profile/profile-capability-status.tsx",
     );
 
-    expect(sessionSurface).toContain('role="alert"');
+    expect(sessionSurface).toContain('role={cancelled ? "status" : "alert"}');
     expect(sessionSurface).toContain('aria-atomic="true"');
     for (const source of [
       sessionPage,

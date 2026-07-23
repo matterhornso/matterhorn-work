@@ -69,6 +69,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import type { ReactComposerNotice } from "./composer/notice";
 import { SessionDebugPanel } from "./debug-panel";
 import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from "./session-render-state";
@@ -532,7 +533,7 @@ function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): stri
 
 type SessionError = {
   message: string;
-  kind?: "model-not-found" | "generic";
+  kind?: "model-not-found" | "cancelled" | "generic";
   /** For model-not-found: the model that failed. */
   failedModel?: { providerID: string; modelID: string };
   /** For model-not-found: suggested replacements from the backend. */
@@ -905,7 +906,10 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
     completedAt: assistantMessage.info.time.completed ?? assistantMessage.info.time.created,
     retryMessage,
     error: name === "MessageAbortedError"
-      ? { message: "Matterhorn did not receive a model response. Your prompt is ready to retry." } satisfies SessionError
+      ? {
+          message: "Generation stopped. Your prompt is still available to edit or send again.",
+          kind: "cancelled",
+        } satisfies SessionError
       : { message: detail || "Matterhorn could not complete this response. Your prompt is ready to retry." } satisfies SessionError,
   };
 }
@@ -916,16 +920,22 @@ function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker }
   onChangeModel?: (model: { providerID: string; modelID: string }) => void;
   onOpenModelPicker?: () => void;
 }) {
+  const cancelled = error.kind === "cancelled";
   return (
     <div className="mx-auto max-w-[720px] px-3 py-3 sm:px-5">
       <div
-        role="alert"
+        role={cancelled ? "status" : "alert"}
         aria-atomic="true"
-        className="rounded-lg bg-red-3/15 px-5 py-4 ring-1 ring-red-6/25"
+        className={cn(
+          "rounded-lg px-5 py-4 ring-1",
+          cancelled
+            ? "bg-dls-surface-muted/[0.16] ring-dls-border/35"
+            : "bg-red-3/15 ring-red-6/25",
+        )}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-red-11">{error.message}</div>
+            <div className={cn("text-sm font-medium", cancelled ? "text-dls-text" : "text-red-11")}>{error.message}</div>
             {error.kind === "model-not-found" ? (
               <div className="mt-2 flex flex-wrap gap-2">
                 {error.suggestions && error.suggestions.length > 0 ? (
@@ -958,9 +968,14 @@ function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker }
           </div>
           <button
             type="button"
-            className="shrink-0 rounded-full p-1 text-red-10 transition-colors hover:bg-red-3 hover:text-red-11"
+            className={cn(
+              "shrink-0 rounded-full p-1 transition-colors",
+              cancelled
+                ? "text-dls-secondary hover:bg-dls-hover hover:text-dls-text"
+                : "text-red-10 hover:bg-red-3 hover:text-red-11",
+            )}
             onClick={onDismiss}
-            aria-label="Dismiss error"
+            aria-label={cancelled ? "Dismiss stopped status" : "Dismiss error"}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
           </button>

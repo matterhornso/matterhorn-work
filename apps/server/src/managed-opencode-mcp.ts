@@ -103,7 +103,7 @@ const MANAGED_MCP_TOOLS: ManagedMcpTool[] = [
     description: "Read a public Sui address balance. Never requests or handles wallet secrets.",
     inputSchema: objectSchema({
       address: { type: "string", description: "Public Sui address." },
-      network: { type: "string", enum: ["mainnet", "testnet", "devnet"] },
+      network: { type: "string", enum: ["mainnet", "testnet"] },
       coinType: { type: "string", description: "Optional public coin type." },
     }, ["address"]),
     request: (args) => ({
@@ -115,13 +115,21 @@ const MANAGED_MCP_TOOLS: ManagedMcpTool[] = [
     title: "Sui transfer preview",
     description: "Prepare a non-custodial Sui transfer preview for review in the user's wallet. Never signs or broadcasts.",
     inputSchema: objectSchema({
-      network: { type: "string", enum: ["mainnet", "testnet", "devnet"] },
+      network: { type: "string", enum: ["mainnet", "testnet"] },
       sender: { type: "string", description: "Public sender address." },
       recipient: { type: "string", description: "Public recipient address." },
-      amount: { type: "string", description: "Transfer amount as a decimal string." },
-      coinType: { type: "string", description: "Optional public coin type." },
-    }, ["network", "sender", "recipient", "amount"]),
-    request: (args) => ({ path: "/api/sui/transactions/preview", method: "POST", body: args }),
+      amountSui: { type: "string", description: "SUI amount as a positive decimal string." },
+      memo: { type: "string", description: "Optional public memo, up to 140 characters." },
+    }, ["network", "sender", "recipient", "amountSui"]),
+    request: (args) => ({
+      path: "/api/sui/transactions/preview",
+      method: "POST",
+      body: {
+        ...args,
+        // Keep older callers working while the advertised contract uses amountSui.
+        amountSui: args.amountSui ?? args.amount,
+      },
+    }),
   },
 ];
 

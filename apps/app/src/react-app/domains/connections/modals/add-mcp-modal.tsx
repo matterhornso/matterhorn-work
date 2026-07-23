@@ -49,6 +49,24 @@ function addMcpReducer(state: AddMcpState, patch: Partial<AddMcpState> | "reset"
   return { ...state, ...patch };
 }
 
+export function validateRemoteMcpUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return "Enter the MCP server URL.";
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return "Use an http:// or https:// MCP server URL.";
+    }
+    if (parsed.username || parsed.password) {
+      return "Remove credentials from the URL. Complete sign-in separately.";
+    }
+    return null;
+  } catch {
+    return "Enter a valid MCP server URL, such as https://mcp.example.com.";
+  }
+}
+
 export function AddMcpModal(props: AddMcpModalProps) {
   const [state, dispatch] = useReducer(addMcpReducer, initialAddMcpState);
   const oauthRequiredId = useId();
@@ -77,8 +95,9 @@ export function AddMcpModal(props: AddMcpModalProps) {
 
     if (state.serverType === "remote") {
       const trimmedUrl = state.url.trim();
-      if (!trimmedUrl) {
-        dispatch({ error: t("mcp.url_or_command_required"), submitting: false });
+      const urlError = validateRemoteMcpUrl(trimmedUrl);
+      if (urlError) {
+        dispatch({ error: urlError, submitting: false });
         return;
       }
 
@@ -190,7 +209,9 @@ export function AddMcpModal(props: AddMcpModalProps) {
                 label={t("mcp.server_url")}
                 placeholder={t("mcp.server_url_placeholder")}
                 value={state.url}
-                onChange={(event) => dispatch({ url: event.currentTarget.value })}
+                onChange={(event) =>
+                  dispatch({ url: event.currentTarget.value, error: null })
+                }
               />
               <div className="rounded-lg border border-dls-border bg-dls-hover/40 p-3">
                 <div className="mb-2 text-xs font-medium text-dls-text">

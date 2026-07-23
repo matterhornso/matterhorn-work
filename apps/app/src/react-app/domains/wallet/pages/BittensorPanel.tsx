@@ -1011,14 +1011,22 @@ function HyperliquidTradeExecution() {
           Asset
           <Input value={asset} onChange={(event) => { setAsset(event.target.value.toUpperCase()); resetReview(); }} placeholder="BTC" />
         </label>
-        <label className="space-y-1.5 text-xs text-dls-secondary">
-          Side
+        <fieldset className="space-y-1.5 text-xs text-dls-secondary">
+          <legend>Side</legend>
           <div className="grid h-10 grid-cols-2 rounded-lg bg-dls-surface-muted/35 p-1">
             {(["buy", "sell"] as const).map((item) => (
-              <button key={item} type="button" onClick={() => { setSide(item); resetReview(); }} className={cn("rounded-md text-xs font-semibold capitalize transition-colors", side === item ? item === "buy" ? "bg-emerald-500/18 text-emerald-200" : "bg-red-500/18 text-red-200" : "text-dls-secondary hover:text-dls-text")}>{item}</button>
+              <button
+                key={item}
+                type="button"
+                aria-pressed={side === item}
+                onClick={() => { setSide(item); resetReview(); }}
+                className={cn("rounded-md text-xs font-semibold capitalize transition-colors", side === item ? item === "buy" ? "bg-emerald-500/18 text-emerald-200" : "bg-red-500/18 text-red-200" : "text-dls-secondary hover:text-dls-text")}
+              >
+                {item}
+              </button>
             ))}
           </div>
-        </label>
+        </fieldset>
         <label className="space-y-1.5 text-xs text-dls-secondary">
           Size
           <Input value={size} inputMode="decimal" onChange={(event) => { setSize(event.target.value); resetReview(); }} placeholder="0.001" />
@@ -1103,7 +1111,10 @@ function HyperliquidTradeExecution() {
       ) : null}
       {tradeError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Hyperliquid order">{tradeError}</Notice> : null}
       <p className="text-[11px] leading-5 text-dls-secondary">
-        Market orders use an IOC limit at your slippage boundary. The connected wallet must already have a funded Hyperliquid account. Matterhorn never stores the wallet signature after submission.
+        {orderType === "market"
+          ? "Market orders use an IOC limit at your slippage boundary."
+          : "Limit orders use the exact price shown in the review."}{" "}
+        The connected wallet must already have a funded Hyperliquid account. Matterhorn never stores the wallet signature after submission.
       </p>
     </div>
   );
@@ -1614,15 +1625,17 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const marketExecutionPassedControls = marketExecutionControls.filter((control) => control.status === "pass").length;
   const marketExecutionBlockedControls = marketExecutionControls.filter((control) => control.status === "blocked" || control.status === "fail").length;
   const marketExecutionNextAction = marketExecutionReadiness?.nextActions?.find(Boolean) ?? null;
+  const marketExecutionSubmissionState = marketExecutionReadiness
+    ? marketExecutionReadiness.readyForLiveSubmission
+      ? "Wallet approved"
+      : "No"
+    : CHECK_PENDING_LABEL;
   const marketVenueState = (venueName: string): string => {
     const venue = marketExecutionReadiness?.venues?.find((item) => item.venue?.toLowerCase() === venueName);
     if (!venue) return CHECK_PENDING_LABEL;
     if (venue.canSubmit === true || venue.liveSubmissionEnabled === true) return "Wallet approved";
     return venue.blockedNow?.includes("live_submit") ? "Disabled" : "Review";
   };
-  const marketExecutionSubmissionState = marketExecutionReadiness
-    ? marketExecutionReadiness.readyForLiveSubmission ? "Hyperliquid" : "No"
-    : CHECK_PENDING_LABEL;
   const marketExecutionChainStages = marketExecutionChain?.stages ?? [];
   const marketExecutionChainStageCount = marketExecutionChainStages.length ? String(marketExecutionChainStages.length) : CHECK_PENDING_LABEL;
   const marketExecutionChainSubmitState = marketExecutionChain?.safety?.canSubmit === false ? "No" : CHECK_PENDING_LABEL;
@@ -1829,7 +1842,10 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
             <Section title={venue === "hyperliquid" ? "Standard Hyperliquid actions" : "Standard Polymarket actions"} icon={<BrainCircuit className="size-4" />}>
               <p className="mb-3 text-xs leading-5 text-dls-secondary">
-                These stage editable {activeVenue.label} Agent tasks in the composer. One-click tasks stay short and the full instruction stays editable before you send. Agent prompts never auto-execute; Hyperliquid orders still require a separate review and wallet signature in the trade ticket.
+                These stage editable {activeVenue.label} Agent tasks in the composer. The full instruction stays editable before you send. Agent prompts never auto-execute.{" "}
+                {venue === "hyperliquid"
+                  ? "Orders require a separate review and wallet signature in the trade ticket."
+                  : "Matterhorn can prepare a preview, but you must review and submit it in an eligible external client."}
               </p>
               <div className="grid gap-2">
                 {activeVenue.prompts.map((item) => (
@@ -1862,7 +1878,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
                   <Metric label="Readiness" value={venue === "hyperliquid" ? hyperliquidReadinessState : polymarketReadinessState} compact />
                   <Metric label="Execution" value={venue === "hyperliquid" ? "Wallet approved" : marketVenueState(venue)} compact />
-                  <Metric label="Can submit" value={venue === "hyperliquid" ? "After signature" : marketExecutionSubmissionState} compact />
+                  <Metric label="Can submit" value={venue === "hyperliquid" ? "After signature" : "No"} compact />
                   <Metric label="SDK evidence" value={marketSdkValidationState} compact />
                 </div>
                 <Notice tone="info" icon={<Shield className="size-4" />} title={venue === "hyperliquid" ? "Execution boundary" : "Preview-only boundary"}>

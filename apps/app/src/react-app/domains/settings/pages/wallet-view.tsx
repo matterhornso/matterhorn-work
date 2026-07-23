@@ -46,6 +46,7 @@ import type { MatterhornWalletSafetyPolicy } from "@matterhorn-work/types/wallet
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ConfirmModal } from "@/react-app/design-system/modals/confirm-modal";
 import type { WalletStore } from "../../wallet/state/wallet-store";
 import { useWalletStore } from "../../wallet/state/wallet-store";
 import {
@@ -1088,6 +1089,7 @@ function WalletSafetyPolicyControls(props: {
   );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [mainnetConfirmOpen, setMainnetConfirmOpen] = useState(false);
 
   const policyQuery = useQuery({
     queryKey: ["wallet-safety-policy", props.runtimeWorkspaceId],
@@ -1354,7 +1356,13 @@ function WalletSafetyPolicyControls(props: {
               ? "bg-amber-500/12 text-amber-200"
               : "bg-dls-surface-muted/[0.16] text-dls-secondary hover:bg-dls-surface-muted/[0.22] hover:text-dls-text",
           )}
-          onClick={() => updateForm("mainnetEnabled", !form.mainnetEnabled)}
+          onClick={() => {
+            if (form.mainnetEnabled) {
+              updateForm("mainnetEnabled", false);
+              return;
+            }
+            setMainnetConfirmOpen(true);
+          }}
         >
           {form.mainnetEnabled ? "Mainnet enabled" : "Mainnet blocked"}
         </button>
@@ -1394,6 +1402,20 @@ function WalletSafetyPolicyControls(props: {
               : "Apply"}
         </Button>
       </div>
+      <ConfirmModal
+        open={mainnetConfirmOpen}
+        title="Enable Base mainnet?"
+        message="Mainnet transactions can move real funds. The saved limits still apply, and your wallet must approve every transaction."
+        confirmLabel="Enable mainnet"
+        cancelLabel="Keep blocked"
+        variant="warning"
+        confirmationPhrase="ENABLE MAINNET"
+        onConfirm={() => {
+          updateForm("mainnetEnabled", true);
+          setMainnetConfirmOpen(false);
+        }}
+        onCancel={() => setMainnetConfirmOpen(false)}
+      />
     </section>
   );
 }
