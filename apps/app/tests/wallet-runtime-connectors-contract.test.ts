@@ -323,6 +323,19 @@ describe("wallet runtime connector contract", () => {
     expect(suiWorkflowSource).not.toContain("No custody");
   });
 
+  test("EVM and Sui connectors share one user-facing wallet list", () => {
+    const source = readReactAppSource("domains/settings/pages/wallet-view.tsx");
+
+    expect(source).toContain("integrated?: boolean");
+    expect(source).toContain("props.integrated && directSuiWalletAvailable");
+    expect(source).toContain('integrated={runtime === "web"}');
+    expect(source.match(/integrated=\{runtime === "web"\}/g)).toHaveLength(3);
+    expect(source).toContain("{!integrated ? (");
+    expect(source).toContain(
+      "Connect a supported wallet. Signing stays in your wallet.",
+    );
+  });
+
   test("compact wallet rail keeps reference detail behind progressive disclosure", () => {
     const source = readReactAppSource("domains/settings/pages/wallet-view.tsx");
 

@@ -502,20 +502,83 @@ function MessageActionIconButton(props: {
   );
 }
 
+const CLIPBOARD_WRITE_TIMEOUT_MS = 600;
+
+function copyMessageTextWithSelection(text: string): boolean {
+  if (typeof document === "undefined" || !document.body) return false;
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
+}
+
+async function copyMessageText(text: string): Promise<boolean> {
+  // Run before the first await so embedded browsers keep the click activation.
+  if (copyMessageTextWithSelection(text)) return true;
+
+  let clipboardWrite: Promise<void> | null = null;
+  try {
+    if (navigator.clipboard?.writeText) {
+      clipboardWrite = navigator.clipboard.writeText(text);
+    }
+  } catch {
+    clipboardWrite = null;
+  }
+
+  if (!clipboardWrite) return false;
+
+  try {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error("Clipboard write timed out.")),
+        CLIPBOARD_WRITE_TIMEOUT_MS,
+      );
+    });
+    try {
+      await Promise.race([clipboardWrite, timeout]);
+    } finally {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function CopyButton(props: { getText: () => string }) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle",
+  );
+  const actionLabel =
+    copyState === "copied"
+      ? "Message copied"
+      : copyState === "failed"
+        ? "Copy failed"
+        : "Copy message";
 
   return (
     <MessageActionIconButton
-      title="Copy message"
-      aria-label="Copy message"
+      title={actionLabel}
+      aria-label={actionLabel}
       onClick={async () => {
-        await navigator.clipboard.writeText(props.getText());
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1200);
+        const didCopy = await copyMessageText(props.getText());
+        setCopyState(didCopy ? "copied" : "failed");
+        window.setTimeout(() => setCopyState("idle"), 1800);
       }}
     >
-      {copied ? <Check size={14} /> : <Copy size={14} />}
+      {copyState === "copied" ? <Check size={14} /> : <Copy size={14} />}
     </MessageActionIconButton>
   );
 }
@@ -1701,8 +1764,8 @@ function MessageBlockRow(props: {
         {!props.isNestedVariant ? (
           <div
             className={cn(
-              "flex items-center gap-0.5 select-none transition-opacity duration-150",
-              "opacity-100 pointer-events-auto md:opacity-0 md:pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:group-focus-within:opacity-100 md:group-focus-within:pointer-events-auto",
+              "relative z-10 flex items-center gap-0.5 select-none transition-opacity duration-150",
+              "pointer-events-auto opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100",
               block.isUser ? "absolute right-2 top-2" : "mt-2",
             )}
           >

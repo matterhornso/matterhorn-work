@@ -829,9 +829,8 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 {t("settings.api_keys_info")}
               </LayoutSectionItemFootnote>
               <p>
-                Included models currently come from the OpenCode Zen catalog
-                managed by the local Matterhorn Desks engine. Availability can
-                change.
+                Included models come from the catalog managed by the local
+                Matterhorn Desks engine. Availability can change.
               </p>
             </div>
           </CollapsibleContent>

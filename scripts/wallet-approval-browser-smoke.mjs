@@ -538,6 +538,24 @@ async function runSmoke(config) {
       simulationMode = "passed";
     });
 
+    await stage(report, "reject_reviewed_transaction", "Cancel reviewed Base Sepolia transaction", async () => {
+      const sentCountBefore = await page.evaluate(() => window.__matterhornWalletSmoke.sentTransactions.length);
+      await dispatchApprovalRequest(page, { chainId: 84532 });
+      const approvalDialog = page.getByRole("dialog", { name: /Transaction Approval/i });
+      await approvalDialog.waitFor({ state: "visible", timeout: 15_000 });
+      await page.getByText(/Passed pre-approval simulation/i).waitFor({ state: "visible", timeout: 10_000 });
+      const approveButton = page.getByRole("button", { name: /^Approve$/ });
+      if (!(await approveButton.isEnabled())) {
+        throw new Error("Valid simulated transaction could not be reviewed before cancellation.");
+      }
+      await page.getByRole("button", { name: /^Reject$/ }).click();
+      await approvalDialog.waitFor({ state: "hidden", timeout: 10_000 });
+      const sentCountAfter = await page.evaluate(() => window.__matterhornWalletSmoke.sentTransactions.length);
+      if (sentCountAfter !== sentCountBefore) {
+        throw new Error(`Cancelled review reached wallet. Sent transaction count changed from ${sentCountBefore} to ${sentCountAfter}.`);
+      }
+    });
+
     await stage(report, "approve_reviewed_transaction", "Approve reviewed Base Sepolia transaction", async () => {
       await dispatchApprovalRequest(page, { chainId: 84532 });
       await page.getByRole("dialog", { name: /Transaction Approval/i }).waitFor({ state: "visible", timeout: 15_000 });

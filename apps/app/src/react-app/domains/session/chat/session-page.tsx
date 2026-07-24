@@ -2262,7 +2262,7 @@ export function SessionPage(props: SessionPageProps) {
             className="min-h-0 flex-1"
           >
             <ResizablePanel minSize="360px" className="min-w-0">
-              <main className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">
+              <div className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">
           <header className="z-10 flex h-10 shrink-0 items-center justify-between bg-dls-surface/95 px-4 shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)] md:px-6 mac:titlebar-drag @container/titlebar">
             <div className="flex min-w-0 items-center gap-3">
               {shellConfig.sidebar ? <SidebarTrigger className="mac:hidden" /> : null}
@@ -2425,6 +2425,7 @@ export function SessionPage(props: SessionPageProps) {
                   questionReplyBusy={props.questionReplyBusy}
                   respondQuestion={props.respondQuestion}
                   safeStringify={props.safeStringify}
+                  connectedProviderIds={props.providerConnectedIds}
                   onOpenTarget={openTarget}
                   onOpenTargetsChange={handleOpenTargetsChange}
                   onCreateDeskTask={(prompt, options) => {
@@ -2914,7 +2915,7 @@ export function SessionPage(props: SessionPageProps) {
               showAccountActions={false}
             />
           ) : null}
-              </main>
+              </div>
             </ResizablePanel>
               {dockedSidePanelOpen ? (
               <>

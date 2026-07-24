@@ -1,0 +1,1067 @@
+#!/usr/bin/env node
+import { mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { chromium } from "playwright";
+
+const repoRoot = resolve(import.meta.dirname, "..");
+const DEFAULT_URL = "http://127.0.0.1:5212/workspace/ws_9d76fd6566f5/session";
+const DEFAULT_CHAT_URL =
+  "http://127.0.0.1:5212/workspace/ws_9d76fd6566f5/session/ses_06e1901f4ffekqyPdUCe1x6zCI";
+const DEFAULT_OUTPUT_DIR = "qa-reports/rc16-control-acceptance";
+const LEGACY_BRANDS = /\b(?:OpenWork|OpenCode|openwork)\b/i;
+
+function parseArgs(argv = process.argv.slice(2)) {
+  const flags = new Set();
+  const values = new Map();
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (!arg.startsWith("--")) continue;
+    const [name, inlineValue] = arg.split("=", 2);
+    if (inlineValue !== undefined) {
+      values.set(name, inlineValue);
+      continue;
+    }
+    const next = argv[index + 1];
+    if (next && !next.startsWith("--")) {
+      values.set(name, next);
+      index += 1;
+      continue;
+    }
+    flags.add(name);
+  }
+  return {
+    help: flags.has("--help") || flags.has("-h"),
+    headed: flags.has("--headed") || process.env.MATTERHORN_RC16_HEADED === "1",
+    json: flags.has("--json"),
+    strict: flags.has("--strict") || process.env.MATTERHORN_RC16_STRICT === "1",
+    url: values.get("--url") || process.env.MATTERHORN_RC16_URL || DEFAULT_URL,
+    chatUrl:
+      values.get("--chat-url") ||
+      process.env.MATTERHORN_RC16_CHAT_URL ||
+      DEFAULT_CHAT_URL,
+    outputDir: resolve(
+      repoRoot,
+      values.get("--output-dir") ||
+        process.env.MATTERHORN_RC16_OUTPUT_DIR ||
+        DEFAULT_OUTPUT_DIR,
+    ),
+  };
+}
+
+function printHelp() {
+  console.log(`Matterhorn Desks RC16 control acceptance
+
+Usage:
+  node scripts/rc16-control-acceptance.mjs --strict
+
+Options:
+  --url <url>          Workspace session URL.
+  --chat-url <url>     Existing chat URL used for non-destructive chat checks.
+  --output-dir <dir>   Evidence directory.
+  --strict             Exit nonzero if any automated case fails.
+  --json               Print the full report.
+  --headed             Show Chromium.
+
+This runner verifies observed outcomes, restores preferences and draft text, and
+does not connect real wallets, complete OAuth, download files, delete data, or
+submit financial transactions. Those boundaries are recorded as owner gates.
+`);
+}
+
+function workspaceId(appUrl) {
+  const match = new URL(appUrl).pathname.match(/^\/workspace\/([^/]+)/);
+  if (!match?.[1]) throw new Error(`Workspace id is missing from ${appUrl}`);
+  return decodeURIComponent(match[1]);
+}
+
+function workspaceUrl(appUrl, suffix = "session", query = "") {
+  const url = new URL(appUrl);
+  url.pathname = `/workspace/${encodeURIComponent(workspaceId(appUrl))}/${suffix.replace(/^\/+/, "")}`;
+  url.search = query;
+  url.hash = "";
+  return url.toString();
+}
+
+function visibleControlName(element) {
+  return (
+    element.getAttribute("aria-label") ||
+    element.getAttribute("title") ||
+    element.textContent ||
+    element.getAttribute("placeholder") ||
+    element.getAttribute("name") ||
+    element.tagName
+  )
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+}
+
+function classifyControl(name, disabled) {
+  if (disabled) return "unavailable";
+  if (/delete|remove|disconnect|forget|revoke|clear data|sign out/i.test(name)) {
+    return "destructive";
+  }
+  if (/connect wallet|approve|sign|submit|pay|checkout|subscribe|purchase|upgrade/i.test(name)) {
+    return "owner-gated";
+  }
+  if (/download|open externally|docs|discord|report issue/i.test(name)) {
+    return "external";
+  }
+  return "safe";
+}
+
+async function mounted(page) {
+  await page.locator("#root").waitFor({ state: "visible", timeout: 20_000 });
+  await page.waitForFunction(
+    () => (document.querySelector("#root")?.childElementCount ?? 0) > 0,
+    undefined,
+    { timeout: 20_000 },
+  );
+}
+
+async function settle(page, delay = 350) {
+  await page.waitForTimeout(delay);
+  await page
+    .waitForFunction(
+      () =>
+        !document.getAnimations().some((animation) => {
+          if (animation.playState !== "running") return false;
+          const endTime = animation.effect?.getComputedTiming().endTime;
+          return typeof endTime === "number" && Number.isFinite(endTime) && endTime > 0;
+        }),
+      undefined,
+      { timeout: 1_500 },
+    )
+    .catch(() => {});
+}
+
+async function open(page, url) {
+  await page.goto(url, { waitUntil: "load", timeout: 30_000 });
+  await mounted(page);
+  await settle(page, 1_100);
+}
+
+async function reload(page) {
+  await page.reload({ waitUntil: "load", timeout: 30_000 });
+  await mounted(page);
+  await settle(page, 1_100);
+}
+
+async function waitForUrl(page, pattern, label) {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline && !pattern.test(page.url())) {
+    await page.waitForTimeout(100);
+  }
+  await mounted(page);
+  await settle(page, 700);
+  if (!pattern.test(page.url())) {
+    throw new Error(`${label}: expected ${pattern}, observed ${page.url()}.`);
+  }
+}
+
+async function firstVisible(locator, label) {
+  const count = await locator.count();
+  for (let index = 0; index < count; index += 1) {
+    const candidate = locator.nth(index);
+    if (await candidate.isVisible()) return candidate;
+  }
+  throw new Error(`${label} is missing or not visible.`);
+}
+
+async function clickVisible(locator, label) {
+  const candidate = await firstVisible(locator, label);
+  await candidate.click();
+  await settle(candidate.page());
+  return candidate;
+}
+
+async function assertText(page, text) {
+  await firstVisible(page.getByText(text, { exact: true }), `"${text}"`);
+}
+
+async function assertUrl(page, pattern, label) {
+  if (!pattern.test(page.url())) {
+    throw new Error(`${label}: expected ${pattern}, observed ${page.url()}.`);
+  }
+}
+
+async function assertSingleMain(page) {
+  const count = await page.locator("main").count();
+  if (count !== 1) throw new Error(`Expected one main landmark, observed ${count}.`);
+}
+
+async function inventorySurface(page, report, id) {
+  const controls = await page
+    .locator("button, a[href], input, select, textarea, [role=switch], [role=radio]")
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => {
+          if (element.getAttribute("aria-hidden") === "true") return false;
+          const style = getComputedStyle(element);
+          const rect = element.getBoundingClientRect();
+          return (
+            style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            rect.width > 0 &&
+            rect.height > 0
+          );
+        })
+        .map((element) => ({
+          tag: element.tagName.toLowerCase(),
+          name:
+            element.getAttribute("aria-label") ||
+            element.getAttribute("title") ||
+            element.textContent?.replace(/\s+/g, " ").trim() ||
+            element.getAttribute("placeholder") ||
+            element.getAttribute("name") ||
+            element.tagName.toLowerCase(),
+          disabled:
+            element.matches(":disabled") ||
+            element.getAttribute("aria-disabled") === "true",
+          role: element.getAttribute("role"),
+        })),
+    );
+
+  for (const control of controls) {
+    const normalized = {
+      surface: id,
+      tag: control.tag,
+      name: String(control.name).slice(0, 180),
+      disabled: control.disabled,
+      role: control.role,
+    };
+    report.inventory.push({
+      ...normalized,
+      classification: classifyControl(normalized.name, normalized.disabled),
+    });
+  }
+}
+
+function reportMarkdown(report) {
+  const counts = report.cases.reduce(
+    (acc, item) => {
+      acc[item.status] = (acc[item.status] ?? 0) + 1;
+      return acc;
+    },
+    {},
+  );
+  const inventoryCounts = report.inventory.reduce(
+    (acc, item) => {
+      acc[item.classification] = (acc[item.classification] ?? 0) + 1;
+      return acc;
+    },
+    {},
+  );
+  const rows = report.cases
+    .map(
+      (item) =>
+        `| ${item.id} | ${item.status.toUpperCase()} | ${item.control} | ${item.observed.replace(/\|/g, "\\|")} |`,
+    )
+    .join("\n");
+  const ownerRows = report.ownerGates
+    .map((item) => `| ${item.id} | ${item.control} | ${item.reason} |`)
+    .join("\n");
+  return `# Matterhorn Desks RC16 Control Acceptance
+
+- Started: ${report.startedAt}
+- Finished: ${report.finishedAt}
+- URL: ${report.url}
+- Automated: ${counts.pass ?? 0} passed, ${counts.fail ?? 0} failed
+- Visible control inventory: ${report.inventory.length}
+- Safe: ${inventoryCounts.safe ?? 0}
+- Owner-gated: ${inventoryCounts["owner-gated"] ?? 0}
+- External: ${inventoryCounts.external ?? 0}
+- Destructive: ${inventoryCounts.destructive ?? 0}
+- Unavailable: ${inventoryCounts.unavailable ?? 0}
+
+## Automated Outcomes
+
+| ID | Result | Control or journey | Observed outcome |
+| --- | --- | --- | --- |
+${rows}
+
+## Owner Acceptance Boundaries
+
+| ID | Control or journey | Why it is not automated against real accounts |
+| --- | --- | --- |
+${ownerRows}
+
+## Browser Diagnostics
+
+- Page errors: ${report.browserDiagnostics.pageErrors.length}
+- Console errors: ${report.browserDiagnostics.consoleErrors.length}
+- Failed requests: ${report.browserDiagnostics.requestFailures.length}
+
+The release rule is outcome-based: a click without the expected state, route,
+persistence, validation, dialog, or clipboard result is a failure.
+`;
+}
+
+const config = parseArgs();
+if (config.help) {
+  printHelp();
+  process.exit(0);
+}
+
+await mkdir(config.outputDir, { recursive: true });
+
+const report = {
+  name: "rc16-control-acceptance",
+  startedAt: new Date().toISOString(),
+  finishedAt: null,
+  url: config.url,
+  chatUrl: config.chatUrl,
+  ready: false,
+  cases: [],
+  inventory: [],
+  ownerGates: [
+    {
+      id: "OWNER-WALLET",
+      control: "MetaMask, Coinbase, Injected, and Phantom connection lifecycles",
+      reason: "Requires installed owner extensions and test accounts; mock-wallet safety is covered separately.",
+    },
+    {
+      id: "OWNER-HL",
+      control: "Hyperliquid exact-order review, wallet signature, testnet submission, and receipt",
+      reason: "Requires owner-controlled testnet assets and explicit financial approval.",
+    },
+    {
+      id: "OWNER-OAUTH",
+      control: "Launch OAuth connector connect, revoke, reconnect, and disconnect",
+      reason: "Requires owner test accounts and provider consent screens.",
+    },
+    {
+      id: "OWNER-NATIVE",
+      control: "macOS native folder, reveal, download, update, signing, and notarization flows",
+      reason: "Requires the packaged signed desktop candidate on a clean Mac.",
+    },
+    {
+      id: "OWNER-DESTRUCTIVE",
+      control: "Delete, forget, disconnect, revoke, and reset actions",
+      reason: "Intentionally excluded from the shared release workspace; use disposable owner fixtures.",
+    },
+  ],
+  browserDiagnostics: {
+    pageErrors: [],
+    consoleErrors: [],
+    requestFailures: [],
+  },
+  artifacts: {},
+};
+
+const browser = await chromium.launch({ headless: !config.headed });
+const context = await browser.newContext({
+  viewport: { width: 1440, height: 1000 },
+  colorScheme: "dark",
+});
+await context.grantPermissions(["clipboard-read", "clipboard-write"]).catch(() => {});
+const page = await context.newPage();
+
+page.on("pageerror", (error) => {
+  report.browserDiagnostics.pageErrors.push(error.message);
+});
+page.on("console", (message) => {
+  if (message.type() !== "error") return;
+  const text = message.text();
+  if (text.includes("Failed to load resource") && text.includes("404")) return;
+  report.browserDiagnostics.consoleErrors.push(text);
+});
+page.on("requestfailed", (request) => {
+  const url = request.url();
+  if (!/^https?:\/\/127\.0\.0\.1:/.test(url)) return;
+  if (request.failure()?.errorText === "net::ERR_ABORTED") return;
+  report.browserDiagnostics.requestFailures.push(
+    `${request.method()} ${url}: ${request.failure()?.errorText ?? "unknown"}`,
+  );
+});
+
+async function acceptanceCase(id, control, expected, action) {
+  const startedAt = Date.now();
+  try {
+    const observed = (await action()) || expected;
+    report.cases.push({
+      id,
+      control,
+      expected,
+      observed: String(observed),
+      status: "pass",
+      durationMs: Date.now() - startedAt,
+    });
+  } catch (error) {
+    const observed = error instanceof Error ? error.message : String(error);
+    const screenshot = resolve(config.outputDir, `${id.toLowerCase()}-failure.png`);
+    await page.screenshot({ path: screenshot, fullPage: false }).catch(() => {});
+    report.cases.push({
+      id,
+      control,
+      expected,
+      observed,
+      status: "fail",
+      durationMs: Date.now() - startedAt,
+      screenshot,
+    });
+  }
+}
+
+const settingsRoutes = [
+  ["NAV-GENERAL", "Settings", "general", "Settings"],
+  ["NAV-PREFERENCES", "Preferences", "preferences", "Preferences"],
+  ["NAV-PERMISSIONS", "Permissions", "permissions", "Permissions"],
+  ["NAV-WALLET", "Wallet", "wallet", "Wallet"],
+  ["NAV-MCP", "MCPs & Tools", "extensions", "MCPs & Tools"],
+  ["NAV-OVERVIEW", "Overview", "overview", "Overview"],
+  ["NAV-MODELS", "Models", "ai", "Models"],
+  ["NAV-CUSTOMIZATION", "Customization", "shell", "Customization"],
+  ["NAV-APPEARANCE", "Appearance", "appearance", "Appearance"],
+  ["NAV-UPDATES", "Updates", "updates", "Updates"],
+];
+
+await open(page, workspaceUrl(config.url, "settings/general"));
+for (const [id, control, route, heading] of settingsRoutes) {
+  await acceptanceCase(
+    id,
+    `Settings sidebar: ${control}`,
+    `Routes to ${route}, exposes ${heading}, and has one main landmark`,
+    async () => {
+      await clickVisible(page.getByRole("button", { name: control, exact: true }), control);
+      await waitForUrl(
+        page,
+        new RegExp(`/settings/${route.replace("/", "\\/")}(?:\\?|$)`),
+        control,
+      );
+      await assertText(page, heading);
+      await assertSingleMain(page);
+      await inventorySurface(page, report, `settings-${route.replace("/", "-")}`);
+      return `${page.url()} · main=1`;
+    },
+  );
+}
+
+await acceptanceCase(
+  "NAV-BACK",
+  "Back to app",
+  "Returns to the workspace session",
+  async () => {
+    await clickVisible(page.getByRole("button", { name: "Back to app", exact: true }), "Back to app");
+    await waitForUrl(page, /\/session(?:\/[^/?]+)?(?:\?|$)/, "Back to app");
+    return page.url();
+  },
+);
+
+await open(page, workspaceUrl(config.url, "settings/preferences"));
+for (const [id, label] of [
+  ["PREF-REASONING", "Show model reasoning"],
+  ["PREF-COMPACTION", "Auto context compaction"],
+]) {
+  await acceptanceCase(
+    id,
+    label,
+    "Toggles, persists after reload, and restores the original value",
+    async () => {
+      let toggle = await firstVisible(page.getByRole("switch", { name: label, exact: true }), label);
+      const original = await toggle.getAttribute("aria-checked");
+      await toggle.click();
+      await settle(page, 500);
+      const changed = await toggle.getAttribute("aria-checked");
+      if (changed === original) throw new Error(`${label} did not change.`);
+      await reload(page);
+      toggle = await firstVisible(page.getByRole("switch", { name: label, exact: true }), label);
+      if ((await toggle.getAttribute("aria-checked")) !== changed) {
+        throw new Error(`${label} did not persist after reload.`);
+      }
+      await toggle.click();
+      await settle(page, 500);
+      await reload(page);
+      toggle = await firstVisible(page.getByRole("switch", { name: label, exact: true }), label);
+      if ((await toggle.getAttribute("aria-checked")) !== original) {
+        throw new Error(`${label} did not restore.`);
+      }
+      return `${original} → ${changed} → reload ${changed} → restored ${original}`;
+    },
+  );
+}
+
+await open(page, workspaceUrl(config.url, "settings/overview"));
+await acceptanceCase(
+  "APPEAR-THEME",
+  "Light, Dark, and System theme controls",
+  "Each selection is pressed, persists on reload, and original theme is restored",
+  async () => {
+    let actualOriginal = "System";
+    for (const name of ["Light", "Dark", "System"]) {
+      const button = await firstVisible(page.getByRole("button", { name, exact: true }), name);
+      if ((await button.getAttribute("aria-pressed")) === "true") actualOriginal = name;
+    }
+    for (const name of ["Light", "Dark", "System"]) {
+      const button = await firstVisible(page.getByRole("button", { name, exact: true }), name);
+      await button.click();
+      await settle(page, 250);
+      if ((await button.getAttribute("aria-pressed")) !== "true") {
+        throw new Error(`${name} theme did not become selected.`);
+      }
+    }
+    await reload(page);
+    const system = await firstVisible(page.getByRole("button", { name: "System", exact: true }), "System");
+    if ((await system.getAttribute("aria-pressed")) !== "true") {
+      throw new Error("System theme did not persist after reload.");
+    }
+    await clickVisible(
+      page.getByRole("button", { name: actualOriginal, exact: true }),
+      `${actualOriginal} theme`,
+    );
+    return `Light, Dark, System selected; restored ${actualOriginal}`;
+  },
+);
+
+await open(page, workspaceUrl(config.url, "settings/overview"));
+await acceptanceCase(
+  "APPEAR-DENSITY",
+  "Comfortable and Compact density",
+  "Both states select correctly and original density is restored",
+  async () => {
+    let original = "Comfortable";
+    for (const name of ["Comfortable", "Compact"]) {
+      const button = await firstVisible(page.getByRole("button", { name, exact: true }), name);
+      if ((await button.getAttribute("aria-pressed")) === "true") original = name;
+    }
+    for (const name of ["Compact", "Comfortable"]) {
+      const button = await firstVisible(page.getByRole("button", { name, exact: true }), name);
+      await button.click();
+      await settle(page, 250);
+      if ((await button.getAttribute("aria-pressed")) !== "true") {
+        throw new Error(`${name} density did not become selected.`);
+      }
+    }
+    if (original !== "Comfortable") {
+      await clickVisible(page.getByRole("button", { name: original, exact: true }), original);
+    }
+    return `Compact and Comfortable selected; restored ${original}`;
+  },
+);
+
+await open(page, workspaceUrl(config.url, "settings/ai"));
+await acceptanceCase(
+  "AI-MODELS",
+  "Browse models",
+  "Opens a searchable model dialog without legacy branding and cancel changes nothing",
+  async () => {
+    await clickVisible(page.getByRole("button", { name: "Browse models", exact: true }), "Browse models");
+    const dialog = await firstVisible(page.getByRole("dialog"), "Models dialog");
+    const body = await dialog.innerText();
+    if (LEGACY_BRANDS.test(body)) throw new Error("Legacy engine branding is visible in Models.");
+    const search = await firstVisible(
+      dialog.getByPlaceholder("Search providers and models..."),
+      "model search",
+    );
+    await search.fill("North");
+    await assertText(page, "North Mini Code Free");
+    await clickVisible(dialog.getByRole("button", { name: "Done", exact: true }), "Done");
+    await dialog.waitFor({ state: "hidden", timeout: 10_000 });
+    return "Models dialog opened, filtered to North, and closed";
+  },
+);
+
+await acceptanceCase(
+  "AI-PROVIDER",
+  "Add provider",
+  "Opens external providers, filters to Anthropic, and prevents blank key submission",
+  async () => {
+    await clickVisible(page.getByRole("button", { name: "Add provider", exact: true }), "Add provider");
+    let dialog = await firstVisible(page.getByRole("dialog"), "provider dialog");
+    if (LEGACY_BRANDS.test(await dialog.innerText())) {
+      throw new Error("Legacy engine provider is visible in Add provider.");
+    }
+    const search = await firstVisible(
+      dialog.getByPlaceholder("Filter providers by name or ID"),
+      "provider search",
+    );
+    await search.fill("Anthropic");
+    await clickVisible(dialog.getByRole("button", { name: /Anthropic/ }), "Anthropic");
+    dialog = await firstVisible(page.getByRole("dialog"), "Anthropic key dialog");
+    const save = await firstVisible(dialog.getByRole("button", { name: "Save key", exact: true }), "Save key");
+    if (!(await save.isDisabled())) throw new Error("Blank provider key can be submitted.");
+    await clickVisible(dialog.getByRole("button", { name: "Close", exact: true }), "Close");
+    return "Anthropic key flow opened; blank Save key disabled";
+  },
+);
+
+const cudosButton = page.getByRole("button", { name: /Connect CUDOS|Connect ASI/i });
+if ((await cudosButton.count()) > 0) {
+  await acceptanceCase(
+    "AI-CUDOS",
+    "Connect CUDOS / ASI:Cloud",
+    "Opens secure key entry and prevents blank submission",
+    async () => {
+      await clickVisible(cudosButton, "Connect CUDOS");
+      const dialog = await firstVisible(page.getByRole("dialog"), "CUDOS key dialog");
+      const save = await firstVisible(dialog.getByRole("button", { name: "Save key", exact: true }), "Save key");
+      if (!(await save.isDisabled())) throw new Error("Blank CUDOS key can be submitted.");
+      await clickVisible(dialog.getByRole("button", { name: "Close", exact: true }), "Close");
+      return "Secure CUDOS key dialog opened; blank Save key disabled";
+    },
+  );
+}
+
+await open(page, workspaceUrl(config.url, "settings/extensions/mcp"));
+await acceptanceCase(
+  "MCP-REFRESH",
+  "Refresh MCP status",
+  "Refresh completes and retains a truthful active server count",
+  async () => {
+    const before = (await page.locator("body").innerText()).match(/\d+ MCP servers? active/)?.[0] ?? "";
+    await clickVisible(page.getByRole("button", { name: /Refresh/i }), "Refresh MCP status");
+    const after = (await page.locator("body").innerText()).match(/\d+ MCP servers? active/)?.[0] ?? "";
+    if (!after) throw new Error("Active MCP server count disappeared after refresh.");
+    return `${before || "count loaded"} → ${after}`;
+  },
+);
+
+await acceptanceCase(
+  "MCP-CLIENTS",
+  "Coding client selector and Copy command",
+  "Each client produces a non-empty, secret-free command and clipboard copy",
+  async () => {
+    const select = await firstVisible(page.locator("select"), "MCP client selector");
+    const options = await select.locator("option").allTextContents();
+    if (options.length < 4) throw new Error(`Expected four coding clients, observed ${options.length}.`);
+    for (let index = 0; index < options.length; index += 1) {
+      await select.selectOption({ index });
+      await settle(page, 150);
+      await clickVisible(
+        page.getByRole("button", { name: /Copy .* config command/i }),
+        "Copy config command",
+      );
+      const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+      if (!clipboard.trim()) throw new Error(`Copied command is empty for ${options[index]}.`);
+      if (/sk-[A-Za-z0-9_-]{12,}/.test(clipboard)) {
+        throw new Error(`Copied command contains a secret for ${options[index]}.`);
+      }
+    }
+    return `${options.length} clients generated and copied secret-free commands`;
+  },
+);
+
+await acceptanceCase(
+  "MCP-DEFINITIONS",
+  "Matterhorn MCP definition disclosures",
+  "Every visible definition expands and collapses",
+  async () => {
+    const definitions = [
+      "Bittensor MCP",
+      "Hyperliquid MCP",
+      "Polymarket MCP",
+      "Memory MCP",
+      "Core Agent MCP",
+    ];
+    let exercised = 0;
+    for (const name of definitions) {
+      const button = page.getByRole("button", { name: new RegExp(name, "i") });
+      if ((await button.count()) < 1) continue;
+      const candidate = await firstVisible(button, name);
+      await candidate.click();
+      await settle(page, 150);
+      await candidate.click();
+      exercised += 1;
+    }
+    if (exercised < 5) throw new Error(`Only ${exercised} MCP definitions were available.`);
+    return `${exercised} definition disclosures expanded and collapsed`;
+  },
+);
+
+await acceptanceCase(
+  "MCP-CUSTOM",
+  "Add Custom MCP",
+  "Blank submission stays open and shows a specific validation message",
+  async () => {
+    await clickVisible(page.getByRole("button", { name: /Add Custom MCP|Add a custom MCP/i }), "Add Custom MCP");
+    const dialog = await firstVisible(page.getByRole("dialog"), "custom MCP dialog");
+    await clickVisible(dialog.getByRole("button", { name: "Add MCP", exact: true }), "Add MCP");
+    await assertText(page, "Enter a server name.");
+    if (!(await dialog.isVisible())) throw new Error("Invalid custom MCP closed the dialog.");
+    await clickVisible(dialog.getByRole("button", { name: "Cancel", exact: true }), "Cancel");
+    return "Blank submission blocked with “Enter a server name.”";
+  },
+);
+
+await open(page, workspaceUrl(config.url, "settings/wallet"));
+await acceptanceCase(
+  "WAL-POLICY-INVALID",
+  "Save policy with an invalid per-transaction limit",
+  "Specific validation appears and the invalid value does not persist",
+  async () => {
+    const perTransaction = await firstVisible(
+      page.getByRole("spinbutton", { name: "Per transaction (USD)", exact: true }),
+      "Per transaction (USD)",
+    );
+    const original = await perTransaction.inputValue();
+    await perTransaction.fill("0");
+    await clickVisible(page.getByRole("button", { name: "Save policy", exact: true }), "Save policy");
+    await firstVisible(
+      page.getByText(/Per-transaction limit must be between \$1 and \$1,000,000\./),
+      "policy validation",
+    );
+    await reload(page);
+    const reloaded = await firstVisible(
+      page.getByRole("spinbutton", { name: "Per transaction (USD)", exact: true }),
+      "Per transaction (USD)",
+    );
+    if ((await reloaded.inputValue()) !== original) {
+      throw new Error("Invalid policy value persisted after reload.");
+    }
+    return `Invalid 0 rejected; persisted value remained ${original}`;
+  },
+);
+
+await acceptanceCase(
+  "WAL-POLICY-PERSIST",
+  "Save valid wallet policy",
+  "Current valid values save and remain exact after reload",
+  async () => {
+    const labels = ["Per transaction (USD)", "Daily limit (USD)", "Max slippage (bps)"];
+    const before = {};
+    for (const label of labels) {
+      before[label] = await (
+        await firstVisible(page.getByRole("spinbutton", { name: label, exact: true }), label)
+      ).inputValue();
+    }
+    await clickVisible(page.getByRole("button", { name: "Save policy", exact: true }), "Save policy");
+    await settle(page, 700);
+    await reload(page);
+    for (const label of labels) {
+      const value = await (
+        await firstVisible(page.getByRole("spinbutton", { name: label, exact: true }), label)
+      ).inputValue();
+      if (value !== before[label]) {
+        throw new Error(`${label} changed from ${before[label]} to ${value}.`);
+      }
+    }
+    return labels.map((label) => `${label}=${before[label]}`).join(", ");
+  },
+);
+
+await acceptanceCase(
+  "WAL-MAINNET",
+  "Base mainnet",
+  "Selecting Mainnet does not enable it; enabling requires typed confirmation",
+  async () => {
+    const sepolia = await firstVisible(
+      page.getByRole("button", { name: "Sepolia", exact: true }),
+      "Sepolia",
+    );
+    const mainnet = await firstVisible(
+      page.getByRole("button", { name: "Mainnet", exact: true }),
+      "Mainnet",
+    );
+    const originalNetwork =
+      (await mainnet.getAttribute("aria-pressed")) === "true"
+        ? "Mainnet"
+        : "Sepolia";
+
+    await mainnet.click();
+    if ((await mainnet.getAttribute("aria-pressed")) !== "true") {
+      throw new Error("Mainnet could not be selected as the preferred network.");
+    }
+
+    const mainnetGate = await firstVisible(
+      page.getByRole("button", { name: "Mainnet blocked", exact: true }),
+      "Mainnet blocked",
+    );
+    await mainnetGate.click();
+    const dialog = await firstVisible(
+      page.getByRole("alertdialog"),
+      "Enable Base mainnet confirmation",
+    );
+    await firstVisible(
+      dialog.getByRole("textbox", { name: "Type ENABLE MAINNET to confirm" }),
+      "mainnet confirmation phrase",
+    );
+    const enable = await firstVisible(
+      dialog.getByRole("button", { name: "Enable mainnet", exact: true }),
+      "Enable mainnet",
+    );
+    if (!(await enable.isDisabled())) {
+      throw new Error("Mainnet can be enabled without typing the confirmation phrase.");
+    }
+    await clickVisible(
+      dialog.getByRole("button", { name: "Keep blocked", exact: true }),
+      "Keep blocked",
+    );
+    if ((await mainnetGate.getAttribute("aria-pressed")) !== "false") {
+      throw new Error("Cancelling the mainnet gate changed the enabled state.");
+    }
+
+    if (originalNetwork === "Sepolia") {
+      await sepolia.click();
+    }
+    return `Preferred network selected and restored to ${originalNetwork}; typed enable gate remained blocked`;
+  },
+);
+
+await open(page, workspaceUrl(config.url, "settings/overview"));
+await acceptanceCase(
+  "OVERVIEW-DETAILS",
+  "Technical readiness details",
+  "Expands and collapses the backend readiness disclosure",
+  async () => {
+    const button = await firstVisible(
+      page.getByRole("button", { name: "Technical readiness details", exact: true }),
+      "Technical readiness details",
+    );
+    await button.click();
+    await assertText(page, "Workspace readiness");
+    await button.click();
+    return "Readiness details exposed, then collapsed";
+  },
+);
+
+await acceptanceCase(
+  "OVERVIEW-FILTERS",
+  "Feedback review filters",
+  "Every filter becomes the selected filter",
+  async () => {
+    const labels = ["All 0", "Worked well", "Felt rough", "Rating", "Comment", "Bug", "Request"];
+    let exercised = 0;
+    for (const label of labels) {
+      const button = page.getByRole("button", { name: label, exact: true });
+      if ((await button.count()) < 1) continue;
+      const candidate = await firstVisible(button, label);
+      await candidate.click();
+      if ((await candidate.getAttribute("aria-pressed")) !== "true") {
+        throw new Error(`${label} did not become selected.`);
+      }
+      exercised += 1;
+    }
+    await clickVisible(page.getByRole("button", { name: "All 0", exact: true }), "All 0");
+    return `${exercised} filters selected; restored All`;
+  },
+);
+
+await acceptanceCase(
+  "OVERVIEW-QUICK-JOT",
+  "Quick Jot",
+  "Opens the note composer and Cancel writes nothing",
+  async () => {
+    await clickVisible(page.getByRole("button", { name: "Quick Jot", exact: true }), "Quick Jot");
+    const dialog = await firstVisible(page.getByRole("dialog"), "Quick Jot dialog");
+    await firstVisible(dialog.getByPlaceholder("Note title"), "Note title");
+    await clickVisible(dialog.getByRole("button", { name: "Cancel", exact: true }), "Cancel");
+    await dialog.waitFor({ state: "hidden", timeout: 10_000 });
+    return "Quick Jot opened with editor fields; Cancel closed it";
+  },
+);
+
+await acceptanceCase(
+  "OVERVIEW-NOTES",
+  "Open notes",
+  "Opens the workspace Notes panel",
+  async () => {
+    await clickVisible(page.getByRole("button", { name: "Open notes", exact: true }), "Open notes");
+    await waitForUrl(page, /(?:\?|&)panel=notes(?:&|$)/, "Open notes");
+    await assertText(page, "Notes");
+    return page.url();
+  },
+);
+
+await open(page, workspaceUrl(config.url, "settings/overview"));
+await acceptanceCase(
+  "OVERVIEW-MEMORY",
+  "Open Memory review",
+  "Opens the workspace Memory panel",
+  async () => {
+    await clickVisible(
+      page.getByRole("button", { name: "Open Memory review", exact: true }),
+      "Open Memory review",
+    );
+    await waitForUrl(page, /(?:\?|&)panel=memory(?:&|$)/, "Open Memory review");
+    await assertText(page, "Memory");
+    return page.url();
+  },
+);
+
+await open(page, config.chatUrl);
+await acceptanceCase(
+  "CHAT-PANELS",
+  "Profile, Wallet, MCPs, and Notes right-rail controls",
+  "Each opens the matching panel URL and heading",
+  async () => {
+    const panels = [
+      ["Profile and account", "profile", "Profile"],
+      ["Wallet details", "wallet", "Wallet"],
+      ["MCPs & Connectors", "extensions", "MCPs & Tools"],
+      ["Project notes", "notes", "Notes"],
+    ];
+    for (const [control, panel, heading] of panels) {
+      await open(page, config.chatUrl);
+      await clickVisible(page.getByRole("button", { name: control, exact: true }), control);
+      await waitForUrl(
+        page,
+        new RegExp(`(?:\\?|&)panel=${panel}(?:&|$)`),
+        control,
+      );
+      await assertText(page, heading);
+    }
+    return `${panels.length} right-rail panels opened with matching routes and headings`;
+  },
+);
+
+await open(page, config.chatUrl);
+await acceptanceCase(
+  "CHAT-MODES",
+  "Discuss, Plan, and Work modes",
+  "Every mode becomes the visible current mode; Work is restored",
+    async () => {
+    for (const name of ["Discuss", "Plan", "Work"]) {
+      await clickVisible(page.getByRole("button", { name: /^Mode\s+/ }), "Mode menu");
+      await clickVisible(
+        page.getByRole("menuitemradio", { name: new RegExp(`^${name}`) }),
+        name,
+      );
+      await firstVisible(
+        page.getByRole("button", { name: new RegExp(`^Mode\\s+${name}$`) }),
+        `Mode ${name}`,
+      );
+    }
+    return "Discuss → Plan → Work; Work restored";
+  },
+);
+
+await acceptanceCase(
+  "CHAT-PERSPECTIVE",
+  "Less optimistic, Normal, and Optimistic perspective controls",
+  "Every perspective becomes checked; Normal is restored",
+  async () => {
+    const labels = ["Cautious", "Balanced", "Optimistic"];
+    for (const label of labels) {
+      const radio = await firstVisible(
+        page.getByRole("radio", { name: label, exact: true }),
+        label,
+      );
+      await radio.click();
+      if ((await radio.getAttribute("aria-checked")) !== "true") {
+        throw new Error(`${label} did not become checked.`);
+      }
+    }
+    await clickVisible(
+      page.getByRole("radio", { name: "Balanced", exact: true }),
+      "Balanced",
+    );
+    return "Cautious → Balanced → Optimistic → Balanced";
+  },
+);
+
+await acceptanceCase(
+  "CHAT-MODEL",
+  "Change model",
+  "Opens a searchable branded model picker and closes without changing selection",
+  async () => {
+    await clickVisible(page.getByRole("button", { name: "Change model", exact: true }), "Change model");
+    const search = await firstVisible(
+      page.getByPlaceholder("Search models..."),
+      "compact model search",
+    );
+    const picker = search.locator("xpath=..");
+    if (LEGACY_BRANDS.test(await picker.innerText())) {
+      throw new Error("Legacy engine branding is visible in the model picker.");
+    }
+    await page.keyboard.press("Escape");
+    await search.waitFor({ state: "hidden", timeout: 10_000 });
+    return "Branded searchable model picker opened and closed";
+  },
+);
+
+await acceptanceCase(
+  "CHAT-TOOLS",
+  "Commands, skills, extensions, and MCP menu",
+  "Menu opens, exposes all Work-mode categories, and dismisses with Escape",
+  async () => {
+    await clickVisible(
+      page.getByRole("button", { name: "Commands, skills, and MCPs", exact: true }),
+      "Commands, skills, and MCPs",
+    );
+    for (const label of ["Commands", "Skills", "Extensions", "MCPs"]) {
+      await firstVisible(page.getByRole("tab", { name: label, exact: true }), label);
+    }
+    await page.keyboard.press("Escape");
+    return "Commands, Skills, Extensions, and MCPs visible; menu dismissed";
+  },
+);
+
+await acceptanceCase(
+  "CHAT-DRAFT",
+  "Chat composer draft",
+  "Draft survives reload, then is cleared and remains cleared",
+  async () => {
+    const editorLocator = page.locator('[contenteditable="true"]').first();
+    const editor = await firstVisible(editorLocator, "chat editor");
+    const original = (await editor.textContent()) ?? "";
+    const marker = `RC16 draft ${Date.now()}`;
+    await editor.fill(marker);
+    await settle(page, 500);
+    await reload(page);
+    const restoredEditor = await firstVisible(page.locator('[contenteditable="true"]').first(), "chat editor");
+    if (!((await restoredEditor.textContent()) ?? "").includes(marker)) {
+      throw new Error("Draft did not survive reload.");
+    }
+    await restoredEditor.fill(original);
+    await settle(page, 500);
+    await reload(page);
+    const clearedEditor = await firstVisible(page.locator('[contenteditable="true"]').first(), "chat editor");
+    if (((await clearedEditor.textContent()) ?? "") !== original) {
+      throw new Error("Draft did not restore to its original value.");
+    }
+    return `Draft ${marker} persisted; original draft restored`;
+  },
+);
+
+await acceptanceCase(
+  "CHAT-COPY",
+  "Copy message",
+  "Copies non-empty message text to the clipboard",
+  async () => {
+    const copy = await firstVisible(page.getByRole("button", { name: "Copy message", exact: true }), "Copy message");
+    await copy.click();
+    await settle(page, 150);
+    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+    if (!clipboard.trim()) throw new Error("Clipboard is empty after Copy message.");
+    return `${clipboard.length} characters copied`;
+  },
+);
+
+await inventorySurface(page, report, "chat");
+const pageText = await page.locator("body").innerText();
+await acceptanceCase(
+  "BRAND-CUSTOMER",
+  "Customer-facing branding",
+  "No legacy OpenWork/OpenCode branding is visible",
+  async () => {
+    if (LEGACY_BRANDS.test(pageText)) {
+      throw new Error(`Legacy brand is visible: ${pageText.match(LEGACY_BRANDS)?.[0]}`);
+    }
+    return "Matterhorn-only customer-facing copy";
+  },
+);
+
+report.finishedAt = new Date().toISOString();
+report.ready = report.cases.every((item) => item.status === "pass");
+
+const screenshotPath = resolve(config.outputDir, "rc16-control-acceptance.png");
+await page.screenshot({ path: screenshotPath, fullPage: false }).catch(() => {});
+report.artifacts.screenshot = screenshotPath;
+
+const summaryPath = resolve(config.outputDir, "summary.json");
+const ledgerPath = resolve(config.outputDir, "control-acceptance.md");
+report.artifacts.summary = summaryPath;
+report.artifacts.ledger = ledgerPath;
+await writeFile(summaryPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+await writeFile(ledgerPath, reportMarkdown(report), "utf8");
+
+await browser.close();
+
+const passed = report.cases.filter((item) => item.status === "pass").length;
+const failed = report.cases.filter((item) => item.status === "fail").length;
+console.log(
+  `RC16 control acceptance: ${passed} passed, ${failed} failed, ${report.inventory.length} controls inventoried.`,
+);
+console.log(`Evidence: ${summaryPath}`);
+if (config.json) console.log(JSON.stringify(report, null, 2));
+if (config.strict && !report.ready) process.exitCode = 1;

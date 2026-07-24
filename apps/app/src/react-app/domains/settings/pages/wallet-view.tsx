@@ -482,6 +482,7 @@ function PhantomWalletMark({ icon }: { icon?: string | null }) {
 
 function SuiWalletPreviewSection(props: {
   compact?: boolean;
+  integrated?: boolean;
   matterhornServerClient?: MatterhornServerClient | null;
   runtime?: WalletRuntime;
   workspaceId?: string | null;
@@ -500,6 +501,7 @@ function SuiWalletPreviewSection(props: {
   const [error, setError] = useState<string | null>(null);
   const runtime = props.runtime ?? "web";
   const directSuiWalletAvailable = runtime === "web";
+  const integrated = Boolean(props.integrated && directSuiWalletAvailable);
   const suiAddress = account?.address ?? phantomSui.address;
   const suiWalletName = account?.address
     ? (wallet?.name ?? "Sui")
@@ -628,28 +630,40 @@ function SuiWalletPreviewSection(props: {
   return (
     <section
       className={cn(
-        "flex flex-col gap-3",
-        props.compact
-          ? "matterhorn-rail-section"
-          : "rounded-md bg-dls-surface-muted/[0.045] px-4 py-4",
+        integrated
+          ? "contents"
+          : cn(
+              "flex flex-col gap-3",
+              props.compact
+                ? "matterhorn-rail-section"
+                : "rounded-md bg-dls-surface-muted/[0.045] px-4 py-4",
+            ),
       )}
     >
-      <div className="flex min-w-0 items-start gap-2">
+      {!integrated ? (
         <div className="flex min-w-0 items-start gap-2">
-          <Waves className="mt-0.5 size-4 shrink-0 text-dls-secondary" />
-          <div className="min-w-0">
-            <h4 className="text-sm font-semibold text-dls-text">Sui wallet</h4>
-            <p className="mt-1 text-xs leading-5 text-dls-secondary">
-              Connect your Sui wallet to view its balance and prepare transfers.
-            </p>
+          <div className="flex min-w-0 items-start gap-2">
+            <Waves className="mt-0.5 size-4 shrink-0 text-dls-secondary" />
+            <div className="min-w-0">
+              <h4 className="text-sm font-semibold text-dls-text">
+                Sui wallet
+              </h4>
+              <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                Connect your Sui wallet to view its balance and prepare
+                transfers.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {suiAddress ? (
         <div className="grid gap-3">
           <div className="grid gap-3 rounded-md bg-dls-surface-muted/[0.055] px-3 py-3 sm:grid-cols-3">
-            <WalletRailMetric label="Wallet" value={suiWalletName} />
+            <WalletRailMetric
+              label={integrated ? "Sui wallet" : "Wallet"}
+              value={suiWalletName}
+            />
             <WalletRailMetric label="Network" value={String(network)} />
             <WalletRailMetric
               label="Balance"
@@ -713,7 +727,8 @@ function SuiWalletPreviewSection(props: {
               variant="outline"
               className={cn(
                 WALLET_CONNECTOR_ACTION_CLASS,
-                "h-auto justify-start gap-3 px-3 py-3",
+                "h-auto justify-start gap-3 px-3",
+                props.compact ? "py-2.5" : "py-3",
               )}
               disabled={busy}
               onClick={() => {
@@ -744,7 +759,8 @@ function SuiWalletPreviewSection(props: {
               rel="noreferrer"
               className={cn(
                 WALLET_CONNECTOR_ACTION_CLASS,
-                "flex min-w-0 items-center gap-3 px-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ab9ff2]",
+                "flex min-w-0 items-center gap-3 px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ab9ff2]",
+                props.compact ? "py-2.5" : "py-3",
               )}
             >
               <PhantomWalletMark />
@@ -765,7 +781,8 @@ function SuiWalletPreviewSection(props: {
               variant="outline"
               className={cn(
                 WALLET_CONNECTOR_ACTION_CLASS,
-                "h-auto justify-start gap-3 px-3 py-3",
+                "h-auto justify-start gap-3 px-3",
+                props.compact ? "py-2.5" : "py-3",
               )}
               disabled={busy}
               onClick={() => connectSuiWallet(availableWallet)}
@@ -2062,12 +2079,9 @@ export function WalletSettingsView({
         <section className="matterhorn-rail-section flex flex-col gap-3">
           <div className="flex flex-wrap items-start justify-between gap-2.5">
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-dls-text">
-                Matterhorn Wallet
-              </h3>
+              <h3 className="text-sm font-semibold text-dls-text">Wallets</h3>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Connect an EVM or Sui wallet. Bittensor uses public SS58 reads
-                and external signing.
+                Connect a supported wallet. Signing stays in your wallet.
               </p>
             </div>
             <span className="shrink-0 pt-0.5 text-[11px] font-medium text-dls-secondary">
@@ -2086,127 +2100,146 @@ export function WalletSettingsView({
           </div>
         ) : null}
 
-        {state.isConnected ? (
-          <section className="flex flex-col gap-4">
-            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr))]">
-              <WalletRailMetric
-                label="Address"
-                value={wagmiAddress ? truncateAddress(wagmiAddress) : "—"}
-              />
-              <WalletRailMetric
-                label="Network"
-                value={
-                  state.chainId
-                    ? (CHAIN_NAMES[state.chainId] ?? "Unknown")
-                    : "Unknown"
-                }
-              />
-              <WalletRailMetric
-                label="ETH"
-                value={
-                  ethBalance
-                    ? Number(formatUnits(ethBalance.value, 18)).toFixed(4)
-                    : (state.ethBalance ?? "—")
-                }
-              />
-              <WalletRailMetric label="USDC" value={state.usdcBalance ?? "—"} />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={copyAddress}
-                disabled={!wagmiAddress}
-              >
-                <Copy className="size-3" />
-                Copy address
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
-                onClick={handleRefresh}
-                disabled={refreshing}
-                aria-label="Refresh wallet"
-                title="Refresh wallet"
-              >
-                <RefreshCw
-                  className={cn("size-3", refreshing && "animate-spin")}
+        <section
+          className={cn(
+            "flex flex-col",
+            state.isConnected
+              ? "gap-4"
+              : "gap-1.5 rounded-lg bg-dls-surface-muted/[0.14] p-1.5",
+          )}
+        >
+          {state.isConnected ? (
+            <>
+              <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr))]">
+                <WalletRailMetric
+                  label="Address"
+                  value={wagmiAddress ? truncateAddress(wagmiAddress) : "—"}
                 />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-red-11 hover:bg-red-500/10 hover:text-red-12"
-                onClick={handleDisconnect}
-              >
-                <Unplug className="size-3" />
-                Disconnect
-              </Button>
-            </div>
-          </section>
-        ) : (
-          <section className="flex flex-col gap-1.5 rounded-lg bg-dls-surface-muted/[0.14] p-1.5">
-            {state.isConnecting && connectingConnectorId ? (
-              <div
-                role="status"
-                className="flex items-center gap-2 px-2 py-1.5 text-xs text-dls-secondary"
-              >
-                <RefreshCw className="size-3 animate-spin" aria-hidden="true" />
-                Continue in {connectors.find(
-                  (connector) => connector.id === connectingConnectorId,
-                )?.name ?? "your wallet"}.
+                <WalletRailMetric
+                  label="Network"
+                  value={
+                    state.chainId
+                      ? (CHAIN_NAMES[state.chainId] ?? "Unknown")
+                      : "Unknown"
+                  }
+                />
+                <WalletRailMetric
+                  label="ETH"
+                  value={
+                    ethBalance
+                      ? Number(formatUnits(ethBalance.value, 18)).toFixed(4)
+                      : (state.ethBalance ?? "—")
+                  }
+                />
+                <WalletRailMetric
+                  label="USDC"
+                  value={state.usdcBalance ?? "—"}
+                />
               </div>
-            ) : null}
-            {connectors.length > 0 ? (
-              connectors.map((connector) => (
+              <div className="flex flex-wrap gap-2">
                 <Button
-                  key={connector.id}
                   variant="outline"
-                  className={cn(
-                    WALLET_CONNECTOR_ACTION_CLASS,
-                    "h-auto justify-start gap-3 px-3 py-2.5",
-                  )}
-                  disabled={state.isConnecting}
-                  onClick={() => handleConnect(connector.id)}
+                  size="sm"
+                  onClick={copyAddress}
+                  disabled={!wagmiAddress}
                 >
-                  <WalletConnectorMark
-                    connector={connector}
-                    className="size-4"
-                  />
-                  <span className="min-w-0 text-left">
-                    <span className="block truncate text-sm font-medium">
-                      {connector.name}
-                    </span>
-                    <span className="block truncate text-xs text-dls-secondary">
-                      {evmConnectorKindLabel(connector)}
-                    </span>
-                  </span>
-                  {state.isConnecting &&
-                  connectingConnectorId === connector.id ? (
-                    <RefreshCw className="ml-auto size-3.5 animate-spin" />
-                  ) : null}
+                  <Copy className="size-3" />
+                  Copy address
                 </Button>
-              ))
-            ) : (
-              <div className="rounded-md bg-dls-surface-muted/[0.14] px-3 py-3 text-sm leading-6 text-dls-secondary">
-                <div className="flex items-center gap-2 font-medium text-dls-text">
-                  <Wallet className="size-4" />
-                  {noConnectorCopy.title}
-                </div>
-                <p className="mt-2 text-xs leading-5">{noConnectorCopy.body}</p>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  aria-label="Refresh wallet"
+                  title="Refresh wallet"
+                >
+                  <RefreshCw
+                    className={cn("size-3", refreshing && "animate-spin")}
+                  />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-11 hover:bg-red-500/10 hover:text-red-12"
+                  onClick={handleDisconnect}
+                >
+                  <Unplug className="size-3" />
+                  Disconnect
+                </Button>
               </div>
-            )}
-          </section>
-        )}
-
-        <SuiWalletPreviewSection
-          compact
-          matterhornServerClient={matterhornServerClient}
-          runtime={runtime}
-          workspaceId={runtimeWorkspaceId}
-          sessionId={sessionId}
-        />
+            </>
+          ) : (
+            <>
+              {state.isConnecting && connectingConnectorId ? (
+                <div
+                  role="status"
+                  className="flex items-center gap-2 px-2 py-1.5 text-xs text-dls-secondary"
+                >
+                  <RefreshCw
+                    className="size-3 animate-spin"
+                    aria-hidden="true"
+                  />
+                  Continue in{" "}
+                  {connectors.find(
+                    (connector) => connector.id === connectingConnectorId,
+                  )?.name ?? "your wallet"}
+                  .
+                </div>
+              ) : null}
+              {connectors.length > 0 ? (
+                connectors.map((connector) => (
+                  <Button
+                    key={connector.id}
+                    variant="outline"
+                    className={cn(
+                      WALLET_CONNECTOR_ACTION_CLASS,
+                      "h-auto justify-start gap-3 px-3 py-2.5",
+                    )}
+                    disabled={state.isConnecting}
+                    onClick={() => handleConnect(connector.id)}
+                  >
+                    <WalletConnectorMark
+                      connector={connector}
+                      className="size-4"
+                    />
+                    <span className="min-w-0 text-left">
+                      <span className="block truncate text-sm font-medium">
+                        {connector.name}
+                      </span>
+                      <span className="block truncate text-xs text-dls-secondary">
+                        {evmConnectorKindLabel(connector)}
+                      </span>
+                    </span>
+                    {state.isConnecting &&
+                    connectingConnectorId === connector.id ? (
+                      <RefreshCw className="ml-auto size-3.5 animate-spin" />
+                    ) : null}
+                  </Button>
+                ))
+              ) : (
+                <div className="rounded-md bg-dls-surface-muted/[0.14] px-3 py-3 text-sm leading-6 text-dls-secondary">
+                  <div className="flex items-center gap-2 font-medium text-dls-text">
+                    <Wallet className="size-4" />
+                    {noConnectorCopy.title}
+                  </div>
+                  <p className="mt-2 text-xs leading-5">
+                    {noConnectorCopy.body}
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+          <SuiWalletPreviewSection
+            compact
+            integrated={runtime === "web"}
+            matterhornServerClient={matterhornServerClient}
+            runtime={runtime}
+            workspaceId={runtimeWorkspaceId}
+            sessionId={sessionId}
+          />
+        </section>
         <WalletSafetyPolicyControls
           compact
           store={store}
@@ -2236,11 +2269,9 @@ export function WalletSettingsView({
       <SettingsStack>
         <SettingsSection>
           <SettingsSectionHeader>
-            <SettingsSectionHeaderTitle>
-              Matterhorn Wallet
-            </SettingsSectionHeaderTitle>
+            <SettingsSectionHeaderTitle>Wallets</SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Connect EVM or Sui. Bittensor uses an external signer.
+              Connect a supported wallet. Signing stays in your wallet.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeader>
 
@@ -2261,9 +2292,11 @@ export function WalletSettingsView({
                 className="flex items-center gap-2 rounded-md bg-dls-surface-muted/[0.14] px-3 py-2 text-xs text-dls-secondary"
               >
                 <RefreshCw className="size-3 animate-spin" aria-hidden="true" />
-                Continue in {connectors.find(
+                Continue in{" "}
+                {connectors.find(
                   (connector) => connector.id === connectingConnectorId,
-                )?.name ?? "your wallet"}.
+                )?.name ?? "your wallet"}
+                .
               </div>
             ) : null}
 
@@ -2303,15 +2336,14 @@ export function WalletSettingsView({
                 </p>
               </div>
             )}
+            <SuiWalletPreviewSection
+              integrated={runtime === "web"}
+              matterhornServerClient={matterhornServerClient}
+              runtime={runtime}
+              workspaceId={runtimeWorkspaceId}
+              sessionId={sessionId}
+            />
           </div>
-        </SettingsSection>
-        <SettingsSection>
-          <SuiWalletPreviewSection
-            matterhornServerClient={matterhornServerClient}
-            runtime={runtime}
-            workspaceId={runtimeWorkspaceId}
-            sessionId={sessionId}
-          />
         </SettingsSection>
         <SettingsSection>
           <SettingsSectionHeader>
@@ -2355,10 +2387,10 @@ export function WalletSettingsView({
           <div className="min-w-0">
             <SettingsSectionHeaderTitle>
               <ShieldCheck className="size-4 text-green-400" />
-              Connected wallet
+              Wallets
             </SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Account, network, and balances for this workspace.
+              Connected accounts and available wallet connections.
             </SettingsSectionHeaderDescription>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -2436,10 +2468,8 @@ export function WalletSettingsView({
             />
           </Button>
         </div>
-      </SettingsSection>
-
-      <SettingsSection>
         <SuiWalletPreviewSection
+          integrated={runtime === "web"}
           matterhornServerClient={matterhornServerClient}
           runtime={runtime}
           workspaceId={runtimeWorkspaceId}

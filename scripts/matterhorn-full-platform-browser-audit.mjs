@@ -23,7 +23,7 @@ const settingsSurfaces = [
   ["settings-overview", "settings/overview", ["Backend status", "Data policy"]],
   ["settings-preferences", "settings/preferences", ["Model", "Show model reasoning"]],
   ["settings-permissions", "settings/permissions", ["Authorized folders"]],
-  ["settings-wallet", "settings/wallet", ["Matterhorn Wallet", "Sui wallet"]],
+  ["settings-wallet", "settings/wallet", ["Wallets", "Save policy"]],
   ["settings-generated-media", "settings/generated-media", ["Production readiness", "Media library"]],
   ["settings-extensions", "settings/extensions", ["Matterhorn MCPs"]],
   ["settings-ai", "settings/ai", ["Models"]],
@@ -36,7 +36,7 @@ const settingsSurfaces = [
 
 const panelSurfaces = [
   ["panel-profile", "profile", ["Profile"]],
-  ["panel-wallet", "wallet", ["Matterhorn Wallet", "Sui wallet"]],
+  ["panel-wallet", "wallet", ["Wallets", "Save policy"]],
   ["panel-outputs", "artifacts", ["Outputs"]],
   ["panel-extensions", "extensions", ["Matterhorn MCPs"]],
   ["panel-memory", "memory", ["Memory", "Review suggestions before saving."]],

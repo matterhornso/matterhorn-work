@@ -49,7 +49,7 @@ type ProviderOAuthSession = ProviderOAuthStartResult & {
 
 const PROVIDER_LABELS: Record<string, string> = {
   matterhorn: "Matterhorn Desks",
-  opencode: "Matterhorn-Code Zen",
+  opencode: "Matterhorn Models",
   openai: "OpenAI",
   anthropic: "Anthropic",
   google: "Google",
@@ -110,12 +110,12 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
   const autoOpenedPreferredProviderIdRef = useRef<string | null>(null);
 
   const formatProviderName = (id: string, fallback?: string) => {
-    const named = fallback?.trim();
-    if (named) return named;
-
     const normalized = id.trim();
     const mapped = PROVIDER_LABELS[normalized.toLowerCase()];
     if (mapped) return mapped;
+
+    const named = fallback?.trim();
+    if (named) return named;
 
     const cleaned = normalized.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
     if (!cleaned) return id;
@@ -150,17 +150,9 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
     return normalizedId === "anthropic" || normalizedName === "anthropic";
   };
 
-  const isOpencodeZenProvider = (id: string) => id.trim().toLowerCase() === "opencode";
-
-  const OPENCODE_ZEN_KEY_URL = "https://opencode.ai/auth";
-
-  const openExternalUrl = async (url: string) => {
-    if (!url) return;
-    if (isDesktopRuntime()) {
-      await openDesktopUrl(url);
-      return;
-    }
-    window.open(url, "_blank", "noopener,noreferrer");
+  const isBundledInternalProvider = (id: string, fallbackName?: string) => {
+    const identity = `${id} ${fallbackName ?? ""}`.trim().toLowerCase();
+    return identity.includes("opencode") || identity.includes("openwork");
   };
 
   const isClaudeProMaxMethod = (method: ProviderAuthMethod) => {
@@ -177,6 +169,10 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
     const nextEntries = Object.keys(methods)
       .flatMap((id) => {
         const provider = providersById.get(id);
+        // The bundled catalog is already available as Matterhorn Models. It is
+        // not a separate provider account for customers to configure.
+        if (isBundledInternalProvider(id, provider?.name)) return [];
+
         const entryMethods = (methods[id] ?? []).filter((method) => {
           if (isAnthropicProvider(id, provider?.name) && isClaudeProMaxMethod(method)) {
             return false;
@@ -699,9 +695,6 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
     if (method.type === "cloud") {
       return method.description ?? "Use the provider and credential managed by your organization.";
     }
-    if (isOpencodeZenProvider(entry.id)) {
-      return "Sign in to Matterhorn-Code Zen with an API key to unlock paid models alongside the free tier.";
-    }
     return "Paste a secret key that Matterhorn stores locally on this device.";
   };
 
@@ -861,34 +854,16 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <div className="text-sm font-medium text-gray-12">{selectedEntry.name}</div>
-                      <div className="text-xs text-gray-10 mt-1">
-                        {isOpencodeZenProvider(selectedEntry.id)
-                          ? "Sign in to Matterhorn-Code Zen with an API key from opencode.ai/auth."
-                          : "Paste your API key to connect."}
-                      </div>
+                      <div className="text-xs text-gray-10 mt-1">Paste your API key to connect.</div>
                     </div>
                     <Button variant="outline" onClick={handleBack} disabled={actionDisabled}>
                       Back
                     </Button>
                   </div>
-                  {isOpencodeZenProvider(selectedEntry.id) ? (
-                    <div className="rounded-lg border border-indigo-5/30 bg-indigo-3/15 px-3 py-2.5 text-xs text-indigo-12 space-y-1.5">
-                      <div>
-                        Matterhorn-Code Zen gives you access to the best coding models. Free models keep working without a key.
-                      </div>
-                      <button
-                        type="button"
-                        className="text-indigo-11 hover:text-indigo-12 underline underline-offset-2 font-medium"
-                        onClick={() => void openExternalUrl(OPENCODE_ZEN_KEY_URL)}
-                      >
-                        Get an API key →
-                      </button>
-                    </div>
-                  ) : null}
                   <TextInput
                     label="API key"
                     type="password"
-                    placeholder={isOpencodeZenProvider(selectedEntry.id) ? "ock_..." : "sk-..."}
+                    placeholder="sk-..."
                     value={apiKeyInput}
                     onChange={(event) => {
                       setApiKeyInput(event.currentTarget.value);

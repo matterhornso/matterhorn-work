@@ -630,18 +630,15 @@ async function runSmoke(config) {
       report.artifacts.memoryPanelUrl = page.url();
     });
 
-    await stage(report, "wallet_panel", "Open Wallet and Sui workflow panel", async () => {
+    await stage(report, "wallet_panel", "Open unified Wallet panel", async () => {
       await page.goto(`${workspaceUrl(config.url, "session")}?panel=wallet`, { waitUntil: "load", timeout: 30_000 });
-      await waitForAnyVisible(page, [
-        page.getByRole("heading", { name: "Sui wallet preview", exact: true }),
-        page.getByText("Sui wallet", { exact: true }),
-        page.getByText("Matterhorn Wallet", { exact: true }),
-      ], "wallet panel", 20_000);
+      await page.getByText("Wallets", { exact: true }).first()
+        .waitFor({ state: "visible", timeout: 20_000 });
       await waitForAnyVisible(page, [
         page.getByText("Install or enable Phantom for Sui", { exact: true }),
         page.getByText("Connect Phantom for Sui", { exact: true }),
         page.getByText("Connected wallet", { exact: true }),
-      ], "Sui wallet connection action or connected state", 20_000);
+      ], "Phantom connection action or connected state", 20_000);
       report.artifacts.walletPanelUrl = page.url();
     });
 
@@ -688,14 +685,14 @@ async function runSmoke(config) {
       }
     });
 
-    await stage(report, "settings_wallet", "Check Wallet settings Sui copy", async () => {
+    await stage(report, "settings_wallet", "Check unified Wallet settings", async () => {
       await page.goto(workspaceUrl(config.url, "settings/wallet"), { waitUntil: "load", timeout: 30_000 });
-      await page.getByText("Sui wallet", { exact: true }).first().waitFor({ state: "visible", timeout: 20_000 });
+      await page.getByText("Wallets", { exact: true }).first().waitFor({ state: "visible", timeout: 20_000 });
       await waitForAnyVisible(page, [
         page.getByText("Install or enable Phantom for Sui", { exact: true }),
         page.getByText("Connect Phantom for Sui", { exact: true }),
         page.getByText("Connected wallet", { exact: true }),
-      ], "wallet settings Sui connection action or connected state", 20_000);
+      ], "wallet settings Phantom connection action or connected state", 20_000);
       report.artifacts.walletSettingsUrl = page.url();
     });
 

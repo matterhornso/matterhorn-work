@@ -185,7 +185,7 @@
   --dls-accent-rgb: var(--matterhorn-blue-rgb);
   --dls-secondary-rgb: 208 218 229;
   --dls-text-primary: #fafcff;
-  --dls-text-secondary: #d0dae5;
+  --dls-text-secondary: #dbe4ee;
   --dls-hover: rgba(56, 189, 248, 0.13);
   --dls-active: rgba(56, 189, 248, 0.22);
   --dls-shell-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
@@ -639,6 +639,12 @@ select:disabled {
 
 .dark,
 [data-theme="dark"] {
+  --gray-9: #858b94;
+  --gray-10: #9ca3ad;
+  --gray-11: #c5cbd3;
+  --slate-9: #838b96;
+  --slate-10: #9aa2ad;
+  --slate-11: #c4cbd4;
   --background: #05070b;
   --foreground: #fafcff;
   --card: var(--dls-surface-raised);
@@ -650,7 +656,7 @@ select:disabled {
   --secondary: #263442;
   --secondary-foreground: #fafcff;
   --muted: #263442;
-  --muted-foreground: #c4ceda;
+  --muted-foreground: #d2dbe5;
   --accent: #172434;
   --accent-foreground: #fafcff;
   --destructive: var(--red-9);

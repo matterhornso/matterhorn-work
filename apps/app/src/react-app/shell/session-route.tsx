@@ -2473,8 +2473,8 @@ export function SessionRoute() {
         }));
         setCompactModelPickerOpen(false);
       },
-      onOpenSettingsSection: (section: "commands" | "skills" | "mcps" | "plugins") => {
-        handleOpenSettings(section === "skills" ? "/settings/skills" : section === "mcps" ? "/settings/extensions/mcp" : section === "plugins" ? "/settings/extensions/plugins" : "/settings/general");
+      onOpenSettingsSection: (section: "commands" | "skills" | "mcps" | "extensions" | "plugins") => {
+        handleOpenSettings(section === "skills" ? "/settings/skills" : section === "mcps" || section === "extensions" ? "/settings/extensions/mcp" : section === "plugins" ? "/settings/extensions/plugins" : "/settings/general");
       },
       onSendDraft: async (draft: ComposerDraft) => {
         const text = (draft.resolvedText ?? draft.text).trim();
@@ -2497,6 +2497,11 @@ export function SessionRoute() {
             sessionID: selectedSessionId,
             command: draft.command.name,
             arguments: draft.command.arguments,
+            model: selectedPromptModel
+              ? `${selectedPromptModel.providerID}/${selectedPromptModel.modelID}`
+              : undefined,
+            agent: selectedAgent ?? undefined,
+            ...(modelVariantValue ? { variant: modelVariantValue } : {}),
           });
           if (result.error) {
             throw new Error(serializeSDKError(result.error));
@@ -2521,8 +2526,11 @@ export function SessionRoute() {
           throw new Error(serializeSDKError(result.error));
         }
       },
-      onDraftChange: () => {
-        // Draft persistence will be wired once the full React shell owns session state.
+      onDraftChange: (draft: ComposerDraft) => {
+        saveSessionDraft(selectedWorkspaceId, selectedSessionId, {
+          text: draft.text,
+          mode: draft.mode,
+        });
       },
       onSessionMissing: recoverMissingSession,
       attachmentsEnabled: true,
@@ -2573,23 +2581,48 @@ export function SessionRoute() {
       },
       isRemoteWorkspace: selectedWorkspace?.workspaceType === "remote",
       isSandboxWorkspace: selectedWorkspace ? isSandboxWorkspace(selectedWorkspace) : false,
-      onRevertToMessage: (messageId: string) => {
+      onRevertToMessage: async (messageId: string) => {
         if (executionMode !== "work") {
-          console.warn(`[revert] blocked in ${executionMode} mode; switch to Work mode first`);
+          showToast({
+            title: "Switch to Work mode to revert",
+            description: "Reverting changes the conversation history, so it is only available in Work mode.",
+            tone: "warning",
+            durationMs: 3200,
+          });
           return;
         }
-        void (async () => {
+        try {
           try {
-            // Abort any running generation first, like the actions-store does
-            try { await opencodeClient.session.abort({ sessionID: selectedSessionId }); } catch { /* ok if not running */ }
-            await revertSession(opencodeClient, selectedSessionId, messageId);
-            // Force a full reload of the session to pick up reverted state
-            navigateToWorkspaceSession(selectedWorkspaceId, selectedSessionId);
-            void refreshRouteState();
-          } catch (error) {
-            console.warn("[revert] failed", error);
+            await opencodeClient.session.abort({ sessionID: selectedSessionId });
+          } catch {
+            // The session may already be idle.
           }
-        })();
+          await revertSession(opencodeClient, selectedSessionId, messageId);
+          if (selectedWorkspaceEndpoint) {
+            const snapshot = await selectedWorkspaceEndpoint.client.getSessionSnapshot(
+              selectedWorkspaceEndpoint.workspaceId,
+              selectedSessionId,
+              { limit: 140 },
+            );
+            getReactQueryClient().setQueryData(
+              ["react-session-snapshot", selectedWorkspaceId, selectedSessionId],
+              snapshot.item,
+            );
+          }
+          showToast({
+            title: "Conversation reverted",
+            description: "Later messages were removed and the prompt is ready to edit.",
+            tone: "success",
+            durationMs: 2400,
+          });
+        } catch (error) {
+          showToast({
+            title: "Could not revert conversation",
+            description: describeRouteError(error),
+            tone: "error",
+            durationMs: 3600,
+          });
+        }
       },
       onForkAtMessage: (messageId: string) => {
         if (executionMode !== "work") {
@@ -2653,9 +2686,11 @@ export function SessionRoute() {
     selectedModelUnavailable,
     selectedPromptModel,
     selectedWorkspace,
+    selectedWorkspaceEndpoint,
     selectedWorkspaceId,
     selectedWorkspaceRoot,
     sessionsByWorkspaceId,
+    showToast,
     token,
   ]);
 

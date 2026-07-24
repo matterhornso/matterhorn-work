@@ -590,7 +590,8 @@ export type SessionSurfaceProps = {
   safeStringify?: (value: unknown) => string;
   onChangeModel?: (model: { providerID: string; modelID: string }) => void;
   onUploadInboxFiles?: ((files: File[], options?: { notify?: boolean }) => void | Promise<unknown>) | null;
-  onOpenSettingsSection?: ((section: "commands" | "skills" | "mcps" | "plugins") => void) | undefined;
+  connectedProviderIds?: string[];
+  onOpenSettingsSection?: ((section: "commands" | "skills" | "mcps" | "extensions" | "plugins") => void) | undefined;
   onRevertToMessage?: (messageId: string) => void;
   onForkAtMessage?: (messageId: string) => void;
   onOpenTarget?: (target: OpenTarget, options?: { auto?: boolean }) => void;
@@ -2134,6 +2135,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
   useControlAction(composerStopControlAction);
 
   const listSkills = async (): Promise<SkillCard[]> => {
+    if (props.executionMode !== "work") {
+      setToolSkills([]);
+      return [];
+    }
     const response = await props.client.listSkills(props.workspaceId, { includeGlobal: true });
     const next = (response.items ?? []).map((skill) => ({
       name: skill.name,
@@ -2542,12 +2547,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
         listAgents={props.listAgents}
         onSelectAgent={props.onSelectAgent}
         listCommands={props.listCommands}
-        listSkills={listSkills}
-        skills={toolSkills}
+        listSkills={props.executionMode === "work" ? listSkills : undefined}
+        skills={props.executionMode === "work" ? toolSkills : []}
         listMcp={listMcp}
         mcpServers={toolMcpServers}
         mcpStatus={toolMcpStatus}
         mcpStatuses={toolMcpStatuses}
+        connectedProviderIds={props.connectedProviderIds}
         listImportedPlugins={listImportedPlugins}
         importedPlugins={toolImportedPlugins}
         onOpenSettingsSection={props.onOpenSettingsSection}

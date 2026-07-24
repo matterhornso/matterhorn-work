@@ -367,8 +367,10 @@ describe("backend capability UI contract", () => {
     expect(walletSource).toContain("matterhornServerClient.backendCapabilities()");
     expect(walletSource).toContain('wallet.family === "Sui"');
     expect(walletSource).toContain("Sui wallet");
-    expect(walletSource).toContain("Connect EVM or Sui. Bittensor uses an external signer.");
-    expect(walletSource).toContain("Connect an EVM or Sui wallet.");
+    expect(walletSource).toContain("Wallets");
+    expect(walletSource).toContain(
+      "Connect a supported wallet. Signing stays in your wallet.",
+    );
     expect(walletSource).toContain("Prepare Sui actions");
     expect(walletSource).toContain('"Prepare only"');
     expect(walletSource).toContain("Review &amp; submit");
@@ -522,7 +524,9 @@ describe("backend capability UI contract", () => {
 
     expect(walletViewSource).not.toContain("function suiWalletStatusLabel");
     expect(walletViewSource).not.toContain('"Preview only"');
-    expect(walletViewSource).toContain("Connect an EVM or Sui wallet.");
+    expect(walletViewSource).toContain(
+      "Connect a supported wallet. Signing stays in your wallet.",
+    );
     expect(walletViewSource).toContain("[grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr))]");
     expect(walletViewSource).not.toContain("border-b border-dls-border/45");
     expect(walletViewSource).not.toContain('className="grid grid-cols-2 gap-3"');

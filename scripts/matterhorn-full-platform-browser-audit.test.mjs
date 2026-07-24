@@ -54,6 +54,8 @@ for (const signal of [
   'id.endsWith("settings-overview")',
   'id.endsWith("settings-wallet")',
   'button.textContent?.trim() === "Save policy" && !button.disabled',
+  '["settings-wallet", "settings/wallet", ["Wallets", "Save policy"]]',
+  '["panel-wallet", "wallet", ["Wallets", "Save policy"]]',
   'id.endsWith("settings-preferences")',
   'element.getAttribute("aria-label") === "Auto context compaction"',
   'element.getAttribute("aria-hidden") === "true"',

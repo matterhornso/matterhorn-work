@@ -179,6 +179,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     ],
     lifecycle: { reload: ["plugins", "agents"], detection: ["plugin:opencode-chrome-devtools"] },
     defaultEnabled: true,
+    platform: ["darwin", "linux", "windows"],
   },
   {
     schemaVersion: 1,
@@ -270,13 +271,13 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
       primaryCta: "Open Hyperliquid desk",
     },
     resources: [
-      { type: "tool", id: "hyperliquid-readiness", label: "Hyperliquid readiness", path: "/api/hyperliquid/readiness", required: true },
+      { type: "tool", id: "hyperliquid-execution-readiness", label: "Hyperliquid execution readiness", path: "/api/crypto/market-execution-readiness", required: true },
       { type: "mcp", id: "hyperliquid-mcp", label: "Hyperliquid MCP tools", mcpServerName: "matterhorn-work", required: false },
     ],
     contributions: [
       { type: "session-side-panel", ref: "matterhorn.hyperliquid.panel", label: "Hyperliquid", location: "session-right-pane" },
       { type: "session-rail-item", ref: "matterhorn.hyperliquid.rail", label: "Hyperliquid", location: "session-rail" },
-      { type: "server-route", ref: "GET /api/hyperliquid/readiness", location: "server" },
+      { type: "server-route", ref: "GET /api/crypto/market-execution-readiness", location: "server" },
       { type: "composer-prompt", prompt: "Use Matterhorn protocol chat. For Hyperliquid, ", location: "composer" },
     ],
     defaultEnabled: true,
@@ -294,13 +295,13 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
       primaryCta: "Open Polymarket desk",
     },
     resources: [
-      { type: "tool", id: "polymarket-readiness", label: "Polymarket readiness", path: "/api/polymarket/readiness", required: true },
+      { type: "tool", id: "polymarket-compliance", label: "Polymarket compliance", path: "/api/polymarket/compliance", required: true },
       { type: "mcp", id: "polymarket-mcp", label: "Polymarket MCP tools", mcpServerName: "matterhorn-work", required: false },
     ],
     contributions: [
       { type: "session-side-panel", ref: "matterhorn.polymarket.panel", label: "Polymarket", location: "session-right-pane" },
       { type: "session-rail-item", ref: "matterhorn.polymarket.rail", label: "Polymarket", location: "session-rail" },
-      { type: "server-route", ref: "GET /api/polymarket/readiness", location: "server" },
+      { type: "server-route", ref: "GET /api/polymarket/compliance", location: "server" },
       { type: "composer-prompt", prompt: "Use Matterhorn protocol chat. For Polymarket, ", location: "composer" },
     ],
     defaultEnabled: true,

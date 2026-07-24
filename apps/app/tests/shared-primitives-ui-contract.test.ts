@@ -41,11 +41,17 @@ describe("Shared primitives UI contract", () => {
 
   test("compact model picker closes from its focused search field", () => {
     const source = readAppPackageSource("components/model-select.tsx");
+    const composer = readAppSource(
+      "domains/session/surface/composer/composer.tsx",
+    );
 
     expect(source).toContain('if (event.key !== "Escape")');
     expect(source).toContain("event.preventDefault()");
     expect(source).toContain("event.stopPropagation()");
     expect(source).toContain("onOpenChange(false)");
+    expect(composer).not.toContain(
+      'displayLabel={t("composer.assistant_identity")}',
+    );
   });
 
   test("session note actions remain visually distinct from rename", () => {
@@ -208,11 +214,113 @@ describe("Shared primitives UI contract", () => {
     expect(source).toContain("function ToolMenuLoading");
     expect(source).toContain("max-h-[min(16rem,calc(100vh-13rem))]");
     expect(source).toContain("matterhorn-tool-menu");
+    expect(source).toContain(
+      "mt-0.5 whitespace-normal break-words text-pretty text-xs leading-4 text-gray-10",
+    );
+    expect(source).not.toContain(
+      '<div className="truncate text-xs text-gray-10">{entry.description}</div>',
+    );
     expect(appStyles).toContain("@media (max-height: 420px)");
     expect(appStyles).toContain("inset: 3rem 0.75rem 0.75rem !important");
     expect(source).toContain('aria-label={t("composer.configure")}');
     expect(source).not.toContain("grid-cols-[152px_minmax(0,1fr)]");
     expect(source).not.toContain("border-r border-dls-border bg-gray-2/30");
+  });
+
+  test("composer tool menu preserves editor focus when inserting tool shortcuts", () => {
+    const source = readAppSource(
+      "domains/session/surface/composer/composer.tsx",
+    );
+
+    const focusGuards = source.match(
+      /event\.preventDefault\(\);\s+event\.stopPropagation\(\);/g,
+    );
+    expect(focusGuards?.length).toBeGreaterThanOrEqual(4);
+    expect(source).toContain(
+      "onClick={() => applyCommandSelection(command)}",
+    );
+    expect(source).toContain(
+      "onClick={() => applyPluginFileSelection(file)}",
+    );
+    expect(source).toContain(
+      "onClick={() => applyExtensionSelection(entry, readiness)}",
+    );
+    expect(source).toContain(
+      "getComposerExtensionReadiness(entry",
+    );
+    expect(source).toContain('props.onOpenSettingsSection?.("extensions")');
+    expect(source).toContain("readiness.setupMessage");
+    expect(source).not.toContain("Prompt shortcut");
+    expect(source).not.toContain(">Enabled</span>");
+  });
+
+  test("composer hides stale release commands and presents Matterhorn labels", () => {
+    const composer = readAppSource(
+      "domains/session/surface/composer/composer.tsx",
+    );
+    const opencodeSession = readAppPackageSource("app/lib/opencode-session.ts");
+
+    expect(composer).toContain(
+      'serverName === "matterhorn-work" ? "Matterhorn Desks" : serverName',
+    );
+    expect(opencodeSession).toContain(
+      '.filter((command) => command.name !== "release")',
+    );
+    expect(opencodeSession).toContain(
+      'description: "Use the built-in Matterhorn Desks browser"',
+    );
+  });
+
+  test("chat commands keep the selected model and only appear in Work mode", () => {
+    const sessionRoute = readAppSource("shell/session-route.tsx");
+    const sessionSurface = readAppSource(
+      "domains/session/surface/session-surface.tsx",
+    );
+    const composer = readAppSource(
+      "domains/session/surface/composer/composer.tsx",
+    );
+
+    expect(sessionRoute).toContain(
+      "`${selectedPromptModel.providerID}/${selectedPromptModel.modelID}`",
+    );
+    expect(sessionRoute).toContain("agent: selectedAgent ?? undefined");
+    expect(sessionSurface).toContain('if (props.executionMode !== "work")');
+    expect(sessionSurface).toContain(
+      'listSkills={props.executionMode === "work" ? listSkills : undefined}',
+    );
+    expect(composer).toContain(
+      'const commandToolsEnabled = props.executionMode === "work";',
+    );
+    expect(composer).toContain(
+      '.filter(({ section }) => commandToolsEnabled || (section !== "commands" && section !== "skills"))',
+    );
+  });
+
+  test("message copy actions fall back when Clipboard API writes are unavailable", () => {
+    const messageListSource = readAppSource(
+      "domains/session/surface/message-list.tsx",
+    );
+
+    expect(messageListSource).toContain("async function copyMessageText");
+    expect(messageListSource).toContain('document.execCommand("copy")');
+    expect(messageListSource).toContain(
+      'copyState === "failed"',
+    );
+    expect(messageListSource).toContain('aria-label={actionLabel}');
+    expect(
+      messageListSource.indexOf("copyMessageTextWithSelection(text)"),
+    ).toBeLessThan(
+      messageListSource.indexOf("navigator.clipboard.writeText(text)"),
+    );
+  });
+
+  test("protocol extension manifests reference live readiness routes", () => {
+    const source = readAppPackageSource("app/extensions.ts");
+
+    expect(source).toContain("/api/crypto/market-execution-readiness");
+    expect(source).toContain("/api/polymarket/compliance");
+    expect(source).not.toContain("/api/hyperliquid/readiness");
+    expect(source).not.toContain("/api/polymarket/readiness");
   });
 
   test("launch-critical status and failure copy remains accessible in both themes", () => {
@@ -586,6 +694,14 @@ describe("Shared primitives UI contract", () => {
     ).toContain('block.isUser ? "absolute right-2 top-2" : "mt-2"');
     expect(
       sourceByPath.get("domains/session/surface/message-list.tsx"),
+    ).toContain(
+      "relative z-10 flex items-center gap-0.5 select-none transition-opacity duration-150",
+    );
+    expect(
+      sourceByPath.get("domains/session/surface/message-list.tsx"),
+    ).not.toContain("md:pointer-events-none");
+    expect(
+      sourceByPath.get("domains/session/surface/message-list.tsx"),
     ).toContain("bg-dls-surface-muted/[0.14] ring-1 ring-white/[0.08]");
     expect(
       sourceByPath.get("domains/session/surface/message-list.tsx"),
@@ -609,7 +725,7 @@ describe("Shared primitives UI contract", () => {
     );
     expect(
       sourceByPath.get("domains/settings/pages/wallet-view.tsx"),
-    ).toContain("Connected wallet");
+    ).toContain("Connected accounts and available wallet connections.");
     expect(
       sourceByPath.get("domains/settings/pages/wallet-view.tsx"),
     ).toContain("bg-dls-surface-muted/[0.055]");
@@ -936,5 +1052,77 @@ describe("Shared primitives UI contract", () => {
     expect(source).not.toContain("backdrop-saturate");
     expect(source).not.toContain("shadow-lg");
     expect(source).not.toContain("tracking-widest");
+  });
+
+  test("revert refreshes the exact transcript and reports the outcome", () => {
+    const source = readAppSource("shell/session-route.tsx");
+    const compact = source.replace(/\s+/g, " ");
+
+    expect(compact).toContain(
+      'onRevertToMessage: async (messageId: string) => {',
+    );
+    expect(compact).toContain(
+      'selectedWorkspaceEndpoint.client.getSessionSnapshot( selectedWorkspaceEndpoint.workspaceId, selectedSessionId, { limit: 140 }, )',
+    );
+    expect(compact).toContain(
+      '["react-session-snapshot", selectedWorkspaceId, selectedSessionId]',
+    );
+    expect(source).toContain('title: "Conversation reverted"');
+    expect(source).toContain('title: "Could not revert conversation"');
+    expect(source).toContain('title: "Switch to Work mode to revert"');
+  });
+
+  test("the React chat route persists each session draft", () => {
+    const source = readAppSource("shell/session-route.tsx");
+    const compact = source.replace(/\s+/g, " ");
+
+    expect(compact).toContain(
+      "onDraftChange: (draft: ComposerDraft) => { saveSessionDraft(selectedWorkspaceId, selectedSessionId, { text: draft.text, mode: draft.mode, }); }",
+    );
+    expect(source).not.toContain(
+      "Draft persistence will be wired once the full React shell owns session state.",
+    );
+  });
+
+  test("the chat shell exposes a single main landmark", () => {
+    const source = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(source).not.toContain(
+      '<main className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">',
+    );
+    expect(source).toContain(
+      '<div className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">',
+    );
+  });
+
+  test("the settings shell exposes a single main landmark", () => {
+    const source = readAppSource("domains/settings/shell/settings-shell.tsx");
+
+    expect(source).toContain(
+      '<SidebarInset className="min-h-0 overflow-hidden bg-background',
+    );
+    expect(source).not.toContain(
+      '<main className="flex min-w-0 flex-1 flex-col overflow-hidden">',
+    );
+    expect(source).toContain(
+      '<div className="flex min-w-0 flex-1 flex-col overflow-hidden">',
+    );
+  });
+
+  test("provider setup keeps legacy engine brands out of customer-facing copy", () => {
+    const providerAuth = readAppSource(
+      "domains/connections/provider-auth/provider-auth-modal.tsx",
+    );
+    const aiView = readAppSource("domains/settings/pages/ai-view.tsx");
+
+    expect(providerAuth).toContain('opencode: "Matterhorn Models"');
+    expect(providerAuth).toContain(
+      'return identity.includes("opencode") || identity.includes("openwork");',
+    );
+    expect(providerAuth).toContain(
+      "if (isBundledInternalProvider(id, provider?.name)) return [];",
+    );
+    expect(providerAuth).not.toContain("Matterhorn-Code Zen");
+    expect(aiView).not.toContain("OpenCode Zen catalog");
   });
 });

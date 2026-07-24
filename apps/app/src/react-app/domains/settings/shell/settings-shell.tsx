@@ -129,7 +129,7 @@ export function SettingsShell(props: SettingsShellProps) {
           backendSettingsSections={props.backendSettingsSections}
         />
         <SidebarInset className="min-h-0 overflow-hidden bg-background mac:bg-background/80 mac:[&_header]:transition-[padding-left] mac:[&_header]:duration-200 mac:[&_header]:ease-linear mac:peer-data-[state=collapsed]:[&_header]:pl-16 [&_header]:pl-16 md:[&_header]:pl-6">
-          <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <header className="flex h-9 shrink-0 items-center justify-between px-4 md:hidden mac:titlebar-drag">
               <div className="flex min-w-0 items-center gap-2">
                 <SidebarTrigger className="mac:titlebar-no-drag md:hidden" />
@@ -176,7 +176,7 @@ export function SettingsShell(props: SettingsShellProps) {
             </div>
 
             {props.footer}
-          </main>
+          </div>
         </SidebarInset>
       </SidebarProvider>
     </div>

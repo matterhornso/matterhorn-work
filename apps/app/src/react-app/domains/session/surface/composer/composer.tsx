@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { OPENWORK_EXTENSION_CATALOG, type McpDirectoryInfo } from "../../../../../app/constants";
 import type { CloudImportedPlugin, CloudImportedPluginFile } from "../../../../../app/cloud/import-state";
 import type { ComposerAttachment, McpServerEntry, McpStatusMap, ModelRef, SkillCard, SlashCommandOption } from "../../../../../app/types";
+import { isDesktopRuntime } from "../../../../../app/utils";
 import { t } from "../../../../../i18n";
 import { isMatterhornExtensionEnabled, isMatterhornExtensionHidden, MATTERHORN_EXTENSION_STATE_CHANGED } from "../../../settings/extension-state";
 import { useDesktopRestriction } from "../../../cloud/desktop-config-provider";
@@ -29,6 +30,10 @@ import {
   MATTERHORN_EXECUTION_MODE_OPTIONS,
   type MatterhornExecutionMode,
 } from "../../modes/execution-mode";
+import {
+  getComposerExtensionReadiness,
+  type ComposerExtensionReadiness,
+} from "./extension-readiness";
 
 type MentionItem = {
   id: string;
@@ -44,16 +49,8 @@ type PastedTextChip = {
   lines: number;
 };
 
-type ToolMenuSettingsSection = "commands" | "skills" | "mcps" | "plugins";
+type ToolMenuSettingsSection = "commands" | "skills" | "mcps" | "extensions" | "plugins";
 type ToolMenuSection = "commands" | "skills" | "mcps" | "extensions" | `plugin:${string}`;
-
-function isComposerExtensionAvailable(entry: McpDirectoryInfo) {
-  const hasSessionSurface = entry.extensionManifest?.contributions?.some((contribution) =>
-    contribution.type === "session-side-panel" || contribution.type === "session-rail-item"
-  ) === true;
-  if (hasSessionSurface) return isMatterhornExtensionEnabled(entry);
-  return !entry.defaultEnabled || isMatterhornExtensionEnabled(entry);
-}
 
 function formatComposerAgentName(agentName: string) {
   const deskAgent = getMatterhornDeskAgentById(agentName);
@@ -63,6 +60,10 @@ function formatComposerAgentName(agentName: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatComposerMcpName(serverName: string) {
+  return serverName === "matterhorn-work" ? "Matterhorn Desks" : serverName;
 }
 
 function ExecutionModeIcon({ mode, size = 13 }: { mode: MatterhornExecutionMode; size?: number }) {
@@ -114,6 +115,7 @@ type ComposerProps = {
   mcpServers?: McpServerEntry[];
   mcpStatus?: string | null;
   mcpStatuses?: McpStatusMap;
+  connectedProviderIds?: string[];
   listImportedPlugins?: () => Promise<CloudImportedPlugin[]>;
   importedPlugins?: CloudImportedPlugin[];
   onOpenSettingsSection?: (section: ToolMenuSettingsSection) => void;
@@ -749,10 +751,23 @@ export function ReactSessionComposer(props: ComposerProps) {
   const activePlugin = toolMenuSection.startsWith("plugin:")
     ? pluginSections.find((entry) => entry.section === toolMenuSection)?.plugin ?? null
     : null;
-  const composerExtensions = OPENWORK_EXTENSION_CATALOG.filter((entry) =>
-    !builtInExtensionsDisabled &&
-    !isMatterhornExtensionHidden(entry) && isComposerExtensionAvailable(entry)
-  );
+  const configuredPluginNames = mcpServers.flatMap((server) => [
+    server.name,
+    ...(server.config.command ?? []),
+  ]);
+  const composerExtensions = OPENWORK_EXTENSION_CATALOG.flatMap((entry) => {
+    if (builtInExtensionsDisabled || isMatterhornExtensionHidden(entry)) return [];
+    const readiness = getComposerExtensionReadiness(entry, {
+      enabled: isMatterhornExtensionEnabled(entry),
+      desktopRuntime: isDesktopRuntime(),
+      connectedProviderIds: props.connectedProviderIds,
+      loadedPlugins: configuredPluginNames.filter((value) =>
+        value.includes("opencode-chrome-devtools") || value.includes("openwork-image-generation")
+      ),
+      mcpStatuses,
+    });
+    return readiness.visible ? [{ entry, readiness }] : [];
+  });
   const canSend = props.draft.trim().length > 0 || props.attachments.length > 0;
 
   useEffect(() => {
@@ -795,7 +810,15 @@ export function ReactSessionComposer(props: ComposerProps) {
     setToolMenuOpen(false);
   };
 
-  const applyExtensionSelection = (entry: McpDirectoryInfo) => {
+  const applyExtensionSelection = (
+    entry: McpDirectoryInfo,
+    readiness: ComposerExtensionReadiness,
+  ) => {
+    if (!readiness.ready) {
+      setToolMenuOpen(false);
+      props.onOpenSettingsSection?.("extensions");
+      return;
+    }
     props.onDraftChange(entry.composerPrompt ?? `Use ${entry.name} to `);
     setToolMenuOpen(false);
   };
@@ -803,6 +826,8 @@ export function ReactSessionComposer(props: ComposerProps) {
   const openToolMenuSettings = () => {
     const section: ToolMenuSettingsSection = toolMenuSection === "commands" || toolMenuSection === "skills" || toolMenuSection === "mcps"
       ? toolMenuSection
+      : toolMenuSection === "extensions"
+        ? "extensions"
       : "plugins";
     props.onOpenSettingsSection?.(section);
   };
@@ -968,6 +993,7 @@ export function ReactSessionComposer(props: ComposerProps) {
     entry,
     status: toReactMcpStatus(entry.name, entry, mcpStatuses),
   }));
+  const commandToolsEnabled = props.executionMode === "work";
 
   const panelRoundedClass =
     mentionOpen || slashOpen
@@ -1304,7 +1330,9 @@ export function ReactSessionComposer(props: ComposerProps) {
                             { section: "skills", label: t("dashboard.skills"), icon: Zap },
                             { section: "extensions", label: "Extensions", icon: Puzzle },
                             { section: "mcps", label: t("composer.mcps_label"), icon: Plug },
-                          ] as const).map(({ section, label, icon: Icon }) => (
+                          ] as const)
+                            .filter(({ section }) => commandToolsEnabled || (section !== "commands" && section !== "skills"))
+                            .map(({ section, label, icon: Icon }) => (
                             <button
                               key={section}
                               type="button"
@@ -1353,6 +1381,10 @@ export function ReactSessionComposer(props: ComposerProps) {
                                     key={command.id}
                                     type="button"
                                     className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                    }}
                                     onClick={() => applyCommandSelection(command)}
                                   >
                                     <Terminal size={14} className="mt-0.5 shrink-0 text-gray-9" />
@@ -1379,6 +1411,10 @@ export function ReactSessionComposer(props: ComposerProps) {
                                     key={command.id}
                                     type="button"
                                     className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                    }}
                                     onClick={() => applyCommandSelection(command)}
                                   >
                                     <Zap size={14} className="mt-0.5 shrink-0 text-gray-9" />
@@ -1407,7 +1443,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                     </div>
                                     <div className="min-w-0 flex-1">
                                       <div className="flex items-center justify-between gap-3">
-                                        <div className="truncate text-xs font-semibold text-gray-11">{entry.name}</div>
+                                        <div className="truncate text-xs font-semibold text-gray-11">{formatComposerMcpName(entry.name)}</div>
                                         <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium ${mcpStatusBadgeClass(status)}`}>
                                           {formatMcpStatusLabel(status)}
                                         </span>
@@ -1428,12 +1464,20 @@ export function ReactSessionComposer(props: ComposerProps) {
                           {toolMenuSection === "extensions" ? (
                             composerExtensions.length > 0 ? (
                               <div className="grid gap-1">
-                                {composerExtensions.map((entry) => (
+                                {composerExtensions.map(({ entry, readiness }) => (
                                   <button
                                     key={entry.id ?? entry.serverName ?? entry.name}
                                     type="button"
-                                    className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
-                                    onClick={() => applyExtensionSelection(entry)}
+                                    aria-label={readiness.ready ? `Use ${entry.name}` : `Set up ${entry.name}`}
+                                    className={cn(
+                                      "flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left text-gray-11 transition-colors hover:bg-gray-2/70",
+                                      !readiness.ready && "bg-gray-2/35",
+                                    )}
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                    }}
+                                    onClick={() => applyExtensionSelection(entry, readiness)}
                                   >
                                     <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border border-dls-border bg-white shadow-sm">
                                       {extensionIcon(entry, 16)}
@@ -1441,11 +1485,18 @@ export function ReactSessionComposer(props: ComposerProps) {
                                     <div className="min-w-0 flex-1">
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="truncate text-xs font-semibold text-gray-11">{entry.name}</div>
-                                        {entry.defaultEnabled ? (
-                                          <span className="shrink-0 rounded-md bg-green-3 px-2 py-0.5 text-[10px] font-medium text-green-11">Enabled</span>
+                                        {!readiness.ready ? (
+                                          <span className="shrink-0 text-[10px] font-medium text-amber-11">Set up</span>
                                         ) : null}
                                       </div>
-                                      <div className="truncate text-xs text-gray-10">{entry.description}</div>
+                                      <div className="mt-0.5 whitespace-normal break-words text-pretty text-xs leading-4 text-gray-10">
+                                        {entry.description}
+                                      </div>
+                                      {readiness.setupMessage ? (
+                                        <div className="mt-1 text-[11px] leading-4 text-amber-11">
+                                          {readiness.setupMessage}
+                                        </div>
+                                      ) : null}
                                     </div>
                                   </button>
                                 ))}
@@ -1462,6 +1513,10 @@ export function ReactSessionComposer(props: ComposerProps) {
                                     key={`${file.configObjectId}:${file.path}`}
                                     type="button"
                                     className="flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                    }}
                                     onClick={() => applyPluginFileSelection(file)}
                                   >
                                     <FileText size={14} className="mt-0.5 shrink-0 text-gray-9" />
@@ -1711,7 +1766,6 @@ export function ReactSessionComposer(props: ComposerProps) {
                 onOpenChange={props.onModelPickerOpenChange}
                 onChange={props.onModelChange}
                 disabled={props.busy}
-                displayLabel={t("composer.assistant_identity")}
               />
             ) : null}
             {props.modelUnavailable ? (
