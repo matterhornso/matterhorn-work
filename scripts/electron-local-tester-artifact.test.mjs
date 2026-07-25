@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -20,12 +21,15 @@ assert.equal(
 
 for (const expected of [
   "matterhorn.electron.local-tester-artifact.v1",
+  "--dist-dir",
   "--output-dir",
   "--skip-build",
   "Matterhorn-Work-${sha}-arm64-unsigned.dmg",
   "Matterhorn-Work-${sha}-arm64-unsigned.zip",
   "SHA256SUMS.txt",
   "matterhorn-electron-local-tester-artifact.json",
+  "gitWorktreeState",
+  "changedPathCount",
   "privateKeysAccepted: false",
   "apiSecretsAccepted: false",
   "signingMaterialAccepted: false",
@@ -44,10 +48,9 @@ for (const forbidden of [
   assert.equal(script.includes(forbidden), false, `tester artifact helper must not include ${forbidden}`);
 }
 
-const distDir = "apps/desktop/dist-electron";
-const outputDir = "/tmp/matterhorn-electron-local-tester-artifact-test";
-rmSync(distDir, { recursive: true, force: true });
-rmSync(outputDir, { recursive: true, force: true });
+const fixtureRoot = mkdtempSync(join(os.tmpdir(), "matterhorn-electron-local-tester-artifact-test-"));
+const distDir = join(fixtureRoot, "dist-electron");
+const outputDir = join(fixtureRoot, "artifact");
 mkdirSync(distDir, { recursive: true });
 writeFileSync(join(distDir, "matterhorn-mac-arm64-0.0.0.dmg"), "fixture dmg\n");
 writeFileSync(join(distDir, "matterhorn-mac-arm64-0.0.0.zip"), "fixture zip\n");
@@ -58,6 +61,8 @@ const result = spawnSync("node", [
   "scripts/electron-local-tester-artifact.mjs",
   "--",
   "--skip-build",
+  "--dist-dir",
+  distDir,
   "--output-dir",
   outputDir,
   "--json",
@@ -69,6 +74,9 @@ assert.equal(manifest.kind, "matterhorn.electron.local-tester-artifact.v1");
 assert.equal(manifest.unsigned, true);
 assert.equal(manifest.notarized, false);
 assert.equal(manifest.publishEnabled, false);
+assert.equal(typeof manifest.source.gitSha, "string");
+assert.equal(typeof manifest.source.dirty, "boolean");
+assert.equal(typeof manifest.source.changedPathCount, "number");
 assert.equal(manifest.safety.privateKeysAccepted, false);
 assert.equal(manifest.safety.apiSecretsAccepted, false);
 assert.equal(manifest.safety.signingMaterialAccepted, false);
@@ -79,7 +87,6 @@ assert.match(
   /matterhorn\.electron\.local-tester-artifact\.v1/,
 );
 
-rmSync(outputDir, { recursive: true, force: true });
-rmSync(distDir, { recursive: true, force: true });
+rmSync(fixtureRoot, { recursive: true, force: true });
 
 console.log("Electron local tester artifact helper check passed.");

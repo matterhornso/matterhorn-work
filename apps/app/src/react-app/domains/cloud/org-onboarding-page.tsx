@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import {
   ArrowRight,
   ArrowUpRightIcon,
@@ -17,12 +17,14 @@ import {
 
 import {
   createDenClient,
+  DenApiError,
   readDenSettings,
   resolveDenBaseUrls,
   writeDenSettings,
   type DenOrgLlmProvider,
   type DenOrgMarketplace,
   type DenOrgSummary,
+  type DenUser,
   type DenWorkerSummary,
 } from "@/app/lib/den";
 import { isPublicBetaWebDeployment } from "@/app/lib/matterhorn-deployment";
@@ -32,6 +34,11 @@ import { resolveModelDisplayName, resolveProviderDisplayName } from "@/app/utils
 import { ProviderIcon } from "../../design-system/provider-icon";
 import { writeStoredDefaultModel } from "../../kernel/model-config";
 import { orgOnboardingVisibilityEvent } from "../../shell/reload-coordinator";
+import { useDenAuth } from "./den-auth-provider";
+import {
+  buildPersonalWorkspaceIdentity,
+  resolvePersonalWorkspaceOnboardingStep,
+} from "./personal-workspace";
 import {
   Page,
   PageBackground,
@@ -111,6 +118,7 @@ function markProvidersSeen(providers: DenOrgLlmProvider[]) {
 export function OrgOnboardingPage() {
   const navigate = useNavigate();
   const { denClient, hasCloudSession, orgId, settings } = useDenClient();
+  const { user } = useDenAuth();
   const { markRouteReady } = useBootState();
   const [hasSelectedOrganization, setHasSelectedOrganization] = useState(false);
   
@@ -187,20 +195,217 @@ export function OrgOnboardingPage() {
     );
   }
 
-  if ((data?.orgs.length ?? 0) > 0 && !hasSelectedOrganization) {
+  const organizations = data?.orgs ?? [];
+  const activeOrganization = organizations.find((org) => org.id === orgId) ?? null;
+  const onboardingStep = resolvePersonalWorkspaceOnboardingStep({
+    organizationCount: organizations.length,
+    hasActiveOrganization: Boolean(activeOrganization),
+    hasSelectedOrganization,
+  });
+
+  if (onboardingStep === "provision") {
+    return (
+      <PersonalWorkspaceProvisioningPage
+        user={user}
+        onContinue={() => setHasSelectedOrganization(true)}
+      />
+    );
+  }
+
+  if (onboardingStep === "resources") {
+    return <ResourceSelectionPage />;
+  }
+
+  if (onboardingStep === "auto_select") {
+    return (
+      <AutomaticOrganizationSelectionPage
+        organization={organizations[0]}
+        onContinue={() => setHasSelectedOrganization(true)}
+      />
+    );
+  }
+
+  if (onboardingStep === "choose") {
     return (
       <OrganizationSelectionPage
-        orgs={data.orgs}
+        orgs={organizations}
         defaultOrganization={
-          data.orgs.find((org) => org.id === orgId) ??
-          data.orgs[0]
+          organizations.find((org) => org.id === orgId) ??
+          organizations[0]
         }
         onContinue={() => setHasSelectedOrganization(true)}
       />
     );
   }
 
-  return <ResourceSelectionPage />;
+  return null;
+}
+
+function persistActiveOrganization(
+  settings: ReturnType<typeof readDenSettings>,
+  authToken: string,
+  organization: DenOrgSummary,
+) {
+  writeDenSettings({
+    ...settings,
+    authToken: authToken || null,
+    activeOrgId: organization.id,
+    activeOrgSlug: organization.slug,
+    activeOrgName: organization.name,
+  });
+}
+
+interface WorkspaceSetupPageProps {
+  title: string;
+  description: string;
+  error: unknown;
+  onRetry: () => void;
+}
+
+function WorkspaceSetupPage({
+  title,
+  description,
+  error,
+  onRetry,
+}: WorkspaceSetupPageProps) {
+  return (
+    <Page>
+      <PageBackground />
+      <PageTitlebarRegion />
+      <PageContainer>
+        <PageHeader>
+          <div className="mx-auto flex size-14 items-center justify-center rounded-lg border border-dls-border bg-dls-hover">
+            <BuildingOffice2Icon className="size-7 text-foreground" />
+          </div>
+          <PageTitle>{title}</PageTitle>
+          {error ? (
+            <Alert variant="destructive">
+              <CircleAlert />
+              <AlertDescription>
+                {error instanceof Error
+                  ? error.message
+                  : "Workspace setup could not be completed."}
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <PageDescription>{description}</PageDescription>
+          )}
+        </PageHeader>
+        <PageContent>
+          {error ? (
+            <Button className="mx-auto w-fit" type="button" onClick={onRetry}>
+              Try again
+            </Button>
+          ) : (
+            <PageLoading>
+              <PageLoadingSpinner />
+              <PageLoadingDescription>{description}</PageLoadingDescription>
+            </PageLoading>
+          )}
+        </PageContent>
+      </PageContainer>
+    </Page>
+  );
+}
+
+interface PersonalWorkspaceProvisioningPageProps {
+  user: DenUser | null;
+  onContinue: () => void;
+}
+
+function PersonalWorkspaceProvisioningPage({
+  user,
+  onContinue,
+}: PersonalWorkspaceProvisioningPageProps) {
+  const { authToken, denClient, settings } = useDenClient();
+  const startedRef = useRef(false);
+  const { error, mutate } = useMutation({
+    mutationFn: async () => {
+      if (!user) {
+        throw new Error("Your account session is not ready. Try again.");
+      }
+
+      const identity = buildPersonalWorkspaceIdentity(user);
+      let organization: DenOrgSummary;
+      try {
+        organization = await denClient.createOrganization(identity);
+      } catch (nextError) {
+        if (!(nextError instanceof DenApiError) || nextError.status !== 409) {
+          throw nextError;
+        }
+        const existing = await denClient.listOrgs();
+        const matchingOrganization = existing.orgs.find(
+          (org) => org.slug === identity.slug,
+        );
+        if (!matchingOrganization) throw nextError;
+        organization = matchingOrganization;
+      }
+
+      await denClient.setActiveOrganization({
+        organizationId: organization.id,
+      });
+      return organization;
+    },
+    onSuccess: (organization) => {
+      persistActiveOrganization(settings, authToken, organization);
+      onContinue();
+    },
+  });
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    mutate();
+  }, [mutate]);
+
+  return (
+    <WorkspaceSetupPage
+      title="Setting up your workspace"
+      description="Creating your private Matterhorn workspace..."
+      error={error}
+      onRetry={() => mutate()}
+    />
+  );
+}
+
+interface AutomaticOrganizationSelectionPageProps {
+  organization: DenOrgSummary;
+  onContinue: () => void;
+}
+
+function AutomaticOrganizationSelectionPage({
+  organization,
+  onContinue,
+}: AutomaticOrganizationSelectionPageProps) {
+  const { authToken, denClient, settings } = useDenClient();
+  const startedRef = useRef(false);
+  const { error, mutate } = useMutation({
+    mutationFn: async () => {
+      await denClient.setActiveOrganization({
+        organizationId: organization.id,
+      });
+      return organization;
+    },
+    onSuccess: (activeOrganization) => {
+      persistActiveOrganization(settings, authToken, activeOrganization);
+      onContinue();
+    },
+  });
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    mutate();
+  }, [mutate]);
+
+  return (
+    <WorkspaceSetupPage
+      title="Opening your workspace"
+      description={`Connecting ${organization.name}...`}
+      error={error}
+      onRetry={() => mutate()}
+    />
+  );
 }
 
 export function ResourceSelectionPage() {
@@ -215,14 +420,15 @@ export function ResourceSelectionPage() {
     label: string;
   } | null>(null);
 
-  // Redirect if no auth or no org — can't show onboarding without them
   useEffect(() => {
     markRouteReady();
   }, [markRouteReady]);
 
   useEffect(() => {
-    if (!hasCloudSession || !orgId) {
-      navigate("/session", { replace: true });
+    if (!hasCloudSession) {
+      navigate("/signin", { replace: true });
+    } else if (!orgId) {
+      navigate("/onboarding", { replace: true });
     }
   }, [hasCloudSession, navigate, orgId]);
 
@@ -610,14 +816,7 @@ function OrganizationSelectionPage({
       return nextOrg;
     },
     onSuccess: (nextOrg) => {
-      writeDenSettings({
-        ...settings,
-        authToken: authToken || null,
-        activeOrgId: nextOrg.id,
-        activeOrgSlug: nextOrg.slug,
-        activeOrgName: nextOrg.name,
-      });
-
+      persistActiveOrganization(settings, authToken, nextOrg);
       onContinue();
     },
   });

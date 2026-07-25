@@ -512,7 +512,9 @@ function copyMessageTextWithSelection(text: string): boolean {
   textarea.style.position = "fixed";
   textarea.style.opacity = "0";
   document.body.appendChild(textarea);
+  textarea.focus({ preventScroll: true });
   textarea.select();
+  textarea.setSelectionRange(0, text.length);
 
   try {
     return document.execCommand("copy");
@@ -1365,12 +1367,28 @@ function StepRow(props: {
     return (
       <div
         data-reasoning="true"
-        className="whitespace-pre-wrap font-sans text-sm leading-[1.65] text-muted-foreground antialiased"
+        className="font-sans text-sm leading-[1.65] text-muted-foreground antialiased"
       >
-        <div className="max-w-[760px]">
-          {preview.headline ? <div className="mb-2 text-muted-foreground">{preview.headline}</div> : null}
-          <div>{preview.body || headline}</div>
-        </div>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
+          aria-expanded={props.expanded}
+          onClick={props.onToggle}
+        >
+          <BrainCircuit size={15} aria-hidden="true" />
+          <span>Reasoning</span>
+          <ChevronDown
+            size={14}
+            className={cn("transition-transform", !props.expanded && "-rotate-90")}
+            aria-hidden="true"
+          />
+        </button>
+        {props.expanded ? (
+          <div className="mt-3 max-w-[760px] whitespace-pre-wrap pl-6">
+            {preview.headline ? <div className="mb-2 text-muted-foreground">{preview.headline}</div> : null}
+            <div>{preview.body || headline}</div>
+          </div>
+        ) : null}
       </div>
     );
   }

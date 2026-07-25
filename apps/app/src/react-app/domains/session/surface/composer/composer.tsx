@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Agent } from "@opencode-ai/sdk/v2/client";
-import { ArrowUp, Check, ChevronDown, FileText, Hammer, ListChecks, MessageCircle, Paperclip, Play, Plug, Puzzle, Settings, SlidersHorizontal, Square, Terminal, X, Zap } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, FileText, Hammer, ListChecks, LockKeyhole, MessageCircle, Paperclip, Play, Plug, Puzzle, Settings, SlidersHorizontal, Square, Terminal, X, Zap } from "lucide-react";
 import { getMatterhornDeskAgentById } from "@matterhorn-work/types/desk-agents";
 import fuzzysort from "fuzzysort";
 import { cn } from "@/lib/utils";
@@ -66,6 +66,11 @@ function formatComposerMcpName(serverName: string) {
   return serverName === "matterhorn-work" ? "Matterhorn Desks" : serverName;
 }
 
+function formatComposerMcpConnection(entry: McpServerEntry) {
+  if (entry.name === "matterhorn-work") return "Local Matterhorn Desks engine";
+  return entry.config.type === "remote" ? "Remote server connection" : "Local process connection";
+}
+
 function ExecutionModeIcon({ mode, size = 13 }: { mode: MatterhornExecutionMode; size?: number }) {
   if (mode === "discuss") return <MessageCircle size={size} />;
   if (mode === "plan") return <ListChecks size={size} />;
@@ -105,6 +110,8 @@ type ComposerProps = {
   executionModesEnabled: boolean;
   onExecutionModeChange: (mode: MatterhornExecutionMode) => void;
   agentLabel: string;
+  agentSelectionLocked?: boolean;
+  agentSelectionLockedReason?: string;
   selectedAgent: string | null;
   listAgents: () => Promise<Agent[]>;
   onSelectAgent: (agent: string | null) => void;
@@ -1151,6 +1158,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                     type="button"
                     className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12"
                     onClick={() => props.onRemoveAttachment(attachment.id)}
+                    aria-label={t("action.remove")}
                     title={t("action.remove")}
                   >
                     <X size={12} />
@@ -1448,7 +1456,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                           {formatMcpStatusLabel(status)}
                                         </span>
                                       </div>
-                                      <div className="truncate text-xs text-gray-10">{entry.config.type === "remote" ? entry.config.url ?? entry.config.command?.join(" ") ?? "Remote MCP" : entry.config.command?.join(" ") ?? "Local MCP"}</div>
+                                      <div className="truncate text-xs text-gray-10">{formatComposerMcpConnection(entry)}</div>
                                     </div>
                                   </div>
                                 ))}
@@ -1694,18 +1702,29 @@ export function ReactSessionComposer(props: ComposerProps) {
               </div>
             </div>
             <div ref={agentMenuRef} className="relative">
-              <button
-                type="button"
-                className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12"
-                onClick={() => setAgentMenuOpen((value) => !value)}
-                disabled={props.busy}
-                aria-expanded={agentMenuOpen}
-                title={t("composer.agent_label")}
-              >
-                <span className="max-w-[140px] truncate">{props.agentLabel}</span>
-                <ChevronDown size={13} />
-              </button>
-              {agentMenuOpen ? (
+              {props.agentSelectionLocked ? (
+                <span
+                  className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-10"
+                  title={props.agentSelectionLockedReason}
+                  aria-label={`${props.agentLabel}. ${props.agentSelectionLockedReason ?? "This desk uses its specialist agent."}`}
+                >
+                  <LockKeyhole size={12} aria-hidden="true" />
+                  <span className="max-w-[140px] truncate">{props.agentLabel}</span>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12"
+                  onClick={() => setAgentMenuOpen((value) => !value)}
+                  disabled={props.busy}
+                  aria-expanded={agentMenuOpen}
+                  title={t("composer.agent_label")}
+                >
+                  <span className="max-w-[140px] truncate">{props.agentLabel}</span>
+                  <ChevronDown size={13} />
+                </button>
+              )}
+              {!props.agentSelectionLocked && agentMenuOpen ? (
                 <div className="absolute bottom-full left-0 z-40 mb-2 w-64 overflow-hidden rounded-lg border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
                   <div className="border-b border-dls-border px-3 py-2 text-[12px] font-semibold text-gray-11">
                     {t("composer.agent_label")}

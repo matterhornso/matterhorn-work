@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
   ChevronDown,
-  Download,
   Eye,
   RefreshCw,
   Search,
@@ -558,14 +557,16 @@ export function MemoryPanel(props: MemoryPanelProps) {
 
   const handleExport = async () => {
     if (!props.client) return;
-    setExportStatus("Exporting public-safe memory bundle...");
+    setExportStatus("Creating public-safe memory export...");
     try {
       const response = workspaceId
         ? await props.client.exportWorkspaceMemory(workspaceId)
         : await props.client.exportMemory();
-      setExportStatus(`Exported ${response.export.recordCount} records. sha256 ${response.export.sha256.slice(0, 12)}...`);
+      setExportStatus(
+        `Created a ${response.export.recordCount}-record export in workspace outputs. sha256 ${response.export.sha256.slice(0, 12)}...`,
+      );
     } catch (nextError) {
-      setExportStatus(nextError instanceof Error ? nextError.message : "Could not export memory bundle.");
+      setExportStatus(nextError instanceof Error ? nextError.message : "Could not create the memory export.");
     }
   };
 
@@ -1232,14 +1233,14 @@ export function MemoryPanel(props: MemoryPanelProps) {
         <section className="rounded-md bg-dls-surface-muted/[0.08] px-3.5 py-3">
           <div className="flex flex-col gap-3">
             <div>
-              <div className="text-sm font-semibold">Export memory</div>
+              <div className="text-sm font-semibold">Create memory export</div>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Exports include only policy-approved public-safe memory metadata.
+                Saves a public-safe bundle in this workspace&apos;s outputs folder.
               </p>
             </div>
             <Button className={cn("w-full justify-center", MEMORY_SECONDARY_ACTION_CLASS)} variant="ghost" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
-              <Download className="mr-2 size-3.5" />
-              Export memory
+              <Archive className="mr-2 size-3.5" />
+              Create export bundle
             </Button>
           </div>
           {exportStatus ? <div className="mt-3 text-xs text-dls-secondary">{exportStatus}</div> : null}

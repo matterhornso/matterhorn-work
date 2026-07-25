@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import * as React from "react";
 import { ArrowUpRight, Cloud, ExternalLink, SlidersHorizontal } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";

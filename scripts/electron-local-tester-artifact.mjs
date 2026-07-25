@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 function parseArgs(argv) {
   const args = {
     outputDir: "",
+    distDir: "",
     json: false,
     skipBuild: false,
   };
@@ -20,6 +21,11 @@ function parseArgs(argv) {
       args.json = true;
     } else if (arg === "--skip-build") {
       args.skipBuild = true;
+    } else if (arg === "--dist-dir") {
+      args.distDir = argv[i + 1] || "";
+      i += 1;
+    } else if (arg.startsWith("--dist-dir=")) {
+      args.distDir = arg.slice("--dist-dir=".length);
     } else if (arg === "--output-dir") {
       args.outputDir = argv[i + 1] || "";
       i += 1;
@@ -51,6 +57,15 @@ function gitSha() {
   return result.stdout.trim() || "unknown";
 }
 
+function gitWorktreeState() {
+  const result = spawnSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], { encoding: "utf8" });
+  if (result.status !== 0) {
+    return { dirty: null, changedPathCount: null };
+  }
+  const paths = result.stdout.split(/\r?\n/).filter(Boolean);
+  return { dirty: paths.length > 0, changedPathCount: paths.length };
+}
+
 function assertSafeOutputDir(outputDir) {
   if (!outputDir || outputDir === "/" || outputDir === resolve(".")) {
     throw new Error("Refusing unsafe output directory");
@@ -60,11 +75,15 @@ function assertSafeOutputDir(outputDir) {
 const args = parseArgs(process.argv.slice(2));
 const sha = gitSha();
 const outputDir = resolve(args.outputDir || join(process.env.HOME || "/tmp", "Desktop", `matterhorn-work-build-${sha}`));
-const distDir = resolve("apps/desktop/dist-electron");
+const defaultDistDir = resolve("apps/desktop/dist-electron");
+const distDir = resolve(args.distDir || defaultDistDir);
 
 assertSafeOutputDir(outputDir);
 
 if (!args.skipBuild) {
+  if (distDir !== defaultDistDir) {
+    throw new Error("--dist-dir can only be used with --skip-build");
+  }
   rmSync(distDir, { recursive: true, force: true });
   run("pnpm", [
     "--filter",
@@ -117,6 +136,10 @@ for (const name of artifactNames.sort()) {
 const manifest = {
   kind: "matterhorn.electron.local-tester-artifact.v1",
   gitSha: sha,
+  source: {
+    gitSha: sha,
+    ...gitWorktreeState(),
+  },
   outputDir,
   unsigned: true,
   notarized: false,

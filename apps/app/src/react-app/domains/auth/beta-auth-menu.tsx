@@ -1,4 +1,5 @@
 /** @jsxImportSource react */
+import { useCallback, useState } from "react";
 import {
   Cloud,
   LogIn,
@@ -7,7 +8,7 @@ import {
   User,
   UserPlus,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { t } from "@/i18n";
+import { useStatusToasts } from "@/react-app/domains/shell-feedback/status-toasts";
 import { useBetaAuth } from "./beta-auth-provider";
 
 export type BetaAuthMenuProps = {
@@ -38,7 +40,7 @@ function UserAvatar({ name, email }: { name: string | null; email: string | null
 /**
  * Beta profile/auth menu.
  *
- * Provides the Monday beta account identity entry point:
+ * Provides the public beta account identity entry point:
  *   - signed in: name/email, settings link, sign out
  *   - signed out: sign in, sign up, continue offline
  *
@@ -49,6 +51,26 @@ function UserAvatar({ name, email }: { name: string | null; email: string | null
 export function BetaAuthMenu({ compact }: BetaAuthMenuProps) {
   const auth = useBetaAuth();
   const navigate = useNavigate();
+  const { showToast } = useStatusToasts();
+  const [signOutBusy, setSignOutBusy] = useState(false);
+
+  const handleSignOut = useCallback(async () => {
+    if (signOutBusy) return;
+
+    setSignOutBusy(true);
+    try {
+      await auth.signOut();
+    } catch {
+      showToast({
+        title: "Could not sign out",
+        description:
+          "Your session is still active. Check your connection and try again.",
+        tone: "error",
+      });
+    } finally {
+      setSignOutBusy(false);
+    }
+  }, [auth, showToast, signOutBusy]);
 
   if (!auth.isLoaded) {
     return (
@@ -130,9 +152,9 @@ export function BetaAuthMenu({ compact }: BetaAuthMenuProps) {
           Switch account
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={auth.signOut}>
+        <DropdownMenuItem disabled={signOutBusy} onClick={handleSignOut}>
           <LogOut className="size-4" />
-          Sign out
+          {signOutBusy ? "Signing out..." : "Sign out"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

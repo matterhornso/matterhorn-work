@@ -43,6 +43,7 @@ export type GeneralSettingsViewProps = {
   onNavigateTab: (tab: SettingsTab) => void;
   developerMode: boolean;
   runtimeWorkspaceId?: string;
+  workspaceResolutionPending?: boolean;
   matterhornServerClient?: MatterhornServerClient | null;
   backendSettingsSections?: MatterhornSettingsSectionCapability[] | null;
   onOpenMemoryReview: () => void;
@@ -205,9 +206,19 @@ function ProjectSurfaceRow(props: {
   actionLabel: string;
   requiresWorkspace?: boolean;
   workspaceReady?: boolean;
+  workspaceResolutionPending?: boolean;
   onClick: () => void;
 }) {
-  const missingWorkspace = Boolean(props.requiresWorkspace && !props.workspaceReady);
+  const waitingForWorkspace = Boolean(
+    props.requiresWorkspace &&
+      props.workspaceResolutionPending &&
+      !props.workspaceReady,
+  );
+  const missingWorkspace = Boolean(
+    props.requiresWorkspace &&
+      !props.workspaceResolutionPending &&
+      !props.workspaceReady,
+  );
   const actionLabel = missingWorkspace ? "Create workspace" : props.actionLabel;
   const showStatus = missingWorkspace || shouldShowSettingsStatus(props.status);
   const statusLabel = showStatus
@@ -236,8 +247,10 @@ function ProjectSurfaceRow(props: {
   return (
     <button
       type="button"
+      aria-busy={waitingForWorkspace || undefined}
+      disabled={waitingForWorkspace}
       onClick={props.onClick}
-      className="group flex min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/[0.065] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.12] focus:outline-none focus-visible:bg-dls-surface-muted/[0.12] focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.34)]"
+      className="group flex min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/[0.065] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.12] focus:outline-none focus-visible:bg-dls-surface-muted/[0.12] focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.34)] disabled:cursor-default disabled:opacity-75 disabled:hover:bg-dls-surface-muted/[0.065]"
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-dls-hover/55 text-dls-text transition-colors group-hover:bg-dls-hover">
         <props.icon size={16} />
@@ -426,6 +439,7 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
               actionLabel={card.actionLabel}
               requiresWorkspace={card.section !== "feedback"}
               workspaceReady={Boolean(props.runtimeWorkspaceId)}
+              workspaceResolutionPending={props.workspaceResolutionPending}
               onClick={projectSurfaceActions[card.section]}
             />
           ))}

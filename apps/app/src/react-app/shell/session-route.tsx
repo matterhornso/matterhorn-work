@@ -10,7 +10,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router";
 import type {
   AgentPartInput,
   FilePartInput,
@@ -146,12 +146,20 @@ import { useControlAction, type MatterhornControlAction } from "./control/contro
 import { useReactRenderWatchdog } from "./react-render-watchdog";
 import { useWallet } from "../domains/wallet/WalletProvider";
 import {
+  buildDirectResponseSystemPrompt,
   buildMatterhornOrientationSystemPrompt,
   buildCryptoSystemPrompt,
   shouldInjectMatterhornOrientationPrompt,
   shouldInjectCryptoPrompt,
 } from "../domains/wallet/prompts/crypto-system-prompt";
-import { getMatterhornDeskAgentById } from "@matterhorn-work/types/desk-agents";
+import {
+  buildMatterhornDeskAgentSystemPrompt,
+  getMatterhornDeskAgentById,
+} from "@matterhorn-work/types/desk-agents";
+import {
+  buildMatterhornPublicWalletContext,
+  compileMatterhornSessionSystemContext,
+} from "../domains/session/context/session-system-context";
 
 import { readDenSettings } from "../../app/lib/den";
 import { denSessionUpdatedEvent } from "../../app/lib/den-session-events";
@@ -2328,6 +2336,9 @@ export function SessionRoute() {
     agentId?: string | null,
     requestedExecutionMode: MatterhornExecutionMode = executionMode,
   ) => {
+    const deskAgent = getMatterhornDeskAgentById(agentId);
+    const isGeneralMatterhornAgent = !agentId || agentId === "matterhorn";
+    const contextPolicy = deskAgent?.contextPolicy;
     const envRuntimeKey = buildMatterhornEnvRuntimeKey({
       baseUrl: client?.baseUrl ?? null,
       pid: matterhornServerHostInfoState?.pid ?? null,
@@ -2338,32 +2349,36 @@ export function SessionRoute() {
       runtimeKey: envRuntimeKey,
     });
 
-    // Build wallet session context (Feature 2)
-    const walletContext = wallet.snapshot.isConnected
-      ? `\n\n## Wallet Context\nConnected wallet: ${wallet.snapshot.address}\nChain ID: ${wallet.snapshot.chainId}\nETH: ${wallet.snapshot.ethBalance ?? "unknown"}\nUSDC: ${wallet.snapshot.usdcBalance ?? "unknown"}\nYou can use the wallet MCP tools to check balances, sign messages, and prepare transactions on behalf of the user.`
+    const includeWalletPublicContext = isGeneralMatterhornAgent || contextPolicy?.includeWalletPublicContext === true;
+    const walletContext = wallet.snapshot.isConnected && includeWalletPublicContext
+      ? buildMatterhornPublicWalletContext({
+          address: wallet.snapshot.address,
+          chainId: wallet.snapshot.chainId,
+          ethBalance: wallet.snapshot.ethBalance,
+          usdcBalance: wallet.snapshot.usdcBalance,
+        })
       : "";
 
-    // Crypto system prompt injected conditionally when the message is crypto-related.
-    // Bittensor and market read/preview flows are public/external-signer-first
-    // and should not require an EVM wallet connection before the agent can
-    // see the Matterhorn crypto tools and safety rules.
-    const matterhornOrientationPrompt = shouldInjectMatterhornOrientationPrompt(text)
+    const includeCryptoSafetyPolicy = isGeneralMatterhornAgent || contextPolicy?.includeCryptoSafetyPolicy === true;
+    const includeWorkspaceOrientation = isGeneralMatterhornAgent || contextPolicy?.includeWorkspaceOrientation === true;
+    const matterhornOrientationPrompt = includeWorkspaceOrientation && shouldInjectMatterhornOrientationPrompt(text)
       ? buildMatterhornOrientationSystemPrompt()
       : "";
 
     const cryptoPrompt =
-      shouldInjectCryptoPrompt(text)
+      includeCryptoSafetyPolicy && shouldInjectCryptoPrompt(text)
         ? buildCryptoSystemPrompt(
-            wallet.snapshot.isConnected ? wallet.snapshot.address : null,
-            wallet.snapshot.isConnected ? wallet.snapshot.chainId : null,
-            wallet.snapshot.isConnected ? wallet.snapshot.ethBalance : null,
-            wallet.snapshot.isConnected ? wallet.snapshot.usdcBalance : null,
+            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.address : null,
+            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.chainId : null,
+            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.ethBalance : null,
+            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.usdcBalance : null,
           )
         : "";
 
     const responsePerspectivePrompt = buildResponsePerspectiveSystemPrompt(responsePerspective);
     const executionModePrompt = buildMatterhornExecutionModeSystemPrompt(requestedExecutionMode);
-    const deskAgentInstructions = getMatterhornDeskAgentById(agentId)?.instructions ?? "";
+    const directResponsePrompt = buildDirectResponseSystemPrompt();
+    const deskAgentInstructions = deskAgent ? buildMatterhornDeskAgentSystemPrompt(deskAgent) : "";
     let workflowRunPrompt = "";
     if (client && selectedWorkspaceId && agentId) {
       try {
@@ -2385,7 +2400,21 @@ export function SessionRoute() {
       }
     }
 
-    return [envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt, deskAgentInstructions, workflowRunPrompt, responsePerspectivePrompt, executionModePrompt].filter(Boolean).join("\n") || undefined;
+    return compileMatterhornSessionSystemContext([
+      { id: "execution_mode", content: executionModePrompt },
+      { id: "desk_contract", content: deskAgentInstructions },
+      { id: "direct_response", content: directResponsePrompt },
+      {
+        id: "environment_metadata",
+        content: envSystemContext,
+        enabled: isGeneralMatterhornAgent || contextPolicy?.includeEnvironmentVariableNames === true,
+      },
+      { id: "wallet_public_metadata", content: walletContext },
+      { id: "crypto_safety", content: cryptoPrompt },
+      { id: "workspace_orientation", content: matterhornOrientationPrompt },
+      { id: "workflow_run", content: workflowRunPrompt },
+      { id: "response_perspective", content: responsePerspectivePrompt },
+    ]);
   }, [client, executionMode, matterhornServerHostInfoState?.pid, matterhornServerHostInfoState?.port, responsePerspective, selectedWorkspaceId, wallet.snapshot]);
 
   const selectedAgentRef = useRef<string | null>(selectedAgent);
@@ -2458,6 +2487,9 @@ export function SessionRoute() {
       onModelClick: () => {
         setModelPickerQuery("");
         setModelPickerOpen(true);
+      },
+      onOpenAiProviders: () => {
+        handleOpenSettings("/settings/ai");
       },
       modelPickerOpen: compactModelPickerOpen,
       modelUnavailable: selectedModelUnavailable,

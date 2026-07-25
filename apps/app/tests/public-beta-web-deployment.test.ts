@@ -63,7 +63,7 @@ describe("public Beta web deployment", () => {
       "utf8",
     );
 
-    expect(den).toContain('target.searchParams.set("returnTo", `${window.location.origin}/session`)');
+    expect(den).toContain('target.searchParams.set("returnTo", `${window.location.origin}/onboarding`)');
     expect(den).toContain('credentials: "include"');
     expect(den).toContain("Browser Cloud auth is cookie-backed");
     expect(remoteLinks).toContain("stripRemoteConnectQuery");

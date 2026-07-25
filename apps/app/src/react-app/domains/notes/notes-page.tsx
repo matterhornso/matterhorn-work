@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { ArrowLeft, Brain, Filter, Loader2, Plus, Search, Trash2 } from "lucide-react";
 
 import { t } from "@/i18n";

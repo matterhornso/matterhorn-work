@@ -607,7 +607,8 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         <LayoutSectionHeader>
           <LayoutSectionTitle>Included models</LayoutSectionTitle>
           <LayoutSectionDescription>
-            Ready to use without adding an API key.
+            Catalog supplied by the local engine. Provider access is checked
+            when a chat starts.
           </LayoutSectionDescription>
         </LayoutSectionHeader>
 
@@ -667,6 +668,13 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               >
                 Subscribe
               </Button>
+            </div>
+          ) : null}
+
+          {!cudosConnected && otherConnectedProviders.length === 0 ? (
+            <div className="border-t border-border/60 px-4 py-3 text-xs leading-5 text-dls-secondary">
+              If chat reports that no provider is available, connect ASI:Cloud
+              or another provider below.
             </div>
           ) : null}
         </div>
@@ -830,7 +838,8 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               </LayoutSectionItemFootnote>
               <p>
                 Included models come from the catalog managed by the local
-                Matterhorn Desks engine. Availability can change.
+                Matterhorn Desks engine. A catalog entry does not guarantee
+                that its provider is authenticated.
               </p>
             </div>
           </CollapsibleContent>

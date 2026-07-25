@@ -5,7 +5,7 @@ import {
   useLocation,
   useNavigate,
   useParams,
-} from "react-router-dom";
+} from "react-router";
 import { useQuery } from "@tanstack/react-query";
 
 import { SUGGESTED_PLUGINS } from "../../app/constants";
@@ -2807,6 +2807,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             onNavigateTab={(tab) => navigateSettingsPath(tab)}
             developerMode={developerMode}
             runtimeWorkspaceId={runtimeWorkspaceId ?? undefined}
+            workspaceResolutionPending={loading}
             matterhornServerClient={settingsCapabilityClient}
             backendSettingsSections={
               settingsCapabilitySectionsQuery.data ?? null

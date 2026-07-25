@@ -1,4 +1,7 @@
-import { getMatterhornDeskAgentById } from "./desk-agents.js";
+import {
+  buildMatterhornDeskReadOnlyTools,
+  getMatterhornDeskAgentById,
+} from "./desk-agents.js";
 
 export type MatterhornExecutionMode = "discuss" | "plan" | "work";
 
@@ -49,9 +52,10 @@ export function buildMatterhornExecutionModeTools(
 
   const normalizedAgentId = agentId?.trim() || "matterhorn";
   const deskAgent = getMatterhornDeskAgentById(normalizedAgentId);
-  const allowedTools = normalizedAgentId === "matterhorn"
-    ? DEFAULT_READ_ONLY_TOOLS
-    : deskAgent?.runtimeReadOnlyTools ?? [];
+  if (deskAgent && normalizedAgentId !== "matterhorn") {
+    return buildMatterhornDeskReadOnlyTools(deskAgent);
+  }
+  const allowedTools = normalizedAgentId === "matterhorn" ? DEFAULT_READ_ONLY_TOOLS : [];
 
   return Object.fromEntries([
     ["*", false],

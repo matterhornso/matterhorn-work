@@ -363,7 +363,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     icon: { src: "/ext-openai.svg" },
     composer: { prompt: "Use the OpenAI Image Gen extension to " },
     setup: {
-      instructions: "Add an OpenAI API key, then Matterhorn installs an OpenCode plugin that exposes image_generate.",
+      instructions: "Add an OpenAI API key, then Matterhorn installs a local image-generation connector.",
       primaryCta: "Enable image generation",
       secondaryCta: "Generate test image",
       requiredEnv: ["OPENAI_API_KEY"],
@@ -460,7 +460,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     icon: { src: "/ext-ollama.svg" },
     composer: { prompt: "Use the Ollama extension to " },
     setup: {
-      instructions: "Run Ollama locally, choose or pull a model, then add it as an OpenCode provider.",
+      instructions: "Run Ollama locally, choose or pull a model, then add it as a local model provider.",
       primaryCta: "Add Ollama model",
       secondaryCta: "Pull model",
     },

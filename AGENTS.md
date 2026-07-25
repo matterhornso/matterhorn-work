@@ -7,7 +7,7 @@ Matterhorn Desks is a Web3-native agentic workspace — Cowork for Web3.
 Matterhorn Desks is a practical control surface for agentic work, with crypto-native capabilities:
 
 * Run local and remote agent workflows from one place.
-* Use OpenCode capabilities directly through Matterhorn Desks.
+* Use the Matterhorn Desks engine and approved tools directly.
 * Compose desktop app, server, and messaging connectors without lock-in.
 * Treat the Matterhorn Desks app as a client of the server API surface.
 * Connect to hosted workers through a simple user flow: `Add a worker` → `Connect remote`.
@@ -18,7 +18,7 @@ Matterhorn Desks is a practical control surface for agentic work, with crypto-na
 * **Local-first, cloud-ready**: Matterhorn Desks runs on your machine in one click and can connect to cloud workflows when needed.
 * **Server-consumption first**: the app should consume server surfaces (self-hosted or hosted), not invent parallel behavior.
 * **Composable**: use the desktop app, messaging connectors, or server mode based on the task.
-* **Ejectable**: Matterhorn Desks is powered by OpenCode, so anything OpenCode can do is available, even before a dedicated UI exists.
+* **Ejectable**: workflows stay portable, inspectable, and available through the engine even before a dedicated UI exists.
 * **Crypto-native**: wallet is a first-class citizen, not a plugin. Agents propose on-chain actions; user approves in-workspace.
 
 

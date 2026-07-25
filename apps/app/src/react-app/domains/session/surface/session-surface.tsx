@@ -533,7 +533,8 @@ function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): stri
 
 type SessionError = {
   message: string;
-  kind?: "model-not-found" | "cancelled" | "generic";
+  detail?: string;
+  kind?: "model-not-found" | "provider-unavailable" | "cancelled" | "generic";
   /** For model-not-found: the model that failed. */
   failedModel?: { providerID: string; modelID: string };
   /** For model-not-found: suggested replacements from the backend. */
@@ -550,6 +551,7 @@ export type SessionSurfaceProps = {
   developerMode: boolean;
   modelLabel: string;
   onModelClick: () => void;
+  onOpenAiProviders?: () => void;
   modelPickerOpen: boolean;
   modelUnavailable?: boolean;
   selectedModel: ModelRef;
@@ -858,12 +860,24 @@ function TodoPanel(props: { todos: TodoItem[] }) {
 
 function parseSessionError(thrown: unknown): SessionError {
   const raw = thrown instanceof Error ? thrown.message : String(thrown);
+  let parsed: unknown;
   // Try to detect ProviderModelNotFoundError from the SDK error shape.
   // The error message may be a JSON string from our serializer in session-route.
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed?.name === "ProviderModelNotFoundError" && parsed?.data) {
-      const { providerID, modelID, suggestions } = parsed.data;
+    parsed = JSON.parse(raw);
+    const parsedRecord = parsed as {
+      name?: unknown;
+      data?: {
+        providerID?: unknown;
+        modelID?: unknown;
+        suggestions?: unknown;
+      };
+    };
+    if (parsedRecord?.name === "ProviderModelNotFoundError" && parsedRecord?.data) {
+      const { providerID, modelID, suggestions } = parsedRecord.data;
+      if (typeof providerID !== "string" || typeof modelID !== "string") {
+        throw new Error("ProviderModelNotFoundError omitted its model reference.");
+      }
       return {
         message: `Model ${providerID}/${modelID} is not available.`,
         kind: "model-not-found",
@@ -873,6 +887,14 @@ function parseSessionError(thrown: unknown): SessionError {
     }
   } catch {
     // Not JSON — fall through to plain message
+  }
+  const diagnostic = `${raw}\n${parsed ? JSON.stringify(parsed) : ""}`;
+  if (/no provider available/i.test(diagnostic)) {
+    return {
+      message: "Connect an AI provider to continue.",
+      detail: "The model catalog loaded, but its provider could not authenticate. Connect ASI:Cloud or another provider, then retry this prompt.",
+      kind: "provider-unavailable",
+    };
   }
   // Check if the raw string mentions model-not-found patterns
   if (/ProviderModelNotFoundError/i.test(raw) || /model.*not found/i.test(raw)) {
@@ -890,10 +912,11 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
 
   const rawError = assistantMessage.info.error as unknown as {
     name?: unknown;
-    data?: { message?: unknown };
+    data?: { message?: unknown; responseBody?: unknown; statusCode?: unknown };
   };
   const name = typeof rawError.name === "string" ? rawError.name : "AssistantResponseError";
   const detail = typeof rawError.data?.message === "string" ? rawError.data.message.trim() : "";
+  const normalizedError = parseSessionError(JSON.stringify(rawError));
   const retryMessage = [...snapshot.messages]
     .reverse()
     .find((message) => message.info.role === "user")
@@ -911,15 +934,18 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
           message: "Generation stopped. Your prompt is still available to edit or send again.",
           kind: "cancelled",
         } satisfies SessionError
-      : { message: detail || "Matterhorn could not complete this response. Your prompt is ready to retry." } satisfies SessionError,
+      : normalizedError.kind === "provider-unavailable" || normalizedError.kind === "model-not-found"
+        ? normalizedError
+        : { message: detail || "Matterhorn could not complete this response. Your prompt is ready to retry." } satisfies SessionError,
   };
 }
 
-function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker }: {
+function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker, onOpenAiProviders }: {
   error: SessionError;
   onDismiss: () => void;
   onChangeModel?: (model: { providerID: string; modelID: string }) => void;
   onOpenModelPicker?: () => void;
+  onOpenAiProviders?: () => void;
 }) {
   const cancelled = error.kind === "cancelled";
   return (
@@ -937,6 +963,37 @@ function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker }
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className={cn("text-sm font-medium", cancelled ? "text-dls-text" : "text-red-11")}>{error.message}</div>
+            {error.detail ? (
+              <p className={cn("mt-1 text-xs leading-5", cancelled ? "text-dls-secondary" : "text-red-11/80")}>
+                {error.detail}
+              </p>
+            ) : null}
+            {error.kind === "provider-unavailable" ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {onOpenAiProviders ? (
+                  <button
+                    type="button"
+                    className="rounded-md bg-dls-accent px-3 py-1.5 text-xs font-semibold text-[var(--dls-accent-fg)] transition-colors hover:bg-[var(--dls-accent-hover)]"
+                    onClick={() => {
+                      onOpenAiProviders();
+                      onDismiss();
+                    }}
+                  >
+                    Open AI Providers
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="rounded-md bg-dls-surface-muted/35 px-3 py-1.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                  onClick={() => {
+                    onOpenModelPicker?.();
+                    onDismiss();
+                  }}
+                >
+                  Change model
+                </button>
+              </div>
+            ) : null}
             {error.kind === "model-not-found" ? (
               <div className="mt-2 flex flex-wrap gap-2">
                 {error.suggestions && error.suggestions.length > 0 ? (
@@ -1481,12 +1538,25 @@ export function SessionSurface(props: SessionSurfaceProps) {
       return;
     }
     if (sending || liveStatus.type !== "idle" || renderedMessages.length <= awaitingAssistantBaseline) return;
+    let cancelled = false;
     const id = window.setTimeout(() => {
-      setNoVisibleAssistantOutputBaseline(awaitingAssistantBaseline);
-      setAwaitingAssistantBaseline(null);
+      const showEmptyResponseFallback = () => {
+        if (cancelled) return;
+        setNoVisibleAssistantOutputBaseline(awaitingAssistantBaseline);
+        setAwaitingAssistantBaseline(null);
+      };
+      void snapshotQuery.refetch()
+        .then(({ data }) => {
+          if (latestSessionSnapshotFailure(data ?? null)) return;
+          showEmptyResponseFallback();
+        })
+        .catch(showEmptyResponseFallback);
     }, 1200);
-    return () => window.clearTimeout(id);
-  }, [assistantOutputAfterAwaitStart, awaitingAssistantBaseline, liveStatus.type, renderedMessages.length, sending]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
+  }, [assistantOutputAfterAwaitStart, awaitingAssistantBaseline, liveStatus.type, renderedMessages.length, sending, snapshotQuery]);
 
   const model = deriveSessionRenderModel({
     intendedSessionId: props.sessionId,
@@ -2348,6 +2418,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     onDismiss={handleDismissError}
                     onChangeModel={props.onChangeModel}
                     onOpenModelPicker={props.onModelClick}
+                    onOpenAiProviders={props.onOpenAiProviders}
                   />
                 ) : sessionMissing ? (
                   <div className="mx-auto flex max-w-sm items-center justify-center gap-2 rounded-lg bg-dls-canvas/45 px-6 py-5 text-sm text-dls-secondary">
@@ -2371,6 +2442,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   onDismiss={handleDismissError}
                   onChangeModel={props.onChangeModel}
                   onOpenModelPicker={props.onModelClick}
+                  onOpenAiProviders={props.onOpenAiProviders}
                 />
               ) : activeDeskMode ? (
                 <div className="space-y-2">
@@ -2465,6 +2537,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                       onDismiss={handleDismissError}
                       onChangeModel={props.onChangeModel}
                       onOpenModelPicker={props.onModelClick}
+                      onOpenAiProviders={props.onOpenAiProviders}
                     />
                   ) : null}
                 </Suspense>
@@ -2543,6 +2616,12 @@ export function SessionSurface(props: SessionSurfaceProps) {
         executionModesEnabled={props.executionModesEnabled}
         onExecutionModeChange={props.onExecutionModeChange}
         agentLabel={props.agentLabel}
+        agentSelectionLocked={Boolean(linkedWorkflowRun?.agentId || activeDeskMode)}
+        agentSelectionLockedReason={
+          linkedWorkflowRun?.deskId === "blank"
+            ? "This chat keeps the agent selected when it started."
+            : "This desk uses its specialist agent."
+        }
         selectedAgent={props.selectedAgent}
         listAgents={props.listAgents}
         onSelectAgent={props.onSelectAgent}

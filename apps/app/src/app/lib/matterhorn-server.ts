@@ -464,6 +464,10 @@ export type MatterhornMemoryExportResponse = {
   export: MatterhornMemoryExportManifest & {
     outputDir?: string;
     manifestPath?: string;
+    recordsPath?: string;
+    sha256Path?: string;
+    workspaceId?: string;
+    workspaceNamespaceTag?: string;
   };
 };
 

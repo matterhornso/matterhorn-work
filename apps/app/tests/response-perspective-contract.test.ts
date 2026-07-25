@@ -43,9 +43,15 @@ describe("Matterhorn response perspectives", () => {
 
   test("injects the selected desk agent safety contract into every prompt", () => {
     const route = readReactSource("shell/session-route.tsx");
+    const compiler = readReactSource("domains/session/context/session-system-context.ts");
     const longevity = getMatterhornDeskAgentById("matterhorn-longevity");
 
-    expect(route).toContain("getMatterhornDeskAgentById(agentId)?.instructions");
+    expect(route).toContain("const deskAgent = getMatterhornDeskAgentById(agentId);");
+    expect(route).toContain("buildMatterhornDeskAgentSystemPrompt(deskAgent)");
+    expect(route).toContain('{ id: "desk_contract", content: deskAgentInstructions }');
+    expect(route).toContain("compileMatterhornSessionSystemContext([");
+    expect(compiler).toContain('"desk_contract",');
+    expect(compiler).toContain("unique.has(block.id)");
     expect(route).toContain("buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode)");
     expect(route).toContain('buildSessionSystemContext(prompt, session.id, agent, "work")');
     expect(route).toContain("Canonical output directory:");

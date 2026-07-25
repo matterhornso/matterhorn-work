@@ -331,7 +331,8 @@ export const HYPERLIQUID_PREVIEW_ORDER_ACTION: DeskActionManifest = {
   id: "hyperliquid_preview_order",
   deskId: "hyperliquid",
   title: "Preview order",
-  description: "Preview a Hyperliquid order without submitting it.",
+  description:
+    "Preview a Hyperliquid order without submitting it. To place it, review the exact order in the separate trade ticket and approve its short-lived intent with your connected wallet.",
   requiredContextFields: ["symbol", "side", "size"],
   optionalContextFields: ["price", "orderType"],
   safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
@@ -346,8 +347,9 @@ export const HYPERLIQUID_EXTERNAL_SIGNER_HANDOFF_ACTION: DeskActionManifest = {
   version: "matterhorn.desk.action.manifest.v1",
   id: "hyperliquid_external_signer_handoff",
   deskId: "hyperliquid",
-  title: "Prepare handoff",
-  description: "Build an external-signer handoff for a Hyperliquid order. Matterhorn never signs or submits.",
+  title: "Open trade review",
+  description:
+    "Build a redacted handoff for the separate Hyperliquid trade ticket. The agent cannot sign or submit; the user must review the exact order and approve a short-lived intent with a connected wallet.",
   requiredContextFields: ["evmAddress", "symbol", "side", "size"],
   optionalContextFields: ["price", "orderType"],
   safetyBoundary: {

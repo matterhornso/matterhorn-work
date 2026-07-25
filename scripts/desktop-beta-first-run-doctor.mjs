@@ -169,7 +169,14 @@ async function liveServerChecks(config) {
 
   try {
     const readiness = await fetchJson(`${baseUrl}/api/crypto/readiness`, config.token);
-    checks.push(check("crypto.readiness", "Unified crypto readiness", readiness.ok ? "pass" : "fail", `HTTP ${readiness.status}`, { body: readiness.body }));
+    const accessControlEnforced = !config.token && readiness.status === 401;
+    checks.push(check(
+      "crypto.readiness",
+      "Unified crypto readiness",
+      readiness.ok || accessControlEnforced ? "pass" : "fail",
+      accessControlEnforced ? "Protected endpoint requires a client token." : `HTTP ${readiness.status}`,
+      { body: readiness.body },
+    ));
   } catch (error) {
     checks.push(check("crypto.readiness", "Unified crypto readiness", "fail", error instanceof Error ? error.message : String(error)));
   }

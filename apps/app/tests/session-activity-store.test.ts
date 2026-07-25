@@ -75,4 +75,49 @@ describe("session activity timing", () => {
 
     expect(latestSessionSnapshotFailure(snapshot)).toBeNull();
   });
+
+  test("turns an upstream provider authentication failure into an actionable recovery", () => {
+    const snapshot = {
+      messages: [
+        {
+          info: { id: "user-1", role: "user", time: { created: 100 } },
+          parts: [{ type: "text", text: "How can I connect a Sui wallet?" }],
+        },
+        {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            time: { created: 110, completed: 130 },
+            error: {
+              name: "APIError",
+              data: {
+                message: "No provider available",
+                statusCode: 401,
+                responseBody: JSON.stringify({
+                  type: "error",
+                  error: {
+                    type: "ModelError",
+                    message: "No provider available",
+                  },
+                }),
+              },
+            },
+          },
+          parts: [],
+        },
+      ],
+    } as unknown as MatterhornSessionSnapshot;
+
+    expect(latestSessionSnapshotFailure(snapshot)).toEqual({
+      id: "assistant-1",
+      name: "APIError",
+      completedAt: 130,
+      retryMessage: "How can I connect a Sui wallet?",
+      error: {
+        kind: "provider-unavailable",
+        message: "Connect an AI provider to continue.",
+        detail: "The model catalog loaded, but its provider could not authenticate. Connect ASI:Cloud or another provider, then retry this prompt.",
+      },
+    });
+  });
 });

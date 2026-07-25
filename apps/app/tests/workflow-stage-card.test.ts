@@ -414,7 +414,8 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("current={selectedPromptModel");
     expect(src).toContain("agent: agent || undefined");
     expect(src).toContain('buildSessionSystemContext(prompt, session.id, agent, "work")');
-    expect(src).toContain("getMatterhornDeskAgentById(agentId)?.instructions");
+    expect(src).toContain("getMatterhornDeskAgentById(agentId)");
+    expect(src).toContain("buildMatterhornDeskAgentSystemPrompt(deskAgent)");
     expect(src).toContain("startOptimisticRun(workspaceId, session.id");
     expect(src).toContain("setRunStatus(workspaceId, session.id, { type: \"idle\" })");
   });

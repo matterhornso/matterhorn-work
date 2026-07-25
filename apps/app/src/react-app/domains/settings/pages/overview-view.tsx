@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -2234,15 +2234,17 @@ export function SettingsOverviewView(props: {
   const exportMemory = useCallback(async () => {
     const client = props.matterhornServerClient;
     if (!client) return;
-    setMemoryExportStatus("Exporting...");
+    setMemoryExportStatus("Creating export...");
     try {
       const response = backendWorkspaceId
         ? await client.exportWorkspaceMemory(backendWorkspaceId)
         : await client.exportMemory();
-      setMemoryExportStatus(`Exported ${response.export.recordCount} records.`);
+      setMemoryExportStatus(
+        `Created a ${response.export.recordCount}-record export in workspace outputs.`,
+      );
     } catch (error) {
       setMemoryExportStatus(
-        error instanceof Error ? error.message : "Could not export memory.",
+        error instanceof Error ? error.message : "Could not create the memory export.",
       );
     }
   }, [backendWorkspaceId, props.matterhornServerClient]);
@@ -2773,8 +2775,8 @@ export function SettingsOverviewView(props: {
                 onClick={() => void exportMemory()}
                 disabled={!props.matterhornServerClient}
               >
-                <Download className="size-3.5" aria-hidden="true" />
-                Export memory bundle
+                <Archive className="size-3.5" aria-hidden="true" />
+                Create memory export
               </Button>
             </div>
             {memoryExportStatus ? (

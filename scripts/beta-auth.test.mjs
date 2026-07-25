@@ -10,6 +10,7 @@ const types = readFileSync("apps/app/src/react-app/domains/auth/beta-auth-types.
 const index = readFileSync("apps/app/src/react-app/domains/auth/index.ts", "utf8");
 const statusBar = readFileSync("apps/app/src/react-app/domains/session/chat/status-bar.tsx", "utf8");
 const providers = readFileSync("apps/app/src/react-app/shell/providers.tsx", "utf8");
+const appEntry = readFileSync("apps/app/src/index.react.tsx", "utf8");
 const setupDoc = readFileSync("docs/beta-auth-setup.md", "utf8");
 
 // 1. Package exposes the beta auth gate.
@@ -100,4 +101,23 @@ assert.equal(
   "auth source must not hardcode CLERK_SECRET_KEY",
 );
 
-console.log("Monday beta auth static check passed.");
+// 10. Public sign-out is server-confirmed and restores the lightweight gate.
+assert.equal(
+  provider.includes(".signOut().catch(() => undefined)"),
+  false,
+  "auth provider must not hide a failed remote sign-out",
+);
+assert.ok(
+  provider.includes('dispatchDenSessionUpdated({ status: "signed_out" })'),
+  "auth provider must notify the public entry gate after sign-out",
+);
+assert.ok(
+  appEntry.includes("denSessionUpdatedEvent"),
+  "public entry must listen for session lifecycle changes",
+);
+assert.ok(
+  appEntry.includes('event.detail?.status === "signed_out"'),
+  "public entry must restore sign-in after sign-out",
+);
+
+console.log("Public beta auth static check passed.");

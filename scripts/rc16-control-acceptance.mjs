@@ -304,6 +304,12 @@ if (config.help) {
 }
 
 await mkdir(config.outputDir, { recursive: true });
+const attachmentFixturePath = resolve(config.outputDir, "chat-attachment-fixture.txt");
+await writeFile(
+  attachmentFixturePath,
+  "Matterhorn Desks chat attachment acceptance fixture.\n",
+  "utf8",
+);
 
 const report = {
   name: "rc16-control-acceptance",
@@ -742,7 +748,7 @@ await acceptanceCase(
 await acceptanceCase(
   "WAL-MAINNET",
   "Base mainnet",
-  "Selecting Mainnet does not enable it; enabling requires typed confirmation",
+  "Selecting Mainnet keeps it blocked until typed confirmation",
   async () => {
     const sepolia = await firstVisible(
       page.getByRole("button", { name: "Sepolia", exact: true }),
@@ -757,16 +763,10 @@ await acceptanceCase(
         ? "Mainnet"
         : "Sepolia";
 
-    await mainnet.click();
-    if ((await mainnet.getAttribute("aria-pressed")) !== "true") {
-      throw new Error("Mainnet could not be selected as the preferred network.");
+    if (originalNetwork === "Mainnet") {
+      await sepolia.click();
     }
-
-    const mainnetGate = await firstVisible(
-      page.getByRole("button", { name: "Mainnet blocked", exact: true }),
-      "Mainnet blocked",
-    );
-    await mainnetGate.click();
+    await mainnet.click();
     const dialog = await firstVisible(
       page.getByRole("alertdialog"),
       "Enable Base mainnet confirmation",
@@ -786,14 +786,18 @@ await acceptanceCase(
       dialog.getByRole("button", { name: "Keep blocked", exact: true }),
       "Keep blocked",
     );
+    const mainnetGate = await firstVisible(
+      page.getByRole("button", { name: "Mainnet blocked", exact: true }),
+      "Mainnet blocked",
+    );
     if ((await mainnetGate.getAttribute("aria-pressed")) !== "false") {
       throw new Error("Cancelling the mainnet gate changed the enabled state.");
     }
-
-    if (originalNetwork === "Sepolia") {
-      await sepolia.click();
+    if ((await mainnet.getAttribute("aria-pressed")) === "true") {
+      throw new Error("Cancelling the mainnet gate selected Mainnet.");
     }
-    return `Preferred network selected and restored to ${originalNetwork}; typed enable gate remained blocked`;
+
+    return "Mainnet remained blocked and unselected without the typed confirmation phrase";
   },
 );
 
@@ -955,34 +959,96 @@ await acceptanceCase(
   "Opens a searchable branded model picker and closes without changing selection",
   async () => {
     await clickVisible(page.getByRole("button", { name: "Change model", exact: true }), "Change model");
-    const search = await firstVisible(
-      page.getByPlaceholder("Search models..."),
-      "compact model search",
-    );
-    const picker = search.locator("xpath=..");
-    if (LEGACY_BRANDS.test(await picker.innerText())) {
-      throw new Error("Legacy engine branding is visible in the model picker.");
+    const dialog = await firstVisible(page.getByRole("dialog"), "Models dialog");
+    try {
+      const search = await firstVisible(
+        dialog.getByPlaceholder(/Search (?:providers and )?models/i),
+        "model search",
+      );
+      if (LEGACY_BRANDS.test(await dialog.innerText())) {
+        throw new Error("Legacy engine branding is visible in the model picker.");
+      }
+      await search.fill("North");
+      await firstVisible(dialog.getByText(/North Mini Code Free/i), "filtered model result");
+    } finally {
+      await page.keyboard.press("Escape");
+      await dialog.waitFor({ state: "hidden", timeout: 10_000 }).catch(async () => {
+        await clickVisible(dialog.getByRole("button", { name: "Done", exact: true }), "Done");
+      });
     }
-    await page.keyboard.press("Escape");
-    await search.waitFor({ state: "hidden", timeout: 10_000 });
-    return "Branded searchable model picker opened and closed";
+    return "Branded model picker opened, filtered, and closed";
   },
 );
 
 await acceptanceCase(
   "CHAT-TOOLS",
   "Commands, skills, extensions, and MCP menu",
-  "Menu opens, exposes all Work-mode categories, and dismisses with Escape",
+  "Every Work-mode category loads without legacy branding and dismisses with Escape",
   async () => {
     await clickVisible(
       page.getByRole("button", { name: "Commands, skills, and MCPs", exact: true }),
       "Commands, skills, and MCPs",
     );
+    const dialog = await firstVisible(
+      page.getByRole("dialog", { name: "Commands, skills, and MCPs" }),
+      "Commands, skills, and MCPs dialog",
+    );
     for (const label of ["Commands", "Skills", "Extensions", "MCPs"]) {
-      await firstVisible(page.getByRole("tab", { name: label, exact: true }), label);
+      const tab = await firstVisible(dialog.getByRole("tab", { name: label, exact: true }), label);
+      await tab.click();
+      await settle(page, 300);
+      const content = await dialog.innerText();
+      if (LEGACY_BRANDS.test(content)) {
+        throw new Error(`Legacy engine branding is visible in the ${label} tab.`);
+      }
     }
     await page.keyboard.press("Escape");
-    return "Commands, Skills, Extensions, and MCPs visible; menu dismissed";
+    await dialog.waitFor({ state: "hidden", timeout: 10_000 });
+    return "Commands, Skills, Extensions, and MCPs loaded with Matterhorn-only copy";
+  },
+);
+
+await acceptanceCase(
+  "CHAT-TOOL-INSERT",
+  "Insert a command from the composer menu",
+  "The selected command is inserted into the editor and the original draft is restored",
+  async () => {
+    const editor = await firstVisible(page.locator('[contenteditable="true"]').first(), "chat editor");
+    const original = (await editor.textContent()) ?? "";
+    await clickVisible(
+      page.getByRole("button", { name: "Commands, skills, and MCPs", exact: true }),
+      "Commands, skills, and MCPs",
+    );
+    const dialog = await firstVisible(
+      page.getByRole("dialog", { name: "Commands, skills, and MCPs" }),
+      "Commands, skills, and MCPs dialog",
+    );
+    await clickVisible(
+      dialog.getByRole("tab", { name: "Commands", exact: true }),
+      "Commands",
+    );
+    const commandList = dialog.locator(".matterhorn-tool-menu-list");
+    await commandList.waitFor({ state: "visible", timeout: 10_000 });
+    await page.waitForFunction(
+      (element) => element?.getAttribute("aria-busy") === "false",
+      await commandList.elementHandle(),
+      { timeout: 20_000 },
+    );
+    const command = await firstVisible(
+      commandList.getByRole("button").filter({ hasText: /^\// }),
+      "workspace command",
+    );
+    const commandLabel = ((await command.innerText()) ?? "").trim().split(/\s+/)[0];
+    if (!commandLabel?.startsWith("/")) {
+      throw new Error(`Command label is invalid: ${JSON.stringify(commandLabel)}.`);
+    }
+    await command.click();
+    const inserted = (await editor.textContent()) ?? "";
+    if (!inserted.includes(commandLabel)) {
+      throw new Error(`Command was not inserted into the editor: ${JSON.stringify(inserted)}.`);
+    }
+    await editor.fill(original);
+    return `${commandLabel} inserted through the menu; original draft restored`;
   },
 );
 
@@ -1010,6 +1076,57 @@ await acceptanceCase(
       throw new Error("Draft did not restore to its original value.");
     }
     return `Draft ${marker} persisted; original draft restored`;
+  },
+);
+
+await acceptanceCase(
+  "CHAT-MULTILINE",
+  "Shift+Enter multiline composer input",
+  "Adds a new line without sending or changing the chat route",
+  async () => {
+    const editor = await firstVisible(page.locator('[contenteditable="true"]').first(), "chat editor");
+    const original = (await editor.textContent()) ?? "";
+    const originalUrl = page.url();
+    const firstLine = `RC16 multiline ${Date.now()}`;
+    await editor.fill(firstLine);
+    await editor.press("Shift+Enter");
+    await editor.type("second line");
+    const multilineText = await editor.innerText();
+    if (!multilineText.includes(firstLine) || !multilineText.includes("second line")) {
+      throw new Error(`Multiline text was not retained: ${JSON.stringify(multilineText)}.`);
+    }
+    if (!multilineText.includes("\n")) {
+      throw new Error("Shift+Enter did not add a visible line break.");
+    }
+    if (page.url() !== originalUrl) {
+      throw new Error(`Shift+Enter changed the chat route to ${page.url()}.`);
+    }
+    await editor.fill(original);
+    return "Shift+Enter added a line break without sending; original draft restored";
+  },
+);
+
+await acceptanceCase(
+  "CHAT-ATTACHMENT",
+  "Chat file attachment",
+  "A real local file appears in the composer and can be removed cleanly",
+  async () => {
+    const fileInput = page.locator('input[type="file"]').first();
+    if ((await fileInput.count()) !== 1) {
+      throw new Error("Chat file input is missing.");
+    }
+    await fileInput.setInputFiles(attachmentFixturePath);
+    const fileName = await firstVisible(
+      page.getByText("chat-attachment-fixture.txt", { exact: true }),
+      "attachment filename",
+    );
+    const attachmentChip = fileName.locator("xpath=../..");
+    await clickVisible(
+      attachmentChip.getByRole("button", { name: "Remove", exact: true }),
+      "Remove attachment",
+    );
+    await fileName.waitFor({ state: "hidden", timeout: 10_000 });
+    return "Local text file attached, rendered with metadata, and removed";
   },
 );
 

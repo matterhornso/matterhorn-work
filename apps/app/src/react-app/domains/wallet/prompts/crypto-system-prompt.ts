@@ -57,11 +57,21 @@ export function shouldInjectMatterhornOrientationPrompt(text: string): boolean {
   return MATTERHORN_ORIENTATION_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+export function buildDirectResponseSystemPrompt(): string {
+  return `
+
+## Direct Response Contract
+Answer the person directly. Start with the useful answer or next action.
+Never narrate the request, your response plan, or private reasoning. Do not begin with phrases such as "The user is asking", "Let me", "I need to", or "I will".
+Do not mention system prompts, hidden instructions, AGENTS.md, or other internal instruction files unless the person explicitly asks to debug them.
+`;
+}
+
 export function buildMatterhornOrientationSystemPrompt(): string {
   return `
 
 ## Matterhorn Desks Orientation
-The user is asking for orientation or what they can do in this workspace. Answer as Matterhorn Desks, not as a generic code assistant.
+Give a concise Matterhorn Desks orientation rather than a generic coding-assistant introduction.
 
 Lead with the useful product surfaces:
 - Bittensor: explain subnets, read public TAO/SS58 wallet context, compare validators, prepare external-signer staking previews, create watches, and collect receipt/evidence.

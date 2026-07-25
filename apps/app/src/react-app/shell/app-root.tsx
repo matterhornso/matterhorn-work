@@ -1,10 +1,11 @@
 /** @jsxImportSource react */
 
 import { Suspense, lazy, useEffect, useSyncExternalStore, type ReactNode } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 
 import { readDenBootstrapConfig, readDenSettings } from "../../app/lib/den";
 import { denSettingsChangedEvent, denSessionUpdatedEvent } from "../../app/lib/den-session-events";
+import { isPublicBetaWebDeployment } from "../../app/lib/matterhorn-deployment";
 import { useDenAuth } from "../domains/cloud/den-auth-provider";
 import { ForcedSigninPage } from "../domains/cloud/forced-signin-page";
 import { NewProvidersToast } from "./new-providers-toast";
@@ -95,6 +96,7 @@ function DenSigninGate({ children }: DenSigninGateProps) {
   const denAuth = useDenAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const publicBetaWeb = isPublicBetaWebDeployment();
   const requireSignin = useSyncExternalStore(
     subscribeToRequireSignin,
     readRequireSigninSnapshot,
@@ -113,6 +115,9 @@ function DenSigninGate({ children }: DenSigninGateProps) {
     const explicitCloudSignin = onSignin && isExplicitCloudSignin(location.search);
 
     const onOnboarding = path === "/onboarding" || path.startsWith("/onboarding/");
+    const hasActiveOrganization = Boolean(
+      readDenSettings().activeOrgId?.trim(),
+    );
 
     if (explicitCloudSignin) return;
 
@@ -121,6 +126,12 @@ function DenSigninGate({ children }: DenSigninGateProps) {
         navigate("/signin", { replace: true });
       } else if (denAuth.isSignedIn && onSignin) {
         // Signed in — route to onboarding so the user sees their org resources.
+        navigate("/onboarding", { replace: true });
+      } else if (
+        denAuth.isSignedIn &&
+        !onOnboarding &&
+        !hasActiveOrganization
+      ) {
         navigate("/onboarding", { replace: true });
       }
     } else if (onSignin) {
@@ -141,19 +152,23 @@ function DenSigninGate({ children }: DenSigninGateProps) {
 
   // After a fresh sign-in, navigate to the onboarding page so the
   // user sees what their org provides.
-  // Poll for activeOrgId (set asynchronously by refreshOrgs) rather
-  // than using a fixed delay — handles both fast and slow org lookups.
+  // New accounts may not have an organization yet. Onboarding creates or
+  // selects one, so a valid auth token is enough to enter that flow.
   useEffect(() => {
     const handler = (event: WindowEventMap[typeof denSessionUpdatedEvent]) => {
       if (event.detail?.status !== "success") return;
+      if (publicBetaWeb) {
+        navigate("/onboarding", { replace: true });
+        return;
+      }
       let attempts = 0;
       const check = () => {
         attempts++;
         const settings = readDenSettings();
-        if (settings.authToken?.trim() && settings.activeOrgId?.trim()) {
+        if (settings.authToken?.trim()) {
           navigate("/onboarding", { replace: true });
         } else if (attempts < 10) {
-          // Org not selected yet — retry (max ~5 seconds)
+          // Auth persistence has not settled yet — retry (max ~5 seconds).
           setTimeout(check, 500);
         }
       };
@@ -162,7 +177,7 @@ function DenSigninGate({ children }: DenSigninGateProps) {
     };
     window.addEventListener(denSessionUpdatedEvent, handler);
     return () => window.removeEventListener(denSessionUpdatedEvent, handler);
-  }, [navigate]);
+  }, [navigate, publicBetaWeb]);
 
   if (
     !isPublicTrustPath(location.pathname) &&

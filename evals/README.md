@@ -1,7 +1,7 @@
-# OpenWork UI evals
+# Matterhorn Desks UI evaluations
 
 Human-readable scenarios that an LLM (or a person) can replay against a live
-OpenWork instance to verify end-to-end behavior of the UI.
+Matterhorn Desks instance to verify end-to-end behavior of the UI.
 
 Each eval is:
 - A short list of steps written in plain English.
@@ -9,7 +9,7 @@ Each eval is:
 - The CDP browser tool calls to drive it.
 
 They are not unit tests. They intentionally exercise the running stack
-(OpenCode + OpenWork server + React UI) so regressions in wiring — not just
+(Matterhorn Desks engine + server + React UI) so regressions in wiring — not just
 types — get caught.
 
 ## How to run

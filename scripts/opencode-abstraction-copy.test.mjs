@@ -11,6 +11,9 @@ const files = {
   server: "apps/server/src/server.ts",
   runtimeDoc: "docs/opencode-runtime-abstraction.md",
   readme: "README.md",
+  agentGuide: "AGENTS.md",
+  composer: "apps/app/src/react-app/domains/session/surface/composer/composer.tsx",
+  evalSkill: ".opencode/skills/run-evals/SKILL.md",
 };
 
 const read = (path) => readFileSync(path, "utf8");
@@ -109,6 +112,32 @@ const checks = [
       "[Engine/OpenCode naming boundary](docs/opencode-runtime-abstraction.md)",
     ],
     mustNotContain: ["**OpenCode integration**"],
+  },
+  {
+    path: files.agentGuide,
+    mustContain: [
+      "Use the Matterhorn Desks engine and approved tools directly.",
+      "workflows stay portable, inspectable, and available through the engine",
+    ],
+    mustNotContain: ["Use OpenCode capabilities", "powered by OpenCode", "OpenWork"],
+  },
+  {
+    path: files.composer,
+    mustContain: [
+      '"Local Matterhorn Desks engine"',
+      '"Remote server connection"',
+      "agentSelectionLocked",
+    ],
+    mustNotContain: [
+      'entry.config.url ?? entry.config.command?.join(" ")',
+      '"Remote MCP"',
+      '"Local MCP"',
+    ],
+  },
+  {
+    path: files.evalSkill,
+    mustContain: ["Run Matterhorn Desks UI evaluations"],
+    mustNotContain: ["Run OpenWork UI evals", "Run the OpenWork UI evaluation flows"],
   },
   {
     path: "docs/mcp-ui-control-profile.md",

@@ -6,6 +6,10 @@ import {
   getMatterhornDeployment,
   isPublicBetaWebDeployment,
 } from "./app/lib/matterhorn-deployment";
+import {
+  denSessionUpdatedEvent,
+  type DenSessionUpdatedDetail,
+} from "./app/lib/den-session-events";
 import { readPublicCloudConfig } from "./app/lib/public-cloud-config";
 import { bootstrapTheme } from "./app/theme";
 import { initLocale } from "./i18n";
@@ -60,6 +64,31 @@ function MatterhornEntry() {
   const markPublicSessionVerified = React.useCallback(() => {
     setPublicSessionVerified(true);
   }, []);
+
+  React.useEffect(() => {
+    if (!publicSigninGate) return;
+
+    const handleSessionUpdated = (
+      event: CustomEvent<DenSessionUpdatedDetail>,
+    ) => {
+      if (event.detail?.status === "signed_out") {
+        setPublicSessionVerified(false);
+      } else if (event.detail?.status === "success") {
+        setPublicSessionVerified(true);
+      }
+    };
+
+    window.addEventListener(
+      denSessionUpdatedEvent,
+      handleSessionUpdated as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        denSessionUpdatedEvent,
+        handleSessionUpdated as EventListener,
+      );
+    };
+  }, [publicSigninGate]);
 
   if (!publicSessionVerified) {
     return (

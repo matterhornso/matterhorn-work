@@ -251,6 +251,45 @@ describe("model readiness summary", () => {
     expect(summary.statusLabel).toBe("Connect provider");
   });
 
+  test("does not claim that a managed catalog alone is a working provider", () => {
+    const summary = buildModelReadinessSummary({
+      currentModelLabel: "Big Pickle",
+      currentModelRef: "opencode/big-pickle",
+      backendModels: {
+        ...baseBackendModels,
+        defaultModel: {
+          providerId: "opencode",
+          modelId: "big-pickle",
+          source: "server_default",
+        },
+        catalog: {
+          ...baseBackendModels.catalog,
+          connectedProviderIds: ["opencode"],
+          defaultModels: { opencode: "big-pickle" },
+          providers: [
+            {
+              id: "opencode",
+              name: "OpenCode",
+              source: "config",
+              connected: true,
+              modelCount: 1,
+              modelIds: ["big-pickle"],
+              sampleModels: ["big-pickle"],
+            },
+          ],
+        },
+      },
+      connectedProviderCount: 1,
+      connectedModelCount: 1,
+    });
+
+    expect(summary.statusLabel).toBe("Catalog loaded");
+    expect(summary.statusTone).toBe("neutral");
+    expect(summary.providerCatalog.detail).toContain(
+      "Provider access is verified when a chat starts",
+    );
+  });
+
   test("builds readable backend model catalog rows from the live provider list", () => {
     const catalog = {
       ...baseBackendModels.catalog,

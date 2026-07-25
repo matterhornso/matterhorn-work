@@ -123,9 +123,12 @@ describe("wallet runtime connector contract", () => {
     expect(source).toMatch(
       /const\s*\{\s*connectAsync,\s*connectors\s*\}\s*=\s*useConnect\(\)/,
     );
-    expect(source).toContain("await connectAsync({ connector })");
+    expect(source).toContain("const connectPromise = connectAsync({ connector })");
+    expect(source).toContain("await Promise.race([");
     expect(source).not.toContain("await connect({ connector })");
     expect(source).toContain("function walletConnectionErrorMessage");
+    expect(source).toContain("Wallet connection timed out.");
+    expect(source).toContain("handleCancelConnection");
     expect(source).toContain(
       "is not available in this browser. Install or enable it, then try again.",
     );
@@ -182,6 +185,16 @@ describe("wallet runtime connector contract", () => {
     expect(
       walletConnectionErrorMessage(new Error("Wallet is locked"), coinbase),
     ).toBe("Coinbase Wallet appears to be locked. Unlock it, then try again.");
+    expect(
+      walletConnectionErrorMessage(
+        new Error(
+          "Wallet connection timed out. Close any wallet prompt, then try again.",
+        ),
+        coinbase,
+      ),
+    ).toBe(
+      "Wallet connection timed out. Close any wallet prompt, then try again.",
+    );
     expect(
       walletConnectionErrorMessage(new Error("RPC request failed"), coinbase),
     ).toBe(

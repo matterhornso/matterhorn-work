@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useEffect, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { useUiStateStore } from "./ui-state-store";
 

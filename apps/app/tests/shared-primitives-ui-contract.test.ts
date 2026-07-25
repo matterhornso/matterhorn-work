@@ -152,6 +152,8 @@ describe("Shared primitives UI contract", () => {
     expect(source).toContain("relative isolate");
     expect(source).toContain("bg-dls-canvas");
     expect(source).toContain("ring-1 ring-dls-border/45");
+    expect(source).toContain("Engine configuration ${verb}. Reload to apply.");
+    expect(source).not.toContain("Config '${trimmedName}'");
     expect(source).not.toContain("border border-dls-border bg-dls-surface");
     expect(source).not.toContain("shadow-lg");
   });
@@ -254,14 +256,53 @@ describe("Shared primitives UI contract", () => {
     expect(source).not.toContain(">Enabled</span>");
   });
 
+  test("composer keyboard contract submits Enter while preserving multiline and IME input", () => {
+    const editor = readAppSource(
+      "domains/session/surface/composer/editor.tsx",
+    );
+
+    expect(editor).toContain(
+      "if (event?.isComposing === true || event?.keyCode === 229) return false;",
+    );
+    expect(editor).toContain("if (event?.shiftKey) return false;");
+    expect(editor).toContain("event?.preventDefault();");
+    expect(editor).toContain("void onSubmitRef.current();");
+    expect(editor.indexOf("if (event?.shiftKey) return false;")).toBeLessThan(
+      editor.indexOf("void onSubmitRef.current();"),
+    );
+  });
+
   test("composer hides stale release commands and presents Matterhorn labels", () => {
     const composer = readAppSource(
       "domains/session/surface/composer/composer.tsx",
+    );
+    const sessionSurface = readAppSource(
+      "domains/session/surface/session-surface.tsx",
     );
     const opencodeSession = readAppPackageSource("app/lib/opencode-session.ts");
 
     expect(composer).toContain(
       'serverName === "matterhorn-work" ? "Matterhorn Desks" : serverName',
+    );
+    expect(composer).toContain(
+      'if (entry.name === "matterhorn-work") return "Local Matterhorn Desks engine"',
+    );
+    expect(composer).toContain(
+      'entry.config.type === "remote" ? "Remote server connection" : "Local process connection"',
+    );
+    expect(composer).toContain("props.agentSelectionLocked");
+    expect(composer).toContain("<LockKeyhole");
+    expect(sessionSurface).toContain(
+      "agentSelectionLocked={Boolean(linkedWorkflowRun?.agentId || activeDeskMode)}",
+    );
+    expect(sessionSurface).toContain(
+      'linkedWorkflowRun?.deskId === "blank"',
+    );
+    expect(sessionSurface).toContain(
+      '"This chat keeps the agent selected when it started."',
+    );
+    expect(sessionSurface).toContain(
+      '"This desk uses its specialist agent."',
     );
     expect(opencodeSession).toContain(
       '.filter((command) => command.name !== "release")',
@@ -303,6 +344,13 @@ describe("Shared primitives UI contract", () => {
 
     expect(messageListSource).toContain("async function copyMessageText");
     expect(messageListSource).toContain('document.execCommand("copy")');
+    expect(messageListSource).toContain(
+      "textarea.focus({ preventScroll: true })",
+    );
+    expect(messageListSource).toContain("textarea.select()");
+    expect(messageListSource).toContain(
+      "textarea.setSelectionRange(0, text.length)",
+    );
     expect(messageListSource).toContain(
       'copyState === "failed"',
     );

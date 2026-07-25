@@ -20,11 +20,19 @@ assert.equal(
   "tests-and-release-documentation",
 );
 assert.equal(
+  classifyCandidatePath("evals/README.md"),
+  "tests-and-release-documentation",
+);
+assert.equal(
   classifyCandidatePath("scripts/public-beta-candidate-certifier.mjs"),
   "release-engineering",
 );
 assert.equal(
   classifyCandidatePath("pnpm-lock.yaml"),
+  "release-engineering",
+);
+assert.equal(
+  classifyCandidatePath("pnpm-workspace.yaml"),
   "release-engineering",
 );
 assert.equal(

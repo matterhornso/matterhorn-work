@@ -94,6 +94,17 @@ function providerCatalogDetail(
   if (!catalog)
     return "Using the app provider list until the engine reports a workspace catalog.";
   if (catalog.serverFetched) {
+    const connectedProviders = catalog.providers.filter(
+      (provider) => provider.connected,
+    );
+    const managedCatalogOnly =
+      connectedProviders.length > 0 &&
+      connectedProviders.every(
+        (provider) => provider.id.trim().toLowerCase() === "opencode",
+      );
+    if (managedCatalogOnly) {
+      return "The local engine returned a model catalog. Provider access is verified when a chat starts.";
+    }
     const availableProviderCount = Math.max(
       0,
       catalog.providerCount - catalog.connectedProviderCount,
@@ -113,7 +124,19 @@ function statusForCatalog(
   catalogQueryFailed: boolean | undefined,
 ): { label: string; tone: ModelReadinessTone } {
   if (catalogQueryFailed) return { label: "Start engine", tone: "warning" };
-  if (catalog?.status === "working") return { label: "Working", tone: "ready" };
+  if (catalog?.status === "working") {
+    const connectedProviders = catalog.providers.filter(
+      (provider) => provider.connected,
+    );
+    const managedCatalogOnly =
+      connectedProviders.length > 0 &&
+      connectedProviders.every(
+        (provider) => provider.id.trim().toLowerCase() === "opencode",
+      );
+    return managedCatalogOnly
+      ? { label: "Catalog loaded", tone: "neutral" }
+      : { label: "Working", tone: "ready" };
+  }
   if (catalog?.status === "needs_setup")
     return { label: "Connect provider", tone: "warning" };
   if (catalog?.status === "preview")

@@ -20,6 +20,10 @@ describe("Settings general hub project surfaces", () => {
     expect(source).toContain("Workspace needed");
     expect(source).toContain('requiresWorkspace={card.section !== "feedback"}');
     expect(source).toContain("workspaceReady={Boolean(props.runtimeWorkspaceId)}");
+    expect(source).toContain("workspaceResolutionPending={props.workspaceResolutionPending}");
+    expect(source).toContain("!props.workspaceResolutionPending");
+    expect(source).toContain("disabled={waitingForWorkspace}");
+    expect(source).toContain("aria-busy={waitingForWorkspace || undefined}");
     expect(source).toContain("props.onOpenMemoryReview");
     expect(source).toContain("props.onOpenNotes");
     expect(source).toContain("props.onOpenOutputs");
@@ -108,6 +112,7 @@ describe("Settings general hub project surfaces", () => {
     expect(source).toContain('onOpenNotes={() => openWorkspaceSurfacePanel("notes")}');
     expect(source).toContain("onOpenOutputs={openWorkspaceOutputs}");
     expect(source).toContain("onSendFeedback={() => setFeedbackDialogOpen(true)}");
+    expect(source).toContain("workspaceResolutionPending={loading}");
   });
 
   test("authorized folders shows runtime truth instead of a disabled web action", () => {

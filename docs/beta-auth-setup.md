@@ -10,9 +10,12 @@ Matterhorn Desks uses a **Matterhorn Cloud account** (Den) for identity, sync, a
 
 ## Supported flows
 
-- **Sign up** — creates a Matterhorn Cloud account in the browser.
+- **Sign up** — any user creates a Matterhorn Cloud account with their own email. No invite, allowlist, or pre-created test email is required.
+- **Email verification** — the identity service sends the verification message and returns the verified user to `/onboarding`.
+- **First workspace** — Matterhorn automatically creates and activates a private personal workspace when the account has no organization.
 - **Sign in** — connects an existing Matterhorn Cloud account.
-- **Sign out** — clears the local session. Local/offline workspaces remain available.
+- **Return session** — a returning user resumes the active workspace; a sole existing workspace is selected automatically.
+- **Sign out** — clears the Cloud session. Local/offline desktop workspaces remain available.
 - **Profile menu** — shows account name/email, cloud account link, switch account, sign out.
 
 ## Environment variables
@@ -79,11 +82,18 @@ The deployment proxy, not browser code, owns upstream credentials and must
 authorize the signed-in user for the selected workspace.
 
 Public web uses a secure HttpOnly Matterhorn Cloud session cookie. Cloud must
-allowlist the exact `https://<app-host>/session` return target, and a separate
+allowlist the exact `https://<app-host>/onboarding` return target, and a separate
 Cloud API must use credentialed CORS for that exact app origin. The browser
 must not receive, persist, or paste a Cloud bearer token or desktop handoff
 grant. A request's selected organization or workspace is only a selector; the
 proxy must authorize that user-to-project relationship server-side.
+
+The production identity service must enable self-service email/password account
+creation, require email verification, configure a verified transactional-email
+sender, and serve the organization plugin endpoint used to create each user's
+first personal workspace. Release acceptance uses ordinary user-owned email
+addresses; the product must not depend on an owner-maintained list of test
+emails.
 
 ## Architecture
 
@@ -122,6 +132,13 @@ To replace Den with Clerk:
 - `CLERK_SECRET_KEY` must never appear in client code, fixtures, or committed env files.
 
 ## Verification
+
+Automated checks verify callback routing, cookie-backed session checks,
+personal-workspace naming, organization creation, malformed-response fail
+closure, and active-workspace routing. Deployment acceptance must additionally
+complete one real new-user signup, verification-email delivery, sign-out,
+returning-user sign-in, and password recovery against the deployed identity
+service.
 
 ```bash
 pnpm --filter @matterhorn-work/app typecheck

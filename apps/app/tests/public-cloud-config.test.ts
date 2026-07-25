@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import {
+  buildPublicCloudAuthUrl,
   checkPublicCloudSession,
   type PublicCloudConfig,
 } from "../src/app/lib/public-cloud-config";
@@ -18,6 +19,32 @@ afterEach(() => {
 });
 
 describe("public Cloud session bootstrap", () => {
+  test("returns account creation and sign-in to first-run onboarding", () => {
+    const signUp = new URL(
+      buildPublicCloudAuthUrl(
+        config,
+        "sign-up",
+        "https://desks.matterhorn.test",
+      ),
+    );
+    const signIn = new URL(
+      buildPublicCloudAuthUrl(
+        config,
+        "sign-in",
+        "https://desks.matterhorn.test",
+      ),
+    );
+
+    expect(signUp.searchParams.get("mode")).toBe("sign-up");
+    expect(signUp.searchParams.get("returnTo")).toBe(
+      "https://desks.matterhorn.test/onboarding",
+    );
+    expect(signIn.searchParams.get("mode")).toBe("sign-in");
+    expect(signIn.searchParams.get("returnTo")).toBe(
+      "https://desks.matterhorn.test/onboarding",
+    );
+  });
+
   test("accepts only a valid cookie-backed user response", async () => {
     let request: { input: string; init?: RequestInit } | null = null;
     globalThis.fetch = (async (input, init) => {

@@ -47,10 +47,11 @@ export function readPublicCloudConfig(): PublicCloudConfig {
 export function buildPublicCloudAuthUrl(
   config: PublicCloudConfig,
   mode: "sign-in" | "sign-up",
+  appOrigin = window.location.origin,
 ): string {
   const target = new URL(config.baseUrl);
   target.searchParams.set("mode", mode);
-  target.searchParams.set("returnTo", `${window.location.origin}/session`);
+  target.searchParams.set("returnTo", new URL("/onboarding", appOrigin).toString());
   return target.toString();
 }
 

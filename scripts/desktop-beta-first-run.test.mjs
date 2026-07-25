@@ -45,6 +45,7 @@ for (const phrase of [
   "--markdown-output",
   "/api/crypto/readiness",
   "Bearer",
+  "Protected endpoint requires a client token.",
   "testerArtifactCommand",
   "customerBoundary",
   "Bittensor",

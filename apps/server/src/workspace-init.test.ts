@@ -38,9 +38,12 @@ describe("ensureWorkspaceFiles", () => {
       expect(agent.toLowerCase()).not.toContain("openwork");
       expect(bittensorAgent.toLowerCase()).not.toContain("openwork");
       expect(bittensorAgent).toContain("Bittensor Agent");
-      expect(bittensorAgent).toContain("matterhorn_desk_agent: v1");
+      expect(bittensorAgent).toContain("matterhorn_desk_agent: v2");
       expect(bittensorAgent).toContain("matterhorn_desk_id: bittensor");
       expect(bittensorAgent).toContain("agent_id: matterhorn-bittensor");
+      expect(bittensorAgent).toContain("## Enforced Matterhorn Desk Contract");
+      expect(bittensorAgent).toContain("Runtime tools are deny-by-default");
+      expect(bittensorAgent).toContain("The agent may never sign, submit, broadcast, or auto-execute");
       expect(bittensorAgent).toContain("public SS58/coldkey/hotkey context only");
       expect(bittensorAgent).toContain("websearch: deny");
       expect(bittensorAgent).toContain('"*": false');
@@ -54,7 +57,9 @@ describe("ensureWorkspaceFiles", () => {
       expect(hyperliquidAgent).toContain("Never claim an Agent prompt placed an order");
       expect(hyperliquidAgent).toContain("websearch: deny");
       expect(hyperliquidAgent).toContain('"matterhorn-work_matterhorn_hyperliquid_list_markets": true');
+      expect(hyperliquidAgent).toContain('"matterhorn-work_matterhorn_hyperliquid_preview_order": true');
       expect(hyperliquidAgent).toContain("single most specific Hyperliquid desk tool");
+      expect(hyperliquidAgent).toContain("The user opens the separate trade ticket");
       expect(polymarketAgent).toContain("Polymarket Agent");
       expect(polymarketAgent).toContain("compliance-gated handoff");
       expect(polymarketAgent).toContain("websearch: deny");
@@ -69,6 +74,8 @@ describe("ensureWorkspaceFiles", () => {
       expect(suiAgent).toContain("outputs/sui/<session-slug>");
       expect(longevityAgent).toContain("Longevity Agent");
       expect(longevityAgent).toContain("7-stage workflow");
+      expect(longevityAgent).toContain('"*": false');
+      expect(longevityAgent).toContain('"matterhorn-work_matterhorn_write_files": true');
       expect(outputsDir.isDirectory()).toBe(true);
       expect(config).toContain('"default_agent": "matterhorn"');
       expect(result.reloadReasons.sort()).toEqual(["agents", "config"]);

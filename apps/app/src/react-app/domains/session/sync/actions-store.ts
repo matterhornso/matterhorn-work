@@ -50,16 +50,16 @@ type SessionActionsSnapshot = {
 
 const FLUSH_PROMPT_EVENT = "matterhorn:flushPromptDraft";
 
-const fileToDataUrl = (file: File) =>
-  new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error(`Failed to read attachment: ${file.name}`));
-    reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : "";
-      resolve(result);
-    };
-    reader.readAsDataURL(file);
-  });
+const fileToDataUrl = async (file: File) => {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  const mime = file.type || "application/octet-stream";
+  return `data:${mime};base64,${btoa(binary)}`;
+};
 
 export function createSessionActionsStore(options: {
   client: () => Client | null;

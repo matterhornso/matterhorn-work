@@ -59,16 +59,18 @@ describe("customer workflow template launch cards", () => {
     expect(hyperliquid?.prompt).toContain("never claim Matterhorn placed it");
     expect(hyperliquid?.prompt).toContain("Finish any real order in your own reviewed Hyperliquid client");
     expect(hyperliquid?.prompt).toContain("Never request keys, signatures, or API secrets");
-    expect(hyperliquid?.statusLabel).toBe("Read and preview");
+    expect(hyperliquid?.statusLabel).toBe("Review & submit");
     expect(hyperliquid?.description).not.toContain("place orders");
+    expect(hyperliquid?.safetySummary).toContain("trade ticket");
+    expect(hyperliquid?.safetySummary).toContain("wallet approval");
 
     const hyperliquidTemplate = FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES.find((template) => template.id === "hyperliquid_trader");
     expect(hyperliquidTemplate?.safetyBoundaries).toMatchObject({
-      canSubmit: false,
-      liveExecutionEnabled: false,
-      canExecute: false,
-      requiresExternalSigner: true,
-      allowsRealFunds: false,
+      canSubmit: true,
+      liveExecutionEnabled: true,
+      canExecute: true,
+      requiresExternalSigner: false,
+      allowsRealFunds: true,
     });
 
     expect(polymarket?.prompt).toContain("Can submit: No");
@@ -80,7 +82,7 @@ describe("customer workflow template launch cards", () => {
     expect(sui?.prompt).toContain("wallet-standard account reads");
     expect(sui?.prompt).toContain("Do not ask for seed phrases");
     expect(sui?.prompt).toContain("raw signatures");
-    expect(sui?.safetySummary).toContain("Use your Sui wallet");
+    expect(sui?.safetySummary).toContain("connected Sui wallet");
     expect(sui?.safetySummary).toContain("public receipts only");
   });
 

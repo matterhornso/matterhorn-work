@@ -128,9 +128,9 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain(
       '<ArrowRight className="size-3.5" aria-hidden="true" />',
     );
-    expect(source).toContain("Export memory bundle");
+    expect(source).toContain("Create memory export");
     expect(source).toContain(
-      '<Download className="size-3.5" aria-hidden="true" />',
+      '<Archive className="size-3.5" aria-hidden="true" />',
     );
   });
 

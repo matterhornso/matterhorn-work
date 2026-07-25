@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   type KeyboardEvent,
 } from "react";
 import {
@@ -113,6 +114,9 @@ const WALLET_CONNECTOR_ACTION_CLASS =
   "rounded-md border-0 bg-dls-surface-raised text-dls-text shadow-none transition-colors hover:bg-dls-surface-muted/55 focus-visible:ring-[rgb(var(--matterhorn-blue-rgb)/0.32)]";
 const WALLET_DISCLOSURE_SUMMARY_FOCUS_CLASS =
   "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--matterhorn-blue-rgb)/0.45)] focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+const WALLET_CONNECTION_TIMEOUT_MS = 30_000;
+const WALLET_CONNECTION_TIMEOUT_MESSAGE =
+  "Wallet connection timed out. Close any wallet prompt, then try again.";
 
 export function handleWalletDisclosureSummaryKeyDown(
   event: KeyboardEvent<HTMLElement>,
@@ -1357,7 +1361,13 @@ function WalletSafetyPolicyControls(props: {
                     ? "bg-dls-surface-muted/45 text-dls-text"
                     : "text-dls-secondary hover:bg-dls-surface-muted/[0.16] hover:text-dls-text",
                 )}
-                onClick={() => updateForm("preferredNetwork", value)}
+                onClick={() => {
+                  if (value === "8453" && !form.mainnetEnabled) {
+                    setMainnetConfirmOpen(true);
+                    return;
+                  }
+                  updateForm("preferredNetwork", value);
+                }}
               >
                 {label}
               </button>
@@ -1429,6 +1439,7 @@ function WalletSafetyPolicyControls(props: {
         confirmationPhrase="ENABLE MAINNET"
         onConfirm={() => {
           updateForm("mainnetEnabled", true);
+          updateForm("preferredNetwork", "8453");
           setMainnetConfirmOpen(false);
         }}
         onCancel={() => setMainnetConfirmOpen(false)}
@@ -1849,6 +1860,10 @@ export function walletConnectionErrorMessage(
     return "Wallet connection was cancelled.";
   }
 
+  if (/wallet connection timed out/i.test(facts)) {
+    return WALLET_CONNECTION_TIMEOUT_MESSAGE;
+  }
+
   const missingProvider =
     /providernotfounderror|connectornotfounderror|(?:provider|connector|extension).{0,48}(?:not found|not available|unavailable|missing|undefined|null|not installed|disabled)|(?:no|missing).{0,16}(?:provider|connector|extension)/i.test(
       facts,
@@ -1920,6 +1935,7 @@ export function WalletSettingsView({
   const [connectingConnectorId, setConnectingConnectorId] = useState<
     string | null
   >(null);
+  const connectionAttemptRef = useRef(0);
   const [refreshing, setRefreshing] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -1967,27 +1983,66 @@ export function WalletSettingsView({
 
   const handleConnect = useCallback(
     async (connectorId: string) => {
+      const attemptId = connectionAttemptRef.current + 1;
+      connectionAttemptRef.current = attemptId;
       setError(null);
       setConnectingConnectorId(connectorId);
       const connector = connectors.find(
         (candidate) => candidate.id === connectorId,
       );
+      let timeoutId: number | undefined;
       try {
         store.setConnecting(true);
         if (!connector) throw new Error("Connector not found");
-        await connectAsync({ connector });
+        const connectPromise = connectAsync({ connector });
+        void connectPromise
+          .then(() => {
+            if (connectionAttemptRef.current !== attemptId) {
+              disconnect();
+            }
+          })
+          .catch(() => undefined);
+        await Promise.race([
+          connectPromise,
+          new Promise<never>((_resolve, reject) => {
+            timeoutId = window.setTimeout(
+              () => reject(new Error(WALLET_CONNECTION_TIMEOUT_MESSAGE)),
+              WALLET_CONNECTION_TIMEOUT_MS,
+            );
+          }),
+        ]);
+        if (connectionAttemptRef.current !== attemptId) {
+          disconnect();
+          return;
+        }
         syncStore();
       } catch (e) {
+        if (connectionAttemptRef.current !== attemptId) return;
         const msg = walletConnectionErrorMessage(e, connector ?? null);
         setError(msg);
         store.setError(msg);
+        if (msg === WALLET_CONNECTION_TIMEOUT_MESSAGE) {
+          connectionAttemptRef.current += 1;
+          store.setConnecting(false);
+          setConnectingConnectorId(null);
+        }
       } finally {
-        store.setConnecting(false);
-        setConnectingConnectorId(null);
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+        if (connectionAttemptRef.current === attemptId) {
+          store.setConnecting(false);
+          setConnectingConnectorId(null);
+        }
       }
     },
-    [connectAsync, connectors, store, syncStore],
+    [connectAsync, connectors, disconnect, store, syncStore],
   );
+
+  const handleCancelConnection = useCallback(() => {
+    connectionAttemptRef.current += 1;
+    store.setConnecting(false);
+    setConnectingConnectorId(null);
+    setError("Wallet connection was cancelled.");
+  }, [store]);
 
   const handleDisconnect = useCallback(async () => {
     try {
@@ -2175,17 +2230,30 @@ export function WalletSettingsView({
               {state.isConnecting && connectingConnectorId ? (
                 <div
                   role="status"
-                  className="flex items-center gap-2 px-2 py-1.5 text-xs text-dls-secondary"
+                  className="flex items-center justify-between gap-3 px-2 py-1.5 text-xs text-dls-secondary"
                 >
-                  <RefreshCw
-                    className="size-3 animate-spin"
-                    aria-hidden="true"
-                  />
-                  Continue in{" "}
-                  {connectors.find(
-                    (connector) => connector.id === connectingConnectorId,
-                  )?.name ?? "your wallet"}
-                  .
+                  <span className="flex min-w-0 items-center gap-2">
+                    <RefreshCw
+                      className="size-3 shrink-0 animate-spin"
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">
+                      Continue in{" "}
+                      {connectors.find(
+                        (connector) => connector.id === connectingConnectorId,
+                      )?.name ?? "your wallet"}
+                      .
+                    </span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0 px-2 text-xs"
+                    onClick={handleCancelConnection}
+                  >
+                    Cancel
+                  </Button>
                 </div>
               ) : null}
               {connectors.length > 0 ? (
@@ -2289,14 +2357,30 @@ export function WalletSettingsView({
             {!error && state.isConnecting && connectingConnectorId ? (
               <div
                 role="status"
-                className="flex items-center gap-2 rounded-md bg-dls-surface-muted/[0.14] px-3 py-2 text-xs text-dls-secondary"
+                className="flex items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.14] px-3 py-2 text-xs text-dls-secondary"
               >
-                <RefreshCw className="size-3 animate-spin" aria-hidden="true" />
-                Continue in{" "}
-                {connectors.find(
-                  (connector) => connector.id === connectingConnectorId,
-                )?.name ?? "your wallet"}
-                .
+                <span className="flex min-w-0 items-center gap-2">
+                  <RefreshCw
+                    className="size-3 shrink-0 animate-spin"
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">
+                    Continue in{" "}
+                    {connectors.find(
+                      (connector) => connector.id === connectingConnectorId,
+                    )?.name ?? "your wallet"}
+                    .
+                  </span>
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 shrink-0 px-2 text-xs"
+                  onClick={handleCancelConnection}
+                >
+                  Cancel
+                </Button>
               </div>
             ) : null}
 

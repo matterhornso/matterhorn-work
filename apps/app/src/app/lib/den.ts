@@ -569,7 +569,7 @@ export function buildDenAuthUrl(baseUrl: string, mode: "sign-in" | "sign-up"): s
   ) {
     // Cloud owns the browser session. The public app only gives it a
     // same-origin return target; it never receives or stores a bearer token.
-    target.searchParams.set("returnTo", `${window.location.origin}/session`);
+    target.searchParams.set("returnTo", `${window.location.origin}/onboarding`);
   }
   if (isDesktopDeployment()) {
     target.searchParams.set("desktopAuth", "1");
@@ -916,6 +916,31 @@ function getOrgList(payload: unknown): DenOrgSummary[] {
       } satisfies DenOrgSummary,
     ];
   });
+}
+
+function getCreatedOrganization(payload: unknown): DenOrgSummary | null {
+  const candidate =
+    isRecord(payload) && isRecord(payload.organization)
+      ? payload.organization
+      : payload;
+  if (
+    !isRecord(candidate) ||
+    typeof candidate.id !== "string" ||
+    typeof candidate.name !== "string" ||
+    typeof candidate.slug !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: candidate.id,
+    name: candidate.name,
+    slug: candidate.slug,
+    role:
+      candidate.role === "admin" || candidate.role === "member"
+        ? candidate.role
+        : "owner",
+  };
 }
 
 function getWorkers(payload: unknown): DenWorkerSummary[] {
@@ -1705,6 +1730,31 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
       await ensureActiveOrganization(baseUrls, token, input);
     },
 
+    async createOrganization(input: { name: string; slug: string }): Promise<DenOrgSummary> {
+      const payload = await requestJson<unknown>(
+        baseUrls,
+        "/api/auth/organization/create",
+        {
+          method: "POST",
+          token,
+          body: {
+            name: input.name.trim(),
+            slug: input.slug.trim(),
+            keepCurrentActiveOrganization: false,
+          },
+        },
+      );
+      const organization = getCreatedOrganization(payload);
+      if (!organization) {
+        throw new DenApiError(
+          500,
+          "invalid_organization_payload",
+          "Workspace setup returned an invalid organization.",
+        );
+      }
+      return organization;
+    },
+
     async signInEmail(email: string, password: string): Promise<DenAuthResult> {
       const payload = await requestJson<unknown>(baseUrls, "/api/auth/sign-in/email", {
         method: "POST",
@@ -1729,7 +1779,7 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
     },
 
     async signOut() {
-      await requestJsonRaw(baseUrls, "/api/auth/sign-out", {
+      await requestJson<unknown>(baseUrls, "/api/auth/sign-out", {
         method: "POST",
         token,
         body: {},
