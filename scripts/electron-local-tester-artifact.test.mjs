@@ -24,8 +24,8 @@ for (const expected of [
   "--dist-dir",
   "--output-dir",
   "--skip-build",
-  "Matterhorn-Work-${sha}-arm64-unsigned.dmg",
-  "Matterhorn-Work-${sha}-arm64-unsigned.zip",
+  "Matterhorn-Desks-${sha}-arm64-unsigned.dmg",
+  "Matterhorn-Desks-${sha}-arm64-unsigned.zip",
   "SHA256SUMS.txt",
   "matterhorn-electron-local-tester-artifact.json",
   "gitWorktreeState",
@@ -81,7 +81,7 @@ assert.equal(manifest.safety.privateKeysAccepted, false);
 assert.equal(manifest.safety.apiSecretsAccepted, false);
 assert.equal(manifest.safety.signingMaterialAccepted, false);
 assert.equal(manifest.artifacts.length, 4);
-assert.match(readFileSync(join(outputDir, "SHA256SUMS.txt"), "utf8"), /Matterhorn-Work-.*-arm64-unsigned\.dmg/);
+assert.match(readFileSync(join(outputDir, "SHA256SUMS.txt"), "utf8"), /Matterhorn-Desks-.*-arm64-unsigned\.dmg/);
 assert.match(
   readFileSync(join(outputDir, "matterhorn-electron-local-tester-artifact.json"), "utf8"),
   /matterhorn\.electron\.local-tester-artifact\.v1/,

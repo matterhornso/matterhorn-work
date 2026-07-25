@@ -74,7 +74,7 @@ function assertSafeOutputDir(outputDir) {
 
 const args = parseArgs(process.argv.slice(2));
 const sha = gitSha();
-const outputDir = resolve(args.outputDir || join(process.env.HOME || "/tmp", "Desktop", `matterhorn-work-build-${sha}`));
+const outputDir = resolve(args.outputDir || join(process.env.HOME || "/tmp", "Desktop", `matterhorn-desks-build-${sha}`));
 const defaultDistDir = resolve("apps/desktop/dist-electron");
 const distDir = resolve(args.distDir || defaultDistDir);
 
@@ -120,9 +120,9 @@ const copied = [];
 for (const name of artifactNames.sort()) {
   const source = join(distDir, name);
   const targetName = name === dmg
-    ? `Matterhorn-Work-${sha}-arm64-unsigned.dmg`
+    ? `Matterhorn-Desks-${sha}-arm64-unsigned.dmg`
     : name === zip
-      ? `Matterhorn-Work-${sha}-arm64-unsigned.zip`
+      ? `Matterhorn-Desks-${sha}-arm64-unsigned.zip`
       : name;
   const target = join(outputDir, targetName);
   await copyFile(source, target);

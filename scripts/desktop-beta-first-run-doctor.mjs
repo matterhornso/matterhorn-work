@@ -57,7 +57,7 @@ function printHelp() {
     "",
     "Usage:",
     "  pnpm desktop:release-doctor -- --json",
-    "  pnpm desktop:release-doctor -- --artifact-dir ~/Desktop/matterhorn-work-build-<sha> --strict --json",
+    "  pnpm desktop:release-doctor -- --artifact-dir ~/Desktop/matterhorn-desks-build-<sha> --strict --json",
     "  pnpm desktop:release-doctor -- --server-url http://127.0.0.1:<port> --token <client-token> --json",
     "",
     "The doctor is read-only. It never asks for keys, secrets, signatures, signed payloads, wallet exports, or funds.",
@@ -275,7 +275,7 @@ const report = {
   checks,
   copyDiagnostics: {
     installGuide: "docs/production-launch-configuration.md",
-    testerArtifactCommand: "pnpm electron:tester-artifact -- --output-dir ~/Desktop/matterhorn-work-build-$(git rev-parse --short=8 HEAD) --json",
+    testerArtifactCommand: "pnpm electron:tester-artifact -- --output-dir ~/Desktop/matterhorn-desks-build-$(git rev-parse --short=8 HEAD) --json",
     doctorCommand: "pnpm desktop:release-doctor -- --artifact-dir <tester-build-dir> --strict --json",
     logLocations: [
       "~/Library/Logs/Matterhorn/",

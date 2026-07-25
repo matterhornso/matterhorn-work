@@ -160,11 +160,11 @@ rmSync(fixtureDir, { recursive: true, force: true });
 mkdirSync(fixtureDir, { recursive: true });
 const dmgText = "fixture dmg\n";
 const zipText = "fixture zip\n";
-const dmgPath = join(fixtureDir, "Matterhorn-Work-test-arm64-unsigned.dmg");
-const zipPath = join(fixtureDir, "Matterhorn-Work-test-arm64-unsigned.zip");
+const dmgPath = join(fixtureDir, "Matterhorn-Desks-test-arm64-unsigned.dmg");
+const zipPath = join(fixtureDir, "Matterhorn-Desks-test-arm64-unsigned.zip");
 writeFileSync(dmgPath, dmgText);
 writeFileSync(zipPath, zipText);
-writeFileSync(join(fixtureDir, "SHA256SUMS.txt"), `${sha256(dmgText)}  Matterhorn-Work-test-arm64-unsigned.dmg\n${sha256(zipText)}  Matterhorn-Work-test-arm64-unsigned.zip\n`);
+writeFileSync(join(fixtureDir, "SHA256SUMS.txt"), `${sha256(dmgText)}  Matterhorn-Desks-test-arm64-unsigned.dmg\n${sha256(zipText)}  Matterhorn-Desks-test-arm64-unsigned.zip\n`);
 writeFileSync(join(fixtureDir, "matterhorn-electron-local-tester-artifact.json"), `${JSON.stringify({
   kind: "matterhorn.electron.local-tester-artifact.v1",
   gitSha: "test",
@@ -172,8 +172,8 @@ writeFileSync(join(fixtureDir, "matterhorn-electron-local-tester-artifact.json")
   notarized: false,
   publishEnabled: false,
   artifacts: [
-    { file: dmgPath, name: "Matterhorn-Work-test-arm64-unsigned.dmg", sha256: sha256(dmgText) },
-    { file: zipPath, name: "Matterhorn-Work-test-arm64-unsigned.zip", sha256: sha256(zipText) },
+    { file: dmgPath, name: "Matterhorn-Desks-test-arm64-unsigned.dmg", sha256: sha256(dmgText) },
+    { file: zipPath, name: "Matterhorn-Desks-test-arm64-unsigned.zip", sha256: sha256(zipText) },
   ],
   safety: {
     privateKeysAccepted: false,

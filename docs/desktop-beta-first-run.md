@@ -15,14 +15,14 @@ From a clean `dev` checkout:
 ```bash
 pnpm install --frozen-lockfile
 pnpm electron:tester-artifact -- \
-  --output-dir "$HOME/Desktop/matterhorn-work-build-$(git rev-parse --short=8 HEAD)" \
+  --output-dir "$HOME/Desktop/matterhorn-desks-build-$(git rev-parse --short=8 HEAD)" \
   --json
 ```
 
 Expected files:
 
-- `Matterhorn-Work-<sha>-arm64-unsigned.dmg`
-- `Matterhorn-Work-<sha>-arm64-unsigned.zip`
+- `Matterhorn-Desks-<sha>-arm64-unsigned.dmg`
+- `Matterhorn-Desks-<sha>-arm64-unsigned.zip`
 - `matterhorn-electron-local-tester-artifact.json`
 - `SHA256SUMS.txt`
 
@@ -38,9 +38,9 @@ The manifest must say:
 ## 2. Verify The Artifact
 
 ```bash
-BUILD_DIR="$HOME/Desktop/matterhorn-work-build-$(git rev-parse --short=8 HEAD)"
-hdiutil verify "$BUILD_DIR/Matterhorn-Work-$(git rev-parse --short=8 HEAD)-arm64-unsigned.dmg"
-unzip -t "$BUILD_DIR/Matterhorn-Work-$(git rev-parse --short=8 HEAD)-arm64-unsigned.zip"
+BUILD_DIR="$HOME/Desktop/matterhorn-desks-build-$(git rev-parse --short=8 HEAD)"
+hdiutil verify "$BUILD_DIR/Matterhorn-Desks-$(git rev-parse --short=8 HEAD)-arm64-unsigned.dmg"
+unzip -t "$BUILD_DIR/Matterhorn-Desks-$(git rev-parse --short=8 HEAD)-arm64-unsigned.zip"
 pnpm desktop:release-doctor -- --artifact-dir "$BUILD_DIR" --strict --json
 ```
 
@@ -115,7 +115,7 @@ Because local tester artifacts are unsigned and not notarized, macOS Gatekeeper
 may block first launch.
 
 1. Open the DMG.
-2. Drag `Matterhorn.app` into `/Applications` or a temporary testing folder.
+2. Drag `Matterhorn Desks.app` into `/Applications` or a temporary testing folder.
 3. Try opening the app once.
 4. If macOS blocks it, open **System Settings > Privacy & Security** and allow
    the app you just attempted to open.
