@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 
 function read(path) {
@@ -44,6 +44,10 @@ for (const phrase of [
   "--server-url",
   "--markdown-output",
   "/api/crypto/readiness",
+  "content-type",
+  "isMatterhornHealth",
+  "isUnauthorizedReadiness",
+  "isMatterhornReadiness",
   "Bearer",
   "Protected endpoint requires a client token.",
   "testerArtifactCommand",
@@ -201,6 +205,102 @@ assert.equal(report.copyDiagnostics.customerBoundary.bittensor, "Bittensor: publ
 assert.ok(report.checks.some((check) => check.id === "artifact.dir" && check.status === "pass"));
 assert.ok(report.checks.some((check) => check.id === "server.health" && check.status === "skip"));
 assert.equal(/privateKey|apiSecret|rawSignature|signedPayload/.test(result.stdout), false);
+
+const fixtureServerPath = join(fixtureDir, "server.mjs");
+writeFileSync(fixtureServerPath, `
+import { createServer } from "node:http";
+
+const mode = process.argv[2];
+const server = createServer((request, response) => {
+  if (mode === "spa") {
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end("<!doctype html><title>Matterhorn Desks</title>");
+    return;
+  }
+
+  if (request.url === "/health") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ok: true, version: "test" }));
+    return;
+  }
+
+  if (request.url === "/api/crypto/readiness") {
+    response.writeHead(401, { "content-type": "application/json" });
+    response.end(JSON.stringify({ code: "unauthorized", message: "Invalid bearer token" }));
+    return;
+  }
+
+  response.writeHead(404, { "content-type": "application/json" });
+  response.end(JSON.stringify({ code: "not_found" }));
+});
+
+server.listen(0, "127.0.0.1", () => {
+  process.stdout.write(String(server.address().port) + "\\n");
+});
+`);
+
+async function startFixtureServer(mode) {
+  const child = spawn(process.execPath, [fixtureServerPath, mode], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+
+  const port = await new Promise((resolvePort, reject) => {
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`Timed out starting ${mode} fixture server: ${stderr}`));
+    }, 5_000);
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+      const firstLine = stdout.split(/\r?\n/)[0];
+      if (/^\d+$/.test(firstLine)) {
+        clearTimeout(timer);
+        resolvePort(Number(firstLine));
+      }
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      reject(new Error(`${mode} fixture server exited early with ${code}: ${stderr}`));
+    });
+  });
+
+  return { child, port };
+}
+
+const healthyFixture = await startFixtureServer("healthy");
+const healthyResult = spawnSync("node", [
+  "scripts/desktop-beta-first-run-doctor.mjs",
+  "--server-url",
+  `http://127.0.0.1:${healthyFixture.port}`,
+  "--strict",
+  "--json",
+], { encoding: "utf8" });
+healthyFixture.child.kill();
+assert.equal(healthyResult.status, 0, healthyResult.stderr);
+const healthyReport = JSON.parse(healthyResult.stdout);
+assert.ok(healthyReport.checks.some((item) => item.id === "server.health" && item.status === "pass"));
+assert.ok(healthyReport.checks.some((item) => item.id === "crypto.readiness" && item.status === "pass"));
+
+const spaFixture = await startFixtureServer("spa");
+const spaResult = spawnSync("node", [
+  "scripts/desktop-beta-first-run-doctor.mjs",
+  "--server-url",
+  `http://127.0.0.1:${spaFixture.port}`,
+  "--strict",
+  "--json",
+], { encoding: "utf8" });
+spaFixture.child.kill();
+assert.equal(spaResult.status, 1, "SPA HTML fallbacks must not pass API release checks");
+const spaReport = JSON.parse(spaResult.stdout);
+assert.ok(spaReport.checks.some((item) => item.id === "server.health" && item.status === "fail"));
+assert.ok(spaReport.checks.some((item) => item.id === "crypto.readiness" && item.status === "fail"));
 
 rmSync(fixtureDir, { recursive: true, force: true });
 

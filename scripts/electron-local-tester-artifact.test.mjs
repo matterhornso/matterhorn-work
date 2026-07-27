@@ -24,12 +24,15 @@ for (const expected of [
   "--dist-dir",
   "--output-dir",
   "--skip-build",
+  "--help",
   "Matterhorn-Desks-${sha}-arm64-unsigned.dmg",
   "Matterhorn-Desks-${sha}-arm64-unsigned.zip",
   "SHA256SUMS.txt",
   "matterhorn-electron-local-tester-artifact.json",
   "gitWorktreeState",
   "changedPathCount",
+  "preserveOnlyPathCount",
+  "preserveOnly",
   "privateKeysAccepted: false",
   "apiSecretsAccepted: false",
   "signingMaterialAccepted: false",
@@ -47,6 +50,14 @@ for (const forbidden of [
 ]) {
   assert.equal(script.includes(forbidden), false, `tester artifact helper must not include ${forbidden}`);
 }
+
+const helpResult = spawnSync("node", [
+  "scripts/electron-local-tester-artifact.mjs",
+  "--help",
+], { encoding: "utf8" });
+assert.equal(helpResult.status, 0, helpResult.stderr);
+assert.match(helpResult.stdout, /Matterhorn Desks unsigned macOS tester artifact helper/);
+assert.match(helpResult.stdout, /--output-dir/);
 
 const fixtureRoot = mkdtempSync(join(os.tmpdir(), "matterhorn-electron-local-tester-artifact-test-"));
 const distDir = join(fixtureRoot, "dist-electron");
@@ -77,6 +88,8 @@ assert.equal(manifest.publishEnabled, false);
 assert.equal(typeof manifest.source.gitSha, "string");
 assert.equal(typeof manifest.source.dirty, "boolean");
 assert.equal(typeof manifest.source.changedPathCount, "number");
+assert.equal(typeof manifest.source.preserveOnlyPathCount, "number");
+assert.equal(typeof manifest.source.preserveOnly, "boolean");
 assert.equal(manifest.safety.privateKeysAccepted, false);
 assert.equal(manifest.safety.apiSecretsAccepted, false);
 assert.equal(manifest.safety.signingMaterialAccepted, false);

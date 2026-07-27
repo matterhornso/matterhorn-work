@@ -137,13 +137,55 @@ async function fetchJson(url, token = "") {
   const headers = token ? { authorization: `Bearer ${token}` } : undefined;
   const response = await fetch(url, { headers });
   const text = await response.text();
+  const contentType = response.headers.get("content-type") || "";
   let body = null;
+  let parsedJson = false;
   try {
     body = text ? JSON.parse(text) : null;
+    parsedJson = true;
   } catch {
     body = { raw: text.slice(0, 300) };
   }
-  return { ok: response.ok, status: response.status, body };
+  return {
+    ok: response.ok,
+    status: response.status,
+    body,
+    isJson: parsedJson && /\bapplication\/json\b/i.test(contentType),
+    contentType,
+  };
+}
+
+function isObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isMatterhornHealth(result) {
+  return result.ok
+    && result.isJson
+    && isObject(result.body)
+    && result.body.ok === true
+    && typeof result.body.version === "string"
+    && result.body.version.trim().length > 0;
+}
+
+function isUnauthorizedReadiness(result) {
+  return result.status === 401
+    && result.isJson
+    && isObject(result.body)
+    && result.body.code === "unauthorized"
+    && typeof result.body.message === "string";
+}
+
+function isMatterhornReadiness(result) {
+  return result.ok
+    && result.isJson
+    && isObject(result.body)
+    && result.body.success === true
+    && isObject(result.body.report)
+    && typeof result.body.report.ready === "boolean"
+    && Array.isArray(result.body.report.checks)
+    && isObject(result.body.report.safety)
+    && result.body.report.safety.nonCustodial === true;
 }
 
 async function liveServerChecks(config) {
@@ -162,20 +204,34 @@ async function liveServerChecks(config) {
   const checks = [];
   try {
     const health = await fetchJson(`${baseUrl}/health`);
-    checks.push(check("server.health", "Local server health", health.ok ? "pass" : "fail", `HTTP ${health.status}`, { body: health.body }));
+    const validHealth = isMatterhornHealth(health);
+    checks.push(check(
+      "server.health",
+      "Local server health",
+      validHealth ? "pass" : "fail",
+      validHealth
+        ? `Matterhorn Desks ${health.body.version} is healthy.`
+        : `HTTP ${health.status} did not return the Matterhorn JSON health contract.`,
+      { body: health.body, contentType: health.contentType },
+    ));
   } catch (error) {
     checks.push(check("server.health", "Local server health", "fail", error instanceof Error ? error.message : String(error)));
   }
 
   try {
     const readiness = await fetchJson(`${baseUrl}/api/crypto/readiness`, config.token);
-    const accessControlEnforced = !config.token && readiness.status === 401;
+    const accessControlEnforced = !config.token && isUnauthorizedReadiness(readiness);
+    const validReadiness = Boolean(config.token) && isMatterhornReadiness(readiness);
     checks.push(check(
       "crypto.readiness",
       "Unified crypto readiness",
-      readiness.ok || accessControlEnforced ? "pass" : "fail",
-      accessControlEnforced ? "Protected endpoint requires a client token." : `HTTP ${readiness.status}`,
-      { body: readiness.body },
+      accessControlEnforced || validReadiness ? "pass" : "fail",
+      accessControlEnforced
+        ? "Protected endpoint requires a client token."
+        : validReadiness
+          ? `Matterhorn readiness is ${readiness.body.report.ready ? "ready" : "not ready"}.`
+          : `HTTP ${readiness.status} did not return the protected Matterhorn readiness contract.`,
+      { body: readiness.body, contentType: readiness.contentType },
     ));
   } catch (error) {
     checks.push(check("crypto.readiness", "Unified crypto readiness", "fail", error instanceof Error ? error.message : String(error)));

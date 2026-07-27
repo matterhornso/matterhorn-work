@@ -71,22 +71,23 @@ export async function submitPolymarketOrder(args: {
     throw new Error("Switch the connected wallet to Polygon before submitting.");
   }
 
-  const { Chain, ClobClient, OrderType, Side } = await import("@polymarket/clob-client-v2");
-  const unauthenticated = new ClobClient({
-    host: POLYMARKET_CLOB_HOST,
-    chain: Chain.POLYGON,
-    signer: args.walletClient,
-    throwOnError: true,
-  });
+  const { Chain, ClobClient, OrderType, Side } = await import("@polymarket/clob-client");
+  const unauthenticated = new ClobClient(
+    POLYMARKET_CLOB_HOST,
+    Chain.POLYGON,
+    args.walletClient,
+  );
   const credentials = await unauthenticated.createOrDeriveApiKey();
+  if (!credentials?.key || !credentials.secret || !credentials.passphrase) {
+    throw new Error("Polymarket did not return temporary order credentials.");
+  }
   try {
-    const client = new ClobClient({
-      host: POLYMARKET_CLOB_HOST,
-      chain: Chain.POLYGON,
-      signer: args.walletClient,
-      creds: credentials,
-      throwOnError: true,
-    });
+    const client = new ClobClient(
+      POLYMARKET_CLOB_HOST,
+      Chain.POLYGON,
+      args.walletClient,
+      credentials,
+    );
     const response = await client.createAndPostMarketOrder(
       {
         tokenID: args.order.tokenId,

@@ -11,6 +11,7 @@ function parseArgs(argv) {
     distDir: "",
     json: false,
     skipBuild: false,
+    help: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -21,6 +22,8 @@ function parseArgs(argv) {
       args.json = true;
     } else if (arg === "--skip-build") {
       args.skipBuild = true;
+    } else if (arg === "--help" || arg === "-h") {
+      args.help = true;
     } else if (arg === "--dist-dir") {
       args.distDir = argv[i + 1] || "";
       i += 1;
@@ -37,6 +40,19 @@ function parseArgs(argv) {
   }
 
   return args;
+}
+
+function printHelp() {
+  process.stdout.write([
+    "Matterhorn Desks unsigned macOS tester artifact helper",
+    "",
+    "Usage:",
+    "  pnpm electron:tester-artifact -- --output-dir ~/Desktop/matterhorn-desks-build-<sha> --json",
+    "  pnpm electron:tester-artifact -- --skip-build --dist-dir <dist-dir> --output-dir <output-dir> --json",
+    "",
+    "The helper creates an unsigned DMG/ZIP bundle, checksums, and a provenance manifest.",
+    "",
+  ].join("\n"));
 }
 
 function run(command, args) {
@@ -60,10 +76,34 @@ function gitSha() {
 function gitWorktreeState() {
   const result = spawnSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], { encoding: "utf8" });
   if (result.status !== 0) {
-    return { dirty: null, changedPathCount: null };
+    return {
+      dirty: null,
+      changedPathCount: null,
+      preserveOnlyPathCount: null,
+      preserveOnly: null,
+    };
   }
-  const paths = result.stdout.split(/\r?\n/).filter(Boolean);
-  return { dirty: paths.length > 0, changedPathCount: paths.length };
+  const preserveRoots = [".matterhorn-work/", "notes/", "outputs/", "qa-reports/"];
+  const entries = result.stdout.split(/\r?\n/).filter(Boolean);
+  const preserveOnlyPaths = [];
+  const releasePaths = [];
+
+  for (const entry of entries) {
+    const status = entry.slice(0, 2);
+    const path = entry.slice(3).trim();
+    if (status === "??" && preserveRoots.some((root) => path.startsWith(root))) {
+      preserveOnlyPaths.push(path);
+    } else {
+      releasePaths.push(path);
+    }
+  }
+
+  return {
+    dirty: releasePaths.length > 0,
+    changedPathCount: releasePaths.length,
+    preserveOnlyPathCount: preserveOnlyPaths.length,
+    preserveOnly: releasePaths.length === 0 && preserveOnlyPaths.length > 0,
+  };
 }
 
 function assertSafeOutputDir(outputDir) {
@@ -73,6 +113,11 @@ function assertSafeOutputDir(outputDir) {
 }
 
 const args = parseArgs(process.argv.slice(2));
+if (args.help) {
+  printHelp();
+  process.exit(0);
+}
+
 const sha = gitSha();
 const outputDir = resolve(args.outputDir || join(process.env.HOME || "/tmp", "Desktop", `matterhorn-desks-build-${sha}`));
 const defaultDistDir = resolve("apps/desktop/dist-electron");
