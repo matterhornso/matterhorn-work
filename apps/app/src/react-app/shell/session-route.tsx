@@ -629,9 +629,13 @@ export function SessionRoute() {
   // A stored hint is for the settings screen to survive a refresh. It is
   // consumed here only after the person explicitly returns from setup; the
   // short-lived marker survives React Router's state loss during bootstrap.
-  const pendingDeskTask =
-    readPendingDeskTaskNavigation(location.state) ??
-    readPendingDeskTaskReturn(location.search);
+  const pendingDeskTask = useMemo(
+    () => (
+      readPendingDeskTaskNavigation(location.state) ??
+      readPendingDeskTaskReturn(location.search)
+    ),
+    [location.search, location.state],
+  );
   const navigateToWorkspaceSession = useCallback((workspaceId: string, sessionId?: string | null, options?: { replace?: boolean; state?: unknown }) => {
     const id = workspaceId.trim();
     if (!id) {
@@ -656,6 +660,16 @@ export function SessionRoute() {
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [legacySelectedWorkspaceId, setLegacySelectedWorkspaceId] = useState<string>(() => readActiveWorkspaceId() ?? "");
   const selectedWorkspaceId = routeWorkspaceId || legacySelectedWorkspaceId;
+  const handlePendingDeskTaskRestored = useCallback(() => {
+    const workspaceId = selectedWorkspaceId || routeWorkspaceId;
+    clearPendingDeskTask(workspaceId);
+    navigateToWorkspaceSession(workspaceId, selectedSessionId, { replace: true });
+  }, [
+    navigateToWorkspaceSession,
+    routeWorkspaceId,
+    selectedSessionId,
+    selectedWorkspaceId,
+  ]);
   const selectedWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? (selectedWorkspaceId ? null : workspaces[0] ?? null),
     [selectedWorkspaceId, workspaces],
@@ -3359,10 +3373,7 @@ export function SessionRoute() {
       settingsSlot={renderEmbeddedSettingsSurface("extensions")}
       settingsSlotForPath={renderEmbeddedSettingsSurface}
       pendingDeskTask={pendingDeskTask}
-      onPendingDeskTaskRestored={() => {
-        const workspaceId = selectedWorkspaceId || routeWorkspaceId;
-        clearPendingDeskTask(workspaceId);
-      }}
+      onPendingDeskTaskRestored={handlePendingDeskTaskRestored}
       sidebar={{
         workspaceSessionGroups,
         selectedWorkspaceId,

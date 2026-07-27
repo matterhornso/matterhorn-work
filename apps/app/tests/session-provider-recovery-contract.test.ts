@@ -48,6 +48,7 @@ describe("session provider recovery", () => {
     expect(route).toContain('reason: "model_unavailable"');
     expect(route).toContain("writePendingDeskTask(workspaceId, pendingDeskTask)");
     expect(route).toContain("clearPendingDeskTask(workspaceId);");
+    expect(route).toContain("navigateToWorkspaceSession(workspaceId, selectedSessionId, { replace: true });");
     expect(route).toContain("readPendingDeskTaskReturn(location.search)");
     expect(route).not.toContain("readStoredPendingDeskTask(routeWorkspaceId)");
     expect(route).toContain('handleOpenSettings("/settings/ai", workspaceId, { pendingDeskTask })');
@@ -57,6 +58,10 @@ describe("session provider recovery", () => {
     expect(settings).toContain("onResumePendingDeskTask");
     expect(settings).toContain("${PENDING_DESK_TASK_RETURN_PARAM}=${encodeURIComponent(pendingDeskTask.deskId)}");
     expect(page).toContain("recovery: true");
+    expect(page).toContain("restoredPendingDeskWorkspaceRef.current = props.selectedWorkspaceId;");
+    expect(page).toContain("restoredPendingDeskWorkspaceRef.current === props.selectedWorkspaceId");
+    expect(page).toContain("if (!props.matterhornServerClient) return;");
+    expect(page).toContain("`${visual.displayName} desk`");
     expect(page).toContain("Nothing has been sent yet.");
     expect(ai).toContain('data-testid="pending-desk-task-handoff"');
     expect(ai).toContain("Finish setting up");

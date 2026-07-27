@@ -783,23 +783,49 @@ async function runSmoke(config) {
       report.artifacts.walletSettingsUrl = page.url();
     });
 
-    await stage(report, "settings_ai_models", "Check AI provider and model picker", async () => {
+    await stage(report, "settings_ai_models", "Check AI provider state and model picker", async () => {
       await page.goto(workspaceUrl(config.url, "settings/ai"), { waitUntil: "load", timeout: 30_000 });
       await page.getByRole("heading", { name: "Models", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByRole("heading", { name: "Available models", exact: true })
-        .waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByText("Connected model catalog", { exact: true })
-        .waitFor({ state: "visible", timeout: 20_000 });
-      await page.getByRole("button", { name: "Browse models", exact: true }).click();
-      const modelDialog = page.getByRole("dialog", { name: "Models" });
-      await modelDialog.waitFor({ state: "visible", timeout: 20_000 });
-      const smokeProvider = modelDialog.getByText("Matterhorn smoke provider", { exact: true });
-      await smokeProvider.waitFor({ state: "visible", timeout: 20_000 });
-      await smokeProvider.click();
-      const smokeModel = modelDialog.getByRole("button", { name: /Smoke model/ });
-      await smokeModel.waitFor({ state: "visible", timeout: 20_000 });
-      await smokeModel.click();
-      await modelDialog.getByRole("button", { name: "Done", exact: true }).click();
+      const availableModels = page.getByRole("heading", { name: "Available models", exact: true });
+      const addCudosKey = page.getByRole("button", { name: "Add CUDOS API key", exact: true });
+      await waitForAnyVisible(
+        page,
+        [availableModels, addCudosKey],
+        "connected model catalog or explicit provider setup state",
+        20_000,
+      );
+
+      if (await availableModels.isVisible().catch(() => false)) {
+        await page.getByText("Connected model catalog", { exact: true })
+          .waitFor({ state: "visible", timeout: 20_000 });
+        await page.getByRole("button", { name: "Browse models", exact: true }).click();
+        const modelDialog = page.getByRole("dialog", { name: "Models" });
+        await modelDialog.waitFor({ state: "visible", timeout: 20_000 });
+        const smokeProvider = modelDialog.getByText("Matterhorn smoke provider", { exact: true });
+        await smokeProvider.waitFor({ state: "visible", timeout: 20_000 });
+        await smokeProvider.click();
+        const smokeModel = modelDialog.getByRole("button", { name: /Smoke model/ });
+        await smokeModel.waitFor({ state: "visible", timeout: 20_000 });
+        await smokeModel.click();
+        await modelDialog.getByRole("button", { name: "Done", exact: true }).click();
+        report.artifacts.aiProviderState = "connected";
+      } else {
+        await page.getByRole("heading", { name: "Model providers", exact: true })
+          .waitFor({ state: "visible", timeout: 20_000 });
+        await page.getByRole("button", { name: "Choose provider", exact: true })
+          .waitFor({ state: "visible", timeout: 20_000 });
+        await addCudosKey.click();
+        const providerDialog = page.getByRole("dialog", { name: "Add a model provider" });
+        await providerDialog.waitFor({ state: "visible", timeout: 20_000 });
+        await providerDialog.getByText("CUDOS / ASI:Cloud", { exact: true })
+          .waitFor({ state: "visible", timeout: 20_000 });
+        await page.keyboard.press("Escape");
+        await providerDialog.waitFor({ state: "hidden", timeout: 20_000 });
+        report.artifacts.aiProviderState = "setup-required";
+        report.warnings.push(
+          "No model provider is connected. The provider setup flow works, but live model responses remain an owner acceptance prerequisite.",
+        );
+      }
       report.artifacts.aiSettingsUrl = page.url();
     });
 

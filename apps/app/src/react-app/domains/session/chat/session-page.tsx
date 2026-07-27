@@ -642,7 +642,9 @@ function WorkflowDeskHomeSurface({
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-semibold text-dls-text">{visual?.agentName ?? "Longevity Agent"}</h2>
+                <h2 className="text-lg font-semibold text-dls-text">
+                  {visual?.displayName ? `${visual.displayName} desk` : "Workflow desk"}
+                </h2>
                 {launchState?.status === "failed" ? (
                   <span className="text-[11px] font-semibold text-rose-300">Needs attention</span>
                 ) : launchState?.status === "ready" ? (
@@ -1511,6 +1513,7 @@ export function SessionPage(props: SessionPageProps) {
   const [homePathCopyLabel, setHomePathCopyLabel] = useState<string | null>(null);
   const [activeWorkflowDeskId, setActiveWorkflowDeskId] = useState<WorkflowDeskId | null>(null);
   const [workflowLaunchState, setWorkflowLaunchState] = useState<WorkflowDeskLaunchState | null>(null);
+  const restoredPendingDeskWorkspaceRef = useRef<string | null>(null);
   const browserPanelRef = usePanelRef();
   const preserveSidePanelOnPanelOpenRef = useRef(false);
   const pendingProtocolRailPanelRef = useRef<VenueSidePanel | null>(null);
@@ -1595,9 +1598,13 @@ export function SessionPage(props: SessionPageProps) {
     // shell bootstraps. Keep an explicitly resumed desk open through that one
     // transition; ordinary workspace changes still reset the desk as before.
     if (props.pendingDeskTask) return;
+    if (restoredPendingDeskWorkspaceRef.current === props.selectedWorkspaceId) {
+      restoredPendingDeskWorkspaceRef.current = null;
+      return;
+    }
     setActiveWorkflowDeskId(null);
     setWorkflowLaunchState(null);
-  }, [props.pendingDeskTask, props.selectedWorkspaceId]);
+  }, [props.pendingDeskTask?.deskId, props.selectedWorkspaceId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1771,18 +1778,30 @@ export function SessionPage(props: SessionPageProps) {
       pendingDeskRecoveryKeyRef.current = null;
       return;
     }
+    // Returning from settings can render once before the workspace endpoint
+    // reconnects. Do not consume the one-shot handoff in that transient state,
+    // or the restored desk is incorrectly frozen as "engine offline".
+    if (!props.matterhornServerClient) return;
     // Workspace bootstrap may settle the selected id one render after the
     // route changes. Include it in the guard so that benign update can reopen
     // the staged desk once, without duplicating it on ordinary re-renders.
     const recoveryKey = `${props.selectedWorkspaceId}:${pendingDeskTask.deskId}:${pendingDeskTask.title}`;
     if (pendingDeskRecoveryKeyRef.current === recoveryKey) return;
     pendingDeskRecoveryKeyRef.current = recoveryKey;
+    restoredPendingDeskWorkspaceRef.current = props.selectedWorkspaceId;
     openWorkflowDesk(pendingDeskTask.deskId, pendingDeskTask.title, {
       title: pendingDeskTask.title,
       recovery: true,
     });
     props.onPendingDeskTaskRestored?.();
-  }, [openWorkflowDesk, props.onPendingDeskTaskRestored, props.pendingDeskTask]);
+  }, [
+    openWorkflowDesk,
+    props.matterhornServerClient,
+    props.onPendingDeskTaskRestored,
+    props.pendingDeskTask?.deskId,
+    props.pendingDeskTask?.title,
+    props.selectedWorkspaceId,
+  ]);
 
   const toggleCurrentSidePanel = useCallback((panel: SidePanelItem) => {
     setCurrentSidePanel(routeSidePanel === panel ? null : panel);
