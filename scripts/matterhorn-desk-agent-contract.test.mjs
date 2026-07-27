@@ -8,6 +8,10 @@ function assertIncludes(source, needle, label) {
   assert.ok(source.includes(needle), `${label} should include ${JSON.stringify(needle)}`);
 }
 
+function assertMatches(source, pattern, label) {
+  assert.match(source, pattern, `${label} should match ${String(pattern)}`);
+}
+
 function assertNotMatches(source, pattern, label) {
   assert.equal(pattern.test(source), false, `${label} should not match ${pattern}`);
 }
@@ -94,12 +98,12 @@ assertIncludes(deskAgents, "If an event or market reports restricted: true or co
 assertIncludes(activePolymarketAgent, "If an event or market reports restricted: true or compliance_blocked", "active Polymarket compliance stop guidance");
 assertIncludes(activePolymarketAgent, "websearch: deny", "active Polymarket web search runtime denial");
 assertIncludes(deskAgents, "For a simple subnet discovery or comparison, do not delegate to subagents", "Bittensor bounded discovery guidance");
-assertIncludes(deskAgents, "Call the Bittensor desk tool exactly once", "Bittensor single-call guidance");
+assertMatches(deskAgents, /call the Bittensor desk tool exactly once/i, "Bittensor single-call guidance");
 assertIncludes(deskAgents, "sole source for subnet IDs, names, and capabilities", "Bittensor evidence-only guidance");
 assertIncludes(deskAgents, "current subnet recommendations are unavailable", "Bittensor unavailable-data guidance");
 assertIncludes(deskAgents, "do not name subnet IDs, subnet names, or capabilities", "Bittensor no-invention guidance");
 assertIncludes(activeBittensorAgent, "For a simple subnet discovery or comparison, do not delegate to subagents", "active Bittensor bounded discovery guidance");
-assertIncludes(activeBittensorAgent, "Call the Bittensor desk tool exactly once", "active Bittensor single-call guidance");
+assertMatches(activeBittensorAgent, /call the Bittensor desk tool exactly once/i, "active Bittensor single-call guidance");
 assertIncludes(activeBittensorAgent, "sole source for subnet IDs, names, and capabilities", "active Bittensor evidence-only guidance");
 assertIncludes(activeBittensorAgent, "current subnet recommendations are unavailable", "active Bittensor unavailable-data guidance");
 assertIncludes(activeBittensorAgent, "do not name subnet IDs, subnet names, or capabilities", "active Bittensor no-invention guidance");

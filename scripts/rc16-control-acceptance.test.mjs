@@ -41,6 +41,15 @@ test("RC16 acceptance covers launch-critical settings and chat journeys", () => 
   }
 });
 
+test("RC16 acceptance distinguishes hidden controls and provider-free recovery", () => {
+  assert.match(source, /openOverviewControlGroup/);
+  assert.match(source, /More workspace controls/);
+  assert.match(source, /escapeRegExp/);
+  assert.match(source, /Connect a model recovery/);
+  assert.match(source, /Add provider recovery/);
+  assert.match(source, /Workspace details/);
+});
+
 test("RC16 acceptance names boundaries it cannot safely automate", () => {
   for (const gate of [
     "OWNER-WALLET",

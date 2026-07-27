@@ -1,6 +1,7 @@
 ---
 name: run-evals
 description: Run Matterhorn Desks UI evaluations on a Daytona sandbox or local Electron instance. Handles sandbox creation, service startup, and evaluation through CDP browser tools.
+user-invocable: false
 ---
 
 # Skill: Run Evals

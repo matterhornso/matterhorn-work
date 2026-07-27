@@ -40,6 +40,7 @@ import {
   MonitorSmartphone,
   Globe,
   Waves,
+  Info,
 } from "lucide-react";
 import type { MatterhornProjectDataLedgerEntry } from "@matterhorn-work/types/project-data-ledger";
 import type { MatterhornWalletSafetyPolicy } from "@matterhorn-work/types/wallet-safety-policy";
@@ -210,13 +211,22 @@ function WalletBoundaryList({
 function protocolLabelAndDetail(
   protocol: WalletProtocol,
   cap: WalletProtocolCapability,
-): { label: string; detail: string; tone: string } {
+): { label: string; status: string; detail: string; tone: string } {
   switch (protocol) {
     case "bittensor":
       return {
         label: "Bittensor",
-        detail: cap.canPreview
-          ? "Read public SS58 data and prepare unsigned actions. Review, sign, and submit them with your own Bittensor signer."
+        status: cap.canSubmit
+          ? "TAO transfer: review & submit"
+          : cap.canPreview
+            ? "Prepare only"
+            : cap.canRead
+              ? "Read only"
+              : "Unavailable",
+        detail: cap.canSubmit
+          ? "Read public SS58 data and prepare TAO transfers. Review and submit the exact transfer with your connected Bittensor wallet. Staking and advanced calls remain external-signer handoffs."
+          : cap.canPreview
+            ? "Read public SS58 data and prepare unsigned actions. Review, sign, and submit them with your own Bittensor signer."
           : "Read public SS58 and coldkey data.",
         tone: cap.canRead
           ? "text-cyan-11 bg-cyan-500/10"
@@ -225,6 +235,13 @@ function protocolLabelAndDetail(
     case "hyperliquid":
       return {
         label: "Hyperliquid",
+        status: cap.canSubmit
+          ? "Order: review & submit"
+          : cap.canPreview
+            ? "Prepare only"
+            : cap.canRead
+              ? "Read only"
+              : "Unavailable",
         detail: cap.canSubmit
           ? "Read markets, prepare the exact order, and review it in the trade ticket. Matterhorn submits only after your connected wallet signs the short-lived intent; agents and watches cannot submit."
           : cap.canPreview
@@ -237,8 +254,17 @@ function protocolLabelAndDetail(
     case "polymarket":
       return {
         label: "Polymarket",
-        detail: cap.canPreview
-          ? "Read markets, compliance, and liquidity, then prepare an order draft. Review and submit it in your Polymarket client."
+        status: cap.canSubmit
+          ? "Eligible buy: review & submit"
+          : cap.canPreview
+            ? "Prepare only"
+            : cap.canRead
+              ? "Read only"
+              : "Unavailable",
+        detail: cap.canSubmit
+          ? "Read markets, check compliance, and prepare exact terms. Eligible EOA BUY orders can be reviewed and submitted after authorization from your connected Polygon wallet. Other order and account types remain external handoffs."
+          : cap.canPreview
+            ? "Read markets, compliance, and liquidity, then prepare an order draft. Review and submit it in your Polymarket client."
           : "Read markets, compliance, and liquidity.",
         tone: cap.canRead
           ? "text-violet-11 bg-violet-500/10"
@@ -247,6 +273,13 @@ function protocolLabelAndDetail(
     case "sui":
       return {
         label: "Sui",
+        status: cap.canSubmit
+          ? "Review & submit"
+          : cap.canPreview
+            ? "Prepare only"
+            : cap.canRead
+              ? "Read only"
+              : "Unavailable",
         detail: cap.canSubmit
           ? "Connect a supported Sui wallet, review the transaction, and approve it in that wallet."
           : "Read public account data and prepare an action to finish in your own Sui wallet.",
@@ -288,9 +321,12 @@ function WalletProtocolSupportMap(props: {
   capability: WalletRuntimeCapability;
   connected: boolean;
   backendWallets?: BackendWalletFamilyRow[];
-  marketExecutionReady?: boolean;
+  hyperliquidExecutionReady?: boolean;
+  polymarketWalletTicketAvailable?: boolean;
+  bittensorWalletTicketAvailable?: boolean;
   compact?: boolean;
 }) {
+  const [statusGuideOpen, setStatusGuideOpen] = useState(false);
   const evm = evmConnectorStatusLabel(
     props.capability.evmConnectorState,
     props.connected,
@@ -352,22 +388,32 @@ function WalletProtocolSupportMap(props: {
     )
       .filter(([protocol]) => protocol !== "sui")
       .map(([protocol, cap]) => {
-        const effectiveCap =
-          protocol === "hyperliquid" && cap.canSubmit
-            ? { ...cap, canSubmit: props.marketExecutionReady === true }
-            : cap;
-        const { label, detail, tone } = protocolLabelAndDetail(
+        const effectiveCap = (() => {
+          if (protocol === "hyperliquid" && cap.canSubmit) {
+            return {
+              ...cap,
+              canSubmit: props.hyperliquidExecutionReady === true,
+            };
+          }
+          if (
+            protocol === "polymarket" &&
+            props.polymarketWalletTicketAvailable === true
+          ) {
+            return { ...cap, canSubmit: true };
+          }
+          if (
+            protocol === "bittensor" &&
+            props.bittensorWalletTicketAvailable === true
+          ) {
+            return { ...cap, canSubmit: true };
+          }
+          return cap;
+        })();
+        const { label, status, detail, tone } = protocolLabelAndDetail(
           protocol,
           effectiveCap,
         );
-        const submitStatus = effectiveCap.canSubmit
-          ? "Review & submit"
-          : effectiveCap.canPreview
-            ? "Prepare only"
-            : effectiveCap.canRead
-              ? "Read only"
-              : "Unavailable";
-        return { label, status: submitStatus, detail, tone };
+        return { label, status, detail, tone };
       }),
   ];
 
@@ -393,22 +439,20 @@ function WalletProtocolSupportMap(props: {
         </summary>
         <div className="mt-3 grid gap-3 rounded-md bg-dls-surface-muted/[0.055] px-3 py-3">
           <p className="text-xs leading-5 text-dls-secondary">
-            <span className="font-medium text-dls-text">
-              Review &amp; submit
-            </span>{" "}
-            still requires your approval in a connected wallet; agents and
-            watches never submit automatically.{" "}
-            <span className="font-medium text-dls-text">Prepare only</span>{" "}
-            creates a draft for you to finish elsewhere.{" "}
-            <span className="font-medium text-dls-text">Limited release</span>{" "}
-            means wallet compatibility is still expanding.
+            Only the action named in each row can be reviewed and submitted
+            here, and it always needs your wallet approval. Prepare only makes
+            a draft for another compatible client. Limited release means
+            compatibility is still expanding.
           </p>
           {rows.map((row) => (
             <div key={row.label} className="grid gap-1 text-xs leading-5">
               <div className="flex items-center justify-between gap-3">
                 <span className="font-medium text-dls-text">{row.label}</span>
                 <span
-                  className={cn("shrink-0 font-medium", row.tone.split(" ")[0])}
+                  className={cn(
+                    "min-w-0 text-right font-medium",
+                    row.tone.split(" ")[0],
+                  )}
                 >
                   {row.status}
                 </span>
@@ -441,7 +485,7 @@ function WalletProtocolSupportMap(props: {
                 {row.label}
               </span>
               <span
-                className={`shrink-0 rounded-md px-2 py-0.5 font-medium ${row.tone}`}
+                className={`max-w-[58%] rounded-md px-2 py-0.5 text-right font-medium ${row.tone}`}
               >
                 {row.status}
               </span>
@@ -453,23 +497,33 @@ function WalletProtocolSupportMap(props: {
           </details>
         ))}
       </div>
-      <details className="group px-1 pt-1 text-xs text-dls-secondary">
-        <summary
-          className={cn(
-            "flex cursor-pointer list-none items-center gap-1.5 font-medium transition-colors hover:text-dls-text",
-            WALLET_DISCLOSURE_SUMMARY_FOCUS_CLASS,
-          )}
-          onKeyDown={handleWalletDisclosureSummaryKeyDown}
+      <div className="px-1 pt-1 text-xs text-dls-secondary">
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          aria-expanded={statusGuideOpen}
+          onClick={() => setStatusGuideOpen((open) => !open)}
+          className="bg-dls-surface-muted/[0.22] text-dls-secondary hover:bg-dls-surface-muted/[0.38] hover:text-dls-text"
         >
-          <span>Status guide</span>
-          <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
-        </summary>
-        <p className="mt-2 max-w-2xl leading-5">
-          Review &amp; submit requires your wallet approval. Prepare only
-          creates a draft to finish elsewhere. Limited release means wallet
-          compatibility is still expanding.
-        </p>
-      </details>
+          <Info className="size-3" />
+          Action guide
+          <ChevronDown
+            className={cn(
+              "size-3 transition-transform",
+              statusGuideOpen && "rotate-180",
+            )}
+          />
+        </Button>
+        {statusGuideOpen ? (
+          <p role="note" className="mt-2 max-w-2xl leading-5">
+            A review &amp; submit badge applies only to the action named in its row
+            and always needs your wallet approval. Prepare only makes a draft
+            for another compatible client. Limited release means compatibility
+            is still expanding.
+          </p>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -1111,6 +1165,7 @@ function WalletSafetyPolicyControls(props: {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [mainnetConfirmOpen, setMainnetConfirmOpen] = useState(false);
+  const [limitsGuideOpen, setLimitsGuideOpen] = useState(false);
 
   const policyQuery = useQuery({
     queryKey: ["wallet-safety-policy", props.runtimeWorkspaceId],
@@ -1279,22 +1334,31 @@ function WalletSafetyPolicyControls(props: {
         </span>
       </div>
 
-      <details className="group mt-2 text-xs text-dls-secondary">
-        <summary
-          className={cn(
-            "flex cursor-pointer list-none items-center gap-1.5 font-medium transition-colors hover:text-dls-text",
-            WALLET_DISCLOSURE_SUMMARY_FOCUS_CLASS,
-          )}
-          onKeyDown={handleWalletDisclosureSummaryKeyDown}
+      <div className="mt-2 text-xs text-dls-secondary">
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          aria-expanded={limitsGuideOpen}
+          onClick={() => setLimitsGuideOpen((open) => !open)}
+          className="bg-dls-surface-muted/[0.22] text-dls-secondary hover:bg-dls-surface-muted/[0.38] hover:text-dls-text"
         >
-          <span>What these limits cover</span>
-          <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
-        </summary>
-        <p className="mt-2 max-w-2xl leading-5">
-          Applied before a Base transaction reaches your browser wallet. Sui and
-          Bittensor use their own wallet review checks.
-        </p>
-      </details>
+          <Info className="size-3" />
+          How limits work
+          <ChevronDown
+            className={cn(
+              "size-3 transition-transform",
+              limitsGuideOpen && "rotate-180",
+            )}
+          />
+        </Button>
+        {limitsGuideOpen ? (
+          <p role="note" className="mt-2 max-w-2xl leading-5">
+            Applied before a Base transaction reaches your browser wallet. Sui
+            and Bittensor use their own wallet review checks.
+          </p>
+        ) : null}
+      </div>
 
       <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr))]">
         <label className="grid gap-1.5 text-xs font-medium text-dls-secondary">
@@ -2120,6 +2184,12 @@ export function WalletSettingsView({
     marketExecutionReadinessQuery.data?.report.venues.find(
       (venue) => venue.venue === "hyperliquid",
     )?.canSubmit === true;
+  const polymarketWalletTicketAvailable =
+    marketExecutionReadinessQuery.data?.report.reviewedWalletTickets
+      .polymarket.available === true;
+  const bittensorWalletTicketAvailable =
+    marketExecutionReadinessQuery.data?.report.reviewedWalletTickets
+      .bittensor.available === true;
 
   const runtimeBadgeLabel: Record<WalletRuntime, string> = {
     web: "Web",
@@ -2325,7 +2395,9 @@ export function WalletSettingsView({
           capability={capability}
           connected={state.isConnected}
           backendWallets={backendWallets}
-          marketExecutionReady={hyperliquidExecutionReady}
+          hyperliquidExecutionReady={hyperliquidExecutionReady}
+          polymarketWalletTicketAvailable={polymarketWalletTicketAvailable}
+          bittensorWalletTicketAvailable={bittensorWalletTicketAvailable}
         />
         <WalletRuntimeExplainer capability={capability} compact />
       </SettingsStack>
@@ -2452,7 +2524,9 @@ export function WalletSettingsView({
             capability={capability}
             connected={state.isConnected}
             backendWallets={backendWallets}
-            marketExecutionReady={hyperliquidExecutionReady}
+            hyperliquidExecutionReady={hyperliquidExecutionReady}
+            polymarketWalletTicketAvailable={polymarketWalletTicketAvailable}
+            bittensorWalletTicketAvailable={bittensorWalletTicketAvailable}
           />
           <WalletRuntimeExplainer capability={capability} />
         </SettingsSection>

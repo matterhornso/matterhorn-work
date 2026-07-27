@@ -11,8 +11,8 @@ describe("desktop deep-link runtime", () => {
   test("keeps auth and remote links available to their own consumers", () => {
     const target = new EventTarget() as Window;
     target.__OPENWORK__ = {};
-    const remote = "matterhorn-work://connect-remote?matterhornHostUrl=http%3A%2F%2F127.0.0.1%3A4126&matterhornToken=test-token";
-    const auth = "matterhorn-work://den-auth?grant=one-time-grant";
+    const remote = "matterhorn-desks://connect-remote?matterhornHostUrl=http%3A%2F%2F127.0.0.1%3A4126&matterhornToken=test-token";
+    const auth = "matterhorn-desks://den-auth?grant=one-time-grant";
 
     pushPendingDeepLinks(target, [remote, auth]);
 

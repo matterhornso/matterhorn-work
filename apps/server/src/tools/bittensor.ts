@@ -7228,13 +7228,15 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
   if (isImageDiscoveryQuestion(message, plan) || (plan.intent === "discover" && !isValidatorComparisonQuestion(message))) {
     const goal = isImageDiscoveryQuestion(message, plan) ? "image generation" : message;
     const discovery = await findBittensorSubnetsForGoal({ goal, limit: resolveExecutionLimit(input, isImageDiscoveryQuestion(message, plan) ? 5 : 8) });
-    const sourceWarnings = discovery.matches.some((match) => match.subnet.source === "curated-fallback")
-      ? ["Some matches use fallback metadata because live provider data was unavailable."]
+    const sourceWarnings = discovery.matches.some((match) => isReferenceBittensorData(match.subnet.source))
+      ? ["Reference metadata is shown because live Bittensor metrics are unavailable. Refresh before acting."]
       : [];
     return {
       plan: { ...answeredPlan, intent: "discover", responseCards: ["subnet_comparison"] },
       responseText: discovery.matches.length
-        ? `I found ${discovery.matches.length} Bittensor subnet candidate(s) for ${goal}. Treat this as discovery context, not financial advice.`
+        ? sourceWarnings.length
+          ? `Live Bittensor metrics are unavailable right now. I found ${discovery.matches.length} reference subnet match(es) for ${goal}.`
+          : `I found ${discovery.matches.length} Bittensor subnet candidate(s) for ${goal}. Treat this as discovery context, not financial advice.`
         : `I could not find a strong Bittensor subnet match for ${goal} from the current provider data.`,
       cards: discovery.cards,
       data: { discovery },
@@ -7255,8 +7257,8 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       strategy: resolveExecutionStrategy(input),
       limit: resolveExecutionLimit(input, 6),
     });
-    const fallbackWarnings = comparison.source === "curated-fallback"
-      ? ["Live provider data was unavailable; this validator comparison is fallback-only and incomplete."]
+    const fallbackWarnings = isReferenceBittensorData(comparison.source)
+      ? ["Live Bittensor metrics are unavailable; this validator comparison is reference-only and incomplete."]
       : [];
     return {
       plan: { ...answeredPlan, responseCards: ["validator_selection"] },
@@ -7913,7 +7915,7 @@ export function scoreBittensorSubnetForGoal(subnet: BittensorSubnetSummary, goal
   }
   if (subnet.emission !== null && subnet.emission > 0) score += 1;
   if (subnet.source !== "curated-fallback") score += 1;
-  if (!reasons.length) reasons.push("Included as a fallback candidate because no stronger match was available.");
+  if (!reasons.length) reasons.push("Included because no closer metadata match was available.");
 
   return { subnet, score, reasons: [...new Set(reasons)].slice(0, 4) };
 }
@@ -7929,16 +7931,21 @@ export async function findBittensorSubnetsForGoal(input: { goal: string; limit?:
   const matches = (confident.length ? confident : scored).slice(0, limit);
   const cards = buildBittensorSubnetCards(matches.map((match) => match.subnet)).map((card, index) => {
     const match = matches[index];
+    const referenceOnly = isReferenceBittensorData(match?.subnet.source);
     return {
       ...card,
-      summary: match ? `${card.summary ?? ""} Match reason: ${match.reasons[0]}`.trim() : card.summary,
+      summary: match
+        ? referenceOnly
+          ? `${card.summary ?? ""} Possible fit: ${match.reasons[0]}`.trim()
+          : `${card.summary ?? ""} Match reason: ${match.reasons[0]}`.trim()
+        : card.summary,
       data: { ...(card.data ?? {}), match },
     };
   });
   const sources = [...new Set(matches.map((match) => match.subnet.source))];
   const source = sources.length === 1 ? sources[0] ?? "unknown" : sources.length > 1 ? "mixed" : "unknown";
-  const warnings = matches.some((match) => match.subnet.source === "curated-fallback")
-    ? ["Some subnet matches use curated fallback metadata because live provider data was unavailable."]
+  const warnings = matches.some((match) => isReferenceBittensorData(match.subnet.source))
+    ? ["Reference metadata is shown because live Bittensor metrics are unavailable. Refresh before acting."]
     : [];
   return { goal, matches, cards, source, warnings };
 }
@@ -8972,7 +8979,7 @@ export async function compareBittensorValidators(input: BittensorValidatorCompar
         "Verify validator identity, commission/fees where applicable, and recent behavior in an external explorer before staking.",
       ];
       if (!validator.hotkey) warnings.push("Validator hotkey is unavailable in this metagraph sample.");
-      if (detail.source === "curated-fallback") warnings.push("Live provider data was unavailable; this comparison is incomplete.");
+      if (detail.source === "curated-fallback") warnings.push("Live Bittensor data is unavailable; this comparison uses reference metadata and is incomplete.");
 
       return {
         netuid,
@@ -8998,7 +9005,7 @@ export async function compareBittensorValidators(input: BittensorValidatorCompar
   ];
   if (!detail.topValidators.length) warnings.push("No validator sample was available for this subnet.");
   if (requestedHotkeys.size && !candidates.length) warnings.push("None of the requested validator hotkeys appeared in the available top-validator sample.");
-  if (detail.source === "curated-fallback") warnings.push("Live provider data was unavailable; connect TAO.app or a Subtensor sidecar for stronger results.");
+  if (detail.source === "curated-fallback") warnings.push("Live Bittensor data is unavailable; connect a live Bittensor data source for stronger results.");
 
   return {
     netuid,
@@ -9055,7 +9062,7 @@ export async function analyzeBittensorValidatorIntelligence(input: {
     candidate?.warnings ?? [],
     !isValidSs58Address(validatorHotkey) ? ["Validator hotkey does not look like a valid SS58 address."] : [],
     !foundInSample ? ["Validator was not found in the current top-validator sample; verify externally before staking."] : [],
-    subnet.source === "curated-fallback" ? ["Live provider data was unavailable; this validator report is fallback-limited."] : [],
+    subnet.source === "curated-fallback" ? ["Live Bittensor data is unavailable; this validator report uses reference metadata and is incomplete."] : [],
     ["This is public validator intelligence, not a staking recommendation."],
   );
   const signals: BittensorIntelligenceSignal[] = [
@@ -9079,8 +9086,8 @@ export async function analyzeBittensorValidatorIntelligence(input: {
     },
     {
       label: "Provider",
-      value: comparison.source,
-      tone: comparison.source === "curated-fallback" ? "warning" : "default",
+      value: bittensorSourceLabel(comparison.source),
+      tone: isReferenceBittensorData(comparison.source) ? "warning" : "default",
       explanation: "Source of subnet and metagraph-like validator data.",
     },
   ];
@@ -9461,7 +9468,7 @@ export async function buildBittensorDecisionBrief(input: {
       prompt: "Run a Bittensor readiness check.",
       priority: "next",
       riskLevel: "low",
-      rationale: "Readiness distinguishes live data from fallback data before users trust the workflow.",
+      rationale: "Readiness distinguishes live data from reference metadata before users trust the workflow.",
     }),
   ];
   return {
@@ -9756,8 +9763,8 @@ export async function analyzeBittensorSubnetIntelligence(netuid: number): Promis
   const score = subnetIntelligenceScore({ detail, concentrationRisk, dataQualityRisk, capability });
   const mechanismAvailable = false;
   const warnings = uniqueWarnings(
-    detailReadWarning ? [`Live subnet detail read failed: ${detailReadWarning}. Falling back to curated subnet context.`] : [],
-    detail.source === "curated-fallback" ? ["Live provider data was unavailable; this report uses curated fallback metadata."] : [],
+    detailReadWarning ? [`Live subnet detail read failed: ${detailReadWarning}. Showing reference subnet metadata instead.`] : [],
+    detail.source === "curated-fallback" ? ["Live Bittensor data is unavailable; this report uses reference metadata."] : [],
     !detail.topValidators.length ? ["No validator sample was available for this subnet."] : [],
     detail.priceTao === null ? ["Dynamic TAO price was unavailable from the current provider."] : [],
     concentrationRisk === "high" ? ["The visible validator sample appears highly concentrated."] : [],
@@ -9768,7 +9775,7 @@ export async function analyzeBittensorSubnetIntelligence(netuid: number): Promis
   const signals: BittensorIntelligenceSignal[] = [
     {
       label: "Provider quality",
-      value: dataQualityRisk === "low" ? "Live-shaped" : dataQualityRisk === "medium" ? "Partial" : "Fallback",
+      value: dataQualityRisk === "low" ? "Live-shaped" : dataQualityRisk === "medium" ? "Partial" : "Reference only",
       tone: riskTone(dataQualityRisk),
       explanation: "Scores whether the current provider returned live/fresh subnet and metagraph context.",
     },
@@ -10325,7 +10332,7 @@ export async function evaluateBittensorWatch(watch: BittensorWatch): Promise<Bit
     watch,
     status: subnet.source === "curated-fallback" ? "warning" : "ok",
     summary: subnet.source === "curated-fallback"
-      ? `Only fallback metadata is available for ${subnet.name}.`
+      ? `Reference metadata is available for ${subnet.name}; live metrics are unavailable.`
       : `${subnet.name} metadata is available from ${subnet.source}.`,
     observedValue: subnet.metagraphSummary.neurons ?? subnet.emission ?? subnet.priceTao,
     threshold: watch.threshold,
@@ -10702,7 +10709,7 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
       status: subnets.length ? fallbackOnly ? "warning" : "pass" : "fail",
       summary: subnets.length
         ? fallbackOnly
-          ? "Subnet discovery is available, but only fallback metadata is loaded."
+          ? "Subnet discovery is available, but only reference metadata is loaded."
           : "Subnet discovery returned live or provider-backed subnet metadata."
         : "Subnet discovery returned no subnets.",
       details: { count: subnets.length, sources: [...new Set(subnets.map((subnet) => subnet.source))] },
@@ -10712,7 +10719,7 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
       label: "Live-read freshness",
       status: providerBacked.length === 0 ? "warning" : providerBackedWithFreshness.length ? "pass" : "warning",
       summary: providerBacked.length === 0
-        ? "No provider-backed subnet freshness was available; Matterhorn will label fallback data clearly."
+        ? "No provider-backed subnet freshness was available; Matterhorn will label reference data clearly."
         : providerBackedWithFreshness.length
           ? "Provider-backed subnet metadata includes block or freshness labels for chat cards."
           : "Provider-backed subnet metadata is available but does not include block or freshness labels.",
@@ -11111,9 +11118,9 @@ export function buildBittensorReadinessOperatorReport(report: BittensorReadiness
     ] : []),
     ...(fallbackChecks.length ? [
       copilotAction(
-        "Inspect fallback data",
-        "Show which Bittensor flows are using fallback data and how to upgrade them to live Finney reads.",
-        "Fallback data is acceptable when clearly labeled, but operators need to know it is not live.",
+        "Inspect data source",
+        "Show which Bittensor flows are using reference metadata and how to enable live Bittensor reads.",
+        "Reference metadata is clearly labeled, but live reads are required for current metrics.",
         "medium",
       ),
     ] : []),
@@ -11196,6 +11203,19 @@ function cardItem(label: string, value: string | number | null | undefined, tone
   return { label, value: value === null || value === undefined || value === "" ? "Unavailable" : String(value), tone };
 }
 
+function isReferenceBittensorData(source: string | null | undefined): boolean {
+  return source?.trim().toLowerCase() === "curated-fallback";
+}
+
+function bittensorSourceLabel(source: string | null | undefined): string {
+  const normalized = source?.trim().toLowerCase() ?? "";
+  if (!normalized || normalized === "unknown") return "Unavailable";
+  if (isReferenceBittensorData(source)) return "Reference metadata";
+  if (/(mock|fixture|test)/.test(normalized)) return "Test data";
+  if (/(sidecar|subtensor|provider)/.test(normalized)) return "Live provider data";
+  return "Connected data";
+}
+
 function buildBittensorCustomerGuidanceCard(result: BittensorChatExecutionResult): BittensorChatCard | null {
   if (result.cards.some((card) => card.kind === "customer_guidance")) return null;
   if (result.execution === "clarification_required") return null;
@@ -11218,7 +11238,7 @@ function buildBittensorCustomerGuidanceCard(result: BittensorChatExecutionResult
       : "Matterhorn can compare visible validator candidates, explain tradeoffs, and prepare an unsigned preview only after you choose a validator hotkey.";
     firstStep = result.execution === "unsigned_preview"
       ? "Verify coldkey, hotkey, netuid, amount, rate tolerance, fee/slippage notes, and consequence text in your external signer."
-      : "Choose a validator hotkey only after reviewing live/fallback source labels and concentration risk.";
+      : "Choose a validator hotkey only after reviewing live, recent, or reference-only data labels and concentration risk.";
     followUpPrompt = result.execution === "unsigned_preview"
       ? "Review this unsigned Bittensor action preview for safety before external signing."
       : "Explain the validator shortlist tradeoffs and what to monitor next.";
@@ -11230,7 +11250,7 @@ function buildBittensorCustomerGuidanceCard(result: BittensorChatExecutionResult
   } else if (intent === "discover" || cardKinds.has("subnet_comparison")) {
     title = "Subnet discovery next steps";
     summary = "Matterhorn can explain why a subnet matched your goal, check live metagraph context, and compare validator exposure before any staking preview.";
-    firstStep = "Open the strongest subnet candidates and check whether their data is live, recent, stale, or fallback.";
+    firstStep = "Open the strongest subnet candidates and check whether their data is live, recent, stale, or reference-only.";
     followUpPrompt = "Compare the strongest Bittensor subnet candidates and explain the risks in beginner language.";
   } else if (intent === "subnet_use" || cardKinds.has("subnet_result") || cardKinds.has("unsupported_adapter")) {
     title = "Subnet service next steps";
@@ -11336,6 +11356,7 @@ export function buildBittensorPlanCards(plan: BittensorPlan): BittensorChatCard[
 export function buildBittensorSubnetCards(subnets: BittensorSubnetSummary[]): BittensorChatCard[] {
   return subnets.slice(0, 6).map((subnet) => {
     const capability = capabilityFromSubnet(subnet);
+    const referenceOnly = isReferenceBittensorData(subnet.source);
     const adapterWarning = capability.capabilityLevel === "adapter_required"
       ? "Matterhorn can explain and monitor this subnet, but direct service execution needs a configured subnet adapter."
       : null;
@@ -11343,8 +11364,10 @@ export function buildBittensorSubnetCards(subnets: BittensorSubnetSummary[]): Bi
       kind: "subnet_comparison",
       title: `${subnet.name} (${subnet.symbol})`,
       subtitle: `Subnet ${subnet.netuid} · ${subnet.category}`,
-      summary: subnet.benefitSummary,
-      tone: subnet.source === "curated-fallback" ? "warning" : "default",
+      summary: referenceOnly
+        ? "Reference metadata only. Live Bittensor metrics are unavailable."
+        : subnet.benefitSummary,
+      tone: referenceOnly ? "warning" : "default",
       items: [
         cardItem("Price", subnet.priceTao === null ? "Unavailable" : `${formatMetric(subnet.priceTao)} TAO`),
         cardItem("Emission", formatMetric(subnet.emission)),
@@ -11352,7 +11375,7 @@ export function buildBittensorSubnetCards(subnets: BittensorSubnetSummary[]): Bi
         cardItem("Capability", titleCase(capability.capabilityLevel.replace(/_/g, " ")), capability.capabilityLevel === "adapter_ready" ? "good" : capability.capabilityLevel === "adapter_required" ? "warning" : "default"),
         cardItem("Adapter", capability.adapterStatus.configured ? capability.serviceAdapter.replace(/_/g, " ") : "Not configured", capability.adapterStatus.configured ? "good" : "muted"),
         cardItem("Freshness", subnet.freshness ?? "Unavailable", subnet.freshness ? "default" : "muted"),
-        cardItem("Source", subnet.source, subnet.source === "curated-fallback" ? "warning" : "muted"),
+        cardItem("Source", bittensorSourceLabel(subnet.source), referenceOnly ? "warning" : "muted"),
       ],
       actions: [{
         label: "Inspect subnet",
@@ -11360,7 +11383,7 @@ export function buildBittensorSubnetCards(subnets: BittensorSubnetSummary[]): Bi
         payload: { prompt: `Explain Bittensor subnet ${subnet.netuid} (${subnet.name}) and how it can help my work.` },
       }],
       warnings: uniqueWarnings(
-        subnet.source === "curated-fallback" ? ["Live provider data was unavailable for this subnet."] : [],
+        referenceOnly ? ["Live Bittensor metrics are unavailable. Refresh before acting on this reference data."] : [],
         adapterWarning ? [adapterWarning] : [],
       ),
       data: { subnet, capability },
@@ -11387,7 +11410,7 @@ export function buildBittensorWalletCard(wallet: BittensorWalletSnapshot): Bitte
       cardItem("Staked value", `${formatMetric(stakeTotal)} TAO`),
       cardItem("Positions", wallet.stakePositions.length),
       cardItem("Highest risk", riskiest ? `${riskiest.subnetName}: ${riskiest.slippageRisk}` : "Unavailable", riskiest?.slippageRisk === "high" ? "warning" : "muted"),
-      cardItem("Source", wallet.source ?? "provider", wallet.source?.includes("mock") ? "warning" : "muted"),
+      cardItem("Source", bittensorSourceLabel(wallet.source ?? "provider"), wallet.source?.includes("mock") ? "warning" : "muted"),
       cardItem("Block", wallet.block ?? "Unavailable", wallet.block === null || wallet.block === undefined ? "muted" : "default"),
     ],
     warnings: wallet.providerStatus === "ok" ? wallet.warnings ?? [] : [wallet.message ?? "Wallet provider data is unavailable."],
@@ -11404,7 +11427,7 @@ export function buildBittensorSubnetIntelligenceCard(report: BittensorSubnetInte
     tone: report.rating === "limited_provider_context" ? "warning" : "default",
     items: [
       cardItem("Score", `${report.score}/100`, report.score >= 75 ? "good" : report.score >= 50 ? "warning" : "danger"),
-      cardItem("Provider", report.market.source, report.market.source === "curated-fallback" ? "warning" : "default"),
+      cardItem("Provider", bittensorSourceLabel(report.market.source), isReferenceBittensorData(report.market.source) ? "warning" : "default"),
       cardItem("Freshness", report.market.freshness ?? "Unavailable", report.market.freshness ? "default" : "muted"),
       cardItem("Price", report.market.priceTao === null ? "Unavailable" : `${formatMetric(report.market.priceTao)} TAO`),
       cardItem("Validators sampled", report.metagraph.validatorsSampled),
@@ -11440,7 +11463,7 @@ export function buildBittensorWalletIntelligenceCard(report: BittensorWalletInte
       cardItem("Slippage", report.slippageRisk, riskTone(report.slippageRisk)),
       cardItem("Top validator", topValidator ? shortSs58(topValidator.validatorHotkey) : "Unavailable", topValidator ? riskTone(topValidator.risk) : "muted"),
       cardItem("Freshness", report.freshness ?? "Unavailable", riskTone(report.staleDataRisk)),
-      cardItem("Source", report.source, report.source.includes("fallback") ? "warning" : "muted"),
+      cardItem("Source", bittensorSourceLabel(report.source), isReferenceBittensorData(report.source) ? "warning" : "muted"),
       cardItem("Block", report.block ?? "Unavailable", report.block === null ? "muted" : "default"),
       cardItem("Copilot actions", report.copilotActions.length),
       cardItem("Watch suggestions", report.watchSuggestions.length),
@@ -11473,7 +11496,7 @@ export function buildBittensorValidatorIntelligenceCard(report: BittensorValidat
       cardItem("Trust", report.trust === null ? "Unavailable" : formatMetric(report.trust, "", 4), report.trust === null ? "muted" : "default"),
       cardItem("Dividends", report.dividends === null ? "Unavailable" : formatMetric(report.dividends, "", 4), report.dividends === null ? "muted" : "default"),
       cardItem("Risk", report.risk, riskTone(report.risk)),
-      cardItem("Source", report.source, report.source === "curated-fallback" ? "warning" : "muted"),
+      cardItem("Source", bittensorSourceLabel(report.source), isReferenceBittensorData(report.source) ? "warning" : "muted"),
       cardItem("Watch suggestions", report.watchSuggestions.length),
     ],
     actions: report.copilotActions.slice(0, 4).map((action) => ({
@@ -11529,7 +11552,7 @@ export function buildBittensorDecisionBriefCard(brief: BittensorDecisionBrief): 
       cardItem("Focus", titleCase(brief.focus)),
       cardItem("Decision score", `${brief.score}/100`, brief.score >= 75 ? "good" : brief.score >= 50 ? "warning" : "danger"),
       cardItem("Risk", brief.risk, riskTone(brief.risk)),
-      cardItem("Source", brief.source, brief.source.includes("fallback") ? "warning" : "muted"),
+      cardItem("Source", bittensorSourceLabel(brief.source), isReferenceBittensorData(brief.source) ? "warning" : "muted"),
       cardItem("Do now", nowOptions),
       cardItem("Options", brief.options.length),
       cardItem("External signing", signingOptions ? `${signingOptions} later option(s)` : "Not required for first step", signingOptions ? "warning" : "good"),
@@ -11564,7 +11587,7 @@ export function buildBittensorWatchPolicyPresetCard(policy: BittensorWatchPolicy
       cardItem("Priority", titleCase(policy.priority), policy.priority === "now" ? "warning" : "default"),
       cardItem("Rules", policy.rules.length, policy.rules.length ? "default" : "warning"),
       cardItem("Highest risk", highestRuleRisk, riskTone(highestRuleRisk)),
-      cardItem("Source", policy.source, policy.source.includes("fallback") ? "warning" : "muted"),
+      cardItem("Source", bittensorSourceLabel(policy.source), isReferenceBittensorData(policy.source) ? "warning" : "muted"),
       cardItem("First trigger", policy.rules[0]?.trigger ?? "Unavailable", policy.rules[0] ? "default" : "muted"),
       cardItem("Copilot actions", policy.copilotActions.length),
     ],
@@ -11881,7 +11904,7 @@ export function buildBittensorValidatorComparisonCards(comparison: BittensorVali
       items: [
         cardItem("Subnet", comparison.subnetName),
         cardItem("Candidates", 0, "warning"),
-        cardItem("Source", comparison.source, comparison.source === "curated-fallback" ? "warning" : "muted"),
+        cardItem("Source", bittensorSourceLabel(comparison.source), isReferenceBittensorData(comparison.source) ? "warning" : "muted"),
       ],
       warnings: comparison.warnings,
       data: { comparison },
@@ -11900,7 +11923,7 @@ export function buildBittensorValidatorComparisonCards(comparison: BittensorVali
       cardItem("Stake", formatMetric(candidate.stake)),
       cardItem("Trust", formatMetric(candidate.trust, "", 4)),
       cardItem("Dividends", formatMetric(candidate.dividends, "", 4)),
-      cardItem("Source", candidate.source, candidate.source === "curated-fallback" ? "warning" : "muted"),
+      cardItem("Source", bittensorSourceLabel(candidate.source), isReferenceBittensorData(candidate.source) ? "warning" : "muted"),
     ],
     actions: candidate.hotkey ? [{
       label: "Plan stake",
@@ -12641,7 +12664,7 @@ export function buildBittensorWatchEvaluationCards(evaluations: BittensorWatchEv
       cardItem("Observed", evaluation.observedValue ?? "Unavailable", evaluation.observedValue === null ? "muted" : "default"),
       cardItem("Threshold", evaluation.threshold ?? "Not set", evaluation.threshold === null ? "muted" : "default"),
       cardItem("Alert level", evaluation.alertLevel ?? "unknown", riskTone(evaluation.alertLevel ?? "unknown")),
-      cardItem("Source", evaluation.source, evaluation.source === "curated-fallback" ? "warning" : "muted"),
+      cardItem("Source", bittensorSourceLabel(evaluation.source), isReferenceBittensorData(evaluation.source) ? "warning" : "muted"),
       cardItem("Notify", evaluation.shouldNotify ? "Yes" : "No", evaluation.shouldNotify ? "warning" : "good"),
       cardItem("Intent", evaluation.notificationIntent ?? "none", evaluation.notificationIntent && evaluation.notificationIntent !== "none" ? "default" : "muted"),
       cardItem("Next actions", evaluation.copilotActions?.length ?? 0, evaluation.copilotActions?.length ? "default" : "muted"),

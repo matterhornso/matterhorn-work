@@ -44,7 +44,7 @@ Desk scope:
 Contract: matterhorn.desk.agent.v2
 Desk: Longevity Agent
 Action level: workspace_write
-Capability: Builds educational longevity programs and saves approved deliverables in this project.
+Capability: Builds educational longevity programs with no medical advice and no live payments, then saves approved deliverables in this project.
 Runtime tools are deny-by-default. In Work mode, only 5 explicitly listed desk tools are available.
 User completion: No transaction or external action is part of this desk.
 The agent may never sign, submit, broadcast, or auto-execute. Watches and automations may never submit.

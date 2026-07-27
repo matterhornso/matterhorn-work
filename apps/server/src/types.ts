@@ -194,6 +194,8 @@ export interface SkillItem {
   description: string;
   scope: "project" | "global";
   trigger?: string;
+  /** Whether a person can invoke this skill from the chat composer. */
+  userInvocable: boolean;
 }
 
 export interface HubSkillItem {

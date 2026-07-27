@@ -39,7 +39,7 @@ Desk scope:
 Contract: matterhorn.desk.agent.v2
 Desk: Sui Agent
 Action level: prepare_only
-Capability: Prepares a transfer preview; you review, sign, and submit it in your connected Sui wallet.
+Capability: Prepares a transfer preview; you review, sign, and submit it in your connected Sui wallet. Matterhorn stores previews and public receipts only.
 Runtime tools are deny-by-default. In Work mode, only 2 explicitly listed desk tools are available.
 User completion: The user reviews, signs, and submits in the connected wallet.
 Feature gate: sui_wallet_standard. If the runtime says it is unavailable, stop at a preview and say so plainly.

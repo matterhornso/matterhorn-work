@@ -245,13 +245,24 @@ const checks = [
   check(
     "ui.release_boundary",
     "Customer-facing release boundary",
-    panelText.includes("Read and preview") && panelText.includes("Hyperliquid: Wallet-approved trading") && panelText.includes("Polymarket remains preview only") && panelText.includes("Matterhorn uses public reads and external signer/client handoffs") ? "pass" : "fail",
-    "Stable UI distinguishes public reads, wallet-approved Hyperliquid execution, and preview-only Polymarket handoffs.",
+    panelText.includes("Public reads, unsigned staking previews, and reviewed TAO transfers.")
+      && panelText.includes("Manual execution is available in the trade ticket after exact-order review and connected-wallet approval.")
+      && panelText.includes("Eligible EOA BUY orders require compliance checks, exact review, and connected Polygon wallet authorization.")
+      && panelText.includes("Matterhorn never custodies keys or signs silently.")
+      ? "pass"
+      : "fail",
+    "Stable UI distinguishes reviewed TAO transfers, exact-order Hyperliquid execution, eligible Polymarket buys, and the no-custody boundary.",
   ),
   check(
     "safety.copy",
     "Safety copy",
-    FORBIDDEN_RE.test(panelText) && panelText.includes("Automatic execution off") && panelText.includes("Wallet approval per Hyperliquid order") && panelText.includes("External signer required") ? "pass" : "fail",
+    FORBIDDEN_RE.test(panelText)
+      && panelText.includes("Automatic execution off")
+      && panelText.includes("Wallet approval per action")
+      && panelText.includes("Bittensor staking uses external signer")
+      && panelText.includes("Polymarket compliance gate")
+      ? "pass"
+      : "fail",
     "UI rejects secrets, custody, and automatic execution while requiring explicit wallet approval for Hyperliquid orders.",
   ),
   inspectArtifactDir(config.artifactDir),

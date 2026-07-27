@@ -118,10 +118,16 @@ function OverlayApp() {
 
 bootstrapTheme();
 
-const root = document.getElementById("root");
+type OverlayRootElement = HTMLElement & {
+  __matterhornReactRoot?: ReturnType<typeof ReactDOM.createRoot>;
+};
+
+const root = document.getElementById("root") as OverlayRootElement | null;
 if (!root) throw new Error("Overlay root element not found");
 
-ReactDOM.createRoot(root).render(
+const overlayRoot = root.__matterhornReactRoot ?? (root.__matterhornReactRoot = ReactDOM.createRoot(root));
+
+overlayRoot.render(
   <React.StrictMode>
     <OverlayApp />
   </React.StrictMode>,

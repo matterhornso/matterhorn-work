@@ -56,9 +56,9 @@ describe("customer workflow template launch cards", () => {
     expect(bittensor?.prompt).toContain("Do not ask for seed phrases");
     expect(bittensor?.prompt).toContain("private keys");
 
-    expect(hyperliquid?.prompt).toContain("never claim Matterhorn placed it");
-    expect(hyperliquid?.prompt).toContain("Finish any real order in your own reviewed Hyperliquid client");
-    expect(hyperliquid?.prompt).toContain("Never request keys, signatures, or API secrets");
+    expect(hyperliquid?.prompt).toContain("never claim the Agent placed it");
+    expect(hyperliquid?.prompt).toContain("separate trade ticket");
+    expect(hyperliquid?.prompt).toContain("Never request keys, raw signatures, or API secrets");
     expect(hyperliquid?.statusLabel).toBe("Review & submit");
     expect(hyperliquid?.description).not.toContain("place orders");
     expect(hyperliquid?.safetySummary).toContain("trade ticket");
@@ -73,9 +73,18 @@ describe("customer workflow template launch cards", () => {
       allowsRealFunds: true,
     });
 
-    expect(polymarket?.prompt).toContain("Can submit: No");
-    expect(polymarket?.prompt).toContain("Live submission: Off");
-    expect(polymarket?.prompt).toContain("Matterhorn never signs");
+    expect(polymarket?.prompt).toContain("eligible EOA BUY order");
+    expect(polymarket?.prompt).toContain("separate connected-wallet ticket");
+    expect(polymarket?.prompt).toContain("agents cannot submit");
+
+    const polymarketTemplate = FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES.find((template) => template.id === "polymarket_researcher");
+    expect(polymarketTemplate?.safetyBoundaries).toMatchObject({
+      canSubmit: true,
+      liveExecutionEnabled: true,
+      canExecute: true,
+      requiresExternalSigner: false,
+      allowsRealFunds: true,
+    });
 
     expect(sui?.prompt).toContain("Sui task");
     expect(sui?.prompt).toContain("Scope: Sui public addresses");

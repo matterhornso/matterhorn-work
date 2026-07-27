@@ -301,7 +301,7 @@ describe("Profile capability status renders all states", () => {
     expect(html).toContain("No account is required");
     expect(html).toContain("Preferences and workspace access");
     expect(html).toContain("Local teammate access");
-    expect(html).toContain("Technical details");
+    expect(html).toContain("Workspace details");
     expect(html).not.toContain("Cloud account");
     expect(html).not.toContain("Cloud teammates");
   });

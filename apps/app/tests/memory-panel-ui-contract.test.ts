@@ -117,6 +117,6 @@ describe("Settings overview memory contract", () => {
     expect(source).toContain("Saved memories");
     expect(source).toContain("Open Memory review");
     expect(source).toContain("Create memory export");
-    expect(source).toContain("Created a ${response.export.recordCount}-record export in workspace outputs.");
+    expect(source).toContain("Saved ${response.export.recordCount}-record export to Outputs.");
   });
 });

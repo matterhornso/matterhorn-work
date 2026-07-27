@@ -120,23 +120,22 @@ describe("model readiness summary", () => {
     expect(summary.statusLabel).toBe("Working");
     expect(summary.statusTone).toBe("ready");
     expect(summary.currentChoice.value).toBe("OpenAI - GPT 4.1");
-    expect(summary.currentChoice.detail).toContain(
-      "OpenAI - GPT 4.1 is sent with prompts",
-    );
+    expect(summary.currentChoice.detail).toContain("Used for this chat");
     expect(summary.workspaceDefault.value).toBe("OpenAI / GPT-4.1");
     expect(summary.workspaceDefault.detail).toContain(
-      "Saved in this workspace",
+      "Used for new chats and desk tasks",
     );
     expect(summary.effectiveModel.value).toBe("OpenAI / GPT-4.1");
-    expect(summary.effectiveModel.label).toBe("Fallback model");
-    expect(summary.answerPath.value).toBe("Local session prompts");
-    expect(summary.answerPath.detail).toContain("session.promptAsync");
-    expect(summary.providerList.value).toBe("Local provider list");
-    expect(summary.providerList.detail).toContain("local engine provider list");
+    expect(summary.effectiveModel.label).toBe("When no model is chosen");
+    expect(summary.answerPath.value).toBe("Ready for chats and desks");
+    expect(summary.answerPath.detail).toContain("selected model");
+    expect(summary.providerList.value).toBe("Available to choose");
+    expect(summary.providerList.detail).toContain(
+      "connected provider",
+    );
     expect(summary.providerCatalog.value).toBe("1 provider · 2 models");
     expect(summary.selectionPolicy.value).toBe("Workspace");
-    expect(summary.trainingPolicy).toContain("No model training by default");
-    expect(summary.trainingPolicy).toContain("product quality review");
+    expect(summary.trainingPolicy).toContain("not used to train models");
   });
 
   test("shows workspace default as the current choice after local override is cleared", () => {
@@ -174,9 +173,7 @@ describe("model readiness summary", () => {
     });
 
     expect(summary.currentChoice.value).toBe("Workspace default");
-    expect(summary.currentChoice.detail).toContain(
-      "follows the saved workspace default",
-    );
+    expect(summary.currentChoice.detail).toContain("follows the workspace default");
     expect(summary.workspaceDefault.value).toBe("OpenAI / GPT-4.1");
     expect(summary.effectiveModel.value).toBe("OpenAI / GPT-4.1");
   });
@@ -192,13 +189,11 @@ describe("model readiness summary", () => {
 
     expect(summary.workspaceDefault.value).toBe("Not saved");
     expect(summary.workspaceDefault.detail).toContain(
-      "local picker choice when you make one",
+      "save it here for new chats and desk tasks",
     );
     expect(summary.effectiveModel.value).toBe("OpenAI / GPT-4.1 Mini");
-    expect(summary.selectionPolicy.value).toBe("Local app");
-    expect(summary.selectionPolicy.detail).toContain(
-      "chosen picker model is stored",
-    );
+    expect(summary.selectionPolicy.value).toBe("This app");
+    expect(summary.selectionPolicy.detail).toContain("applies to this app");
   });
 
   test("marks engine failures without hiding known local provider counts", () => {
@@ -224,9 +219,7 @@ describe("model readiness summary", () => {
     expect(summary.statusLabel).toBe("Start engine");
     expect(summary.statusTone).toBe("warning");
     expect(summary.providerCatalog.value).toBe("2 providers · 8 models");
-    expect(summary.providerCatalog.detail).toContain(
-      "workspace is not connected to an agent engine yet",
-    );
+    expect(summary.providerCatalog.detail).toContain("Connect a provider");
   });
 
   test("names provider setup as the workspace-owner action", () => {
@@ -283,10 +276,10 @@ describe("model readiness summary", () => {
       connectedModelCount: 1,
     });
 
-    expect(summary.statusLabel).toBe("Catalog loaded");
-    expect(summary.statusTone).toBe("neutral");
+    expect(summary.statusLabel).toBe("Connect provider");
+    expect(summary.statusTone).toBe("warning");
     expect(summary.providerCatalog.detail).toContain(
-      "Provider access is verified when a chat starts",
+      "Connect a provider before chats and desk tasks can start",
     );
   });
 
@@ -327,15 +320,6 @@ describe("model readiness summary", () => {
         modelCountLabel: "5 models",
         defaultModel: "gpt-4.1-mini",
         sampleModels: "gpt-4.1, gpt-4.1-mini, gpt-4o, o3 +1 more",
-      },
-      {
-        providerId: "opencode",
-        providerName: "Included models",
-        sourceLabel: "Config",
-        connectedLabel: "Available",
-        modelCountLabel: "1 model",
-        defaultModel: "Not set",
-        sampleModels: "big-pickle",
       },
     ]);
 

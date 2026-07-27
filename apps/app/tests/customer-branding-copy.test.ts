@@ -84,10 +84,16 @@ describe("customer-facing Matterhorn Desks branding", () => {
     const desktopMain = readRepoFile("apps/desktop/electron/main.mjs");
 
     expect(packageJson.name).toBe("@matterhornso/matterhorn-work");
-    expect(builder).toContain("appId: com.differentai.openwork");
+    expect(builder).toContain("appId: com.matterhorn.desks");
+    expect(builder).toContain("productName: Matterhorn Desks");
+    expect(builder).toContain("      - matterhorn-desks");
     expect(builder).toContain("      - matterhorn-work");
     expect(builder).toContain("      - openwork");
-    expect(desktopMain).toContain('const DESKTOP_PROTOCOL_SCHEMES = ["matterhorn-work", "openwork"];');
+    expect(desktopMain).toContain('"com.differentai.openwork",');
+    expect(desktopMain).toContain('"com.matterhorn.work",');
+    expect(desktopMain).toContain(
+      'const DESKTOP_PROTOCOL_SCHEMES = ["matterhorn-desks", "matterhorn-work", "openwork"];',
+    );
     expect(desktopMain).toContain('".config", "matterhorn-work", "desktop-bootstrap.json"');
   });
 

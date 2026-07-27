@@ -115,8 +115,8 @@ describe("session activity timing", () => {
       retryMessage: "How can I connect a Sui wallet?",
       error: {
         kind: "provider-unavailable",
-        message: "Connect an AI provider to continue.",
-        detail: "The model catalog loaded, but its provider could not authenticate. Connect ASI:Cloud or another provider, then retry this prompt.",
+        message: "This model is not ready in this workspace.",
+        detail: "Your message is still in the composer. Connect a provider or choose another model, then send it again.",
       },
     });
   });

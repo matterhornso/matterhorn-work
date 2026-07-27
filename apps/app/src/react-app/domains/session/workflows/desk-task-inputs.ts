@@ -12,7 +12,7 @@ export type DeskTaskInputRequirement = {
   invalidMessage: string;
 };
 
-const PROMPT_PLACEHOLDER_PATTERN = /<paste ([^>]+)>/i;
+const PROMPT_PLACEHOLDER_PATTERN = /<(?:paste|describe) ([^>]+)>/i;
 const SECRET_INPUT_PATTERN =
   /\b(seed phrase|private key|mnemonic|raw signature|signed payload|wallet export|api secret|exchange secret)\b/i;
 const SS58_PUBLIC_ADDRESS_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,64}$/;
@@ -80,13 +80,13 @@ export function getDeskTaskInputRequirement(prompt: string): DeskTaskInputRequir
     return {
       kind: "market",
       fieldId: "market",
-      label: "Market URL or slug",
-      actionLabel: "Add market",
+      label: "Describe the market or trade",
+      actionLabel: "Describe market",
       placeholder,
-      inputPlaceholder: "https://polymarket.com/event/... or market slug",
-      helpText: "Use a public market URL or slug. No wallet secrets are needed.",
-      missingMessage: "Add a public market URL or slug to start this task.",
-      invalidMessage: "Use a public market URL or slug, not wallet or API secrets.",
+      inputPlaceholder: "e.g. YES on a September rate cut, $50",
+      helpText: "Use the market question or your trade idea. A Polymarket link is optional.",
+      missingMessage: "Describe the market or paste a Polymarket link to start.",
+      invalidMessage: "Use a public market description or link, not wallet or API secrets.",
     };
   }
 
@@ -130,6 +130,13 @@ export function buildDeskTaskPromptWithInput(
 ): string {
   const trimmed = value.trim();
   if (!trimmed) return prompt;
-  if (prompt.includes(requirement.placeholder)) return prompt.replace(requirement.placeholder, trimmed);
-  return `${prompt}\n\n${requirement.label}: ${trimmed}`;
+  const promptWithInput = prompt.includes(requirement.placeholder)
+    ? prompt.replace(requirement.placeholder, trimmed)
+    : `${prompt}\n\n${requirement.label}: ${trimmed}`;
+
+  if (requirement.kind !== "market") return promptWithInput;
+
+  return `${promptWithInput}
+
+Treat the request above as either a natural-language market or trade description, or an optional exact Polymarket URL or slug. Search the current public Polymarket catalog to resolve the exact market. If multiple markets plausibly match, show at most three concise choices and ask me to choose before continuing. Check compliance before preparing exact order terms. The Agent draft must remain non-submittable. If the request is an eligible EOA BUY order, direct me to the separate connected-wallet trade ticket for final review and authorization. Never auto-sign, auto-submit, or place a bet from chat or a watch.`;
 }

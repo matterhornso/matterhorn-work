@@ -89,9 +89,7 @@ import {
   backendCapabilityLabel,
   backendCapabilityTone,
   summarizeCapability,
-  summarizeModelSource,
-  summarizeModelRoutingPolicy,
-  walletFamilySummary,
+  summarizeModelSelection,
   workspaceDataPolicySummary,
   type BackendCapabilityTone,
 } from "../backend-capability-status";
@@ -243,6 +241,46 @@ function SettingsCard(props: {
         </div>
       ) : null}
     </section>
+  );
+}
+
+function OverviewControlGroup(props: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Collapsible
+      className="group/overview-control-group"
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <CollapsibleTrigger
+        render={
+          <button
+            type="button"
+            className="flex w-full items-center gap-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-focus-ring"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium text-dls-text">
+                {props.title}
+              </span>
+              <span className="mt-0.5 block text-xs leading-5 text-dls-secondary">
+                {props.description}
+              </span>
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-dls-secondary transition-transform group-data-[state=open]/overview-control-group:rotate-180" />
+          </button>
+        }
+      />
+      <CollapsibleContent>
+        <div className="mt-1 space-y-1 rounded-md bg-dls-surface-muted/[0.04] p-1">
+          {props.children}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -1783,6 +1821,8 @@ export function SettingsOverviewView(props: {
     useState<ExportActionStatus | null>(null);
   const [supportReportStatus, setSupportReportStatus] =
     useState<ExportActionStatus | null>(null);
+  const [advancedOverviewOpen, setAdvancedOverviewOpen] = useState(false);
+  const [dataPrivacyOpen, setDataPrivacyOpen] = useState(false);
   const notesWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
   const notesReady = Boolean(props.matterhornServerClient && notesWorkspaceId);
   const backendWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
@@ -2240,7 +2280,7 @@ export function SettingsOverviewView(props: {
         ? await client.exportWorkspaceMemory(backendWorkspaceId)
         : await client.exportMemory();
       setMemoryExportStatus(
-        `Created a ${response.export.recordCount}-record export in workspace outputs.`,
+        `Saved ${response.export.recordCount}-record export to Outputs.`,
       );
     } catch (error) {
       setMemoryExportStatus(
@@ -2262,8 +2302,7 @@ export function SettingsOverviewView(props: {
           Settings
         </h1>
         <p className="mt-1 text-sm leading-6 text-dls-secondary">
-          Your account, appearance, safety, protocols, extensions, workspaces,
-          and diagnostics — all in one place.
+          Control your workspace, tools, privacy, and support settings.
         </p>
       </header>
 
@@ -2276,16 +2315,18 @@ export function SettingsOverviewView(props: {
             description={
               MATTERHORN_LAUNCH_FEATURES.cloud
                 ? "Account, local profile, and Cloud readiness."
-                : "Local profile and workspace access readiness."
+                : "Profile and workspace access."
             }
           >
             <Row
               label={profileCapability?.label ?? "Profile status"}
               hint={
-                profileCapability?.description ??
-                (MATTERHORN_LAUNCH_FEATURES.cloud
-                  ? "Open profile settings to manage local and Cloud account state."
-                  : "Open workspace preferences to review local settings and access.")
+                profileCapability?.status === "working"
+                  ? "Preferences and workspace access are ready in this workspace."
+                  : (profileCapability?.description ??
+                    (MATTERHORN_LAUNCH_FEATURES.cloud
+                      ? "Open profile settings to manage local and Cloud account state."
+                      : "Open workspace preferences to manage settings and access."))
               }
               value={
                 profileCapability ? (
@@ -2320,8 +2361,8 @@ export function SettingsOverviewView(props: {
           {/* Backend control plane */}
           <SettingsCard
             icon={<ShieldCheck size={18} />}
-            title="Backend status"
-            description="What the local Matterhorn Desks engine reports for this workspace."
+            title="Workspace health"
+            description="Check whether this workspace is ready. Troubleshooting details stay out of the way until you need them."
             status={
               backendCapabilities ? (
                 <CapabilityBadge
@@ -2338,13 +2379,13 @@ export function SettingsOverviewView(props: {
               <>
                 <Collapsible className="group/backend-details">
                   <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5 text-left text-sm font-medium text-dls-text transition-colors hover:bg-dls-surface-muted/[0.14]">
-                    <span>Technical readiness details</span>
+                    <span>Workspace details</span>
                     <ChevronDown className="size-4 text-dls-secondary transition-transform group-data-[state=open]/backend-details:rotate-180" />
                   </CollapsibleTrigger>
                   <CollapsibleContent className="mt-2 flex flex-col gap-1">
                     <Row
-                      label="Model routing"
-                      hint={`Default: ${summarizeModelSource(backendCapabilities)}. ${summarizeModelRoutingPolicy(backendCapabilities)}`}
+                      label="AI model"
+                      hint={summarizeModelSelection(backendCapabilities)}
                       value={
                         <CapabilityBadge
                           status={backendCapabilities.models.status}
@@ -2352,17 +2393,15 @@ export function SettingsOverviewView(props: {
                       }
                     />
                     <Row
-                      label="Workspace readiness"
+                      label="Workspace setup"
                       hint={
                         workspaceReadiness
-                          ? `${workspaceReadiness.summary.readyFeatures}/${workspaceReadiness.summary.totalFeatures} actions ready. ${
-                              workspaceReadiness.summary.blockingChecks.length
-                                ? `Blocked by ${workspaceReadiness.summary.blockingChecks.join(", ")}.`
-                                : "No blockers reported."
-                            }`
+                          ? workspaceReadiness.summary.blockingChecks.length
+                            ? `Needs attention: ${workspaceReadiness.summary.blockingChecks.join(", ")}.`
+                            : "Everything available for this workspace is ready."
                           : workspaceReadinessLoading
-                            ? "Checking workspace readiness."
-                            : "Readiness is unavailable until the workspace engine responds."
+                            ? "Checking workspace health."
+                            : "Workspace health could not load. Reload this page or check the desktop app."
                       }
                       value={
                         workspaceReadiness ? (
@@ -2436,7 +2475,7 @@ export function SettingsOverviewView(props: {
                     ) : null}
                     <Row
                       label="Notes and memory"
-                      hint={`Notes: ${summarizeCapability(backendCapabilities.notes)} Memory: ${summarizeCapability(backendCapabilities.memory)}`}
+                      hint="Your notes and saved memory are available in this workspace."
                       value={
                         <div className="flex flex-wrap justify-end gap-1.5">
                           <CapabilityBadge
@@ -2449,8 +2488,8 @@ export function SettingsOverviewView(props: {
                       }
                     />
                     <Row
-                      label="Evidence ledger"
-                      hint={`Sources: ${backendCapabilities.evidence.sources.join(", ")}.`}
+                      label="Project history"
+                      hint="Activity and saved evidence stay with this workspace."
                       value={
                         <CapabilityBadge
                           status={backendCapabilities.evidence.status}
@@ -2458,13 +2497,13 @@ export function SettingsOverviewView(props: {
                       }
                     />
                     <Row
-                      label="Project ledger"
+                      label="Activity controls"
                       hint={
                         projectDataLedgerQuery.data
-                          ? `${projectDataLedgerQuery.data.summary.redacted} redacted. Feedback is eval/routing/product-quality only. Append-only history remains exportable for accountability.`
+                          ? "Review or export the workspace activity record when you need it."
                           : projectDataLedgerQuery.isLoading
-                            ? "Loading ledger policy and counts."
-                            : "Ledger counts are unavailable until the workspace engine responds."
+                            ? "Loading activity controls."
+                            : "Activity controls are unavailable until the engine responds."
                       }
                       value={
                         <ProjectLedgerControlSummary
@@ -2526,13 +2565,8 @@ export function SettingsOverviewView(props: {
                       status={supportReportStatus ?? ledgerExportStatus}
                     />
                     <Row
-                      label="Wallet families"
-                      hint={walletFamilySummary(backendCapabilities)
-                        .map(
-                          (wallet) =>
-                            `${wallet.family}: ${backendCapabilityLabel(wallet.status)}`,
-                        )
-                        .join(" · ")}
+                      label="Wallet safety"
+                      hint="Each protocol keeps its own review and signing controls."
                       value={
                         <CapabilityBadge
                           status={backendCapabilities.wallets.status}
@@ -2599,52 +2633,97 @@ export function SettingsOverviewView(props: {
             )}
           </SettingsCard>
 
-          {/* 1a. Data Policy */}
-          <SettingsCard
-            icon={<FolderCog size={18} />}
-            title="Data policy"
-            description="Where workspace data lives, what can be exported, and what can be deleted."
-            status={
-              workspaceDataMap ? (
-                <CapabilityBadge
-                  status={workspaceDataMap.policy.redaction.status}
-                />
-              ) : workspaceDataMapLoading ? (
-                <StatusBadge>Loading</StatusBadge>
-              ) : (
-                <UnavailableStatus label="Workspace unavailable" />
-              )
-            }
+          <Collapsible
+            className="group/overview-data"
+            open={dataPrivacyOpen}
+            onOpenChange={setDataPrivacyOpen}
           >
-            {workspaceDataMap ? (
-              <DataPolicySection
-                dataMap={workspaceDataMap}
-                controls={workspaceDataControls}
-                dataPolicy={workspaceDataPolicy}
-                feedbackPolicySaving={
-                  updateWorkspaceDataPolicyMutation.isPending
-                }
-                feedbackPolicyError={
-                  updateWorkspaceDataPolicyMutation.error instanceof Error
-                    ? updateWorkspaceDataPolicyMutation.error.message
-                    : null
-                }
-                onFeedbackPolicyChange={
-                  props.matterhornServerClient && props.runtimeWorkspaceId
-                    ? handleFeedbackPolicyChange
-                    : undefined
-                }
-                onOpenControlRoute={(href) => navigate(href)}
-              />
-            ) : (
-              <div className="px-1 py-3 text-sm leading-6 text-dls-secondary">
-                {workspaceDataMapLoading
-                  ? "Loading workspace data policy..."
-                  : "Open a connected workspace to review storage, export, and deletion policy."}
+            <CollapsibleTrigger
+              render={
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-focus-ring"
+                >
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-dls-surface-muted/[0.16] text-dls-text">
+                    <FolderCog size={18} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-dls-text">
+                      Data & privacy
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-5 text-dls-secondary">
+                      Local workspace controls for data, feedback, exports, and deletion.
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2 text-xs font-medium text-primary">
+                    Review
+                    <ChevronDown className="size-4 text-dls-secondary transition-transform group-data-[state=open]/overview-data:rotate-180" />
+                  </span>
+                </button>
+              }
+            />
+            <CollapsibleContent>
+              <div className="mt-1 rounded-md bg-dls-surface-muted/[0.05] px-3 py-1">
+                {workspaceDataMap ? (
+                  <DataPolicySection
+                    dataMap={workspaceDataMap}
+                    controls={workspaceDataControls}
+                    dataPolicy={workspaceDataPolicy}
+                    feedbackPolicySaving={
+                      updateWorkspaceDataPolicyMutation.isPending
+                    }
+                    feedbackPolicyError={
+                      updateWorkspaceDataPolicyMutation.error instanceof Error
+                        ? updateWorkspaceDataPolicyMutation.error.message
+                        : null
+                    }
+                    onFeedbackPolicyChange={
+                      props.matterhornServerClient && props.runtimeWorkspaceId
+                        ? handleFeedbackPolicyChange
+                        : undefined
+                    }
+                    onOpenControlRoute={(href) => navigate(href)}
+                  />
+                ) : (
+                  <div className="px-1 py-3 text-sm leading-6 text-dls-secondary">
+                    {workspaceDataMapLoading
+                      ? "Loading data controls..."
+                      : "Open a workspace to manage its data and privacy controls."}
+                  </div>
+                )}
               </div>
-            )}
-          </SettingsCard>
+            </CollapsibleContent>
+          </Collapsible>
 
+          <Collapsible
+            className="group/overview-advanced"
+            open={advancedOverviewOpen}
+            onOpenChange={setAdvancedOverviewOpen}
+          >
+            <CollapsibleTrigger
+              render={
+                <button
+                  type="button"
+                  className="mt-3 flex w-full items-center justify-between gap-4 rounded-md bg-dls-surface-muted/[0.08] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-focus-ring"
+                >
+                  <span>
+                    <span className="block text-sm font-medium text-dls-text">
+                      More workspace controls
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-5 text-dls-secondary">
+                      Activity, notes, appearance, wallet tools, connectors, and diagnostics.
+                    </span>
+                  </span>
+                  <ChevronDown className="size-4 shrink-0 text-dls-secondary transition-transform group-data-[state=open]/overview-advanced:rotate-180" />
+                </button>
+              }
+            />
+            <CollapsibleContent>
+              <div className="mt-3 space-y-2">
+                <OverviewControlGroup
+                  title="Work & evidence"
+                  description="Task history, activity, notes, memory, and feedback."
+                >
           {/* 1b. Task History */}
           {props.matterhornServerClient && props.runtimeWorkspaceId ? (
             <SettingsCard
@@ -2836,7 +2915,12 @@ export function SettingsOverviewView(props: {
               </Button>
             </div>
           </SettingsCard>
+                </OverviewControlGroup>
 
+                <OverviewControlGroup
+                  title="Appearance"
+                  description="Theme, brand palette, and text density."
+                >
           {/* 2. Appearance */}
           <SettingsCard
             icon={<Palette size={18} />}
@@ -2921,7 +3005,12 @@ export function SettingsOverviewView(props: {
               </Button>
             </div>
           </SettingsCard>
+                </OverviewControlGroup>
 
+                <OverviewControlGroup
+                  title="Wallet & protocols"
+                  description="Safety boundaries, wallet support, and execution readiness."
+                >
           {/* 3. Safety & Wallets */}
           <SettingsCard
             icon={<ShieldCheck size={18} />}
@@ -2942,9 +3031,9 @@ export function SettingsOverviewView(props: {
             <ul className="flex list-none flex-col gap-1 text-sm leading-6 text-dls-secondary">
               <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
                 <span className="font-medium text-dls-text">Bittensor:</span>{" "}
-                actions are prepared as previews. Anything on-chain is signed in
-                your own external Bittensor-compatible signer — Matterhorn Desks
-                cannot sign or broadcast.
+                reviewed TAO transfers can be signed and submitted by your
+                connected Bittensor wallet. Staking and advanced calls remain
+                unsigned handoffs for an external signer.
               </li>
               <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
                 <span className="font-medium text-dls-text">Hyperliquid:</span>{" "}
@@ -2955,8 +3044,9 @@ export function SettingsOverviewView(props: {
               </li>
               <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
                 <span className="font-medium text-dls-text">Polymarket:</span>{" "}
-                Matterhorn reads market data and prepares drafts for you to
-                review and submit in your own eligible client.
+                eligible EOA BUY orders use a separate compliance-gated ticket.
+                You review the exact terms and authorize submission in your
+                connected Polygon wallet; agents and watches cannot submit.
               </li>
               <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
                 <span className="font-medium text-dls-text">
@@ -2978,8 +3068,8 @@ export function SettingsOverviewView(props: {
               label="Bittensor"
               hint={
                 bittensorUsesFallbackData
-                  ? "Public reads use clearly labeled fallback data. Staking actions remain unsigned previews for an external signer."
-                  : "Live public reads for TAO, subnets, and validators. Staking actions remain unsigned previews for an external signer."
+                  ? "Public reads use clearly labeled fallback data. Reviewed TAO transfers use a connected wallet; staking remains an external-signer handoff."
+                  : "Live public reads for TAO, subnets, and validators. Reviewed TAO transfers use a connected wallet; staking remains an external-signer handoff."
               }
               value={
                 bittensorCapability ? (
@@ -2987,8 +3077,8 @@ export function SettingsOverviewView(props: {
                     tone={bittensorUsesLiveProvider ? "ready" : "preview"}
                   >
                     {bittensorUsesLiveProvider
-                      ? "Live reads · Preview"
-                      : "Fallback reads · Preview"}
+                      ? "Live reads · TAO transfers"
+                      : "Fallback reads · TAO transfers"}
                   </StatusBadge>
                 ) : (
                   <UnavailableStatus label="Status unavailable" />
@@ -3024,7 +3114,7 @@ export function SettingsOverviewView(props: {
               label="Polymarket"
               hint={
                 polymarketExecution
-                  ? "Live market discovery, odds, and compliance checks are available. Matterhorn prepares previews but live submission is disabled."
+                  ? "Agent drafts never submit. Eligible EOA BUY orders can use a separate compliance-gated connected-wallet ticket."
                   : "Execution readiness is unavailable."
               }
               value={
@@ -3032,11 +3122,9 @@ export function SettingsOverviewView(props: {
                   <StatusBadge>Checking</StatusBadge>
                 ) : polymarketExecution ? (
                   <StatusBadge
-                    tone={polymarketExecution.canSubmit ? "ready" : "preview"}
+                    tone="ready"
                   >
-                    {polymarketExecution.canSubmit
-                      ? "Wallet-approved execution"
-                      : "Preview only"}
+                    Eligible BUY execution
                   </StatusBadge>
                 ) : (
                   <UnavailableStatus label="Status unavailable" />
@@ -3048,7 +3136,12 @@ export function SettingsOverviewView(props: {
               buttons. Open a protocol workspace from the sidebar to use it.
             </p>
           </SettingsCard>
+                </OverviewControlGroup>
 
+                <OverviewControlGroup
+                  title="MCPs & connectors"
+                  description="Connected tools and custom MCP servers for chat."
+                >
           {/* 5. MCPs & Connectors */}
           <SettingsCard
             icon={<Boxes size={18} />}
@@ -3082,7 +3175,12 @@ export function SettingsOverviewView(props: {
               </Button>
             </div>
           </SettingsCard>
+                </OverviewControlGroup>
 
+                <OverviewControlGroup
+                  title="Workspace & diagnostics"
+                  description="Folders, local data, version information, and support tools."
+                >
           {/* 6. Workspaces */}
           <SettingsCard
             icon={<FolderCog size={18} />}
@@ -3283,6 +3381,10 @@ export function SettingsOverviewView(props: {
               </a>
             </div>
           </SettingsCard>
+                </OverviewControlGroup>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       </div>
     </div>

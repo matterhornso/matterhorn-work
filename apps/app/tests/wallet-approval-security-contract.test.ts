@@ -206,9 +206,9 @@ describe("Wallet approval security contract", () => {
       "Applied before a Base transaction reaches your browser wallet.",
     );
     expect(walletViewSource).toMatch(
-      /Sui and\s+Bittensor use their own wallet review checks\./,
+      /Sui\s+and Bittensor use their own wallet review checks\./,
     );
-    expect(walletViewSource).toContain("What these limits cover");
+    expect(walletViewSource).toContain("How limits work");
     expect(walletViewSource).toContain(
       "aria-pressed={form.preferredNetwork === value}",
     );

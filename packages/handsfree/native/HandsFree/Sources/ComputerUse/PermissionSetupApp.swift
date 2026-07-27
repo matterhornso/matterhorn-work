@@ -136,7 +136,7 @@ final class PermissionSetupViewController: NSViewController {
         let axCard = makeAccessibilityCard()
         let srCard = makeScreenRecordingCard()
 
-        let doneBtn = NSButton(title: "Done — Return to OpenWork", target: self, action: #selector(done))
+        let doneBtn = NSButton(title: "Done — Return to Matterhorn Desks", target: self, action: #selector(done))
         doneBtn.bezelStyle = .rounded
         doneBtn.controlSize = .large
         doneBtn.keyEquivalent = "\r"
@@ -589,4 +589,3 @@ final class DraggableAppIconView: NSImageView, NSDraggingSource {
         .copy
     }
 }
-

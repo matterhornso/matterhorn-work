@@ -368,8 +368,10 @@ describe("wallet runtime connector contract", () => {
     const source = readReactAppSource("domains/settings/pages/wallet-view.tsx");
 
     expect(source).toContain("Base transaction limits");
-    expect(source).toContain("What these limits cover");
-    expect(source).toContain("Status guide");
+    expect(source).toContain("How limits work");
+    expect(source).toContain("Action guide");
+    expect(source).toContain("aria-expanded={limitsGuideOpen}");
+    expect(source).toContain("aria-expanded={statusGuideOpen}");
     expect(source).toContain("Signing &amp; privacy");
     expect(source).toContain('row.riskLevel !== "low"');
     expect(source).not.toContain(
@@ -380,25 +382,29 @@ describe("wallet runtime connector contract", () => {
     );
   });
 
-  test("Hyperliquid copy distinguishes wallet-approved execution from agent automation", () => {
+  test("protocol support names the bounded wallet-approved action instead of implying general automation", () => {
     const source = readReactAppSource("domains/settings/pages/wallet-view.tsx");
 
     expect(source).toMatch(
       /cap\.canSubmit\s*\? "Read markets, prepare the exact order/,
     );
-    expect(source).toMatch(/effectiveCap\.canSubmit\s*\? "Review & submit"/);
+    expect(source).toContain('"TAO transfer: review & submit"');
+    expect(source).toContain('"Order: review & submit"');
+    expect(source).toContain('"Eligible buy: review & submit"');
     expect(source).toContain("agents and watches cannot submit");
-    expect(source).toMatch(
-      /Review &amp; submit\s*<\/span>\s*\{" "\}\s*still requires your approval in a connected wallet/,
+    expect(source).toContain(
+      "A review &amp; submit badge applies only to the action named in its row",
     );
     expect(source).toContain('queryKey: ["wallet-market-execution-readiness"]');
     expect(source).toContain(
       "matterhornServerClient.marketExecutionReadiness()",
     );
     expect(source).toContain('protocol === "hyperliquid" && cap.canSubmit');
-    expect(source).toContain("canSubmit: props.marketExecutionReady === true");
+    expect(source).toContain(
+      "canSubmit: props.hyperliquidExecutionReady === true",
+    );
     expect(
-      source.match(/marketExecutionReady=\{hyperliquidExecutionReady\}/g),
+      source.match(/hyperliquidExecutionReady=\{hyperliquidExecutionReady\}/g),
     ).toHaveLength(2);
   });
 });

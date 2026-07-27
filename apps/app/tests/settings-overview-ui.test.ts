@@ -14,9 +14,7 @@ describe("Settings overview backend capability integration", () => {
 
     expect(source).toContain("backendCapabilityLabel");
     expect(source).toContain("backendCapabilityTone");
-    expect(source).toContain("summarizeModelSource");
-    expect(source).toContain("summarizeModelRoutingPolicy");
-    expect(source).toContain("walletFamilySummary");
+    expect(source).toContain("summarizeModelSelection");
     expect(source).toContain("settingsStorageLocationLabel");
     expect(source).toContain("workspaceDataPolicySummary");
     expect(source).toContain("buildNftPublishingReadinessItems");
@@ -50,7 +48,7 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain(
       "client.updateWorkspaceDataPolicy(workspaceId, { feedbackUse })",
     );
-    expect(source).toContain("Backend status");
+    expect(source).toContain("Workspace health");
     expect(source).toContain("Image and NFT publishing");
     expect(source).toContain(
       "Generated images, public storage, Sui minting, and marketplace listing readiness.",
@@ -59,7 +57,7 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain(
       "MATTERHORN_LAUNCH_FEATURES.generatedMedia && publishingReadiness.length",
     );
-    expect(source).toContain("Wallet families");
+    expect(source).toContain("Wallet safety");
     expect(source).toContain("Training use");
   });
 
@@ -73,7 +71,7 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain(
       "<CapabilityBadge status={profileCapability.status}",
     );
-    expect(source).toContain('"Local profile and workspace access readiness."');
+    expect(source).toContain('"Profile and workspace access."');
     expect(source).not.toContain(
       "You are not signed in to a Matterhorn Desks account.",
     );
@@ -103,7 +101,7 @@ describe("Settings overview backend capability integration", () => {
 
     expect(source).toContain('if (status === "working") return null;');
     expect(source).toContain('className="group/backend-details"');
-    expect(source).toContain("Technical readiness details");
+    expect(source).toContain("Workspace details");
     expect(source).toContain("<CollapsibleContent");
     expect(source).not.toContain(
       'status={<StatusBadge tone="ready">Ready</StatusBadge>}',
@@ -111,6 +109,21 @@ describe("Settings overview backend capability integration", () => {
     expect(source).not.toContain(
       'status={<StatusBadge tone="ready">Boundaries visible</StatusBadge>}',
     );
+  });
+
+  test("keeps secondary operational controls behind an intentional disclosure", () => {
+    const source = readAppSource("domains/settings/pages/overview-view.tsx");
+
+    expect(source).toContain("advancedOverviewOpen");
+    expect(source).toContain("More workspace controls");
+    expect(source).toContain(
+      "Activity, notes, appearance, wallet tools, connectors, and diagnostics.",
+    );
+    expect(source).toContain("group/overview-advanced");
+    expect(source).toContain("OverviewControlGroup");
+    expect(source).toContain("Work & evidence");
+    expect(source).toContain("Wallet & protocols");
+    expect(source).toContain("Workspace & diagnostics");
   });
 
   test("makes feedback filters and memory commands visibly interactive", () => {
@@ -177,9 +190,10 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("Storage locations, routes, and controls");
     expect(source).toContain("Use the Manage links for user-controlled stores");
     expect(source).toContain("retentionPolicy.summary");
-    expect(source).toContain(
-      "Where workspace data lives, what can be exported, and what can be deleted.",
-    );
+    expect(source).toContain("dataPrivacyOpen");
+    expect(source).toContain("Local workspace controls for data, feedback, exports, and deletion.");
+    expect(source).toContain("group/overview-data");
+    expect(source).toContain("group-data-[state=open]/overview-data:rotate-180");
   });
 
   test("keeps truthful wallet copy constraints", () => {
@@ -187,7 +201,7 @@ describe("Settings overview backend capability integration", () => {
 
     expect(source).toContain("non-custodial");
     expect(source).toContain("Bittensor:");
-    expect(source).toContain("external Bittensor-compatible signer");
+    expect(source).toContain("Staking and advanced calls remain");
     expect(source).toContain("Hyperliquid:</");
     expect(source).toContain("manual orders use a separate trade ticket");
     expect(source).toContain("agents and watches cannot submit");
@@ -209,8 +223,8 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain('dataMode === "curated_fallback"');
     expect(source).toContain('venue.venue === "hyperliquid"');
     expect(source).toContain('venue.venue === "polymarket"');
-    expect(source).toContain("Live reads · Preview");
-    expect(source).toContain("Fallback reads · Preview");
+    expect(source).toContain("Live reads · TAO transfers");
+    expect(source).toContain("Fallback reads · TAO transfers");
     expect(source).toContain("Wallet-approved execution");
     expect(source).toContain("Live submission is enabled only through the exact-order trade ticket");
     expect(source).toContain("Live submission is disabled by the deployment execution switch");

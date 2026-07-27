@@ -65,7 +65,30 @@ describe("skills", () => {
         path: join(workspaceRoot, ".opencode", "skills", "good", "SKILL.md"),
         scope: "project",
         trigger: "Good skill trigger.",
+        userInvocable: true,
       },
     ]);
+  });
+
+  test("preserves an explicit customer-facing invocation boundary", async () => {
+    const workspaceRoot = await makeWorkspace();
+    await mkdir(join(workspaceRoot, ".opencode", "skills", "maintainer-only"), { recursive: true });
+    await writeFile(
+      join(workspaceRoot, ".opencode", "skills", "maintainer-only", "SKILL.md"),
+      [
+        "---",
+        "name: maintainer-only",
+        "description: Internal release maintenance only.",
+        "user-invocable: false",
+        "---",
+        "# When to use",
+        "- Engineering release maintenance.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const [skill] = await listSkills(workspaceRoot, false);
+    expect(skill?.userInvocable).toBe(false);
   });
 });

@@ -7,6 +7,10 @@ import type {
   MatterhornWalletRuntimeSupport,
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
+import {
+  resolveModelDisplayName,
+  resolveProviderDisplayName,
+} from "@/app/utils";
 
 export type BackendCapabilityTone =
   | "ready"
@@ -63,7 +67,7 @@ export function summarizeModelSource(
   const provider = capabilities.models.defaultModel.providerId;
   const model = capabilities.models.defaultModel.modelId;
   if (!provider || !model) return "No default model reported.";
-  return `${provider}/${model}`;
+  return `${resolveProviderDisplayName(provider)} / ${resolveModelDisplayName(model)}`;
 }
 
 export function summarizeModelRoutingPolicy(
@@ -71,20 +75,30 @@ export function summarizeModelRoutingPolicy(
 ): string {
   const routing = capabilities.models.routing;
   if (!routing) return "Model routing policy is not reported by the backend.";
-  const answerPath =
+  const delivery =
     routing.answerPath === "opencode_session_prompt_async"
-      ? "Local session prompts"
-      : "unknown route";
-  const modelList =
-    routing.modelListTool === "opencode_provider_list"
-      ? "Local provider list"
-      : routing.modelListTool === "matterhorn_backend_registry"
-        ? "Matterhorn registry"
-        : "unknown source";
+      ? "Chats and desk tasks use the selected model."
+      : "Model delivery needs attention before you start work.";
   const selection = routing.userSelectable
-    ? `users can choose in ${routing.selectionSurface === "model_picker" ? "the model picker" : routing.selectionSurface}`
-    : "users cannot choose models here";
-  return `Answers use ${answerPath}. Models come from ${modelList}; ${selection}.`;
+    ? "Choose another model anytime in Models."
+    : "This workspace uses its configured model.";
+  return `${delivery} ${selection}`;
+}
+
+/**
+ * Keeps routine settings copy useful without exposing provider implementation
+ * identifiers such as an internal runtime/model slug.
+ */
+export function summarizeModelSelection(
+  capabilities: MatterhornBackendCapabilitiesResponse,
+): string {
+  if (capabilities.models.status !== "working") {
+    return "Set up a model provider to finish configuring this workspace.";
+  }
+
+  return capabilities.models.routing?.userSelectable
+    ? "You can change the workspace model in Models."
+    : "A workspace model is ready to use.";
 }
 
 export function walletFamilySummary(

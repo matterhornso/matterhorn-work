@@ -64,7 +64,12 @@ describe("project feedback UI contract", () => {
     expect(source).toContain("exportable");
     expect(source).toContain("deletable");
     expect(source).toContain("append-only");
-    expect(source).toContain("Feedback is eval/routing/product-quality only");
+    expect(source).toContain(
+      "Local feedback stored for product quality and routing. No training by default.",
+    );
+    expect(source).toContain(
+      "Explicit feedback only. Product quality and routing, not training.",
+    );
   });
 
   test("settings overview exposes a local feedback review surface", () => {

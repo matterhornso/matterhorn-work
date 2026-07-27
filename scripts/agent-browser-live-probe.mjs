@@ -27,6 +27,8 @@ function defaultDiscoveryPaths() {
   return [
     process.env.MATTERHORN_WORK_UI_CONTROL_DISCOVERY?.trim(),
     process.env.OPENWORK_UI_CONTROL_DISCOVERY?.trim(),
+    join(appData, "com.matterhorn.desks", "matterhorn-work-ui-control.json"),
+    join(appData, "com.matterhorn.desks.dev", "matterhorn-work-ui-control.json"),
     join(appData, "com.matterhorn.work", "matterhorn-work-ui-control.json"),
     join(appData, "com.matterhorn.work.dev", "matterhorn-work-ui-control.json"),
     join(appData, "com.differentai.openwork", "matterhorn-work-ui-control.json"),

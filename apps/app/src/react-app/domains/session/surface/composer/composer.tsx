@@ -86,6 +86,7 @@ type ComposerProps = {
   busy: boolean;
   disabled: boolean;
   modelUnavailable?: boolean;
+  onOpenAiProviders?: () => void;
   statusLabel: string;
   showModelPicker?: boolean;
   modelPickerOpen: boolean;
@@ -374,7 +375,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   const [pluginsLoading, setPluginsLoading] = useState(false);
   const [slashOpen, setSlashOpen] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
-  const [toolMenuSection, setToolMenuSection] = useState<ToolMenuSection>("commands");
+  const [toolMenuSection, setToolMenuSection] = useState<ToolMenuSection>("extensions");
   const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [menuIndex, setMenuIndex] = useState(0);
@@ -415,9 +416,10 @@ export function ReactSessionComposer(props: ComposerProps) {
     draftRef.current = props.draft;
   }, [props.draft]);
 
-  const slashMatch = props.draft.match(/^\/(\S*)$/);
-  const slashOpenNext = Boolean(slashMatch);
-  const slashQuery = slashMatch?.[1] ?? "";
+  // Runtime slash commands belong to Matterhorn's engineering environment.
+  // Customer-facing skills come only from the workspace skill catalog below.
+  const slashOpenNext = false;
+  const slashQuery = "";
   const mentionMatch = props.draft.match(/@([^\s@]*)$/);
   const mentionOpenNext = Boolean(mentionMatch);
   const mentionQuery = mentionMatch?.[1] ?? "";
@@ -553,16 +555,14 @@ export function ReactSessionComposer(props: ComposerProps) {
   }, [toolMenuOpen]);
 
   useEffect(() => {
-    if (!slashOpen && !toolMenuOpen) return;
+    if (!slashOpen) return;
     const openId = toolMenuLoadRef.current.openId;
-    if (toolMenuOpen && toolMenuLoadRef.current.commands) return;
-    if (toolMenuOpen) toolMenuLoadRef.current.commands = true;
     let cancelled = false;
     const cached = commandsCacheRef.current;
     if (cached !== null) {
       setCommands(cached);
       setCommandsLoading(false);
-      if (toolMenuOpen && toolMenuLoadRef.current.openId === openId) setCommandsLoaded(true);
+      if (toolMenuLoadRef.current.openId === openId) setCommandsLoaded(true);
       return () => {
         cancelled = true;
       };
@@ -572,13 +572,13 @@ export function ReactSessionComposer(props: ComposerProps) {
       .then((next) => {
         if (!cancelled) {
           setCommands(next);
-          if (toolMenuOpen && toolMenuLoadRef.current.openId === openId) setCommandsLoaded(true);
+          if (toolMenuLoadRef.current.openId === openId) setCommandsLoaded(true);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setCommands([]);
-          if (toolMenuOpen && toolMenuLoadRef.current.openId === openId) setCommandsLoaded(true);
+          if (toolMenuLoadRef.current.openId === openId) setCommandsLoaded(true);
         }
       })
       .finally(() => {
@@ -587,7 +587,7 @@ export function ReactSessionComposer(props: ComposerProps) {
     return () => {
       cancelled = true;
     };
-  }, [slashOpen, toolMenuOpen, loadCommands]);
+  }, [slashOpen, loadCommands]);
 
   useEffect(() => {
     if (!mentionOpen) return;
@@ -749,7 +749,6 @@ export function ReactSessionComposer(props: ComposerProps) {
   const activeMenu = slashOpen ? "slash" : mentionOpen ? "mention" : null;
   const activeItems = activeMenu === "slash" ? slashFiltered : activeMenu === "mention" ? mentionFiltered : [];
   const toolCommandItems = commands.filter((command) => !command.source || command.source === "command");
-  const toolSkillItems = commands.filter((command) => command.source === "skill");
   const toolMcpItems = commands.filter((command) => command.source === "mcp");
   void toolMcpItems;
   const pluginSections = importedPlugins
@@ -780,7 +779,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   useEffect(() => {
     if (!toolMenuSection.startsWith("plugin:")) return;
     if (activePlugin) return;
-    setToolMenuSection("commands");
+    setToolMenuSection("extensions");
   }, [activePlugin, toolMenuSection]);
 
   useEffect(() => {
@@ -1001,6 +1000,11 @@ export function ReactSessionComposer(props: ComposerProps) {
     status: toReactMcpStatus(entry.name, entry, mcpStatuses),
   }));
   const commandToolsEnabled = props.executionMode === "work";
+
+  useEffect(() => {
+    if (commandToolsEnabled || toolMenuSection !== "skills") return;
+    setToolMenuSection("extensions");
+  }, [commandToolsEnabled, toolMenuSection]);
 
   const panelRoundedClass =
     mentionOpen || slashOpen
@@ -1334,12 +1338,11 @@ export function ReactSessionComposer(props: ComposerProps) {
                         <div className="flex items-center gap-1 bg-dls-surface-muted/[0.12] p-2">
                           <div role="tablist" aria-label="Tool categories" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
                           {([
-                            { section: "commands", label: t("dashboard.commands"), icon: Terminal },
                             { section: "skills", label: t("dashboard.skills"), icon: Zap },
                             { section: "extensions", label: "Extensions", icon: Puzzle },
                             { section: "mcps", label: t("composer.mcps_label"), icon: Plug },
                           ] as const)
-                            .filter(({ section }) => commandToolsEnabled || (section !== "commands" && section !== "skills"))
+                            .filter(({ section }) => commandToolsEnabled || section !== "skills")
                             .map(({ section, label, icon: Icon }) => (
                             <button
                               key={section}
@@ -1398,7 +1401,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                     <Terminal size={14} className="mt-0.5 shrink-0 text-gray-9" />
                                     <div className="min-w-0">
                                       <div className="truncate text-xs font-semibold text-gray-11">/{command.name}</div>
-                                      {command.description ? <div className="truncate text-xs text-gray-10">{command.description}</div> : null}
+                                      {command.description ? <div className="mt-0.5 line-clamp-2 break-words text-xs leading-4 text-gray-10">{command.description}</div> : null}
                                     </div>
                                   </button>
                                 ))}
@@ -1407,14 +1410,14 @@ export function ReactSessionComposer(props: ComposerProps) {
                               <ToolMenuLoading label={t("composer.loading_commands")} />
                             ) : (
                               <div className="px-3 py-2 text-xs text-gray-10">
-                                {t("composer.no_commands")}
+                                No workspace commands are available.
                               </div>
                             )
                           ) : null}
                           {toolMenuSection === "skills" ? (
-                            (skills.length > 0 || toolSkillItems.length > 0) ? (
+                            skills.length > 0 ? (
                               <div className="grid gap-1">
-                                {[...toolSkillItems, ...skills.filter((skill) => !toolSkillItems.some((command) => command.name === skill.name)).map((skill) => ({ id: `skill:${skill.name}`, name: skill.name, description: skill.description, source: "skill" as const }))].map((command) => (
+                                {skills.map((skill) => ({ id: `skill:${skill.name}`, name: skill.name, description: skill.description, source: "skill" as const })).map((command) => (
                                   <button
                                     key={command.id}
                                     type="button"
@@ -1428,16 +1431,28 @@ export function ReactSessionComposer(props: ComposerProps) {
                                     <Zap size={14} className="mt-0.5 shrink-0 text-gray-9" />
                                     <div className="min-w-0">
                                       <div className="truncate text-xs font-semibold text-gray-11">/{command.name}</div>
-                                      {command.description ? <div className="truncate text-xs text-gray-10">{command.description}</div> : null}
+                                      {command.description ? <div className="mt-0.5 line-clamp-2 break-words text-xs leading-4 text-gray-10">{command.description}</div> : null}
                                     </div>
                                   </button>
                                 ))}
                               </div>
-                            ) : (!skillsLoaded && skillsLoading) || (!commandsLoaded && commandsLoading) ? (
+                            ) : !skillsLoaded && skillsLoading ? (
                               <ToolMenuLoading label={t("composer.loading_commands")} />
                             ) : (
-                              <div className="px-3 py-2 text-xs text-gray-10">
-                                {t("context_panel.no_skills")}
+                              <div className="space-y-2 px-3 py-2">
+                                <div className="text-xs leading-4 text-gray-10">
+                                  No workspace skills are installed.
+                                </div>
+                                <button
+                                  type="button"
+                                  className="inline-flex h-7 items-center rounded-md bg-dls-hover/55 px-2.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.3)]"
+                                  onClick={() => {
+                                    setToolMenuOpen(false);
+                                    openToolMenuSettings();
+                                  }}
+                                >
+                                  Manage skills
+                                </button>
                               </div>
                             )
                           ) : null}
@@ -1456,7 +1471,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                           {formatMcpStatusLabel(status)}
                                         </span>
                                       </div>
-                                      <div className="truncate text-xs text-gray-10">{formatComposerMcpConnection(entry)}</div>
+                                      <div className="mt-0.5 line-clamp-2 break-words text-xs leading-4 text-gray-10">{formatComposerMcpConnection(entry)}</div>
                                     </div>
                                   </div>
                                 ))}
@@ -1788,7 +1803,19 @@ export function ReactSessionComposer(props: ComposerProps) {
               />
             ) : null}
             {props.modelUnavailable ? (
-              <span className="text-xs font-medium text-red-10">Model no longer available</span>
+              props.onOpenAiProviders ? (
+                <button
+                  type="button"
+                  className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[rgb(var(--dls-accent-rgb)/0.16)] px-2.5 text-xs font-semibold text-dls-text transition-colors hover:bg-[rgb(var(--dls-accent-rgb)/0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.35)]"
+                  onClick={props.onOpenAiProviders}
+                  title="Connect a model provider to send messages"
+                >
+                  <Plug size={12} />
+                  Connect a model
+                </button>
+              ) : (
+                <span className="text-xs font-medium text-red-10">Connect a model to send</span>
+              )
             ) : null}
 
             <ModelBehaviorSelect

@@ -45,6 +45,7 @@ import {
   buildBittensorSigningReceiptCard,
   buildBittensorSidecarHealthCard,
   buildBittensorStakingPlanCard,
+  buildBittensorSubnetCards,
   buildBittensorValidatorComparisonCards,
   buildBittensorValidatorIntelligenceCard,
   buildBittensorWalletCard,
@@ -263,6 +264,36 @@ describe("buildBittensorQuote", () => {
     const quote = buildBittensorQuote({ action: "stake", netuid: 1, amountTao: "1" });
     expect(quote.expectedAlpha).toBeNull();
     expect(quote.warnings.join(" ")).toContain("Live subnet price was unavailable");
+  });
+});
+
+describe("Bittensor reference-data presentation", () => {
+  test("labels curated fallback data clearly without exposing the internal source identifier", () => {
+    const [card] = buildBittensorSubnetCards([{
+      netuid: 14,
+      name: "TAOHash",
+      symbol: "SN14",
+      category: "Compute and infrastructure",
+      benefitSummary: "Compute-oriented subnet context.",
+      ownerColdkey: null,
+      ownerHotkey: null,
+      priceTao: null,
+      emission: null,
+      tempo: null,
+      updatedAt: "2026-07-26T00:00:00.000Z",
+      source: "curated-fallback",
+    }]);
+
+    expect(card?.summary).toContain("Reference metadata only");
+    expect(card?.items.find((item) => item.label === "Source")?.value).toBe("Reference metadata");
+    expect(card?.warnings?.join(" ")).toContain("Live Bittensor metrics are unavailable");
+    expect(JSON.stringify({
+      title: card?.title,
+      subtitle: card?.subtitle,
+      summary: card?.summary,
+      items: card?.items,
+      warnings: card?.warnings,
+    })).not.toContain("curated-fallback");
   });
 });
 

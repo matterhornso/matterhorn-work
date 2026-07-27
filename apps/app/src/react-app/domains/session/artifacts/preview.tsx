@@ -292,14 +292,17 @@ export function GeneratedImagePreview({
     <div className={cn("h-full overflow-auto px-4 py-5", className)} {...props}>
       <div className="mx-auto grid max-w-3xl gap-4">
         {mock ? (
-          <div className="flex min-h-56 items-center justify-center rounded-lg bg-dls-surface-raised px-6 py-10 text-center">
+          <div
+            role="status"
+            className="flex min-h-48 items-center justify-center rounded-lg border border-dls-border-subtle bg-dls-surface-raised px-6 py-8 text-center"
+          >
             <div className="max-w-sm">
-              <div className="mx-auto flex size-10 items-center justify-center rounded-md bg-dls-surface-muted/45 text-muted-foreground">
+              <div className="mx-auto flex size-10 items-center justify-center rounded-md bg-dls-surface-muted/55 text-muted-foreground">
                 <ImageIcon className="size-5" />
               </div>
-              <h4 className="mt-3 text-sm font-semibold text-foreground">Mock preview</h4>
+              <h4 className="mt-3 text-sm font-semibold text-foreground">Sample image output</h4>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                This placeholder confirms the image workflow works. No production image was rendered.
+                A sample artifact was saved to verify this workflow. No provider image was generated.
               </p>
             </div>
           </div>

@@ -37,7 +37,7 @@ describe("AI provider UI contract", () => {
     );
   });
 
-  test("keeps technical model details scoped to connected providers", () => {
+  test("keeps provider availability focused on user actions", () => {
     const summarySource = readReactSource(
       "domains/settings/state/model-readiness-summary.ts",
     );
@@ -49,7 +49,8 @@ describe("AI provider UI contract", () => {
       "buildModelCatalogRows(catalog, { connectedOnly: true })",
     );
     expect(summarySource).toContain("countConnectedCatalogModels");
-    expect(summarySource).toContain("available through Connect provider");
+    expect(summarySource).toContain("more provider");
+    expect(summarySource).toContain("Connect a provider before chats and desk tasks can start.");
   });
 
   test("connect-provider recovery from the picker opens the real provider flow", () => {
@@ -68,7 +69,7 @@ describe("AI provider UI contract", () => {
     );
   });
 
-  test("separates the included catalog from optional external providers", () => {
+  test("separates a ready model provider from a catalog-only entry", () => {
     const viewSource = readReactSource("domains/settings/pages/ai-view.tsx");
     const summarySource = readReactSource(
       "domains/settings/state/model-readiness-summary.ts",
@@ -76,13 +77,14 @@ describe("AI provider UI contract", () => {
     const routeSource = readReactSource("shell/settings-route.tsx");
 
     expect(viewSource).toContain("isMatterhornManagedProvider");
-    expect(viewSource).toContain("<LayoutSectionTitle>Model</LayoutSectionTitle>");
-    expect(viewSource).toContain("<LayoutSectionTitle>Included models</LayoutSectionTitle>");
-    expect(viewSource).toContain("<LayoutSectionTitle>External providers</LayoutSectionTitle>");
-    expect(viewSource).toContain("Included catalog");
+    expect(viewSource).toContain("<LayoutSectionTitle>Model provider</LayoutSectionTitle>");
+    expect(viewSource).toContain("<LayoutSectionTitle>Available models</LayoutSectionTitle>");
+    expect(viewSource).toContain("<LayoutSectionTitle>Model providers</LayoutSectionTitle>");
+    expect(viewSource).toContain("Connected model catalog");
     expect(viewSource).toContain("Browse models");
-    expect(viewSource).toContain("Add provider");
-    expect(viewSource).toContain("Provider details");
+    expect(viewSource).toContain("Choose provider");
+    expect(viewSource).toContain("Provider and data details");
+    expect(viewSource).toContain("A model catalog is only a list.");
     expect(viewSource).not.toContain('"Included models ready"');
     expect(viewSource).not.toContain('label="Included"');
     expect(viewSource).not.toContain("Matterhorn Models");
@@ -90,6 +92,31 @@ describe("AI provider UI contract", () => {
     expect(routeSource).toContain(
       "resolveProviderDisplayName(provider.id, provider.name)",
     );
+  });
+
+  test("keeps setup in one clear provider section until a model is ready", () => {
+    const viewSource = readReactSource("domains/settings/pages/ai-view.tsx");
+
+    expect(viewSource).toContain(
+      "Connect a provider below, then choose a model for chats and desk tasks.",
+    );
+    expect(viewSource).not.toContain(
+      'props.cudosBusy ? "Opening..." : "Connect ASI:Cloud"',
+    );
+    expect(viewSource).toContain('"Add CUDOS API key"');
+    expect(viewSource).toContain('"Update CUDOS key"');
+  });
+
+  test("starts provider setup with a focused set and keeps the long tail deliberate", () => {
+    const modalSource = readReactSource(
+      "domains/connections/provider-auth/provider-auth-modal.tsx",
+    );
+
+    expect(modalSource).toContain("RECOMMENDED_PROVIDER_IDS");
+    expect(modalSource).toContain("Recommended providers");
+    expect(modalSource).toContain("Browse all providers");
+    expect(modalSource).toContain("Search all providers");
+    expect(modalSource).toContain("Add a model provider");
   });
 
   test("uses the Matterhorn brand mark for the included model catalog", () => {

@@ -241,7 +241,7 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("Starting {launchingTaskTitle} in a new chat.");
     expect(src).toContain('actionLabel={isLaunching ? "Starting..."');
     expect(src).not.toContain("draftedPromptTitle");
-    expect(src).not.toContain("Nothing has");
+    expect(src).toContain("Nothing has been sent yet.");
     expect(src).not.toContain("Draft ready");
     expect(surfaceSrc).toContain("Choose a starter below to run");
     expect(surfaceSrc).toContain("DeskSafetyInfoButton");
@@ -336,8 +336,10 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(launcherBlock).toContain('title: "Could not start task"');
     expect(launcherBlock).toContain('title: "Matterhorn Desks engine is offline"');
     expect(launcherBlock).toContain("selectedModelUnavailable");
-    expect(launcherBlock).toContain("setModelPickerOpen(true)");
-    expect(launcherBlock).toContain("Connect or pick an available model, then start the task again.");
+    expect(launcherBlock).toContain('handleOpenSettings("/settings/ai", workspaceId, { pendingDeskTask })');
+    expect(launcherBlock).toContain("writePendingDeskTask(workspaceId, pendingDeskTask)");
+    expect(launcherBlock).toContain("Nothing has been sent.");
+    expect(launcherBlock).toContain("Add a provider in Models, then choose one of its available models.");
     expect(launcherBlock).toContain('title: `Starting ${title || "desk task"}`');
     expect(launcherBlock).toContain('title: `${title || "Desk task"} started`');
     expect(launcherBlock).toContain('title: "Task needs review before sending"');

@@ -79,13 +79,13 @@ for (const visibleText of [
   "Hyperliquid desk",
   "Polymarket desk",
   "Sui desk",
-  "Longevity Agent",
+  "Longevity desk",
   "Agent tasks",
   "Explore subnets",
   "Read market overview",
   "Check compliance",
-  "Add market",
-  "Market URL or slug",
+  "Describe market",
+  "Describe the market or trade",
   "Preview a SUI transfer",
   "7 stages",
   "Run in chat",
@@ -109,8 +109,8 @@ for (const visibleText of [
   "Connect Phantom for Sui",
   "Connected wallet",
   "Settings",
-  "Backend status",
-  "Data policy",
+  "Workspace health",
+  "Data & privacy",
   "Task History",
   "Copy and run this in your terminal to capture a redacted readiness report.",
   "Support report",
@@ -118,11 +118,12 @@ for (const visibleText of [
   "Copy command",
   "Wallets",
   "Limited release",
-  "Model",
-  "Included models",
+  "Models",
+  "Available models",
+  "Connected model catalog",
   "Browse models",
-  "Included models",
-  "Big Pickle",
+  "Matterhorn smoke provider",
+  "Smoke model",
   "Billing",
   "Matterhorn Plus",
   "Matterhorn Max",
@@ -187,14 +188,18 @@ assert.ok(
 );
 assert.ok(
   script.includes("function isWorkspaceSessionDetailUrl") &&
+    script.includes("function isWorkspaceSettingsAiUrl") &&
     script.includes("async function waitForDeskPromptSentEvent") &&
     script.includes('entry?.name === "desk.task_launch.prompt_sent"') &&
     script.includes('locator("[data-workflow-stage]")') &&
-    script.includes("await page.waitForURL((url) => isWorkspaceSessionDetailUrl(url.toString())") &&
+    script.includes("provider_setup_required") &&
+    script.includes('getByTestId("pending-desk-task-handoff")') &&
+    script.includes('name: "Return to desk"') &&
+    script.includes("Nothing has been sent yet.") &&
     script.includes('page.getByTestId("session-composer-shell")') &&
     script.includes("startedDeskTaskEvents") &&
     script.includes("startedDeskTaskSessions"),
-  "product browser smoke should prove desk task launch sends a real prompt and navigates into a concrete chat session with the composer mounted",
+  "product browser smoke should prove a desk task either sends a real prompt into a concrete chat session or pauses safely at provider setup without sending work",
 );
 assert.ok(
   script.includes('browser.newContext({ viewport: { width: 390, height: 844 } })') &&

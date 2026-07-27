@@ -413,7 +413,7 @@ export function ArtifactPanel({
                 </h3>
                 <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
                   {generatedImageId ? (
-                    <span>{isMockGeneratedImage ? "Mock preview · no production image rendered" : "Image preview"}</span>
+                    <span>{isMockGeneratedImage ? "Sample output · no provider image" : "Image preview"}</span>
                   ) : (
                     <span className="truncate">{target.name}</span>
                   )}

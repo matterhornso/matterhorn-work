@@ -16,10 +16,21 @@ import { TextInput } from "../../../design-system/text-input";
 import type { McpDirectoryInfo } from "@/app/constants";
 import { t } from "@/i18n";
 
+export type McpAddResult =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      message?: string;
+    };
+
 export type AddMcpModalProps = {
   open: boolean;
   onClose: () => void;
-  onAdd: (entry: McpDirectoryInfo) => void;
+  onAdd: (
+    entry: McpDirectoryInfo,
+  ) => McpAddResult | void | Promise<McpAddResult | void>;
   busy: boolean;
   isRemoteWorkspace: boolean;
 };
@@ -67,6 +78,13 @@ export function validateRemoteMcpUrl(value: string): string | null {
   }
 }
 
+export function getMcpAddError(result: McpAddResult | void): string | null {
+  if (!result || result.ok) return null;
+  // Connection errors can include implementation-specific details. Keep the
+  // form guidance safe and actionable while preserving the person's input.
+  return "Couldn't add this MCP. Check its URL or command, then try again.";
+}
+
 export function AddMcpModal(props: AddMcpModalProps) {
   const [state, dispatch] = useReducer(addMcpReducer, initialAddMcpState);
   const oauthRequiredId = useId();
@@ -75,8 +93,8 @@ export function AddMcpModal(props: AddMcpModalProps) {
     dispatch("reset");
   };
 
-  const handleClose = () => {
-    if (state.submitting) return;
+  const handleClose = (force = false) => {
+    if (state.submitting && !force) return;
     reset();
     props.onClose();
   };
@@ -102,7 +120,7 @@ export function AddMcpModal(props: AddMcpModalProps) {
       }
 
       try {
-        await Promise.resolve(
+        const result = await Promise.resolve(
           props.onAdd({
             name: trimmedName,
             description: "",
@@ -111,6 +129,16 @@ export function AddMcpModal(props: AddMcpModalProps) {
             oauth: state.oauthRequired,
           }),
         );
+        const addError = getMcpAddError(result);
+        if (addError) {
+          dispatch({ error: addError });
+          return;
+        }
+      } catch {
+        dispatch({
+          error: "Couldn't add this MCP. Check its URL or command, then try again.",
+        });
+        return;
       } finally {
         dispatch({ submitting: false });
       }
@@ -122,7 +150,7 @@ export function AddMcpModal(props: AddMcpModalProps) {
       }
 
       try {
-        await Promise.resolve(
+        const result = await Promise.resolve(
           props.onAdd({
             name: trimmedName,
             description: "",
@@ -131,12 +159,22 @@ export function AddMcpModal(props: AddMcpModalProps) {
             oauth: false,
           }),
         );
+        const addError = getMcpAddError(result);
+        if (addError) {
+          dispatch({ error: addError });
+          return;
+        }
+      } catch {
+        dispatch({
+          error: "Couldn't add this MCP. Check its URL or command, then try again.",
+        });
+        return;
       } finally {
         dispatch({ submitting: false });
       }
     }
 
-    handleClose();
+    handleClose(true);
   };
 
   return (

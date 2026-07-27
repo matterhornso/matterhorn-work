@@ -62,7 +62,10 @@ import { t } from "../../../../i18n";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ConfirmModal } from "../../../design-system/modals/confirm-modal";
-import { AddMcpModal } from "../../connections/modals/add-mcp-modal";
+import {
+  AddMcpModal,
+  type McpAddResult,
+} from "../../connections/modals/add-mcp-modal";
 import { useStatusToasts } from "../../shell-feedback/status-toasts";
 import {
   isMatterhornExtensionEnabled,
@@ -135,7 +138,9 @@ export type McpViewProps = {
   selectedMcp: string | null;
   setSelectedMcp: (name: string | null) => void;
   quickConnect: McpDirectoryInfo[];
-  connectMcp: (entry: McpDirectoryInfo) => void;
+  connectMcp: (
+    entry: McpDirectoryInfo,
+  ) => McpAddResult | void | Promise<McpAddResult | void>;
   authorizeMcp: (entry: McpServerEntry) => void;
   logoutMcpAuth: (name: string) => Promise<void> | void;
   removeMcp: (name: string) => void;
@@ -471,7 +476,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     name: "Bittensor MCP",
     protocolDeskId: "bittensor",
     description:
-      "TAO reads, subnet discovery, validator checks, watches, receipts, and unsigned previews.",
+      "Public TAO reads, subnet discovery, transfer drafts, watches, receipts, and advanced previews.",
     command: "matterhorn-work mcp config --target codex --profile full",
     tools: [
       "matterhorn_bittensor_chat",
@@ -497,7 +502,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     toolSummary:
       "19 tools for chat, wallet reads, readiness, subnets, watches, and receipts.",
     boundary:
-      "Public reads and unsigned previews only. Use an external signer. Never paste seeds, keys, mnemonics, signatures, signed payloads, or wallet exports.",
+      "Public reads and transfer drafts. Direct TAO transfers move to a separate wallet review; staking and advanced actions use an external signer. Never paste seeds, keys, mnemonics, signatures, signed payloads, or wallet exports.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
     docs: mcpDocs(
       "bittensor",
@@ -507,23 +512,23 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
           title: "Use this MCP for",
           items: [
             "TAO balance, stake, hotkey, coldkey, subnet, validator, and watch context.",
-            "Unsigned staking, transfer, subnet invocation, and receipt previews.",
-            "Customer evidence bundles and readiness checks before an external signing step.",
+            "Transfer drafts, staking and subnet previews, and public receipt evidence.",
+            "Customer evidence bundles and readiness checks before a wallet or external-signing step.",
           ],
         },
         {
           title: "How it works",
           items: [
             "Reads use public SS58, coldkey, hotkey, subnet, validator, and receipt data.",
-            "Preview tools return unsigned payloads or handoff packets for review.",
-            "External signing remains outside Matterhorn; signed receipts can be imported for evidence.",
+            "Transfer drafts can move to a separate installed-wallet review; staking and advanced previews create handoff packets.",
+            "Matterhorn never stores signing material; public receipts can be imported as evidence.",
           ],
         },
         {
           title: "Safety boundary",
           items: [
             "Matterhorn never asks for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
-            "Action previews require user review and an external signer.",
+            "Direct TAO transfers require exact wallet review; staking and advanced actions use an external signer.",
             "Any live sidecar submission remains explicitly separated from the default MCP flow.",
           ],
         },
@@ -1736,8 +1741,9 @@ export function McpView(props: McpViewProps) {
                       : hasConfigSlot
                         ? undefined
                         : () => {
-                            props.connectMcp(detailEntry);
-                            setDetailEntry(null);
+                            void Promise.resolve(props.connectMcp(detailEntry)).then((result) => {
+                              if (!result || result.ok) setDetailEntry(null);
+                            });
                           }
                 }
                 onUninstall={
@@ -3205,12 +3211,14 @@ function McpAdvancedConfigSection(props: {
                 )}
               </Button>
               <a
-                href="https://opencode.ai/docs/mcp-servers/"
+                href="https://github.com/matterhornso/matterhorn-work/blob/dev/docs/mcp/README.md"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-dls-secondary transition-colors hover:text-dls-text"
+                className="inline-flex h-6 items-center gap-1 rounded-md bg-dls-surface-muted/55 px-2.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-surface-muted/75"
+                aria-label="Open the Matterhorn MCP guide"
               >
-                {t("mcp.docs_link")}
+                <BookOpen size={12} />
+                MCP guide
                 <ExternalLink size={11} />
               </a>
             </div>

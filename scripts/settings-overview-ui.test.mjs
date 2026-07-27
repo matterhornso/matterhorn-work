@@ -112,11 +112,13 @@ for (const title of [
 for (const phrase of [
   "non-custodial",
   "never holds your keys, signs silently, or moves funds",
-  "external Bittensor-compatible signer",
+  "connected Bittensor wallet",
+  "Staking and advanced calls remain unsigned handoffs for an external signer",
   "manual orders use a separate trade ticket",
   "sign a short-lived intent in your connected wallet",
   "agents and watches cannot submit",
-  "prepares drafts for you to review and submit in your own eligible client",
+  "eligible EOA BUY orders use a separate compliance-gated ticket",
+  "connected Polygon wallet; agents and watches cannot submit",
   "never asks for or stores seed phrases, private keys, or API secrets",
   "stored",
 ]) {
@@ -128,9 +130,10 @@ for (const phrase of [
 for (const phrase of [
   "liveProviderConfigured",
   "curated_fallback",
-  "Live reads · Preview",
-  "Fallback reads · Preview",
-  "Manual wallet approval",
+  "Live reads · TAO transfers",
+  "Fallback reads · TAO transfers",
+  "Wallet-approved execution",
+  "Eligible BUY execution",
   "Preview only",
   "These labels describe what each desk can do; they are not action buttons.",
 ]) {
@@ -142,7 +145,7 @@ for (const phrase of [
 
 // 5. Theme controls, accent preview, diagnostics, version.
 for (const phrase of [
-  "setThemeMode",
+  "onThemeChange",
   "Brand palette",
   "matterhorn-blue",
   "VITE_OPENWORK_APP_VERSION",

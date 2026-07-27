@@ -64,84 +64,91 @@ function modelRefLabel(
   return `${resolveProviderDisplayName(model.providerId)} / ${resolveModelDisplayName(model.modelId)}`;
 }
 
+function isCatalogOnlyProviderId(providerId: string | null | undefined) {
+  return providerId?.trim().toLowerCase() === "opencode";
+}
+
+function connectedPromptProviders(
+  catalog: MatterhornBackendModelCatalogSnapshot | undefined,
+) {
+  return (catalog?.providers ?? []).filter(
+    (provider) =>
+      provider.connected &&
+      !isCatalogOnlyProviderId(provider.id) &&
+      provider.modelCount > 0,
+  );
+}
+
 function answerPathLabel(
   routing: MatterhornBackendModelRouting | undefined,
+  canAnswerPrompts: boolean,
 ): string {
-  if (routing?.answerPath.transport === "opencode_session_prompt_async") {
-    return "Local session prompts";
-  }
-  return routing?.answerPath.label ?? "Local session prompts";
+  return routing?.answerPath.status === "working" && canAnswerPrompts
+    ? "Ready for chats and desks"
+    : "Connect a model provider";
 }
 
 function providerListLabel(
   routing: MatterhornBackendModelRouting | undefined,
   catalog: MatterhornBackendModelCatalogSnapshot | undefined,
+  canAnswerPrompts: boolean,
 ): string {
-  if (routing?.registry.source === "matterhorn_backend_registry")
-    return "Matterhorn model registry";
-  if (
-    routing?.registry.source === "opencode_provider_list" ||
-    catalog?.source === "opencode_provider_list"
-  ) {
-    return "Local provider list";
+  if (routing?.answerPath.status !== "working" || !canAnswerPrompts) {
+    return "Connect a provider";
   }
-  return routing?.registry.label ?? "Connect an agent engine";
+  if (routing?.registry.source === "matterhorn_backend_registry") {
+    return "Included and connected models";
+  }
+  if (catalog?.status === "needs_setup") return "Connect a provider";
+  return catalog?.serverFetched || routing?.registry.status === "working"
+    ? "Available to choose"
+    : "Checking availability";
 }
 
 function providerCatalogDetail(
   catalog: MatterhornBackendModelCatalogSnapshot | undefined,
+  routing: MatterhornBackendModelRouting | undefined,
+  canAnswerPrompts: boolean,
 ): string {
-  if (!catalog)
-    return "Using the app provider list until the engine reports a workspace catalog.";
+  if (routing?.answerPath.status !== "working" || !canAnswerPrompts) {
+    return "Connect a provider before chats and desk tasks can start.";
+  }
+  if (!catalog) {
+    return "Matterhorn Desks will check available models before you start work.";
+  }
   if (catalog.serverFetched) {
-    const connectedProviders = catalog.providers.filter(
-      (provider) => provider.connected,
-    );
-    const managedCatalogOnly =
-      connectedProviders.length > 0 &&
-      connectedProviders.every(
-        (provider) => provider.id.trim().toLowerCase() === "opencode",
-      );
-    if (managedCatalogOnly) {
-      return "The local engine returned a model catalog. Provider access is verified when a chat starts.";
-    }
     const availableProviderCount = Math.max(
       0,
       catalog.providerCount - catalog.connectedProviderCount,
     );
     return availableProviderCount > 0
-      ? `Fetched from the local workspace engine. ${availableProviderCount} more provider${availableProviderCount === 1 ? " is" : "s are"} available through Connect provider.`
-      : "Fetched from the local workspace engine.";
+      ? `${availableProviderCount} more provider${availableProviderCount === 1 ? " is" : "s are"} available to connect.`
+      : "Your connected provider supplies the models shown here.";
   }
   if (catalog.errorCode === "opencode_unconfigured") {
-    return "The local engine is reachable, but this workspace is not connected to an agent engine yet.";
+    return "Connect a provider to start chats and desk tasks.";
   }
-  return "Using delegated app state until a live workspace catalog is available.";
+  return "Model availability is still being checked for this workspace.";
 }
 
 function statusForCatalog(
   catalog: MatterhornBackendModelCatalogSnapshot | undefined,
+  routing: MatterhornBackendModelRouting | undefined,
   catalogQueryFailed: boolean | undefined,
+  canAnswerPrompts: boolean,
 ): { label: string; tone: ModelReadinessTone } {
   if (catalogQueryFailed) return { label: "Start engine", tone: "warning" };
+  if (routing?.answerPath.status !== "working" || !canAnswerPrompts) {
+    return { label: "Connect provider", tone: "warning" };
+  }
   if (catalog?.status === "working") {
-    const connectedProviders = catalog.providers.filter(
-      (provider) => provider.connected,
-    );
-    const managedCatalogOnly =
-      connectedProviders.length > 0 &&
-      connectedProviders.every(
-        (provider) => provider.id.trim().toLowerCase() === "opencode",
-      );
-    return managedCatalogOnly
-      ? { label: "Catalog loaded", tone: "neutral" }
-      : { label: "Working", tone: "ready" };
+    return { label: "Working", tone: "ready" };
   }
   if (catalog?.status === "needs_setup")
     return { label: "Connect provider", tone: "warning" };
   if (catalog?.status === "preview")
     return { label: "Preview", tone: "neutral" };
-  return { label: "Provider status unavailable", tone: "neutral" };
+  return { label: "Availability unknown", tone: "neutral" };
 }
 
 function sourceLabel(source: string | undefined): string {
@@ -172,7 +179,11 @@ export function buildModelCatalogRows(
   if (!catalog?.providers.length) return [];
 
   return catalog.providers
-    .filter((provider) => !options.connectedOnly || provider.connected)
+    .filter(
+      (provider) =>
+        !isCatalogOnlyProviderId(provider.id) &&
+        (!options.connectedOnly || provider.connected),
+    )
     .map((provider) => {
       const samples = provider.sampleModels.length
         ? provider.sampleModels
@@ -194,7 +205,11 @@ export function countConnectedCatalogModels(
 ): number {
   if (!catalog?.providers.length) return 0;
   return catalog.providers
-    .filter((provider) => provider.connected)
+    .filter(
+      (provider) =>
+        provider.connected &&
+        !isCatalogOnlyProviderId(provider.id),
+    )
     .reduce((total, provider) => total + provider.modelCount, 0);
 }
 
@@ -208,104 +223,124 @@ export function buildModelReadinessSummary(
     input.workspaceSelection ?? backendModels?.workspaceSelection ?? null;
   const effectiveModel =
     input.effectiveWorkspaceModel ?? backendModels?.defaultModel ?? null;
-  const status = statusForCatalog(catalog, input.catalogQueryFailed);
   const providerCount = catalog?.serverFetched
-    ? catalog.connectedProviderCount
+    ? connectedPromptProviders(catalog).length
     : input.connectedProviderCount;
   const modelCount = catalog?.serverFetched
     ? countConnectedCatalogModels(catalog)
     : input.connectedModelCount;
+  const canAnswerPrompts =
+    routing?.answerPath.status === "working" && providerCount > 0;
+  const status = statusForCatalog(
+    catalog,
+    routing,
+    input.catalogQueryFailed,
+    canAnswerPrompts,
+  );
   const currentModelRef = input.currentModelRef.trim();
   const hasLocalModelOverride =
     input.hasLocalModelOverride ??
     Boolean(currentModelRef && currentModelRef.toLowerCase() !== "default");
-  const currentChoiceValue = hasLocalModelOverride
+  const currentChoiceValue = !canAnswerPrompts
+    ? "Not ready"
+    : hasLocalModelOverride
     ? input.currentModelLabel.trim() || currentModelRef || "Local picker"
     : workspaceSelection
       ? "Workspace default"
-      : "Engine fallback";
+      : "No saved choice";
   const currentChoiceLabel = currentChoiceValue;
-  const workspaceDefaultValue = workspaceSelection
+  const workspaceDefaultValue = !canAnswerPrompts
+    ? "Connect a provider first"
+    : workspaceSelection
     ? modelRefLabel(workspaceSelection)
     : "Not saved";
-  const effectiveModelValue = modelRefLabel(effectiveModel);
-  const providerListValue = providerListLabel(routing, catalog);
-  const answerPathValue = answerPathLabel(routing);
+  const effectiveModelValue = canAnswerPrompts
+    ? modelRefLabel(effectiveModel)
+    : "Connect a provider first";
+  const providerListValue = providerListLabel(
+    routing,
+    catalog,
+    canAnswerPrompts,
+  );
+  const answerPathValue = answerPathLabel(routing, canAnswerPrompts);
   const preferenceStore =
-    routing?.selection.preferenceStore === "server" ? "Workspace" : "Local app";
+    routing?.selection.preferenceStore === "server"
+      ? "Workspace"
+      : "This app";
 
   return {
     statusLabel: status.label,
     statusTone: status.tone,
     currentChoice: {
-      label: "Current picker choice",
+      label: "Selected model",
       value: currentChoiceLabel,
       detail: hasLocalModelOverride
-        ? `${currentChoiceValue} is sent with prompts from this app session.`
+        ? canAnswerPrompts
+          ? "Used for this chat until you change it."
+          : "Connect a provider before this choice can answer."
         : workspaceSelection
-          ? "This app session follows the saved workspace default."
-          : "This app session falls back to the engine default until you choose or save a model.",
+          ? "This chat follows the workspace default."
+          : "Choose a model for this chat or save one for the workspace.",
     },
     workspaceDefault: {
       label: "Workspace default",
       value: workspaceDefaultValue,
       detail: workspaceSelection
-        ? "Saved in this workspace for agents that do not have a local picker override."
-        : "No workspace default is saved yet. The app uses a local picker choice when you make one, then the engine fallback.",
+        ? canAnswerPrompts
+          ? "Used for new chats and desk tasks unless you choose another model."
+          : "Connect a provider before this default can answer."
+        : "Choose a model, then save it here for new chats and desk tasks.",
     },
     effectiveModel: {
-      label: "Fallback model",
+      label: "When no model is chosen",
       value: effectiveModelValue,
-      detail:
-        "Used when this app has no local picker choice or saved workspace default.",
+      detail: canAnswerPrompts
+        ? "Matterhorn Desks uses this model until you make a choice."
+        : "Connect a provider to make a model available in this workspace.",
     },
     answerPath: {
-      label: "Agent answers",
+      label: "Chat delivery",
       value: answerPathValue,
-      detail:
-        "Chats and desk tasks call session.promptAsync. Requests include providerID/modelID when a picker choice or workspace default exists.",
+      detail: canAnswerPrompts
+        ? "Your selected model is used when you send a prompt."
+        : "Connect a provider before sending a prompt or starting a desk task.",
     },
     providerList: {
-      label: "Model list",
+      label: "Model availability",
       value: providerListValue,
-      detail: routing?.registry.serverOwned
-        ? "The Matterhorn backend owns the model registry for this workspace."
-        : "The live selectable list is fetched from the local engine provider list for this workspace.",
+      detail: canAnswerPrompts
+        ? "Choose a model from a connected provider."
+        : "Connect a provider to make models available for this workspace.",
     },
     providerCatalog: {
-      label: "Connected catalog",
+      label: "Available models",
       value: `${providerCount} provider${providerCount === 1 ? "" : "s"} · ${modelCount} model${modelCount === 1 ? "" : "s"}`,
-      detail: providerCatalogDetail(catalog),
+      detail: providerCatalogDetail(catalog, routing, canAnswerPrompts),
     },
     selectionPolicy: {
-      label: "Selection store",
+      label: "Where this choice applies",
       value: preferenceStore,
       detail: routing?.selection.serverPersisted
-        ? "A server-side workspace default exists. Local app overrides can still apply."
-        : "A chosen picker model is stored in this app profile unless you save a workspace default.",
+        ? "This workspace has a saved default. You can still choose another model for a chat."
+        : "A model chosen here applies to this app until you save a workspace default.",
     },
     trainingPolicy:
       backendModels?.privacy.trainingUse === "none_by_default"
-        ? "No model training by default. Feedback is kept only for eval, routing, and product quality review."
-        : "The agent engine did not report a training policy.",
+        ? "Your conversations are not used to train models by default."
+        : "Training use is not reported for this workspace.",
     catalogRows: buildModelCatalogRows(catalog, { connectedOnly: true }),
     details: [
       {
-        label: "Request field",
-        value:
-          routing?.answerPath.requestModelField === "model.providerID_modelID"
-            ? "model.providerID + model.modelID"
-            : "Engine did not report",
+        label: "Model selection",
+        value: routing?.selection.userSelectable ? "You choose" : "Workspace managed",
       },
       {
-        label: "Provider import",
-        value: routing?.registry.cloudProviderImport
-          ? "Cloud provider import supported"
-          : "Local providers only",
+        label: "Provider access",
+        value: canAnswerPrompts ? "Connected provider" : "Provider needed",
       },
       {
-        label: "Catalog source",
-        value: catalog?.serverFetched ? "Server snapshot" : "Delegated",
+        label: "Model check",
+        value: canAnswerPrompts ? "Ready now" : "Connect provider",
       },
       {
         label: "User selectable",

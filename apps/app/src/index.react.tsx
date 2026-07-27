@@ -33,7 +33,11 @@ const PublicSigninBootstrap = React.lazy(
   () => import("./react-app/shell/public-signin-bootstrap"),
 );
 
-const root = document.getElementById("root");
+type MatterhornRootElement = HTMLElement & {
+  __matterhornReactRoot?: ReturnType<typeof ReactDOM.createRoot>;
+};
+
+const root = document.getElementById("root") as MatterhornRootElement | null;
 
 if (!root) {
   throw new Error("Root element not found");
@@ -108,7 +112,9 @@ function MatterhornEntry() {
   );
 }
 
-ReactDOM.createRoot(root).render(
+const appRoot = root.__matterhornReactRoot ?? (root.__matterhornReactRoot = ReactDOM.createRoot(root));
+
+appRoot.render(
   <React.StrictMode>
     <MatterhornEntry />
   </React.StrictMode>,

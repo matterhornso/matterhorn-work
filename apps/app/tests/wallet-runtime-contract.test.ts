@@ -69,6 +69,16 @@ describe("wallet runtime contract", () => {
     expect(WEB_WALLET_RUNTIME_CAPABILITY.protocols.hyperliquid.connectionMode).toBe("injected_evm");
     expect(WEB_WALLET_RUNTIME_CAPABILITY.protocols.polymarket.connectionMode).toBe("injected_evm");
     expect(WEB_WALLET_RUNTIME_CAPABILITY.protocols.bittensor.connectionMode).toBe("external_handoff");
+    expect(WEB_WALLET_RUNTIME_CAPABILITY.protocols.bittensor).toMatchObject({
+      canSubmit: true,
+      liveSubmissionEnabled: true,
+      signerRequirement: "client_signer",
+    });
+    expect(WEB_WALLET_RUNTIME_CAPABILITY.protocols.polymarket).toMatchObject({
+      canSubmit: true,
+      liveSubmissionEnabled: true,
+      signerRequirement: "client_signer",
+    });
     expect(DESKTOP_WALLET_RUNTIME_CAPABILITY.safetyCopy.publicAddressLine).toContain("complete signing in your own wallet");
     expect(DESKTOP_WALLET_RUNTIME_CAPABILITY.safetyCopy.publicAddressLine).not.toContain("planned wallet strategy");
   });

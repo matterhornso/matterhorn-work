@@ -45,6 +45,7 @@ describe("Matterhorn Cloud availability contract", () => {
 
   test("keeps unavailable team-provider sign-in actions out of AI settings", () => {
     expect(cloudProvidersSource).toContain("MATTERHORN_CLOUD_ENABLED");
-    expect(cloudProvidersSource).toContain("Matterhorn Cloud provider sharing is not available in this build.");
+    expect(cloudProvidersSource).toContain("if (embedded) return null;");
+    expect(cloudProvidersSource).toContain("Team provider sharing is not included in this local build.");
   });
 });

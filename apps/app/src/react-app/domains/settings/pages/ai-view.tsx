@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/collapsible";
 import { ModelBehaviorSelect } from "@/components/model-behavior-select";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, KeyRound, Plus } from "lucide-react";
+import { ArrowLeft, ChevronDown, KeyRound, Plus } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { t } from "@/i18n";
@@ -75,6 +75,8 @@ export type AiSettingsViewProps = {
   cudosStatus?: string | null;
   cudosError?: string | null;
   onConnectCudos?: () => void | Promise<void>;
+  pendingDeskTask?: { deskId: string; title: string } | null;
+  onResumePendingDeskTask?: () => void | Promise<void>;
   onOpenModelPicker: () => void | Promise<void>;
   onUseWorkspaceDefault?: () => void | Promise<void>;
   onOpenProviderAuth: () => void | Promise<void>;
@@ -271,14 +273,6 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             source: catalogProviderSource(provider.source),
             modelCount: provider.modelCount,
           }));
-  const includedProvider = connectedProviders.find(
-    isMatterhornManagedProvider,
-  );
-  const includedCatalogProvider = catalog?.providers.find((provider) =>
-    isMatterhornManagedProvider(provider),
-  );
-  const includedModelCount =
-    includedProvider?.modelCount ?? includedCatalogProvider?.modelCount;
   const cudosProvider = connectedProviders.find(
     (provider) => provider.id.trim().toLowerCase() === "cudos",
   );
@@ -287,6 +281,13 @@ export function AiSettingsView(props: AiSettingsViewProps) {
       !isMatterhornManagedProvider(provider) &&
       provider.id.trim().toLowerCase() !== "cudos",
   );
+  const connectedPromptProviders = connectedProviders.filter(
+    (provider) => !isMatterhornManagedProvider(provider),
+  );
+  const modelProviderReady =
+    connectedPromptProviders.length > 0 &&
+    !opencodeSetupMissing &&
+    !catalogQueryFailed;
   const cudosConnected = Boolean(props.cudosConnected || cudosProvider);
   const modelReadiness = buildModelReadinessSummary({
     currentModelLabel: props.defaultModelLabel,
@@ -367,15 +368,46 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     <LayoutStack className="gap-y-8">
       <LayoutSection>
         <LayoutSectionHeader>
-          <LayoutSectionTitle>Model</LayoutSectionTitle>
+          <LayoutSectionTitle>Model provider</LayoutSectionTitle>
           <LayoutSectionDescription>
-            Choose what answers chats and desk tasks.
+            Connect a provider, then choose what answers chats and desk tasks.
           </LayoutSectionDescription>
         </LayoutSectionHeader>
+        {props.pendingDeskTask ? (
+          <div
+            className="mt-4 flex flex-col gap-4 rounded-lg border border-dls-accent/30 bg-dls-surface-raised/70 p-4 sm:flex-row sm:items-center sm:justify-between"
+            data-testid="pending-desk-task-handoff"
+          >
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-dls-text">
+                Finish setting up {props.pendingDeskTask.title}
+              </div>
+              <p className="mt-1 text-sm leading-5 text-dls-secondary">
+                Choose a provider and model, then return to this desk task. Nothing has been sent.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button
+                onClick={() => void props.onOpenProviderAuth()}
+                disabled={props.busy || props.providerAuthBusy}
+              >
+                <Plus data-icon="inline-start" />
+                Choose provider
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void props.onResumePendingDeskTask?.()}
+              >
+                <ArrowLeft data-icon="inline-start" />
+                Return to desk
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         {opencodeSetupMissing ? (
           <SettingsNotice>
-            The local agent engine is not running. Start Matterhorn Desks, then
+            Matterhorn Desks is not ready to answer yet. Restart it, then
             reload this workspace.
           </SettingsNotice>
         ) : null}
@@ -390,7 +422,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         <LayoutSectionItem className="rounded-lg bg-dls-surface-raised/65 p-4">
           <LayoutSectionItemHeader>
             <LayoutSectionItemTitle>
-              {modelReadiness.currentChoice.value}
+              {modelReadiness.currentChoice.label}
               {modelReadiness.statusTone !== "ready" ? (
                 <SettingsStatusBadge
                   tone={modelReadiness.statusTone}
@@ -399,16 +431,19 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               ) : null}
             </LayoutSectionItemTitle>
             <LayoutSectionItemDescription>
-              {modelReadiness.currentChoice.detail}
+              {modelProviderReady
+                ? `${modelReadiness.currentChoice.value}. ${modelReadiness.currentChoice.detail}`
+                : "Connect a provider below, then choose a model for chats and desk tasks."}
             </LayoutSectionItemDescription>
-            <LayoutSectionItemHeaderActions>
-              <Button
-                onClick={() => void props.onOpenModelPicker()}
-                disabled={props.busy}
-              >
-                Choose model
-              </Button>
-              {canUseWorkspaceDefault ? (
+            {modelProviderReady ? (
+              <LayoutSectionItemHeaderActions>
+                <Button
+                  onClick={() => void props.onOpenModelPicker()}
+                  disabled={props.busy}
+                >
+                  Choose model
+                </Button>
+                {canUseWorkspaceDefault ? (
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -422,7 +457,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                   Use workspace default
                 </Button>
               ) : null}
-              {canSaveWorkspaceDefault ? (
+                {canSaveWorkspaceDefault ? (
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -436,7 +471,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                   Save for workspace
                 </Button>
               ) : null}
-              {workspaceSelection ? (
+                {workspaceSelection ? (
                 <Button
                   variant="ghost"
                   onClick={() => {
@@ -450,10 +485,11 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                   Reset
                 </Button>
               ) : null}
-            </LayoutSectionItemHeaderActions>
+              </LayoutSectionItemHeaderActions>
+            ) : null}
           </LayoutSectionItemHeader>
 
-          {behaviorOptions.length > 1 ? (
+          {modelProviderReady && behaviorOptions.length > 1 ? (
             <div className="mt-1 border-t border-border/60 pt-3">
               <div className="grid items-center gap-2 py-1.5 @md/settings:grid-cols-[minmax(9rem,1fr)_auto]">
                 <div>
@@ -516,18 +552,20 @@ export function AiSettingsView(props: AiSettingsViewProps) {
           >
             <CollapsibleTrigger
               render={
-                <button
+                <Button
                   type="button"
-                  className="mt-1 flex w-full items-center justify-between border-t border-border/60 pt-3 text-xs font-medium text-dls-secondary transition-colors hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+                  variant="outline"
+                  size="xs"
+                  className="mt-3 bg-dls-surface-muted/[0.22] text-dls-secondary hover:bg-dls-surface-muted/[0.38] hover:text-dls-text"
                 >
-                  Model details
+                  How models work
                   <ChevronDown
                     className={cn(
                       "size-3.5 transition-transform",
                       modelDetailsOpen && "rotate-180",
                     )}
                   />
-                </button>
+                </Button>
               }
             />
             <CollapsibleContent>
@@ -535,55 +573,33 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 {[
                   modelReadiness.workspaceDefault,
                   modelReadiness.effectiveModel,
-                  modelReadiness.answerPath,
-                  modelReadiness.providerList,
+                  modelReadiness.providerCatalog,
                 ].map((item) => (
                   <ModelRoutingRow key={item.label} item={item} />
                 ))}
               </div>
-              <div className="mt-3 grid gap-2 border-t border-border/60 pt-3 text-xs text-dls-secondary @md/settings:grid-cols-2">
-                {[
-                  modelReadiness.providerCatalog,
-                  modelReadiness.selectionPolicy,
-                  ...modelReadiness.details,
-                ].map((item) => (
-                  <div key={item.label} className="min-w-0">
-                    <span className="text-dls-text">{item.label}</span>
-                    <span className="ml-2">{item.value}</span>
-                    {item.detail ? (
-                      <div className="mt-1 leading-5">{item.detail}</div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
+              <p className="mt-3 border-t border-border/60 pt-3 text-xs leading-5 text-dls-secondary">
+                {modelProviderReady
+                  ? "Choose a model for this chat, then save it here when you want new chats and desk tasks to use the same default."
+                  : "A model catalog is only a list. Connect a provider before chats and desk tasks can start."}
+              </p>
               {modelReadiness.catalogRows.length ? (
                 <div className="mt-3 border-t border-border/60 pt-3">
                   <div className="mb-1 text-xs font-medium text-dls-text">
-                    Available catalog
+                    Available providers
                   </div>
                   {modelReadiness.catalogRows.map((row) => (
                     <div
                       key={row.providerId}
-                      className="grid gap-1 py-2 text-xs @md/settings:grid-cols-[minmax(10rem,14rem)_1fr] @md/settings:gap-4"
+                      className="flex items-center justify-between gap-3 py-2 text-xs"
                     >
                       <div className="min-w-0">
                         <div className="truncate text-dls-text">
                           {row.providerName}
                         </div>
-                        <div className="truncate text-muted-foreground">
-                          {row.providerId === "opencode"
-                            ? "Included"
-                            : row.providerId}{" "}
-                          · {row.sourceLabel}
-                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <div className="truncate text-dls-secondary">
-                          {row.modelCountLabel} · Default {row.defaultModel}
-                        </div>
-                        <div className="mt-0.5 truncate text-muted-foreground">
-                          {row.sampleModels}
-                        </div>
+                      <div className="shrink-0 text-dls-secondary">
+                        {row.modelCountLabel}
                       </div>
                     </div>
                   ))}
@@ -603,12 +619,12 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         </LayoutSectionItem>
       </LayoutSection>
 
-      <LayoutSection>
+      {modelProviderReady ? (
+        <LayoutSection>
         <LayoutSectionHeader>
-          <LayoutSectionTitle>Included models</LayoutSectionTitle>
+          <LayoutSectionTitle>Available models</LayoutSectionTitle>
           <LayoutSectionDescription>
-            Catalog supplied by the local engine. Provider access is checked
-            when a chat starts.
+            Models from the providers connected to this workspace.
           </LayoutSectionDescription>
         </LayoutSectionHeader>
 
@@ -622,14 +638,12 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               />
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-dls-text">
-                  Included catalog
+                  Connected model catalog
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {providerCatalogLoading
                     ? "Checking models..."
-                    : includedModelCount != null
-                      ? `${includedModelCount} model${includedModelCount === 1 ? "" : "s"}`
-                      : "Available with the Matterhorn Desks engine"}
+                    : `${connectedModelCount} model${connectedModelCount === 1 ? "" : "s"} from ${connectedPromptProviders.length} provider${connectedPromptProviders.length === 1 ? "" : "s"}`}
                 </div>
               </div>
             </div>
@@ -671,22 +685,17 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             </div>
           ) : null}
 
-          {!cudosConnected && otherConnectedProviders.length === 0 ? (
-            <div className="border-t border-border/60 px-4 py-3 text-xs leading-5 text-dls-secondary">
-              If chat reports that no provider is available, connect ASI:Cloud
-              or another provider below.
-            </div>
-          ) : null}
         </div>
       </LayoutSection>
+      ) : null}
 
       <LayoutSection>
         <LayoutSectionHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
-              <LayoutSectionTitle>External providers</LayoutSectionTitle>
+              <LayoutSectionTitle>Model providers</LayoutSectionTitle>
               <LayoutSectionDescription>
-                Use a provider account you control.
+                Connect a provider account or API key you control.
               </LayoutSectionDescription>
             </div>
             <Button
@@ -695,7 +704,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               disabled={props.busy || props.providerAuthBusy}
             >
               <Plus data-icon="inline-start" />
-              {props.providerAuthBusy ? "Loading..." : "Add provider"}
+              {props.providerAuthBusy ? "Loading..." : "Choose provider"}
             </Button>
           </div>
         </LayoutSectionHeader>
@@ -716,7 +725,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                   ) : null}
                 </div>
                 <div className="text-xs leading-5 text-muted-foreground">
-                  7 models · CUDOS API key
+                  {cudosConnected
+                    ? "7 models available"
+                    : "Connect your CUDOS API key to use seven models"}
                 </div>
               </div>
             </div>
@@ -733,8 +744,8 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               {props.cudosBusy
                 ? "Opening..."
                 : cudosConnected
-                  ? "Update key"
-                  : "Connect"}
+                  ? "Update CUDOS key"
+                  : "Add CUDOS API key"}
             </Button>
           </div>
 
@@ -817,9 +828,11 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         >
           <CollapsibleTrigger
             render={
-              <button
+              <Button
                 type="button"
-                className="flex items-center gap-1.5 text-xs font-medium text-dls-secondary transition-colors hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+                variant="outline"
+                size="xs"
+                className="bg-dls-surface-muted/[0.22] text-dls-secondary hover:bg-dls-surface-muted/[0.38] hover:text-dls-text"
               >
                 <ChevronDown
                   className={cn(
@@ -827,8 +840,8 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                     providerDetailsOpen && "rotate-180",
                   )}
                 />
-                Provider details
-              </button>
+                Provider and data details
+              </Button>
             }
           />
           <CollapsibleContent>
@@ -837,9 +850,8 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 {t("settings.api_keys_info")}
               </LayoutSectionItemFootnote>
               <p>
-                Included models come from the catalog managed by the local
-                Matterhorn Desks engine. A catalog entry does not guarantee
-                that its provider is authenticated.
+                Provider credentials stay in this workspace runtime. A model
+                becomes available only after its provider is connected.
               </p>
             </div>
           </CollapsibleContent>

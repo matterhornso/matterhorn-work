@@ -116,13 +116,13 @@ type CustomerWorkflowTemplateResponse = {
 };
 
 const MARKET_HANDOFF_SUFFIX =
-  "Prepare an external trade handoff when asked. Make clear: Can submit: No. Live submission: Off. External trade handoff only. The user executes in their own external client, and Matterhorn never signs or holds keys.";
+  "Prepare exact order terms when asked. The Agent draft cannot submit. An eligible EOA BUY order can continue in the separate connected-wallet ticket after compliance passes and the user authorizes the exact order. Sell orders, proxy accounts, watches, and agents cannot submit. Matterhorn never signs or holds keys.";
 
 const HYPERLIQUID_EXECUTION_SUFFIX =
-  "Research and prepare an order preview, but never claim Matterhorn placed it. Finish any real order in your own reviewed Hyperliquid client. Never request keys, signatures, or API secrets.";
+  "Research and prepare an exact order draft, but never claim the Agent placed it. The user must review it in the separate trade ticket and authorize its short-lived intent with a connected wallet before Matterhorn submits it. Agents and watches cannot submit. Never request keys, raw signatures, or API secrets.";
 
 const BITTENSOR_SUFFIX =
-  "Use public wallet context only. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";
+  "Use public wallet context only. TAO transfers can continue in the separate transfer ticket after exact review and connected Bittensor-wallet authorization. Staking, unstaking, delegation, and advanced calls remain external-signer previews. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";
 
 const SUI_SUFFIX =
   "Use public Sui account context only. Prepare non-custodial previews, and keep signing inside the user's Sui wallet or external client. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";
@@ -223,9 +223,7 @@ function demoStatusLabel(status: CustomerBetaDemoScenario["status"]): string {
 
 function safetySummary(template: CustomerWorkflowTemplate): string {
   if (template.routing.chatMode === "bittensor") {
-    return template.safetyBoundaries.requiresExternalSigner
-      ? "External signer required. No seed phrases, private keys, or wallet exports."
-      : "Public reads only. No secrets.";
+    return "TAO transfers require exact connected-wallet review. Staking and advanced calls stay external-signer previews. No secrets.";
   }
   if (template.routing.chatMode === "hyperliquid") {
     return "Read and preview tasks with external-client handoff.";
@@ -327,8 +325,8 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   {
     id: "bittensor_operator",
     name: "Use Bittensor",
-    summary: "Start with a public TAO wallet, understand subnets, compare validators, and prepare external-signer previews.",
-    promise: "Matterhorn explains the Bittensor concepts as you go. It never asks for seed phrases, private keys, or wallet exports.",
+    summary: "Read TAO and subnet context, compare validators, and prepare reviewed Bittensor transactions.",
+    promise: "TAO transfers can be authorized in a connected Bittensor wallet. Staking and advanced calls remain external handoffs.",
     category: "bittensor",
     status: "beta_ready",
     examplePrompts: ["Show my TAO", "Which subnet is useful for image generation?", "Compare validators on subnet 14"],
@@ -342,7 +340,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "bittensor",
       accent: "matterhorn_blue",
-      shortDescription: "Check TAO, browse subnets, compare validators, and prepare unsigned staking or transfer previews.",
+      shortDescription: "Read TAO and subnet context, compare validators, and review wallet-approved transfers.",
     },
     routing: { chatMode: "bittensor", opensPanel: "bittensor", startsSession: true },
     safetyBoundaries: {
@@ -350,18 +348,18 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
       acceptsPrivateKeys: false,
       acceptsApiSecrets: false,
       acceptsRawSignatures: false,
-      canSubmit: false,
-      liveExecutionEnabled: false,
+      canSubmit: true,
+      liveExecutionEnabled: true,
       canExecute: true,
-      requiresExternalSigner: true,
-      allowsRealFunds: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: true,
     },
   },
   {
     id: "hyperliquid_trader",
     name: "Use Hyperliquid",
     summary: "Read Hyperliquid markets, check exposure, and prepare perpetual order previews.",
-    promise: "Research and preview only. Finish real orders in your own reviewed Hyperliquid client.",
+    promise: "Prepare exact orders here, then review and authorize submission in the separate connected-wallet ticket.",
     category: "markets",
     status: "beta_ready",
     examplePrompts: ["Preview a Hyperliquid BTC-PERP order", "Show my Hyperliquid exposure"],
@@ -375,7 +373,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "hyperliquid",
       accent: "matterhorn_blue",
-      shortDescription: "Read markets, review exposure, and prepare an external handoff.",
+      shortDescription: "Read markets, review exposure, and authorize exact wallet-approved orders.",
     },
     routing: { chatMode: "hyperliquid", opensPanel: "hyperliquid", startsSession: true },
     safetyBoundaries: {
@@ -383,18 +381,18 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
       acceptsPrivateKeys: false,
       acceptsApiSecrets: false,
       acceptsRawSignatures: false,
-      canSubmit: false,
-      liveExecutionEnabled: false,
-      canExecute: false,
-      requiresExternalSigner: true,
-      allowsRealFunds: false,
+      canSubmit: true,
+      liveExecutionEnabled: true,
+      canExecute: true,
+      requiresExternalSigner: false,
+      allowsRealFunds: true,
     },
   },
   {
     id: "polymarket_researcher",
     name: "Use Polymarket",
-    summary: "Research Polymarket outcomes, liquidity, and eligibility before preparing a trade handoff.",
-    promise: "Compliance-gated handoff only. No live submission by Matterhorn.",
+    summary: "Research Polymarket outcomes, liquidity, and eligibility before preparing exact trade terms.",
+    promise: "Eligible EOA BUY orders can be authorized in a connected Polygon wallet after compliance passes.",
     category: "markets",
     status: "preview_only",
     examplePrompts: ["Summarize this Polymarket market", "Check Polymarket compliance"],
@@ -408,7 +406,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "polymarket",
       accent: "matterhorn_blue",
-      shortDescription: "Research markets, outcomes, liquidity, compliance, and prepare external trade handoffs. Bet placement stays off.",
+      shortDescription: "Research markets and compliance, then review eligible wallet-approved BUY orders.",
     },
     routing: { chatMode: "polymarket", opensPanel: "polymarket", startsSession: true },
     safetyBoundaries: {
@@ -416,11 +414,11 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
       acceptsPrivateKeys: false,
       acceptsApiSecrets: false,
       acceptsRawSignatures: false,
-      canSubmit: false,
-      liveExecutionEnabled: false,
-      canExecute: false,
+      canSubmit: true,
+      liveExecutionEnabled: true,
+      canExecute: true,
       requiresExternalSigner: false,
-      allowsRealFunds: false,
+      allowsRealFunds: true,
     },
   },
   {

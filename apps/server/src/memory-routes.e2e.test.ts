@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +21,7 @@ const HOST_TOKEN = "owt_memory_routes_host_token";
 const priorEnv = {
   envStore: process.env.OPENWORK_ENV_STORE,
   tokenStore: process.env.OPENWORK_TOKEN_STORE,
+  dataDir: process.env.OPENWORK_DATA_DIR,
   memoryRoot: process.env.MATTERHORN_WORK_MEMORY_ROOT,
   memoryScope: process.env.MATTERHORN_WORK_MEMORY_SCOPE,
 };
@@ -78,6 +79,7 @@ async function boot(options: { workspaceMemoryScope?: string } = {}) {
   dirs.push(dir);
   process.env.OPENWORK_ENV_STORE = join(dir, "env.json");
   process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
+  process.env.OPENWORK_DATA_DIR = join(dir, "openwork-data");
   process.env.MATTERHORN_WORK_MEMORY_ROOT = join(dir, "memory");
   if (options.workspaceMemoryScope) process.env.MATTERHORN_WORK_MEMORY_SCOPE = options.workspaceMemoryScope;
   else delete process.env.MATTERHORN_WORK_MEMORY_SCOPE;
@@ -168,14 +170,17 @@ afterEach(async () => {
           ? "MATTERHORN_WORK_MEMORY_ROOT"
           : key === "memoryScope"
             ? "MATTERHORN_WORK_MEMORY_SCOPE"
-            : key === "envStore"
-              ? "OPENWORK_ENV_STORE"
+          : key === "envStore"
+            ? "OPENWORK_ENV_STORE"
+            : key === "dataDir"
+              ? "OPENWORK_DATA_DIR"
               : "OPENWORK_TOKEN_STORE"
       ];
     }
   }
   if (priorEnv.envStore !== undefined) process.env.OPENWORK_ENV_STORE = priorEnv.envStore;
   if (priorEnv.tokenStore !== undefined) process.env.OPENWORK_TOKEN_STORE = priorEnv.tokenStore;
+  if (priorEnv.dataDir !== undefined) process.env.OPENWORK_DATA_DIR = priorEnv.dataDir;
   if (priorEnv.memoryRoot !== undefined) process.env.MATTERHORN_WORK_MEMORY_ROOT = priorEnv.memoryRoot;
   if (priorEnv.memoryScope !== undefined) process.env.MATTERHORN_WORK_MEMORY_SCOPE = priorEnv.memoryScope;
 });
@@ -445,6 +450,23 @@ describe("Matterhorn memory API routes", () => {
     });
     expect(exported.response.status).toBe(200);
     expect(exported.payload.export.recordCount).toBe(205);
+    expect(exported.payload.export.outputDir).toMatch(/^outputs\/memory\//);
+    expect(exported.payload.export.recordsPath).toMatch(/^outputs\/memory\/.*matterhorn-memory-records\.json$/);
+    expect(exported.payload.export.manifestPath).toMatch(/^outputs\/memory\/.*matterhorn-memory-export-manifest\.json$/);
+    expect(exported.payload.export.sha256Path).toMatch(/^outputs\/memory\/.*matterhorn-memory-export\.sha256$/);
+    expect(exported.payload.export.recordsPath).not.toContain(dir);
+
+    const manifest = JSON.parse(await readFile(join(dir, exported.payload.export.manifestPath), "utf8"));
+    expect(manifest.recordsPath).toBe(exported.payload.export.recordsPath);
+    expect(manifest.recordsPath).not.toContain(dir);
+
+    const evidence = await jsonFetch(base, "/workspace/ws_memory/evidence?limit=20");
+    expect(evidence.response.status).toBe(200);
+    expect(evidence.payload.items).toContainEqual(expect.objectContaining({
+      type: "task.output_saved",
+      outputPath: exported.payload.export.manifestPath,
+      title: expect.stringContaining("Memory export saved"),
+    }));
   });
 
   test("workspace memory routes return a safe error when vault metadata is corrupt", async () => {

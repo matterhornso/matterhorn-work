@@ -584,8 +584,8 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     id: "polymarket_researcher",
     name: "Bet on Polymarket",
     summary:
-      "Research Polymarket markets, preview positions, and prepare compliance-aware signing handoffs without live submission.",
-    promise: "Preview-only. Compliance and external signer required. No live submission by Matterhorn.",
+      "Research Polymarket markets and prepare exact, compliance-aware BUY orders for connected-wallet review.",
+    promise: "Eligible EOA BUY orders require an allowed compliance result, exact review, and Polygon wallet authorization.",
     category: "markets",
     examplePrompts: ["Summarize this Polymarket market", "Preview a Polymarket trade", "Show my Polymarket positions"],
     expectedArtifacts: [

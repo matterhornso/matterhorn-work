@@ -5,6 +5,7 @@ import { Check, ChevronRight, HelpCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
+import { cn } from "@/lib/utils";
 
 export type QuestionPanelProps = {
   questions: QuestionInfo[];
@@ -183,10 +184,10 @@ export function QuestionPanel(props: QuestionPanelProps) {
                   className={`flex w-full items-start justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60
                         ${
                           isSelected
-                            ? "bg-blue-9/10 border-blue-9/30 text-gray-12 shadow-sm"
+                            ? "border-blue-7/45 bg-blue-3/40 text-blue-12"
                             : "bg-gray-1 border-gray-6 hover:border-gray-8 text-gray-11 hover:text-gray-12 hover:bg-gray-3"
                         }
-                        ${isFocused ? "ring-2 ring-blue-9/20 border-blue-9/40 bg-gray-3" : ""}
+                        ${isFocused ? "border-blue-8/45 bg-blue-3/30 ring-2 ring-blue-8/25" : ""}
                       `}
                   onClick={() => {
                     dispatch({ type: "setFocusedOptionIndex", value: idx });
@@ -194,9 +195,14 @@ export function QuestionPanel(props: QuestionPanelProps) {
                   }}
                 >
                   <span className="min-w-0">
-                    <span className="block font-medium text-gray-12">{opt.label}</span>
+                    <span className="block font-medium text-current">{opt.label}</span>
                     {opt.description && opt.description !== opt.label ? (
-                      <span className="mt-1 block text-xs leading-5 text-gray-11">{opt.description}</span>
+                      <span className={cn(
+                        "mt-1 block text-xs leading-5",
+                        isSelected ? "text-blue-11" : "text-gray-11",
+                      )}>
+                        {opt.description}
+                      </span>
                     ) : null}
                   </span>
                   {isSelected ? (

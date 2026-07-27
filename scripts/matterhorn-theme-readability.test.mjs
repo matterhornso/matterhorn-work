@@ -45,8 +45,8 @@ for (const phrase of [
   "--dls-canvas: #1b2530",
   "--dls-surface-muted: #263442",
   "--dls-text-primary: #fafcff",
-  "--dls-text-secondary: #d0dae5",
-  "--muted-foreground: #c4ceda",
+  "--dls-text-secondary: #dbe4ee",
+  "--muted-foreground: #d2dbe5",
   "--dls-hover: rgba(56, 189, 248, 0.13)",
 ]) {
   assert.ok(css.includes(phrase), `dark theme should be brighter and more legible: ${phrase}`);

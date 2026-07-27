@@ -45,6 +45,8 @@ export interface UnifiedCryptoChatInput {
   side?: string | null;
   size?: number | string | null;
   price?: number | string | null;
+  orderType?: "market" | "limit" | null;
+  network?: "testnet" | "mainnet" | null;
   amountUsdc?: number | string | null;
   amountTao?: number | string | null;
   netuid?: number | string | null;
@@ -302,7 +304,7 @@ function isMarketActionPreview(venue: RoutedCryptoVenue | "auto", kind: UnifiedC
 
 function previewOnlyTitle(venue: RoutedCryptoVenue | "auto", kind: UnifiedCryptoSharedCardKind, originalKind: string | null, title: string): string {
   if (!isMarketActionPreview(venue, kind, originalKind)) return title;
-  return /preview only/i.test(title) ? title : `Preview Only: ${title}`;
+  return /agent draft/i.test(title) ? title : `Agent Draft: ${title.replace(/^preview only:\s*/i, "")}`;
 }
 
 function sharedSummaryFor(kind: UnifiedCryptoSharedCardKind, venue: RoutedCryptoVenue | "auto", title: string, originalKind: string | null = null): string {
@@ -324,9 +326,9 @@ function sharedSummaryFor(kind: UnifiedCryptoSharedCardKind, venue: RoutedCrypto
       return `Read-only orderbook/depth context from ${venue}.`;
     case "action_preview":
       if (isMarketActionPreview(venue, kind, originalKind)) {
-        return `Preview only from ${venue}; Matterhorn prepares safe previews, while your wallet/client decides whether anything is signed externally.`;
+        return `Agent-prepared ${venue} terms for review. This artifact cannot submit; use the separate wallet ticket to authorize an eligible action.`;
       }
-      return `Non-custodial preview from ${venue}; Matterhorn does not sign or submit.`;
+      return `Non-custodial draft from ${venue}. The agent cannot sign or submit; supported actions continue in a separate reviewed wallet ticket.`;
     case "compliance_block":
       return `Compliance status from ${venue}; blocked previews must not contain executable order terms.`;
     case "external_signer_handoff":
@@ -544,7 +546,7 @@ function marketExecutionReadinessResult(input: UnifiedCryptoChatInput, message: 
     requestedVenue: normalizeVenue(input.venue),
     intent: "market_execution_readiness",
     execution: "read_only",
-    responseText: "Hyperliquid and Polymarket are not live-submit enabled in Matterhorn. Matterhorn supports read, preview, external-signer handoff, redacted signed-artifact validation, and public receipt import. Can submit: No. Live submission: Off. A separate security review is required before any future submit route.",
+    responseText: "Can submit: No. Live submission: Off. Agent drafts never submit. Hyperliquid orders and eligible Polymarket EOA BUY orders can continue in a separate reviewed wallet ticket, where exact terms, expiry, compliance, and connected-wallet authorization are enforced. Watches and agents cannot sign or submit.",
     cards,
     sharedCards: buildUnifiedCryptoSharedCards("auto", "read_only", cards, warnings),
     data: { report },
@@ -581,8 +583,8 @@ function marketExecutionChainResult(input: UnifiedCryptoChatInput, message: stri
     intent: highlightedStep ? "market_execution_step_guidance" : "market_execution_chain",
     execution: "read_only",
     responseText: highlightedStep
-      ? `${highlightedStep.label}: ${highlightedStep.purpose} Use only public/redacted inputs. Every accepted artifact must be hash-bound to the sign request, and hash mismatches fail closed. Can submit: No. Live submission: Off. Matterhorn never takes private keys, API secrets, raw signatures, signed payloads, or wallet exports.`
-      : "The safe Hyperliquid/Polymarket chain is: preview or handoff, external sign request, public/redacted artifact validation, artifact reconciliation, then public receipt import. Artifact validation is hash-bound to the sign request, and hash mismatches fail closed. Can submit: No. Live submission: Off. Matterhorn never takes private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+      ? `Can submit: No. Live submission: Off. ${highlightedStep.label}: ${highlightedStep.purpose} Use only public/redacted inputs. Agent artifacts remain non-submitting and hash mismatches fail closed. Supported actions continue only in a separate exact-term wallet ticket. Matterhorn never takes private keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.`
+      : "Can submit: No. Live submission: Off. The safe Hyperliquid/Polymarket chain is: agent draft, exact-term wallet ticket, connected-wallet authorization, submission, then public receipt evidence. Agent artifacts remain non-submitting, reviewed terms are immutable, and watches cannot execute. Matterhorn never takes private keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.",
     cards,
     sharedCards: buildUnifiedCryptoSharedCards("auto", "read_only", cards, warnings),
     data: { guide, highlightedStep },
@@ -598,7 +600,7 @@ function marketSdkValidationResult(input: UnifiedCryptoChatInput, message: strin
   const cards = [buildMarketSdkValidationCard(guide)];
   const warnings = [
     "Official SDK validation is public/redacted evidence only.",
-    "Matterhorn does not run private SDK signing, compute final signatures, call exchanges, or submit orders.",
+    "The agent workflow does not sign or submit. Supported execution happens only in a separate connected-wallet ticket.",
   ];
   const route: UnifiedCryptoRoutePlan = {
     requestedVenue: normalizeVenue(input.venue),
@@ -614,7 +616,7 @@ function marketSdkValidationResult(input: UnifiedCryptoChatInput, message: strin
     requestedVenue: normalizeVenue(input.venue),
     intent: "market_sdk_validation",
     execution: "read_only",
-    responseText: "Use fixture or operator-owned testnet SDK validation only. Hyperliquid uses testnet evidence; Polymarket uses Polygon Amoy evidence. Matterhorn accepts public/redacted artifacts only. Can submit: No. Live submission: Off. Matterhorn never takes private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+    responseText: "Can submit: No. Live submission: Off. Use fixture or operator-owned testnet SDK validation for the agent workflow. The agent artifact cannot submit; supported Hyperliquid and Polymarket actions continue in a separate connected-wallet ticket. Matterhorn accepts public/redacted evidence only and never takes private keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.",
     cards,
     sharedCards: buildUnifiedCryptoSharedCards("auto", "read_only", cards, warnings),
     data: { guide },
@@ -778,6 +780,8 @@ export async function executeUnifiedCryptoChatWorkflow(
       side: input.side as HyperliquidChatExecutionInput["side"],
       size: input.size ?? null,
       price: input.price ?? null,
+      orderType: input.orderType ?? null,
+      network: input.network ?? null,
       limit: input.limit ?? null,
       slippageTolerance: input.slippageTolerance ?? null,
       reduceOnly: input.reduceOnly ?? null,

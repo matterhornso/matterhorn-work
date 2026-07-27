@@ -14,7 +14,21 @@ const files = {
   agentGuide: "AGENTS.md",
   composer: "apps/app/src/react-app/domains/session/surface/composer/composer.tsx",
   evalSkill: ".opencode/skills/run-evals/SKILL.md",
+  skillCreator: "apps/app/src/app/data/skill-creator.md",
 };
+
+const localeFiles = [
+  "apps/app/src/i18n/locales/ca.ts",
+  "apps/app/src/i18n/locales/en.ts",
+  "apps/app/src/i18n/locales/es.ts",
+  "apps/app/src/i18n/locales/fr.ts",
+  "apps/app/src/i18n/locales/ja.ts",
+  "apps/app/src/i18n/locales/pt-BR.ts",
+  "apps/app/src/i18n/locales/ru.ts",
+  "apps/app/src/i18n/locales/th.ts",
+  "apps/app/src/i18n/locales/vi.ts",
+  "apps/app/src/i18n/locales/zh.ts",
+];
 
 const read = (path) => readFileSync(path, "utf8");
 
@@ -24,14 +38,16 @@ const checks = [
     mustContain: [
       '"config.engine_reload_desc": "Restart the Matterhorn Desks engine for this workspace."',
       '"settings.opencode_engine_label": "Matterhorn Desks engine"',
-      '"settings.opencode_engine_sidecar_desc": "Local engine process managed by Matterhorn Desks. Technical runtime: OpenCode."',
-      '"settings.debug_opencode_version": "Underlying OpenCode runtime: {version}"',
+      '"settings.opencode_engine_sidecar_desc": "Local engine process managed by Matterhorn Desks."',
+      '"settings.debug_opencode_version": "Local engine version: {version}"',
       '"settings.restart_opencode": "Restart engine"',
       '"system.reload_body_default": "Matterhorn Desks detected changes that require reloading the engine instance."',
     ],
     mustNotContain: [
       '"settings.opencode_engine_label": "OpenCode engine"',
       '"settings.opencode_section_label": "OpenCode"',
+      '"settings.opencode_engine_sidecar_desc": "Local engine process managed by Matterhorn Desks. Technical runtime: OpenCode."',
+      '"settings.debug_opencode_version": "Underlying OpenCode runtime: {version}"',
       '"settings.restart_opencode": "Restart OpenCode"',
       '"session.permission_message": "OpenCode is requesting permission to continue."',
       '"system.reload_body_default": "Matterhorn Desks detected changes that require reloading the OpenCode instance."',
@@ -140,6 +156,11 @@ const checks = [
     mustNotContain: ["Run OpenWork UI evals", "Run the OpenWork UI evaluation flows"],
   },
   {
+    path: files.skillCreator,
+    mustContain: ["extends Matterhorn Desks with specialized knowledge"],
+    mustNotContain: ["extends OpenCode with specialized knowledge"],
+  },
+  {
     path: "docs/mcp-ui-control-profile.md",
     mustContain: [
       "# Control Matterhorn Desks from any MCP client",
@@ -171,9 +192,17 @@ for (const check of checks) {
   }
 }
 
+for (const localePath of localeFiles) {
+  const content = read(localePath);
+  if (/\b(?:OpenCode|OpenWork)\b/.test(content)) {
+    console.error(`Found retired customer-facing runtime copy in ${localePath}.`);
+    failures += 1;
+  }
+}
+
 if (failures > 0) {
-  console.error(`OpenCode abstraction copy check failed with ${failures} issue(s).`);
+  console.error(`Matterhorn runtime copy check failed with ${failures} issue(s).`);
   process.exit(1);
 }
 
-console.log("OpenCode abstraction copy check passed.");
+console.log("Matterhorn runtime copy check passed.");

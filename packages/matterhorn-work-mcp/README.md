@@ -62,7 +62,7 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 
 - `matterhorn_doctor` — one readiness report across server health, client token, workspaces, optional session/file probes, approvals, desktop browser bridge, and Bittensor readiness
 - `matterhorn_status` — health, status, and server capabilities
-- `matterhorn_upstream_openwork_check` — build a read-only upstream OpenWork update intake plan with conflict zones and verification commands
+- `matterhorn_upstream_source_check` — build a read-only upstream runtime-source intake plan with conflict zones and verification commands
 - `matterhorn_list_workspaces` — visible workspaces
 - `matterhorn_create_session` — create a chat session with a writable collaborator/owner token
 - `matterhorn_list_sessions` — list chat sessions in a workspace

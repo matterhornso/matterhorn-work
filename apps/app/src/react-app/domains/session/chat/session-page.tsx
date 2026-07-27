@@ -114,6 +114,7 @@ import { useStatusToasts } from "../../shell-feedback/status-toasts";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
+import { subscribeReviewedActionHandoff } from "../../wallet/reviewed-action-handoff";
 import { configureSecurityLogReporter } from "../../wallet/state/security-log";
 import { useJobCron } from "../../wallet/hooks/useJobCron";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
@@ -783,7 +784,7 @@ function ProtocolDeskEmptyState({
       ? "Open workspace"
       : "Platform setup";
   const deskSafetyInfo = panel === "bittensor"
-    ? "Runs public SS58 reads and unsigned previews. Signing stays in an external Bittensor-compatible wallet."
+    ? "Uses public wallet details and prepares transfer drafts. You approve TAO transfers in your wallet; staking and advanced actions finish in an external signer."
     : panel === "polymarket"
       ? "Runs market research, compliance checks, and external-wallet handoffs. Matterhorn never places bets inside the app."
       : panel === "sui"
@@ -906,7 +907,7 @@ function ProtocolDeskEmptyState({
       {providerNotice ? (
         <div
           className={cn(
-            "mx-1 flex items-center gap-2 rounded-md px-3 py-2 text-xs leading-5",
+            "mx-1 flex items-start gap-2 rounded-md px-3 py-2 text-xs leading-5 sm:items-center",
             providerNotice.tone === "warning"
               ? "bg-amber-500/[0.08] text-amber-100"
               : "bg-dls-surface-muted/35 text-dls-secondary",
@@ -918,8 +919,8 @@ function ProtocolDeskEmptyState({
           ) : (
             <ShieldCheck className="size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" aria-hidden="true" />
           )}
-          <span className="font-semibold text-dls-text">{providerNotice.label}</span>
-          <span className="min-w-0 truncate text-dls-secondary">{providerNotice.detail}</span>
+          <span className="shrink-0 font-semibold text-dls-text">{providerNotice.label}</span>
+          <span className="min-w-0 text-dls-secondary">{providerNotice.detail}</span>
         </div>
       ) : null}
       {launchingTaskTitle ? (
@@ -997,7 +998,7 @@ function ProtocolDeskEmptyState({
                   <p
                     id={`${inputId}-hint`}
                     className={cn(
-                      "mt-2 text-[11px] leading-4",
+                      "mt-2 text-xs leading-[18px]",
                       taskInputError ? "text-red-11" : "text-dls-secondary",
                     )}
                     role={taskInputError ? "alert" : undefined}
@@ -1029,7 +1030,10 @@ type WorkflowDeskLaunchState = {
   intent: string | null;
 };
 
-type WorkflowDeskId = Extract<CustomerProtocolDeskId, CustomerWorkflowIconHint>;
+export type WorkflowDeskId = Extract<
+  CustomerProtocolDeskId,
+  CustomerWorkflowIconHint
+>;
 
 export type SessionPageHistoryControls = {
   canUndo: boolean;
@@ -1060,7 +1064,13 @@ export type SessionPageSidebarProps = {
   onCreateTaskWithPrompt?: (
     workspaceId: string,
     prompt: string,
-    options?: { title?: string; agent?: string; sendImmediately?: boolean; onSessionCreated?: (sessionId: string) => void | Promise<void> },
+    options?: {
+      title?: string;
+      agent?: string;
+      deskId?: WorkflowDeskId;
+      sendImmediately?: boolean;
+      onSessionCreated?: (sessionId: string) => void | Promise<void>;
+    },
   ) => boolean | void | Promise<boolean | void>;
   onOpenRenameWorkspace: (workspaceId: string) => void;
   onShareWorkspace: (workspaceId: string) => void;
@@ -1135,6 +1145,15 @@ export type SessionPageProps = {
   settingsSlot?: React.ReactNode;
   /** Settings content rendered inside the right pane for a specific compact settings route. */
   settingsSlotForPath?: (initialPath: "general" | "cloud-account" | "wallet" | "extensions") => React.ReactNode;
+  /**
+   * A desk task that paused at model setup. It intentionally contains no
+   * prompt text, so returning from setup cannot silently send work.
+   */
+  pendingDeskTask?: {
+    deskId: WorkflowDeskId;
+    title: string;
+  } | null;
+  onPendingDeskTaskRestored?: () => void;
 };
 
 function getSidebarInitialLoading(props: SessionPageSidebarProps) {
@@ -1553,6 +1572,11 @@ export function SessionPage(props: SessionPageProps) {
     );
   }, [navigate, setSidePanelState, sidePanelScopeId]);
 
+  useEffect(
+    () => subscribeReviewedActionHandoff((handoff) => setCurrentSidePanel(handoff.protocol)),
+    [setCurrentSidePanel],
+  );
+
   useEffect(() => {
     // The URL is the shareable source of truth. This effect only mirrors it to
     // the store; it never navigates, so reload and Back/Forward cannot loop.
@@ -1567,9 +1591,13 @@ export function SessionPage(props: SessionPageProps) {
   }, [routeSidePanel, setSidePanelState, sidePanelScopeId]);
 
   useEffect(() => {
+    // A settings return may briefly change the selected workspace while the
+    // shell bootstraps. Keep an explicitly resumed desk open through that one
+    // transition; ordinary workspace changes still reset the desk as before.
+    if (props.pendingDeskTask) return;
     setActiveWorkflowDeskId(null);
     setWorkflowLaunchState(null);
-  }, [props.selectedWorkspaceId]);
+  }, [props.pendingDeskTask, props.selectedWorkspaceId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1634,12 +1662,21 @@ export function SessionPage(props: SessionPageProps) {
   const openWorkflowDesk = useCallback((
     deskId: WorkflowDeskId,
     prompt: string,
-    options?: { title?: string; stageId?: string; actionId?: string; sourceId?: string; launchAgent?: boolean },
+    options?: {
+      title?: string;
+      stageId?: string;
+      actionId?: string;
+      sourceId?: string;
+      launchAgent?: boolean;
+      recovery?: boolean;
+    },
   ) => {
     const visibleUserIntent = prompt.trim();
     if (!visibleUserIntent) return;
 
-    props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
+    if (!options?.recovery) {
+      props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
+    }
     setCurrentSidePanel(null);
     setActiveWorkflowDeskId(deskId);
 
@@ -1649,7 +1686,9 @@ export function SessionPage(props: SessionPageProps) {
         status: props.matterhornServerClient ? "ready" : "failed",
         run: null,
         message: props.matterhornServerClient
-          ? `Choose a stage to begin. Outputs will save under outputs/${getCustomerProtocolDeskVisual(deskId)?.outputDeskId ?? deskId}/<session-slug>/`
+          ? options?.recovery
+            ? "Choose a stage to start this task. Nothing has been sent yet."
+            : `Choose a stage to begin. Outputs will save under outputs/${getCustomerProtocolDeskVisual(deskId)?.outputDeskId ?? deskId}/<session-slug>/`
           : "Matterhorn Desks engine is unavailable for this project. Retry the connection or restart Matterhorn Desks if it stays offline.",
         intent: visibleUserIntent,
       });
@@ -1673,6 +1712,7 @@ export function SessionPage(props: SessionPageProps) {
       const startResult = props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, visibleUserIntent, {
         title: options.title ?? getCustomerProtocolDeskVisual(deskId)?.agentName ?? "Desk task",
         agent: agentIdForDesk(deskId),
+        deskId,
         sendImmediately: true,
         onSessionCreated: async (sessionId) => {
           if (deskId === "wellness") {
@@ -1723,6 +1763,26 @@ export function SessionPage(props: SessionPageProps) {
     props.sidebar,
     setCurrentSidePanel,
   ]);
+
+  const pendingDeskRecoveryKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const pendingDeskTask = props.pendingDeskTask;
+    if (!pendingDeskTask) {
+      pendingDeskRecoveryKeyRef.current = null;
+      return;
+    }
+    // Workspace bootstrap may settle the selected id one render after the
+    // route changes. Include it in the guard so that benign update can reopen
+    // the staged desk once, without duplicating it on ordinary re-renders.
+    const recoveryKey = `${props.selectedWorkspaceId}:${pendingDeskTask.deskId}:${pendingDeskTask.title}`;
+    if (pendingDeskRecoveryKeyRef.current === recoveryKey) return;
+    pendingDeskRecoveryKeyRef.current = recoveryKey;
+    openWorkflowDesk(pendingDeskTask.deskId, pendingDeskTask.title, {
+      title: pendingDeskTask.title,
+      recovery: true,
+    });
+    props.onPendingDeskTaskRestored?.();
+  }, [openWorkflowDesk, props.onPendingDeskTaskRestored, props.pendingDeskTask]);
 
   const toggleCurrentSidePanel = useCallback((panel: SidePanelItem) => {
     setCurrentSidePanel(routeSidePanel === panel ? null : panel);
@@ -1928,6 +1988,7 @@ export function SessionPage(props: SessionPageProps) {
       props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, prompt, {
         title,
         agent: agentIdForDesk(panel),
+        deskId: panel,
         sendImmediately: true,
       });
       return;
@@ -2563,6 +2624,7 @@ export function SessionPage(props: SessionPageProps) {
                           const startResult = props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, {
                             title,
                             agent: agentIdForDesk(focusedProtocolPanel),
+                            deskId: focusedProtocolPanel,
                             sendImmediately: true,
                             onSessionCreated: () => {
                               taskSessionCreated = true;

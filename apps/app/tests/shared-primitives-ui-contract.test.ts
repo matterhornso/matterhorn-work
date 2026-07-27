@@ -229,6 +229,15 @@ describe("Shared primitives UI contract", () => {
     expect(source).not.toContain("border-r border-dls-border bg-gray-2/30");
   });
 
+  test("composer keeps engineering-only skills out of the customer tool catalog", () => {
+    const surface = readAppSource("domains/session/surface/session-surface.tsx");
+    const route = readAppSource("shell/session-route.tsx");
+
+    expect(surface).toContain("skill.userInvocable !== false");
+    expect(route).toContain("Matterhorn Desks gives people purpose-built desk actions");
+    expect(route).toMatch(/const listSlashCommands[\s\S]*?return \[\];/);
+  });
+
   test("composer tool menu preserves editor focus when inserting tool shortcuts", () => {
     const source = readAppSource(
       "domains/session/surface/composer/composer.tsx",
@@ -329,12 +338,26 @@ describe("Shared primitives UI contract", () => {
     expect(sessionSurface).toContain(
       'listSkills={props.executionMode === "work" ? listSkills : undefined}',
     );
+    expect(sessionSurface).toContain(
+      'listSkills(props.workspaceId, { includeGlobal: false })',
+    );
     expect(composer).toContain(
       'const commandToolsEnabled = props.executionMode === "work";',
     );
     expect(composer).toContain(
-      '.filter(({ section }) => commandToolsEnabled || (section !== "commands" && section !== "skills"))',
+      '.filter(({ section }) => commandToolsEnabled || section !== "skills")',
     );
+    expect(composer).toContain(
+      'if (commandToolsEnabled || toolMenuSection !== "skills") return;',
+    );
+    expect(composer).toContain("const slashOpenNext = false;");
+    expect(composer).toContain(
+      'skills.map((skill) => ({ id: `skill:${skill.name}`',
+    );
+    expect(composer).not.toContain("toolSkillItems");
+    expect(composer).toContain('useState<ToolMenuSection>("extensions")');
+    expect(composer).toContain("No workspace skills are installed.");
+    expect(composer).toContain("Manage skills");
   });
 
   test("message copy actions fall back when Clipboard API writes are unavailable", () => {
@@ -556,7 +579,7 @@ describe("Shared primitives UI contract", () => {
     const sidebar = readAppSource("domains/session/sidebar/app-sidebar.tsx");
     expect(composer).toContain("props.showModelPicker !== false");
     expect(sessionSurface).toContain(
-      "showModelPicker={shellConfig.modelPicker}",
+      "showModelPicker={shellConfig.modelPicker && !props.modelUnavailable}",
     );
     expect(sidebar).toContain("shellConfig.addWorkspace ?");
   });
@@ -961,10 +984,10 @@ describe("Shared primitives UI contract", () => {
     expect(extensionsSource).toContain("mcpConnectedAppNames: string[]");
     expect(extensionsSource).toContain('connectedAppNames.join(" · ")');
     expect(extensionsSource).toContain(
-      "h-9 min-w-0 rounded-none border-x-0 border-t-0 border-b-2",
+      "h-9 min-w-0 rounded-md border-0 bg-transparent",
     );
     expect(extensionsSource).toContain(
-      '"grid min-w-0 flex-1 grid-cols-2 border-b border-dls-border/40"',
+      '"grid min-w-0 flex-1 grid-cols-2 rounded-md bg-dls-surface-muted/[0.14] p-1"',
     );
     expect(extensionsSource).toContain(
       "const marketplaceAvailable = Boolean(props.cloudMarketplaceView)",

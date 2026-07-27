@@ -1,11 +1,11 @@
 /**
  * Polymarket read and preview tools.
  *
- * This Matterhorn Polymarket slice is intentionally read-only plus
- * preview-only, mirroring the Hyperliquid read/preview pattern. It never
- * accepts API secrets, private keys, signatures, or signed payloads, and it
- * never submits an order to Polymarket. Prediction-market prices are treated as
- * risk-bearing information, never as betting or investment advice.
+ * This Matterhorn Polymarket slice prepares public, reviewable order terms for
+ * a browser wallet. It never accepts API secrets, private keys, signatures, or
+ * signed payloads. Wallet authorization and CLOB submission stay in the client
+ * runtime. Prediction-market prices are treated as risk-bearing information,
+ * never as betting or investment advice.
  *
  * Compliance: a geoblock check runs before any order preview. When the user's
  * region is blocked, the preview is returned as `blocked_by_compliance` with no
@@ -185,6 +185,8 @@ export interface PolymarketActionPreview {
   execution: "unsigned_preview" | "blocked_by_compliance";
   action: "buy_shares";
   marketId: string | null;
+  /** Public CLOB outcome token id. Required by the user's wallet at submit time. */
+  tokenId: string | null;
   marketLabel: string | null;
   outcome: string | null;
   side: PolymarketSide | null;
@@ -194,6 +196,8 @@ export interface PolymarketActionPreview {
   /** expected average fill price as a probability (0..1) */
   price: number | null;
   priceAsset: "probability";
+  /** Maximum slippage percentage requested by the user. */
+  slippageTolerance: number | null;
   estimatedShares: number | null;
   marketability: PolymarketMarketabilityEstimate | null;
   risk: PolymarketRiskContext | null;
@@ -888,6 +892,7 @@ export function buildBlockedPolymarketPreview(args: {
     execution: "blocked_by_compliance",
     action: "buy_shares",
     marketId: args.market?.id ?? null,
+    tokenId: null,
     marketLabel: args.market?.question ?? null,
     outcome: args.outcome,
     side: args.side,
@@ -895,6 +900,7 @@ export function buildBlockedPolymarketPreview(args: {
     sizeAsset: "USDC",
     price: null,
     priceAsset: "probability",
+    slippageTolerance: null,
     estimatedShares: null,
     marketability: null,
     risk: null,
@@ -927,8 +933,8 @@ export async function preparePolymarketOrderPreview(
   const { market, outcome, side, amountUsdc, compliance } = args;
   const slippageTolerance = numberOrNull(args.slippageTolerance);
   const warnings = [
-    "Preview only: Matterhorn does not submit Polymarket orders.",
-    "No API wallet secret, private key, or signature is accepted or stored.",
+    "Review required: a connected EVM wallet must authorize the exact order before submission.",
+    "Wallet authorization and CLOB API credentials stay in browser memory and are never accepted or stored by the Matterhorn backend.",
     RISK_DISCLAIMER,
   ];
 
@@ -969,6 +975,7 @@ export async function preparePolymarketOrderPreview(
     side,
     amountUsdc,
     price,
+    slippageTolerance,
   });
 
   return {
@@ -979,6 +986,7 @@ export async function preparePolymarketOrderPreview(
     execution: "unsigned_preview",
     action: "buy_shares",
     marketId: market.id,
+    tokenId,
     marketLabel: market.question,
     outcome,
     side,
@@ -986,6 +994,7 @@ export async function preparePolymarketOrderPreview(
     sizeAsset: "USDC",
     price,
     priceAsset: "probability",
+    slippageTolerance,
     estimatedShares,
     marketability,
     risk,
@@ -997,8 +1006,8 @@ export async function preparePolymarketOrderPreview(
     consequence:
       "If executed outside Matterhorn, this would attempt to buy ~" + (estimatedShares ?? "?") + " '" + outcome + "' shares for $" + amountUsdc.toFixed(2) + " USDC at about " + formatProbability(price) + " on \"" + market.question + "\". " +
       (risk.payoutIfWinUsdc !== null ? "If '" + outcome + "' resolves true, ~$" + risk.payoutIfWinUsdc.toFixed(2) + " USDC pays out (max profit ~$" + (risk.maxProfitUsdc ?? 0).toFixed(2) + "); otherwise the $" + amountUsdc.toFixed(2) + " stake is lost. " : "") +
-      PREVIEW_CONSEQUENCE_SUFFIX,
-    confirmationText: "I understand this is preview-only in Matterhorn. " + PREVIEW_CONSEQUENCE_SUFFIX,
+      "Submitting requires a separate connected-wallet review.",
+    confirmationText: "I reviewed the exact market, outcome, amount, estimated fill, and maximum loss. My connected wallet must authorize submission.",
     previewSha256,
     source: nowSource(GAMMA_BASE_URL),
     compliance,
@@ -1833,7 +1842,7 @@ export async function executePolymarketChatWorkflow(
       intent,
       execution: "answered",
       responseText:
-        "Polymarket support is read-only plus preview-only. I can search prediction markets, explain a market's odds and liquidity, show a CLOB orderbook, check the compliance/geoblock status, and prepare a non-submittable bet preview. I never accept API secrets or submit orders. " + RISK_DISCLAIMER,
+        "I can search prediction markets, explain odds and liquidity, inspect the CLOB orderbook, check compliance, and prepare exact order terms. The agent draft cannot submit. An eligible EOA BUY order can continue in the separate Polymarket ticket for exact review and connected Polygon wallet authorization. Sell orders, proxy accounts, agents, and watches cannot submit. I never ask for API secrets or wallet keys. " + RISK_DISCLAIMER,
       cards: [],
       warnings: [],
     };

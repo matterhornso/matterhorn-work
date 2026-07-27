@@ -45,6 +45,10 @@ const SIGNATURE_RE = /^0x[a-fA-F0-9]{130}$/;
 const DEFAULT_INTENT_TTL_MS = 90_000;
 const DEFAULT_MAX_ORDER_NOTIONAL_USDC = 1_000;
 const MAX_SLIPPAGE_BPS = 500;
+const MAX_PENDING_INTENTS_PER_OWNER = 5;
+// Tickets stay in memory only for their short review window. Bound the shared
+// store too, so many independent authenticated sessions cannot grow it without limit.
+const MAX_STORED_INTENTS = 250;
 
 type Fetcher = typeof fetch;
 
@@ -139,10 +143,17 @@ export interface HyperliquidExecutionReceipt {
 }
 
 interface StoredIntent {
+  ownerKey: string;
   publicIntent: HyperliquidExecutionIntent;
   action: HyperliquidOrderAction;
   state: "ready" | "submitting" | "complete";
   receipt: HyperliquidExecutionReceipt | null;
+}
+
+function normalizeIntentOwnerKey(value: string): string {
+  const ownerKey = value.trim();
+  if (!ownerKey) throw new Error("An authenticated session is required to prepare or submit an order.");
+  return ownerKey;
 }
 
 function finitePositive(value: unknown, label: string): number {
@@ -262,6 +273,7 @@ function venueAcceptedOrder(value: unknown): boolean {
 
 export class HyperliquidExecutionIntentStore {
   private readonly intents = new Map<string, StoredIntent>();
+  private lastNonce = 0;
 
   constructor(
     private readonly options: {
@@ -271,9 +283,20 @@ export class HyperliquidExecutionIntentStore {
     } = {},
   ) {}
 
-  async create(input: CreateHyperliquidExecutionIntentInput): Promise<HyperliquidExecutionIntent> {
+  async create(input: CreateHyperliquidExecutionIntentInput, ownerKey: string): Promise<HyperliquidExecutionIntent> {
     const fetcher = this.options.fetcher ?? globalThis.fetch;
     const now = this.options.now?.() ?? Date.now();
+    const normalizedOwnerKey = normalizeIntentOwnerKey(ownerKey);
+    this.prune(now);
+    if (this.intents.size >= MAX_STORED_INTENTS) {
+      throw new Error("The order-review queue is temporarily full. Wait for an existing ticket to finish or expire, then prepare the order again.");
+    }
+    const pendingForOwner = [...this.intents.values()].filter(
+      (intent) => intent.ownerKey === normalizedOwnerKey && intent.state !== "complete",
+    ).length;
+    if (pendingForOwner >= MAX_PENDING_INTENTS_PER_OWNER) {
+      throw new Error("Too many pending order confirmations. Review one of the existing tickets or let it expire before preparing another order.");
+    }
     const network = input.network;
     if (network !== "testnet" && network !== "mainnet") throw new Error("network must be testnet or mainnet.");
     if (!ADDRESS_RE.test(input.signerAddress)) throw new Error("Connect a valid EVM wallet before preparing an order.");
@@ -312,7 +335,8 @@ export class HyperliquidExecutionIntentStore {
       }],
       grouping: "na",
     };
-    const nonce = now;
+    const nonce = Math.max(now, this.lastNonce + 1);
+    this.lastNonce = nonce;
     const intentId = randomUUID();
     const expiresAtMs = now + (this.options.ttlMs ?? DEFAULT_INTENT_TTL_MS);
     const connectionId = hashHyperliquidAction(action, nonce, null, expiresAtMs);
@@ -351,17 +375,20 @@ export class HyperliquidExecutionIntentStore {
         apiSecretsAccepted: false,
       },
     };
-    this.prune(now);
-    this.intents.set(intentId, { publicIntent, action, state: "ready", receipt: null });
+    this.intents.set(intentId, { ownerKey: normalizedOwnerKey, publicIntent, action, state: "ready", receipt: null });
     return publicIntent;
   }
 
-  async submit(input: SubmitHyperliquidExecutionInput): Promise<HyperliquidExecutionReceipt> {
+  async submit(input: SubmitHyperliquidExecutionInput, ownerKey: string): Promise<HyperliquidExecutionReceipt> {
     const allowedKeys = new Set(["intentId", "signerAddress", "signature", "liveConfirmation"]);
     const extraKey = Object.keys(input as unknown as Record<string, unknown>).find((key) => !allowedKeys.has(key));
     if (extraKey) throw new Error(`Unexpected submission field: ${extraKey}. Submit only the intent id, public signer address, signature, and confirmation.`);
+    const normalizedOwnerKey = normalizeIntentOwnerKey(ownerKey);
     const stored = this.intents.get(input.intentId);
     if (!stored) throw new Error("Execution intent was not found or has expired. Prepare the order again.");
+    if (stored.ownerKey !== normalizedOwnerKey) {
+      throw new Error("This execution intent belongs to a different signed-in session. Prepare the order again.");
+    }
     if (stored.state === "complete" && stored.receipt) return stored.receipt;
     if (stored.state !== "ready") throw new Error("This execution intent is already being submitted.");
     const intent = stored.publicIntent;

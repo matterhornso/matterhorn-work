@@ -48,6 +48,8 @@ const feedback = read("apps/app/src/app/lib/feedback.ts");
 const den = read("apps/app/src/app/lib/den.ts");
 const denSigninSurface = read("apps/app/src/react-app/domains/cloud/den-signin-surface.tsx");
 const forcedSigninPage = read("apps/app/src/react-app/domains/cloud/forced-signin-page.tsx");
+const normalizeWhitespace = (value) => value.replace(/\s+/g, " ").trim();
+const normalizedMcpView = normalizeWhitespace(settingsRoute);
 
 const denHelpLink = read("apps/app/src/react-app/domains/workspace/matterhorn-den-help-link.tsx");
 const remoteWorkspaceDiagnostics = read("apps/app/src/react-app/domains/workspace/remote-workspace-diagnostics.ts");
@@ -152,9 +154,9 @@ for (const phrase of [
   "Risk details stay behind each info button.",
   "Outputs and receipts stay with this project.",
   "Wallet details",
-  "Public SS58 reads and unsigned previews only.",
-  "Can submit: No. Live submission: Off. External trade handoff only.",
-  "Blocked regions get no executable bet fields.",
+  "Agents prepare drafts only. TAO transfers require exact review and connected Bittensor-wallet approval; staking and advanced calls remain external handoffs.",
+  "Agents prepare drafts only.",
+  "blocked regions get no executable terms.",
   "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.",
   "No auto-send",
   "matterhorn-capability-overview",
@@ -200,9 +202,9 @@ for (const phrase of [
   "starterWorkflowCapabilityItems",
   "`${manifest.displayName} session`",
   "Longevity workflow session",
-  "Public SS58/coldkey/hotkey context only. External signer required for actions.",
-  "Matterhorn never stores API secrets or signs orders.",
-  "Blocked regions get no executable bet fields.",
+  "Public wallet details and transfer drafts. You approve TAO transfers in your wallet; staking and advanced actions finish in an external signer.",
+  "Matterhorn never signs or holds keys.",
+  "blocked regions get no executable terms.",
   "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.",
   "External-signer previews",
   "External trade handoff",
@@ -220,8 +222,8 @@ for (const phrase of [
   "Start with a Matterhorn workflow",
   "Longevity: standalone service workflows, program packets, progress check-ins, and client handoffs",
   "Intake, goals, training, nutrition education, schedule, handouts, and service packaging.",
-  "Can submit: No",
-  "Live submission: Off",
+  "The Agent draft cannot submit.",
+  "Agents prepare drafts only.",
   "Matterhorn never signs",
   "Do not ask for seed phrases",
   "MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY",
@@ -239,7 +241,6 @@ for (const phrase of [
   "Workflow-ready",
   "Planned, not live",
   "starterStatusLabel",
-  "Can submit: No. Live submission: Off. External trade handoff only.",
   "Standalone business workflow. Not Web3, not markets, no medical advice, and no live payments/email/hosting.",
   "Use the standalone Longevity workflow, not a Web3 or market desk.",
   "CUSTOMER_VISIBLE_TEMPLATE_IDS",
@@ -346,12 +347,9 @@ for (const phrase of [
 }
 
 for (const phrase of [
-  'displayLabel={t("composer.assistant_identity")}',
   "Stop generating (cancels current run)",
-  "displayLabel?: string",
-  "const triggerLabel = displayLabel ?? selectedModelLabel",
-  "Change model (${selectedModelLabel})",
-  'aria-label={tooltipLabel}',
+  "All models",
+  "Change model",
   'aria-label={`${t("composer.assistant_identity")} ${label}`}',
   'font-medium text-dls-text">{t("composer.assistant_identity")}',
   "protocolDeskIdForComposerExtension",
@@ -464,9 +462,9 @@ assert.ok(workflowTemplates.includes('primaryPanelRouteId: manifest.primaryPanel
 assert.ok(workflowTemplates.includes('launchBehavior: manifest.launchBehavior'), "app launcher metadata should preserve manifest launch behavior");
 assert.ok(workflowTemplates.includes('canSubmit: false'), "app launcher metadata should keep market submit disabled");
 assert.ok(workflowTemplates.includes('liveExecutionEnabled: false'), "app launcher metadata should keep live execution disabled");
-assert.ok(protocolDeskUi.includes("Bittensor: TAO wallet reads, subnets, validators, watches, receipts, and unsigned staking previews"), "Bittensor rail tooltip should explain protocol-specific work");
-assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, exposure, funding, watches, and wallet-approved orders"), "Hyperliquid rail tooltip should explain protocol-specific work");
-assert.ok(protocolDeskUi.includes("Polymarket: markets, outcomes, liquidity, compliance, watches, and trade handoffs"), "Polymarket rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Bittensor: TAO reads, subnets, validators, reviewed transfers, staking previews, watches, and receipts"), "Bittensor rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, exposure, funding, watches, and order previews"), "Hyperliquid rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Polymarket: markets, liquidity, compliance, watches, and wallet-approved BUY orders"), "Polymarket rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes('w-[var(--nav-rail-width-compact)]'), "right rail should use a compact responsive width before wide desktop");
 assert.ok(sessionPage.includes('2xl:w-[var(--nav-rail-width)]'), "right rail should expand to readable customer desk labels on wide desktop");
 assert.ok(appCss.includes("--nav-rail-width-compact: 88px;"), "compact right rail should be wide enough for readable desk labels");
@@ -626,7 +624,7 @@ for (const phrase of [
   "walletStatusLabel",
   "Wallet not connected",
   "Open Matterhorn Wallet",
-  "Bittensor uses public SS58 reads and the user's own signer. Hyperliquid orders require exact review and connected-wallet approval. Polymarket stays preview-only.",
+  "Supported actions are prepared first, then require exact review and approval in the connected wallet. Agents and watches never submit.",
 ]) {
   assert.ok(statusBar.includes(phrase), `status bar should expose customer navigation: ${phrase}`);
 }
@@ -666,8 +664,8 @@ assert.ok(settingsShell.includes('props.compact ? "sr-only" : "truncate"'), "com
 assert.equal(settingsShell.includes('className="min-w-0 max-w-46 justify-start gap-2"'), false, "compact settings rail should not use the old large dropdown trigger as the primary header");
 assert.ok(extensionsView.includes("compact?: boolean"), "extensions settings should support embedded compact right-rail rendering");
 assert.ok(extensionsView.includes('props.compact ? "space-y-4 max-w-none" : "space-y-6 max-w-3xl"'), "embedded extensions settings should remove full-page max-width spacing");
-assert.ok(extensionsView.includes('"grid min-w-0 flex-1 grid-cols-2 border-b border-dls-border/40"'), "embedded extensions tabs should use equal compact columns, fill the available space beside refresh, and keep a quiet baseline");
-assert.ok(extensionsView.includes("h-9 min-w-0 rounded-none border-x-0 border-t-0 border-b-2"), "embedded extensions tabs should use a slim active underline instead of filled blocks");
+assert.ok(extensionsView.includes('"grid min-w-0 flex-1 grid-cols-2 rounded-md bg-dls-surface-muted/[0.14] p-1"'), "embedded extensions tabs should use equal compact columns and a quiet shared surface");
+assert.ok(extensionsView.includes("h-9 min-w-0 rounded-md border-0 bg-transparent"), "embedded extensions tabs should use compact, softly contrasted controls");
 assert.equal(extensionsView.includes("post-go-live"), false, "Marketplace tabs should omit redundant launch-status copy");
 assert.ok(extensionsView.includes('<span className="min-w-0 max-w-full truncate">Marketplace</span>'), "embedded Marketplace label should be constrained inside its compact tab");
 assert.ok(settingsSurfaceRoute.includes("compact={props.embedded}"), "embedded settings should tell extensions and MCP views to use compact right-rail layout");
@@ -691,7 +689,7 @@ for (const phrase of [
   "Local profile",
   "Preferences and workspace access",
   "Local teammate access",
-  "Technical details",
+  "Workspace details",
   "Backend version",
   "Profile capability",
   "Local token sharing",
@@ -707,7 +705,7 @@ for (const phrase of [
   "WalletBoundaryList",
   "capability.safetyCopy",
   "External signer",
-  "Connect an EVM or Sui wallet.",
+  "Browser wallet extensions are available when installed and allowed.",
   "No EVM wallet connector detected",
   "Install or enable MetaMask, Rabby, or another injected wallet. Public reads and market previews still work.",
   "Read public SS58 data and prepare unsigned actions.",
@@ -736,7 +734,9 @@ for (const phrase of [
   "buildMatterhornOrientationSystemPrompt",
   "shouldInjectMatterhornOrientationPrompt(text)",
   "matterhornOrientationPrompt",
-  "[envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt, deskAgentInstructions, workflowRunPrompt, responsePerspectivePrompt, executionModePrompt]",
+  'id: "workspace_orientation", content: matterhornOrientationPrompt',
+  'id: "crypto_safety", content: cryptoPrompt',
+  'id: "desk_contract", content: deskAgentInstructions',
 ]) {
   assert.ok(sessionRoute.includes(phrase), `broad starter prompts should receive Matterhorn orientation context: ${phrase}`);
 }
@@ -744,13 +744,13 @@ for (const phrase of [
   "MATTERHORN_ORIENTATION_PATTERNS",
   "\\bwhat can i do\\b",
   "## Matterhorn Desks Orientation",
-  "Answer as Matterhorn Desks, not as a generic code assistant.",
+  "Give a concise Matterhorn Desks orientation rather than a generic coding-assistant introduction.",
   "If the workspace is empty, do not lead with internal runtime files such as opencode.json or .opencode/.",
   "Bittensor: explain subnets",
   "Hyperliquid: read markets/orderbooks/account exposure",
   "Polymarket: search/summarize markets",
   "Longevity workflows",
-  "Can submit: No. Live submission: Off.",
+  "Chat and watches never auto-execute.",
 ]) {
   assert.ok(cryptoPrompt.includes(phrase), `orientation prompt should keep starter answers Matterhorn-native: ${phrase}`);
 }
@@ -820,7 +820,8 @@ for (const phrase of [
 
 for (const phrase of [
   "Matterhorn MCPs",
-  "Install Matterhorn MCPs for Codex, Claude Code, Claude Desktop, and Cursor.",
+  "Install Matterhorn MCPs for Codex, Claude Code, Claude Desktop, and",
+  "Cursor.",
   "Use them for protocol reads, previews, memory, workflow, evidence, and agent control.",
   "Cards show command, clients, tools, and safety limits.",
   "@container/matterhorn-mcps",
@@ -868,7 +869,7 @@ for (const phrase of [
   "matterhorn-work mcp config --target claude --profile full",
   "matterhorn-work mcp config --target claude-desktop --profile full",
   "matterhorn-work mcp config --target cursor --profile full",
-  "Public reads and unsigned previews only.",
+  "Public reads and transfer drafts.",
   "Compliance-gated handoff only. No live submit.",
   "review and submit it with your own signer or client.",
   "Never paste seeds, keys, mnemonics, signatures, signed payloads, or wallet exports.",
@@ -877,7 +878,10 @@ for (const phrase of [
   "No provider execution, payments, email sending, publishing, or token gates.",
   "No custody, signing, market submit, or secret collection.",
 ]) {
-  assert.ok(settingsRoute.includes(phrase), `MCP desk product cards should expose safe Matterhorn MCP setup copy: ${phrase}`);
+  assert.ok(
+    settingsRoute.includes(phrase) || normalizedMcpView.includes(phrase),
+    `MCP desk product cards should expose safe Matterhorn MCP setup copy: ${phrase}`,
+  );
 }
 assert.equal(
   settingsRoute.includes("props.card.docs.examples.map"),
@@ -966,11 +970,11 @@ assert.equal(
   "MCP custom app card should not use decorative blue gradient backgrounds.",
 );
 assert.ok(
-  settingsRoute.includes('McpCustomAppCard compact={props.compact}'),
+  normalizedMcpView.includes("McpCustomAppCard compact={props.compact}"),
   "MCP custom app card should inherit the compact right-rail rendering mode.",
 );
 assert.ok(
-  settingsRoute.includes('props.compact\n        ? "px-1 py-2"'),
+  normalizedMcpView.includes('props.compact ? "px-1 py-2"'),
   "MCP custom app action should use an open compact rail treatment.",
 );
 assert.ok(
@@ -1069,12 +1073,14 @@ for (const forbidden of [
 }
 
 for (const phrase of [
-  "Matterhorn Wallet",
   "EVM wallet",
-  "Bittensor actions stay external-signer only.",
+  "Review & submit",
+  "Prepare only",
+  "Read public SS58 data and prepare TAO transfers.",
+  "Staking and advanced calls remain external-signer handoffs.",
   "WalletBoundaryList",
   "safetyCopy.forbiddenSecretsLine",
-  "Public Bittensor reads and market previews still work.",
+  "keys stay in your wallet",
 ]) {
   assert.ok(walletSettings.includes(phrase), `wallet settings should clearly explain current wallet boundaries: ${phrase}`);
 }

@@ -290,7 +290,7 @@ describe("backend control plane routes", () => {
     expect(result.payload.success).toBe(true);
     expect(result.payload.version).toBe("matterhorn.backend.capabilities.v1");
     expect(result.payload.models.status).toBe("needs_setup");
-    expect(result.payload.models.label).toBe("Local engine not connected");
+    expect(result.payload.models.label).toBe("Model catalog unavailable");
     expect(result.payload.models.defaultModel).toEqual({ providerId: "opencode", modelId: "mimo-v2.5-free" });
     expect(result.payload.models.providerListSource).toBe("opencode");
     expect(result.payload.models.routing.answerPath).toBe("opencode_session_prompt_async");
@@ -303,7 +303,7 @@ describe("backend control plane routes", () => {
     });
     expect(result.payload.models.actions).toContainEqual({
       id: "settings.models.connect-local-engine",
-      label: "Connect local engine",
+      label: "Open Models",
       kind: "route",
       href: "/settings/ai",
     });
@@ -411,7 +411,7 @@ describe("backend control plane routes", () => {
     const result = await jsonFetch(base, "/api/backend/capabilities");
     expect(result.response.status).toBe(200);
     expect(result.payload.models.status).toBe("working");
-    expect(result.payload.models.label).toBe("Agent model routing");
+    expect(result.payload.models.label).toBe("Model catalog service");
     expect(result.payload.models.details).toMatchObject({
       opencodeConfigured: true,
       configuredWorkspaceCount: 1,
@@ -591,7 +591,7 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain("Basic ");
   });
 
-  test("GET /workspace/:id/backend/models prefers the verified included release model", async () => {
+  test("GET /workspace/:id/backend/models keeps a catalog-only model from looking ready or being saved", async () => {
     const opencodeBaseUrl = await startProviderCatalogServer({
       all: [{
         id: "opencode",
@@ -614,6 +614,14 @@ describe("backend control plane routes", () => {
       modelId: "mimo-v2.5-free",
       source: "server_default",
     });
+    expect(result.payload.routing.answerPath.status).toBe("needs_setup");
+
+    const rejected = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {
+      method: "PATCH",
+      body: JSON.stringify({ providerId: "opencode", modelId: "mimo-v2.5-free" }),
+    });
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.payload.code).toBe("invalid_model_selection");
   });
 
   test("workspace model selection persists, clears, audits, and enforces write guards", async () => {

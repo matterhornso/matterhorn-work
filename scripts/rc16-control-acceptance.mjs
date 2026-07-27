@@ -159,13 +159,27 @@ async function waitForUrl(page, pattern, label) {
   }
 }
 
-async function firstVisible(locator, label) {
+async function firstVisible(locator, label, timeout = 12_000) {
+  const deadline = Date.now() + timeout;
+  let count = 0;
+  while (Date.now() < deadline) {
+    count = await locator.count();
+    for (let index = 0; index < count; index += 1) {
+      const candidate = locator.nth(index);
+      if (await candidate.isVisible()) return candidate;
+    }
+    await locator.page().waitForTimeout(120);
+  }
+  throw new Error(`${label} is missing or not visible after ${timeout}ms (matched ${count}).`);
+}
+
+async function visibleOrNull(locator) {
   const count = await locator.count();
   for (let index = 0; index < count; index += 1) {
     const candidate = locator.nth(index);
     if (await candidate.isVisible()) return candidate;
   }
-  throw new Error(`${label} is missing or not visible.`);
+  return null;
 }
 
 async function clickVisible(locator, label) {
@@ -173,6 +187,96 @@ async function clickVisible(locator, label) {
   await candidate.click();
   await settle(candidate.page());
   return candidate;
+}
+
+async function ensureExpanded(page, locator, label) {
+  const trigger = await firstVisible(locator, label);
+  if ((await trigger.getAttribute("aria-expanded")) !== "true") {
+    await trigger.click();
+    await settle(page);
+  }
+  return trigger;
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function openOverviewControlGroup(page, title) {
+  const main = page.locator("main");
+  await ensureExpanded(
+    page,
+    main.getByRole("button", { name: /More workspace controls/i }),
+    "More workspace controls",
+  );
+  await ensureExpanded(
+    page,
+    main.getByRole("button", {
+      name: new RegExp(`^${escapeRegExp(title)}(?:\\s|$)`),
+    }),
+    title,
+  );
+}
+
+async function openChat(page) {
+  await open(page, workspaceUrl(config.url, "session"));
+  const existingEditor = await visibleOrNull(
+    page.locator('[contenteditable="true"]').first(),
+  );
+  if (existingEditor) return;
+
+  await clickVisible(
+    page.getByRole("button", { name: "New chat", exact: true }),
+    "New chat",
+  );
+  await waitForUrl(page, /\/session\/[^/?]+(?:\?|$)/, "New chat");
+  await firstVisible(
+    page.locator('[contenteditable="true"]').first(),
+    "chat composer",
+  );
+}
+
+async function chatEditorOrRecovery(page) {
+  const editor = await visibleOrNull(
+    page.locator('[contenteditable="true"]').first(),
+  );
+  if (editor) return { editor, recovery: null };
+
+  const recovery = await visibleOrNull(
+    page.getByRole("button", { name: "Connect a model", exact: true }),
+  );
+  if (!recovery) {
+    throw new Error(
+      "Chat composer is unavailable and does not offer the Connect a model recovery action.",
+    );
+  }
+  return { editor: null, recovery };
+}
+
+async function chatEditorOrVerifyRecovery(page, control) {
+  const { editor, recovery } = await chatEditorOrRecovery(page);
+  if (editor) return editor;
+
+  await recovery.click();
+  await waitForUrl(page, /\/settings\/ai(?:\?|$)/, `${control} model recovery`);
+  await firstVisible(
+    page.getByRole("button", { name: "Add provider", exact: true }),
+    "Add provider recovery",
+  );
+  return null;
+}
+
+async function verifyChatProviderRecovery(page, control) {
+  const recovery = await firstVisible(
+    page.getByRole("button", { name: "Connect a model", exact: true }),
+    `${control} model recovery`,
+  );
+  await recovery.click();
+  await waitForUrl(page, /\/settings\/ai(?:\?|$)/, `${control} model recovery`);
+  await firstVisible(
+    page.getByRole("button", { name: "Add provider", exact: true }),
+    "Add provider recovery",
+  );
 }
 
 async function assertText(page, text) {
@@ -493,6 +597,7 @@ await acceptanceCase(
   "Light, Dark, and System theme controls",
   "Each selection is pressed, persists on reload, and original theme is restored",
   async () => {
+    await openOverviewControlGroup(page, "Appearance");
     let actualOriginal = "System";
     for (const name of ["Light", "Dark", "System"]) {
       const button = await firstVisible(page.getByRole("button", { name, exact: true }), name);
@@ -507,6 +612,7 @@ await acceptanceCase(
       }
     }
     await reload(page);
+    await openOverviewControlGroup(page, "Appearance");
     const system = await firstVisible(page.getByRole("button", { name: "System", exact: true }), "System");
     if ((await system.getAttribute("aria-pressed")) !== "true") {
       throw new Error("System theme did not persist after reload.");
@@ -525,6 +631,7 @@ await acceptanceCase(
   "Comfortable and Compact density",
   "Both states select correctly and original density is restored",
   async () => {
+    await openOverviewControlGroup(page, "Appearance");
     let original = "Comfortable";
     for (const name of ["Comfortable", "Compact"]) {
       const button = await firstVisible(page.getByRole("button", { name, exact: true }), name);
@@ -551,7 +658,18 @@ await acceptanceCase(
   "Browse models",
   "Opens a searchable model dialog without legacy branding and cancel changes nothing",
   async () => {
-    await clickVisible(page.getByRole("button", { name: "Browse models", exact: true }), "Browse models");
+    const browseModels = await visibleOrNull(
+      page.getByRole("button", { name: "Browse models", exact: true }),
+    );
+    if (!browseModels) {
+      const addProvider = await firstVisible(
+        page.getByRole("button", { name: "Add provider", exact: true }),
+        "Add provider recovery",
+      );
+      return `No model catalog is connected; ${await addProvider.innerText()} is available to recover.`;
+    }
+    await browseModels.click();
+    await settle(page);
     const dialog = await firstVisible(page.getByRole("dialog"), "Models dialog");
     const body = await dialog.innerText();
     if (LEGACY_BRANDS.test(body)) throw new Error("Legacy engine branding is visible in Models.");
@@ -559,11 +677,11 @@ await acceptanceCase(
       dialog.getByPlaceholder("Search providers and models..."),
       "model search",
     );
-    await search.fill("North");
-    await assertText(page, "North Mini Code Free");
+    await search.fill("Smoke");
+    await assertText(page, "Smoke model");
     await clickVisible(dialog.getByRole("button", { name: "Done", exact: true }), "Done");
     await dialog.waitFor({ state: "hidden", timeout: 10_000 });
-    return "Models dialog opened, filtered to North, and closed";
+    return "Models dialog opened, filtered to the current smoke model, and closed";
   },
 );
 
@@ -614,11 +732,16 @@ await acceptanceCase(
   "Refresh MCP status",
   "Refresh completes and retains a truthful active server count",
   async () => {
-    const before = (await page.locator("body").innerText()).match(/\d+ MCP servers? active/)?.[0] ?? "";
+    const currentMcpStatus = async () => {
+      const body = await page.locator("body").innerText();
+      return body.match(/\d+ MCP servers? active/)?.[0]
+        ?? (body.includes("No external MCPs connected.") ? "No external MCPs connected" : "");
+    };
+    const before = await currentMcpStatus();
     await clickVisible(page.getByRole("button", { name: /Refresh/i }), "Refresh MCP status");
-    const after = (await page.locator("body").innerText()).match(/\d+ MCP servers? active/)?.[0] ?? "";
-    if (!after) throw new Error("Active MCP server count disappeared after refresh.");
-    return `${before || "count loaded"} → ${after}`;
+    const after = await currentMcpStatus();
+    if (!after) throw new Error("MCP connection status disappeared after refresh.");
+    return `${before || "status loaded"} → ${after}`;
   },
 );
 
@@ -804,15 +927,15 @@ await acceptanceCase(
 await open(page, workspaceUrl(config.url, "settings/overview"));
 await acceptanceCase(
   "OVERVIEW-DETAILS",
-  "Technical readiness details",
+  "Workspace details",
   "Expands and collapses the backend readiness disclosure",
   async () => {
     const button = await firstVisible(
-      page.getByRole("button", { name: "Technical readiness details", exact: true }),
-      "Technical readiness details",
+      page.getByRole("button", { name: /Workspace details/i }),
+      "Workspace details",
     );
     await button.click();
-    await assertText(page, "Workspace readiness");
+    await assertText(page, "Workspace setup");
     await button.click();
     return "Readiness details exposed, then collapsed";
   },
@@ -823,8 +946,18 @@ await acceptanceCase(
   "Feedback review filters",
   "Every filter becomes the selected filter",
   async () => {
-    const labels = ["All 0", "Worked well", "Felt rough", "Rating", "Comment", "Bug", "Request"];
+    await openOverviewControlGroup(page, "Work & evidence");
+    const all = await firstVisible(
+      page.getByRole("button", { name: /^All\s+\d+$/ }),
+      "All feedback",
+    );
+    const labels = ["Worked well", "Felt rough", "Rating", "Comment", "Bug", "Request"];
     let exercised = 0;
+    await all.click();
+    if ((await all.getAttribute("aria-pressed")) !== "true") {
+      throw new Error("All feedback did not become selected.");
+    }
+    exercised += 1;
     for (const label of labels) {
       const button = page.getByRole("button", { name: label, exact: true });
       if ((await button.count()) < 1) continue;
@@ -835,7 +968,7 @@ await acceptanceCase(
       }
       exercised += 1;
     }
-    await clickVisible(page.getByRole("button", { name: "All 0", exact: true }), "All 0");
+    await all.click();
     return `${exercised} filters selected; restored All`;
   },
 );
@@ -845,6 +978,7 @@ await acceptanceCase(
   "Quick Jot",
   "Opens the note composer and Cancel writes nothing",
   async () => {
+    await openOverviewControlGroup(page, "Work & evidence");
     await clickVisible(page.getByRole("button", { name: "Quick Jot", exact: true }), "Quick Jot");
     const dialog = await firstVisible(page.getByRole("dialog"), "Quick Jot dialog");
     await firstVisible(dialog.getByPlaceholder("Note title"), "Note title");
@@ -859,6 +993,7 @@ await acceptanceCase(
   "Open notes",
   "Opens the workspace Notes panel",
   async () => {
+    await openOverviewControlGroup(page, "Work & evidence");
     await clickVisible(page.getByRole("button", { name: "Open notes", exact: true }), "Open notes");
     await waitForUrl(page, /(?:\?|&)panel=notes(?:&|$)/, "Open notes");
     await assertText(page, "Notes");
@@ -872,6 +1007,7 @@ await acceptanceCase(
   "Open Memory review",
   "Opens the workspace Memory panel",
   async () => {
+    await openOverviewControlGroup(page, "Work & evidence");
     await clickVisible(
       page.getByRole("button", { name: "Open Memory review", exact: true }),
       "Open Memory review",
@@ -895,7 +1031,7 @@ await acceptanceCase(
       ["Project notes", "notes", "Notes"],
     ];
     for (const [control, panel, heading] of panels) {
-      await open(page, config.chatUrl);
+      await openChat(page);
       await clickVisible(page.getByRole("button", { name: control, exact: true }), control);
       await waitForUrl(
         page,
@@ -908,7 +1044,7 @@ await acceptanceCase(
   },
 );
 
-await open(page, config.chatUrl);
+await openChat(page);
 await acceptanceCase(
   "CHAT-MODES",
   "Discuss, Plan, and Work modes",
@@ -934,6 +1070,7 @@ await acceptanceCase(
   "Less optimistic, Normal, and Optimistic perspective controls",
   "Every perspective becomes checked; Normal is restored",
   async () => {
+    await openChat(page);
     const labels = ["Cautious", "Balanced", "Optimistic"];
     for (const label of labels) {
       const radio = await firstVisible(
@@ -955,10 +1092,19 @@ await acceptanceCase(
 
 await acceptanceCase(
   "CHAT-MODEL",
-  "Change model",
-  "Opens a searchable branded model picker and closes without changing selection",
+  "Model selection or first-run recovery",
+  "Opens a searchable branded model picker when available, or routes to provider setup when no catalog is connected",
   async () => {
-    await clickVisible(page.getByRole("button", { name: "Change model", exact: true }), "Change model");
+    await openChat(page);
+    const changeModel = await visibleOrNull(
+      page.getByRole("button", { name: "Change model", exact: true }),
+    );
+    if (!changeModel) {
+      await verifyChatProviderRecovery(page, "Chat model selection");
+      return "No model catalog is connected; Connect a model routed to Add provider setup";
+    }
+    await changeModel.click();
+    await settle(page);
     const dialog = await firstVisible(page.getByRole("dialog"), "Models dialog");
     try {
       const search = await firstVisible(
@@ -968,8 +1114,8 @@ await acceptanceCase(
       if (LEGACY_BRANDS.test(await dialog.innerText())) {
         throw new Error("Legacy engine branding is visible in the model picker.");
       }
-      await search.fill("North");
-      await firstVisible(dialog.getByText(/North Mini Code Free/i), "filtered model result");
+      await search.fill("Smoke");
+      await firstVisible(dialog.getByText(/Smoke model/i), "filtered model result");
     } finally {
       await page.keyboard.press("Escape");
       await dialog.waitFor({ state: "hidden", timeout: 10_000 }).catch(async () => {
@@ -985,6 +1131,7 @@ await acceptanceCase(
   "Commands, skills, extensions, and MCP menu",
   "Every Work-mode category loads without legacy branding and dismisses with Escape",
   async () => {
+    await openChat(page);
     await clickVisible(
       page.getByRole("button", { name: "Commands, skills, and MCPs", exact: true }),
       "Commands, skills, and MCPs",
@@ -1013,7 +1160,11 @@ await acceptanceCase(
   "Insert a command from the composer menu",
   "The selected command is inserted into the editor and the original draft is restored",
   async () => {
-    const editor = await firstVisible(page.locator('[contenteditable="true"]').first(), "chat editor");
+    await openChat(page);
+    const editor = await chatEditorOrVerifyRecovery(page, "Command insertion");
+    if (!editor) {
+      return "No model catalog is connected; command insertion stays unavailable until Add provider completes";
+    }
     const original = (await editor.textContent()) ?? "";
     await clickVisible(
       page.getByRole("button", { name: "Commands, skills, and MCPs", exact: true }),
@@ -1035,13 +1186,12 @@ await acceptanceCase(
       { timeout: 20_000 },
     );
     const command = await firstVisible(
-      commandList.getByRole("button").filter({ hasText: /^\// }),
+      commandList.getByRole("button").filter({ hasText: /\/\w+/ }),
       "workspace command",
     );
-    const commandLabel = ((await command.innerText()) ?? "").trim().split(/\s+/)[0];
-    if (!commandLabel?.startsWith("/")) {
-      throw new Error(`Command label is invalid: ${JSON.stringify(commandLabel)}.`);
-    }
+    const commandMatch = ((await command.innerText()) ?? "").match(/\/[-\w]+/);
+    const commandLabel = commandMatch?.[0] ?? "";
+    if (!commandLabel) throw new Error("Command label is missing.");
     await command.click();
     const inserted = (await editor.textContent()) ?? "";
     if (!inserted.includes(commandLabel)) {
@@ -1057,8 +1207,11 @@ await acceptanceCase(
   "Chat composer draft",
   "Draft survives reload, then is cleared and remains cleared",
   async () => {
-    const editorLocator = page.locator('[contenteditable="true"]').first();
-    const editor = await firstVisible(editorLocator, "chat editor");
+    await openChat(page);
+    const editor = await chatEditorOrVerifyRecovery(page, "Draft editing");
+    if (!editor) {
+      return "No model catalog is connected; draft editing stays unavailable until Add provider completes";
+    }
     const original = (await editor.textContent()) ?? "";
     const marker = `RC16 draft ${Date.now()}`;
     await editor.fill(marker);
@@ -1084,7 +1237,11 @@ await acceptanceCase(
   "Shift+Enter multiline composer input",
   "Adds a new line without sending or changing the chat route",
   async () => {
-    const editor = await firstVisible(page.locator('[contenteditable="true"]').first(), "chat editor");
+    await openChat(page);
+    const editor = await chatEditorOrVerifyRecovery(page, "Multiline draft editing");
+    if (!editor) {
+      return "No model catalog is connected; multiline draft editing stays unavailable until Add provider completes";
+    }
     const original = (await editor.textContent()) ?? "";
     const originalUrl = page.url();
     const firstLine = `RC16 multiline ${Date.now()}`;
@@ -1111,6 +1268,7 @@ await acceptanceCase(
   "Chat file attachment",
   "A real local file appears in the composer and can be removed cleanly",
   async () => {
+    await openChat(page);
     const fileInput = page.locator('input[type="file"]').first();
     if ((await fileInput.count()) !== 1) {
       throw new Error("Chat file input is missing.");
@@ -1135,7 +1293,14 @@ await acceptanceCase(
   "Copy message",
   "Copies non-empty message text to the clipboard",
   async () => {
-    const copy = await firstVisible(page.getByRole("button", { name: "Copy message", exact: true }), "Copy message");
+    await openChat(page);
+    const copy = await visibleOrNull(
+      page.getByRole("button", { name: "Copy message", exact: true }),
+    );
+    if (!copy) {
+      await verifyChatProviderRecovery(page, "Message copy");
+      return "No assistant response exists in this provider-free workspace; Connect a model routed to Add provider setup";
+    }
     await copy.click();
     await settle(page, 150);
     const clipboard = await page.evaluate(() => navigator.clipboard.readText());

@@ -67,6 +67,11 @@ import ProviderAuthModal from "../domains/connections/provider-auth/provider-aut
 import ConnectionsModals from "../domains/connections/modals";
 import { AiSettingsView } from "../domains/settings/pages/ai-view";
 import { SettingsOverviewView } from "../domains/settings/pages/overview-view";
+import {
+  PENDING_DESK_TASK_RETURN_PARAM,
+  readPendingDeskTaskNavigation,
+  readStoredPendingDeskTask,
+} from "./pending-desk-task";
 // Side-effect imports: register extension config components into the registry.
 import "../domains/settings/openai-image-gen-config";
 import "../domains/settings/ollama-config";
@@ -621,6 +626,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   );
   const navigationWorkspaceId = readNavigationWorkspaceId(location.state);
   const navigationSessionId = readNavigationSessionId(location.state);
+  const navigationPendingDeskTask = readPendingDeskTaskNavigation(location.state);
 
   const [loading, setLoading] = useState(true);
   const [workspaces, setWorkspaces] = useState<RouteWorkspace[]>([]);
@@ -637,6 +643,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   );
   const legacySelectedWorkspaceIdRef = useRef(legacySelectedWorkspaceId);
   const selectedWorkspaceId = routeWorkspaceId || legacySelectedWorkspaceId;
+  const pendingDeskTask =
+    navigationPendingDeskTask ?? readStoredPendingDeskTask(selectedWorkspaceId);
 
   useEffect(() => {
     if (!props.embedded || !route.redirectPath) return;
@@ -653,9 +661,10 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         selectedWorkspaceId
           ? workspaceSettingsRoute(selectedWorkspaceId, path)
           : `/settings/${path}`,
+        { state: location.state },
       );
     },
-    [navigate, props.embedded, selectedWorkspaceId],
+    [location.state, navigate, props.embedded, selectedWorkspaceId],
   );
   const [baseUrl, setBaseUrl] = useState("");
   const [token, setToken] = useState("");
@@ -2887,6 +2896,13 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             cudosStatus={cudosProviderStatus}
             cudosError={cudosProviderError}
             onConnectCudos={connectCudosProvider}
+            pendingDeskTask={pendingDeskTask}
+            onResumePendingDeskTask={() => {
+              if (!pendingDeskTask || !selectedWorkspaceId) return;
+              navigate(
+                `${workspaceSessionRoute(selectedWorkspaceId)}?${PENDING_DESK_TASK_RETURN_PARAM}=${encodeURIComponent(pendingDeskTask.deskId)}`,
+              );
+            }}
             onOpenModelPicker={() => {
               setModelPickerQuery("");
               setModelOptionsLoading(true);
@@ -3031,9 +3047,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                   restriction: "allowBuiltInExtensions",
                 })}
                 compact={props.embedded}
-                connectMcp={(entry) => {
-                  void connectionsStore.connectMcp(entry);
-                }}
+                connectMcp={(entry) => connectionsStore.connectMcp(entry)}
                 configSlotForEntry={(entry) =>
                   getExtensionConfigSlot(entry, {
                     matterhornServerClient:
@@ -3051,7 +3065,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                       ),
                       connecting:
                         connectionsSnapshot.mcpConnectingName === entry.name,
-                      onConnect: () => connectionsStore.connectMcp(entry),
+                      onConnect: async () => {
+                        await connectionsStore.connectMcp(entry);
+                      },
                       onRefresh: () => connectionsStore.refreshMcpServers(),
                     },
                     imageExtension: {

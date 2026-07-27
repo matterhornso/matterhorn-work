@@ -84,16 +84,20 @@ for (const phrase of [
 
 for (const phrase of [
   "Desktop release checks",
-  "Bittensor: Read and preview",
-  "Hyperliquid: Wallet-approved trading",
-  "Polymarket remains preview only",
+  "Bittensor: Read, prepare, and transfer",
+  "Markets: Wallet-approved trading",
+  "Public reads, unsigned staking previews, and reviewed TAO transfers.",
+  "Manual execution is available in the trade ticket after exact-order review and connected-wallet approval.",
+  "Eligible EOA BUY orders require compliance checks, exact review, and connected Polygon wallet authorization.",
+  "Matterhorn never custodies keys or signs silently.",
   "Longevity workflow: Standalone",
   "Open install guide",
   "Copy doctor",
   "Copy tester build",
   "Automatic execution off",
-  "Wallet approval per Hyperliquid order",
-  "External signer required",
+  "Wallet approval per action",
+  "Bittensor staking uses external signer",
+  "Polymarket compliance gate",
   "Not Web3, not medical advice, and no live payments or email.",
 ]) {
   assert.ok(panel.includes(phrase), `Demo tab should include desktop beta copy: ${phrase}`);

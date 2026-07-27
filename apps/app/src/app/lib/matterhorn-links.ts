@@ -17,6 +17,8 @@ export type DenAuthDeepLink = {
 function isSupportedDeepLinkProtocol(protocol: string): boolean {
   const normalized = protocol.toLowerCase();
   return (
+    normalized === "matterhorn-desks:" ||
+    normalized === "matterhorn-desks-dev:" ||
     normalized === "matterhorn-work:" ||
     normalized === "matterhorn-work-dev:" ||
     normalized === "matterhorn:" ||
@@ -145,7 +147,7 @@ function normalizeDebugDeepLinkInput(rawValue: string): string {
   const trimmed = rawValue.trim();
   if (!trimmed) return "";
 
-  const directMatch = trimmed.match(/(?:matterhorn-work-dev|matterhorn-work|openwork-dev|openwork|matterhorn-dev|matterhorn|https?):\/\/[^\s"'<>]+/i);
+  const directMatch = trimmed.match(/(?:matterhorn-desks-dev|matterhorn-desks|matterhorn-work-dev|matterhorn-work|openwork-dev|openwork|matterhorn-dev|matterhorn|https?):\/\/[^\s"'<>]+/i);
   if (directMatch) return directMatch[0];
 
   return trimmed;

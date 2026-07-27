@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import {
   MATTERHORN_DESK_AGENT_MANIFESTS,
@@ -53,25 +55,57 @@ describe("Matterhorn desk agent architecture", () => {
 
   test("models each protocol completion surface truthfully", () => {
     expect(MATTERHORN_DESK_AGENT_MANIFESTS.bittensor.capabilityPolicy.userCompletion.surface)
-      .toBe("external_signer");
+      .toBe("connected_wallet");
     expect(MATTERHORN_DESK_AGENT_MANIFESTS.hyperliquid.capabilityPolicy.userCompletion)
       .toEqual({
         surface: "manual_trade_ticket",
         availableAfterReview: true,
         featureGate: "hyperliquid_execution",
       });
-    expect(MATTERHORN_DESK_AGENT_MANIFESTS.polymarket.capabilityPolicy.userCompletion.surface)
-      .toBe("external_client");
+    expect(MATTERHORN_DESK_AGENT_MANIFESTS.polymarket.capabilityPolicy.userCompletion)
+      .toEqual({
+        surface: "connected_wallet",
+        availableAfterReview: true,
+        featureGate: "polymarket_compliance",
+      });
     expect(MATTERHORN_DESK_AGENT_MANIFESTS.sui.capabilityPolicy.userCompletion.surface)
       .toBe("connected_wallet");
   });
 
   test("shares public wallet context only with desks that need it", () => {
-    expect(MATTERHORN_DESK_AGENT_MANIFESTS.hyperliquid.contextPolicy.includeWalletPublicContext)
-      .toBe(true);
-    for (const deskId of ["bittensor", "polymarket", "sui", "wellness", "memory", "mcps"] as const) {
+    for (const deskId of ["bittensor", "hyperliquid", "polymarket"] as const) {
+      expect(MATTERHORN_DESK_AGENT_MANIFESTS[deskId].contextPolicy.includeWalletPublicContext)
+        .toBe(true);
+    }
+    for (const deskId of ["sui", "wellness", "memory", "mcps"] as const) {
       expect(MATTERHORN_DESK_AGENT_MANIFESTS[deskId].contextPolicy.includeWalletPublicContext)
         .toBe(false);
+    }
+  });
+
+  test("requires typed wallet-review cards for complete protocol action requests", () => {
+    for (const deskId of ["bittensor", "hyperliquid", "polymarket"] as const) {
+      const agent = MATTERHORN_DESK_AGENT_MANIFESTS[deskId];
+      expect(agent.toolPolicy.work).toContain("matterhorn-work_matterhorn_crypto_chat");
+      expect(agent.instructions).toContain("you MUST call matterhorn-work_matterhorn_crypto_chat exactly once");
+      expect(agent.instructions).toContain("Review in wallet");
+      expect(agent.instructions).toContain("do not replace it with a prose-only");
+    }
+  });
+
+  test("keeps checked-in execution desk manifests synchronized with the source policy", async () => {
+    const repositoryRoot = join(import.meta.dir, "../../..");
+
+    for (const deskId of ["bittensor", "hyperliquid", "polymarket"] as const) {
+      const agent = MATTERHORN_DESK_AGENT_MANIFESTS[deskId];
+      const checkedIn = await readFile(
+        join(repositoryRoot, ".opencode", "agents", `${agent.agentId}.md`),
+        "utf8",
+      );
+
+      expect(checkedIn).toContain('"matterhorn-work_matterhorn_crypto_chat": true');
+      expect(checkedIn).toContain("you MUST call matterhorn-work_matterhorn_crypto_chat exactly once");
+      expect(checkedIn).toContain("typed Review in wallet card");
     }
   });
 

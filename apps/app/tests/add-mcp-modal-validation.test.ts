@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { validateRemoteMcpUrl } from "../src/react-app/domains/connections/modals/add-mcp-modal";
+import {
+  getMcpAddError,
+  validateRemoteMcpUrl,
+} from "../src/react-app/domains/connections/modals/add-mcp-modal";
 
 describe("custom MCP URL validation", () => {
   test("accepts HTTP and HTTPS MCP endpoints", () => {
@@ -17,6 +20,14 @@ describe("custom MCP URL validation", () => {
   test("rejects credentials embedded in the URL", () => {
     expect(validateRemoteMcpUrl("https://user:secret@mcp.example.com")).toContain(
       "credentials",
+    );
+  });
+
+  test("keeps a failed connection recoverable without surfacing internal errors", () => {
+    expect(getMcpAddError({ ok: true })).toBeNull();
+    expect(getMcpAddError()).toBeNull();
+    expect(getMcpAddError({ ok: false, message: "internal service failed" })).toBe(
+      "Couldn't add this MCP. Check its URL or command, then try again.",
     );
   });
 });

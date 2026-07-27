@@ -232,9 +232,9 @@ describe("unified crypto chat router", () => {
     expect(result.intent).toBe("market_execution_readiness");
     expect(result.execution).toBe("read_only");
     expect(result.requiresClarification).toBe(false);
-    expect(result.responseText).toContain("Can submit: No");
-    expect(result.responseText).toContain("Live submission: Off");
-    expect(result.responseText).toContain("separate security review");
+    expect(result.responseText).toContain("Agent drafts never submit");
+    expect(result.responseText).toContain("separate reviewed wallet ticket");
+    expect(result.responseText).toContain("Watches and agents cannot sign or submit");
     expect(result.cards[0]).toMatchObject({
       kind: "market_execution_readiness",
       title: "Market execution readiness",
@@ -280,11 +280,10 @@ describe("unified crypto chat router", () => {
     expect(result.intent).toBe("market_execution_chain");
     expect(result.execution).toBe("read_only");
     expect(result.requiresClarification).toBe(false);
-    expect(result.responseText).toContain("preview or handoff");
-    expect(result.responseText).toContain("hash-bound to the sign request");
-    expect(result.responseText).toContain("hash mismatches fail closed");
-    expect(result.responseText).toContain("Can submit: No");
-    expect(result.responseText).toContain("Live submission: Off");
+    expect(result.responseText).toContain("agent draft, exact-term wallet ticket");
+    expect(result.responseText).toContain("connected-wallet authorization");
+    expect(result.responseText).toContain("reviewed terms are immutable");
+    expect(result.responseText).toContain("watches cannot execute");
     expect(result.responseText).toContain("never takes private keys");
     expect(result.cards[0]).toMatchObject({
       kind: "market_execution_chain",
@@ -340,10 +339,9 @@ describe("unified crypto chat router", () => {
     expect(result.execution).toBe("read_only");
     expect(result.responseText).toContain("External sign request");
     expect(result.responseText).toContain("Use only public/redacted inputs");
-    expect(result.responseText).toContain("hash-bound to the sign request");
     expect(result.responseText).toContain("hash mismatches fail closed");
-    expect(result.responseText).toContain("Can submit: No");
-    expect(result.responseText).toContain("Live submission: Off");
+    expect(result.responseText).toContain("separate exact-term wallet ticket");
+    expect(result.responseText).toContain("never takes private keys");
     expect(result.cards[0]).toMatchObject({
       kind: "market_execution_chain",
       title: "Market execution chain: External sign request",
@@ -375,8 +373,8 @@ describe("unified crypto chat router", () => {
     expect(result.intent).toBe("market_sdk_validation");
     expect(result.execution).toBe("read_only");
     expect(result.responseText).toContain("operator-owned testnet");
-    expect(result.responseText).toContain("Can submit: No");
-    expect(result.responseText).toContain("Live submission: Off");
+    expect(result.responseText).toContain("agent artifact cannot submit");
+    expect(result.responseText).toContain("separate connected-wallet ticket");
     expect(result.responseText).toContain("never takes private keys");
     expect(result.cards[0]).toMatchObject({
       kind: "market_sdk_validation",
@@ -622,8 +620,9 @@ describe("unified crypto chat router", () => {
     shared.forEach((card) => expectSharedCardContract(card, "polymarket"));
     expect(shared.find((card) => card.kind === "compliance_block")?.status).toBe("danger");
     const actionPreview = shared.find((card) => card.kind === "action_preview");
-    expect(actionPreview?.title).toContain("Preview Only");
-    expect(actionPreview?.summary).toContain("wallet/client decides whether anything is signed externally");
+    expect(actionPreview?.title).toContain("Agent Draft");
+    expect(actionPreview?.summary).toContain("artifact cannot submit");
+    expect(actionPreview?.summary).toContain("separate wallet ticket");
     expect(shared.find((card) => card.kind === "receipt_status")?.summary).toContain("receipt/status");
   });
 
@@ -667,6 +666,71 @@ describe("unified crypto chat router", () => {
     expect(JSON.stringify(result)).not.toContain("/orders/submit");
   });
 
+  test("builds an exact Bittensor transfer draft for the reviewed wallet ticket", async () => {
+    const sender = "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX";
+    const destination = "5DAAnrj7VHTz5x9R9mWAxJfPjNJBoDVqnZ8DvKh7cpLpPNKv";
+    const result = await executeUnifiedCryptoChatWorkflow(
+      {
+        venue: "bittensor",
+        message: "Transfer 0.25 TAO to the requested recipient",
+        ss58Address: sender,
+        destination,
+        amountTao: "0.25",
+      },
+      {
+        bittensorExecutor: async () => ({
+          plan: { intent: "stake_plan" } as never,
+          responseText: "Prepared an unsigned direct TAO transfer for wallet review.",
+          cards: [{
+            kind: "signed_action_review",
+            title: "Transfer review",
+            warnings: [],
+            data: {
+              preview: {
+                action: "transfer",
+                network: "finney",
+                coldkey: sender,
+                destination,
+                amountTao: 0.25,
+                unsignedPayload: { call: "must-not-cross-the-wallet-ticket-boundary" },
+              },
+            },
+          }] as never,
+          data: {},
+          warnings: [],
+          requiresClarification: false,
+          clarificationQuestion: null,
+          execution: "unsigned_preview",
+        }),
+      },
+    );
+
+    expect(result.venue).toBe("bittensor");
+    expect(result.execution).toBe("unsigned_preview");
+    expect(result.sharedCards).toHaveLength(1);
+    expect(result.sharedCards[0]).toMatchObject({
+      kind: "action_preview",
+      venue: "bittensor",
+      originalKind: "signed_action_review",
+      status: "success",
+      data: {
+        data: {
+          preview: {
+            action: "transfer",
+            network: "finney",
+            coldkey: sender,
+            destination,
+            amountTao: 0.25,
+          },
+        },
+      },
+    });
+    result.sharedCards.forEach((card) => expectSharedCardContract(card, "bittensor"));
+    expect(JSON.stringify(result)).not.toContain("privateKey");
+    expect(JSON.stringify(result)).not.toContain("seedPhrase");
+    expect(JSON.stringify(result)).not.toContain("/submit");
+  });
+
   test("locks shared-card contract for Hyperliquid read and preview workflows", async () => {
     const orderbook = await executeUnifiedCryptoChatWorkflow(
       { venue: "hyperliquid", message: "show BTC orderbook", asset: "BTC" },
@@ -683,9 +747,26 @@ describe("unified crypto chat router", () => {
     expect(preview.sharedCards[0]).toMatchObject({ kind: "action_preview", originalKind: "hyperliquid_order_preview", status: "warning" });
     orderbook.sharedCards.forEach((card) => expectSharedCardContract(card, "hyperliquid"));
     preview.sharedCards.forEach((card) => expectSharedCardContract(card, "hyperliquid"));
-    expect(preview.sharedCards[0]?.title).toContain("Preview Only");
-    expect(preview.sharedCards[0]?.summary).toContain("wallet/client decides whether anything is signed externally");
-    expect((preview.sharedCards[0]?.data as { preview?: { canSubmit?: boolean } }).preview?.canSubmit).toBe(false);
+    expect(preview.sharedCards[0]?.title).toContain("Agent Draft");
+    expect(preview.sharedCards[0]?.summary).toContain("artifact cannot submit");
+    expect(preview.sharedCards[0]?.summary).toContain("separate wallet ticket");
+    expect((preview.sharedCards[0]?.data as {
+      preview?: {
+        asset?: string;
+        side?: string;
+        size?: number;
+        price?: number | null;
+        reduceOnly?: boolean;
+        canSubmit?: boolean;
+      };
+    }).preview).toMatchObject({
+      asset: "BTC",
+      side: "buy",
+      size: 0.1,
+      price: 65000,
+      reduceOnly: false,
+      canSubmit: false,
+    });
     expect(JSON.stringify(preview)).not.toContain("/orders/submit");
   });
 
@@ -723,12 +804,59 @@ describe("unified crypto chat router", () => {
     const blockedPreview = (blockedAction?.data as { preview?: { canSubmit?: boolean; size?: number | null; price?: number | null; estimatedShares?: number | null } }).preview;
     expect(blocked.execution).toBe("blocked_by_compliance");
     expect(blockedAction?.status).toBe("danger");
-    expect(blockedAction?.title).toContain("Preview Only");
-    expect(blockedAction?.summary).toContain("wallet/client decides whether anything is signed externally");
+    expect(blockedAction?.title).toContain("Agent Draft");
+    expect(blockedAction?.summary).toContain("artifact cannot submit");
+    expect(blockedAction?.summary).toContain("separate wallet ticket");
     expect(blockedPreview?.canSubmit).toBe(false);
     expect(blockedPreview?.size).toBeNull();
     expect(blockedPreview?.price).toBeNull();
     expect(blockedPreview?.estimatedShares).toBeNull();
     expect(JSON.stringify(blocked)).not.toContain("/orders/submit");
+  });
+
+  test("builds an exact compliance-approved Polymarket BUY draft for wallet review", async () => {
+    const result = await executeUnifiedCryptoChatWorkflow(
+      {
+        venue: "polymarket",
+        message: "Prepare a $10 Yes buy with 2% slippage",
+        marketId: polymarketMarket.id,
+        outcome: "Yes",
+        side: "buy",
+        amountUsdc: 10,
+        slippageTolerance: 2,
+      },
+      { polymarketProvider },
+    );
+
+    expect(result.venue).toBe("polymarket");
+    expect(result.execution).toBe("unsigned_preview");
+    const action = result.sharedCards.find((card) => card.kind === "action_preview");
+    const preview = (action?.data as {
+      preview?: {
+        marketId?: string;
+        outcome?: string;
+        size?: number | null;
+        slippageTolerance?: number | null;
+        compliance?: { status?: string };
+        canSubmit?: boolean;
+      };
+    }).preview;
+    expect(action).toMatchObject({
+      venue: "polymarket",
+      originalKind: "polymarket_order_preview",
+      status: "warning",
+    });
+    expect(preview).toMatchObject({
+      marketId: polymarketMarket.id,
+      outcome: "Yes",
+      size: 10,
+      compliance: { status: "allowed" },
+      canSubmit: false,
+    });
+    expect(preview?.slippageTolerance).toBe(2);
+    result.sharedCards.forEach((card) => expectSharedCardContract(card, "polymarket"));
+    expect(JSON.stringify(result)).not.toContain("apiSecret");
+    expect(JSON.stringify(result)).not.toContain("privateKey");
+    expect(JSON.stringify(result)).not.toContain("/orders/submit");
   });
 });

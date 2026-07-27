@@ -20,7 +20,7 @@ import type {
 import type { MatterhornBackendModelSelectionResponse } from "@matterhorn-work/types/backend-models";
 
 import { createClient, unwrap } from "../../app/lib/opencode";
-import { forkSession, listCommands, revertSession, shellInSession } from "../../app/lib/opencode-session";
+import { forkSession, revertSession, shellInSession } from "../../app/lib/opencode-session";
 import {
   buildMatterhornWorkspaceBaseUrl,
   createMatterhornServerClient,
@@ -83,6 +83,14 @@ import { t } from "../../i18n";
 import { useLocal } from "../kernel/local-provider";
 import { usePlatform } from "../kernel/platform";
 import { SessionPage } from "../domains/session/chat/session-page";
+import {
+  clearPendingDeskTask,
+  isPendingDeskTaskId,
+  readPendingDeskTaskNavigation,
+  readPendingDeskTaskReturn,
+  writePendingDeskTask,
+  type PendingDeskTaskNavigation,
+} from "./pending-desk-task";
 import { useQuickJot } from "../domains/notes";
 import { isDesktopProviderBlocked } from "../../app/cloud/desktop-app-restrictions";
 import { useCheckDesktopRestriction } from "../domains/cloud/desktop-config-provider";
@@ -156,6 +164,7 @@ import {
   buildMatterhornDeskAgentSystemPrompt,
   getMatterhornDeskAgentById,
 } from "@matterhorn-work/types/desk-agents";
+import { getCustomerProtocolDeskVisual } from "../domains/session/workflows/protocol-desk-ui";
 import {
   buildMatterhornPublicWalletContext,
   compileMatterhornSessionSystemContext,
@@ -198,7 +207,8 @@ import type { OpenTarget } from "../domains/session/artifacts/open-target";
 import type { SettingsSurfaceProps } from "./settings-route";
 import {
   ensureProviderListQuery,
-  getConnectedProviderItems,
+  getConnectedPromptProviderItems,
+  hasConnectedPromptProvider,
   isModelAvailableInConnectedProviders,
   refreshProviderListAfterEngineReload,
   useProviderListQuery,
@@ -616,6 +626,12 @@ export function SessionRoute() {
   const routeWorkspaceId = params.workspaceId?.trim() || "";
   const selectedSessionId = params.sessionId?.trim() || null;
   const isWorkspaceHistoryRoute = Boolean(routeWorkspaceId && /\/history\/?$/.test(location.pathname));
+  // A stored hint is for the settings screen to survive a refresh. It is
+  // consumed here only after the person explicitly returns from setup; the
+  // short-lived marker survives React Router's state loss during bootstrap.
+  const pendingDeskTask =
+    readPendingDeskTaskNavigation(location.state) ??
+    readPendingDeskTaskReturn(location.search);
   const navigateToWorkspaceSession = useCallback((workspaceId: string, sessionId?: string | null, options?: { replace?: boolean; state?: unknown }) => {
     const id = workspaceId.trim();
     if (!id) {
@@ -1781,7 +1797,7 @@ export function SessionRoute() {
     client: opencodeClient,
     baseUrl: opencodeBaseUrl,
     directory: selectedWorkspaceRoot || undefined,
-    enabled: modelPickerOpen,
+    enabled: Boolean(selectedWorkspaceId),
   });
   const refreshWorkspaceModelSelection = useCallback((options?: { signal?: AbortSignal }) => {
     if (!client || !selectedWorkspaceId) {
@@ -1820,28 +1836,32 @@ export function SessionRoute() {
     workspaceModelSelection,
   }), [local.prefs.defaultModel, workspaceModelSelection]);
   const selectedPromptModel = selectedPromptModelResolution.model;
+  const promptProviderReady = hasConnectedPromptProvider(providerListQuery.data);
   const selectedModelUnavailable = Boolean(
-    selectedPromptModel &&
+    !selectedPromptModel ||
+      providerListQuery.isLoading ||
+      providerListQuery.isError ||
+      !promptProviderReady ||
+      isDesktopProviderBlocked({
+        providerId: selectedPromptModel.providerID,
+        checkRestriction: checkDesktopRestriction,
+      }) ||
       (
-        isDesktopProviderBlocked({
-          providerId: selectedPromptModel.providerID,
-          checkRestriction: checkDesktopRestriction,
-        }) ||
-        (
-          providerListQuery.data &&
-          checkDesktopRestriction({ restriction: "allowCustomProviders" }) &&
-          !providerConnectedIds.some(
-            (providerId) => providerId.trim() === selectedPromptModel.providerID.trim(),
-          )
-        ) ||
-        (
-          providerListQuery.data &&
-          !isModelAvailableInConnectedProviders(providerListQuery.data, selectedPromptModel)
+        providerListQuery.data &&
+        checkDesktopRestriction({ restriction: "allowCustomProviders" }) &&
+        !providerConnectedIds.some(
+          (providerId) => providerId.trim() === selectedPromptModel.providerID.trim(),
         )
+      ) ||
+      (
+        providerListQuery.data &&
+        !isModelAvailableInConnectedProviders(providerListQuery.data, selectedPromptModel)
       ),
   );
+  // A person can always open a blank chat in a healthy workspace. Model readiness
+  // governs sending and immediate desk runs, not organising work or drafting context.
   const canCreateTask = Boolean(
-    opencodeClient && selectedWorkspaceId && !loading && !selectedWorkspaceError && !selectedModelUnavailable,
+    opencodeClient && selectedWorkspaceId && !loading && !selectedWorkspaceError,
   );
 
   const sessionProviderAuthStateRef = useRef({
@@ -2085,7 +2105,7 @@ export function SessionRoute() {
     (!canCreateTask && !routeError && !selectedWorkspaceError);
 
   useEffect(() => {
-    if (!opencodeClient || !modelPickerOpen) {
+    if (!opencodeClient) {
       setProviders([]);
       setProviderDefaults({});
       setProviderConnectedIds([]);
@@ -2152,6 +2172,8 @@ export function SessionRoute() {
     return () => {
       cancelled = true;
     };
+  // Keep the catalogue synchronized when the picker opens without making
+  // provider readiness depend on the picker being visible.
   }, [denSessionVersion, modelPickerOpen, opencodeBaseUrl, opencodeClient, selectedWorkspaceRoot]);
 
   const modelLabel = selectedPromptModel
@@ -2253,7 +2275,7 @@ export function SessionRoute() {
           seenIds = new Set();
         }
         const options: ModelOption[] = [];
-        for (const provider of getConnectedProviderItems(data)) {
+        for (const provider of getConnectedPromptProviderItems(data)) {
           const modelIds = Object.keys(provider.models);
           const isNew = !seenIds.has(provider.id) || recentProviderIds.has(provider.id);
           for (const id of modelIds) {
@@ -2314,20 +2336,31 @@ export function SessionRoute() {
   }, [checkDesktopRestriction, modelOptions]);
 
   const listSlashCommands = useCallback(async (): Promise<SlashCommandOption[]> => {
-    // engineReloadVersion is included so the callback identity changes after
-    // an engine reload, which invalidates the composer's command list cache
-    // and causes it to re-fetch (picking up newly created skills).
+    // Matterhorn Desks gives people purpose-built desk actions, not the raw
+    // repository command catalog used to maintain this app. Skills, extensions,
+    // and MCPs have their own customer-facing surfaces in the composer.
+    // Keep this reactive to an engine reload so an explicit customer-command
+    // catalog has a safe insertion point here in the future.
     void engineReloadVersion;
-    if (!opencodeClient) return [];
-    return listCommands(opencodeClient, selectedWorkspaceRoot || undefined);
-  }, [engineReloadVersion, opencodeClient, selectedWorkspaceRoot]);
+    return [];
+  }, [engineReloadVersion]);
 
-  const handleOpenSettings = useCallback((route = "/settings/general", workspaceId = sidebarActiveWorkspaceId) => {
+  const handleOpenSettings = useCallback((
+    route = "/settings/general",
+    workspaceId = sidebarActiveWorkspaceId,
+    navigationState?: { pendingDeskTask?: PendingDeskTaskNavigation },
+  ) => {
     const sessionId = workspaceId === sidebarActiveWorkspaceId ? selectedSessionId : null;
     const tab = route.replace(/^\/settings\/?/, "").replace(/^\/+|\/+$/g, "") || "general";
     const target = workspaceId ? workspaceSettingsRoute(workspaceId, tab) : route;
     writeActiveWorkspaceId(workspaceId || null);
-    navigate(target, { state: { workspaceId, sessionId } });
+    navigate(target, {
+      state: {
+        workspaceId,
+        sessionId,
+        ...navigationState,
+      },
+    });
   }, [navigate, selectedSessionId, sidebarActiveWorkspaceId]);
 
   const buildSessionSystemContext = useCallback(async (
@@ -3299,7 +3332,7 @@ export function SessionRoute() {
       providers={providers}
       mcpConnectedCount={0}
       onSendFeedback={() => setFeedbackDialogOpen(true)}
-      onOpenSettings={() => handleOpenSettings("/settings/general")}
+      onOpenSettings={() => handleOpenSettings("/settings/ai")}
       providerAuthModal={sessionProviderAuthSnapshot.providerAuthModalOpen ? {
         open: true,
         loading: false,
@@ -3325,6 +3358,11 @@ export function SessionRoute() {
       } : null}
       settingsSlot={renderEmbeddedSettingsSurface("extensions")}
       settingsSlotForPath={renderEmbeddedSettingsSurface}
+      pendingDeskTask={pendingDeskTask}
+      onPendingDeskTaskRestored={() => {
+        const workspaceId = selectedWorkspaceId || routeWorkspaceId;
+        clearPendingDeskTask(workspaceId);
+      }}
       sidebar={{
         workspaceSessionGroups,
         selectedWorkspaceId,
@@ -3442,15 +3480,28 @@ export function SessionRoute() {
               return false;
             }
             if (options?.sendImmediately && selectedModelUnavailable) {
+              const deskId = options.deskId ?? getMatterhornDeskAgentById(agent)?.deskId;
+              const pendingDeskTask = isPendingDeskTaskId(deskId)
+                ? {
+                    deskId,
+                    title: title || getCustomerProtocolDeskVisual(deskId)?.agentName || "Desk task",
+                  }
+                : undefined;
+              if (pendingDeskTask) {
+                writePendingDeskTask(workspaceId, pendingDeskTask);
+              }
               recordInspectorEvent("desk.task_launch.failed", {
                 ...taskLaunchEvent,
                 reason: "model_unavailable",
               });
-              setModelPickerQuery("");
-              setModelPickerOpen(true);
+              handleOpenSettings("/settings/ai", workspaceId, { pendingDeskTask });
               showToast({
-                title: "Choose a model to start the task",
-                description: "Connect or pick an available model, then start the task again.",
+                title: pendingDeskTask
+                  ? `Finish setting up ${pendingDeskTask.title}`
+                  : "Connect a model provider to start the task",
+                description: pendingDeskTask
+                  ? "Choose a provider and model, then return to this desk task. Nothing has been sent."
+                  : "Add a provider in Models, then choose one of its available models.",
                 tone: "warning",
                 durationMs: 5200,
               });
@@ -3849,7 +3900,7 @@ export function SessionRoute() {
       }}
       onOpenSettings={() => {
         setModelPickerOpen(false);
-        handleOpenSettings("/settings/general");
+        handleOpenSettings("/settings/ai");
       }}
       onClose={() => { setModelPickerOpen(false); setRecentProviderIds(new Set()); }}
     />

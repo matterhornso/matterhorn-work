@@ -39,6 +39,7 @@ import {
   type MatterhornBittensorPublicReadEvidenceInput,
   type MatterhornServerClient,
   type MatterhornSessionSnapshot,
+  type MatterhornSkillItem,
 } from "../../../../app/lib/matterhorn-server";
 import type {
   ComposerAttachment,
@@ -93,6 +94,22 @@ import {
   getComposerPasteParts,
   useComposerStateStore,
 } from "./composer-state-store";
+
+// These project-local tools are maintained for the Matterhorn Desks team, not
+// workspace users. The server marks them as non-invocable; this list protects
+// the customer-facing composer while an older local engine is still reloading.
+const INTERNAL_ENGINEERING_SKILL_NAMES = new Set([
+  "browser-automation",
+  "daytona-dev",
+  "daytona-electron-test",
+  "release",
+  "run-evals",
+  "shadcn",
+]);
+
+function isCustomerFacingWorkspaceSkill(skill: MatterhornSkillItem): boolean {
+  return skill.userInvocable !== false && !INTERNAL_ENGINEERING_SKILL_NAMES.has(skill.name.trim().toLowerCase());
+}
 import {
   addBittensorContextToResolvedText,
   describeBittensorSessionContext,
@@ -275,7 +292,7 @@ function MatterhornDeskFocusedEmptyState({
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint] ?? FileText;
   const prompts = MATTERHORN_DESK_TASK_STARTERS[mode];
   const boundary = mode === "bittensor"
-    ? "Runs public SS58 reads and unsigned previews. Signing stays in an external Bittensor-compatible wallet."
+    ? "Uses public wallet details and prepares transfer drafts. You approve TAO transfers in your wallet; staking and advanced actions finish in an external signer."
     : mode === "wellness"
       ? "Standalone longevity workflow. Educational only, non-medical, and no live payments/email/hosting."
     : mode === "polymarket"
@@ -889,10 +906,10 @@ function parseSessionError(thrown: unknown): SessionError {
     // Not JSON — fall through to plain message
   }
   const diagnostic = `${raw}\n${parsed ? JSON.stringify(parsed) : ""}`;
-  if (/no provider available/i.test(diagnostic)) {
+  if (/no provider available|provider.{0,72}(?:not available|unavailable|not configured|not authenticated)/i.test(diagnostic)) {
     return {
-      message: "Connect an AI provider to continue.",
-      detail: "The model catalog loaded, but its provider could not authenticate. Connect ASI:Cloud or another provider, then retry this prompt.",
+      message: "This model is not ready in this workspace.",
+      detail: "Your message is still in the composer. Connect a provider or choose another model, then send it again.",
       kind: "provider-unavailable",
     };
   }
@@ -974,12 +991,12 @@ function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker, 
                   <button
                     type="button"
                     className="rounded-md bg-dls-accent px-3 py-1.5 text-xs font-semibold text-[var(--dls-accent-fg)] transition-colors hover:bg-[var(--dls-accent-hover)]"
-                    onClick={() => {
-                      onOpenAiProviders();
-                      onDismiss();
-                    }}
-                  >
-                    Open AI Providers
+                  onClick={() => {
+                    onOpenAiProviders();
+                    onDismiss();
+                  }}
+                >
+                    Set up provider
                   </button>
                 ) : null}
                 <button
@@ -990,7 +1007,7 @@ function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker, 
                     onDismiss();
                   }}
                 >
-                  Change model
+                  Choose another model
                 </button>
               </div>
             ) : null}
@@ -1752,7 +1769,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
       const parsed = parseSessionError(nextError);
       setError(parsed);
       useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId);
-      setComposerDraft(props.sessionId, "");
+      // A rejected send must leave the person's work intact. This includes
+      // provider setup failures, where the next useful action is to connect a
+      // model and then resend the exact draft.
+      setComposerDraft(props.sessionId, text);
+      props.onDraftChange(buildDraft(text, attachments));
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
@@ -2209,13 +2230,19 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setToolSkills([]);
       return [];
     }
-    const response = await props.client.listSkills(props.workspaceId, { includeGlobal: true });
-    const next = (response.items ?? []).map((skill) => ({
-      name: skill.name,
-      path: skill.path,
-      description: skill.description,
-      trigger: skill.trigger,
-    } satisfies SkillCard));
+    // The composer is part of the workspace, so it must not expose every
+    // developer skill installed on the host machine. Workspace skills remain
+    // visible here; global skills continue to be managed in Settings.
+    const response = await props.client.listSkills(props.workspaceId, { includeGlobal: false });
+    const next = (response.items ?? [])
+      .filter(isCustomerFacingWorkspaceSkill)
+      .map((skill) => ({
+        name: skill.name,
+        path: skill.path,
+        description: skill.description,
+        trigger: skill.trigger,
+        userInvocable: skill.userInvocable,
+      } satisfies SkillCard));
     setToolSkills(next);
     return next;
   };
@@ -2592,8 +2619,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
         busy={chatStreaming}
         disabled={model.transitionState !== "idle" || Boolean(props.modelUnavailable)}
         modelUnavailable={Boolean(props.modelUnavailable)}
+        onOpenAiProviders={props.onOpenAiProviders}
         statusLabel={statusLabel(snapshot ?? undefined, chatStreaming)}
-        showModelPicker={shellConfig.modelPicker}
+        showModelPicker={shellConfig.modelPicker && !props.modelUnavailable}
         modelPickerOpen={props.modelPickerOpen}
         selectedModel={props.selectedModel}
         onModelPickerOpenChange={props.onModelPickerOpenChange}

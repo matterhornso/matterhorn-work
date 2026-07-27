@@ -321,7 +321,8 @@ describe("Polymarket preview math", () => {
     const preview = await preparePolymarketOrderPreview({ market, outcome: "Yes", side: "yes", amountUsdc: 10, compliance }, provider());
     expect(preview.canSubmit).toBe(false);
     expect(preview.version).toBe("matterhorn.market.action-preview.v1");
-    expect(preview.warnings.join(" ")).toContain("does not submit");
+    expect(preview.warnings.join(" ")).toContain("connected EVM wallet");
+    expect(preview.warnings.join(" ")).toContain("exact order");
   });
 });
 
@@ -354,6 +355,7 @@ describe("Polymarket preview risk polish", () => {
     const market = await provider().getMarket("0xmarket-ai");
     // amount 200 forces walking into the 0.64 level -> slippage vs 0.63 reference.
     const preview = await preparePolymarketOrderPreview({ market, outcome: "Yes", side: "yes", amountUsdc: 200, compliance: allowed, slippageTolerance: 0.01 }, provider());
+    expect(preview.slippageTolerance).toBe(0.01);
     expect(preview.warnings.some((w) => /exceeds your tolerance/.test(w))).toBe(true);
   });
 

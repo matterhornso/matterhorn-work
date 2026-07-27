@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,7 +13,7 @@ const productName = "HandsFreeComputerUse";
 const helperExecutableName = "ComputerUse";
 const helperAppName = "Matterhorn Desks Automation Helper.app";
 const legacyHelperAppName = "OpenWork Computer Use.app";
-const bundleIdentifier = "com.differentai.openwork.computer-use";
+const bundleIdentifier = "com.matterhorn.desks.computer-use";
 
 const readArg = (name) => {
   const raw = process.argv.slice(2);
@@ -73,6 +74,31 @@ function signHelperApp() {
   }
 }
 
+function verifyHelperAppForPackaging() {
+  if (process.platform !== "darwin") return;
+
+  // This project can live in a File Provider-managed folder. Stage with the same
+  // Node copy primitive used by afterPack so Finder metadata cannot invalidate
+  // the helper's signature in the packaged application.
+  const stagingRoot = mkdtempSync(join(tmpdir(), "matterhorn-desks-helper-verify-"));
+  const stagedAppPath = join(stagingRoot, helperAppName);
+  try {
+    cpSync(appPath, stagedAppPath, { recursive: true });
+    const result = spawnSync("codesign", ["--verify", "--deep", "--strict", "--verbose=2", stagedAppPath], {
+      encoding: "utf8",
+      stdio: "pipe",
+    });
+    if (result.error) {
+      throw result.error;
+    }
+    if (result.status !== 0) {
+      throw new Error(`Prepared Matterhorn Desks automation helper did not verify: ${result.stderr?.trim() ?? "unknown error"}`);
+    }
+  } finally {
+    rmSync(stagingRoot, { recursive: true, force: true });
+  }
+}
+
 function infoPlist() {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -100,9 +126,39 @@ function infoPlist() {
   <string>1</string>
   <key>LSMinimumSystemVersion</key>
   <string>14.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
 </dict>
 </plist>
 `;
+}
+
+function helperIdentityNeedsRefresh() {
+  const infoPath = join(appPath, "Contents", "Info.plist");
+  try {
+    const existing = readFileSync(infoPath, "utf8");
+    return !existing.includes(`<string>${bundleIdentifier}</string>`) ||
+      !existing.includes("<string>Matterhorn Desks Automation Helper</string>") ||
+      !existing.includes("<string>NSApplication</string>") ||
+      !existing.includes("<key>NSHighResolutionCapable</key>");
+  } catch {
+    return true;
+  }
+}
+
+function refreshPreparedHelperIdentity() {
+  mkdirSync(join(appPath, "Contents", "MacOS"), { recursive: true });
+  mkdirSync(join(appPath, "Contents", "Resources"), { recursive: true });
+  writeFileSync(join(appPath, "Contents", "Info.plist"), infoPlist(), "utf8");
+  writeFileSync(join(appPath, "Contents", "PkgInfo"), "APPL????", "utf8");
+  if (existsSync(iconPath)) {
+    copyFileSync(iconPath, join(appPath, "Contents", "Resources", "AppIcon.icns"));
+  }
+  chmodSync(join(appPath, "Contents", "MacOS", helperExecutableName), 0o755);
+  signHelperApp();
+  verifyHelperAppForPackaging();
 }
 
 if (process.platform !== "darwin") {
@@ -113,6 +169,12 @@ if (process.platform !== "darwin") {
 rmSync(legacyAppPath, { recursive: true, force: true });
 
 if (!force && existsSync(join(appPath, "Contents", "MacOS", helperExecutableName))) {
+  if (helperIdentityNeedsRefresh()) {
+    refreshPreparedHelperIdentity();
+    process.stdout.write(JSON.stringify({ ok: true, refreshed: true, appPath }, null, 2) + "\n");
+    process.exit(0);
+  }
+  verifyHelperAppForPackaging();
   process.stdout.write(JSON.stringify({ ok: true, skipped: true, appPath }, null, 2) + "\n");
   process.exit(0);
 }
@@ -136,5 +198,6 @@ if (existsSync(iconPath)) {
 }
 chmodSync(join(appPath, "Contents", "MacOS", helperExecutableName), 0o755);
 signHelperApp();
+verifyHelperAppForPackaging();
 
 process.stdout.write(JSON.stringify({ ok: true, appPath, executable: join(appPath, "Contents", "MacOS", helperExecutableName) }, null, 2) + "\n");

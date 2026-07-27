@@ -63,6 +63,14 @@ function boundedOutput(current, chunk) {
   return `${current}${String(chunk)}`.slice(-20_000);
 }
 
+async function readBoundedOutput(filePath) {
+  try {
+    return boundedOutput("", await readFile(filePath, "utf8"));
+  } catch {
+    return "";
+  }
+}
+
 async function waitFor(predicate, timeoutMs, label) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -95,6 +103,33 @@ async function stopProcess(child) {
   if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
 }
 
+function runningAppProcessIds(executablePath) {
+  const result = spawnSync("ps", ["-axo", "pid=,command="], { encoding: "utf8" });
+  if (result.status !== 0) return [];
+  return result.stdout
+    .split("\n")
+    .map((line) => {
+      const match = line.trim().match(/^(\d+)\s+(.*)$/);
+      return match && match[2].includes(executablePath) ? Number(match[1]) : null;
+    })
+    .filter((pid) => Number.isInteger(pid));
+}
+
+async function stopLaunchedApp(executablePath, existingProcessIds) {
+  const prior = new Set(existingProcessIds);
+  const launchedProcessIds = runningAppProcessIds(executablePath).filter((pid) => !prior.has(pid));
+  for (const pid of launchedProcessIds) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // The app may already have exited while the smoke was completing.
+    }
+  }
+  if (launchedProcessIds.length > 0) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
 const options = parseArgs(process.argv.slice(2));
 if (options.help) {
   console.log(helpText());
@@ -103,7 +138,8 @@ if (options.help) {
 let appBundle = path.resolve(options.app);
 let artifactSource = null;
 let extractionDir = null;
-let executable = "";
+let appExecutablePath = "";
+let appProcessIdsBeforeLaunch = [];
 const checks = [];
 const routes = [
   ["route.settings.general", "/settings/general"],
@@ -113,9 +149,13 @@ const routes = [
   ["route.session", "/welcome"],
 ];
 let child = null;
+let launcherExitCode = null;
+let launcherSignal = null;
 let stdout = "";
 let stderr = "";
 let userDataDir = null;
+let appStdoutPath = "";
+let appStderrPath = "";
 let failure = null;
 let browserOpenResult = null;
 let lastControlSnapshotResult = null;
@@ -144,32 +184,56 @@ try {
     ? plist.CFBundleExecutable.trim()
     : "";
   if (!executableName) throw new Error("Packaged Matterhorn bundle does not declare CFBundleExecutable.");
-  executable = path.join(appBundle, "Contents", "MacOS", executableName);
+  const executable = path.join(appBundle, "Contents", "MacOS", executableName);
   if (!existsSync(executable)) throw new Error(`Packaged Matterhorn executable not found: ${executable}`);
+  const appBundleIdentifier = typeof plist.CFBundleIdentifier === "string"
+    ? plist.CFBundleIdentifier.trim()
+    : "";
+  if (!appBundleIdentifier) throw new Error("Packaged Matterhorn bundle does not declare CFBundleIdentifier.");
+  appExecutablePath = executable;
   const protocolSchemes = (plist.CFBundleURLTypes ?? []).flatMap((entry) => entry?.CFBundleURLSchemes ?? []);
-  if (!protocolSchemes.includes("matterhorn-work")) {
-    throw new Error("Packaged Matterhorn does not register the matterhorn-work URL scheme.");
+  if (!protocolSchemes.includes("matterhorn-desks")) {
+    throw new Error("Packaged Matterhorn does not register the matterhorn-desks URL scheme.");
   }
-  checks.push({ id: "protocol.matterhorn_work", status: "pass" });
+  checks.push({ id: "protocol.matterhorn_desks", status: "pass" });
+  if (protocolSchemes.includes("matterhorn-work")) {
+    checks.push({ id: "protocol.matterhorn_work_compatibility", status: "pass" });
+  }
 
   userDataDir = await mkdtemp(path.join(os.tmpdir(), "matterhorn-packaged-clean-profile-"));
-  child = spawn(executable, [], {
-    cwd: path.dirname(executable),
-    env: {
-      ...process.env,
-      MATTERHORN_WORK_ELECTRON_USERDATA: userDataDir,
-      OPENWORK_DATA_DIR: path.join(userDataDir, "data"),
-      OPENWORK_DEV_MODE: "0",
-    },
+  appStdoutPath = path.join(userDataDir, "matterhorn-packaged-stdout.log");
+  appStderrPath = path.join(userDataDir, "matterhorn-packaged-stderr.log");
+  appProcessIdsBeforeLaunch = runningAppProcessIds(appExecutablePath);
+  // LaunchServices is the path a tester uses by double-clicking the app. A raw
+  // Electron executable can abort before JavaScript starts on newer macOS
+  // releases because it bypasses app-bundle registration.
+  child = spawn("open", [
+    "-n",
+    "-g",
+    "--env", `MATTERHORN_WORK_ELECTRON_USERDATA=${userDataDir}`,
+    "--env", `OPENWORK_DATA_DIR=${path.join(userDataDir, "data")}`,
+    "--env", "OPENWORK_DEV_MODE=0",
+    "--stdout", appStdoutPath,
+    "--stderr", appStderrPath,
+    appBundle,
+  ], {
     stdio: ["ignore", "pipe", "pipe"],
   });
   child.stdout?.on("data", (chunk) => { stdout = boundedOutput(stdout, chunk); });
   child.stderr?.on("data", (chunk) => { stderr = boundedOutput(stderr, chunk); });
+  child.on("exit", (code, signal) => {
+    launcherExitCode = code;
+    launcherSignal = signal;
+  });
 
   const discoveryPath = path.join(userDataDir, "matterhorn-work-ui-control.json");
   const discovery = await waitFor(async () => {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      throw new Error(`Packaged app exited before first-run control was ready (${child.exitCode ?? child.signalCode}).`);
+    // `open` hands off to LaunchServices and exits after a successful launch.
+    // Its lifecycle is not the app's lifecycle, so only a nonzero launcher
+    // result is a startup failure. The control bridge below proves the actual
+    // packaged app reached first-run safely.
+    if (launcherExitCode !== null && launcherExitCode !== 0) {
+      throw new Error(`macOS could not launch the packaged app (${launcherExitCode ?? launcherSignal}).`);
     }
     if (!existsSync(discoveryPath)) return null;
     try {
@@ -229,7 +293,7 @@ try {
     if (!options.serverUrl || !options.token) {
       throw new Error("Packaged deep-link smoke requires both --server-url and --token.");
     }
-    const deepLink = new URL("matterhorn-work://connect-remote");
+    const deepLink = new URL("matterhorn-desks://connect-remote");
     deepLink.searchParams.set("matterhornHostUrl", options.serverUrl);
     deepLink.searchParams.set("matterhornToken", options.token);
     deepLink.searchParams.set("workerName", "Packaged deep-link smoke");
@@ -310,12 +374,21 @@ try {
     checks.push({ id: "browser.close_panel", status: "pass" });
   }
 
-  if (child.exitCode !== null || child.signalCode !== null) throw new Error("Packaged app did not remain running after first-run navigation.");
+  const runningProcessIds = runningAppProcessIds(appExecutablePath)
+    .filter((pid) => !appProcessIdsBeforeLaunch.includes(pid));
+  if (runningProcessIds.length === 0) {
+    throw new Error("Packaged app did not remain running after first-run navigation.");
+  }
   checks.push({ id: "process.stable", status: "pass" });
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);
 } finally {
-  if (child) await stopProcess(child);
+  if (child) {
+    await stopLaunchedApp(appExecutablePath, appProcessIdsBeforeLaunch);
+    await stopProcess(child);
+  }
+  stdout = boundedOutput(stdout, await readBoundedOutput(appStdoutPath));
+  stderr = boundedOutput(stderr, await readBoundedOutput(appStderrPath));
   if (userDataDir && !options.keepUserData) await rm(userDataDir, { recursive: true, force: true });
   if (extractionDir) await rm(extractionDir, { recursive: true, force: true });
 }

@@ -197,7 +197,9 @@ process.once("SIGINT", () => void stopAll(130));
 process.once("SIGTERM", () => void stopAll(143));
 
 runSync(nodeCmd, [resolve(__dirname, "prepare-sidecar.mjs"), "--force", "--outdir", electronSidecarDir], { cwd: desktopRoot });
-runSync(nodeCmd, [resolve(__dirname, "prepare-computer-use-helper.mjs"), "--force", "--outdir", electronHelperDir], { cwd: desktopRoot });
+// Rebuild the helper only when explicitly requested. A clean checkout still
+// builds it automatically when no prepared helper is present.
+runSync(nodeCmd, [resolve(__dirname, "prepare-computer-use-helper.mjs"), "--outdir", electronHelperDir], { cwd: desktopRoot });
 
 // Build the server TS -> JS so Electron can import it in-process.
 console.log("[electron-dev] Building matterhorn-work-server (tsc)...");

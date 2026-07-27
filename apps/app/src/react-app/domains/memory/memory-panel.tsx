@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   ChevronDown,
@@ -425,6 +426,7 @@ function useMemorySuggestionInbox(client: MatterhornServerClient | null, workspa
 }
 
 export function MemoryPanel(props: MemoryPanelProps) {
+  const queryClient = useQueryClient();
   const workspaceId = props.workspaceId?.trim() || null;
   const { query, setQuery, records, setRecords, loading, error, refresh } = useMemoryRecords(props.client, workspaceId);
   const {
@@ -562,8 +564,14 @@ export function MemoryPanel(props: MemoryPanelProps) {
       const response = workspaceId
         ? await props.client.exportWorkspaceMemory(workspaceId)
         : await props.client.exportMemory();
+      if (workspaceId) {
+        await queryClient.invalidateQueries({ queryKey: ["workflow-output-receipts", workspaceId] as const });
+        await queryClient.invalidateQueries({ queryKey: ["project-evidence", workspaceId] });
+        window.dispatchEvent(new Event("matterhorn:project-evidence-updated"));
+        window.dispatchEvent(new Event("matterhorn:task-log-updated"));
+      }
       setExportStatus(
-        `Created a ${response.export.recordCount}-record export in workspace outputs. sha256 ${response.export.sha256.slice(0, 12)}...`,
+        `Saved ${response.export.recordCount}-record export to Outputs.`,
       );
     } catch (nextError) {
       setExportStatus(nextError instanceof Error ? nextError.message : "Could not create the memory export.");

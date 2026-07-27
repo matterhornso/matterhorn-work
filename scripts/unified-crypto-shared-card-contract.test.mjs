@@ -109,11 +109,11 @@ for (const rendererPhrase of [
 }
 
 for (const previewPhrase of [
-  "Preview Only",
-  "wallet/client decides whether anything is signed externally",
+  "Agent Draft",
+  "separate wallet ticket",
 ]) {
-  assert.ok(cryptoChat.includes(previewPhrase), `shared-card implementation should include preview-only copy: ${previewPhrase}`);
-  assert.ok(cryptoChatTest.includes(previewPhrase), `shared-card tests should lock preview-only copy: ${previewPhrase}`);
+  assert.ok(cryptoChat.includes(previewPhrase), `shared-card implementation should include agent-draft copy: ${previewPhrase}`);
+  assert.ok(cryptoChatTest.includes(previewPhrase), `shared-card tests should lock agent-draft copy: ${previewPhrase}`);
 }
 
 assert.equal(fixturePack.version, "matterhorn.crypto.shared-card.fixtures.v1", "fixture pack should be versioned");
@@ -174,10 +174,10 @@ assert.equal(blockedPolymarketPreview?.size, null, "blocked Polymarket preview m
 assert.equal(blockedPolymarketPreview?.estimatedShares, null, "blocked Polymarket preview must not expose executable shares");
 for (const venue of ["hyperliquid", "polymarket"]) {
   const previewCard = fixturePack.cards.find((card) => card.venue === venue && card.kind === "action_preview");
-  assert.ok(previewCard?.title.includes("Preview Only"), `${venue} preview fixture should show Preview Only`);
+  assert.ok(previewCard?.title.includes("Agent Draft"), `${venue} preview fixture should show Agent Draft`);
   assert.ok(
-    previewCard?.summary.includes("wallet/client decides whether anything is signed externally"),
-    `${venue} preview fixture should explain wallet/client external signing`,
+    previewCard?.summary.includes("artifact cannot submit"),
+    `${venue} preview fixture should explain the no-submit boundary`,
   );
 }
 

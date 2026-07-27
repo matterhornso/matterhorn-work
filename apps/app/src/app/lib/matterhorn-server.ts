@@ -499,6 +499,7 @@ export type MatterhornSkillItem = {
   description: string;
   scope: "project" | "global";
   trigger?: string;
+  userInvocable: boolean;
 };
 
 export type MatterhornSkillContent = {

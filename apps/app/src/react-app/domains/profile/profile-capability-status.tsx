@@ -123,7 +123,7 @@ export function ProfileCapabilityStatus(props: ProfileCapabilityStatusProps) {
         </div>
 
         <details className="group rounded-lg bg-dls-surface-muted/[0.20] px-3 py-2.5 text-xs text-dls-secondary transition-colors hover:bg-dls-surface-muted/[0.30]">
-          <summary className="cursor-pointer select-none font-medium text-dls-text">Technical details</summary>
+          <summary className="cursor-pointer select-none font-medium text-dls-text">Workspace details</summary>
           <dl className="mt-3 grid gap-2 border-t border-dls-border-subtle/50 pt-3">
             <div className="flex items-center justify-between gap-3">
               <dt>Backend version</dt>

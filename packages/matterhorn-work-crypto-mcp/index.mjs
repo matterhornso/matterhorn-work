@@ -844,6 +844,15 @@ async function pm_getOrderbook(marketId, limit = 5) {
 // =========================================================
 // Bittensor Research and Quote-only Actions
 // =========================================================
+function bittensorSourceLabel(source) {
+  const normalized = typeof source === "string" ? source.trim().toLowerCase() : "";
+  if (!normalized || normalized === "unknown") return "Unavailable";
+  if (normalized === "curated-fallback") return "Reference metadata";
+  if (/(mock|fixture|test)/.test(normalized)) return "Test data";
+  if (/(sidecar|subtensor|provider)/.test(normalized)) return "Live provider data";
+  return "Connected data";
+}
+
 function filterSubnets(subnets, query, limit) {
   const q = String(query || "").trim().toLowerCase();
   const filtered = q
@@ -892,7 +901,7 @@ async function bittensor_compare_subnets(netuids) {
         { label: "Price", value: s.priceTao === null || s.priceTao === undefined ? "Unavailable" : `${s.priceTao} TAO` },
         { label: "Emission", value: s.emission === null || s.emission === undefined ? "Unavailable" : String(s.emission) },
         { label: "Neurons", value: s.metagraphSummary?.neurons === null || s.metagraphSummary?.neurons === undefined ? "Unavailable" : String(s.metagraphSummary.neurons) },
-        { label: "Source", value: s.source || "Unavailable", tone: s.source === "curated-fallback" ? "warning" : "muted" },
+        { label: "Source", value: bittensorSourceLabel(s.source), tone: s.source === "curated-fallback" ? "warning" : "muted" },
       ],
       warnings: s.risks || [],
       data: { subnet: s },

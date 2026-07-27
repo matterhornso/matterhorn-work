@@ -20,7 +20,7 @@ let activeBrowser = null;
 
 const settingsSurfaces = [
   ["settings-general", "settings/general", ["Settings", "Settings at a glance"]],
-  ["settings-overview", "settings/overview", ["Backend status", "Data policy"]],
+  ["settings-overview", "settings/overview", ["Workspace health", "Data & privacy"]],
   ["settings-preferences", "settings/preferences", ["Model", "Show model reasoning"]],
   ["settings-permissions", "settings/permissions", ["Authorized folders"]],
   ["settings-wallet", "settings/wallet", ["Wallets", "Save policy"]],
@@ -46,6 +46,8 @@ const panelSurfaces = [
   ["desk-polymarket", "polymarket", ["Polymarket desk"]],
   ["desk-sui", "sui", ["Sui desk"]],
 ];
+
+const chatSurfaceMarkers = ["Perspective", "Start work", "Start with a Matterhorn workflow"];
 
 function workspaceId() {
   const match = new URL(baseUrl).pathname.match(/^\/workspace\/([^/]+)/);
@@ -104,6 +106,19 @@ async function visibleMarker(page, markers, timeoutMs = 20_000) {
   throw new Error(`None of these markers became visible: ${markers.join(", ")}`);
 }
 
+async function openOverviewSecondaryControls(page) {
+  const quickJot = page.getByRole("button", { name: "Quick Jot", exact: true });
+  if (await quickJot.isVisible().catch(() => false)) return;
+
+  const disclosure = page.getByRole("button", { name: /More workspace controls/i });
+  await disclosure.waitFor({ state: "visible", timeout: 20_000 });
+  await clickUnique(disclosure, "More workspace controls");
+  const workAndEvidence = page.getByRole("button", { name: /Work & evidence/i });
+  await workAndEvidence.waitFor({ state: "visible", timeout: 20_000 });
+  await clickUnique(workAndEvidence, "Work & evidence");
+  await quickJot.waitFor({ state: "visible", timeout: 20_000 });
+}
+
 async function waitForChatComposer(page, timeoutMs = 20_000) {
   // Compact layouts collapse the visual label, but retain the named control users operate.
   const group = page.getByRole("radiogroup", { name: "Response perspective", exact: true });
@@ -138,12 +153,20 @@ async function inspectSurface(page, report, id, url, markers, viewportName) {
       { timeout: 20_000 },
     );
     const launchPolicyFallback = launchPolicyFallbackForSurface(id);
-    const marker = await visibleMarker(page, launchPolicyFallback ? [...markers, "Overview"] : markers);
-    const hiddenByLaunchPolicy = Boolean(launchPolicyFallback && marker === "Overview");
-    if (hiddenByLaunchPolicy && page.url() !== launchPolicyFallback) {
-      throw new Error(`Hidden launch-policy surface resolved to ${page.url()} instead of ${launchPolicyFallback}.`);
+    let marker;
+    let hiddenByLaunchPolicy = false;
+    try {
+      // Check the requested surface before looking for its fallback. "Overview"
+      // also lives in the persistent sidebar, so looking for it first can turn a
+      // still-loading but available launch-gated page into a false redirect.
+      marker = await visibleMarker(page, markers, launchPolicyFallback ? 7_500 : 20_000);
+    } catch (error) {
+      if (!launchPolicyFallback || page.url() !== launchPolicyFallback) throw error;
+      marker = await visibleMarker(page, ["Overview"]);
+      hiddenByLaunchPolicy = true;
     }
     if (id.endsWith("settings-overview")) {
+      await openOverviewSecondaryControls(page);
       await page.waitForFunction(
         () => Array.from(document.querySelectorAll("button")).some(
           (button) => button.textContent?.trim() === "Quick Jot" && !button.disabled,
@@ -376,9 +399,39 @@ async function latestSmokeSessionUrl() {
   return null;
 }
 
+function isAuditedSessionUrl(value) {
+  try {
+    const candidate = new URL(value);
+    const expected = new URL(baseUrl);
+    const expectedPrefix = `/workspace/${encodeURIComponent(workspaceId())}/session/`;
+    return candidate.origin === expected.origin && candidate.pathname.startsWith(expectedPrefix);
+  } catch {
+    return false;
+  }
+}
+
+async function ensureAuditChat(page, report, existingChatUrl) {
+  if (existingChatUrl) return existingChatUrl;
+
+  await page.goto(workspaceUrl("session"), { waitUntil: "load", timeout: 30_000 });
+  await visibleMarker(page, ["Open a desk", "Wallet readiness"]);
+  const home = page.getByLabel("Workspace home");
+  const newChat = home.getByRole("button", { name: "New chat", exact: true });
+  await clickUnique(newChat, "Workspace home New chat");
+  await page.waitForURL((url) => isAuditedSessionUrl(url.toString()), { timeout: 20_000 });
+  await waitForChatComposer(page);
+  const chatUrl = page.url();
+  report.auditArtifacts.push({
+    kind: "blank_chat",
+    source: "workspace_home_new_chat",
+    url: chatUrl,
+  });
+  return chatUrl;
+}
+
 async function generatedMediaChatControlAvailable(page, report) {
   const generateImage = page.getByRole("button", { name: "Generate image", exact: true });
-  if (await generateImage.isVisible().catch(() => false)) return true;
+  if (await generateImage.waitFor({ state: "visible", timeout: 10_000 }).then(() => true).catch(() => false)) return true;
 
   const requestedUrl = workspaceUrl("settings/generated-media");
   const fallbackUrl = launchPolicyFallbackForSurface("settings-generated-media");
@@ -427,7 +480,7 @@ async function inspectResponsiveSurfaceCatalog(page, report, prefix, viewportNam
     );
   }
   if (chatUrl) {
-    await inspectSurface(page, report, `${prefix}desk-chat`, chatUrl, ["Bittensor session", "Matterhorn"], viewportName);
+    await inspectSurface(page, report, `${prefix}desk-chat`, chatUrl, chatSurfaceMarkers, viewportName);
   } else {
     report.issues.push({
       severity: "P1",
@@ -453,6 +506,7 @@ async function run() {
     networkFailures: [],
     screenshots: [],
     launchPolicies: [],
+    auditArtifacts: [],
   };
   const browser = await chromium.launch({ headless: true });
   activeBrowser = browser;
@@ -478,7 +532,7 @@ async function run() {
     });
   };
   attachDiagnostics(page);
-  const chatUrl = await latestSmokeSessionUrl();
+  let chatUrl = await latestSmokeSessionUrl();
 
   await inspectSurface(page, report, "workspace-home", workspaceUrl("session"), ["Open a desk", "Wallet readiness"], "desktop");
   await recordInteraction(report, "home-new-project-dialog", async () => {
@@ -510,6 +564,7 @@ async function run() {
     await clickUnique(toggle, "Toggle Sidebar");
     await clickUnique(toggle, "Toggle Sidebar");
   });
+  chatUrl = await ensureAuditChat(page, report, chatUrl);
 
   await inspectSurface(page, report, "project-history", workspaceUrl("history"), ["Project history"], "desktop");
   for (const [id, suffix, markers] of settingsSurfaces) {
@@ -528,6 +583,8 @@ async function run() {
     };
 
     const initial = await openCustomization();
+    const initiallyShowingModelPicker = await initial.modelPicker.isChecked();
+    const initiallyShowingNewWorkspace = await initial.newWorkspace.isChecked();
     try {
       await initial.modelPicker.setChecked(false);
       await initial.newWorkspace.setChecked(false);
@@ -540,29 +597,53 @@ async function run() {
       if (!chatUrl) throw new Error("A smoke-created chat is required to verify model picker visibility.");
       await page.goto(chatUrl, { waitUntil: "load" });
       await waitForChatComposer(page);
-      if (await page.getByRole("button", { name: /^Change model/ }).count() !== 0) {
+      const hiddenModelPicker = page.getByRole("button", { name: /^Change model/ });
+      if (await hiddenModelPicker.isVisible().catch(() => false)) {
         throw new Error("Model picker stayed visible after being hidden.");
+      }
+      const composer = page.getByRole("textbox", { name: /Ask Matterhorn/i });
+      const composerEditable = await composer.isEditable().catch(() => false);
+      let composerUnavailable = !composerEditable;
+      if (composerEditable) {
+        await composer.fill("Verify the current connected model remains usable.");
+        composerUnavailable = await page.getByRole("button", { name: "Ask", exact: true })
+          .isDisabled()
+          .catch(() => false);
+        await composer.fill("");
+      }
+      if (composerUnavailable
+        && !await page.getByRole("button", { name: "Connect a model", exact: true }).isVisible().catch(() => false)) {
+        throw new Error("A hidden model picker left no clear model recovery action.");
       }
     } finally {
       const restore = await openCustomization();
-      await restore.modelPicker.setChecked(true);
-      await restore.newWorkspace.setChecked(true);
+      await restore.modelPicker.setChecked(initiallyShowingModelPicker);
+      await restore.newWorkspace.setChecked(initiallyShowingNewWorkspace);
     }
 
     await page.goto(workspaceUrl("session"), { waitUntil: "load" });
     await visibleMarker(page, ["Open a desk", "Wallet readiness"]);
     const restoredWorkspaceAction = page.locator('[data-sidebar="footer"]').getByRole("button", { name: "New project", exact: true });
-    if (await restoredWorkspaceAction.count() !== 1) throw new Error("New project sidebar action did not return after restoring defaults.");
+    const restoredWorkspaceVisible = await restoredWorkspaceAction.isVisible().catch(() => false);
+    if (restoredWorkspaceVisible !== initiallyShowingNewWorkspace) {
+      throw new Error("New project sidebar action did not return to its original visibility setting.");
+    }
 
     await page.goto(chatUrl, { waitUntil: "load" });
     await waitForChatComposer(page);
-    if (await page.getByRole("button", { name: /^Change model/ }).count() !== 1) {
-      throw new Error("Model picker did not return after restoring defaults.");
+    const restoredModelPickerVisible = await page.getByRole("button", { name: /^Change model/ }).isVisible().catch(() => false);
+    const restoredRecoveryVisible = await page.getByRole("button", { name: "Connect a model", exact: true }).isVisible().catch(() => false);
+    if (initiallyShowingModelPicker && !restoredModelPickerVisible && !restoredRecoveryVisible) {
+      throw new Error("Model controls did not return after restoring their original visibility setting.");
+    }
+    if (!initiallyShowingModelPicker && restoredModelPickerVisible) {
+      throw new Error("Model picker became visible even though the original preference kept it hidden.");
     }
   });
   await recordInteraction(report, "settings-overview-quick-jot", async () => {
     await page.goto(workspaceUrl("settings/overview"), { waitUntil: "load" });
-    await visibleMarker(page, ["Backend status", "Data policy"]);
+    await visibleMarker(page, ["Workspace health", "Data & privacy"]);
+    await openOverviewSecondaryControls(page);
     const quickJot = page.getByRole("button", { name: "Quick Jot", exact: true });
     await quickJot.waitFor({ state: "visible", timeout: 20_000 });
     await page.waitForFunction(
@@ -578,7 +659,8 @@ async function run() {
   });
   await recordInteraction(report, "settings-overview-evidence-navigation", async () => {
     await page.goto(workspaceUrl("settings/overview"), { waitUntil: "load" });
-    await visibleMarker(page, ["Backend status", "Data policy"]);
+    await visibleMarker(page, ["Workspace health", "Data & privacy"]);
+    await openOverviewSecondaryControls(page);
     const openNotes = page.getByRole("button", { name: "Open notes", exact: true });
     await openNotes.waitFor({ state: "visible", timeout: 20_000 });
     await page.waitForFunction(
@@ -593,7 +675,8 @@ async function run() {
     await visibleMarker(page, ["Notes"]);
 
     await page.goto(workspaceUrl("settings/overview"), { waitUntil: "load" });
-    await visibleMarker(page, ["Backend status", "Data policy"]);
+    await visibleMarker(page, ["Workspace health", "Data & privacy"]);
+    await openOverviewSecondaryControls(page);
     await page.waitForFunction(
       () => Array.from(document.querySelectorAll("button")).some(
         (button) => button.textContent?.trim() === "Open Memory review" && !button.disabled,
@@ -647,7 +730,18 @@ async function run() {
   });
 
   if (chatUrl) {
-    await inspectSurface(page, report, "desk-chat", chatUrl, ["Bittensor session", "Matterhorn"], "desktop");
+    await inspectSurface(page, report, "desk-chat", chatUrl, chatSurfaceMarkers, "desktop");
+    await recordInteraction(report, "session-model-provider-recovery", async () => {
+      await page.goto(chatUrl, { waitUntil: "load" });
+      await waitForChatComposer(page);
+
+      const recovery = page.getByRole("button", { name: "Connect a model", exact: true });
+      if (!await recovery.isVisible().catch(() => false)) return;
+
+      await clickUnique(recovery, "Connect a model recovery");
+      await page.waitForURL(workspaceUrl("settings/ai"), { timeout: 10_000 });
+      await visibleMarker(page, ["Models", "Model provider setup"]);
+    });
     await recordInteraction(report, "response-perspective-controls", async () => {
       await page.goto(chatUrl, { waitUntil: "load" });
       const group = await waitForChatComposer(page);

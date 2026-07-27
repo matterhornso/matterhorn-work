@@ -103,7 +103,7 @@ export function ExtensionsView(props: ExtensionsViewProps) {
         <div className="flex items-end justify-between gap-2">
           <div className={cn(
             props.compact
-              ? "grid min-w-0 flex-1 grid-cols-2 border-b border-dls-border/40"
+              ? "grid min-w-0 flex-1 grid-cols-2 rounded-md bg-dls-surface-muted/[0.14] p-1"
               : "inline-flex w-fit rounded-md bg-dls-surface-muted/15 p-1",
           )}>
             <Button
@@ -111,8 +111,8 @@ export function ExtensionsView(props: ExtensionsViewProps) {
               size="sm"
               className={cn(
                 props.compact && cn(
-                  "h-9 min-w-0 rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-2 text-sm leading-5 shadow-none hover:bg-dls-surface-muted/[0.12]",
-                  view === "my" && "border-[rgb(var(--dls-accent-rgb))] text-dls-text",
+                  "h-9 min-w-0 rounded-md border-0 bg-transparent px-2 text-sm leading-5 shadow-none hover:bg-dls-surface-muted/[0.20]",
+                  view === "my" && "bg-dls-surface-muted/[0.40] text-dls-text",
                 ),
               )}
               onClick={() => setView("my")}
@@ -125,8 +125,8 @@ export function ExtensionsView(props: ExtensionsViewProps) {
               className={cn(
                 props.compact
                   ? cn(
-                    "h-9 min-w-0 rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-2 text-sm leading-5 shadow-none hover:bg-dls-surface-muted/[0.12]",
-                    view === "marketplace" && "border-[rgb(var(--dls-accent-rgb))] text-dls-text",
+                    "h-9 min-w-0 rounded-md border-0 bg-transparent px-2 text-sm leading-5 shadow-none hover:bg-dls-surface-muted/[0.20]",
+                    view === "marketplace" && "bg-dls-surface-muted/[0.40] text-dls-text",
                   )
                   : undefined,
               )}
