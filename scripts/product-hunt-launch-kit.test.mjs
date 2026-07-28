@@ -17,7 +17,7 @@ for (const required of [
   "Signing stays in the user's wallet",
   "Screenshot Storyboard",
   "Maker comment",
-  "support@matterhorn.work",
+  "updates@matterhorn.so",
 ]) assert.ok(files.kit.includes(required), `launch kit missing ${required}`);
 
 for (const required of [
@@ -34,7 +34,7 @@ for (const required of [
   "wallet addresses",
   "Data-Minimized Event Plan",
   "Privacy policy URL",
-  "support@matterhorn.work",
+  "updates@matterhorn.so",
 ]) assert.ok(files.trust.includes(required), `measurement and trust guide missing ${required}`);
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));

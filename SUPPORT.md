@@ -7,7 +7,7 @@ Use the right channel to get faster help:
 - **Questions / usage help**: open a GitHub issue and mark it as a question.
 - **Bug reports**: use the Bug issue template.
 - **Feature requests**: use the Feature issue template.
-- **Product support**: email `support@matterhorn.work`.
+- **Product support**: email `updates@matterhorn.so`.
 - **Security reports**: follow `SECURITY.md` and report privately through GitHub Security Advisories.
 
 ## Before opening an issue

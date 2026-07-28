@@ -92,7 +92,7 @@ final product accurately:
 |---|---|---|
 | Privacy policy URL | Product and legal | UNASSIGNED |
 | Terms URL | Product and legal | UNASSIGNED |
-| Support URL or staffed support email | Support | `support@matterhorn.work` exists in product copy; staffing is UNASSIGNED |
+| Support URL or staffed support email | Support | `updates@matterhorn.so` exists in product copy; staffing is UNASSIGNED |
 | Security disclosure contact | Security | UNASSIGNED |
 | Service status or incident update surface | Operations | UNASSIGNED |
 | Data export/delete instructions | Product and engineering | Implemented in product; public help review is UNASSIGNED |

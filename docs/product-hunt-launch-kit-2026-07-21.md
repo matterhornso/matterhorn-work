@@ -82,7 +82,7 @@ easier to return to a project later.
 ### First launch reply
 
 Thanks for taking a look. If something is unclear or fails, use Send feedback
-in the app or email support@matterhorn.work. Please never include keys, seed
+in the app or email updates@matterhorn.so. Please never include keys, seed
 phrases, signatures, signed payloads, wallet exports, or other secrets in a
 support report.
 
@@ -144,7 +144,7 @@ assets are signed, notarized, stapled, Gatekeeper-accepted, and clean-install
 tested.
 
 **How do I report a problem?** Use Send feedback in the app or email
-support@matterhorn.work without including credentials or signing material.
+updates@matterhorn.so without including credentials or signing material.
 
 ## Promotion Copy
 
