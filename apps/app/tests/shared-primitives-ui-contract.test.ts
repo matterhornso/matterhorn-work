@@ -345,10 +345,13 @@ describe("Shared primitives UI contract", () => {
       'const commandToolsEnabled = props.executionMode === "work";',
     );
     expect(composer).toContain(
-      '.filter(({ section }) => commandToolsEnabled || section !== "skills")',
+      '.filter(({ section }) => commandToolsEnabled || (section !== "commands" && section !== "skills"))',
     );
     expect(composer).toContain(
-      'if (commandToolsEnabled || toolMenuSection !== "skills") return;',
+      '{ section: "commands", label: "Commands", icon: Terminal }',
+    );
+    expect(composer).toContain(
+      'if (commandToolsEnabled || (toolMenuSection !== "commands" && toolMenuSection !== "skills")) return;',
     );
     expect(composer).toContain("const slashOpenNext = false;");
     expect(composer).toContain(
