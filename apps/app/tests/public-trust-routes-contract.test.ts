@@ -78,7 +78,7 @@ describe("public trust routes", () => {
   });
 
   test("uses Matterhorn public identity and safe support channels", () => {
-    expect(MATTERHORN_SUPPORT_EMAIL).toBe("support@matterhorn.work");
+    expect(MATTERHORN_SUPPORT_EMAIL).toBe("updates@matterhorn.so");
     expect(MATTERHORN_SECURITY_REPORT_URL).toContain("security/advisories/new");
     expect(trustRouteSource).toContain("Matterhorn Desks");
     expect(trustRouteSource).not.toMatch(/\bOpenWork\b|\bOpenCode\b/);

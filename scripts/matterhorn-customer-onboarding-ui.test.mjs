@@ -1023,8 +1023,8 @@ for (const phrase of [
   assert.ok(feedback.includes(phrase), `feedback URLs should be Matterhorn-first: ${phrase}`);
 }
 assert.equal(feedback.includes("https://openworklabs.com/feedback"), false, "feedback default must not send customers to OpenWork Labs");
-assert.ok(denHelpLink.includes("support@matterhorn.work"), "remote worker help dialog should use Matterhorn support email");
-assert.ok(remoteWorkspaceDiagnostics.includes("support@matterhorn.work"), "remote workspace diagnostics should use Matterhorn support email");
+assert.ok(denHelpLink.includes("updates@matterhorn.so"), "remote worker help dialog should use Matterhorn support email");
+assert.ok(remoteWorkspaceDiagnostics.includes("updates@matterhorn.so"), "remote workspace diagnostics should use Matterhorn support email");
 assert.equal(denHelpLink.includes("team@openworklabs.com"), false, "remote worker help dialog must not send customers to OpenWork Labs");
 assert.equal(remoteWorkspaceDiagnostics.includes("team@openworklabs.com"), false, "remote diagnostics must not send customers to OpenWork Labs");
 

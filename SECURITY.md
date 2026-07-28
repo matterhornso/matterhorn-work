@@ -31,5 +31,5 @@ Please include:
 Please keep details private until a fix or mitigation is available and maintainers
 confirm public disclosure timing.
 
-For non-security product support, email `support@matterhorn.work` or follow
+For non-security product support, email `updates@matterhorn.so` or follow
 `SUPPORT.md`.

@@ -104,7 +104,7 @@ function rejectedTokenMessage(target: RemoteWorkspaceConnectionTarget) {
 }
 
 function remoteSupportMessage(message: string) {
-  return `${message} Upgrade the Matterhorn Desks host and try again. If this continues, contact support@matterhorn.work.`;
+  return `${message} Upgrade the Matterhorn Desks host and try again. If this continues, contact updates@matterhorn.so.`;
 }
 
 export function redactRemoteDiagnosticText(value: string): string {

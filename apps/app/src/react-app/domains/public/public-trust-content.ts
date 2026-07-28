@@ -25,7 +25,7 @@ export function shouldGatePublicWebEntry(input: {
   );
 }
 
-export const MATTERHORN_SUPPORT_EMAIL = "support@matterhorn.work";
+export const MATTERHORN_SUPPORT_EMAIL = "updates@matterhorn.so";
 export const MATTERHORN_DOCS_URL =
   "https://github.com/matterhornso/matterhorn-work/tree/dev/docs";
 export const MATTERHORN_ISSUES_URL =
