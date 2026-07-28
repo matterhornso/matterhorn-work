@@ -807,7 +807,12 @@ async function runSmoke(config) {
         const smokeModel = modelDialog.getByRole("button", { name: /Smoke model/ });
         await smokeModel.waitFor({ state: "visible", timeout: 20_000 });
         await smokeModel.click();
-        await modelDialog.getByRole("button", { name: "Done", exact: true }).click();
+        // Selection can close this picker immediately. Escape is also the
+        // supported keyboard dismissal when it remains open.
+        if (await modelDialog.isVisible().catch(() => false)) {
+          await page.keyboard.press("Escape");
+          await modelDialog.waitFor({ state: "hidden", timeout: 20_000 });
+        }
         report.artifacts.aiProviderState = "connected";
       } else {
         await page.getByRole("heading", { name: "Model providers", exact: true })
@@ -890,7 +895,17 @@ async function runSmoke(config) {
       const requestedGeneratedMediaUrl = workspaceUrl(config.url, "settings/generated-media");
       await page.goto(requestedGeneratedMediaUrl, { waitUntil: "load", timeout: 30_000 });
       const productionReadiness = page.getByText("Production readiness", { exact: true });
-      const generatedMediaVisible = await productionReadiness.isVisible({ timeout: 2_000 }).catch(() => false);
+      const generatedMediaHeading = page.getByRole("heading", { name: "Generated media", exact: true });
+      const overviewHeading = page.getByRole("heading", { name: "Overview", exact: true });
+      await waitForAnyVisible(
+        page,
+        [productionReadiness, generatedMediaHeading, overviewHeading],
+        "Generated media settings or the safe Overview fallback",
+        20_000,
+      );
+      const generatedMediaVisible =
+        (await productionReadiness.isVisible().catch(() => false)) ||
+        (await generatedMediaHeading.isVisible().catch(() => false));
       if (!generatedMediaVisible) {
         const overviewUrl = workspaceUrl(config.url, "settings/overview");
         await page.locator("main").getByRole("heading", { name: "Overview", exact: true }).last().waitFor({

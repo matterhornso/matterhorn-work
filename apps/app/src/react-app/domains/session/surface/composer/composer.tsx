@@ -1002,7 +1002,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   const commandToolsEnabled = props.executionMode === "work";
 
   useEffect(() => {
-    if (commandToolsEnabled || toolMenuSection !== "skills") return;
+    if (commandToolsEnabled || (toolMenuSection !== "commands" && toolMenuSection !== "skills")) return;
     setToolMenuSection("extensions");
   }, [commandToolsEnabled, toolMenuSection]);
 
@@ -1338,11 +1338,12 @@ export function ReactSessionComposer(props: ComposerProps) {
                         <div className="flex items-center gap-1 bg-dls-surface-muted/[0.12] p-2">
                           <div role="tablist" aria-label="Tool categories" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
                           {([
+                            { section: "commands", label: "Commands", icon: Terminal },
                             { section: "skills", label: t("dashboard.skills"), icon: Zap },
                             { section: "extensions", label: "Extensions", icon: Puzzle },
                             { section: "mcps", label: t("composer.mcps_label"), icon: Plug },
                           ] as const)
-                            .filter(({ section }) => commandToolsEnabled || section !== "skills")
+                            .filter(({ section }) => commandToolsEnabled || (section !== "commands" && section !== "skills"))
                             .map(({ section, label, icon: Icon }) => (
                             <button
                               key={section}

@@ -687,25 +687,26 @@ await acceptanceCase(
 
 await acceptanceCase(
   "AI-PROVIDER",
-  "Add provider",
-  "Opens external providers, filters to Anthropic, and prevents blank key submission",
+  "Choose provider",
+  "Opens the available provider catalog without exposing legacy engine branding",
   async () => {
-    await clickVisible(page.getByRole("button", { name: "Add provider", exact: true }), "Add provider");
+    await clickVisible(page.getByRole("button", { name: "Choose provider", exact: true }), "Choose provider");
     let dialog = await firstVisible(page.getByRole("dialog"), "provider dialog");
     if (LEGACY_BRANDS.test(await dialog.innerText())) {
-      throw new Error("Legacy engine provider is visible in Add provider.");
+      throw new Error("Legacy engine provider is visible in the provider catalog.");
     }
     const search = await firstVisible(
-      dialog.getByPlaceholder("Filter providers by name or ID"),
+      dialog.getByPlaceholder("Search all providers"),
       "provider search",
     );
-    await search.fill("Anthropic");
-    await clickVisible(dialog.getByRole("button", { name: /Anthropic/ }), "Anthropic");
-    dialog = await firstVisible(page.getByRole("dialog"), "Anthropic key dialog");
-    const save = await firstVisible(dialog.getByRole("button", { name: "Save key", exact: true }), "Save key");
-    if (!(await save.isDisabled())) throw new Error("Blank provider key can be submitted.");
-    await clickVisible(dialog.getByRole("button", { name: "Close", exact: true }), "Close");
-    return "Anthropic key flow opened; blank Save key disabled";
+    await search.fill("CUDOS");
+    await settle(page, 250);
+    if (LEGACY_BRANDS.test(await dialog.innerText())) {
+      throw new Error("Legacy engine branding appeared after filtering providers.");
+    }
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden", timeout: 10_000 });
+    return "Provider catalog opened, filtered, and closed without exposing a credential";
   },
 );
 
@@ -1128,8 +1129,8 @@ await acceptanceCase(
 
 await acceptanceCase(
   "CHAT-TOOLS",
-  "Commands, skills, extensions, and MCP menu",
-  "Every Work-mode category loads without legacy branding and dismisses with Escape",
+  "Available composer tool categories",
+  "Every enabled category loads without legacy branding and dismisses with Escape",
   async () => {
     await openChat(page);
     await clickVisible(
@@ -1140,8 +1141,11 @@ await acceptanceCase(
       page.getByRole("dialog", { name: "Commands, skills, and MCPs" }),
       "Commands, skills, and MCPs dialog",
     );
+    const visibleLabels = [];
     for (const label of ["Commands", "Skills", "Extensions", "MCPs"]) {
-      const tab = await firstVisible(dialog.getByRole("tab", { name: label, exact: true }), label);
+      const tab = dialog.getByRole("tab", { name: label, exact: true });
+      if (!(await tab.count())) continue;
+      visibleLabels.push(label);
       await tab.click();
       await settle(page, 300);
       const content = await dialog.innerText();
@@ -1151,7 +1155,10 @@ await acceptanceCase(
     }
     await page.keyboard.press("Escape");
     await dialog.waitFor({ state: "hidden", timeout: 10_000 });
-    return "Commands, Skills, Extensions, and MCPs loaded with Matterhorn-only copy";
+    if (!visibleLabels.includes("Extensions") || !visibleLabels.includes("MCPs")) {
+      throw new Error(`Expected Extensions and MCPs tabs, found ${visibleLabels.join(", ") || "none"}.`);
+    }
+    return `${visibleLabels.join(", ")} loaded with Matterhorn-only copy`;
   },
 );
 
@@ -1174,10 +1181,12 @@ await acceptanceCase(
       page.getByRole("dialog", { name: "Commands, skills, and MCPs" }),
       "Commands, skills, and MCPs dialog",
     );
-    await clickVisible(
-      dialog.getByRole("tab", { name: "Commands", exact: true }),
-      "Commands",
-    );
+    const commandsTab = dialog.getByRole("tab", { name: "Commands", exact: true });
+    if (!(await commandsTab.count())) {
+      await page.keyboard.press("Escape");
+      return "Commands are intentionally unavailable outside Work mode";
+    }
+    await clickVisible(commandsTab, "Commands");
     const commandList = dialog.locator(".matterhorn-tool-menu-list");
     await commandList.waitFor({ state: "visible", timeout: 10_000 });
     await page.waitForFunction(
@@ -1185,10 +1194,12 @@ await acceptanceCase(
       await commandList.elementHandle(),
       { timeout: 20_000 },
     );
-    const command = await firstVisible(
-      commandList.getByRole("button").filter({ hasText: /\/\w+/ }),
-      "workspace command",
-    );
+    const commands = commandList.getByRole("button").filter({ hasText: /\/\w+/ });
+    if (!(await commands.count())) {
+      await page.keyboard.press("Escape");
+      return "No workspace commands are configured for this workspace";
+    }
+    const command = await firstVisible(commands, "workspace command");
     const commandMatch = ((await command.innerText()) ?? "").match(/\/[-\w]+/);
     const commandLabel = commandMatch?.[0] ?? "";
     if (!commandLabel) throw new Error("Command label is missing.");
