@@ -5,6 +5,10 @@ import type { ReactNode } from "react";
 import { t } from "@/i18n";
 import type { AppearanceViewProps } from "../pages/appearance-view";
 import {
+  useSettingsThemeMode,
+  type SettingsThemeMode,
+} from "../state/settings-theme";
+import {
   LayoutSectionItem,
   LayoutSectionItemDescription,
   LayoutSectionItemFootnote,
@@ -12,27 +16,32 @@ import {
   LayoutSectionItemTitle,
 } from "../settings-layout";
 
-type ThemeMode = AppearanceViewProps["themeMode"];
-
-interface ThemeSectionProps
-  extends Pick<AppearanceViewProps, "busy" | "themeMode" | "setThemeMode"> {}
+interface ThemeSectionProps extends Pick<AppearanceViewProps, "busy"> {}
 
 export function ThemeSection(props: ThemeSectionProps) {
+  const [themeMode, setThemeMode] = useSettingsThemeMode();
+
   return (
     <LayoutSectionItem className="items-center">
       <LayoutSectionItemHeader className="w-full">
-        <LayoutSectionItemTitle>{t("settings.theme_title")}</LayoutSectionItemTitle>
-        <LayoutSectionItemDescription>{t("settings.appearance_hint")}</LayoutSectionItemDescription>
+        <LayoutSectionItemTitle>
+          {t("settings.theme_title")}
+        </LayoutSectionItemTitle>
+        <LayoutSectionItemDescription>
+          {t("settings.appearance_hint")}
+        </LayoutSectionItemDescription>
       </LayoutSectionItemHeader>
 
       <ThemePicker
         className="pt-1"
         busy={props.busy}
-        themeMode={props.themeMode}
-        setThemeMode={props.setThemeMode}
+        themeMode={themeMode}
+        setThemeMode={setThemeMode}
       />
 
-      <LayoutSectionItemFootnote>{t("settings.theme_system_hint")}</LayoutSectionItemFootnote>
+      <LayoutSectionItemFootnote>
+        {t("settings.theme_system_hint")}
+      </LayoutSectionItemFootnote>
     </LayoutSectionItem>
   );
 }
@@ -40,8 +49,8 @@ export function ThemeSection(props: ThemeSectionProps) {
 interface ThemePickerProps {
   className?: string;
   busy: boolean;
-  themeMode: ThemeMode;
-  setThemeMode: (value: ThemeMode) => void;
+  themeMode: SettingsThemeMode;
+  setThemeMode: (value: SettingsThemeMode) => void;
 }
 
 function ThemePicker(props: ThemePickerProps) {
@@ -53,29 +62,20 @@ function ThemePicker(props: ThemePickerProps) {
           return;
         }
 
-        props.setThemeMode(value[0] as ThemeMode);
+        props.setThemeMode(value[0] as SettingsThemeMode);
       }}
       disabled={props.busy}
       className={cn("w-full gap-6 max-w-xl", props.className)}
     >
-      <ThemePickerItem
-        value="system"
-        label={t("settings.theme_system")}
-      >
+      <ThemePickerItem value="system" label={t("settings.theme_system")}>
         <ThemePreview value="system" />
         <ThemePickerLabel>{t("settings.theme_system")}</ThemePickerLabel>
       </ThemePickerItem>
-      <ThemePickerItem
-        value="light"
-        label={t("settings.theme_light")}
-      >
+      <ThemePickerItem value="light" label={t("settings.theme_light")}>
         <ThemePreview value="light" className="bg-white" />
         <ThemePickerLabel>{t("settings.theme_light")}</ThemePickerLabel>
       </ThemePickerItem>
-      <ThemePickerItem
-        value="dark"
-        label={t("settings.theme_dark")}
-      >
+      <ThemePickerItem value="dark" label={t("settings.theme_dark")}>
         <ThemePreview value="dark" className="bg-zinc-950" />
         <ThemePickerLabel>{t("settings.theme_dark")}</ThemePickerLabel>
       </ThemePickerItem>
@@ -84,7 +84,7 @@ function ThemePicker(props: ThemePickerProps) {
 }
 
 interface ThemePickerItemProps {
-  value: ThemeMode;
+  value: SettingsThemeMode;
   label: string;
   children: ReactNode;
 }
@@ -102,7 +102,7 @@ function ThemePickerItem(props: ThemePickerItemProps) {
 }
 
 interface ThemePreviewProps {
-  value: ThemeMode;
+  value: SettingsThemeMode;
   className?: string;
 }
 

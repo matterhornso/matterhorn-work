@@ -18,6 +18,7 @@ import { sanitizeGasEstimateError } from "../lib/gas-estimate";
 const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const RECIPIENT = "0x0000000000000000000000001111111111111111111111111111111111111111";
 const SPENDER = "0x0000000000000000000000002222222222222222222222222222222222222222";
+const UNKNOWN_TOKEN = "0x3333333333333333333333333333333333333333";
 
 function word(hex: string): string {
   return hex.toLowerCase().replace(/^0x/, "").padStart(64, "0");
@@ -89,6 +90,43 @@ describe("wallet transaction value parsing", () => {
 
     expect(reasons.join(" ")).toContain("per-transaction limit");
     expect(reasons.join(" ")).toContain("daily limit");
+  });
+
+  test("fails closed when an ERC-20 action cannot be priced in USD", () => {
+    const data = `0xa9059cbb${addressWord(RECIPIENT)}${uintWord(10n ** 18n)}`;
+    const analysis = analyzeWalletTransaction({ chainId: 8453, to: UNKNOWN_TOKEN, value: "0", data });
+
+    expect(analysis.valueUSD).toBe(0);
+    expect(analysis.valueUSDIsKnown).toBe(false);
+    expect(analysis.displayValue).toBe("Token value unavailable");
+    expect(analysis.unpricedValueReason).toContain("cannot verify the USD value");
+    expect(() => validateWalletTransactionBeforeSend({
+      chainId: 8453,
+      connectedChainId: 8453,
+      to: UNKNOWN_TOKEN,
+      value: "0",
+      data,
+      policy: {
+        maxPerTransactionUSD: 1_000_000,
+        maxDailySpendUSD: 1_000_000,
+        dailySpendUSD: 0,
+        sessionSwapCount: 0,
+        lastSwapReset: Date.now(),
+      },
+    })).toThrow("cannot verify this transaction's USD value");
+  });
+
+  test("fails closed for token-input router swaps with no price evidence", () => {
+    const analysis = analyzeWalletTransaction({
+      chainId: 8453,
+      to: RECIPIENT,
+      value: "0",
+      data: "0x3593564c",
+    });
+
+    expect(analysis.isSwap).toBe(true);
+    expect(analysis.valueUSDIsKnown).toBe(false);
+    expect(analysis.unpricedValueReason).toContain("token-input swap");
   });
 
   test("builds one versioned safety policy from the wallet snapshot", () => {

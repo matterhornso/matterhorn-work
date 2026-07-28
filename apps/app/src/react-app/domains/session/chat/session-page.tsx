@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import type { CSSProperties, FormEvent } from "react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { usePanelRef } from "react-resizable-panels";
 import {
@@ -17,6 +17,7 @@ import {
   Home,
   Info,
   Mic2,
+  NotebookPen,
   PanelRightClose,
   PencilLine,
   Settings2,
@@ -91,10 +92,13 @@ import { useShellConfig } from "../../../shell/shell-config";
 import { SurfaceErrorBoundary } from "../../../shell/surface-error-boundary";
 import {
   GLOBAL_HOME_SIDE_PANEL_KEY,
-  SIDE_PANEL_ITEMS,
   type SidePanelItem,
   useUiStateStore,
 } from "../../../shell/ui-state-store";
+import {
+  readSessionPanelFromSearch,
+  resolveSessionPanelNavigation,
+} from "../../../shell/session-panel-route";
 
 import { isDesktopRuntime, isElectronRuntime } from "../../../../app/utils";
 import { isCollectibleArtifactTarget, isLocalhostBrowserTarget, type OpenTarget } from "../artifacts/open-target";
@@ -110,6 +114,7 @@ import { useStatusToasts } from "../../shell-feedback/status-toasts";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
+import { subscribeReviewedActionHandoff } from "../../wallet/reviewed-action-handoff";
 import { configureSecurityLogReporter } from "../../wallet/state/security-log";
 import { useJobCron } from "../../wallet/hooks/useJobCron";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
@@ -194,7 +199,7 @@ const RAIL_BUTTON_CLASS =
   "h-auto min-h-12 w-full flex-col gap-1 rounded-md px-1 py-2 text-dls-text transition-colors hover:bg-dls-hover/45 hover:text-dls-text";
 const RAIL_ACTIVE_CLASS = "bg-dls-hover/55 text-dls-text hover:bg-dls-hover/60 hover:text-dls-text";
 const RAIL_DESK_BUTTON_CLASS =
-  "h-auto min-h-12 w-full flex-col gap-1 rounded-md px-1 py-2 text-dls-text transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] hover:text-[var(--matterhorn-desk-color)]";
+  "h-auto min-h-12 w-full flex-col gap-1 rounded-md px-1 py-2 text-dls-text transition-colors hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.09)] hover:text-[var(--matterhorn-desk-color)]";
 const RAIL_LABEL_CLASS = "max-w-full truncate text-[11px] font-medium leading-4 text-current";
 const RAIL_OPTIONAL_LABEL_CLASS = `hidden ${RAIL_LABEL_CLASS} 2xl:inline`;
 const RAIL_SECTION_LABEL_CLASS =
@@ -333,13 +338,13 @@ function homeWalletRuntime(): MatterhornWalletRuntime {
 function homeWalletTone(status: MatterhornCapabilityStatus | null): string {
   switch (status) {
     case "working":
-      return "bg-emerald-500/10 text-emerald-300";
+      return "bg-emerald-500/10 text-emerald-11";
     case "needs_setup":
-      return "bg-sky-500/10 text-sky-300";
+      return "bg-sky-500/10 text-sky-11";
     case "preview":
-      return "bg-amber-500/10 text-amber-300";
+      return "bg-amber-500/10 text-amber-12 dark:text-amber-11";
     case "error":
-      return "bg-red-500/10 text-red-300";
+      return "bg-red-500/10 text-red-11";
     case "unsupported":
     default:
       return "bg-dls-surface-muted text-dls-secondary";
@@ -509,7 +514,7 @@ function HomeCapabilityOverview({
             <article
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="matterhorn-capability-card group grid min-w-0 gap-3 relative rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.085)] shadow-[var(--dls-card-shadow)] transition-[background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-px hover:bg-[rgba(var(--matterhorn-desk-rgb),0.14)] motion-reduce:transform-none motion-reduce:transition-none"
+              className="matterhorn-capability-card group grid min-w-0 gap-3 relative rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.085)] shadow-[var(--dls-card-shadow)] transition-[background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-px hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.14)] motion-reduce:transform-none motion-reduce:transition-none"
             >
               <button
                 type="button"
@@ -630,14 +635,16 @@ function WorkflowDeskHomeSurface({
           </button>
         </div>
 
-        <section className="rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.06)] px-4 py-4">
+        <section className="rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.06)] px-4 py-4">
           <div className="flex min-w-0 items-start gap-3">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.12)] text-[var(--matterhorn-desk-color)]">
               <ProtocolDeskMark id={deskId} visual={visual ?? undefined} size={34} />
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-semibold text-dls-text">{visual?.agentName ?? "Longevity Agent"}</h2>
+                <h2 className="text-lg font-semibold text-dls-text">
+                  {visual?.displayName ? `${visual.displayName} desk` : "Workflow desk"}
+                </h2>
                 {launchState?.status === "failed" ? (
                   <span className="text-[11px] font-semibold text-rose-300">Needs attention</span>
                 ) : launchState?.status === "ready" ? (
@@ -654,7 +661,7 @@ function WorkflowDeskHomeSurface({
               {launchState?.message ? (
                 <p className={cn(
                   "mt-1 text-xs leading-5",
-                  launchState.status === "failed" ? "text-red-300" : "text-dls-secondary",
+                  launchState.status === "failed" ? "text-red-11" : "text-dls-secondary",
                 )}>
                   {launchState.message}
                 </p>
@@ -779,7 +786,7 @@ function ProtocolDeskEmptyState({
       ? "Open workspace"
       : "Platform setup";
   const deskSafetyInfo = panel === "bittensor"
-    ? "Runs public SS58 reads and unsigned previews. Signing stays in an external Bittensor-compatible wallet."
+    ? "Uses public wallet details and prepares transfer drafts. You approve TAO transfers in your wallet; staking and advanced actions finish in an external signer."
     : panel === "polymarket"
       ? "Runs market research, compliance checks, and external-wallet handoffs. Matterhorn never places bets inside the app."
       : panel === "sui"
@@ -902,7 +909,7 @@ function ProtocolDeskEmptyState({
       {providerNotice ? (
         <div
           className={cn(
-            "mx-1 flex items-center gap-2 rounded-md px-3 py-2 text-xs leading-5",
+            "mx-1 flex items-start gap-2 rounded-md px-3 py-2 text-xs leading-5 sm:items-center",
             providerNotice.tone === "warning"
               ? "bg-amber-500/[0.08] text-amber-100"
               : "bg-dls-surface-muted/35 text-dls-secondary",
@@ -914,8 +921,8 @@ function ProtocolDeskEmptyState({
           ) : (
             <ShieldCheck className="size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" aria-hidden="true" />
           )}
-          <span className="font-semibold text-dls-text">{providerNotice.label}</span>
-          <span className="min-w-0 truncate text-dls-secondary">{providerNotice.detail}</span>
+          <span className="shrink-0 font-semibold text-dls-text">{providerNotice.label}</span>
+          <span className="min-w-0 text-dls-secondary">{providerNotice.detail}</span>
         </div>
       ) : null}
       {launchingTaskTitle ? (
@@ -993,8 +1000,8 @@ function ProtocolDeskEmptyState({
                   <p
                     id={`${inputId}-hint`}
                     className={cn(
-                      "mt-2 text-[11px] leading-4",
-                      taskInputError ? "text-red-300" : "text-dls-secondary",
+                      "mt-2 text-xs leading-[18px]",
+                      taskInputError ? "text-red-11" : "text-dls-secondary",
                     )}
                     role={taskInputError ? "alert" : undefined}
                   >
@@ -1025,7 +1032,10 @@ type WorkflowDeskLaunchState = {
   intent: string | null;
 };
 
-type WorkflowDeskId = Extract<CustomerProtocolDeskId, CustomerWorkflowIconHint>;
+export type WorkflowDeskId = Extract<
+  CustomerProtocolDeskId,
+  CustomerWorkflowIconHint
+>;
 
 export type SessionPageHistoryControls = {
   canUndo: boolean;
@@ -1056,7 +1066,13 @@ export type SessionPageSidebarProps = {
   onCreateTaskWithPrompt?: (
     workspaceId: string,
     prompt: string,
-    options?: { title?: string; agent?: string; sendImmediately?: boolean; onSessionCreated?: (sessionId: string) => void | Promise<void> },
+    options?: {
+      title?: string;
+      agent?: string;
+      deskId?: WorkflowDeskId;
+      sendImmediately?: boolean;
+      onSessionCreated?: (sessionId: string) => void | Promise<void>;
+    },
   ) => boolean | void | Promise<boolean | void>;
   onOpenRenameWorkspace: (workspaceId: string) => void;
   onShareWorkspace: (workspaceId: string) => void;
@@ -1131,6 +1147,15 @@ export type SessionPageProps = {
   settingsSlot?: React.ReactNode;
   /** Settings content rendered inside the right pane for a specific compact settings route. */
   settingsSlotForPath?: (initialPath: "general" | "cloud-account" | "wallet" | "extensions") => React.ReactNode;
+  /**
+   * A desk task that paused at model setup. It intentionally contains no
+   * prompt text, so returning from setup cannot silently send work.
+   */
+  pendingDeskTask?: {
+    deskId: WorkflowDeskId;
+    title: string;
+  } | null;
+  onPendingDeskTaskRestored?: () => void;
 };
 
 function getSidebarInitialLoading(props: SessionPageSidebarProps) {
@@ -1193,6 +1218,8 @@ function writeHiddenAccessibleTargetIds(workspaceId: string | null | undefined, 
 export function SessionPage(props: SessionPageProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const liveLocationRef = useRef(location);
+  liveLocationRef.current = location;
   const { config: shellConfig } = useShellConfig();
   const wallet = useWallet();
   const sessionWallet = useSessionWallet(wallet.store);
@@ -1266,12 +1293,7 @@ export function SessionPage(props: SessionPageProps) {
   const sidePanelScopeId = props.selectedSessionId?.trim() || GLOBAL_HOME_SIDE_PANEL_KEY;
   const sidebarOpen = useUiStateStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUiStateStore((state) => state.setSidebarOpen);
-  const sessionSidePanel = useUiStateStore((state) => (
-    state.sidePanelState[sidePanelScopeId] ?? null
-  ));
-  const voiceSidePanelOpen = useUiStateStore((state) => state.sidePanelState[GLOBAL_VOICE_SIDE_PANEL_KEY] === "voice");
   const setSidePanelState = useUiStateStore((state) => state.setSidePanelState);
-  const toggleSidePanelState = useUiStateStore((state) => state.toggleSidePanelState);
   const [artifactTarget, setArtifactTarget] = useState<OpenTarget | null>(null);
   const [openTargets, setOpenTargets] = useState<OpenTarget[]>([]);
   const [hiddenAccessibleTargetIds, setHiddenAccessibleTargetIds] = useState<Set<string>>(() => new Set());
@@ -1355,16 +1377,11 @@ export function SessionPage(props: SessionPageProps) {
   const visibleArtifactTarget = artifactTarget ?? artifactFileTargets[0] ?? null;
   const artifactTargetCount = artifactFileTargets.length;
   const hasArtifactTargets = artifactTargetCount > 0;
-  const routeSidePanel = useMemo(() => {
-    const requestedPanel = new URLSearchParams(location.search).get("panel");
-    if (requestedPanel === "notes" && !workspaceNotesAvailable) return null;
-    return SIDE_PANEL_ITEMS.includes(requestedPanel as SidePanelItem)
-      ? requestedPanel as SidePanelItem
-      : null;
-  }, [location.search, workspaceNotesAvailable]);
-  const activeSidePanel = voiceSidePanelOpen
-    ? "voice"
-    : routeSidePanel ?? (sessionSidePanel === "notes" && !workspaceNotesAvailable ? null : sessionSidePanel);
+  const routeSidePanel = useMemo(
+    () => readSessionPanelFromSearch(location.search, { notesAvailable: workspaceNotesAvailable }),
+    [location.search, workspaceNotesAvailable],
+  );
+  const activeSidePanel = routeSidePanel;
   const browserRailActive = activeSidePanel === "browser";
   const artifactRailActive = activeSidePanel === "artifacts";
   const showArtifactRailItem = hasArtifactTargets || artifactRailActive;
@@ -1496,6 +1513,7 @@ export function SessionPage(props: SessionPageProps) {
   const [homePathCopyLabel, setHomePathCopyLabel] = useState<string | null>(null);
   const [activeWorkflowDeskId, setActiveWorkflowDeskId] = useState<WorkflowDeskId | null>(null);
   const [workflowLaunchState, setWorkflowLaunchState] = useState<WorkflowDeskLaunchState | null>(null);
+  const restoredPendingDeskWorkspaceRef = useRef<string | null>(null);
   const browserPanelRef = usePanelRef();
   const preserveSidePanelOnPanelOpenRef = useRef(false);
   const pendingProtocolRailPanelRef = useRef<VenueSidePanel | null>(null);
@@ -1504,6 +1522,7 @@ export function SessionPage(props: SessionPageProps) {
   const homeOutputsPath = homeProjectPath ? joinWorkspaceChildPath(homeProjectPath, "outputs") : "outputs/";
   const homeProjectName = props.selectedWorkspaceDisplay.displayName || props.selectedWorkspaceDisplay.name || "Current project";
   const homeFolderLabel = compactPathSegment(homeProjectPath) || "No local folder";
+  const canExposeLocalPaths = isDesktopRuntime();
 
   const openRunHistory = useCallback(() => {
     if (props.sidebar.onOpenWorkspaceHistory) {
@@ -1538,44 +1557,54 @@ export function SessionPage(props: SessionPageProps) {
 
   const setCurrentSidePanel = useCallback((panel: SidePanelItem | null) => {
     setSidePanelState(GLOBAL_VOICE_SIDE_PANEL_KEY, panel === "voice" ? "voice" : null);
-    if (panel === "voice") return;
-    setSidePanelState(sidePanelScopeId, panel);
+    setSidePanelState(sidePanelScopeId, panel === "voice" ? null : panel);
 
     // Async task launches can navigate before their desk-close callback runs.
-    // Read the live URL so a stale render closure cannot send the user back to
-    // workspace home after the new session is already open.
-    const currentLocation = typeof window !== "undefined" ? window.location : location;
-    const params = new URLSearchParams(currentLocation.search);
-    const routedPanel = params.get("panel");
-    if (!routedPanel || routedPanel === panel) return;
-    if (panel) params.set("panel", panel);
-    else params.delete("panel");
+    // React Router owns the live path in both BrowserRouter and desktop
+    // HashRouter, so keep its latest value without closing over an old render.
+    const currentLocation = liveLocationRef.current;
+    const transition = resolveSessionPanelNavigation(currentLocation.search, panel);
+    if (!transition) return;
     navigate(
       {
         pathname: currentLocation.pathname,
-        search: params.toString() ? `?${params.toString()}` : "",
+        search: transition.search,
         hash: currentLocation.hash,
       },
-      { replace: true },
+      { replace: transition.replace },
     );
-  }, [location.hash, location.pathname, location.search, navigate, setSidePanelState, sidePanelScopeId]);
+  }, [navigate, setSidePanelState, sidePanelScopeId]);
+
+  useEffect(
+    () => subscribeReviewedActionHandoff((handoff) => setCurrentSidePanel(handoff.protocol)),
+    [setCurrentSidePanel],
+  );
 
   useEffect(() => {
-    const requestedPanel = new URLSearchParams(location.search).get("panel");
-    if (SIDE_PANEL_ITEMS.includes(requestedPanel as SidePanelItem)) {
-      setCurrentSidePanel(requestedPanel as SidePanelItem);
+    // The URL is the shareable source of truth. This effect only mirrors it to
+    // the store; it never navigates, so reload and Back/Forward cannot loop.
+    setSidePanelState(
+      GLOBAL_VOICE_SIDE_PANEL_KEY,
+      routeSidePanel === "voice" ? "voice" : null,
+    );
+    setSidePanelState(
+      sidePanelScopeId,
+      routeSidePanel === "voice" ? null : routeSidePanel,
+    );
+  }, [routeSidePanel, setSidePanelState, sidePanelScopeId]);
+
+  useEffect(() => {
+    // A settings return may briefly change the selected workspace while the
+    // shell bootstraps. Keep an explicitly resumed desk open through that one
+    // transition; ordinary workspace changes still reset the desk as before.
+    if (props.pendingDeskTask) return;
+    if (restoredPendingDeskWorkspaceRef.current === props.selectedWorkspaceId) {
+      restoredPendingDeskWorkspaceRef.current = null;
       return;
     }
-
-    // The URL is the shareable source of truth. A plain project-home URL must
-    // not resurrect a panel that happened to be open in a previous visit.
-    setCurrentSidePanel(null);
-  }, [location.search, setCurrentSidePanel]);
-
-  useEffect(() => {
     setActiveWorkflowDeskId(null);
     setWorkflowLaunchState(null);
-  }, [props.selectedWorkspaceId]);
+  }, [props.pendingDeskTask?.deskId, props.selectedWorkspaceId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1640,12 +1669,21 @@ export function SessionPage(props: SessionPageProps) {
   const openWorkflowDesk = useCallback((
     deskId: WorkflowDeskId,
     prompt: string,
-    options?: { title?: string; stageId?: string; actionId?: string; sourceId?: string; launchAgent?: boolean },
+    options?: {
+      title?: string;
+      stageId?: string;
+      actionId?: string;
+      sourceId?: string;
+      launchAgent?: boolean;
+      recovery?: boolean;
+    },
   ) => {
     const visibleUserIntent = prompt.trim();
     if (!visibleUserIntent) return;
 
-    props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
+    if (!options?.recovery) {
+      props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
+    }
     setCurrentSidePanel(null);
     setActiveWorkflowDeskId(deskId);
 
@@ -1655,7 +1693,9 @@ export function SessionPage(props: SessionPageProps) {
         status: props.matterhornServerClient ? "ready" : "failed",
         run: null,
         message: props.matterhornServerClient
-          ? `Choose a stage to begin. Outputs will save under outputs/${getCustomerProtocolDeskVisual(deskId)?.outputDeskId ?? deskId}/<session-slug>/`
+          ? options?.recovery
+            ? "Choose a stage to start this task. Nothing has been sent yet."
+            : `Choose a stage to begin. Outputs will save under outputs/${getCustomerProtocolDeskVisual(deskId)?.outputDeskId ?? deskId}/<session-slug>/`
           : "Matterhorn Desks engine is unavailable for this project. Retry the connection or restart Matterhorn Desks if it stays offline.",
         intent: visibleUserIntent,
       });
@@ -1679,6 +1719,7 @@ export function SessionPage(props: SessionPageProps) {
       const startResult = props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, visibleUserIntent, {
         title: options.title ?? getCustomerProtocolDeskVisual(deskId)?.agentName ?? "Desk task",
         agent: agentIdForDesk(deskId),
+        deskId,
         sendImmediately: true,
         onSessionCreated: async (sessionId) => {
           if (deskId === "wellness") {
@@ -1730,14 +1771,41 @@ export function SessionPage(props: SessionPageProps) {
     setCurrentSidePanel,
   ]);
 
-  const toggleCurrentSidePanel = useCallback((panel: SidePanelItem) => {
-    if (panel === "voice") {
-      toggleSidePanelState(GLOBAL_VOICE_SIDE_PANEL_KEY, "voice");
+  const pendingDeskRecoveryKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const pendingDeskTask = props.pendingDeskTask;
+    if (!pendingDeskTask) {
+      pendingDeskRecoveryKeyRef.current = null;
       return;
     }
-    setSidePanelState(GLOBAL_VOICE_SIDE_PANEL_KEY, null);
-    toggleSidePanelState(props.selectedSessionId ?? GLOBAL_HOME_SIDE_PANEL_KEY, panel);
-  }, [props.selectedSessionId, setSidePanelState, toggleSidePanelState]);
+    // Returning from settings can render once before the workspace endpoint
+    // reconnects. Do not consume the one-shot handoff in that transient state,
+    // or the restored desk is incorrectly frozen as "engine offline".
+    if (!props.matterhornServerClient) return;
+    // Workspace bootstrap may settle the selected id one render after the
+    // route changes. Include it in the guard so that benign update can reopen
+    // the staged desk once, without duplicating it on ordinary re-renders.
+    const recoveryKey = `${props.selectedWorkspaceId}:${pendingDeskTask.deskId}:${pendingDeskTask.title}`;
+    if (pendingDeskRecoveryKeyRef.current === recoveryKey) return;
+    pendingDeskRecoveryKeyRef.current = recoveryKey;
+    restoredPendingDeskWorkspaceRef.current = props.selectedWorkspaceId;
+    openWorkflowDesk(pendingDeskTask.deskId, pendingDeskTask.title, {
+      title: pendingDeskTask.title,
+      recovery: true,
+    });
+    props.onPendingDeskTaskRestored?.();
+  }, [
+    openWorkflowDesk,
+    props.matterhornServerClient,
+    props.onPendingDeskTaskRestored,
+    props.pendingDeskTask?.deskId,
+    props.pendingDeskTask?.title,
+    props.selectedWorkspaceId,
+  ]);
+
+  const toggleCurrentSidePanel = useCallback((panel: SidePanelItem) => {
+    setCurrentSidePanel(routeSidePanel === panel ? null : panel);
+  }, [routeSidePanel, setCurrentSidePanel]);
 
   // Sync browser panel state with Electron main process IPC events.
   // When the agent calls a built-in browser tool, the main process opens
@@ -1841,18 +1909,7 @@ export function SessionPage(props: SessionPageProps) {
   }, []);
   const closeRightPane = useCallback(() => {
     setCurrentSidePanel(null);
-    if (!routeSidePanel) return;
-    const params = new URLSearchParams(location.search);
-    params.delete("panel");
-    navigate(
-      {
-        pathname: location.pathname,
-        search: params.toString() ? `?${params.toString()}` : "",
-        hash: location.hash,
-      },
-      { replace: true },
-    );
-  }, [location.hash, location.pathname, location.search, navigate, routeSidePanel, setCurrentSidePanel]);
+  }, [setCurrentSidePanel]);
   const openBrowserRailPane = useCallback(() => {
     toggleCurrentSidePanel("browser");
   }, [toggleCurrentSidePanel]);
@@ -1950,6 +2007,7 @@ export function SessionPage(props: SessionPageProps) {
       props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, prompt, {
         title,
         agent: agentIdForDesk(panel),
+        deskId: panel,
         sendImmediately: true,
       });
       return;
@@ -2284,8 +2342,8 @@ export function SessionPage(props: SessionPageProps) {
             className="min-h-0 flex-1"
           >
             <ResizablePanel minSize="360px" className="min-w-0">
-              <main className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">
-          <header className="z-10 flex h-10 shrink-0 items-center justify-between bg-dls-surface/95 px-4 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.08)] md:px-6 mac:titlebar-drag @container/titlebar">
+              <div className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">
+          <header className="z-10 flex h-10 shrink-0 items-center justify-between bg-dls-surface/95 px-4 shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)] md:px-6 mac:titlebar-drag @container/titlebar">
             <div className="flex min-w-0 items-center gap-3">
               {shellConfig.sidebar ? <SidebarTrigger className="mac:hidden" /> : null}
               {!showWorkspaceSetupEmptyState ? (
@@ -2358,7 +2416,7 @@ export function SessionPage(props: SessionPageProps) {
                   title={t("notes.quick_jot_button_title")}
                   aria-label={t("notes.quick_jot_button_title")}
                 >
-                  <PencilLine className="size-3.5" />
+                  <NotebookPen className="size-3.5" />
                 </Button>
               ) : null}
               {/* Revert/redo moved to per-message actions */}
@@ -2447,6 +2505,7 @@ export function SessionPage(props: SessionPageProps) {
                   questionReplyBusy={props.questionReplyBusy}
                   respondQuestion={props.respondQuestion}
                   safeStringify={props.safeStringify}
+                  connectedProviderIds={props.providerConnectedIds}
                   onOpenTarget={openTarget}
                   onOpenTargetsChange={handleOpenTargetsChange}
                   onCreateDeskTask={(prompt, options) => {
@@ -2584,6 +2643,7 @@ export function SessionPage(props: SessionPageProps) {
                           const startResult = props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, {
                             title,
                             agent: agentIdForDesk(focusedProtocolPanel),
+                            deskId: focusedProtocolPanel,
                             sendImmediately: true,
                             onSessionCreated: () => {
                               taskSessionCreated = true;
@@ -2649,53 +2709,68 @@ export function SessionPage(props: SessionPageProps) {
                               <span className="font-medium text-dls-text">Project folder</span>
                               <span
                                 className="min-w-0 truncate font-mono text-[11px] leading-4 text-dls-secondary"
-                                title={homeProjectPath || "No local project folder selected"}
+                                title={
+                                  canExposeLocalPaths
+                                    ? homeProjectPath || "No local project folder selected"
+                                    : "Stored by your local Matterhorn engine"
+                                }
                               >
                                 {homeFolderLabel}
                               </span>
                               <span className="flex shrink-0 items-center gap-0.5">
-                                <WorkspaceHomeIconAction
-                                  label={homePathCopyLabel === "Project path" ? "Project path copied" : "Copy project path"}
-                                  tooltip={homePathCopyLabel === "Project path" ? "Copied" : "Copy project path"}
-                                  disabled={!homeProjectPath}
-                                  onClick={() => void copyHomePath(homeProjectPath, "Project path")}
-                                >
-                                  <Copy className="size-3.5" />
-                                </WorkspaceHomeIconAction>
-                                <WorkspaceHomeIconAction
-                                  label="Open project folder"
-                                  tooltip="Open project folder"
-                                  disabled={!homeProjectPath}
-                                  onClick={() => props.sidebar.onRevealWorkspace(props.selectedWorkspaceId)}
-                                >
-                                  <FolderOpen className="size-3.5" />
-                                </WorkspaceHomeIconAction>
+                                {canExposeLocalPaths ? (
+                                  <>
+                                    <WorkspaceHomeIconAction
+                                      label={homePathCopyLabel === "Project path" ? "Project path copied" : "Copy project path"}
+                                      tooltip={homePathCopyLabel === "Project path" ? "Copied" : "Copy project path"}
+                                      disabled={!homeProjectPath}
+                                      onClick={() => void copyHomePath(homeProjectPath, "Project path")}
+                                    >
+                                      <Copy className="size-3.5" />
+                                    </WorkspaceHomeIconAction>
+                                    <WorkspaceHomeIconAction
+                                      label="Open project folder"
+                                      tooltip="Open project folder"
+                                      disabled={!homeProjectPath}
+                                      onClick={() => props.sidebar.onRevealWorkspace(props.selectedWorkspaceId)}
+                                    >
+                                      <FolderOpen className="size-3.5" />
+                                    </WorkspaceHomeIconAction>
+                                  </>
+                                ) : null}
                               </span>
                             </div>
                             <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2">
                               <span className="font-medium text-dls-text">Saved outputs</span>
-                              <span className="min-w-0 truncate font-mono text-[11px] leading-4 text-dls-secondary" title={homeOutputsPath}>
+                              <span
+                                className="min-w-0 truncate font-mono text-[11px] leading-4 text-dls-secondary"
+                                title={canExposeLocalPaths ? homeOutputsPath : "Stored with this project"}
+                              >
                                 outputs/
                               </span>
                               <span className="flex shrink-0 items-center gap-0.5">
-                                <WorkspaceHomeIconAction
-                                  label={homePathCopyLabel === "Outputs path" ? "Outputs path copied" : "Copy outputs path"}
-                                  tooltip={homePathCopyLabel === "Outputs path" ? "Copied" : "Copy outputs path"}
-                                  onClick={() => void copyHomePath(homeOutputsPath, "Outputs path")}
-                                >
-                                  <Copy className="size-3.5" />
-                                </WorkspaceHomeIconAction>
-                                <WorkspaceHomeIconAction
-                                  label="Open outputs folder"
-                                  tooltip="Open outputs folder"
-                                  disabled={!homeProjectPath || !props.onRevealPath}
-                                  onClick={() => {
-                                    if (!props.onRevealPath) return;
-                                    void props.onRevealPath(homeOutputsPath, "Outputs folder");
-                                  }}
-                                >
-                                  <FolderOpen className="size-3.5" />
-                                </WorkspaceHomeIconAction>
+                                {canExposeLocalPaths ? (
+                                  <>
+                                    <WorkspaceHomeIconAction
+                                      label={homePathCopyLabel === "Outputs path" ? "Outputs path copied" : "Copy outputs path"}
+                                      tooltip={homePathCopyLabel === "Outputs path" ? "Copied" : "Copy outputs path"}
+                                      onClick={() => void copyHomePath(homeOutputsPath, "Outputs path")}
+                                    >
+                                      <Copy className="size-3.5" />
+                                    </WorkspaceHomeIconAction>
+                                    <WorkspaceHomeIconAction
+                                      label="Open outputs folder"
+                                      tooltip="Open outputs folder"
+                                      disabled={!homeProjectPath || !props.onRevealPath}
+                                      onClick={() => {
+                                        if (!props.onRevealPath) return;
+                                        void props.onRevealPath(homeOutputsPath, "Outputs folder");
+                                      }}
+                                    >
+                                      <FolderOpen className="size-3.5" />
+                                    </WorkspaceHomeIconAction>
+                                  </>
+                                ) : null}
                                 <WorkspaceHomeIconAction
                                   label="Jot a note about outputs"
                                   tooltip="Jot a note about outputs"
@@ -2708,7 +2783,7 @@ export function SessionPage(props: SessionPageProps) {
                                     })
                                   }
                                 >
-                                  <PencilLine className="size-3.5" />
+                                  <NotebookPen className="size-3.5" />
                                 </WorkspaceHomeIconAction>
                               </span>
                             </div>
@@ -2767,7 +2842,7 @@ export function SessionPage(props: SessionPageProps) {
                                       key={demo.id}
                                       type="button"
                                       style={deskToneStyle(demo.iconHint)}
-                                      className="relative isolate flex min-h-[144px] w-full flex-col items-start overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.075)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                                      className="relative isolate flex min-h-[144px] w-full flex-col items-start overflow-hidden rounded-lg border-0 bg-[rgb(var(--matterhorn-desk-rgb)/0.075)] p-3 text-left transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                                       onClick={() => {
                                         if (demo.panel) {
                                           openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo", title: demo.title });
@@ -2791,13 +2866,13 @@ export function SessionPage(props: SessionPageProps) {
                                         {demo.panel ? <ProtocolLogo venue={demo.panel} size={92} /> : <Icon className="size-24 text-[var(--matterhorn-desk-color)]" />}
                                       </span>
                                       <span className="relative flex w-full items-start gap-3">
-                                        <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.16)] text-[var(--matterhorn-desk-color)]">
+                                        <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.16)] text-[var(--matterhorn-desk-color)]">
                                           {demo.panel ? <ProtocolLogo venue={demo.panel} size={25} /> : <Icon className="size-4" />}
                                         </span>
                                         <span className="min-w-0 flex-1">
                                           <span className="flex flex-wrap items-center gap-2">
                                             <span className="text-[13px] font-semibold text-dls-text">{demo.title}</span>
-                                            <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
+                                            <span className="rounded-full bg-[rgb(var(--matterhorn-desk-rgb)/0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
                                               {demo.statusLabel}
                                             </span>
                                           </span>
@@ -2837,7 +2912,7 @@ export function SessionPage(props: SessionPageProps) {
                                       key={task.id}
                                       type="button"
                                       style={deskToneStyle(task.iconHint)}
-                                      className="relative isolate flex min-h-[162px] w-full flex-col gap-3 overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.08)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                                      className="relative isolate flex min-h-[162px] w-full flex-col gap-3 overflow-hidden rounded-lg border-0 bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] p-3 text-left transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                                       onClick={() => {
                                         openWorkflowDesk("wellness", task.prompt, {
                                           title: task.title,
@@ -2852,7 +2927,7 @@ export function SessionPage(props: SessionPageProps) {
                                         <span className="min-w-0">
                                           <span className="flex flex-wrap items-center gap-2">
                                             <span className="text-[14px] font-semibold text-dls-text">Longevity workflow desk</span>
-                                            <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
+                                            <span className="rounded-full bg-[rgb(var(--matterhorn-desk-rgb)/0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
                                               {task.statusLabel}
                                             </span>
                                           </span>
@@ -2921,7 +2996,7 @@ export function SessionPage(props: SessionPageProps) {
               showAccountActions={false}
             />
           ) : null}
-              </main>
+              </div>
             </ResizablePanel>
               {dockedSidePanelOpen ? (
               <>
@@ -3086,7 +3161,7 @@ export function SessionPage(props: SessionPageProps) {
                 aria-label={t("notes.rail_title")}
                 aria-pressed={notesRailActive}
               >
-                <PencilLine size={17} />
+                <NotebookPen size={17} />
                 <span className={RAIL_LABEL_CLASS}>{t("notes.rail_label")}</span>
               </Button>
             ) : null}
@@ -3110,7 +3185,7 @@ export function SessionPage(props: SessionPageProps) {
                   style={deskToneStyle(item.panel)}
                   className={cn(
                     RAIL_DESK_BUTTON_CLASS,
-                    item.active && "bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.16)] hover:text-[var(--matterhorn-desk-color)]",
+                    item.active && "bg-[rgb(var(--matterhorn-desk-rgb)/0.12)] text-[var(--matterhorn-desk-color)] hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.16)] hover:text-[var(--matterhorn-desk-color)]",
                   )}
                   onClick={() => openVenueRailPane(item.panel)}
                   title={item.title}

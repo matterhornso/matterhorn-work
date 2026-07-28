@@ -25,6 +25,8 @@ function policy(overrides: Partial<Parameters<typeof sendReviewedWalletTransacti
   };
 }
 
+const passingSimulation = async () => ({ status: "passed" as const });
+
 function encodeErc20Transfer(to: string, rawAmount: bigint) {
   return `0xa9059cbb${to.replace(/^0x/, "").padStart(64, "0")}${rawAmount.toString(16).padStart(64, "0")}`;
 }
@@ -51,6 +53,7 @@ describe("reviewed wallet send behavior", () => {
       connectedChainId: 84532,
       forceTestnet: true,
       policy: policy(),
+      simulateTransaction: passingSimulation,
       chainName: (id) => (id === 84532 ? "Base Sepolia" : `chain ${id}`),
       sendTransaction: async (request) => {
         requests.push(request);
@@ -278,6 +281,32 @@ describe("reviewed wallet send behavior", () => {
     });
   });
 
+  test("never calls the wallet for an unpriced ERC-20 transfer", async () => {
+    const requests: PreparedWalletSendRequest["request"][] = [];
+    const transferData = encodeErc20Transfer(TARGET, 10n ** 18n);
+
+    await expect(sendReviewedWalletTransaction({
+      approval: {
+        chainId: 84532,
+        to: SPENDER,
+        value: "0",
+        data: transferData,
+        proposedBy: "behavior_test",
+        riskLevel: "high",
+      },
+      connectedChainId: 84532,
+      forceTestnet: true,
+      policy: policy(),
+      sendTransaction: async (request) => {
+        requests.push(request);
+        return HASH;
+      },
+      approvedReason: "User approved via TransactionApproval modal",
+    })).rejects.toThrow("cannot verify this transaction's USD value");
+
+    expect(requests).toHaveLength(0);
+  });
+
   test("blocks mainnet sends when the app is in forced testnet mode", () => {
     const usdc = USDC_BY_CHAIN[8453];
     const approveData = encodeErc20Approve(SPENDER, 1_000_000n);
@@ -291,6 +320,39 @@ describe("reviewed wallet send behavior", () => {
       forceTestnet: true,
       policy: policy(),
     })).toThrow("Mainnet is disabled");
+  });
+
+  test("does not call the wallet when pre-send simulation fails or is unavailable", async () => {
+    const requests: PreparedWalletSendRequest["request"][] = [];
+    const logs: SecurityLogEntry[] = [];
+    const baseInput = {
+      approval: {
+        chainId: 84532,
+        to: TARGET,
+        value: "1",
+        proposedBy: "behavior_test",
+        riskLevel: "medium" as const,
+      },
+      connectedChainId: 84532,
+      forceTestnet: true,
+      policy: policy(),
+      sendTransaction: async (request: PreparedWalletSendRequest["request"]) => {
+        requests.push(request);
+        return HASH as `0x${string}`;
+      },
+      onSecurityLog: (entry: SecurityLogEntry) => logs.push(entry),
+      approvedReason: "User approved via TransactionApproval modal",
+    };
+
+    await expect(sendReviewedWalletTransaction({
+      ...baseInput,
+      simulateTransaction: async () => ({ status: "failed", error: "Simulation reverted." }),
+    })).rejects.toThrow("Simulation reverted");
+    await expect(sendReviewedWalletTransaction(baseInput)).rejects.toThrow("Simulation service is unavailable");
+
+    expect(requests).toHaveLength(0);
+    expect(logs).toHaveLength(2);
+    expect(logs.every((entry) => entry.action === "simulation_failed")).toBe(true);
   });
 
   test("records explicit audit actions for mainnet and unavailable-wallet blocks", async () => {
@@ -333,13 +395,13 @@ describe("reviewed wallet send behavior", () => {
 
   test("increments swap quota only after a reviewed swap transaction is submitted", async () => {
     let swapSubmissions = 0;
-    const swapData = `0x38ed1739${"0".repeat(64 * 5)}`;
+    const swapData = `0x7ff36ab5${"0".repeat(64 * 5)}`;
 
     const result = await sendReviewedWalletTransaction({
       approval: {
         chainId: 84532,
         to: TARGET,
-        value: "0",
+        value: "0.01",
         data: swapData,
         proposedBy: "behavior_test",
         riskLevel: "medium",
@@ -347,6 +409,7 @@ describe("reviewed wallet send behavior", () => {
       connectedChainId: 84532,
       forceTestnet: true,
       policy: policy({ sessionSwapCount: 4, lastSwapReset: Date.now() }),
+      simulateTransaction: passingSimulation,
       sendTransaction: async () => HASH,
       onSwapSubmitted: () => {
         swapSubmissions += 1;
@@ -372,6 +435,7 @@ describe("reviewed wallet send behavior", () => {
       connectedChainId: 84532,
       forceTestnet: true,
       policy: policy({ sessionSwapCount: 4, lastSwapReset: Date.now() }),
+      simulateTransaction: passingSimulation,
       sendTransaction: async () => HASH,
       onSwapSubmitted: () => {
         swapSubmissions += 1;

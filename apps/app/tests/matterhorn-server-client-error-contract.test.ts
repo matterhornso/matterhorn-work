@@ -16,6 +16,60 @@ function mockFetch(response: Response) {
 }
 
 describe("Matterhorn server client error contract", () => {
+  test("does not probe host-only environment keys without a host credential", async () => {
+    let requested = false;
+    globalThis.fetch = (async () => {
+      requested = true;
+      throw new Error("host-only request must not be sent");
+    }) as typeof fetch;
+    const client = createMatterhornServerClient({
+      baseUrl: "http://127.0.0.1:4096",
+      token: "collaborator-token",
+    });
+
+    await expect(client.listUserEnvKeys()).resolves.toEqual({ keys: [] });
+    expect(requested).toBe(false);
+  });
+
+  test("reads live market execution readiness from the guarded backend route", async () => {
+    let requestedUrl = "";
+    globalThis.fetch = (async (input) => {
+      requestedUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      return new Response(JSON.stringify({
+        success: true,
+        report: {
+          version: "matterhorn.market.execution-readiness.v1",
+          checkedAt: "2026-07-21T00:00:00.000Z",
+          readyForLiveSubmission: true,
+          status: "ready",
+          venues: [{ venue: "hyperliquid", canSubmit: true }],
+          controls: [],
+          nextActions: [],
+          safety: {
+            nonCustodial: true,
+            liveSubmissionEnabled: true,
+            canSubmit: true,
+            signsOrSubmits: true,
+            acceptsSecrets: false,
+            acceptsRawSignatures: false,
+            acceptsSignedPayloads: false,
+          },
+        },
+        cards: [],
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const client = createMatterhornServerClient({ baseUrl: "http://127.0.0.1:4096" });
+
+    const response = await client.marketExecutionReadiness();
+
+    expect(requestedUrl).toBe("http://127.0.0.1:4096/api/crypto/market-execution-readiness");
+    expect(response.report.venues[0]?.venue).toBe("hyperliquid");
+    expect(response.report.venues[0]?.canSubmit).toBe(true);
+  });
+
   test("turns proxy HTML errors into typed sanitized server errors", async () => {
     mockFetch(new Response("<html>bad gateway token=secret-token</html>", {
       status: 502,

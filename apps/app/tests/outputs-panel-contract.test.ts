@@ -155,10 +155,11 @@ describe("Outputs panel contract", () => {
     expect(receiptSource).toContain('? "Generated image"');
     expect(receiptSource).not.toContain('`Image generated: ${basename(outputPath)}`');
     expect(artifactSource).toContain("client.getGeneratedImage");
-    expect(artifactSource).toContain("Mock preview · no production image rendered");
+    expect(artifactSource).toContain("Sample output · no provider image");
     expect(artifactSource).toContain("<GeneratedImagePreview");
     expect(artifactSource).toContain("w-fit max-w-full");
-    expect(previewSource).toContain("This placeholder confirms the image workflow works. No production image was rendered.");
+    expect(previewSource).toContain("Sample image output");
+    expect(previewSource).toContain("No provider image was generated.");
     expect(previewSource).toContain("Preview unavailable");
     expect(previewSource).toContain("Prompt");
   });

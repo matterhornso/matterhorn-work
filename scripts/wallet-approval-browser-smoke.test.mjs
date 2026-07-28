@@ -46,6 +46,7 @@ for (const stageId of [
   "connect_mock_wallet",
   "open_session",
   "block_failed_simulation",
+  "reject_reviewed_transaction",
   "approve_reviewed_transaction",
   "block_mainnet_transaction",
 ]) {
@@ -72,6 +73,14 @@ assert.ok(
   "wallet approval browser smoke should use the real transaction approval event, modal, and simulation gate",
 );
 assert.ok(
+  script.includes("SAFETY_EVENT_ROUTE_GLOB") &&
+    script.includes("/wallet/safety-events") &&
+    script.includes("persists synthetic wallet events to the selected workspace ledger") &&
+    script.includes("request.postDataJSON()") &&
+    script.includes("safetyAction: input.action"),
+  "wallet approval browser smoke should keep synthetic safety events out of the selected workspace ledger",
+);
+assert.ok(
   script.includes("REVIEWED_TO") &&
     script.includes("REVIEWED_VALUE_WEI") &&
     script.includes("REVIEWED_VALUE_DISPLAY") &&
@@ -94,6 +103,7 @@ assert.ok(
     script.includes("assertApprovalBlocked(page, \"Failed simulation\")") &&
     script.includes("approve button is enabled") &&
     script.includes("Failed simulation reached wallet") &&
+    script.includes("Cancelled review reached wallet") &&
     script.includes("simulation route was not reachable in this browser path") &&
     script.includes("simulationMode = \"failed\"") &&
     script.includes("simulationMode = \"passed\""),

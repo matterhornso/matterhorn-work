@@ -36,13 +36,13 @@ const REQUEST_TIMEOUT_MS = Number(process.env.MATTERHORN_WORK_MCP_TIMEOUT_MS || 
 const MAX_TEXT_BYTES = Number(process.env.MATTERHORN_WORK_MCP_MAX_TEXT_BYTES || 512_000);
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
-const UPSTREAM_OPENWORK_DEFAULTS = {
-  upstreamUrl: process.env.OPENWORK_UPSTREAM_REMOTE || "https://github.com/different-ai/openwork.git",
-  upstreamBranch: process.env.OPENWORK_UPSTREAM_BRANCH || "main",
+const UPSTREAM_SOURCE_DEFAULTS = {
+  upstreamUrl: process.env.MATTERHORN_UPSTREAM_SOURCE_REMOTE || process.env.OPENWORK_UPSTREAM_REMOTE || "",
+  upstreamBranch: process.env.MATTERHORN_UPSTREAM_SOURCE_BRANCH || process.env.OPENWORK_UPSTREAM_BRANCH || "main",
   baseBranch: process.env.MATTERHORN_WORK_BASE_BRANCH || "dev",
 };
 
-const UPSTREAM_OPENWORK_CONFLICT_ZONES = [
+const UPSTREAM_SOURCE_CONFLICT_ZONES = [
   {
     name: "Branding and i18n",
     paths: ["apps/app/src/i18n", "README.md", "docs"],
@@ -51,17 +51,17 @@ const UPSTREAM_OPENWORK_CONFLICT_ZONES = [
   {
     name: "Env vars and headers",
     paths: ["apps/server", "apps/orchestrator", "docs"],
-    preserve: "Matterhorn-native aliases should take precedence while OpenWork fallbacks keep working.",
+    preserve: "Matterhorn-native aliases should take precedence while legacy fallbacks keep working.",
   },
   {
     name: "CLI and packaging",
     paths: ["apps/orchestrator", "packages", "scripts/release"],
-    preserve: "Public commands should stay matterhorn-work and matterhorn-work-server with openwork shims.",
+    preserve: "Public commands should stay Matterhorn Desks with compatibility shims kept internal.",
   },
   {
-    name: "OpenCode abstraction",
+    name: "Runtime abstraction",
     paths: ["apps/app/src", "apps/orchestrator", "docs/opencode-runtime-abstraction.md"],
-    preserve: "User-facing copy should say Matterhorn Desks engine while technical docs can name OpenCode.",
+    preserve: "User-facing copy should say Matterhorn Desks engine while technical implementation stays encapsulated.",
   },
   {
     name: "Agent control surface",
@@ -80,10 +80,10 @@ const UPSTREAM_OPENWORK_CONFLICT_ZONES = [
   },
 ];
 
-const UPSTREAM_OPENWORK_VERIFICATION_COMMANDS = [
-  "pnpm test:upstream-openwork-sync",
+const UPSTREAM_SOURCE_VERIFICATION_COMMANDS = [
+  "pnpm test:upstream-source-sync",
   "pnpm test:cli-packaging-rename",
-  "pnpm test:opencode-abstraction-copy",
+  "pnpm test:runtime-abstraction-copy",
   "pnpm test:agent-control-coverage-matrix",
   "pnpm test:agent-control-doctor",
   "pnpm test:bittensor-operator-playbook",
@@ -110,12 +110,12 @@ const tools = [
     inputSchema: { type: "object", properties: {} },
   },
   {
-    name: "matterhorn_upstream_openwork_check",
-    description: "Build a read-only intake plan for reviewing upstream OpenWork updates before bringing them into Matterhorn Desks. Does not merge or modify files.",
+    name: "matterhorn_upstream_source_check",
+    description: "Build a read-only intake plan for reviewing an upstream runtime source before adoption in Matterhorn Desks. It never fetches, merges, or changes files.",
     inputSchema: {
       type: "object",
       properties: {
-        upstreamUrl: { type: "string", description: "Optional upstream OpenWork repository URL." },
+        upstreamUrl: { type: "string", description: "Optional upstream runtime source URL." },
         upstreamBranch: { type: "string", description: "Optional upstream branch name." },
         baseBranch: { type: "string", description: "Optional Matterhorn base branch." },
         date: { type: "string", description: "Optional date used for the recommended sync branch slug." },
@@ -365,13 +365,16 @@ const tools = [
   },
   {
     name: "matterhorn_crypto_chat",
-    description: "Default first Matterhorn Desks tool for ordinary crypto requests when the user has not clearly chosen Bittensor, Hyperliquid, or Polymarket. Routes to the safe unified crypto chat workflow; read/preview only and never accepts wallet or exchange secrets.",
+    description: "Default first Matterhorn Desks tool for ordinary crypto requests when the user has not clearly chosen Bittensor, Hyperliquid, or Polymarket, and the canonical typed action-preview tool once a desk is selected. Routes to the safe unified crypto workflow; the agent prepares drafts but never accepts wallet or exchange secrets, signs, or submits.",
     inputSchema: {
       type: "object",
       properties: {
         message: { type: "string" },
         venue: { type: "string", enum: ["auto", "bittensor", "hyperliquid", "polymarket"] },
         ss58Address: { type: "string", description: "Optional public Bittensor SS58 address." },
+        coldkey: { type: "string", description: "Optional public Bittensor sender coldkey/SS58 address." },
+        recipient: { type: "string", description: "Optional public Bittensor transfer recipient." },
+        destination: { type: "string", description: "Optional public Bittensor transfer destination." },
         netuid: { type: "number", description: "Optional Bittensor subnet id." },
         validatorHotkey: { type: "string", description: "Optional public Bittensor validator hotkey." },
         amountTao: { oneOf: [{ type: "number" }, { type: "string" }], description: "Optional TAO amount for Bittensor previews." },
@@ -386,6 +389,7 @@ const tools = [
         limit: { type: "number" },
         slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
         rateTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
+        reduceOnly: { type: "boolean", description: "Optional Hyperliquid reduce-only flag." },
       },
       required: ["message"],
     },
@@ -1502,6 +1506,8 @@ async function discoverUiBridge() {
   const candidates = [
     process.env.MATTERHORN_WORK_UI_CONTROL_DISCOVERY?.trim(),
     process.env.OPENWORK_UI_CONTROL_DISCOVERY?.trim(),
+    join(appData, "com.matterhorn.desks", "matterhorn-work-ui-control.json"),
+    join(appData, "com.matterhorn.desks.dev", "matterhorn-work-ui-control.json"),
     join(appData, "com.matterhorn.work", "matterhorn-work-ui-control.json"),
     join(appData, "com.matterhorn.work.dev", "matterhorn-work-ui-control.json"),
     join(appData, "com.differentai.openwork", "matterhorn-work-ui-control.json"),
@@ -1830,19 +1836,25 @@ function inspectUpstreamRemote(upstreamUrl, upstreamBranch) {
   }
 }
 
-function matterhornUpstreamOpenWorkCheck(args = {}) {
-  const upstreamUrl = args.upstreamUrl || UPSTREAM_OPENWORK_DEFAULTS.upstreamUrl;
-  const upstreamBranch = args.upstreamBranch || UPSTREAM_OPENWORK_DEFAULTS.upstreamBranch;
-  const baseBranch = args.baseBranch || UPSTREAM_OPENWORK_DEFAULTS.baseBranch;
+function matterhornUpstreamSourceCheck(args = {}) {
+  const upstreamUrl = args.upstreamUrl || UPSTREAM_SOURCE_DEFAULTS.upstreamUrl;
+  const upstreamBranch = args.upstreamBranch || UPSTREAM_SOURCE_DEFAULTS.upstreamBranch;
+  const baseBranch = args.baseBranch || UPSTREAM_SOURCE_DEFAULTS.baseBranch;
   const date = args.date || new Date().toISOString().slice(0, 10);
-  const syncBranch = `codex/sync-openwork-${upstreamBranchDateSlug(date)}`;
-  const remoteStatus = args.remote === true
-    ? inspectUpstreamRemote(upstreamUrl, upstreamBranch)
-    : {
+  const syncBranch = `codex/sync-runtime-${upstreamBranchDateSlug(date)}`;
+  const remoteStatus = !upstreamUrl
+    ? {
         checked: false,
-        status: "skipped",
-        message: "Remote inspection skipped. Pass remote=true when network access is available.",
-      };
+        status: "not_configured",
+        message: "No upstream source is configured. Add a source URL only when you intend to review one.",
+      }
+    : args.remote === true
+      ? inspectUpstreamRemote(upstreamUrl, upstreamBranch)
+      : {
+          checked: false,
+          status: "skipped",
+          message: "Remote inspection skipped. Pass remote=true when network access is available.",
+        };
 
   const plan = {
     upstreamUrl,
@@ -1850,16 +1862,16 @@ function matterhornUpstreamOpenWorkCheck(args = {}) {
     baseBranch,
     syncBranch,
     remoteStatus,
-    conflictZones: UPSTREAM_OPENWORK_CONFLICT_ZONES,
-    verificationCommands: UPSTREAM_OPENWORK_VERIFICATION_COMMANDS,
-    nextCommands: [
+    conflictZones: UPSTREAM_SOURCE_CONFLICT_ZONES,
+    verificationCommands: UPSTREAM_SOURCE_VERIFICATION_COMMANDS,
+    nextCommands: upstreamUrl ? [
       `git fetch origin ${baseBranch}`,
       `git switch -c ${syncBranch} origin/${baseBranch}`,
-      `git remote add openwork-upstream ${upstreamUrl}`,
-      `git fetch openwork-upstream ${upstreamBranch}`,
-      `git log --oneline ${baseBranch}..openwork-upstream/${upstreamBranch}`,
-      `git diff --name-status ${baseBranch}...openwork-upstream/${upstreamBranch}`,
-    ],
+      `git remote add matterhorn-runtime-upstream ${upstreamUrl}`,
+      `git fetch matterhorn-runtime-upstream ${upstreamBranch}`,
+      `git log --oneline ${baseBranch}..matterhorn-runtime-upstream/${upstreamBranch}`,
+      `git diff --name-status ${baseBranch}...matterhorn-runtime-upstream/${upstreamBranch}`,
+    ] : [],
   };
 
   return {
@@ -1872,7 +1884,7 @@ function matterhornUpstreamOpenWorkCheck(args = {}) {
       requiresHumanReview: true,
     },
     guidance: [
-      "Review conflict zones before applying upstream OpenWork changes.",
+      "Review conflict zones before applying upstream runtime changes.",
       "Preserve Matterhorn Desks branding, compatibility aliases, CLI names, agent-control contracts, and Bittensor safety gates.",
       "Run the verification commands before opening or merging an upstream sync PR.",
     ],
@@ -3453,8 +3465,8 @@ async function handleTool(name, args = {}) {
       return matterhornDoctor(args);
     case "matterhorn_status":
       return matterhornStatus();
-    case "matterhorn_upstream_openwork_check":
-      return matterhornUpstreamOpenWorkCheck(args);
+    case "matterhorn_upstream_source_check":
+      return matterhornUpstreamSourceCheck(args);
     case "matterhorn_list_workspaces":
       return callServer("/workspaces");
     case "matterhorn_create_session":

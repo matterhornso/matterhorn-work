@@ -1,8 +1,19 @@
 import { dirname, join } from "node:path";
-import { appendFile, readFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { appendFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import { createInterface } from "node:readline";
 import type { AuditEntry } from "./types.js";
 import { ensureDir, exists } from "./utils.js";
+import { readRecentJsonl } from "./jsonl-tail.js";
+
+export interface AuditEntryCountOptions {
+  actions?: readonly string[];
+  startAtMs?: number;
+  endBeforeMs?: number;
+  excludeTargetContains?: readonly string[];
+  uniqueTargets?: boolean;
+}
 
 function expandHome(value: string): string {
   if (value.startsWith("~/")) {
@@ -48,17 +59,8 @@ export async function recordAudit(workspaceRoot: string, entry: AuditEntry): Pro
 }
 
 export async function readLastAudit(workspaceRoot: string, workspaceId: string): Promise<AuditEntry | null> {
-  const path = await resolveReadableAuditPath(workspaceRoot, workspaceId);
-  if (!path) return null;
-  const content = await readFile(path, "utf8");
-  const lines = content.trim().split("\n");
-  const last = lines[lines.length - 1];
-  if (!last) return null;
-  try {
-    return JSON.parse(last) as AuditEntry;
-  } catch {
-    return null;
-  }
+  const [entry] = await readAuditEntries(workspaceRoot, workspaceId, 1);
+  return entry ?? null;
 }
 
 export async function readAuditEntries(
@@ -68,17 +70,47 @@ export async function readAuditEntries(
 ): Promise<AuditEntry[]> {
   const path = await resolveReadableAuditPath(workspaceRoot, workspaceId);
   if (!path) return [];
-  const content = await readFile(path, "utf8");
-  const rawLines = content.trim().split("\n").filter(Boolean);
-  if (!rawLines.length) return [];
-  const slice = rawLines.slice(-Math.max(1, limit));
-  const entries: AuditEntry[] = [];
-  for (let i = slice.length - 1; i >= 0; i -= 1) {
+  const { items } = await readRecentJsonl<AuditEntry>(path, limit);
+  return items;
+}
+
+export async function countAuditEntries(
+  workspaceRoot: string,
+  workspaceId: string,
+  options: AuditEntryCountOptions = {},
+): Promise<number> {
+  const path = await resolveReadableAuditPath(workspaceRoot, workspaceId);
+  if (!path) return 0;
+
+  const actions = options.actions?.length ? new Set(options.actions) : null;
+  const uniqueTargets = options.uniqueTargets ? new Set<string>() : null;
+  let count = 0;
+  const lines = createInterface({
+    input: createReadStream(path, { encoding: "utf8" }),
+    crlfDelay: Infinity,
+  });
+
+  for await (const line of lines) {
+    if (!line.trim()) continue;
+    let entry: AuditEntry;
     try {
-      entries.push(JSON.parse(slice[i]) as AuditEntry);
+      entry = JSON.parse(line) as AuditEntry;
     } catch {
-      // ignore malformed entry
+      continue;
+    }
+
+    if (actions && !actions.has(entry.action)) continue;
+    if (options.startAtMs !== undefined && entry.timestamp < options.startAtMs) continue;
+    if (options.endBeforeMs !== undefined && entry.timestamp >= options.endBeforeMs) continue;
+    const target = typeof entry.target === "string" ? entry.target : "";
+    if (options.excludeTargetContains?.some((fragment) => target.includes(fragment))) continue;
+
+    if (uniqueTargets) {
+      uniqueTargets.add(`${entry.action}:${target}`);
+    } else {
+      count += 1;
     }
   }
-  return entries;
+
+  return uniqueTargets?.size ?? count;
 }

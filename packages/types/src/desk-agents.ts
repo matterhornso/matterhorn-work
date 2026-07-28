@@ -8,8 +8,97 @@ export type MatterhornDeskAgentDeskId =
   | "mcps"
   | "blank";
 
+export type MatterhornDeskRuntimeKind = "managed_desk" | "general_orchestrator";
+export type MatterhornDeskAgentActionLevel = "read_only" | "prepare_only" | "workspace_write";
+export type MatterhornDeskCompletionSurface =
+  | "none"
+  | "external_signer"
+  | "connected_wallet"
+  | "external_client"
+  | "manual_trade_ticket";
+export type MatterhornDeskEvidencePolicy = "workspace" | "tool" | "tool_and_receipt";
+
+export interface MatterhornDeskToolPolicy {
+  runtimeKind: MatterhornDeskRuntimeKind;
+  /**
+   * Managed desk agents are emitted with `"*": false` and only these exact
+   * tools enabled. The general orchestrator is intentionally managed by the
+   * workspace-owned Matterhorn agent template instead.
+   */
+  denyByDefault: boolean;
+  permissions: Partial<Record<"task" | "webfetch" | "websearch", "allow" | "ask" | "deny">>;
+  work: string[];
+  /** Tools that remain safe when a session is narrowed to Discuss or Plan. */
+  readOnly: string[];
+}
+
+export interface MatterhornDeskCapabilityPolicy {
+  actionLevel: MatterhornDeskAgentActionLevel;
+  readsLiveData: boolean;
+  preparesUserAction: boolean;
+  userCompletion: {
+    surface: MatterhornDeskCompletionSurface;
+    availableAfterReview: boolean;
+    featureGate?: string;
+  };
+  /** These remain false for every desk. Signing and submission are user-owned. */
+  agentMaySign: false;
+  agentMaySubmit: false;
+  automationsMaySubmit: false;
+  evidence: MatterhornDeskEvidencePolicy;
+  statusLabel: string;
+  summary: string;
+}
+
+export interface MatterhornDeskContextPolicy {
+  includeEnvironmentVariableNames: true;
+  includeWorkspaceOrientation: boolean;
+  includeWalletPublicContext: boolean;
+  includeCryptoSafetyPolicy: boolean;
+  selectedMemoryOnly: true;
+  allowSecretValues: false;
+}
+
+export interface MatterhornDeskVerificationPolicy {
+  requireToolEvidenceForLiveFacts: boolean;
+  requireSourceAndFreshness: boolean;
+  requireReceiptForCompletionClaim: boolean;
+  maxToolCalls: number;
+  prohibitedClaims: string[];
+}
+
+export interface MatterhornDeskModelPolicy {
+  selection: "user_selected_with_workspace_fallback";
+  defaultReasoningEffort: "balanced";
+  temperature: number;
+  requiresToolCalling: boolean;
+}
+
+export interface MatterhornDeskResponseEvidence {
+  liveFactsUsed?: boolean;
+  toolEvidencePresent?: boolean;
+  sourceNamed?: boolean;
+  freshnessNamed?: boolean;
+  completionClaimed?: boolean;
+  receiptEvidencePresent?: boolean;
+  agentSigningClaimed?: boolean;
+  agentSubmissionClaimed?: boolean;
+  automationSubmissionClaimed?: boolean;
+  toolCalls?: number;
+}
+
+export type MatterhornDeskResponseVerificationIssue =
+  | "agent_signing_claim"
+  | "agent_submission_claim"
+  | "automation_submission_claim"
+  | "completion_without_receipt"
+  | "live_fact_without_freshness"
+  | "live_fact_without_source"
+  | "live_fact_without_tool_evidence"
+  | "tool_call_budget_exceeded";
+
 export interface MatterhornDeskAgentManifest {
-  version: "matterhorn.desk.agent.v1";
+  version: "matterhorn.desk.agent.v2";
   deskId: MatterhornDeskAgentDeskId;
   agentId: string;
   workflowId: string;
@@ -17,15 +106,43 @@ export interface MatterhornDeskAgentManifest {
   outputDeskId: string;
   defaultStageId?: string;
   defaultActionId?: string;
-  toolAllowlist: string[];
-  runtimePermissions?: Partial<Record<"task" | "webfetch" | "websearch", "allow" | "ask" | "deny">>;
-  runtimeTools?: Record<string, boolean>;
-  /** Tools that remain safe when a session is narrowed to Discuss or Plan. */
-  runtimeReadOnlyTools?: string[];
+  toolPolicy: MatterhornDeskToolPolicy;
+  capabilityPolicy: MatterhornDeskCapabilityPolicy;
+  contextPolicy: MatterhornDeskContextPolicy;
+  verificationPolicy: MatterhornDeskVerificationPolicy;
+  modelPolicy: MatterhornDeskModelPolicy;
   displayName: string;
   description: string;
   instructions: string;
 }
+
+const NEVER_AGENT_SUBMITS = {
+  agentMaySign: false,
+  agentMaySubmit: false,
+  automationsMaySubmit: false,
+} as const;
+
+const DEFAULT_CONTEXT_POLICY: MatterhornDeskContextPolicy = {
+  includeEnvironmentVariableNames: true,
+  includeWorkspaceOrientation: true,
+  includeWalletPublicContext: false,
+  includeCryptoSafetyPolicy: false,
+  selectedMemoryOnly: true,
+  allowSecretValues: false,
+};
+
+const DEFAULT_MODEL_POLICY: MatterhornDeskModelPolicy = {
+  selection: "user_selected_with_workspace_fallback",
+  defaultReasoningEffort: "balanced",
+  temperature: 0.2,
+  requiresToolCalling: true,
+};
+
+const PROHIBITED_EXECUTION_CLAIMS = [
+  "Do not claim that Matterhorn signed on the user's behalf.",
+  "Do not claim that an agent, automation, or watch submitted a transaction.",
+  "Do not claim completion without the required receipt evidence.",
+];
 
 export const LONGEVITY_PRIMARY_GOAL_OPTIONS = [
   {
@@ -75,7 +192,7 @@ const AGENT_SHARED_BOUNDARY = [
 
 export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, MatterhornDeskAgentManifest> = {
   bittensor: {
-    version: "matterhorn.desk.agent.v1",
+    version: "matterhorn.desk.agent.v2",
     deskId: "bittensor",
     agentId: "matterhorn-bittensor",
     workflowId: "bittensor_operator",
@@ -83,40 +200,70 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     outputDeskId: "bittensor",
     defaultStageId: "stage_1_ss58_context",
     defaultActionId: "read_or_preview",
-    toolAllowlist: [
-      "matterhorn_bittensor_",
-      "matterhorn_status",
-      "matterhorn_read_files",
-      "matterhorn_write_files",
-    ],
-    runtimePermissions: {
-      task: "deny",
-      webfetch: "deny",
-      websearch: "deny",
+    toolPolicy: {
+      runtimeKind: "managed_desk",
+      denyByDefault: true,
+      permissions: {
+        task: "deny",
+        webfetch: "deny",
+        websearch: "deny",
+      },
+      work: [
+        "matterhorn-work_matterhorn_bittensor_chat",
+        "matterhorn-work_matterhorn_crypto_chat",
+      ],
+      readOnly: [],
     },
-    runtimeTools: {
-      "matterhorn-work_matterhorn_bittensor_chat": true,
+    capabilityPolicy: {
+      actionLevel: "prepare_only",
+      readsLiveData: true,
+      preparesUserAction: true,
+      userCompletion: {
+        surface: "connected_wallet",
+        availableAfterReview: true,
+      },
+      ...NEVER_AGENT_SUBMITS,
+      evidence: "tool_and_receipt",
+      statusLabel: "Review in wallet",
+      summary: "Reads public Bittensor data, prepares TAO transfers for connected-wallet review, and keeps staking or advanced calls as external-signer handoffs.",
     },
+    contextPolicy: {
+      ...DEFAULT_CONTEXT_POLICY,
+      includeWalletPublicContext: true,
+      includeCryptoSafetyPolicy: true,
+    },
+    verificationPolicy: {
+      requireToolEvidenceForLiveFacts: true,
+      requireSourceAndFreshness: true,
+      requireReceiptForCompletionClaim: true,
+      maxToolCalls: 1,
+      prohibitedClaims: PROHIBITED_EXECUTION_CLAIMS,
+    },
+    modelPolicy: { ...DEFAULT_MODEL_POLICY, temperature: 0.1 },
     displayName: "Bittensor Agent",
-    description: "Bittensor-native TAO, subnet, validator, wallet-read, watch, receipt, and external-signer handoff agent.",
+    description: "Bittensor-native TAO, subnet, validator, wallet-read, reviewed transfer, watch, receipt, and staking-handoff agent.",
     instructions: [
       AGENT_SHARED_BOUNDARY,
       "",
       "Desk scope:",
       "- Work in Bittensor-native terms: TAO, SS58 public addresses, coldkeys, hotkeys, subnets, validators, metagraph freshness, staking previews, watches, and receipts.",
       "- Use public SS58/coldkey/hotkey context only.",
-      "- Prepare unsigned previews and external Bittensor-compatible signer handoffs. Matterhorn does not sign or broadcast.",
+      "- Prepare direct TAO transfer drafts for the separate connected-wallet ticket. The installed Bittensor wallet must review, sign, and broadcast the exact Finney call.",
+      "- Prepare staking, unstaking, delegation, and advanced-call previews only as external Bittensor-compatible signer handoffs. Matterhorn does not sign or broadcast those actions.",
       "- Explain Bittensor concepts in beginner language before exposing raw chain details.",
       "- If required public context is missing, ask one concise question for the public value only.",
       "- For a simple subnet discovery or comparison, do not delegate to subagents and do not create files unless the user requests a saved report.",
-      "- Call the Bittensor desk tool exactly once. After it returns, do not call any tool again. Answer immediately from that bounded evidence; do not inspect repository files, use shell commands, or call generic web tools.",
+      "- For a complete direct TAO transfer request, you MUST call matterhorn-work_matterhorn_crypto_chat exactly once with venue bittensor, the user's original message, the public sender address when available, destination, and amountTao. This final action call creates the typed Review in wallet card; do not replace it with a prose-only transaction draft.",
+      "- A direct transfer request is complete only when the public destination and positive TAO amount are known. Use the selected public wallet address as sender when it is present. Otherwise ask one concise question listing only the missing public fields; never invent them.",
+      "- After the unified action tool returns, do not call another tool or restate an invented draft. Briefly summarize the returned evidence and tell the user to choose Review in wallet.",
+      "- For non-transfer Bittensor reads: Call the Bittensor desk tool exactly once. After it returns, do not call any tool again. Answer immediately from that bounded evidence; do not inspect repository files, use shell commands, or call generic web tools.",
       "- Treat the returned tool evidence as the sole source for subnet IDs, names, and capabilities. Never fill gaps from model memory or infer a subnet-to-capability mapping that the tool did not return.",
       "- If the returned evidence is fallback, stale, unavailable, or does not explicitly identify matching subnets, say that current subnet recommendations are unavailable. Give only generic selection criteria plus a concise configure-and-retry step; do not name subnet IDs, subnet names, or capabilities.",
       "- Return at most five relevant subnets only when every recommendation is directly supported by the returned evidence. Keep the default answer concise and always name the data source and freshness.",
     ].join("\n"),
   },
   hyperliquid: {
-    version: "matterhorn.desk.agent.v1",
+    version: "matterhorn.desk.agent.v2",
     deskId: "hyperliquid",
     agentId: "matterhorn-hyperliquid",
     workflowId: "hyperliquid_preview",
@@ -124,28 +271,60 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     outputDeskId: "hyperliquid",
     defaultStageId: "stage_1_market_read",
     defaultActionId: "read_or_handoff",
-    toolAllowlist: [
-      "matterhorn_hyperliquid_",
-      "matterhorn_market_",
-      "matterhorn_status",
-      "matterhorn_read_files",
-      "matterhorn_write_files",
-    ],
-    runtimePermissions: {
-      task: "deny",
-      webfetch: "deny",
-      websearch: "deny",
+    toolPolicy: {
+      runtimeKind: "managed_desk",
+      denyByDefault: true,
+      permissions: {
+        task: "deny",
+        webfetch: "deny",
+        websearch: "deny",
+      },
+      work: [
+        "matterhorn-work_matterhorn_hyperliquid_list_markets",
+        "matterhorn-work_matterhorn_hyperliquid_get_account",
+        "matterhorn-work_matterhorn_hyperliquid_get_positions",
+        "matterhorn-work_matterhorn_hyperliquid_get_open_orders",
+        "matterhorn-work_matterhorn_hyperliquid_get_orderbook",
+        "matterhorn-work_matterhorn_hyperliquid_get_funding",
+        "matterhorn-work_matterhorn_hyperliquid_preview_order",
+        "matterhorn-work_matterhorn_crypto_chat",
+      ],
+      readOnly: [
+        "matterhorn-work_matterhorn_hyperliquid_list_markets",
+        "matterhorn-work_matterhorn_hyperliquid_get_account",
+        "matterhorn-work_matterhorn_hyperliquid_get_positions",
+        "matterhorn-work_matterhorn_hyperliquid_get_open_orders",
+        "matterhorn-work_matterhorn_hyperliquid_get_orderbook",
+        "matterhorn-work_matterhorn_hyperliquid_get_funding",
+      ],
     },
-    runtimeTools: {
-      "matterhorn-work_matterhorn_hyperliquid_list_markets": true,
-      "matterhorn-work_matterhorn_hyperliquid_get_orderbook": true,
-      "matterhorn-work_matterhorn_hyperliquid_get_funding": true,
+    capabilityPolicy: {
+      actionLevel: "prepare_only",
+      readsLiveData: true,
+      preparesUserAction: true,
+      userCompletion: {
+        surface: "manual_trade_ticket",
+        availableAfterReview: true,
+        featureGate: "hyperliquid_execution",
+      },
+      ...NEVER_AGENT_SUBMITS,
+      evidence: "tool_and_receipt",
+      statusLabel: "Review & submit",
+      summary: "Chat prepares the order; the trade ticket requires your wallet approval before one-time submission.",
     },
-    runtimeReadOnlyTools: [
-      "matterhorn-work_matterhorn_hyperliquid_list_markets",
-      "matterhorn-work_matterhorn_hyperliquid_get_orderbook",
-      "matterhorn-work_matterhorn_hyperliquid_get_funding",
-    ],
+    contextPolicy: {
+      ...DEFAULT_CONTEXT_POLICY,
+      includeWalletPublicContext: true,
+      includeCryptoSafetyPolicy: true,
+    },
+    verificationPolicy: {
+      requireToolEvidenceForLiveFacts: true,
+      requireSourceAndFreshness: true,
+      requireReceiptForCompletionClaim: true,
+      maxToolCalls: 2,
+      prohibitedClaims: PROHIBITED_EXECUTION_CLAIMS,
+    },
+    modelPolicy: { ...DEFAULT_MODEL_POLICY, temperature: 0.1 },
     displayName: "Hyperliquid Agent",
     description: "Hyperliquid market research, exposure, funding, watch, receipt, and wallet-approved execution agent.",
     instructions: [
@@ -157,13 +336,16 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "- Show market context, missing inputs, estimated notional, network, order type, slippage, and reduce-only state before directing the user to review an order.",
       "- Do not request exchange API secrets, private keys, raw signatures, signed payloads, or custody.",
       "- Never claim an Agent prompt placed an order. Direct actual trading to the desk ticket; watches and chat never auto-execute.",
+      "- For a complete order request, you MUST call matterhorn-work_matterhorn_crypto_chat exactly once with venue hyperliquid, the user's original message, asset, side, base-asset size, price when limit, slippageTolerance, and reduceOnly. This final action call creates the typed Review in wallet card; do not replace it with a prose-only order draft.",
+      "- An order request is complete only when asset, side, positive base-asset size, order type, slippage tolerance, and reduce-only intent are known, plus price for a limit order. If anything is missing, ask one concise question listing only the missing public order fields; never guess or silently convert notional into base size.",
+      "- After the unified action tool returns, do not call another tool or recreate the draft in prose. Briefly summarize the returned evidence and tell the user to choose Review in wallet. The separate ticket defaults to testnet; mainnet remains explicitly gated there.",
       "- For a simple market, orderbook, funding, or exposure read, do not delegate to subagents and do not create files unless the user asks for a saved report.",
       "- Start with the single most specific Hyperliquid desk tool. Do not inspect repository files, use shell commands, call generic web tools, or repeat the read through a second data path.",
       "- Once the desk tool returns enough evidence, state source and freshness, include stale-data warnings, and answer immediately.",
     ].join("\n"),
   },
   polymarket: {
-    version: "matterhorn.desk.agent.v1",
+    version: "matterhorn.desk.agent.v2",
     deskId: "polymarket",
     agentId: "matterhorn-polymarket",
     workflowId: "polymarket_preview",
@@ -171,26 +353,53 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     outputDeskId: "polymarket",
     defaultStageId: "stage_1_market_summary",
     defaultActionId: "research_or_handoff",
-    toolAllowlist: [
-      "matterhorn_polymarket_",
-      "matterhorn_market_",
-      "matterhorn_status",
-      "matterhorn_read_files",
-      "matterhorn_write_files",
-    ],
-    runtimePermissions: {
-      task: "deny",
-      webfetch: "deny",
-      websearch: "deny",
+    toolPolicy: {
+      runtimeKind: "managed_desk",
+      denyByDefault: true,
+      permissions: {
+        task: "deny",
+        webfetch: "deny",
+        websearch: "deny",
+      },
+      work: [
+        "matterhorn-work_matterhorn_polymarket_search_markets",
+        "matterhorn-work_matterhorn_polymarket_check_compliance",
+        "matterhorn-work_matterhorn_polymarket_preview_order",
+        "matterhorn-work_matterhorn_polymarket_prepare_handoff",
+        "matterhorn-work_matterhorn_crypto_chat",
+      ],
+      readOnly: [
+        "matterhorn-work_matterhorn_polymarket_search_markets",
+        "matterhorn-work_matterhorn_polymarket_check_compliance",
+      ],
     },
-    runtimeTools: {
-      "matterhorn-work_matterhorn_polymarket_search_markets": true,
-      "matterhorn-work_matterhorn_polymarket_check_compliance": true,
+    capabilityPolicy: {
+      actionLevel: "prepare_only",
+      readsLiveData: true,
+      preparesUserAction: true,
+      userCompletion: {
+        surface: "connected_wallet",
+        availableAfterReview: true,
+        featureGate: "polymarket_compliance",
+      },
+      ...NEVER_AGENT_SUBMITS,
+      evidence: "tool_and_receipt",
+      statusLabel: "Review in wallet",
+      summary: "Researches live markets and prepares compliance-allowed orders; eligible EOA BUY orders can continue through a connected Polygon wallet ticket.",
     },
-    runtimeReadOnlyTools: [
-      "matterhorn-work_matterhorn_polymarket_search_markets",
-      "matterhorn-work_matterhorn_polymarket_check_compliance",
-    ],
+    contextPolicy: {
+      ...DEFAULT_CONTEXT_POLICY,
+      includeWalletPublicContext: true,
+      includeCryptoSafetyPolicy: true,
+    },
+    verificationPolicy: {
+      requireToolEvidenceForLiveFacts: true,
+      requireSourceAndFreshness: true,
+      requireReceiptForCompletionClaim: true,
+      maxToolCalls: 2,
+      prohibitedClaims: PROHIBITED_EXECUTION_CLAIMS,
+    },
+    modelPolicy: { ...DEFAULT_MODEL_POLICY, temperature: 0.1 },
     displayName: "Polymarket Agent",
     description: "Polymarket research, liquidity, compliance, watch, receipt, and compliance-gated handoff agent.",
     instructions: [
@@ -198,10 +407,13 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "",
       "Desk scope:",
       "- Work in Polymarket terms: markets, outcomes, probabilities, orderbooks, liquidity, eligibility, compliance state, watches, receipts, and external wallet handoffs.",
-      "- Live submission is off. Can submit: No.",
+      "- Eligible compliance-allowed EOA BUY orders can continue only through a separate connected Polygon wallet ticket. Sell orders, proxy accounts, blocked regions, agents, and watches cannot submit in this release.",
       "- If compliance blocks a flow, do not expose executable price, size, share, or order fields.",
       "- Do not request wallet secrets, API secrets, raw signatures, signed payloads, or custody.",
       "- Research first, show source/freshness, then prepare a compliance-gated handoff only when safe.",
+      "- For a complete order request, you MUST call matterhorn-work_matterhorn_crypto_chat exactly once with venue polymarket, the user's original message, public marketId, outcome, side, amountUsdc, and slippageTolerance. This final action call creates the typed Review in wallet card when compliance allows it; do not replace it with a prose-only order draft.",
+      "- An order request is complete only when public market id, outcome, side, positive USDC amount, and slippage tolerance are known. If anything is missing, ask one concise question listing only the missing public order fields; never guess them.",
+      "- After the unified action tool returns, do not call another tool or recreate the draft in prose. If allowed, tell the user to choose Review in wallet. If blocked or unsupported, state that clearly and keep it as an external handoff without executable fields.",
       "- For a simple market lookup or compliance check, do not delegate to subagents and do not create files unless the user asks for a saved report.",
       "- Bound exact-market discovery to two Polymarket tool calls. Do not use generic web search, web fetch, or subagents. If the market is still not found, say so and stop.",
       "- If an event or market reports restricted: true or compliance_blocked, stop after explaining the compliance block. Do not query orderbooks or expose executable fields.",
@@ -209,7 +421,7 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     ].join("\n"),
   },
   sui: {
-    version: "matterhorn.desk.agent.v1",
+    version: "matterhorn.desk.agent.v2",
     deskId: "sui",
     agentId: "matterhorn-sui",
     workflowId: "sui_wallet_workflow",
@@ -217,23 +429,47 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     outputDeskId: "sui",
     defaultStageId: "stage_1_account_context",
     defaultActionId: "read_or_preview",
-    toolAllowlist: [
-      "matterhorn_sui_",
-      "matterhorn_wallet_",
-      "matterhorn_status",
-      "matterhorn_read_files",
-      "matterhorn_write_files",
-    ],
-    runtimePermissions: {
-      task: "deny",
-      webfetch: "deny",
-      websearch: "deny",
+    toolPolicy: {
+      runtimeKind: "managed_desk",
+      denyByDefault: true,
+      permissions: {
+        task: "deny",
+        webfetch: "deny",
+        websearch: "deny",
+      },
+      work: [
+        "matterhorn-work_matterhorn_sui_get_balance",
+        "matterhorn-work_matterhorn_sui_preview_transfer",
+      ],
+      readOnly: ["matterhorn-work_matterhorn_sui_get_balance"],
     },
-    runtimeTools: {
-      "matterhorn-work_matterhorn_sui_get_balance": true,
-      "matterhorn-work_matterhorn_sui_preview_transfer": true,
+    capabilityPolicy: {
+      actionLevel: "prepare_only",
+      readsLiveData: true,
+      preparesUserAction: true,
+      userCompletion: {
+        surface: "connected_wallet",
+        availableAfterReview: true,
+        featureGate: "sui_wallet_standard",
+      },
+      ...NEVER_AGENT_SUBMITS,
+      evidence: "tool_and_receipt",
+      statusLabel: "Review in wallet",
+      summary:
+        "Prepares a transfer preview; you review, sign, and submit it in your connected Sui wallet. Matterhorn stores previews and public receipts only.",
     },
-    runtimeReadOnlyTools: ["matterhorn-work_matterhorn_sui_get_balance"],
+    contextPolicy: {
+      ...DEFAULT_CONTEXT_POLICY,
+      includeCryptoSafetyPolicy: true,
+    },
+    verificationPolicy: {
+      requireToolEvidenceForLiveFacts: true,
+      requireSourceAndFreshness: true,
+      requireReceiptForCompletionClaim: true,
+      maxToolCalls: 1,
+      prohibitedClaims: PROHIBITED_EXECUTION_CLAIMS,
+    },
+    modelPolicy: { ...DEFAULT_MODEL_POLICY, temperature: 0.1 },
     displayName: "Sui Agent",
     description: "Sui wallet-standard account reads, transfer previews, wallet signing handoffs, and public receipt evidence.",
     instructions: [
@@ -242,13 +478,15 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "Desk scope:",
       "- Work in Sui-native terms: SUI, testnet/mainnet, wallet-standard accounts, public addresses, transfer previews, transaction digests, receipts, and explorer links.",
       "- Read public account and balance context only.",
-      "- Prepare non-custodial transfer previews. On web, signing must happen in the user's connected Sui wallet; on desktop, prepare an external wallet handoff.",
+      "- Prepare non-custodial transfer previews with amountSui as a positive decimal string. On web, signing must happen in the user's connected Sui wallet; on desktop, prepare an external wallet handoff.",
+      "- Call the Sui transfer preview tool once. If it fails, say that no valid preview was generated, do not calculate replacement transaction details yourself, and do not recommend signing or execution.",
+      "- Never invent a gas budget, digest, preview hash, or handoff. Show those fields only when the tool returns them.",
       "- Never ask for seed phrases, private keys, mnemonics, wallet exports, raw signatures, signed payloads, or custody.",
       "- Save previews and public receipts as project evidence under outputs/sui/<session-slug>/ when available.",
     ].join("\n"),
   },
   wellness: {
-    version: "matterhorn.desk.agent.v1",
+    version: "matterhorn.desk.agent.v2",
     deskId: "wellness",
     agentId: "matterhorn-longevity",
     workflowId: "wellness_creator_services",
@@ -256,12 +494,54 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     outputDeskId: "longevity",
     defaultStageId: "stage_1_intake",
     defaultActionId: "start_longevity_workflow",
-    toolAllowlist: [
-      "matterhorn_workflows_",
-      "matterhorn_read_files",
-      "matterhorn_write_files",
-      "matterhorn_file_",
-    ],
+    toolPolicy: {
+      runtimeKind: "managed_desk",
+      denyByDefault: true,
+      permissions: {
+        task: "deny",
+        webfetch: "deny",
+        websearch: "deny",
+      },
+      work: [
+        "matterhorn-work_matterhorn_workflows_catalog",
+        "matterhorn-work_matterhorn_workflows_customer_templates",
+        "matterhorn-work_matterhorn_workflows_prompt_pack",
+        "matterhorn-work_matterhorn_read_files",
+        "matterhorn-work_matterhorn_write_files",
+      ],
+      readOnly: [
+        "matterhorn-work_matterhorn_workflows_catalog",
+        "matterhorn-work_matterhorn_workflows_customer_templates",
+        "matterhorn-work_matterhorn_workflows_prompt_pack",
+        "matterhorn-work_matterhorn_read_files",
+      ],
+    },
+    capabilityPolicy: {
+      actionLevel: "workspace_write",
+      readsLiveData: false,
+      preparesUserAction: false,
+      userCompletion: {
+        surface: "none",
+        availableAfterReview: false,
+      },
+      ...NEVER_AGENT_SUBMITS,
+      evidence: "workspace",
+      statusLabel: "Workspace workflow",
+      summary:
+        "Builds educational longevity programs with no medical advice and no live payments, then saves approved deliverables in this project.",
+    },
+    contextPolicy: DEFAULT_CONTEXT_POLICY,
+    verificationPolicy: {
+      requireToolEvidenceForLiveFacts: false,
+      requireSourceAndFreshness: false,
+      requireReceiptForCompletionClaim: false,
+      maxToolCalls: 8,
+      prohibitedClaims: [
+        "Do not diagnose, prescribe, treat, or claim guaranteed health outcomes.",
+        "Do not claim that a deliverable was saved unless the file write succeeded.",
+      ],
+    },
+    modelPolicy: DEFAULT_MODEL_POLICY,
     displayName: "Longevity Agent",
     description: "Offline longevity optimization workflow agent for creators, coaches, client packets, and service packaging.",
     instructions: [
@@ -280,7 +560,7 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     ].join("\n"),
   },
   memory: {
-    version: "matterhorn.desk.agent.v1",
+    version: "matterhorn.desk.agent.v2",
     deskId: "memory",
     agentId: "matterhorn-memory",
     workflowId: "matterhorn_memory_review",
@@ -288,11 +568,54 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     outputDeskId: "memory",
     defaultStageId: "review_candidates",
     defaultActionId: "review_memory",
-    toolAllowlist: [
-      "matterhorn_memory_",
-      "matterhorn_read_files",
-      "matterhorn_write_files",
-    ],
+    toolPolicy: {
+      runtimeKind: "managed_desk",
+      denyByDefault: true,
+      permissions: {
+        task: "deny",
+        webfetch: "deny",
+        websearch: "deny",
+      },
+      work: [
+        "matterhorn-work_matterhorn_memory_capture",
+        "matterhorn-work_matterhorn_memory_export",
+        "matterhorn-work_matterhorn_memory_forget",
+        "matterhorn-work_matterhorn_memory_get",
+        "matterhorn-work_matterhorn_memory_list",
+        "matterhorn-work_matterhorn_memory_search",
+        "matterhorn-work_matterhorn_memory_update",
+      ],
+      readOnly: [
+        "matterhorn-work_matterhorn_memory_get",
+        "matterhorn-work_matterhorn_memory_list",
+        "matterhorn-work_matterhorn_memory_search",
+      ],
+    },
+    capabilityPolicy: {
+      actionLevel: "workspace_write",
+      readsLiveData: false,
+      preparesUserAction: false,
+      userCompletion: {
+        surface: "none",
+        availableAfterReview: false,
+      },
+      ...NEVER_AGENT_SUBMITS,
+      evidence: "workspace",
+      statusLabel: "User-confirmed",
+      summary: "Reviews, saves, edits, exports, or forgets only the memories you explicitly control.",
+    },
+    contextPolicy: DEFAULT_CONTEXT_POLICY,
+    verificationPolicy: {
+      requireToolEvidenceForLiveFacts: false,
+      requireSourceAndFreshness: false,
+      requireReceiptForCompletionClaim: false,
+      maxToolCalls: 6,
+      prohibitedClaims: [
+        "Do not claim that anything was remembered unless the memory tool confirms it.",
+        "Do not save secrets, credentials, wallet material, or hidden clinical records.",
+      ],
+    },
+    modelPolicy: DEFAULT_MODEL_POLICY,
     displayName: "Memory Agent",
     description: "User-controlled memory review, suggestion, provenance, and forget/edit workflow agent.",
     instructions: [
@@ -306,7 +629,7 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     ].join("\n"),
   },
   mcps: {
-    version: "matterhorn.desk.agent.v1",
+    version: "matterhorn.desk.agent.v2",
     deskId: "mcps",
     agentId: "matterhorn-mcps",
     workflowId: "matterhorn_mcp_setup",
@@ -314,13 +637,54 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     outputDeskId: "mcp",
     defaultStageId: "inspect_client",
     defaultActionId: "configure_mcp",
-    toolAllowlist: [
-      "matterhorn_workflows_",
-      "matterhorn_services_",
-      "matterhorn_status",
-      "matterhorn_read_files",
-      "matterhorn_write_files",
-    ],
+    toolPolicy: {
+      runtimeKind: "managed_desk",
+      denyByDefault: true,
+      permissions: {
+        task: "deny",
+        webfetch: "deny",
+        websearch: "deny",
+      },
+      work: [
+        "matterhorn-work_matterhorn_status",
+        "matterhorn-work_matterhorn_services_get_capabilities",
+        "matterhorn-work_matterhorn_services_chat_plan",
+        "matterhorn-work_matterhorn_workflows_catalog",
+        "matterhorn-work_matterhorn_read_files",
+        "matterhorn-work_matterhorn_write_files",
+      ],
+      readOnly: [
+        "matterhorn-work_matterhorn_status",
+        "matterhorn-work_matterhorn_services_get_capabilities",
+        "matterhorn-work_matterhorn_workflows_catalog",
+        "matterhorn-work_matterhorn_read_files",
+      ],
+    },
+    capabilityPolicy: {
+      actionLevel: "workspace_write",
+      readsLiveData: true,
+      preparesUserAction: false,
+      userCompletion: {
+        surface: "none",
+        availableAfterReview: false,
+      },
+      ...NEVER_AGENT_SUBMITS,
+      evidence: "tool",
+      statusLabel: "Configure",
+      summary: "Inspects the live runtime and prepares client-specific MCP configuration for this project.",
+    },
+    contextPolicy: DEFAULT_CONTEXT_POLICY,
+    verificationPolicy: {
+      requireToolEvidenceForLiveFacts: true,
+      requireSourceAndFreshness: false,
+      requireReceiptForCompletionClaim: false,
+      maxToolCalls: 6,
+      prohibitedClaims: [
+        "Do not claim that an MCP server is connected unless the runtime reports it ready.",
+        "Do not claim that configuration was written unless the file write succeeded.",
+      ],
+    },
+    modelPolicy: DEFAULT_MODEL_POLICY,
     displayName: "MCP Agent",
     description: "MCP setup, docs, tool inventory, install command, and client configuration agent.",
     instructions: [
@@ -334,7 +698,7 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     ].join("\n"),
   },
   blank: {
-    version: "matterhorn.desk.agent.v1",
+    version: "matterhorn.desk.agent.v2",
     deskId: "blank",
     agentId: "matterhorn",
     workflowId: "matterhorn_blank_chat",
@@ -342,13 +706,42 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     outputDeskId: "blank",
     defaultStageId: "freeform",
     defaultActionId: "ask_matterhorn",
-    toolAllowlist: [
-      "matterhorn_status",
-      "matterhorn_read_files",
-      "matterhorn_write_files",
-      "matterhorn_create_session",
-      "matterhorn_submit_session_prompt",
-    ],
+    toolPolicy: {
+      runtimeKind: "general_orchestrator",
+      denyByDefault: false,
+      permissions: {},
+      work: [],
+      readOnly: ["read", "glob", "grep", "webfetch", "websearch"],
+    },
+    capabilityPolicy: {
+      actionLevel: "workspace_write",
+      readsLiveData: false,
+      preparesUserAction: false,
+      userCompletion: {
+        surface: "none",
+        availableAfterReview: false,
+      },
+      ...NEVER_AGENT_SUBMITS,
+      evidence: "workspace",
+      statusLabel: "General",
+      summary: "Coordinates project work and routes specialized requests to the appropriate desk.",
+    },
+    contextPolicy: {
+      ...DEFAULT_CONTEXT_POLICY,
+      includeWalletPublicContext: true,
+      includeCryptoSafetyPolicy: true,
+    },
+    verificationPolicy: {
+      requireToolEvidenceForLiveFacts: true,
+      requireSourceAndFreshness: false,
+      requireReceiptForCompletionClaim: false,
+      maxToolCalls: 12,
+      prohibitedClaims: PROHIBITED_EXECUTION_CLAIMS,
+    },
+    modelPolicy: {
+      ...DEFAULT_MODEL_POLICY,
+      requiresToolCalling: false,
+    },
     displayName: "Matterhorn Agent",
     description: "General Matterhorn Desks project agent for free-form tasks that do not belong to a dedicated desk.",
     instructions: [
@@ -396,4 +789,127 @@ export function getMatterhornDeskAgentById(agentId: string | null | undefined): 
 
 export function isMatterhornDeskAgentId(agentId: string | null | undefined): boolean {
   return Boolean(getMatterhornDeskAgentById(agentId));
+}
+
+function completionSurfaceLabel(surface: MatterhornDeskCompletionSurface): string {
+  switch (surface) {
+    case "external_signer":
+      return "The user reviews, signs, and submits in an external signer.";
+    case "connected_wallet":
+      return "The user reviews, signs, and submits in the connected wallet.";
+    case "external_client":
+      return "The user reviews and completes the action in an external client.";
+    case "manual_trade_ticket":
+      return "The user opens the separate trade ticket, reviews the exact order, signs a short-lived intent in the connected wallet, and explicitly submits.";
+    case "none":
+      return "No transaction or external action is part of this desk.";
+  }
+}
+
+export function buildMatterhornDeskAgentContractPrompt(agent: MatterhornDeskAgentManifest): string {
+  const capability = agent.capabilityPolicy;
+  const verification = agent.verificationPolicy;
+  const context = agent.contextPolicy;
+  const toolBoundary = agent.toolPolicy.runtimeKind === "managed_desk"
+    ? `Runtime tools are deny-by-default. In Work mode, only ${agent.toolPolicy.work.length} explicitly listed desk tool${agent.toolPolicy.work.length === 1 ? " is" : "s are"} available.`
+    : "This is the general orchestrator. Route specialized work to a managed desk instead of impersonating its capabilities.";
+
+  return [
+    "## Enforced Matterhorn Desk Contract",
+    `Contract: ${agent.version}`,
+    `Desk: ${agent.displayName}`,
+    `Action level: ${capability.actionLevel}`,
+    `Capability: ${capability.summary}`,
+    toolBoundary,
+    `User completion: ${completionSurfaceLabel(capability.userCompletion.surface)}`,
+    ...(capability.userCompletion.featureGate
+      ? [`Feature gate: ${capability.userCompletion.featureGate}. If the runtime says it is unavailable, stop at a preview and say so plainly.`]
+      : []),
+    "The agent may never sign, submit, broadcast, or auto-execute. Watches and automations may never submit.",
+    context.includeWalletPublicContext
+      ? "Connected public wallet metadata may be used. Never request or expose signing material."
+      : "Do not request or use wallet context that is unrelated to this desk.",
+    context.selectedMemoryOnly
+      ? "Use only memories the user explicitly selected for visible chat context. Never infer hidden memory."
+      : "",
+    context.allowSecretValues
+      ? ""
+      : "Environment context may name configured variables, but secret values must never enter the prompt or response.",
+    verification.requireToolEvidenceForLiveFacts
+      ? "Live facts require evidence from an allowed desk tool. Do not substitute model memory."
+      : "",
+    verification.requireSourceAndFreshness
+      ? "Name the source and freshness for live facts. Mark stale, fallback, or unavailable evidence clearly."
+      : "",
+    verification.requireReceiptForCompletionClaim
+      ? "Never claim an action completed without a matching public receipt or confirmed result."
+      : "",
+    `Tool-call budget: at most ${verification.maxToolCalls} calls for one user turn unless the user explicitly starts a broader saved workflow.`,
+    ...verification.prohibitedClaims,
+  ].filter(Boolean).join("\n");
+}
+
+export function buildMatterhornDeskAgentSystemPrompt(agent: MatterhornDeskAgentManifest): string {
+  return [
+    agent.instructions,
+    buildMatterhornDeskAgentContractPrompt(agent),
+  ].join("\n\n");
+}
+
+export function buildMatterhornDeskRuntimeTools(agent: MatterhornDeskAgentManifest): Record<string, boolean> | undefined {
+  if (agent.toolPolicy.runtimeKind !== "managed_desk") return undefined;
+  return Object.fromEntries([
+    ["*", false],
+    ...agent.toolPolicy.work.map((tool) => [tool, true] as const),
+  ]);
+}
+
+export function buildMatterhornDeskReadOnlyTools(agent: MatterhornDeskAgentManifest): Record<string, boolean> {
+  return Object.fromEntries([
+    ["*", false],
+    ...agent.toolPolicy.readOnly.map((tool) => [tool, true] as const),
+  ]);
+}
+
+/**
+ * Deterministic companion to the system prompt. Callers that assemble
+ * structured response evidence can use this before presenting a completion
+ * claim or accepting an evaluation result.
+ */
+export function evaluateMatterhornDeskResponseEvidence(
+  agent: MatterhornDeskAgentManifest,
+  evidence: MatterhornDeskResponseEvidence,
+): MatterhornDeskResponseVerificationIssue[] {
+  const issues: MatterhornDeskResponseVerificationIssue[] = [];
+  const policy = agent.verificationPolicy;
+
+  if (evidence.agentSigningClaimed) issues.push("agent_signing_claim");
+  if (evidence.agentSubmissionClaimed) issues.push("agent_submission_claim");
+  if (evidence.automationSubmissionClaimed) issues.push("automation_submission_claim");
+
+  if (
+    evidence.completionClaimed
+    && policy.requireReceiptForCompletionClaim
+    && !evidence.receiptEvidencePresent
+  ) {
+    issues.push("completion_without_receipt");
+  }
+
+  if (evidence.liveFactsUsed) {
+    if (policy.requireToolEvidenceForLiveFacts && !evidence.toolEvidencePresent) {
+      issues.push("live_fact_without_tool_evidence");
+    }
+    if (policy.requireSourceAndFreshness && !evidence.sourceNamed) {
+      issues.push("live_fact_without_source");
+    }
+    if (policy.requireSourceAndFreshness && !evidence.freshnessNamed) {
+      issues.push("live_fact_without_freshness");
+    }
+  }
+
+  if ((evidence.toolCalls ?? 0) > policy.maxToolCalls) {
+    issues.push("tool_call_budget_exceeded");
+  }
+
+  return issues;
 }

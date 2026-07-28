@@ -109,7 +109,11 @@ export interface Capabilities {
   schemaVersion: number;
   serverVersion: string;
   opencodeVersion: string;
-  skills: { read: boolean; write: boolean; source: "openwork" | "opencode" };
+  skills: {
+    read: boolean;
+    write: boolean;
+    source: "matterhorn" | "openwork" | "opencode";
+  };
   hub: {
     skills: {
       read: boolean;
@@ -190,6 +194,8 @@ export interface SkillItem {
   description: string;
   scope: "project" | "global";
   trigger?: string;
+  /** Whether a person can invoke this skill from the chat composer. */
+  userInvocable: boolean;
 }
 
 export interface HubSkillItem {

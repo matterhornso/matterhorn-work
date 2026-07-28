@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { ArrowLeft, Brain, Filter, Loader2, Plus, Search, Trash2 } from "lucide-react";
 
 import { t } from "@/i18n";
@@ -226,7 +226,7 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
   if (selectedNote) {
     return (
       <div aria-label="Notes editor" role="region" className="matterhorn-rail-content flex h-full min-h-0 flex-col bg-dls-background">
-        <header className="flex h-11 shrink-0 items-center gap-1 px-2 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.08)]">
+        <header className="flex h-11 shrink-0 items-center gap-1 px-2 shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)]">
           <Tooltip>
             <TooltipTrigger render={(
               <Button variant="ghost" size="icon-sm" onClick={() => void closeEditor()} aria-label="Back to notes">
@@ -303,7 +303,7 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
                 value={draft.tags}
                 onChange={(event) => setDraft((current) => ({ ...current, tags: event.target.value }))}
                 placeholder={t("notes.tags_placeholder")}
-                className="mt-2 h-9 w-full rounded-md bg-dls-surface-muted/[0.22] px-3 text-xs text-dls-text outline-none transition-colors placeholder:text-dls-muted hover:bg-dls-surface-muted/[0.26] focus:bg-dls-surface-muted/[0.28] focus:ring-1 focus:ring-[rgba(var(--dls-accent-rgb),0.32)]"
+                className="mt-2 h-9 w-full rounded-md bg-dls-surface-muted/[0.22] px-3 text-xs text-dls-text outline-none transition-colors placeholder:text-dls-muted hover:bg-dls-surface-muted/[0.26] focus:bg-dls-surface-muted/[0.28] focus:ring-1 focus:ring-[rgb(var(--dls-accent-rgb)/0.32)]"
               />
             </details>
             <div className="flex items-center justify-between gap-3 text-[11px] text-dls-muted">
@@ -356,7 +356,7 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
                 placeholder={t("notes.search_placeholder")}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                className="h-9 w-full rounded-md bg-dls-surface-muted/[0.22] pl-8 pr-2 text-xs text-dls-text outline-none transition-colors placeholder:text-dls-muted hover:bg-dls-surface-muted/[0.26] focus:bg-dls-surface-muted/[0.28] focus:ring-1 focus:ring-[rgba(var(--dls-accent-rgb),0.32)]"
+                className="h-9 w-full rounded-md bg-dls-surface-muted/[0.22] pl-8 pr-2 text-xs text-dls-text outline-none transition-colors placeholder:text-dls-muted hover:bg-dls-surface-muted/[0.26] focus:bg-dls-surface-muted/[0.28] focus:ring-1 focus:ring-[rgb(var(--dls-accent-rgb)/0.32)]"
               />
             </label>
             <label className="relative min-w-0">
@@ -365,7 +365,7 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
               <select
                 value={filterId}
                 onChange={(event) => setFilterId(event.target.value as NoteFilterId)}
-                className="h-9 w-full appearance-none rounded-md bg-dls-surface-muted/[0.22] pl-8 pr-2 text-xs text-dls-text outline-none transition-colors hover:bg-dls-surface-muted/[0.26] focus:bg-dls-surface-muted/[0.28] focus:ring-1 focus:ring-[rgba(var(--dls-accent-rgb),0.32)]"
+                className="h-9 w-full appearance-none rounded-md bg-dls-surface-muted/[0.22] pl-8 pr-2 text-xs text-dls-text outline-none transition-colors hover:bg-dls-surface-muted/[0.26] focus:bg-dls-surface-muted/[0.28] focus:ring-1 focus:ring-[rgb(var(--dls-accent-rgb)/0.32)]"
                 aria-label="Filter notes"
               >
                 {NOTE_FILTERS.map((filter) => (
@@ -412,7 +412,7 @@ export function NotesPage({ client, workspaceId: explicitWorkspaceId }: NotesPag
                 key={note.id}
                 type="button"
                 onClick={() => openNote(note)}
-                className="grid min-w-0 gap-1 rounded-md bg-dls-surface-muted/[0.12] px-3 py-2.5 text-left transition-colors hover:bg-dls-surface-muted/[0.20] focus-visible:bg-dls-surface-muted/[0.20] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.32)]"
+                className="grid min-w-0 gap-1 rounded-md bg-dls-surface-muted/[0.12] px-3 py-2.5 text-left transition-colors hover:bg-dls-surface-muted/[0.20] focus-visible:bg-dls-surface-muted/[0.20] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.32)]"
               >
                 <span className="flex min-w-0 items-baseline justify-between gap-3">
                   <span className="min-w-0 truncate text-sm font-medium text-dls-text">

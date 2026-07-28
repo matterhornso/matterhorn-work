@@ -183,13 +183,21 @@ describe("Hyperliquid read/preview safety", () => {
   });
 
   test("builds a non-submittable order preview", async () => {
-    const preview = await prepareHyperliquidOrderPreview({ asset: "BTC", side: "buy", size: 0.1, price: 65000 }, provider());
+    const preview = await prepareHyperliquidOrderPreview({ asset: "BTC", side: "buy", size: 0.1, orderType: "limit", price: 65000 }, provider());
     expect(preview.version).toBe("matterhorn.market.action-preview.v1");
     expect(preview.venue).toBe("hyperliquid");
     expect(preview.canSubmit).toBe(false);
     expect(preview.previewSha256).toMatch(/^[a-f0-9]{64}$/);
     expect(preview.signerPolicy).toBe("api_wallet_required");
-    expect(preview.warnings.join(" ")).toContain("does not submit");
+    expect(preview.orderType).toBe("limit");
+    expect(preview.warnings.join(" ")).toContain("Agent draft only");
+  });
+
+  test("keeps a market preview separate from its indicative mark", async () => {
+    const preview = await prepareHyperliquidOrderPreview({ asset: "BTC", side: "buy", size: 0.1, orderType: "market" }, provider());
+    expect(preview.orderType).toBe("market");
+    expect(preview.price).toBe(65000);
+    expect(preview.consequence).toContain("near 65,000 USDC");
   });
 
   test("chat preview never accepts API secrets", async () => {
@@ -245,7 +253,7 @@ describe("Hyperliquid preview risk polish", () => {
     expect(preview.leverageContext.estimatedLeverage).toBeNull();
     expect(preview.leverageContext.liquidationPrice).toBeNull();
     expect(preview.canSubmit).toBe(false);
-    expect(preview.consequence).toContain("will not sign or submit");
+    expect(preview.consequence).toContain("cannot sign or submit");
   });
 
   test("flags slippage beyond tolerance using the orderbook", async () => {

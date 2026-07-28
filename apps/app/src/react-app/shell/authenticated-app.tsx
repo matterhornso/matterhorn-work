@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, HashRouter } from "react-router-dom";
+import { BrowserRouter, HashRouter } from "react-router";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "../../app/index.css";

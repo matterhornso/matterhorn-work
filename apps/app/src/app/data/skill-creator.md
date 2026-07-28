@@ -1,6 +1,6 @@
 ---
 name: skill-creator
-description: Guide for creating effective skills. Use when users want to create or update a skill that extends OpenCode with specialized knowledge, workflows, or tool integrations.
+description: Guide for creating effective skills. Use when users want to create or update a skill that extends Matterhorn Desks with specialized knowledge, workflows, or tool integrations.
 ---
 
 # Skill Creator

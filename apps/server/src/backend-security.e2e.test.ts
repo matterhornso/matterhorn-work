@@ -41,6 +41,7 @@ const priorEnv = {
   memoryRoot: process.env.MATTERHORN_WORK_MEMORY_ROOT,
   devLogFile: process.env.OPENWORK_DEV_LOG_FILE,
   toyUi: process.env.OPENWORK_TOY_UI,
+  hyperliquidExecution: process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED,
 };
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
@@ -227,6 +228,8 @@ afterEach(async () => {
   else process.env.OPENWORK_DEV_LOG_FILE = priorEnv.devLogFile;
   if (priorEnv.toyUi === undefined) delete process.env.OPENWORK_TOY_UI;
   else process.env.OPENWORK_TOY_UI = priorEnv.toyUi;
+  if (priorEnv.hyperliquidExecution === undefined) delete process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED;
+  else process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED = priorEnv.hyperliquidExecution;
 });
 
 // ---------------------------------------------------------------------------
@@ -579,6 +582,71 @@ describe("Memory write permissions by token scope", () => {
         method: "POST",
         body: JSON.stringify({ id: recordId }),
       });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scope A.5: Protocol watch and baseline mutations
+// ---------------------------------------------------------------------------
+
+describe("Protocol state mutations enforce client scope and workspace mode", () => {
+  const mutationPaths = [
+    "/api/hyperliquid/watches",
+    "/api/hyperliquid/watches/act",
+    "/api/polymarket/watches",
+    "/api/polymarket/watches/act",
+    "/api/bittensor/wallet/timeline/clear",
+    "/api/bittensor/monitoring/watchlist",
+  ];
+
+  test("viewer tokens cannot mutate protocol watches or wallet baselines", async () => {
+    const { base, viewerToken } = await boot();
+
+    for (const path of mutationPaths) {
+      const result = await jsonFetch(base, path, viewerToken, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+
+      expect(result.response.status, path).toBe(403);
+      expect(result.payload.code, path).toBe("forbidden");
+    }
+  });
+
+  test("Hyperliquid execution tickets require a collaborator before intent validation", async () => {
+    process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED = "true";
+    const { base, collaboratorToken, viewerToken } = await boot();
+    const body = JSON.stringify({ unexpected: true });
+
+    const viewer = await jsonFetch(base, "/api/hyperliquid/orders/execution-intent", viewerToken, {
+      method: "POST",
+      body,
+    });
+    expect(viewer.response.status).toBe(403);
+    expect(viewer.payload.code).toBe("forbidden");
+
+    // A collaborator gets past authorization but is rejected before any provider call.
+    const collaborator = await jsonFetch(base, "/api/hyperliquid/orders/execution-intent", collaboratorToken, {
+      method: "POST",
+      body,
+    });
+    expect(collaborator.response.status).toBe(400);
+    expect(collaborator.payload.code).toBe("invalid_hyperliquid_execution_intent");
+    expect(collaborator.payload.message).toContain("Unexpected execution-intent field");
+  });
+
+  test("read-only workspaces block protocol watch and wallet baseline mutations", async () => {
+    const { base, ownerToken } = await boot(true);
+
+    for (const path of mutationPaths) {
+      const result = await jsonFetch(base, path, ownerToken, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+
+      expect(result.response.status, path).toBe(403);
+      expect(result.payload.code, path).toBe("read_only");
     }
   });
 });
@@ -1092,6 +1160,9 @@ describe("Security capability classification", () => {
       expect(serialized).not.toContain("\"username\"");
       expect(serialized).not.toContain("\"password\"");
       expect(serialized).not.toContain("\"openworkToken\"");
+      if (path.endsWith("/capabilities")) {
+        expect(result.payload.skills?.source).toBe("matterhorn");
+      }
     }
   });
 

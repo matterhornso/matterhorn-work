@@ -8,6 +8,10 @@ function assertIncludes(source, needle, label) {
   assert.ok(source.includes(needle), `${label} should include ${JSON.stringify(needle)}`);
 }
 
+function assertMatches(source, pattern, label) {
+  assert.match(source, pattern, `${label} should match ${String(pattern)}`);
+}
+
 function assertNotMatches(source, pattern, label) {
   assert.equal(pattern.test(source), false, `${label} should not match ${pattern}`);
 }
@@ -29,6 +33,7 @@ const [
   watchAutopilot,
   watchScheduler,
   mcpBundle,
+  managedMcpBridge,
   activeLongevityAgent,
   activeHyperliquidAgent,
   activePolymarketAgent,
@@ -50,6 +55,7 @@ const [
   read("scripts/bittensor-watch-autopilot.mjs"),
   read("scripts/bittensor-watch-autopilot-scheduler.mjs"),
   read("packages/matterhorn-work-mcp/index.mjs"),
+  read("apps/server/src/managed-opencode-mcp.ts"),
   read(".opencode/agents/matterhorn-longevity.md"),
   read(".opencode/agents/matterhorn-hyperliquid.md"),
   read(".opencode/agents/matterhorn-polymarket.md"),
@@ -79,21 +85,25 @@ assertIncludes(activeHyperliquidAgent, "Start with the single most specific Hype
 assertIncludes(activeHyperliquidAgent, "websearch: deny", "active Hyperliquid web search runtime denial");
 assertIncludes(deskAgents, "do not delegate to subagents", "Polymarket bounded lookup guidance");
 assertIncludes(deskAgents, "Bound exact-market discovery to two Polymarket tool calls", "Polymarket bounded search guidance");
-assertIncludes(deskAgents, 'runtimePermissions: {', "desk agent runtime permission manifest");
+assertIncludes(deskAgents, "toolPolicy: {", "desk agent tool policy manifest");
+assertIncludes(deskAgents, 'runtimeKind: "managed_desk"', "managed desk runtime kind");
+assertIncludes(deskAgents, "denyByDefault: true", "desk agent deny-by-default policy");
 assertIncludes(deskAgents, 'websearch: "deny"', "desk agent web search runtime denial");
-assertIncludes(deskAgents, 'runtimeTools: {', "desk agent deny-by-default runtime tool manifest");
+assertIncludes(deskAgents, "work: [", "desk agent work tool manifest");
+assertIncludes(deskAgents, "readOnly: [", "desk agent read-only tool manifest");
+assertIncludes(deskAgents, "evaluateMatterhornDeskResponseEvidence", "desk response verification helper");
 assertIncludes(activePolymarketAgent, "do not delegate to subagents", "active Polymarket bounded lookup guidance");
 assertIncludes(activePolymarketAgent, "Bound exact-market discovery to two Polymarket tool calls", "active Polymarket bounded search guidance");
 assertIncludes(deskAgents, "If an event or market reports restricted: true or compliance_blocked", "Polymarket compliance stop guidance");
 assertIncludes(activePolymarketAgent, "If an event or market reports restricted: true or compliance_blocked", "active Polymarket compliance stop guidance");
 assertIncludes(activePolymarketAgent, "websearch: deny", "active Polymarket web search runtime denial");
 assertIncludes(deskAgents, "For a simple subnet discovery or comparison, do not delegate to subagents", "Bittensor bounded discovery guidance");
-assertIncludes(deskAgents, "Call the Bittensor desk tool exactly once", "Bittensor single-call guidance");
+assertMatches(deskAgents, /call the Bittensor desk tool exactly once/i, "Bittensor single-call guidance");
 assertIncludes(deskAgents, "sole source for subnet IDs, names, and capabilities", "Bittensor evidence-only guidance");
 assertIncludes(deskAgents, "current subnet recommendations are unavailable", "Bittensor unavailable-data guidance");
 assertIncludes(deskAgents, "do not name subnet IDs, subnet names, or capabilities", "Bittensor no-invention guidance");
 assertIncludes(activeBittensorAgent, "For a simple subnet discovery or comparison, do not delegate to subagents", "active Bittensor bounded discovery guidance");
-assertIncludes(activeBittensorAgent, "Call the Bittensor desk tool exactly once", "active Bittensor single-call guidance");
+assertMatches(activeBittensorAgent, /call the Bittensor desk tool exactly once/i, "active Bittensor single-call guidance");
 assertIncludes(activeBittensorAgent, "sole source for subnet IDs, names, and capabilities", "active Bittensor evidence-only guidance");
 assertIncludes(activeBittensorAgent, "current subnet recommendations are unavailable", "active Bittensor unavailable-data guidance");
 assertIncludes(activeBittensorAgent, "do not name subnet IDs, subnet names, or capabilities", "active Bittensor no-invention guidance");
@@ -101,6 +111,26 @@ assertIncludes(activeBittensorAgent, "websearch: deny", "active Bittensor web se
 assertIncludes(activeBittensorAgent, '"*": false', "active Bittensor deny-by-default tool map");
 assertIncludes(activeBittensorAgent, '"matterhorn-work_matterhorn_bittensor_chat": true', "active Bittensor MCP tool allowlist");
 assertIncludes(deskAgents, "getMatterhornDeskAgentById", "desk agent manifest");
+
+const registeredMcpToolNames = new Set(
+  Array.from(
+    `${mcpBundle}\n${managedMcpBridge}`.matchAll(/name:\s*"([^"]+)"/g),
+    (match) => match[1],
+  ),
+);
+const allowlistedMcpToolNames = new Set(
+  Array.from(
+    deskAgents.matchAll(/"matterhorn-work_(matterhorn_[a-z0-9_]+)"/g),
+    (match) => match[1],
+  ),
+);
+assert.ok(allowlistedMcpToolNames.size > 0, "desk manifests should expose at least one Matterhorn MCP tool");
+for (const toolName of allowlistedMcpToolNames) {
+  assert.ok(
+    registeredMcpToolNames.has(toolName),
+    `allowlisted desk tool ${toolName} should be registered by the Matterhorn MCP server`,
+  );
+}
 
 for (const [deskId, agentId] of [
   ["bittensor", "matterhorn-bittensor"],
@@ -119,7 +149,7 @@ assertIncludes(workspaceInit, "MATTERHORN_DESK_AGENT_MANIFESTS", "workspace init
 assertIncludes(workspaceInit, "renderDeskAgentTemplate", "workspace init");
 assertIncludes(workspaceInit, "renderDeskAgentRuntimePermissions", "workspace init runtime permissions");
 assertIncludes(workspaceInit, "ensureMatterhornDeskAgents", "workspace init");
-assertIncludes(workspaceInit, "matterhorn_desk_agent: v1", "workspace init desk agent frontmatter");
+assertIncludes(workspaceInit, "matterhorn_desk_agent: v2", "workspace init desk agent frontmatter");
 assertIncludes(workspaceInit, "matterhorn_desk_id: ${agent.deskId}", "workspace init desk agent frontmatter");
 assertIncludes(workspaceInit, "agent_id: ${agent.agentId}", "workspace init desk agent frontmatter");
 assertIncludes(workspaceInit, ".opencode\", \"agents", "workspace init agent directory");
@@ -129,6 +159,18 @@ assertIncludes(workspaceInitTest, "matterhorn-hyperliquid.md", "workspace init t
 assertIncludes(workspaceInitTest, "matterhorn-polymarket.md", "workspace init tests");
 assertIncludes(workspaceInitTest, "matterhorn-sui.md", "workspace init tests");
 assertIncludes(workspaceInitTest, "matterhorn-longevity.md", "workspace init tests");
+assertIncludes(workspaceInitTest, "## Enforced Matterhorn Desk Contract", "workspace init contract tests");
+
+for (const [activeAgent, label] of [
+  [activeLongevityAgent, "active Longevity agent"],
+  [activeHyperliquidAgent, "active Hyperliquid agent"],
+  [activePolymarketAgent, "active Polymarket agent"],
+  [activeBittensorAgent, "active Bittensor agent"],
+]) {
+  assertIncludes(activeAgent, "matterhorn_desk_agent: v2", `${label} contract version`);
+  assertIncludes(activeAgent, "## Enforced Matterhorn Desk Contract", `${label} generated contract`);
+  assertIncludes(activeAgent, '"*": false', `${label} deny-by-default tool map`);
+}
 
 assertIncludes(sessionSurface, "matterhornDeskAgentIdForDesk(activeDeskMode)", "session surface auto agent selection");
 assertIncludes(sessionSurface, "props.onSelectAgent(deskAgentId)", "session surface auto agent selection");

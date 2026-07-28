@@ -57,7 +57,7 @@ function printHelp() {
     "",
     "Usage:",
     "  pnpm desktop:release-doctor -- --json",
-    "  pnpm desktop:release-doctor -- --artifact-dir ~/Desktop/matterhorn-work-build-<sha> --strict --json",
+    "  pnpm desktop:release-doctor -- --artifact-dir ~/Desktop/matterhorn-desks-build-<sha> --strict --json",
     "  pnpm desktop:release-doctor -- --server-url http://127.0.0.1:<port> --token <client-token> --json",
     "",
     "The doctor is read-only. It never asks for keys, secrets, signatures, signed payloads, wallet exports, or funds.",
@@ -137,13 +137,55 @@ async function fetchJson(url, token = "") {
   const headers = token ? { authorization: `Bearer ${token}` } : undefined;
   const response = await fetch(url, { headers });
   const text = await response.text();
+  const contentType = response.headers.get("content-type") || "";
   let body = null;
+  let parsedJson = false;
   try {
     body = text ? JSON.parse(text) : null;
+    parsedJson = true;
   } catch {
     body = { raw: text.slice(0, 300) };
   }
-  return { ok: response.ok, status: response.status, body };
+  return {
+    ok: response.ok,
+    status: response.status,
+    body,
+    isJson: parsedJson && /\bapplication\/json\b/i.test(contentType),
+    contentType,
+  };
+}
+
+function isObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isMatterhornHealth(result) {
+  return result.ok
+    && result.isJson
+    && isObject(result.body)
+    && result.body.ok === true
+    && typeof result.body.version === "string"
+    && result.body.version.trim().length > 0;
+}
+
+function isUnauthorizedReadiness(result) {
+  return result.status === 401
+    && result.isJson
+    && isObject(result.body)
+    && result.body.code === "unauthorized"
+    && typeof result.body.message === "string";
+}
+
+function isMatterhornReadiness(result) {
+  return result.ok
+    && result.isJson
+    && isObject(result.body)
+    && result.body.success === true
+    && isObject(result.body.report)
+    && typeof result.body.report.ready === "boolean"
+    && Array.isArray(result.body.report.checks)
+    && isObject(result.body.report.safety)
+    && result.body.report.safety.nonCustodial === true;
 }
 
 async function liveServerChecks(config) {
@@ -162,14 +204,35 @@ async function liveServerChecks(config) {
   const checks = [];
   try {
     const health = await fetchJson(`${baseUrl}/health`);
-    checks.push(check("server.health", "Local server health", health.ok ? "pass" : "fail", `HTTP ${health.status}`, { body: health.body }));
+    const validHealth = isMatterhornHealth(health);
+    checks.push(check(
+      "server.health",
+      "Local server health",
+      validHealth ? "pass" : "fail",
+      validHealth
+        ? `Matterhorn Desks ${health.body.version} is healthy.`
+        : `HTTP ${health.status} did not return the Matterhorn JSON health contract.`,
+      { body: health.body, contentType: health.contentType },
+    ));
   } catch (error) {
     checks.push(check("server.health", "Local server health", "fail", error instanceof Error ? error.message : String(error)));
   }
 
   try {
     const readiness = await fetchJson(`${baseUrl}/api/crypto/readiness`, config.token);
-    checks.push(check("crypto.readiness", "Unified crypto readiness", readiness.ok ? "pass" : "fail", `HTTP ${readiness.status}`, { body: readiness.body }));
+    const accessControlEnforced = !config.token && isUnauthorizedReadiness(readiness);
+    const validReadiness = Boolean(config.token) && isMatterhornReadiness(readiness);
+    checks.push(check(
+      "crypto.readiness",
+      "Unified crypto readiness",
+      accessControlEnforced || validReadiness ? "pass" : "fail",
+      accessControlEnforced
+        ? "Protected endpoint requires a client token."
+        : validReadiness
+          ? `Matterhorn readiness is ${readiness.body.report.ready ? "ready" : "not ready"}.`
+          : `HTTP ${readiness.status} did not return the protected Matterhorn readiness contract.`,
+      { body: readiness.body, contentType: readiness.contentType },
+    ));
   } catch (error) {
     checks.push(check("crypto.readiness", "Unified crypto readiness", "fail", error instanceof Error ? error.message : String(error)));
   }
@@ -238,13 +301,24 @@ const checks = [
   check(
     "ui.release_boundary",
     "Customer-facing release boundary",
-    panelText.includes("Read and preview") && panelText.includes("Hyperliquid: Wallet-approved trading") && panelText.includes("Polymarket remains preview only") && panelText.includes("Matterhorn uses public reads and external signer/client handoffs") ? "pass" : "fail",
-    "Stable UI distinguishes public reads, wallet-approved Hyperliquid execution, and preview-only Polymarket handoffs.",
+    panelText.includes("Public reads, unsigned staking previews, and reviewed TAO transfers.")
+      && panelText.includes("Manual execution is available in the trade ticket after exact-order review and connected-wallet approval.")
+      && panelText.includes("Eligible EOA BUY orders require compliance checks, exact review, and connected Polygon wallet authorization.")
+      && panelText.includes("Matterhorn never custodies keys or signs silently.")
+      ? "pass"
+      : "fail",
+    "Stable UI distinguishes reviewed TAO transfers, exact-order Hyperliquid execution, eligible Polymarket buys, and the no-custody boundary.",
   ),
   check(
     "safety.copy",
     "Safety copy",
-    FORBIDDEN_RE.test(panelText) && panelText.includes("Automatic execution off") && panelText.includes("Wallet approval per Hyperliquid order") && panelText.includes("External signer required") ? "pass" : "fail",
+    FORBIDDEN_RE.test(panelText)
+      && panelText.includes("Automatic execution off")
+      && panelText.includes("Wallet approval per action")
+      && panelText.includes("Bittensor staking uses external signer")
+      && panelText.includes("Polymarket compliance gate")
+      ? "pass"
+      : "fail",
     "UI rejects secrets, custody, and automatic execution while requiring explicit wallet approval for Hyperliquid orders.",
   ),
   inspectArtifactDir(config.artifactDir),
@@ -268,7 +342,7 @@ const report = {
   checks,
   copyDiagnostics: {
     installGuide: "docs/production-launch-configuration.md",
-    testerArtifactCommand: "pnpm electron:tester-artifact -- --output-dir ~/Desktop/matterhorn-work-build-$(git rev-parse --short=8 HEAD) --json",
+    testerArtifactCommand: "pnpm electron:tester-artifact -- --output-dir ~/Desktop/matterhorn-desks-build-$(git rev-parse --short=8 HEAD) --json",
     doctorCommand: "pnpm desktop:release-doctor -- --artifact-dir <tester-build-dir> --strict --json",
     logLocations: [
       "~/Library/Logs/Matterhorn/",

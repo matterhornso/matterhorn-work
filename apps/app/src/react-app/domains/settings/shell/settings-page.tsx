@@ -119,7 +119,7 @@ export function getSettingsTabLabel(tab: SettingsTab) {
     case "overview":
       return "Overview";
     case "ai":
-      return "AI Providers";
+      return "Models";
     case "preferences":
       return "Preferences";
     case "shell":
@@ -170,7 +170,7 @@ export function getSettingsTabDescription(tab: SettingsTab) {
     case "overview":
       return "Profile, safety, protocols, and diagnostics";
     case "ai":
-      return "Connect model providers";
+      return "Choose models and connect providers";
     case "preferences":
       return "Model and reasoning controls";
     case "shell":
@@ -385,7 +385,17 @@ function SettingsTabReadinessBadge(props: { status: SettingsReadinessStatus | nu
 }
 
 const SETTINGS_SIDEBAR_ITEM_CLASS =
-  "rounded-none px-3 text-sidebar-foreground/82 hover:bg-white/[0.035] hover:text-sidebar-accent-foreground data-active:bg-transparent data-active:font-semibold data-active:text-sidebar-accent-foreground data-active:[&_svg]:text-[rgb(var(--matterhorn-blue-rgb))] dark:mac:data-active:bg-transparent";
+  "rounded-md px-3 text-[rgb(var(--matterhorn-blue-rgb)/0.78)] transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-blue-rgb)/0.07)] hover:text-[var(--matterhorn-blue)] data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)] data-active:font-semibold data-active:text-[var(--matterhorn-blue)] data-active:[&_svg]:text-[var(--matterhorn-blue)] mac:data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)] dark:mac:data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)]";
+
+const SETTINGS_SIDEBAR_STYLE = {
+  "--sidebar": "var(--matterhorn-ink)",
+  "--sidebar-foreground": "#f4fbff",
+  "--sidebar-accent": "rgb(var(--matterhorn-blue-rgb) / 0.08)",
+  "--sidebar-accent-foreground": "var(--matterhorn-blue)",
+  "--sidebar-border": "rgb(var(--matterhorn-blue-rgb) / 0.16)",
+  "--sidebar-ring": "var(--matterhorn-blue)",
+  borderColor: "rgb(var(--matterhorn-blue-rgb) / 0.16)",
+} as React.CSSProperties;
 
 type SettingsPageProps = {
   activeTab: SettingsTab;
@@ -423,7 +433,10 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
   const cloudTabs = getCloudSettingsTabs(props.developerMode);
 
   return (
-    <Sidebar className="mac:**:data-[sidebar=sidebar]:bg-transparent">
+    <Sidebar
+      className="matterhorn-settings-sidebar border-[rgb(var(--matterhorn-blue-rgb)/0.16)] mac:**:data-[sidebar=sidebar]:bg-transparent"
+      style={SETTINGS_SIDEBAR_STYLE}
+    >
       <div className="hidden h-10 mac:block mac:titlebar-drag" />
       <SidebarHeader>
         <SidebarMenu>
@@ -439,7 +452,12 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                 <DropdownMenuTrigger
                   render={
                     <SidebarMenuButton type="button">
-                      <WorkspaceIcon seed={props.selectedWorkspaceName} sizeClass="size-4" />
+                      <img
+                        src="/matterhorn-logo-square.svg"
+                        alt=""
+                        aria-hidden="true"
+                        className="size-4 shrink-0 rounded-[4px]"
+                      />
                       <span className="truncate">{props.selectedWorkspaceName}</span>
                       <ChevronDown className="ml-auto" />
                     </SidebarMenuButton>

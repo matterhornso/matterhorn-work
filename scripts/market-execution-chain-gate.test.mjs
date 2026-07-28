@@ -65,7 +65,7 @@ for (const required of [
 for (const required of [
   "market_execution_chain",
   "matterhorn.market.execution-chain-guide.v1",
-  "preview or handoff",
+  "agent draft, exact-term wallet ticket",
   "artifact reconciliation",
   "public receipt import",
   "Can submit: No",
@@ -167,7 +167,7 @@ for (const required of [
 for (const required of [
   "Execution chain",
   "Testnet-only path: preview",
-  "external sign request",
+  "external-signer request",
   "redacted artifact validation",
   "public receipt import",
   "hash-bound",

@@ -343,7 +343,13 @@ import { deleteSkill, listSkills, upsertSkill } from "./skills.js";
 import { installHubSkill, listHubSkills } from "./skill-hub.js";
 import { deleteCommand, listCommands, repairCommands, upsertCommand } from "./commands.js";
 import { ApiError, formatError } from "./errors.js";
-import { readJsoncFile, updateJsoncPath, updateJsoncTopLevel, writeJsoncFile } from "./jsonc.js";
+import {
+  readJsoncFile,
+  updateJsoncExternalDirectoryPermission,
+  updateJsoncPath,
+  updateJsoncTopLevel,
+  writeJsoncFile,
+} from "./jsonc.js";
 import { auditLogPath, recordAudit, readAuditEntries, readLastAudit } from "./audit.js";
 import { deriveTaskRuns, readTaskEvents, recordTaskEvent, taskEventsPath } from "./task-events.js";
 import { ReloadEventStore } from "./events.js";
@@ -363,6 +369,8 @@ import {
   buildBackendModels,
   buildWorkspaceModelSelectionResponse,
   clearWorkspaceModelSelection,
+  MATTERHORN_RELEASE_DEFAULT_MODEL_ID,
+  MATTERHORN_RELEASE_DEFAULT_PROVIDER_ID,
   normalizeModelSelectionRequest,
   readWorkspaceModelSelection,
   workspaceModelSelectionPath,
@@ -1273,8 +1281,8 @@ function providerListToBackendModelCatalog(value: unknown): MatterhornBackendMod
 
   return {
     status: "working",
-    label: "Local provider catalog",
-    description: "Matterhorn asked the local agent engine for the provider and model catalog for this workspace, then normalized it into safe counts and IDs.",
+    label: "Model catalog",
+    description: "Matterhorn Desks checked which model providers and models are available for this workspace.",
     source: "opencode_provider_list",
     serverFetched: true,
     providerCount: providerSummaries.length,
@@ -1291,8 +1299,8 @@ function unavailableBackendModelCatalog(
 ): MatterhornBackendModelCatalogSnapshot {
   return {
     status: "needs_setup",
-    label: "Local provider catalog unavailable",
-    description: "Matterhorn could not ask the local agent engine for this workspace's live provider list. Model routing can still use the selected local preference once the engine is connected.",
+    label: "Model catalog unavailable",
+    description: "Matterhorn Desks could not check available model providers for this workspace. Reconnect the local workspace runtime and try again.",
     source: "opencode_provider_list",
     serverFetched: false,
     providerCount: 0,
@@ -1335,11 +1343,23 @@ function assertModelSelectionInCatalog(
   if (!catalog.serverFetched) return;
 
   const provider = catalog.providers.find((candidate) => candidate.id === selection.providerId);
-  if (!provider) {
-    throw new ApiError(400, "invalid_model_selection", `providerId ${selection.providerId} is not available in the workspace model catalog`);
+  if (
+    !provider ||
+    !provider.connected ||
+    provider.id.trim().toLowerCase() === MATTERHORN_RELEASE_DEFAULT_PROVIDER_ID
+  ) {
+    throw new ApiError(
+      400,
+      "invalid_model_selection",
+      "Choose a model from a connected provider.",
+    );
   }
   if (!provider.modelIds.includes(selection.modelId)) {
-    throw new ApiError(400, "invalid_model_selection", `modelId ${selection.modelId} is not available for providerId ${selection.providerId}`);
+    throw new ApiError(
+      400,
+      "invalid_model_selection",
+      "Choose a model that is available from the connected provider.",
+    );
   }
 }
 
@@ -1805,9 +1825,12 @@ async function exportWorkspaceMemoryRecords(
     tags: [workspaceMemoryTag(workspace.id)],
   })).filter((record) => record.canExport && record.sensitivity !== "forbidden_secret");
 
-  const recordsPath = join(outputDir, "matterhorn-memory-records.json");
-  const manifestPath = join(outputDir, "matterhorn-memory-export-manifest.json");
-  const sha256Path = join(outputDir, "matterhorn-memory-export.sha256");
+  const recordsRelativePath = `${outputRelativePath}/matterhorn-memory-records.json`;
+  const manifestRelativePath = `${outputRelativePath}/matterhorn-memory-export-manifest.json`;
+  const sha256RelativePath = `${outputRelativePath}/matterhorn-memory-export.sha256`;
+  const recordsPath = resolveSafeChildPath(workspace.path, recordsRelativePath);
+  const manifestPath = resolveSafeChildPath(workspace.path, manifestRelativePath);
+  const sha256Path = resolveSafeChildPath(workspace.path, sha256RelativePath);
   const recordsJson = `${JSON.stringify(records, null, 2)}\n`;
   const sha256 = sha256Hex(recordsJson);
   const exportedAt = new Date().toISOString();
@@ -1817,7 +1840,7 @@ async function exportWorkspaceMemoryRecords(
     workspaceId: workspace.id,
     workspaceNamespaceTag: workspaceMemoryTag(workspace.id),
     recordCount: records.length,
-    recordsPath,
+    recordsPath: recordsRelativePath,
     sha256,
     includesSecrets: false,
     includesRawSignatures: false,
@@ -1829,9 +1852,9 @@ async function exportWorkspaceMemoryRecords(
   await writeFile(sha256Path, `${sha256}  matterhorn-memory-records.json\n`, "utf8");
   return {
     ...manifest,
-    outputDir,
-    manifestPath,
-    sha256Path,
+    outputDir: outputRelativePath,
+    manifestPath: manifestRelativePath,
+    sha256Path: sha256RelativePath,
   };
 }
 
@@ -2587,7 +2610,7 @@ function buildCapabilities(config: ServerConfig): Capabilities {
     schemaVersion,
     serverVersion: SERVER_VERSION,
     opencodeVersion: OPENCODE_VERSION,
-    skills: { read: true, write: writeEnabled, source: "openwork" },
+    skills: { read: true, write: writeEnabled, source: "matterhorn" },
     hub: {
       skills: {
         read: true,
@@ -2811,9 +2834,9 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
   const opencodeConfigured = configuredOpencodeWorkspaces > 0 || Boolean(config.opencodeBaseUrl?.trim());
   const modelStatus: MatterhornCapabilityStatus = opencodeConfigured ? "working" : "needs_setup";
   const providerStatus: MatterhornCapabilityStatus = opencodeConfigured ? "working" : "needs_setup";
-  const connectOpenCodeAction = {
+  const openModelSetupAction = {
     id: "settings.models.connect-local-engine",
-    label: "Connect local engine",
+    label: "Open Models",
     kind: "route" as const,
     href: "/settings/ai",
   };
@@ -3045,18 +3068,21 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     models: {
       ...capability(
         modelStatus,
-        opencodeConfigured ? "Agent model routing" : "Local engine not connected",
+        opencodeConfigured ? "Model catalog service" : "Model catalog unavailable",
         opencodeConfigured
-          ? "Agent responses are routed through the local engine using the selected model preference."
-          : "The local Matterhorn server is reachable, but this workspace is not connected to a local agent engine yet, so chats and desk tasks cannot run.",
+          ? "Matterhorn Desks can check model availability for this workspace. Connect a model provider in Models before chats and desk tasks can start."
+          : "The local Matterhorn Desks runtime is not connected to this workspace, so model availability cannot be checked.",
         {
           opencodeConfigured,
           configuredWorkspaceCount: configuredOpencodeWorkspaces,
           requiredFor: ["start_chat", "start_desk_task"],
         },
-        opencodeConfigured ? undefined : [connectOpenCodeAction],
+        opencodeConfigured ? undefined : [openModelSetupAction],
       ),
-      defaultModel: { providerId: "opencode", modelId: "big-pickle" },
+      defaultModel: {
+        providerId: MATTERHORN_RELEASE_DEFAULT_PROVIDER_ID,
+        modelId: MATTERHORN_RELEASE_DEFAULT_MODEL_ID,
+      },
       providerListSource: "opencode",
       selectedModelSource: "local_preferences",
       routing: {
@@ -3071,16 +3097,16 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     providers: {
       ...capability(
         providerStatus,
-        opencodeConfigured ? "Provider discovery" : "Provider discovery unavailable",
+        opencodeConfigured ? "Provider catalog" : "Provider catalog unavailable",
         opencodeConfigured
-          ? "The app reads available models from the local engine; Matterhorn Cloud providers can be imported separately."
-          : "Provider discovery depends on the workspace local engine connection. Configure the local engine before selecting live providers.",
+          ? "Matterhorn Desks can show providers for this workspace. Connect one in Models before it can answer chats or desk tasks."
+          : "Connect the local workspace runtime before choosing a model provider.",
         {
           opencodeConfigured,
           configuredWorkspaceCount: configuredOpencodeWorkspaces,
           source: "opencode_provider_list",
         },
-        opencodeConfigured ? undefined : [connectOpenCodeAction],
+        opencodeConfigured ? undefined : [openModelSetupAction],
       ),
       sources: ["opencode", "matterhorn_cloud", "managed_openwork_models"],
     },
@@ -7372,19 +7398,11 @@ function createRoutes(
       const permissionUpdate = ensurePlainObject(permission);
       if (Object.prototype.hasOwnProperty.call(permissionUpdate, "external_directory")) {
         const existingOpencode = await readOpencodeConfig(workspace.path);
-        const existingPermission = ensurePlainObject(existingOpencode.permission);
-        const nextExternalDirectory = permissionUpdate.external_directory;
-        const existingPermissionKeys = Object.keys(existingPermission);
-        const removePermissionParent =
-          typeof nextExternalDirectory === "undefined" &&
-          (existingPermissionKeys.length === 0 ||
-            (existingPermissionKeys.length === 1 && Object.prototype.hasOwnProperty.call(existingPermission, "external_directory")));
-
-        if (removePermissionParent) {
-          await updateJsoncPath(configPath, ["permission"], undefined);
-        } else {
-          await updateJsoncPath(configPath, ["permission", "external_directory"], nextExternalDirectory);
-        }
+        await updateJsoncExternalDirectoryPermission(
+          configPath,
+          existingOpencode.permission,
+          permissionUpdate.external_directory,
+        );
       }
     }
     if (openwork) {
@@ -8969,6 +8987,8 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/hyperliquid/watches", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
     const forbidden = findForbiddenHyperliquidCredentialInput(body);
     if (forbidden) {
@@ -9014,6 +9034,8 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/hyperliquid/watches/act", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
     rejectCustomWatchActionPrompt(body, "Hyperliquid");
     const forbidden = findForbiddenHyperliquidCredentialInput(body);
@@ -9507,6 +9529,39 @@ function createRoutes(
       const body = await readJsonBody(ctx.request);
       const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
       const result = await exportWorkspaceMemoryRecords(workspaceVault, workspace, body.outputDir);
+      const timestamp = Date.now();
+      const taskId = `memory_export_${shortId()}`;
+      const detail = "memory;workspace;memory_export;outputs/memory";
+      await recordTaskEvent({
+        id: `task_evt_${shortId()}`,
+        workspaceId: workspace.id,
+        taskId,
+        type: "artifact_saved",
+        timestamp,
+        summary: "Memory export saved",
+        detail,
+        artifactPath: result.manifestPath,
+        stageName: "memory_export",
+        metadata: {
+          recordCount: result.recordCount,
+          sha256: result.sha256,
+          publicSafe: true,
+        },
+      });
+      await recordTaskEvent({
+        id: `task_evt_${shortId()}`,
+        workspaceId: workspace.id,
+        taskId,
+        type: "completed",
+        timestamp: timestamp + 1,
+        summary: "Memory export complete",
+        detail,
+        stageName: "memory_export",
+        metadata: {
+          recordCount: result.recordCount,
+          publicSafe: true,
+        },
+      });
       await recordMemoryMutationAudit(workspace, ctx, {
         action: "memory.export",
         target: result.outputDir,
@@ -10004,18 +10059,18 @@ function createRoutes(
           : "Hyperliquid reads and previews are available; wallet execution is disabled by the deployment kill switch.",
       },
       {
-        id: "polymarket.read_preview",
-        label: "Polymarket read/preview",
+        id: "polymarket.wallet_ticket",
+        label: "Polymarket wallet ticket",
         status: "pass" as const,
-        summary: "Polymarket is limited to read-only data, compliance-gated previews, external signer handoff, and public receipt evidence.",
+        summary: "Agents prepare non-submitting drafts. Compliance-allowed EOA BUY orders can continue through a separate Polygon wallet ticket; sell and proxy-account flows remain external handoffs.",
       },
       {
         id: "market.execution_safety",
         label: "Market execution safety",
         status: "pass" as const,
         summary: hyperliquidExecution
-          ? "Hyperliquid submission is bound to a server-issued intent and recovered signer address. Polymarket remains preview-only. Matterhorn accepts no private keys or API secrets."
-          : "Hyperliquid execution is disabled. Polymarket remains preview-only. Matterhorn accepts no private keys or API secrets.",
+          ? "Hyperliquid submission is bound to a server-issued intent and recovered signer address. Eligible Polymarket BUY orders require a separate exact-term wallet ticket. Matterhorn accepts no private keys or API secrets."
+          : "Hyperliquid execution is disabled. Eligible Polymarket BUY orders still require a separate exact-term wallet ticket. Matterhorn accepts no private keys or API secrets.",
       },
     ];
     const blockers = [
@@ -10055,13 +10110,13 @@ function createRoutes(
         kind: "readiness_report",
         title: "Crypto customer readiness",
         summary: ready
-          ? "Runtime crypto surfaces are ready within their stated boundaries: Hyperliquid uses wallet-approved execution, while other write paths remain external or preview-only."
+          ? "Runtime crypto surfaces are ready within their stated boundaries: Hyperliquid uses wallet-approved execution, Polymarket supports an eligible reviewed wallet ticket, and Bittensor uses its stated external-signer routes."
           : "Resolve readiness blockers before production use.",
         tone: ready ? "good" : "danger",
         items: [
           { label: "Bittensor", value: bittensor.status, tone: bittensor.status === "pass" ? "good" : bittensor.status === "warning" ? "warning" : "danger" },
           { label: "Hyperliquid", value: hyperliquidExecution ? "Wallet-approved execution" : "Execution disabled", tone: hyperliquidExecution ? "good" : "warning" },
-          { label: "Polymarket", value: "Read/preview only", tone: "good" },
+          { label: "Polymarket", value: "Eligible EOA BUY ticket", tone: "good" },
           { label: "Automatic execution", value: "Off", tone: "good" },
         ],
         warnings,
@@ -10097,6 +10152,8 @@ function createRoutes(
       side: typeof body.side === "string" ? body.side : null,
       size: body.size === undefined ? null : body.size as UnifiedCryptoChatInput["size"],
       price: body.price === undefined ? null : body.price as UnifiedCryptoChatInput["price"],
+      orderType: body.orderType === "limit" ? "limit" : body.orderType === "market" ? "market" : null,
+      network: body.network === "mainnet" ? "mainnet" : body.network === "testnet" ? "testnet" : null,
       amountUsdc: body.amountUsdc === undefined ? null : body.amountUsdc as UnifiedCryptoChatInput["amountUsdc"],
       amountTao: body.amountTao === undefined ? null : body.amountTao as UnifiedCryptoChatInput["amountTao"],
       netuid: body.netuid === undefined ? null : body.netuid as UnifiedCryptoChatInput["netuid"],
@@ -10128,6 +10185,8 @@ function createRoutes(
         asset: typeof body.asset === "string" ? body.asset : null,
         side: typeof body.side === "string" ? body.side as never : null,
         size: body.size === undefined ? null : body.size as never,
+        orderType: body.orderType === "limit" ? "limit" : "market",
+        network: body.network === "mainnet" ? "mainnet" : "testnet",
         price: body.price === undefined ? null : body.price as never,
         reduceOnly: typeof body.reduceOnly === "boolean" ? body.reduceOnly : null,
         slippageTolerance: body.slippageTolerance === undefined ? null : body.slippageTolerance as never,
@@ -10157,6 +10216,8 @@ function createRoutes(
       side: typeof body.side === "string" ? body.side as never : null,
       size: body.size === undefined ? null : body.size as never,
       price: body.price === undefined ? null : body.price as never,
+      orderType: body.orderType === "limit" ? "limit" : body.orderType === "market" ? "market" : null,
+      network: body.network === "mainnet" ? "mainnet" : body.network === "testnet" ? "testnet" : null,
       limit: body.limit === undefined ? null : body.limit as never,
       slippageTolerance: body.slippageTolerance === undefined ? null : body.slippageTolerance as never,
       reduceOnly: typeof body.reduceOnly === "boolean" ? body.reduceOnly : null,
@@ -10241,6 +10302,8 @@ function createRoutes(
     if (!isHyperliquidExecutionEnabled()) {
       throw new ApiError(503, "hyperliquid_execution_disabled", "Hyperliquid execution is disabled for this deployment.");
     }
+    requireClientScope(ctx, "collaborator");
+    const ownerKey = hyperliquidExecutionOwnerKey(ctx);
     const body = await readJsonBody(ctx.request);
     const allowedKeys = new Set([
       "network",
@@ -10268,7 +10331,7 @@ function createRoutes(
         limitPrice: body.limitPrice,
         slippageBps: body.slippageBps,
         reduceOnly: body.reduceOnly,
-      } as CreateHyperliquidExecutionIntentInput);
+      } as CreateHyperliquidExecutionIntentInput, ownerKey);
       return jsonResponse({ success: true, intent });
     } catch (err) {
       throw new ApiError(400, "invalid_hyperliquid_execution_intent", err instanceof Error ? err.message : "Could not prepare Hyperliquid execution intent");
@@ -10279,9 +10342,11 @@ function createRoutes(
     if (!isHyperliquidExecutionEnabled()) {
       throw new ApiError(503, "hyperliquid_execution_disabled", "Hyperliquid execution is disabled for this deployment.");
     }
+    requireClientScope(ctx, "collaborator");
+    const ownerKey = hyperliquidExecutionOwnerKey(ctx);
     const body = await readJsonBody(ctx.request);
     try {
-      const receipt = await hyperliquidExecutionIntentStore.submit(body as unknown as SubmitHyperliquidExecutionInput);
+      const receipt = await hyperliquidExecutionIntentStore.submit(body as unknown as SubmitHyperliquidExecutionInput, ownerKey);
       return jsonResponse({ success: receipt.status === "submitted", receipt });
     } catch (err) {
       throw new ApiError(400, "hyperliquid_submission_rejected", err instanceof Error ? err.message : "Could not submit Hyperliquid order");
@@ -10321,6 +10386,8 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/polymarket/watches", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
     const forbidden = findForbiddenPolymarketCredentialInput(body);
     if (forbidden) {
@@ -10364,6 +10431,8 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/polymarket/watches/act", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
     rejectCustomWatchActionPrompt(body, "Polymarket");
     const forbidden = findForbiddenPolymarketCredentialInput(body);
@@ -10729,6 +10798,8 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/bittensor/wallet/timeline/clear", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
     const ss58Address = typeof body.ss58Address === "string" ? body.ss58Address : "";
     if (!isValidSs58Address(ss58Address)) throw new ApiError(400, "invalid_ss58", "valid SS58 address is required");
@@ -11812,6 +11883,8 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/bittensor/monitoring/watchlist", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
     const watchKind: BittensorWatch["kind"] =
       typeof body.kind === "string" && ["subnet", "wallet", "validator", "emissions", "slippage"].includes(body.kind)
@@ -12293,6 +12366,14 @@ function requireClientScope(ctx: RequestContext, required: TokenScope): void {
   if (scopeRank(scope) < scopeRank(required)) {
     throw new ApiError(403, "forbidden", "Insufficient token scope", { required, scope });
   }
+}
+
+function hyperliquidExecutionOwnerKey(ctx: RequestContext): string {
+  const tokenHash = ctx.actor?.tokenHash;
+  if (!tokenHash) {
+    throw new ApiError(401, "unauthorized", "An authenticated session is required to prepare or submit an order.");
+  }
+  return tokenHash;
 }
 
 const DEFAULT_JSON_BODY_MAX_BYTES = 1_048_576;

@@ -8,8 +8,10 @@ import { spawnSync } from "node:child_process";
 function parseArgs(argv) {
   const args = {
     outputDir: "",
+    distDir: "",
     json: false,
     skipBuild: false,
+    help: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -20,6 +22,13 @@ function parseArgs(argv) {
       args.json = true;
     } else if (arg === "--skip-build") {
       args.skipBuild = true;
+    } else if (arg === "--help" || arg === "-h") {
+      args.help = true;
+    } else if (arg === "--dist-dir") {
+      args.distDir = argv[i + 1] || "";
+      i += 1;
+    } else if (arg.startsWith("--dist-dir=")) {
+      args.distDir = arg.slice("--dist-dir=".length);
     } else if (arg === "--output-dir") {
       args.outputDir = argv[i + 1] || "";
       i += 1;
@@ -31,6 +40,19 @@ function parseArgs(argv) {
   }
 
   return args;
+}
+
+function printHelp() {
+  process.stdout.write([
+    "Matterhorn Desks unsigned macOS tester artifact helper",
+    "",
+    "Usage:",
+    "  pnpm electron:tester-artifact -- --output-dir ~/Desktop/matterhorn-desks-build-<sha> --json",
+    "  pnpm electron:tester-artifact -- --skip-build --dist-dir <dist-dir> --output-dir <output-dir> --json",
+    "",
+    "The helper creates an unsigned DMG/ZIP bundle, checksums, and a provenance manifest.",
+    "",
+  ].join("\n"));
 }
 
 function run(command, args) {
@@ -51,6 +73,39 @@ function gitSha() {
   return result.stdout.trim() || "unknown";
 }
 
+function gitWorktreeState() {
+  const result = spawnSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], { encoding: "utf8" });
+  if (result.status !== 0) {
+    return {
+      dirty: null,
+      changedPathCount: null,
+      preserveOnlyPathCount: null,
+      preserveOnly: null,
+    };
+  }
+  const preserveRoots = [".matterhorn-work/", "notes/", "outputs/", "qa-reports/"];
+  const entries = result.stdout.split(/\r?\n/).filter(Boolean);
+  const preserveOnlyPaths = [];
+  const releasePaths = [];
+
+  for (const entry of entries) {
+    const status = entry.slice(0, 2);
+    const path = entry.slice(3).trim();
+    if (status === "??" && preserveRoots.some((root) => path.startsWith(root))) {
+      preserveOnlyPaths.push(path);
+    } else {
+      releasePaths.push(path);
+    }
+  }
+
+  return {
+    dirty: releasePaths.length > 0,
+    changedPathCount: releasePaths.length,
+    preserveOnlyPathCount: preserveOnlyPaths.length,
+    preserveOnly: releasePaths.length === 0 && preserveOnlyPaths.length > 0,
+  };
+}
+
 function assertSafeOutputDir(outputDir) {
   if (!outputDir || outputDir === "/" || outputDir === resolve(".")) {
     throw new Error("Refusing unsafe output directory");
@@ -58,13 +113,22 @@ function assertSafeOutputDir(outputDir) {
 }
 
 const args = parseArgs(process.argv.slice(2));
+if (args.help) {
+  printHelp();
+  process.exit(0);
+}
+
 const sha = gitSha();
-const outputDir = resolve(args.outputDir || join(process.env.HOME || "/tmp", "Desktop", `matterhorn-work-build-${sha}`));
-const distDir = resolve("apps/desktop/dist-electron");
+const outputDir = resolve(args.outputDir || join(process.env.HOME || "/tmp", "Desktop", `matterhorn-desks-build-${sha}`));
+const defaultDistDir = resolve("apps/desktop/dist-electron");
+const distDir = resolve(args.distDir || defaultDistDir);
 
 assertSafeOutputDir(outputDir);
 
 if (!args.skipBuild) {
+  if (distDir !== defaultDistDir) {
+    throw new Error("--dist-dir can only be used with --skip-build");
+  }
   rmSync(distDir, { recursive: true, force: true });
   run("pnpm", [
     "--filter",
@@ -101,9 +165,9 @@ const copied = [];
 for (const name of artifactNames.sort()) {
   const source = join(distDir, name);
   const targetName = name === dmg
-    ? `Matterhorn-Work-${sha}-arm64-unsigned.dmg`
+    ? `Matterhorn-Desks-${sha}-arm64-unsigned.dmg`
     : name === zip
-      ? `Matterhorn-Work-${sha}-arm64-unsigned.zip`
+      ? `Matterhorn-Desks-${sha}-arm64-unsigned.zip`
       : name;
   const target = join(outputDir, targetName);
   await copyFile(source, target);
@@ -117,6 +181,10 @@ for (const name of artifactNames.sort()) {
 const manifest = {
   kind: "matterhorn.electron.local-tester-artifact.v1",
   gitSha: sha,
+  source: {
+    gitSha: sha,
+    ...gitWorktreeState(),
+  },
   outputDir,
   unsigned: true,
   notarized: false,

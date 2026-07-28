@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { readFileSync, rmSync, writeFileSync, mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync, mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,6 +19,7 @@ const archive = join(root, "backup.mhdb");
 const backupReport = join(root, "backup-report.json");
 const restoreReport = join(root, "restore-report.json");
 const databasePath = join(root, "opencode.db");
+const qaRestoreTarget = join(workspace, ".matterhorn-work", "qa-restore-target-contract");
 const passphrase = "test-only-recovery-passphrase-32-characters";
 
 function write(relativePath, content) {
@@ -50,6 +51,11 @@ try {
   write(".matterhorn-work/memory/memory-records.json", '{"records":[{"title":"remembered"}]}\n');
   write(".matterhorn-work/task-logs/ws_test/run.jsonl", '{"type":"completed"}\n');
   write(".matterhorn-work/outputs/images/image.metadata.json", '{"id":"img_test"}\n');
+  mkdirSync(join(qaRestoreTarget, ".opencode", "node_modules", ".bin"), { recursive: true });
+  symlinkSync(
+    join(workspace, "notes", "launch.md"),
+    join(qaRestoreTarget, ".opencode", "node_modules", ".bin", "qa-only-link"),
+  );
 
   const database = new Database(databasePath);
   database.exec("create table session (id text primary key, title text); insert into session values ('ses_test', 'Recovery chat');");
@@ -110,6 +116,11 @@ try {
   assert.equal(readFileSync(join(restoreTarget, "workspace", "notes", "launch.md"), "utf8"), "# Launch note\nprivate launch plan\n");
   assert.equal(readFileSync(join(restoreTarget, "workspace", "outputs", "report.txt"), "utf8"), "customer output\n");
   assert.equal(readFileSync(join(restoreTarget, "workspace", ".matterhorn-work", "memory", "memory-records.json"), "utf8"), '{"records":[{"title":"remembered"}]}\n');
+  assert.equal(
+    existsSync(join(restoreTarget, "workspace", ".matterhorn-work", "qa-restore-target-contract")),
+    false,
+    "QA restore targets must not be included in user-data backups",
+  );
 
   const restoredDb = new Database(join(restoreTarget, "runtime", "opencode.db"), { readonly: true });
   assert.equal(restoredDb.prepare("select title from session where id = ?").get("ses_test").title, "Recovery chat");
@@ -154,6 +165,18 @@ try {
   ]);
   assert.equal(symlinkedRestore.code, 1);
   assert.match(symlinkedRestore.stderr, /separate from the active workspace/i);
+
+  symlinkSync(
+    join(workspace, "notes", "launch.md"),
+    join(workspace, ".matterhorn-work", "memory", "unsafe-link"),
+  );
+  const unsafeBackup = await run([
+    "--workspace-root", workspace,
+    "--opencode-db", databasePath,
+    "--output", join(root, "unsafe-backup.mhdb"),
+  ]);
+  assert.equal(unsafeBackup.code, 1);
+  assert.match(unsafeBackup.stderr, /symlinks are not allowed/i);
 
   const unsafeCliSecret = await run(["--passphrase", passphrase]);
   assert.equal(unsafeCliSecret.code, 1);

@@ -44,7 +44,7 @@ function SectionCard(props: {
   return (
     <section className="flex flex-col gap-4 px-3 py-5 first:pt-3 last:pb-3">
       <div className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--dls-accent-rgb)/0.12)] text-dls-text">
           {props.icon}
         </div>
         <div className="min-w-0">

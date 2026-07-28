@@ -54,7 +54,16 @@ describe("Matterhorn compatibility aliases", () => {
     });
   });
 
-  test("accepts matterhorn-work deep links alongside openwork links", () => {
+  test("accepts the primary Matterhorn Desks deep-link scheme alongside compatibility aliases", () => {
+    const primaryRemote = parseRemoteConnectDeepLink(
+      "matterhorn-desks://connect-remote?matterhornHostUrl=http%3A%2F%2F127.0.0.1%3A8787&matterhornToken=primary-token",
+    );
+    expect(primaryRemote?.matterhornHostUrl).toBe("http://127.0.0.1:8787");
+    expect(primaryRemote?.matterhornToken).toBe("primary-token");
+
+    const primaryAuth = parseDenAuthDeepLink("matterhorn-desks://den-auth?grant=primary-grant");
+    expect(primaryAuth?.grant).toBe("primary-grant");
+
     const remote = parseRemoteConnectDeepLink(
       "matterhorn-work://connect-remote?matterhornHostUrl=http%3A%2F%2F127.0.0.1%3A8787&matterhornToken=abc",
     );
@@ -68,7 +77,7 @@ describe("Matterhorn compatibility aliases", () => {
     expect(legacyAuth?.grant).toBe("legacy-grant");
 
     const debug = parseDebugDeepLinkInput(
-      "Paste this: matterhorn-work://den-auth?grant=debug-grant",
+      "Paste this: matterhorn-desks://den-auth?grant=debug-grant",
     );
     expect(debug).toEqual({
       kind: "auth",

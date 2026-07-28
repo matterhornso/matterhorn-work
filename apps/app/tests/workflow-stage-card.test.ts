@@ -241,7 +241,7 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("Starting {launchingTaskTitle} in a new chat.");
     expect(src).toContain('actionLabel={isLaunching ? "Starting..."');
     expect(src).not.toContain("draftedPromptTitle");
-    expect(src).not.toContain("Nothing has");
+    expect(src).toContain("Nothing has been sent yet.");
     expect(src).not.toContain("Draft ready");
     expect(surfaceSrc).toContain("Choose a starter below to run");
     expect(surfaceSrc).toContain("DeskSafetyInfoButton");
@@ -256,11 +256,15 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
 
   test("focused desk close cannot overwrite a newly opened task session", () => {
     const src = readAppSource("domains/session/chat/session-page.tsx");
+    const routeState = readAppSource("shell/session-panel-route.ts");
 
-    expect(src).toContain('const currentLocation = typeof window !== "undefined" ? window.location : location');
-    expect(src).toContain("new URLSearchParams(currentLocation.search)");
+    expect(src).toContain("const liveLocationRef = useRef(location)");
+    expect(src).toContain("const currentLocation = liveLocationRef.current");
+    expect(src).not.toContain('const currentLocation = typeof window !== "undefined" ? window.location : location');
+    expect(src).toContain("resolveSessionPanelNavigation(currentLocation.search, panel)");
     expect(src).toContain("pathname: currentLocation.pathname");
     expect(src).toContain("hash: currentLocation.hash");
+    expect(routeState).toContain("new URLSearchParams(search)");
   });
 
   test("desk launchers run tasks while Home New chat stays blank", () => {
@@ -332,8 +336,10 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(launcherBlock).toContain('title: "Could not start task"');
     expect(launcherBlock).toContain('title: "Matterhorn Desks engine is offline"');
     expect(launcherBlock).toContain("selectedModelUnavailable");
-    expect(launcherBlock).toContain("setModelPickerOpen(true)");
-    expect(launcherBlock).toContain("Connect or pick an available model, then start the task again.");
+    expect(launcherBlock).toContain('handleOpenSettings("/settings/ai", workspaceId, { pendingDeskTask })');
+    expect(launcherBlock).toContain("writePendingDeskTask(workspaceId, pendingDeskTask)");
+    expect(launcherBlock).toContain("Nothing has been sent.");
+    expect(launcherBlock).toContain("Add a provider in Models, then choose one of its available models.");
     expect(launcherBlock).toContain('title: `Starting ${title || "desk task"}`');
     expect(launcherBlock).toContain('title: `${title || "Desk task"} started`');
     expect(launcherBlock).toContain('title: "Task needs review before sending"');
@@ -410,7 +416,8 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("current={selectedPromptModel");
     expect(src).toContain("agent: agent || undefined");
     expect(src).toContain('buildSessionSystemContext(prompt, session.id, agent, "work")');
-    expect(src).toContain("getMatterhornDeskAgentById(agentId)?.instructions");
+    expect(src).toContain("getMatterhornDeskAgentById(agentId)");
+    expect(src).toContain("buildMatterhornDeskAgentSystemPrompt(deskAgent)");
     expect(src).toContain("startOptimisticRun(workspaceId, session.id");
     expect(src).toContain("setRunStatus(workspaceId, session.id, { type: \"idle\" })");
   });
@@ -431,7 +438,7 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(surfaceSrc).toContain("Taking longer than usual. You can stop this run at any time.");
     expect(surfaceSrc).toContain("latestSessionSnapshotFailure");
     expect(surfaceSrc).toContain("snapshotQuery.refetch()");
-    expect(surfaceSrc).toContain("Matterhorn did not receive a model response. Your prompt is ready to retry.");
+    expect(surfaceSrc).toContain("Matterhorn could not complete this response. Your prompt is ready to retry.");
     expect(surfaceSrc).toContain("suppressNextAbortFailureRef");
     expect(surfaceSrc).not.toContain("(!chatStreaming && awaitingAssistantBaseline === null)");
     expect(surfaceSrc).toContain("isError: snapshotQuery.isError,");

@@ -39,6 +39,7 @@ import {
   type MatterhornBittensorPublicReadEvidenceInput,
   type MatterhornServerClient,
   type MatterhornSessionSnapshot,
+  type MatterhornSkillItem,
 } from "../../../../app/lib/matterhorn-server";
 import type {
   ComposerAttachment,
@@ -69,6 +70,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import type { ReactComposerNotice } from "./composer/notice";
 import { SessionDebugPanel } from "./debug-panel";
 import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from "./session-render-state";
@@ -92,6 +94,22 @@ import {
   getComposerPasteParts,
   useComposerStateStore,
 } from "./composer-state-store";
+
+// These project-local tools are maintained for the Matterhorn Desks team, not
+// workspace users. The server marks them as non-invocable; this list protects
+// the customer-facing composer while an older local engine is still reloading.
+const INTERNAL_ENGINEERING_SKILL_NAMES = new Set([
+  "browser-automation",
+  "daytona-dev",
+  "daytona-electron-test",
+  "release",
+  "run-evals",
+  "shadcn",
+]);
+
+function isCustomerFacingWorkspaceSkill(skill: MatterhornSkillItem): boolean {
+  return skill.userInvocable !== false && !INTERNAL_ENGINEERING_SKILL_NAMES.has(skill.name.trim().toLowerCase());
+}
 import {
   addBittensorContextToResolvedText,
   describeBittensorSessionContext,
@@ -214,9 +232,9 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint];
   const agent = getMatterhornDeskAgent(mode);
   return (
-    <div style={deskToneStyle(iconHint)} className="mb-1 rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.05)] px-3 py-2.5">
+    <div style={deskToneStyle(iconHint)} className="mb-1 rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.05)] px-3 py-2.5">
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
+        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgb(var(--matterhorn-desk-rgb)/0.12)] text-[var(--matterhorn-desk-color)]">
           {copy.id === "bittensor" || copy.id === "hyperliquid" || copy.id === "polymarket" ? (
             <ProtocolLogo iconHint={copy.id} size={22} />
           ) : (
@@ -274,7 +292,7 @@ function MatterhornDeskFocusedEmptyState({
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint] ?? FileText;
   const prompts = MATTERHORN_DESK_TASK_STARTERS[mode];
   const boundary = mode === "bittensor"
-    ? "Runs public SS58 reads and unsigned previews. Signing stays in an external Bittensor-compatible wallet."
+    ? "Uses public wallet details and prepares transfer drafts. You approve TAO transfers in your wallet; staking and advanced actions finish in an external signer."
     : mode === "wellness"
       ? "Standalone longevity workflow. Educational only, non-medical, and no live payments/email/hosting."
     : mode === "polymarket"
@@ -289,10 +307,10 @@ function MatterhornDeskFocusedEmptyState({
       style={deskToneStyle(iconHint)}
     >
       <section className="w-full space-y-3">
-        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
+        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.14)] text-[var(--matterhorn-desk-color)]">
                 {visual ? <ProtocolLogo iconHint={iconHint} size={34} /> : <Icon className="size-5" />}
               </span>
               <div className="min-w-0">
@@ -321,7 +339,7 @@ function MatterhornDeskFocusedEmptyState({
             <button
               key={item.id}
               type="button"
-              className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-3.5 py-3 text-left transition duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-3.5 py-3 text-left transition duration-150 hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
               onClick={() => void onUsePrompt(item.prompt)}
             >
               <span className="min-w-0">
@@ -384,10 +402,10 @@ function LongevityDeskEmptyState({
   return (
     <div className="min-w-0 w-full px-2 py-3 sm:px-3 sm:py-4" style={deskToneStyle("wellness")}>
       <section className="w-full space-y-3">
-        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
+        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.14)] text-[var(--matterhorn-desk-color)]">
                 {visual ? <ProtocolLogo iconHint="wellness" size={34} /> : <Icon className="size-5" />}
               </span>
               <div className="min-w-0">
@@ -423,7 +441,7 @@ function LongevityDeskEmptyState({
                 key={choice.label}
                 type="button"
                 onClick={() => void onUsePrompt(choice.prompt)}
-                className="rounded-md bg-dls-surface-muted/42 px-2.5 py-2 text-left text-[12px] font-medium text-dls-text transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                className="rounded-md bg-dls-surface-muted/42 px-2.5 py-2 text-left text-[12px] font-medium text-dls-text transition-colors hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
               >
                 {choice.label}
               </button>
@@ -445,7 +463,7 @@ function LongevityDeskEmptyState({
               <button
                 type="button"
                 onClick={() => void onUsePrompt(item.prompt)}
-                className="rounded-md px-2 py-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                className="rounded-md px-2 py-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] transition-colors hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
               >
                 Stage task
               </button>
@@ -461,7 +479,7 @@ function LongevityDeskEmptyState({
                 key={card.title}
                 type="button"
                 onClick={() => void onUsePrompt(card.prompt)}
-                className="group flex items-center justify-between rounded-md bg-dls-surface-muted/42 px-3 py-2 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                className="group flex items-center justify-between rounded-md bg-dls-surface-muted/42 px-3 py-2 text-left transition-colors hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
               >
                 <span className="min-w-0">
                   <span className="block text-[12px] font-semibold text-dls-text">{card.title}</span>
@@ -473,7 +491,7 @@ function LongevityDeskEmptyState({
           </div>
         </div>
 
-        <div className="rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.24)] bg-[rgba(var(--matterhorn-desk-rgb),0.06)] px-3 py-2.5">
+        <div className="rounded-lg border border-[rgb(var(--matterhorn-desk-rgb)/0.24)] bg-[rgb(var(--matterhorn-desk-rgb)/0.06)] px-3 py-2.5">
           <p className="text-[11px] leading-4 text-dls-secondary">
             <span className="font-semibold text-dls-text">Safety boundary:</span> Educational only, not medical advice.
             No diagnosis, prescription, treatment, or guaranteed outcomes. Storage/hosting, payments, email, and
@@ -532,7 +550,8 @@ function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): stri
 
 type SessionError = {
   message: string;
-  kind?: "model-not-found" | "generic";
+  detail?: string;
+  kind?: "model-not-found" | "provider-unavailable" | "cancelled" | "generic";
   /** For model-not-found: the model that failed. */
   failedModel?: { providerID: string; modelID: string };
   /** For model-not-found: suggested replacements from the backend. */
@@ -549,6 +568,7 @@ export type SessionSurfaceProps = {
   developerMode: boolean;
   modelLabel: string;
   onModelClick: () => void;
+  onOpenAiProviders?: () => void;
   modelPickerOpen: boolean;
   modelUnavailable?: boolean;
   selectedModel: ModelRef;
@@ -589,7 +609,8 @@ export type SessionSurfaceProps = {
   safeStringify?: (value: unknown) => string;
   onChangeModel?: (model: { providerID: string; modelID: string }) => void;
   onUploadInboxFiles?: ((files: File[], options?: { notify?: boolean }) => void | Promise<unknown>) | null;
-  onOpenSettingsSection?: ((section: "commands" | "skills" | "mcps" | "plugins") => void) | undefined;
+  connectedProviderIds?: string[];
+  onOpenSettingsSection?: ((section: "commands" | "skills" | "mcps" | "extensions" | "plugins") => void) | undefined;
   onRevertToMessage?: (messageId: string) => void;
   onForkAtMessage?: (messageId: string) => void;
   onOpenTarget?: (target: OpenTarget, options?: { auto?: boolean }) => void;
@@ -856,12 +877,24 @@ function TodoPanel(props: { todos: TodoItem[] }) {
 
 function parseSessionError(thrown: unknown): SessionError {
   const raw = thrown instanceof Error ? thrown.message : String(thrown);
+  let parsed: unknown;
   // Try to detect ProviderModelNotFoundError from the SDK error shape.
   // The error message may be a JSON string from our serializer in session-route.
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed?.name === "ProviderModelNotFoundError" && parsed?.data) {
-      const { providerID, modelID, suggestions } = parsed.data;
+    parsed = JSON.parse(raw);
+    const parsedRecord = parsed as {
+      name?: unknown;
+      data?: {
+        providerID?: unknown;
+        modelID?: unknown;
+        suggestions?: unknown;
+      };
+    };
+    if (parsedRecord?.name === "ProviderModelNotFoundError" && parsedRecord?.data) {
+      const { providerID, modelID, suggestions } = parsedRecord.data;
+      if (typeof providerID !== "string" || typeof modelID !== "string") {
+        throw new Error("ProviderModelNotFoundError omitted its model reference.");
+      }
       return {
         message: `Model ${providerID}/${modelID} is not available.`,
         kind: "model-not-found",
@@ -871,6 +904,14 @@ function parseSessionError(thrown: unknown): SessionError {
     }
   } catch {
     // Not JSON — fall through to plain message
+  }
+  const diagnostic = `${raw}\n${parsed ? JSON.stringify(parsed) : ""}`;
+  if (/no provider available|provider.{0,72}(?:not available|unavailable|not configured|not authenticated)/i.test(diagnostic)) {
+    return {
+      message: "This model is not ready in this workspace.",
+      detail: "Your message is still in the composer. Connect a provider or choose another model, then send it again.",
+      kind: "provider-unavailable",
+    };
   }
   // Check if the raw string mentions model-not-found patterns
   if (/ProviderModelNotFoundError/i.test(raw) || /model.*not found/i.test(raw)) {
@@ -888,10 +929,11 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
 
   const rawError = assistantMessage.info.error as unknown as {
     name?: unknown;
-    data?: { message?: unknown };
+    data?: { message?: unknown; responseBody?: unknown; statusCode?: unknown };
   };
   const name = typeof rawError.name === "string" ? rawError.name : "AssistantResponseError";
   const detail = typeof rawError.data?.message === "string" ? rawError.data.message.trim() : "";
+  const normalizedError = parseSessionError(JSON.stringify(rawError));
   const retryMessage = [...snapshot.messages]
     .reverse()
     .find((message) => message.info.role === "user")
@@ -905,23 +947,70 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
     completedAt: assistantMessage.info.time.completed ?? assistantMessage.info.time.created,
     retryMessage,
     error: name === "MessageAbortedError"
-      ? { message: "Matterhorn did not receive a model response. Your prompt is ready to retry." } satisfies SessionError
-      : { message: detail || "Matterhorn could not complete this response. Your prompt is ready to retry." } satisfies SessionError,
+      ? {
+          message: "Generation stopped. Your prompt is still available to edit or send again.",
+          kind: "cancelled",
+        } satisfies SessionError
+      : normalizedError.kind === "provider-unavailable" || normalizedError.kind === "model-not-found"
+        ? normalizedError
+        : { message: detail || "Matterhorn could not complete this response. Your prompt is ready to retry." } satisfies SessionError,
   };
 }
 
-function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker }: {
+function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker, onOpenAiProviders }: {
   error: SessionError;
   onDismiss: () => void;
   onChangeModel?: (model: { providerID: string; modelID: string }) => void;
   onOpenModelPicker?: () => void;
+  onOpenAiProviders?: () => void;
 }) {
+  const cancelled = error.kind === "cancelled";
   return (
     <div className="mx-auto max-w-[720px] px-3 py-3 sm:px-5">
-        <div className="rounded-lg bg-red-3/15 px-5 py-4 ring-1 ring-red-6/25">
+      <div
+        role={cancelled ? "status" : "alert"}
+        aria-atomic="true"
+        className={cn(
+          "rounded-lg px-5 py-4 ring-1",
+          cancelled
+            ? "bg-dls-surface-muted/[0.16] ring-dls-border/35"
+            : "bg-red-3/15 ring-red-6/25",
+        )}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-red-11">{error.message}</div>
+            <div className={cn("text-sm font-medium", cancelled ? "text-dls-text" : "text-red-11")}>{error.message}</div>
+            {error.detail ? (
+              <p className={cn("mt-1 text-xs leading-5", cancelled ? "text-dls-secondary" : "text-red-11/80")}>
+                {error.detail}
+              </p>
+            ) : null}
+            {error.kind === "provider-unavailable" ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {onOpenAiProviders ? (
+                  <button
+                    type="button"
+                    className="rounded-md bg-dls-accent px-3 py-1.5 text-xs font-semibold text-[var(--dls-accent-fg)] transition-colors hover:bg-[var(--dls-accent-hover)]"
+                  onClick={() => {
+                    onOpenAiProviders();
+                    onDismiss();
+                  }}
+                >
+                    Set up provider
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="rounded-md bg-dls-surface-muted/35 px-3 py-1.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                  onClick={() => {
+                    onOpenModelPicker?.();
+                    onDismiss();
+                  }}
+                >
+                  Choose another model
+                </button>
+              </div>
+            ) : null}
             {error.kind === "model-not-found" ? (
               <div className="mt-2 flex flex-wrap gap-2">
                 {error.suggestions && error.suggestions.length > 0 ? (
@@ -954,9 +1043,14 @@ function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker }
           </div>
           <button
             type="button"
-            className="shrink-0 rounded-full p-1 text-red-10 transition-colors hover:bg-red-3 hover:text-red-11"
+            className={cn(
+              "shrink-0 rounded-full p-1 transition-colors",
+              cancelled
+                ? "text-dls-secondary hover:bg-dls-hover hover:text-dls-text"
+                : "text-red-10 hover:bg-red-3 hover:text-red-11",
+            )}
             onClick={onDismiss}
-            aria-label="Dismiss error"
+            aria-label={cancelled ? "Dismiss stopped status" : "Dismiss error"}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
           </button>
@@ -988,7 +1082,7 @@ function BittensorContextStrip(props: { context: BittensorSessionContext; onClea
 
 function MemoryContextStrip(props: { context: MatterhornSessionMemoryContext; onClear: () => void; onRemove: (recordId: string) => void }) {
   return (
-    <div className="border-b border-dls-border bg-[rgba(var(--matterhorn-blue-rgb),0.08)] px-4 py-2">
+    <div className="border-b border-dls-border bg-[rgb(var(--matterhorn-blue-rgb)/0.08)] px-4 py-2">
       <div className="flex min-w-0 items-start justify-between gap-3 text-xs">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 font-medium text-dls-text">
@@ -1461,12 +1555,25 @@ export function SessionSurface(props: SessionSurfaceProps) {
       return;
     }
     if (sending || liveStatus.type !== "idle" || renderedMessages.length <= awaitingAssistantBaseline) return;
+    let cancelled = false;
     const id = window.setTimeout(() => {
-      setNoVisibleAssistantOutputBaseline(awaitingAssistantBaseline);
-      setAwaitingAssistantBaseline(null);
+      const showEmptyResponseFallback = () => {
+        if (cancelled) return;
+        setNoVisibleAssistantOutputBaseline(awaitingAssistantBaseline);
+        setAwaitingAssistantBaseline(null);
+      };
+      void snapshotQuery.refetch()
+        .then(({ data }) => {
+          if (latestSessionSnapshotFailure(data ?? null)) return;
+          showEmptyResponseFallback();
+        })
+        .catch(showEmptyResponseFallback);
     }, 1200);
-    return () => window.clearTimeout(id);
-  }, [assistantOutputAfterAwaitStart, awaitingAssistantBaseline, liveStatus.type, renderedMessages.length, sending]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
+  }, [assistantOutputAfterAwaitStart, awaitingAssistantBaseline, liveStatus.type, renderedMessages.length, sending, snapshotQuery]);
 
   const model = deriveSessionRenderModel({
     intendedSessionId: props.sessionId,
@@ -1662,7 +1769,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
       const parsed = parseSessionError(nextError);
       setError(parsed);
       useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId);
-      setComposerDraft(props.sessionId, "");
+      // A rejected send must leave the person's work intact. This includes
+      // provider setup failures, where the next useful action is to connect a
+      // model and then resend the exact draft.
+      setComposerDraft(props.sessionId, text);
+      props.onDraftChange(buildDraft(text, attachments));
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
@@ -2115,13 +2226,23 @@ export function SessionSurface(props: SessionSurfaceProps) {
   useControlAction(composerStopControlAction);
 
   const listSkills = async (): Promise<SkillCard[]> => {
-    const response = await props.client.listSkills(props.workspaceId, { includeGlobal: true });
-    const next = (response.items ?? []).map((skill) => ({
-      name: skill.name,
-      path: skill.path,
-      description: skill.description,
-      trigger: skill.trigger,
-    } satisfies SkillCard));
+    if (props.executionMode !== "work") {
+      setToolSkills([]);
+      return [];
+    }
+    // The composer is part of the workspace, so it must not expose every
+    // developer skill installed on the host machine. Workspace skills remain
+    // visible here; global skills continue to be managed in Settings.
+    const response = await props.client.listSkills(props.workspaceId, { includeGlobal: false });
+    const next = (response.items ?? [])
+      .filter(isCustomerFacingWorkspaceSkill)
+      .map((skill) => ({
+        name: skill.name,
+        path: skill.path,
+        description: skill.description,
+        trigger: skill.trigger,
+        userInvocable: skill.userInvocable,
+      } satisfies SkillCard));
     setToolSkills(next);
     return next;
   };
@@ -2324,6 +2445,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     onDismiss={handleDismissError}
                     onChangeModel={props.onChangeModel}
                     onOpenModelPicker={props.onModelClick}
+                    onOpenAiProviders={props.onOpenAiProviders}
                   />
                 ) : sessionMissing ? (
                   <div className="mx-auto flex max-w-sm items-center justify-center gap-2 rounded-lg bg-dls-canvas/45 px-6 py-5 text-sm text-dls-secondary">
@@ -2347,6 +2469,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   onDismiss={handleDismissError}
                   onChangeModel={props.onChangeModel}
                   onOpenModelPicker={props.onModelClick}
+                  onOpenAiProviders={props.onOpenAiProviders}
                 />
               ) : activeDeskMode ? (
                 <div className="space-y-2">
@@ -2393,7 +2516,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                             key={item.id}
                             type="button"
                             style={deskToneStyle(item.iconHint)}
-                            className="group grid min-h-[64px] min-w-0 grid-cols-[32px_minmax(0,1fr)] gap-2.5 rounded-md bg-dls-surface-muted/42 px-2.5 py-2 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                            className="group grid min-h-[64px] min-w-0 grid-cols-[32px_minmax(0,1fr)] gap-2.5 rounded-md bg-dls-surface-muted/42 px-2.5 py-2 text-left transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                             onClick={() => startStarterTask(item)}
                           >
                             <span className="flex size-8 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
@@ -2441,6 +2564,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                       onDismiss={handleDismissError}
                       onChangeModel={props.onChangeModel}
                       onOpenModelPicker={props.onModelClick}
+                      onOpenAiProviders={props.onOpenAiProviders}
                     />
                   ) : null}
                 </Suspense>
@@ -2454,7 +2578,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
               {!chatStreaming && sessionScroll.topClippedMessageId ? (
                 <button
                   type="button"
-                  className="inline-flex h-7 items-center gap-1 rounded px-2 text-[11px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover/70 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                  className="inline-flex h-7 items-center gap-1 rounded px-2 text-[11px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover/70 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)]"
                   onClick={() => {
                     sessionScroll.jumpToStartOfMessage("smooth");
                   }}
@@ -2468,7 +2592,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
               {!sessionScroll.isAtBottom ? (
                 <button
                   type="button"
-                  className="inline-flex h-7 items-center gap-1 rounded bg-dls-hover/65 px-2 text-[11px] font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.32)]"
+                  className="inline-flex h-7 items-center gap-1 rounded bg-dls-hover/65 px-2 text-[11px] font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.32)]"
                   onClick={() => {
                     sessionScroll.jumpToLatest("smooth");
                   }}
@@ -2495,8 +2619,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
         busy={chatStreaming}
         disabled={model.transitionState !== "idle" || Boolean(props.modelUnavailable)}
         modelUnavailable={Boolean(props.modelUnavailable)}
+        onOpenAiProviders={props.onOpenAiProviders}
         statusLabel={statusLabel(snapshot ?? undefined, chatStreaming)}
-        showModelPicker={shellConfig.modelPicker}
+        showModelPicker={shellConfig.modelPicker && !props.modelUnavailable}
         modelPickerOpen={props.modelPickerOpen}
         selectedModel={props.selectedModel}
         onModelPickerOpenChange={props.onModelPickerOpenChange}
@@ -2519,16 +2644,23 @@ export function SessionSurface(props: SessionSurfaceProps) {
         executionModesEnabled={props.executionModesEnabled}
         onExecutionModeChange={props.onExecutionModeChange}
         agentLabel={props.agentLabel}
+        agentSelectionLocked={Boolean(linkedWorkflowRun?.agentId || activeDeskMode)}
+        agentSelectionLockedReason={
+          linkedWorkflowRun?.deskId === "blank"
+            ? "This chat keeps the agent selected when it started."
+            : "This desk uses its specialist agent."
+        }
         selectedAgent={props.selectedAgent}
         listAgents={props.listAgents}
         onSelectAgent={props.onSelectAgent}
         listCommands={props.listCommands}
-        listSkills={listSkills}
-        skills={toolSkills}
+        listSkills={props.executionMode === "work" ? listSkills : undefined}
+        skills={props.executionMode === "work" ? toolSkills : []}
         listMcp={listMcp}
         mcpServers={toolMcpServers}
         mcpStatus={toolMcpStatus}
         mcpStatuses={toolMcpStatuses}
+        connectedProviderIds={props.connectedProviderIds}
         listImportedPlugins={listImportedPlugins}
         importedPlugins={toolImportedPlugins}
         onOpenSettingsSection={props.onOpenSettingsSection}

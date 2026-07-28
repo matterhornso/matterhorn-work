@@ -128,9 +128,9 @@ const panel = read("apps/app/src/react-app/domains/wallet/pages/BittensorPanel.t
 for (const required of [
   "VITE_MATTERHORN_BITTENSOR_BETA",
   "Bittensor Beta",
-  "Market previews are hidden in Bittensor beta mode",
-  "preview/R&amp;D only",
   "Bittensor beta boundary",
+  "market desks are hidden in Bittensor-only mode",
+  "Connected-wallet TAO transfers remain explicit, one-at-a-time actions.",
 ]) {
   assert.ok(panel.includes(required), `Bittensor panel missing ${required}`);
 }

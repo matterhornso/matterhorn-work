@@ -379,7 +379,7 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
       const typed = result as { ok: boolean; stderr?: string; stdout?: string };
       if (!typed.ok) {
         throw new Error(
-          typed.stderr || typed.stdout || "Failed to write .opencode/openwork.json",
+          "Could not update the workspace provider configuration. Check folder access and try again.",
         );
       }
       return true;
@@ -466,7 +466,9 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
         content,
       ) as { ok: boolean; stderr?: string; stdout?: string };
       if (!result.ok) {
-        throw new Error(result.stderr || result.stdout || "Failed to write opencode.jsonc");
+        throw new Error(
+          "Could not update the workspace provider configuration. Check folder access and try again.",
+        );
       }
       return true;
     }
@@ -474,7 +476,9 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     if (isLocalWorkspace && isDesktopRuntime() && root) {
       const result = await writeOpencodeConfig("project", root, content) as { ok: boolean; stderr?: string; stdout?: string };
       if (!result.ok) {
-        throw new Error(result.stderr || result.stdout || "Failed to write opencode.jsonc");
+        throw new Error(
+          "Could not update the workspace provider configuration. Check folder access and try again.",
+        );
       }
       return true;
     }
@@ -581,7 +585,7 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     );
 
     if (!updatedConfig) {
-      throw new Error("Could not update opencode.jsonc for this workspace.");
+      throw new Error("Could not update the workspace provider configuration.");
     }
 
     options.setDisabledProviders(nextDisabled);
@@ -821,7 +825,7 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
       localProviderId in (providerSection as Record<string, unknown>)
     ) {
       throw new Error(
-        `${localProviderId} already has a provider block in opencode.jsonc. Remove it before importing the cloud-managed version.`,
+        `${localProviderId} is already configured in this workspace. Remove it before importing the managed version.`,
       );
     }
   };
@@ -1039,7 +1043,11 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
       firstString(["message", "detail", "reason", "error"]) ||
       (typeof error === "string" ? readString(error) : null);
 
-    const generic = raw && /^unknown\s+error$/i.test(raw);
+    const implementationLeak = /\b(?:open(?:code|work)|opencode\.jsonc|local_[\w-]+)\b|\.opencode\b/i;
+    const safeRaw = raw && !implementationLeak.test(raw) ? raw : null;
+    const safeResponse = response && !implementationLeak.test(response) ? response : null;
+
+    const generic = safeRaw && /^unknown\s+error$/i.test(safeRaw);
     const heading = (() => {
       if (status === 401 || status === 403) return t("providers.auth_failed");
       if (status === 429) return t("providers.rate_limit_exceeded");
@@ -1048,17 +1056,17 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     })();
 
     const lines = [heading];
-    if (raw && !generic && raw !== heading) lines.push(raw);
+    if (safeRaw && !generic && safeRaw !== heading) lines.push(safeRaw);
     if (status && !heading.includes(String(status))) lines.push(`Status: ${status}`);
     if (provider && !heading.includes(provider)) lines.push(`Provider: ${provider}`);
     if (code) lines.push(`Code: ${code}`);
-    if (response) lines.push(`Response: ${response}`);
+    if (safeResponse) lines.push(`Response: ${safeResponse}`);
     if (lines.length > 1) return lines.join("\n");
 
-    if (raw && !generic) return raw;
+    if (safeRaw && !generic) return safeRaw;
     if (error && typeof error === "object") {
       const serialized = safeStringify(error);
-      if (serialized && serialized !== "{}") return serialized;
+      if (serialized && serialized !== "{}" && !implementationLeak.test(serialized)) return serialized;
     }
     return fallback;
   };
@@ -1449,7 +1457,7 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
         formatConfigWithCloudProvider(raw, provider, localProviderId, existingImported?.providerId ?? null),
       );
       if (!updatedConfig) {
-        throw new Error("Could not update opencode.jsonc for this workspace.");
+        throw new Error("Could not update the workspace provider configuration.");
       }
 
       const nextImportedProviders = {
@@ -1516,7 +1524,7 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
         formatConfigWithoutCloudProvider(raw, imported.providerId),
       );
       if (!updatedConfig) {
-        throw new Error("Could not update opencode.jsonc for this workspace.");
+        throw new Error("Could not update the workspace provider configuration.");
       }
 
       const nextImportedProviders = { ...state.importedCloudProviders };

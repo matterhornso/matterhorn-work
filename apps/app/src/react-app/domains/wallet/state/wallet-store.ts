@@ -123,6 +123,8 @@ export type WalletTransactionAnalysis = {
   tokenAction: KnownTokenAction | null;
   isSwap: boolean;
   valueUSD: number;
+  valueUSDIsKnown: boolean;
+  unpricedValueReason: string | null;
   displayValue: string;
   assetChanges: WalletAssetChange[];
   warnings: string[];
@@ -141,6 +143,7 @@ export type WalletAssetChange = {
 
 export type WalletApprovalPolicyInput = {
   valueUSD: number;
+  valueUSDIsKnown?: boolean;
   maxPerTransactionUSD: number;
   maxDailySpendUSD: number;
   dailySpendUSD: number;
@@ -338,15 +341,40 @@ function knownUsdcAddress(chainId: number): string | null {
   return USDC_BY_CHAIN[chainId]?.toLowerCase() ?? null;
 }
 
+function dataSelector(data: string | undefined): string | null {
+  if (!data || data === "0x") return null;
+  return `0x${data.toLowerCase().replace(/^0x/, "").slice(0, 8)}`;
+}
+
 function isKnownSwapSelector(data: string | undefined): boolean {
-  if (!data || data === "0x") return false;
-  const selector = `0x${data.toLowerCase().replace(/^0x/, "").slice(0, 8)}`;
+  const selector = dataSelector(data);
+  if (!selector) return false;
   return [
     "0x38ed1739", // swapExactTokensForTokens
     "0x8803dbee", // swapTokensForExactTokens
     "0x7ff36ab5", // swapExactETHForTokens
     "0x18cbafe5", // swapExactTokensForETH
+    "0x414bf389", // Uniswap V3 exactInputSingle
+    "0xc04b8d59", // Uniswap V3 exactInput
+    "0xdb3e2198", // Uniswap V3 exactOutputSingle
+    "0xf28c0498", // Uniswap V3 exactOutput
+    "0x3593564c", // Universal Router execute with deadline
+    "0x24856bc3", // Universal Router execute
+    "0x12aa3caf", // 1inch swap
+    "0x0502b1c5", // 1inch unoswap
   ].includes(selector);
+}
+
+function detectUnpricedValue(data: string | undefined, tokenAction: KnownTokenAction | null): string | null {
+  const selector = dataSelector(data);
+  if (!selector || tokenAction) return null;
+  if (["0xa9059cbb", "0x095ea7b3", "0x23b872dd"].includes(selector)) {
+    return "Matterhorn cannot verify the USD value of this token action against your wallet limits.";
+  }
+  if (isKnownSwapSelector(data) && selector !== "0x7ff36ab5") {
+    return "Matterhorn cannot verify the USD value of this token-input swap against your wallet limits.";
+  }
+  return null;
 }
 
 export function decodeKnownTokenAction({
@@ -423,6 +451,7 @@ export function analyzeWalletTransaction({
   const nativeValueUSD = computeTxValueUSD(value);
   const tokenAction = decodeKnownTokenAction({ chainId, to, data });
   const isSwap = isKnownSwapSelector(data);
+  const unpricedValueReason = detectUnpricedValue(data, tokenAction);
   const valueUSD = nativeValueUSD + (tokenAction?.usdValue ?? 0);
   const warnings: string[] = [];
   const assetChanges: WalletAssetChange[] = [];
@@ -430,6 +459,7 @@ export function analyzeWalletTransaction({
   if (tokenAction?.isUnlimitedApproval) {
     warnings.push("Unlimited USDC approval detected. Use a limited allowance unless you fully trust the spender.");
   }
+  if (unpricedValueReason) warnings.push(unpricedValueReason);
 
   const displayParts: string[] = [];
   if (nativeValueWei > 0n) {
@@ -465,7 +495,13 @@ export function analyzeWalletTransaction({
     tokenAction,
     isSwap,
     valueUSD,
-    displayValue: displayParts.length > 0 ? displayParts.join(" + ") : "0 ETH",
+    valueUSDIsKnown: unpricedValueReason === null,
+    unpricedValueReason,
+    displayValue: displayParts.length > 0
+      ? displayParts.join(" + ")
+      : unpricedValueReason
+        ? "Token value unavailable"
+        : "0 ETH",
     assetChanges,
     warnings,
   };
@@ -473,6 +509,9 @@ export function analyzeWalletTransaction({
 
 export function evaluateWalletApprovalPolicy(input: WalletApprovalPolicyInput): string[] {
   const reasons: string[] = [];
+  if (input.valueUSDIsKnown === false) {
+    reasons.push("Matterhorn cannot verify this transaction's USD value against your wallet limits.");
+  }
   if (input.maxPerTransactionUSD > 0 && input.valueUSD > input.maxPerTransactionUSD) {
     reasons.push(`This transaction exceeds your per-transaction limit of $${input.maxPerTransactionUSD}.`);
   }
@@ -527,6 +566,7 @@ export function approvalPolicyFromSafetyPolicy(
 
 export function evaluateWalletApprovalAgainstPolicy(input: {
   valueUSD: number;
+  valueUSDIsKnown?: boolean;
   policy: WalletSafetyPolicy;
   isSwap?: boolean;
   now?: number;
@@ -534,6 +574,7 @@ export function evaluateWalletApprovalAgainstPolicy(input: {
   return evaluateWalletApprovalPolicy({
     ...approvalPolicyFromSafetyPolicy(input.policy),
     valueUSD: input.valueUSD,
+    valueUSDIsKnown: input.valueUSDIsKnown,
     isSwap: input.isSwap,
     now: input.now,
   });
@@ -565,6 +606,7 @@ export function validateWalletTransactionBeforeSend(
   const blockingReasons = evaluateWalletApprovalPolicy({
     ...input.policy,
     valueUSD: analysis.valueUSD,
+    valueUSDIsKnown: analysis.valueUSDIsKnown,
     isSwap: analysis.isSwap,
   });
   if (blockingReasons.length > 0) {

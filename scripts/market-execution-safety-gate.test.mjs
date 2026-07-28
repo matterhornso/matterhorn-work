@@ -158,6 +158,8 @@ for (const required of [
   "/api/hyperliquid/orders/execution-intent",
   "/api/hyperliquid/orders/submit",
   "Unexpected execution-intent field",
+  "requireClientScope(ctx, \"collaborator\")",
+  "hyperliquidExecutionOwnerKey(ctx)",
 ]) {
   if (hyperliquidRoutes.includes(required)) pass(`Hyperliquid server routes contain ${required}`);
   else fail(`Hyperliquid server routes contain ${required}`, "missing");
@@ -182,6 +184,12 @@ const hyperliquidExecution = mustContain("apps/server/src/tools/hyperliquid-live
   "This execution intent is already being submitted",
   "SUBMIT LIVE ORDER",
   "MATTERHORN_HYPERLIQUID_MAX_ORDER_USDC",
+  "MAX_PENDING_INTENTS_PER_OWNER",
+  "MAX_STORED_INTENTS",
+  "Too many pending order confirmations",
+  "order-review queue is temporarily full",
+  "different signed-in session",
+  "this.lastNonce + 1",
 ]);
 for (const forbidden of ["privateKey =", "apiSecret =", "seedPhrase", "mnemonic"]) {
   if (hyperliquidExecution.includes(forbidden)) fail(`Hyperliquid execution excludes ${forbidden}`, "present");

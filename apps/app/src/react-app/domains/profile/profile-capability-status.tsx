@@ -18,11 +18,11 @@ export interface ProfileCapabilityStatusProps {
 }
 
 const profileStatusToneClasses = {
-  ready: "text-emerald-300",
-  setup: "text-sky-300",
-  preview: "text-amber-300",
+  ready: "text-emerald-11",
+  setup: "text-sky-11",
+  preview: "text-amber-12 dark:text-amber-11",
   neutral: "text-dls-secondary",
-  error: "text-red-300",
+  error: "text-red-11",
 } as const;
 
 function ProfileStatusText(props: { status: CapabilityUiStatus; label?: string }) {
@@ -123,7 +123,7 @@ export function ProfileCapabilityStatus(props: ProfileCapabilityStatusProps) {
         </div>
 
         <details className="group rounded-lg bg-dls-surface-muted/[0.20] px-3 py-2.5 text-xs text-dls-secondary transition-colors hover:bg-dls-surface-muted/[0.30]">
-          <summary className="cursor-pointer select-none font-medium text-dls-text">Technical details</summary>
+          <summary className="cursor-pointer select-none font-medium text-dls-text">Workspace details</summary>
           <dl className="mt-3 grid gap-2 border-t border-dls-border-subtle/50 pt-3">
             <div className="flex items-center justify-between gap-3">
               <dt>Backend version</dt>
@@ -155,7 +155,7 @@ export function ProfileCapabilityStatus(props: ProfileCapabilityStatusProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--dls-accent-rgb)/0.12)] text-dls-text">
           <CircleUser size={18} />
         </div>
         <div className="min-w-0 flex-1">

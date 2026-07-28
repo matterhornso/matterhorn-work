@@ -22,6 +22,10 @@ const objectSchema = (properties: JsonObject, required: string[] = []): JsonObje
   additionalProperties: false,
 });
 
+const numberOrStringSchema: JsonObject = {
+  oneOf: [{ type: "number" }, { type: "string" }],
+};
+
 function stringArg(args: JsonObject, name: string, fallback = ""): string {
   const value = args[name];
   return typeof value === "string" ? value.trim() : fallback;
@@ -60,11 +64,63 @@ const MANAGED_MCP_TOOLS: ManagedMcpTool[] = [
     request: (args) => ({ path: "/api/bittensor/chat/execute", method: "POST", body: args }),
   },
   {
+    name: "matterhorn_crypto_chat",
+    title: "Matterhorn reviewed crypto action",
+    description: "Prepare the canonical typed Bittensor, Hyperliquid, or Polymarket action card for separate wallet review. Never signs or submits.",
+    inputSchema: objectSchema({
+      message: { type: "string", description: "The user's original request." },
+      venue: { type: "string", enum: ["auto", "bittensor", "hyperliquid", "polymarket"] },
+      address: { type: "string", description: "Optional public 0x wallet address." },
+      ss58Address: { type: "string", description: "Optional public Bittensor SS58 address." },
+      coldkey: { type: "string", description: "Optional public Bittensor sender coldkey/SS58 address." },
+      recipient: { type: "string", description: "Optional public Bittensor transfer recipient." },
+      destination: { type: "string", description: "Optional public Bittensor transfer destination." },
+      netuid: { type: "number", description: "Optional Bittensor subnet id." },
+      validatorHotkey: { type: "string", description: "Optional public Bittensor validator hotkey." },
+      amountTao: numberOrStringSchema,
+      marketId: { type: "string", description: "Optional public Polymarket market id." },
+      outcome: { type: "string", description: "Optional Polymarket outcome label." },
+      asset: { type: "string", description: "Optional Hyperliquid asset symbol." },
+      side: { type: "string", enum: ["buy", "sell", "long", "short", "yes", "no"] },
+      size: numberOrStringSchema,
+      price: numberOrStringSchema,
+      orderType: { type: "string", enum: ["market", "limit"], description: "Optional Hyperliquid order type. Market uses an indicative mark; limit requires a price." },
+      network: { type: "string", enum: ["testnet", "mainnet"], description: "Optional Hyperliquid wallet review network." },
+      amountUsdc: numberOrStringSchema,
+      limit: { type: "number" },
+      slippageTolerance: numberOrStringSchema,
+      rateTolerance: numberOrStringSchema,
+      reduceOnly: { type: "boolean" },
+    }, ["message"]),
+    request: (args) => ({ path: "/api/crypto/chat/execute", method: "POST", body: args }),
+  },
+  {
     name: "matterhorn_hyperliquid_list_markets",
     title: "Hyperliquid markets",
     description: "List public Hyperliquid markets with source and freshness metadata.",
     inputSchema: objectSchema({ limit: { type: "number", minimum: 1, maximum: 50 } }),
     request: (args) => ({ path: queryPath("/api/hyperliquid/markets", args, ["limit"]) }),
+  },
+  {
+    name: "matterhorn_hyperliquid_get_account",
+    title: "Hyperliquid account",
+    description: "Read public Hyperliquid account state for a connected or supplied public address.",
+    inputSchema: objectSchema({ address: { type: "string", description: "Public 42-character 0x account address." } }, ["address"]),
+    request: (args) => ({ path: `/api/hyperliquid/account/${encodeURIComponent(stringArg(args, "address"))}` }),
+  },
+  {
+    name: "matterhorn_hyperliquid_get_positions",
+    title: "Hyperliquid positions",
+    description: "Read public Hyperliquid positions and exposure for an account.",
+    inputSchema: objectSchema({ address: { type: "string", description: "Public 42-character 0x account address." } }, ["address"]),
+    request: (args) => ({ path: `/api/hyperliquid/account/${encodeURIComponent(stringArg(args, "address"))}/positions` }),
+  },
+  {
+    name: "matterhorn_hyperliquid_get_open_orders",
+    title: "Hyperliquid open orders",
+    description: "Read public Hyperliquid open orders for an account.",
+    inputSchema: objectSchema({ address: { type: "string", description: "Public 42-character 0x account address." } }, ["address"]),
+    request: (args) => ({ path: `/api/hyperliquid/account/${encodeURIComponent(stringArg(args, "address"))}/open-orders` }),
   },
   {
     name: "matterhorn_hyperliquid_get_orderbook",
@@ -79,6 +135,24 @@ const MANAGED_MCP_TOOLS: ManagedMcpTool[] = [
     description: "Read public Hyperliquid funding data for an asset.",
     inputSchema: objectSchema({ asset: { type: "string", description: "Asset symbol such as BTC." } }, ["asset"]),
     request: (args) => ({ path: `/api/hyperliquid/funding/${encodeURIComponent(stringArg(args, "asset"))}` }),
+  },
+  {
+    name: "matterhorn_hyperliquid_preview_order",
+    title: "Hyperliquid order preview",
+    description: "Prepare exact Hyperliquid order terms for review. This preview never signs or submits.",
+    inputSchema: objectSchema({
+      asset: { type: "string" },
+      side: { type: "string", enum: ["buy", "sell", "long", "short"] },
+      size: numberOrStringSchema,
+      orderType: { type: "string", enum: ["market", "limit"], description: "Market orders use an indicative mark; limit orders require price." },
+      network: { type: "string", enum: ["testnet", "mainnet"], description: "Wallet review network. Defaults to testnet." },
+      price: numberOrStringSchema,
+      reduceOnly: { type: "boolean" },
+      slippageTolerance: numberOrStringSchema,
+      address: { type: "string" },
+      message: { type: "string" },
+    }, ["asset", "side", "size"]),
+    request: (args) => ({ path: "/api/hyperliquid/orders/preview", method: "POST", body: args }),
   },
   {
     name: "matterhorn_polymarket_search_markets",
@@ -98,12 +172,38 @@ const MANAGED_MCP_TOOLS: ManagedMcpTool[] = [
     request: () => ({ path: "/api/polymarket/compliance" }),
   },
   {
+    name: "matterhorn_polymarket_preview_order",
+    title: "Polymarket order preview",
+    description: "Prepare exact Polymarket order terms after compliance review. This preview never signs or submits.",
+    inputSchema: objectSchema({
+      marketId: { type: "string" },
+      outcome: { type: "string" },
+      side: { type: "string", enum: ["buy", "sell", "yes", "no"] },
+      amountUsdc: numberOrStringSchema,
+      slippageTolerance: numberOrStringSchema,
+    }, ["marketId", "outcome", "side", "amountUsdc"]),
+    request: (args) => ({ path: "/api/polymarket/orders/preview", method: "POST", body: args }),
+  },
+  {
+    name: "matterhorn_polymarket_prepare_handoff",
+    title: "Polymarket wallet handoff",
+    description: "Prepare a compliance-gated Polymarket handoff for separate connected-wallet review. Never signs or submits.",
+    inputSchema: objectSchema({
+      marketId: { type: "string" },
+      outcome: { type: "string" },
+      side: { type: "string", enum: ["buy", "sell", "yes", "no"] },
+      amountUsdc: numberOrStringSchema,
+      slippageTolerance: numberOrStringSchema,
+    }, ["marketId", "outcome", "side", "amountUsdc"]),
+    request: (args) => ({ path: "/api/polymarket/orders/handoff", method: "POST", body: args }),
+  },
+  {
     name: "matterhorn_sui_get_balance",
     title: "Sui public balance",
     description: "Read a public Sui address balance. Never requests or handles wallet secrets.",
     inputSchema: objectSchema({
       address: { type: "string", description: "Public Sui address." },
-      network: { type: "string", enum: ["mainnet", "testnet", "devnet"] },
+      network: { type: "string", enum: ["mainnet", "testnet"] },
       coinType: { type: "string", description: "Optional public coin type." },
     }, ["address"]),
     request: (args) => ({
@@ -115,13 +215,21 @@ const MANAGED_MCP_TOOLS: ManagedMcpTool[] = [
     title: "Sui transfer preview",
     description: "Prepare a non-custodial Sui transfer preview for review in the user's wallet. Never signs or broadcasts.",
     inputSchema: objectSchema({
-      network: { type: "string", enum: ["mainnet", "testnet", "devnet"] },
+      network: { type: "string", enum: ["mainnet", "testnet"] },
       sender: { type: "string", description: "Public sender address." },
       recipient: { type: "string", description: "Public recipient address." },
-      amount: { type: "string", description: "Transfer amount as a decimal string." },
-      coinType: { type: "string", description: "Optional public coin type." },
-    }, ["network", "sender", "recipient", "amount"]),
-    request: (args) => ({ path: "/api/sui/transactions/preview", method: "POST", body: args }),
+      amountSui: { type: "string", description: "SUI amount as a positive decimal string." },
+      memo: { type: "string", description: "Optional public memo, up to 140 characters." },
+    }, ["network", "sender", "recipient", "amountSui"]),
+    request: (args) => ({
+      path: "/api/sui/transactions/preview",
+      method: "POST",
+      body: {
+        ...args,
+        // Keep older callers working while the advertised contract uses amountSui.
+        amountSui: args.amountSui ?? args.amount,
+      },
+    }),
   },
 ];
 

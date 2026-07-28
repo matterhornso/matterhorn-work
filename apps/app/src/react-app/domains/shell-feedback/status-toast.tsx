@@ -20,12 +20,12 @@ export function StatusToast(props: StatusToastProps) {
 
   const iconClass =
     tone === "success"
-      ? "text-emerald-300"
+      ? "text-emerald-11"
       : tone === "warning"
-        ? "text-amber-300"
+        ? "text-amber-12 dark:text-amber-11"
         : tone === "error"
-          ? "text-red-300"
-          : "text-sky-300";
+          ? "text-red-11"
+          : "text-sky-11";
 
   const Icon =
     tone === "success"

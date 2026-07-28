@@ -20,7 +20,7 @@ export type AppearanceViewProps = {
 export function AppearanceView(props: AppearanceViewProps) {
   return (
     <LayoutStack>
-      <ThemeSection {...props} />
+      <ThemeSection busy={props.busy} />
       <Separator />
       <LanguageSection {...props} />
       {isDesktopRuntime() ? (

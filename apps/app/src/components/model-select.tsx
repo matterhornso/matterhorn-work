@@ -17,7 +17,10 @@ import {
 } from "@/components/ui/tooltip";
 import { useWorkspace } from "@/react-app/shell/workspace-provider";
 import { useCheckDesktopRestriction } from "@/react-app/domains/cloud/desktop-config-provider";
-import { getConnectedProviderItems, useProviderListQuery } from "@/react-app/domains/connections/provider-list-query";
+import {
+  getConnectedProviderItems,
+  useProviderListQuery,
+} from "@/react-app/domains/connections/provider-list-query";
 import {
   Command,
   CommandCollection,
@@ -39,6 +42,7 @@ import {
   getModelBehaviorCapabilityLabel,
   getModelBehaviorSummary,
 } from "@/app/lib/model-behavior";
+import { resolveProviderDisplayName } from "@/app/utils";
 
 function getProviderDisplayName(providerId: string) {
   return providerId
@@ -83,27 +87,31 @@ function useModelOptions(open: boolean) {
       restriction: "allowCustomProviders",
     });
 
-    const options = getConnectedProviderItems(data)
-      .flatMap((provider) =>
-        Object.entries(provider.models).map(([id, model]) => {
-          const behavior = getModelBehaviorSummary(provider.id, model, null, provider.name);
-          return {
-            providerID: provider.id,
-            modelID: id,
-            title: model.name,
-            description: provider.name,
-            behaviorTitle: behavior.title,
-            behaviorLabel: behavior.label,
-            behaviorDescription: behavior.description,
-            behaviorValue: behavior.value,
-            behaviorOptions: behavior.options,
-            behaviorCapability: getModelBehaviorCapability(model),
-            behaviorCapabilityLabel: getModelBehaviorCapabilityLabel(model),
-            isFree: false,
-            isConnected: true,
-          };
-        }),
-      );
+    const options = getConnectedProviderItems(data).flatMap((provider) =>
+      Object.entries(provider.models).map(([id, model]) => {
+        const behavior = getModelBehaviorSummary(
+          provider.id,
+          model,
+          null,
+          provider.name,
+        );
+        return {
+          providerID: provider.id,
+          modelID: id,
+          title: model.name,
+          description: resolveProviderDisplayName(provider.id, provider.name),
+          behaviorTitle: behavior.title,
+          behaviorLabel: behavior.label,
+          behaviorDescription: behavior.description,
+          behaviorValue: behavior.value,
+          behaviorOptions: behavior.options,
+          behaviorCapability: getModelBehaviorCapability(model),
+          behaviorCapabilityLabel: getModelBehaviorCapabilityLabel(model),
+          isFree: false,
+          isConnected: true,
+        };
+      }),
+    );
 
     return options.filter((option) => {
       if (
@@ -128,7 +136,8 @@ function groupByProvider(modelOptions: ModelOption[]) {
   const groups = new Map<string, ModelOption[]>();
 
   for (const option of modelOptions) {
-    const providerLabel = option.description ?? getProviderDisplayName(option.providerID);
+    const providerLabel =
+      option.description ?? getProviderDisplayName(option.providerID);
     const existing = groups.get(providerLabel);
 
     if (existing) {
@@ -197,7 +206,8 @@ export function ModelSelect({
       modelID: option.modelID,
     }),
   );
-  const selectedModelLabel = selectedOption?.title ?? value.modelID ?? "Select model";
+  const selectedModelLabel =
+    selectedOption?.title ?? value.modelID ?? "Select model";
   const triggerLabel = displayLabel ?? selectedModelLabel;
   const tooltipLabel = displayLabel
     ? `Change model (${selectedModelLabel})`
@@ -248,14 +258,10 @@ export function ModelSelect({
             />
           }
         >
-          <span className="max-w-48 truncate">
-            {triggerLabel}
-          </span>
+          <span className="max-w-48 truncate">{triggerLabel}</span>
           <ChevronDown className="h-3 w-3" />
         </TooltipTrigger>
-        <TooltipContent>
-          {tooltipLabel}
-        </TooltipContent>
+        <TooltipContent>{tooltipLabel}</TooltipContent>
       </Tooltip>
       <PopoverContent
         className="h-80 max-h-(--available-height) w-72 gap-0 overflow-hidden p-px **:data-[slot=scroll-area-viewport]:data-has-overflow-y:pe-0.5"
@@ -267,15 +273,22 @@ export function ModelSelect({
             <CommandInput
               ref={searchInputRef}
               placeholder="Search models..."
+              onKeyDown={(event) => {
+                if (event.key !== "Escape") {
+                  return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+                setSearch("");
+                onOpenChange(false);
+              }}
             />
           </CommandHeader>
           <CommandEmpty>No models found.</CommandEmpty>
           <CommandList>
             {(group) => (
-              <CommandGroup
-                key={group.value}
-                items={group.items}
-              >
+              <CommandGroup key={group.value} items={group.items}>
                 <CommandGroupLabel>{group.value}</CommandGroupLabel>
                 <CommandCollection>
                   {(option: ModelOption) => (

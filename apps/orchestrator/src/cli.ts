@@ -5096,8 +5096,6 @@ async function verifyOpenworkServer(input: {
   expectedWorkspace: string;
   expectedOpencodeBaseUrl?: string;
   expectedOpencodeDirectory?: string;
-  expectedOpencodeUsername?: string;
-  expectedOpencodePassword?: string;
 }): Promise<string | undefined> {
   const health = await fetchJson(`${input.baseUrl}/health`);
   const actualVersion =
@@ -5132,8 +5130,6 @@ async function verifyOpenworkServer(input: {
         opencode?: {
           baseUrl?: string;
           directory?: string;
-          username?: string;
-          password?: string;
         };
       }
     | undefined;
@@ -5161,19 +5157,6 @@ async function verifyOpenworkServer(input: {
       `Matterhorn Desks server engine directory mismatch: expected ${input.expectedOpencodeDirectory}, got ${opencode?.directory ?? "<missing>"}.`,
     );
   }
-  if (
-    input.expectedOpencodeUsername &&
-    opencode?.username !== input.expectedOpencodeUsername
-  ) {
-    throw new Error("Matterhorn Desks server engine username mismatch.");
-  }
-  if (
-    input.expectedOpencodePassword &&
-    opencode?.password !== input.expectedOpencodePassword
-  ) {
-    throw new Error("Matterhorn Desks server engine password mismatch.");
-  }
-
   const hostHeaders = { "X-Matterhorn-Host-Token": input.hostToken, "X-OpenWork-Host-Token": input.hostToken };
   await fetchJson(`${input.baseUrl}/approvals`, { headers: hostHeaders });
 
@@ -10949,8 +10932,6 @@ async function runStart(args: ParsedArgs) {
       expectedWorkspace: resolvedWorkspace,
       expectedOpencodeBaseUrl: opencodeConnectUrl,
       expectedOpencodeDirectory: resolvedWorkspace,
-      expectedOpencodeUsername: opencodeUsername,
-      expectedOpencodePassword: opencodePassword,
     });
   };
   const restartOpenCodeRouter = async () => {
@@ -11661,8 +11642,6 @@ async function runStart(args: ParsedArgs) {
           expectedWorkspace: "/workspace",
           expectedOpencodeBaseUrl: opencodeInternalBaseUrl,
           expectedOpencodeDirectory: "/workspace",
-          expectedOpencodeUsername: opencodeUsername,
-          expectedOpencodePassword: opencodePassword,
         });
       } catch (verifyError) {
         // In sandbox mode the released server binary may differ from the
@@ -11913,8 +11892,6 @@ async function runStart(args: ParsedArgs) {
         expectedWorkspace: resolvedWorkspace,
         expectedOpencodeBaseUrl: opencodeConnectUrl,
         expectedOpencodeDirectory: resolvedWorkspace,
-        expectedOpencodeUsername: opencodeUsername,
-        expectedOpencodePassword: opencodePassword,
       });
       openworkOwnerToken = await issueOpenworkOwnerToken(
         openworkBaseUrl,
@@ -12089,29 +12066,41 @@ async function runStart(args: ParsedArgs) {
         },
       },
     };
+    const safeReadyAttributes = {
+      workspace: payload.workspace,
+      opencode: {
+        baseUrl: payload.opencode.baseUrl,
+        connectUrl: payload.opencode.connectUrl,
+        bindHost: payload.opencode.bindHost,
+        port: payload.opencode.port,
+        hotReload: payload.opencode.hotReload,
+        version: payload.opencode.version,
+        auth: payload.opencode.username && payload.opencode.password
+          ? "managed"
+          : "none",
+      },
+      openwork: {
+        baseUrl: payload.openwork.baseUrl,
+        connectUrl: payload.openwork.connectUrl,
+        host: payload.openwork.host,
+        port: payload.openwork.port,
+        version: payload.openwork.version,
+      },
+      opencodeRouter: payload.opencodeRouter,
+    };
 
     if (outputJson) {
       console.log(JSON.stringify(payload, null, 2));
     } else if (useTui) {
       logger.info(
         "Ready",
-        {
-          workspace: payload.workspace,
-          opencode: payload.opencode,
-          openwork: payload.openwork,
-          opencodeRouter: payload.opencodeRouter,
-        },
+        safeReadyAttributes,
         "openwork-orchestrator",
       );
     } else if (logFormat === "json") {
       logger.info(
         "Ready",
-        {
-          workspace: payload.workspace,
-          opencode: payload.opencode,
-          openwork: payload.openwork,
-          opencodeRouter: payload.opencodeRouter,
-        },
+        safeReadyAttributes,
         "openwork-orchestrator",
       );
     } else {

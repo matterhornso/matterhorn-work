@@ -28,7 +28,7 @@ describe("session activity timing", () => {
     expect(secondStartedAt).toBeGreaterThan(firstStartedAt ?? 0);
   });
 
-  test("turns an empty model abort into a retryable prompt failure", () => {
+  test("treats an empty model abort as a neutral cancellation with the prompt available", () => {
     const snapshot = {
       messages: [
         {
@@ -52,7 +52,10 @@ describe("session activity timing", () => {
       name: "MessageAbortedError",
       completedAt: 130,
       retryMessage: "Find useful subnets",
-      error: { message: "Matterhorn did not receive a model response. Your prompt is ready to retry." },
+      error: {
+        kind: "cancelled",
+        message: "Generation stopped. Your prompt is still available to edit or send again.",
+      },
     });
   });
 
@@ -71,5 +74,50 @@ describe("session activity timing", () => {
     } as unknown as MatterhornSessionSnapshot;
 
     expect(latestSessionSnapshotFailure(snapshot)).toBeNull();
+  });
+
+  test("turns an upstream provider authentication failure into an actionable recovery", () => {
+    const snapshot = {
+      messages: [
+        {
+          info: { id: "user-1", role: "user", time: { created: 100 } },
+          parts: [{ type: "text", text: "How can I connect a Sui wallet?" }],
+        },
+        {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            time: { created: 110, completed: 130 },
+            error: {
+              name: "APIError",
+              data: {
+                message: "No provider available",
+                statusCode: 401,
+                responseBody: JSON.stringify({
+                  type: "error",
+                  error: {
+                    type: "ModelError",
+                    message: "No provider available",
+                  },
+                }),
+              },
+            },
+          },
+          parts: [],
+        },
+      ],
+    } as unknown as MatterhornSessionSnapshot;
+
+    expect(latestSessionSnapshotFailure(snapshot)).toEqual({
+      id: "assistant-1",
+      name: "APIError",
+      completedAt: 130,
+      retryMessage: "How can I connect a Sui wallet?",
+      error: {
+        kind: "provider-unavailable",
+        message: "This model is not ready in this workspace.",
+        detail: "Your message is still in the composer. Connect a provider or choose another model, then send it again.",
+      },
+    });
   });
 });

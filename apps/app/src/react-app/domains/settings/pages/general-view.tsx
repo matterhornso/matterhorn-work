@@ -43,6 +43,7 @@ export type GeneralSettingsViewProps = {
   onNavigateTab: (tab: SettingsTab) => void;
   developerMode: boolean;
   runtimeWorkspaceId?: string;
+  workspaceResolutionPending?: boolean;
   matterhornServerClient?: MatterhornServerClient | null;
   backendSettingsSections?: MatterhornSettingsSectionCapability[] | null;
   onOpenMemoryReview: () => void;
@@ -83,7 +84,7 @@ const workspaceCards: SettingsHubCard[] = [
 ];
 
 const globalCards: SettingsHubCard[] = [
-  { tab: "ai", icon: Cpu, title: "AI Providers", desc: "Connect model providers.", status: "Connect provider" },
+  { tab: "ai", icon: Cpu, title: "Models", desc: "Choose models and connect providers.", status: "Connect provider" },
   { tab: "cloud-account", icon: Cloud, title: "Matterhorn Cloud", desc: "Account and organization.", status: "Configure cloud" },
   { tab: "appearance", icon: Paintbrush, title: "Appearance", desc: "Theme and text size.", status: "Working" },
   { tab: "updates", icon: RefreshCcw, title: "Updates", desc: "Version and update channel.", status: "Desktop only" },
@@ -125,7 +126,7 @@ const projectSurfaceCards: ProjectSurfaceCard[] = [
 ];
 
 const FEEDBACK_ACTION_CLASS =
-  "matterhorn-feedback-action inline-flex items-center gap-1.5 rounded-md px-0.5 py-1 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--matterhorn-blue-rgb),0.28)]";
+  "matterhorn-feedback-action inline-flex items-center gap-1.5 rounded-md px-0.5 py-1 text-[12px] font-medium text-dls-secondary transition-colors duration-150 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--matterhorn-blue-rgb)/0.28)]";
 const SETTINGS_HUB_SECTION_CLASS = "rounded-lg bg-dls-surface-muted/[0.06] p-3";
 const SETTINGS_HUB_GRID_CLASS = "grid grid-cols-1 gap-1 @lg/settings-general:grid-cols-2";
 
@@ -176,9 +177,9 @@ function SettingsCard(props: {
     <button
       type="button"
       onClick={props.onClick}
-      className="group grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-dls-surface-muted/[0.065] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.12] focus:outline-none focus-visible:bg-dls-surface-muted/[0.12] focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+      className="group grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-dls-surface-muted/[0.065] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.12] focus:outline-none focus-visible:bg-dls-surface-muted/[0.12] focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)]"
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.10)] text-dls-text transition-colors group-hover:bg-[rgba(var(--dls-accent-rgb),0.16)]">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--dls-accent-rgb)/0.10)] text-dls-text transition-colors group-hover:bg-[rgb(var(--dls-accent-rgb)/0.16)]">
         <props.icon size={16} />
       </div>
       <div className="min-w-0">
@@ -205,9 +206,19 @@ function ProjectSurfaceRow(props: {
   actionLabel: string;
   requiresWorkspace?: boolean;
   workspaceReady?: boolean;
+  workspaceResolutionPending?: boolean;
   onClick: () => void;
 }) {
-  const missingWorkspace = Boolean(props.requiresWorkspace && !props.workspaceReady);
+  const waitingForWorkspace = Boolean(
+    props.requiresWorkspace &&
+      props.workspaceResolutionPending &&
+      !props.workspaceReady,
+  );
+  const missingWorkspace = Boolean(
+    props.requiresWorkspace &&
+      !props.workspaceResolutionPending &&
+      !props.workspaceReady,
+  );
   const actionLabel = missingWorkspace ? "Create workspace" : props.actionLabel;
   const showStatus = missingWorkspace || shouldShowSettingsStatus(props.status);
   const statusLabel = showStatus
@@ -236,8 +247,10 @@ function ProjectSurfaceRow(props: {
   return (
     <button
       type="button"
+      aria-busy={waitingForWorkspace || undefined}
+      disabled={waitingForWorkspace}
       onClick={props.onClick}
-      className="group flex min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/[0.065] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.12] focus:outline-none focus-visible:bg-dls-surface-muted/[0.12] focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.34)]"
+      className="group flex min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/[0.065] px-3 py-3 text-left transition-colors hover:bg-dls-surface-muted/[0.12] focus:outline-none focus-visible:bg-dls-surface-muted/[0.12] focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.34)] disabled:cursor-default disabled:opacity-75 disabled:hover:bg-dls-surface-muted/[0.065]"
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-dls-hover/55 text-dls-text transition-colors group-hover:bg-dls-hover">
         <props.icon size={16} />
@@ -311,8 +324,8 @@ function TaskLogsSection(props: {
             <ListChecks size={16} />
           </div>
           <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-dls-text">Task Logs</div>
-            <p className="mt-0.5 text-[12px] leading-5 text-dls-text">Recent desk runs, outputs, and wait states.</p>
+            <div className="text-[13px] font-semibold text-dls-text">Workflow task log</div>
+            <p className="mt-0.5 text-[12px] leading-5 text-dls-text">Tracked workflow runs and wait states for this workspace.</p>
           </div>
         </div>
         <span className="shrink-0 pt-0.5 text-[11px] font-medium text-dls-secondary">
@@ -346,7 +359,7 @@ function TaskLogsSection(props: {
             </div>
           ))
         ) : (
-          <div className="py-3 text-[12px] leading-5 text-dls-secondary">Desk tasks will appear here when they start, wait, finish, or save outputs.</div>
+          <div className="py-3 text-[12px] leading-5 text-dls-secondary">Tracked workflow tasks will appear here when they start, wait, or finish.</div>
         )}
       </div>
     </section>
@@ -426,6 +439,7 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
               actionLabel={card.actionLabel}
               requiresWorkspace={card.section !== "feedback"}
               workspaceReady={Boolean(props.runtimeWorkspaceId)}
+              workspaceResolutionPending={props.workspaceResolutionPending}
               onClick={projectSurfaceActions[card.section]}
             />
           ))}

@@ -38,6 +38,37 @@ describe("crypto shared-card transcript rendering", () => {
     );
   }
 
+  function renderToolOutput(output: unknown) {
+    const messages: UIMessage[] = [
+      {
+        id: "assistant-crypto-tool-output",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-matterhorn_crypto_chat",
+            toolCallId: "tool-crypto-tool-output",
+            state: "output-available",
+            input: { message: "prepare a BTC order" },
+            output,
+            providerMetadata: {
+              opencode: {
+                partId: "tool-crypto-tool-output",
+              },
+            },
+          } as never,
+        ],
+      },
+    ];
+
+    return renderToStaticMarkup(
+      React.createElement(SessionTranscript, {
+        messages,
+        isStreaming: false,
+        developerMode: false,
+      }),
+    );
+  }
+
   test("renders versioned shared crypto cards with customer safety context", () => {
     const messages: UIMessage[] = [
       {
@@ -237,6 +268,46 @@ describe("crypto shared-card transcript rendering", () => {
     expect(html).not.toContain("External signer");
   });
 
+  test("renders a wallet-review action when the active MCP returns a JSON result string", () => {
+    const html = renderToolOutput(JSON.stringify({
+      sharedCards: [
+        {
+          version: "matterhorn.crypto.shared-card.v1",
+          kind: "action_preview",
+          venue: "hyperliquid",
+          title: "Hyperliquid order preview",
+          summary: "Agent-prepared hyperliquid terms for review.",
+          status: "success",
+          originalKind: "hyperliquid_order_preview",
+          source: { source: "hyperliquid.info" },
+          warnings: [],
+          data: {
+            kind: "hyperliquid_order_preview",
+            preview: {
+              network: "testnet",
+              asset: "BTC",
+              side: "buy",
+              size: 0.001,
+              price: null,
+              slippageTolerance: 1,
+              reduceOnly: false,
+            },
+          },
+          safety: {
+            nonCustodial: true,
+            liveSubmissionEnabled: false,
+            canSubmit: false,
+          },
+        },
+      ],
+    }));
+
+    expect(html).toContain("Hyperliquid order preview");
+    expect(html).toContain("Review in wallet");
+    expect(html).toContain("BTC");
+    expect(html).not.toContain("Result</div>");
+  });
+
   test("renders shared-card account, preview, market, receipt, and watch fixtures", () => {
     const fixturePack = JSON.parse(readFileSync("qa-fixtures/crypto-shared-cards.v1.json", "utf8")) as {
       cards: Array<Record<string, unknown>>;
@@ -262,13 +333,12 @@ describe("crypto shared-card transcript rendering", () => {
     expect(html).toContain("Funding exposure");
     expect(html).toContain("BTC long: 5x leverage");
 
-    expect(html).toContain("Preview Only: BTC order preview");
-    expect(html).toContain("External signer");
-    expect(html).toContain("Required");
-    expect(html).toContain("Preview submit");
-    expect(html).toContain("Disabled");
+    expect(html).toContain("Agent Draft: BTC order preview");
+    expect(html).toContain("Wallet ticket");
+    expect(html).toContain("Exact order review");
+    expect(html).toContain("Agent draft");
+    expect(html).toContain("Review only");
     expect(html).toContain("Can submit");
-    expect(html).toContain("No");
     expect(html).toContain("Live submission");
     expect(html).toContain("Off");
 
@@ -297,5 +367,19 @@ describe("crypto shared-card transcript rendering", () => {
     expect(html).not.toContain("privateKey");
     expect(html).not.toContain("rawSignature");
     expect(html).not.toContain("signedPayload");
+  });
+
+  test("does not offer a wallet review ticket for a blocked Polymarket draft", () => {
+    const fixturePack = JSON.parse(readFileSync("qa-fixtures/crypto-shared-cards.v1.json", "utf8")) as {
+      cards: Array<Record<string, unknown>>;
+    };
+    const blockedDraft = fixturePack.cards.find((card) => (
+      card.venue === "polymarket" && card.kind === "action_preview"
+    ));
+    const html = renderSharedCards(blockedDraft ? [blockedDraft] : []);
+
+    expect(html).toContain("Agent Draft: Blocked order preview");
+    expect(html).not.toContain("Wallet ticket");
+    expect(html).not.toContain("Review in wallet");
   });
 });

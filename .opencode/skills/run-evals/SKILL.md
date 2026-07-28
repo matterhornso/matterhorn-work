@@ -1,11 +1,12 @@
 ---
 name: run-evals
-description: Run OpenWork UI evals on a Daytona sandbox or local Electron instance. Handles sandbox creation, service startup, and eval execution via CDP browser tools.
+description: Run Matterhorn Desks UI evaluations on a Daytona sandbox or local Electron instance. Handles sandbox creation, service startup, and evaluation through CDP browser tools.
+user-invocable: false
 ---
 
 # Skill: Run Evals
 
-Run the OpenWork UI evaluation flows against a real Electron app. Prefer a fresh Daytona sandbox for each run, with a local test fallback when Daytona is unavailable.
+Run the Matterhorn Desks UI evaluation flows against a real Electron app. Prefer a fresh Daytona sandbox for each run, with a local test fallback when Daytona is unavailable.
 
 ## When to use
 
@@ -63,12 +64,12 @@ Use the Electron CDP URL printed by `test-on-daytona.sh` with the browser tools:
 
 ```
 browser_list({ browser_url: "<CDP_URL>" })
-→ should show "OpenWork" page target
+→ should show the "Matterhorn Desks" page target
 ```
 
 If `browser_list` fails, inspect `/tmp/electron.log`. The real CDP success
 marker is Chromium's `DevTools listening on ws://127.0.0.1:9825/...`, not just
-OpenWork's `Electron CDP exposed` line.
+the app's `Electron CDP exposed` line.
 
 ### Step 5: Create a workspace
 

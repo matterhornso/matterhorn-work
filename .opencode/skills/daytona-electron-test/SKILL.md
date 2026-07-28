@@ -1,6 +1,7 @@
 ---
 name: daytona-electron-test
 description: "Test the real Electron app on Daytona: create sandbox, start services, connect via CDP, create workspaces, drive sessions, and verify settings. Use when the user says 'test on Daytona', 'run the app on Daytona', 'Daytona dry run', 'test Electron remotely', or 'reproduce on Daytona'."
+user-invocable: false
 ---
 
 # Skill: Daytona Electron Test

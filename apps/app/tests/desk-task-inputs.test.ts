@@ -41,13 +41,24 @@ describe("desk task required inputs", () => {
     expect(getDeskTaskInputRequirement("Find useful Bittensor subnets for image generation.")).toBeNull();
   });
 
-  test("requires public market context before a compliance task starts", () => {
-    const prompt = "Check compliance for <paste market URL or slug>.";
+  test("accepts a natural-language market request and keeps a URL optional", () => {
+    const prompt = "Check compliance for <describe market or trade, or paste a Polymarket URL>.";
     const requirement = getDeskTaskInputRequirement(prompt);
+    const naturalLanguageRequest = "Preview YES on a September rate cut with $50";
+    const builtPrompt = buildDeskTaskPromptWithInput(prompt, requirement!, naturalLanguageRequest);
 
     expect(requirement?.kind).toBe("market");
-    expect(requirement?.actionLabel).toBe("Add market");
+    expect(requirement?.actionLabel).toBe("Describe market");
+    expect(requirement?.label).toBe("Describe the market or trade");
+    expect(validateDeskTaskInput(requirement!, naturalLanguageRequest)).toBeNull();
     expect(validateDeskTaskInput(requirement!, "will-bitcoin-reach-150000-in-2026")).toBeNull();
-    expect(buildDeskTaskPromptWithInput(prompt, requirement!, "market-slug")).toContain("market-slug");
+    expect(validateDeskTaskInput(requirement!, "https://polymarket.com/event/fed-rate-cut")).toBeNull();
+    expect(validateDeskTaskInput(requirement!, "")).toBe(requirement?.missingMessage);
+    expect(builtPrompt).toContain(naturalLanguageRequest);
+    expect(builtPrompt).toContain("Search the current public Polymarket catalog");
+    expect(builtPrompt).toContain("show at most three concise choices");
+    expect(builtPrompt).toContain("Agent draft must remain non-submittable");
+    expect(builtPrompt).toContain("separate connected-wallet trade ticket");
+    expect(builtPrompt).toContain("Never auto-sign, auto-submit, or place a bet");
   });
 });

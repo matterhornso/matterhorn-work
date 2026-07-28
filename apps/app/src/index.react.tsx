@@ -6,9 +6,14 @@ import {
   getMatterhornDeployment,
   isPublicBetaWebDeployment,
 } from "./app/lib/matterhorn-deployment";
+import {
+  denSessionUpdatedEvent,
+  type DenSessionUpdatedDetail,
+} from "./app/lib/den-session-events";
 import { readPublicCloudConfig } from "./app/lib/public-cloud-config";
 import { bootstrapTheme } from "./app/theme";
 import { initLocale } from "./i18n";
+import { shouldGatePublicWebEntry } from "./react-app/domains/public/public-trust-content";
 import "./app/bootstrap.css";
 
 bootstrapTheme();
@@ -28,7 +33,11 @@ const PublicSigninBootstrap = React.lazy(
   () => import("./react-app/shell/public-signin-bootstrap"),
 );
 
-const root = document.getElementById("root");
+type MatterhornRootElement = HTMLElement & {
+  __matterhornReactRoot?: ReturnType<typeof ReactDOM.createRoot>;
+};
+
+const root = document.getElementById("root") as MatterhornRootElement | null;
 
 if (!root) {
   throw new Error("Root element not found");
@@ -49,13 +58,41 @@ function AppLoadingFallback() {
 }
 
 function MatterhornEntry() {
-  const publicSigninGate =
-    publicBetaWeb && bootstrapConfig.requireSignin;
+  const publicSigninGate = shouldGatePublicWebEntry({
+    publicBetaWeb,
+    requireSignin: bootstrapConfig.requireSignin,
+    pathname: window.location.pathname,
+  });
   const [publicSessionVerified, setPublicSessionVerified] =
     React.useState(!publicSigninGate);
   const markPublicSessionVerified = React.useCallback(() => {
     setPublicSessionVerified(true);
   }, []);
+
+  React.useEffect(() => {
+    if (!publicSigninGate) return;
+
+    const handleSessionUpdated = (
+      event: CustomEvent<DenSessionUpdatedDetail>,
+    ) => {
+      if (event.detail?.status === "signed_out") {
+        setPublicSessionVerified(false);
+      } else if (event.detail?.status === "success") {
+        setPublicSessionVerified(true);
+      }
+    };
+
+    window.addEventListener(
+      denSessionUpdatedEvent,
+      handleSessionUpdated as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        denSessionUpdatedEvent,
+        handleSessionUpdated as EventListener,
+      );
+    };
+  }, [publicSigninGate]);
 
   if (!publicSessionVerified) {
     return (
@@ -75,7 +112,9 @@ function MatterhornEntry() {
   );
 }
 
-ReactDOM.createRoot(root).render(
+const appRoot = root.__matterhornReactRoot ?? (root.__matterhornReactRoot = ReactDOM.createRoot(root));
+
+appRoot.render(
   <React.StrictMode>
     <MatterhornEntry />
   </React.StrictMode>,

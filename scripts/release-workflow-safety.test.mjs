@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const releaseWorkflow = readFileSync(".github/workflows/release-macos-aarch64.yml", "utf8");
@@ -13,6 +14,32 @@ const productionCompose = readFileSync("packaging/docker/docker-compose.yml", "u
 const legacyDockerfile = readFileSync("packaging/docker/Dockerfile", "utf8");
 const engineChecksums = JSON.parse(readFileSync("packaging/docker/opencode-release-checksums.json", "utf8"));
 const constants = JSON.parse(readFileSync("constants.json", "utf8"));
+const appPackage = JSON.parse(readFileSync("apps/app/package.json", "utf8"));
+
+function verifyReleaseTag(tag) {
+  return spawnSync(process.execPath, ["scripts/release/verify-tag.mjs", "--tag", tag], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+}
+
+const packageVersion = String(appPackage.version);
+const stableVersion = packageVersion.split("-", 1)[0];
+assert.equal(
+  verifyReleaseTag(`v${packageVersion}`).status,
+  0,
+  "release verifier must accept an exact package-version tag",
+);
+assert.equal(
+  verifyReleaseTag(`v${stableVersion}-public-beta-rc.999`).status,
+  0,
+  "release verifier must accept a prerelease tag bound to the stable package version",
+);
+assert.notEqual(
+  verifyReleaseTag("v999.999.999-public-beta-rc.1").status,
+  0,
+  "release verifier must reject a prerelease tag for another package version",
+);
 
 for (const phrase of [
   'orchestratorPkg.dependencies?.["matterhorn-work-server"]',

@@ -48,6 +48,8 @@ function discoveryPaths() {
   return [
     process.env.MATTERHORN_WORK_UI_CONTROL_DISCOVERY?.trim(),
     process.env.OPENWORK_UI_CONTROL_DISCOVERY?.trim(),
+    join(userAppDataDir(), "com.matterhorn.desks", DISCOVERY_FILE),
+    join(userAppDataDir(), "com.matterhorn.desks.dev", DISCOVERY_FILE),
     join(userAppDataDir(), "com.matterhorn.work", DISCOVERY_FILE),
     join(userAppDataDir(), "com.matterhorn.work.dev", DISCOVERY_FILE),
     join(userAppDataDir(), "com.differentai.openwork", DISCOVERY_FILE),

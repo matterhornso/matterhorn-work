@@ -1,11 +1,11 @@
-# IMPORTANT: appId intentionally matches the Tauri shell so both builds share
-# the same macOS bundle identifier, keychain entries, Launchpad slot, and TCC
-# permissions. In-place migration from Tauri to Electron depends on this.
-appId: com.differentai.openwork
+# Matterhorn Desks owns its public desktop identity. First launch copies local
+# state from pre-Matterhorn installs without deleting the original data.
+appId: com.matterhorn.desks
 productName: Matterhorn Desks
 protocols:
   - name: Matterhorn Desks
     schemes:
+      - matterhorn-desks
       - matterhorn-work
       - openwork
 directories:
@@ -37,6 +37,9 @@ mac:
   notarize: false
   extendInfo:
     NSMicrophoneUsageDescription: Matterhorn uses the microphone when you start Voice Mode so you can speak commands to your agent.
+    NSAppTransportSecurity:
+      NSAllowsArbitraryLoads: false
+      NSAllowsLocalNetworking: true
   extraResources:
     - from: resources/sidecars
       to: sidecars

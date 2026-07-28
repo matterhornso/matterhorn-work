@@ -66,8 +66,7 @@ for (const visibleText of [
   "New chat",
   "New note",
   "Open a desk",
-  "Copy project path",
-  "Open outputs folder",
+  "Jot a note about outputs",
   "Wallet readiness",
   "Wallet readiness details",
   "review and sign every transaction in your wallet",
@@ -80,13 +79,13 @@ for (const visibleText of [
   "Hyperliquid desk",
   "Polymarket desk",
   "Sui desk",
-  "Longevity Agent",
+  "Longevity desk",
   "Agent tasks",
   "Explore subnets",
   "Read market overview",
   "Check compliance",
-  "Add market",
-  "Market URL or slug",
+  "Describe market",
+  "Describe the market or trade",
   "Preview a SUI transfer",
   "7 stages",
   "Run in chat",
@@ -105,25 +104,30 @@ for (const visibleText of [
   "Memory review",
   "Memory inbox filters",
   "Refresh memory review",
-  "Sui wallet",
+  "Wallets",
   "Install or enable Phantom for Sui",
   "Connect Phantom for Sui",
   "Connected wallet",
   "Settings",
-  "Backend status",
-  "Data policy",
+  "Workspace health",
+  "Data & privacy",
   "Task History",
   "Copy and run this in your terminal to capture a redacted readiness report.",
   "Support report",
   "Download report",
   "Copy command",
-  "Sui wallet",
+  "Wallets",
   "Limited release",
-  "Agent model",
-  "opencode/big-pickle",
-  "1 provider connected",
-  "OpenCode",
-  "Big Pickle",
+  "Models",
+  "Available models",
+  "Connected model catalog",
+  "Browse models",
+  "Matterhorn smoke provider",
+  "Smoke model",
+  "Add CUDOS API key",
+  "Choose provider",
+  "Add a model provider",
+  "CUDOS / ASI:Cloud",
   "Billing",
   "Matterhorn Plus",
   "Matterhorn Max",
@@ -138,6 +142,15 @@ for (const visibleText of [
 ]) {
   assert.ok(script.includes(visibleText), `product browser smoke should exercise ${visibleText}`);
 }
+
+assert.ok(
+  script.includes('getByLabel("Copy project path").count()'),
+  "product browser smoke should reject exposed local project path controls on the web",
+);
+assert.ok(
+  script.includes('getByLabel("Open outputs folder").count()'),
+  "product browser smoke should reject exposed local outputs-folder controls on the web",
+);
 
 assert.ok(
   script.includes("waitForEvent(\"download\"") &&
@@ -179,14 +192,18 @@ assert.ok(
 );
 assert.ok(
   script.includes("function isWorkspaceSessionDetailUrl") &&
+    script.includes("function isWorkspaceSettingsAiUrl") &&
     script.includes("async function waitForDeskPromptSentEvent") &&
     script.includes('entry?.name === "desk.task_launch.prompt_sent"') &&
     script.includes('locator("[data-workflow-stage]")') &&
-    script.includes("await page.waitForURL((url) => isWorkspaceSessionDetailUrl(url.toString())") &&
+    script.includes("provider_setup_required") &&
+    script.includes('getByTestId("pending-desk-task-handoff")') &&
+    script.includes('name: "Return to desk"') &&
+    script.includes("Nothing has been sent yet.") &&
     script.includes('page.getByTestId("session-composer-shell")') &&
     script.includes("startedDeskTaskEvents") &&
     script.includes("startedDeskTaskSessions"),
-  "product browser smoke should prove desk task launch sends a real prompt and navigates into a concrete chat session with the composer mounted",
+  "product browser smoke should prove a desk task either sends a real prompt into a concrete chat session or pauses safely at provider setup without sending work",
 );
 assert.ok(
   script.includes('browser.newContext({ viewport: { width: 390, height: 844 } })') &&

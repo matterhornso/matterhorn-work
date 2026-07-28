@@ -18,6 +18,7 @@ import {
 } from "./billing.js";
 import { MatterhornBillingAccountStore } from "./billing-account-store.js";
 import { MatterhornGeneratedImageStore } from "./generated-image-store.js";
+import { countDurableGeneratedImageUsage } from "./generated-media-usage.js";
 import { buildGeneratedMediaDiagnostics } from "./generated-media-diagnostics.js";
 import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
 import { buildProjectDataLedgerExport } from "./project-data-ledger.js";
@@ -136,7 +137,7 @@ async function buildBillingSupportReportSection(options: {
     }).list(),
   ]);
   const usage = {
-    generatedImages: images.filter((image) => isBillingUsageTimestampInPeriod(image.createdAt, usagePeriod)).length,
+    generatedImages: await countDurableGeneratedImageUsage(options.workspace, images, usagePeriod),
     generatedImagesResetsAt: usagePeriod.resetsAt,
     nftDrafts: nftDrafts.filter((draft) => isBillingUsageTimestampInPeriod(draft.createdAt, usagePeriod)).length,
     nftDraftsResetsAt: usagePeriod.resetsAt,

@@ -164,6 +164,7 @@ export default defineConfig({
             id.includes("node_modules/wagmi") ||
             id.includes("node_modules/viem") ||
             id.includes("node_modules/@mysten") ||
+            id.includes("node_modules/@polkadot") ||
             id.includes("node_modules/@wallet-standard") ||
             id.includes("node_modules/@walletconnect") ||
             id.includes("node_modules/@coinbase")
@@ -180,6 +181,7 @@ export default defineConfig({
     },
   },
   resolve: {
+    dedupe: ["react", "react-dom"],
     alias: {
       "@": resolve(appRoot, "src"),
     },

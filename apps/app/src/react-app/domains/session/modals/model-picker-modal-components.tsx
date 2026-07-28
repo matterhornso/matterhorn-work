@@ -138,7 +138,7 @@ function ModelPickerSearch(props: {
           value={props.query}
           onChange={(event) => props.onSetQuery(event.currentTarget.value)}
           placeholder={t("settings.search_models")}
-          className="w-full bg-dls-surface border border-dls-border rounded-lg py-2.5 pl-9 pr-3 text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-1 focus:ring-[rgba(var(--dls-accent-rgb),0.2)] focus:border-dls-accent"
+          className="w-full bg-dls-surface border border-dls-border rounded-lg py-2.5 pl-9 pr-3 text-sm text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-1 focus:ring-[rgb(var(--dls-accent-rgb)/0.2)] focus:border-dls-accent"
         />
       </div>
       {props.query.trim() ? (

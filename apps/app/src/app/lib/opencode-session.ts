@@ -144,12 +144,17 @@ export async function listCommands(
     const result = await client.command.list({ directory });
     const list = result?.data ?? [];
     if (!Array.isArray(list)) return [];
-    return list.map((cmd: Record<string, unknown>) => ({
-      id: `cmd:${cmd.name}`,
-      name: String(cmd.name ?? ""),
-      description: cmd.description ? String(cmd.description) : undefined,
-      source: cmd.source as CommandListItem["source"],
-    }));
+    return list
+      .map((cmd: Record<string, unknown>) => ({
+        id: `cmd:${cmd.name}`,
+        name: String(cmd.name ?? ""),
+        description: cmd.description ? String(cmd.description) : undefined,
+        source: cmd.source as CommandListItem["source"],
+      }))
+      .filter((command) => command.name !== "release")
+      .map((command) => command.name === "browser-setup"
+        ? { ...command, description: "Use the built-in Matterhorn Desks browser" }
+        : command);
   } catch {
     return [];
   }

@@ -7,10 +7,21 @@ import type {
   MatterhornWalletRuntimeSupport,
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
+import {
+  resolveModelDisplayName,
+  resolveProviderDisplayName,
+} from "@/app/utils";
 
-export type BackendCapabilityTone = "ready" | "setup" | "preview" | "neutral" | "error";
+export type BackendCapabilityTone =
+  | "ready"
+  | "setup"
+  | "preview"
+  | "neutral"
+  | "error";
 
-export function backendCapabilityLabel(status: MatterhornCapabilityStatus): string {
+export function backendCapabilityLabel(
+  status: MatterhornCapabilityStatus,
+): string {
   switch (status) {
     case "working":
       return "Working";
@@ -25,7 +36,9 @@ export function backendCapabilityLabel(status: MatterhornCapabilityStatus): stri
   }
 }
 
-export function backendCapabilityTone(status: MatterhornCapabilityStatus): BackendCapabilityTone {
+export function backendCapabilityTone(
+  status: MatterhornCapabilityStatus,
+): BackendCapabilityTone {
   switch (status) {
     case "working":
       return "ready";
@@ -41,34 +54,56 @@ export function backendCapabilityTone(status: MatterhornCapabilityStatus): Backe
 }
 
 export function summarizeCapability(capability: MatterhornCapability): string {
-  return capability.description?.trim() || capability.label.trim() || backendCapabilityLabel(capability.status);
+  return (
+    capability.description?.trim() ||
+    capability.label.trim() ||
+    backendCapabilityLabel(capability.status)
+  );
 }
 
-export function summarizeModelSource(capabilities: MatterhornBackendCapabilitiesResponse): string {
+export function summarizeModelSource(
+  capabilities: MatterhornBackendCapabilitiesResponse,
+): string {
   const provider = capabilities.models.defaultModel.providerId;
   const model = capabilities.models.defaultModel.modelId;
   if (!provider || !model) return "No default model reported.";
-  return `${provider}/${model}`;
+  return `${resolveProviderDisplayName(provider)} / ${resolveModelDisplayName(model)}`;
 }
 
-export function summarizeModelRoutingPolicy(capabilities: MatterhornBackendCapabilitiesResponse): string {
+export function summarizeModelRoutingPolicy(
+  capabilities: MatterhornBackendCapabilitiesResponse,
+): string {
   const routing = capabilities.models.routing;
   if (!routing) return "Model routing policy is not reported by the backend.";
-  const answerPath = routing.answerPath === "opencode_session_prompt_async"
-    ? "Local session prompts"
-    : "unknown route";
-  const modelList = routing.modelListTool === "opencode_provider_list"
-    ? "Local provider list"
-    : routing.modelListTool === "matterhorn_backend_registry"
-      ? "Matterhorn registry"
-      : "unknown source";
+  const delivery =
+    routing.answerPath === "opencode_session_prompt_async"
+      ? "Chats and desk tasks use the selected model."
+      : "Model delivery needs attention before you start work.";
   const selection = routing.userSelectable
-    ? `users can choose in ${routing.selectionSurface === "model_picker" ? "the model picker" : routing.selectionSurface}`
-    : "users cannot choose models here";
-  return `Answers use ${answerPath}. Models come from ${modelList}; ${selection}.`;
+    ? "Choose another model anytime in Models."
+    : "This workspace uses its configured model.";
+  return `${delivery} ${selection}`;
 }
 
-export function walletFamilySummary(capabilities: MatterhornBackendCapabilitiesResponse): Array<{
+/**
+ * Keeps routine settings copy useful without exposing provider implementation
+ * identifiers such as an internal runtime/model slug.
+ */
+export function summarizeModelSelection(
+  capabilities: MatterhornBackendCapabilitiesResponse,
+): string {
+  if (capabilities.models.status !== "working") {
+    return "Set up a model provider to finish configuring this workspace.";
+  }
+
+  return capabilities.models.routing?.userSelectable
+    ? "You can change the workspace model in Models."
+    : "A workspace model is ready to use.";
+}
+
+export function walletFamilySummary(
+  capabilities: MatterhornBackendCapabilitiesResponse,
+): Array<{
   family: "EVM" | "Sui" | "Bittensor";
   label: string;
   status: MatterhornCapabilityStatus;
@@ -106,7 +141,11 @@ export function walletFamilySummary(capabilities: MatterhornBackendCapabilitiesR
 
 export function walletRuntimeSupportSummary(
   support: MatterhornWalletRuntimeSupport | undefined,
-): { label: string; detail: string; status: MatterhornCapabilityStatus | null } {
+): {
+  label: string;
+  detail: string;
+  status: MatterhornCapabilityStatus | null;
+} {
   if (!support) {
     return {
       label: "Runtime status unavailable",
@@ -117,7 +156,9 @@ export function walletRuntimeSupportSummary(
   if (["needs_setup", "unsupported", "error"].includes(support.status)) {
     return {
       label: backendCapabilityLabel(support.status),
-      detail: support.description || "Wallet support is not available in this runtime.",
+      detail:
+        support.description ||
+        "Wallet support is not available in this runtime.",
       status: support.status,
     };
   }
@@ -128,15 +169,15 @@ export function walletRuntimeSupportSummary(
     : `Prepare only${limitedRelease ? " · Limited release" : ""}`;
   const detail = support.directConnect
     ? `Connect and use a supported wallet in Matterhorn. ${
-      support.signing === "client_wallet"
-        ? "You still review and sign every transaction in your wallet."
-        : "Transaction signing is not available here."
-    }${limitedRelease ? " Wallet compatibility is still expanding." : ""}`
+        support.signing === "client_wallet"
+          ? "You still review and sign every transaction in your wallet."
+          : "Transaction signing is not available here."
+      }${limitedRelease ? " Wallet compatibility is still expanding." : ""}`
     : `Matterhorn prepares the action. ${
-      support.signing === "external_signer"
-        ? "Review, sign, and submit it in your own wallet or protocol client."
-        : "Signing and submission are not available here."
-    }${limitedRelease ? " This workflow is still in a limited release." : ""}`;
+        support.signing === "external_signer"
+          ? "Review, sign, and submit it in your own wallet or protocol client."
+          : "Signing and submission are not available here."
+      }${limitedRelease ? " This workflow is still in a limited release." : ""}`;
   return {
     label,
     detail,
@@ -144,18 +185,23 @@ export function walletRuntimeSupportSummary(
   };
 }
 
-export function storageLocationLabel(store: MatterhornDataStoreDescriptor): string {
+export function storageLocationLabel(
+  store: MatterhornDataStoreDescriptor,
+): string {
+  if (store.scope === "opencode_runtime")
+    return "Managed chat history on this device";
   if (store.path?.trim()) return store.path.trim();
   const firstPath = store.paths?.find((path) => path.trim());
   if (firstPath) return firstPath.trim();
   if (store.scope === "matterhorn_cloud") return "Matterhorn Cloud";
-  if (store.scope === "opencode_runtime") return "Chat runtime";
   if (store.scope === "machine_global") return "This device";
   if (store.scope === "workspace") return "Workspace folder";
   return "Location unavailable";
 }
 
-export function workspaceDataPolicySummary(dataMap: MatterhornWorkspaceDataMapResponse): string {
+export function workspaceDataPolicySummary(
+  dataMap: MatterhornWorkspaceDataMapResponse,
+): string {
   if (dataMap.policy.trainingUse === "none_by_default") {
     return "No training use by default.";
   }

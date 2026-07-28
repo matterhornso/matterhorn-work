@@ -1,5 +1,12 @@
 /** @jsxImportSource react */
-import { useState, useCallback, useEffect, useMemo } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type KeyboardEvent,
+} from "react";
 import {
   useCurrentAccount,
   useCurrentNetwork,
@@ -8,7 +15,14 @@ import {
   useWallets,
   type UiWallet,
 } from "@mysten/dapp-kit-react";
-import { useAccount, useBalance, useConnect, useDisconnect, useChainId, useSwitchChain } from "wagmi";
+import {
+  useAccount,
+  useBalance,
+  useConnect,
+  useDisconnect,
+  useChainId,
+  useSwitchChain,
+} from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { formatUnits } from "viem";
 import {
@@ -26,6 +40,7 @@ import {
   MonitorSmartphone,
   Globe,
   Waves,
+  Info,
 } from "lucide-react";
 import type { MatterhornProjectDataLedgerEntry } from "@matterhorn-work/types/project-data-ledger";
 import type { MatterhornWalletSafetyPolicy } from "@matterhorn-work/types/wallet-safety-policy";
@@ -33,6 +48,7 @@ import type { MatterhornWalletSafetyPolicy } from "@matterhorn-work/types/wallet
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ConfirmModal } from "@/react-app/design-system/modals/confirm-modal";
 import type { WalletStore } from "../../wallet/state/wallet-store";
 import { useWalletStore } from "../../wallet/state/wallet-store";
 import {
@@ -43,8 +59,18 @@ import {
 } from "../../wallet/state/security-log";
 import { useStatusToasts } from "../../shell-feedback/status-toasts";
 import { CHAIN_NAMES, CHAIN_LIST } from "../../../infra/chains";
-import { SUI_NETWORKS, suiDAppKit, type SuiMatterhornNetwork } from "../../../infra/sui-dapp-kit";
-import { SettingsSection, SettingsSectionHeader, SettingsSectionHeaderTitle, SettingsSectionHeaderDescription, SettingsStack } from "../settings-section";
+import {
+  SUI_NETWORKS,
+  suiDAppKit,
+  type SuiMatterhornNetwork,
+} from "../../../infra/sui-dapp-kit";
+import {
+  SettingsSection,
+  SettingsSectionHeader,
+  SettingsSectionHeaderTitle,
+  SettingsSectionHeaderDescription,
+  SettingsStack,
+} from "../settings-section";
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import { SuiWorkflowPanel } from "../../wallet/sui-workflow-panel";
 import { usePhantomSui } from "../../wallet/phantom-sui-provider";
@@ -66,29 +92,70 @@ function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
-function formatSuiBalance(totalBalance: string | number | bigint | null | undefined): string {
+function formatSuiBalance(
+  totalBalance: string | number | bigint | null | undefined,
+): string {
   if (totalBalance === null || totalBalance === undefined) return "—";
   try {
     const mist = BigInt(totalBalance);
     const whole = mist / 1_000_000_000n;
     const fraction = mist % 1_000_000_000n;
-    const fractionText = fraction.toString().padStart(9, "0").slice(0, 4).replace(/0+$/g, "");
+    const fractionText = fraction
+      .toString()
+      .padStart(9, "0")
+      .slice(0, 4)
+      .replace(/0+$/g, "");
     return `${whole.toString()}${fractionText ? `.${fractionText}` : ""} SUI`;
   } catch {
     return "—";
   }
 }
 
+const WALLET_CONNECTOR_ACTION_CLASS =
+  "rounded-md border-0 bg-dls-surface-raised text-dls-text shadow-none transition-colors hover:bg-dls-surface-muted/55 focus-visible:ring-[rgb(var(--matterhorn-blue-rgb)/0.32)]";
+const WALLET_DISCLOSURE_SUMMARY_FOCUS_CLASS =
+  "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--matterhorn-blue-rgb)/0.45)] focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+const WALLET_CONNECTION_TIMEOUT_MS = 30_000;
+const WALLET_CONNECTION_TIMEOUT_MESSAGE =
+  "Wallet connection timed out. Close any wallet prompt, then try again.";
+
+export function handleWalletDisclosureSummaryKeyDown(
+  event: KeyboardEvent<HTMLElement>,
+): void {
+  if (
+    event.key !== "Enter" &&
+    event.key !== " " &&
+    event.key !== "Space" &&
+    event.key !== "Spacebar"
+  )
+    return;
+
+  event.preventDefault();
+  if (event.repeat) return;
+
+  const details = event.currentTarget.closest(
+    "details",
+  ) as HTMLDetailsElement | null;
+  if (details) details.open = !details.open;
+}
+
 function isSuiMatterhornNetwork(value: unknown): value is SuiMatterhornNetwork {
-  return typeof value === "string" && SUI_NETWORKS.includes(value as SuiMatterhornNetwork);
+  return (
+    typeof value === "string" &&
+    SUI_NETWORKS.includes(value as SuiMatterhornNetwork)
+  );
 }
 
 function txStatusIcon(status: string) {
   switch (status) {
-    case "confirmed": return <CheckCircle2 className="size-3 text-green-500" />;
-    case "pending": return <Clock className="size-3 text-yellow-500" />;
-    case "failed": return <AlertCircle className="size-3 text-red-500" />;
-    default: return <Clock className="size-3 text-gray-500" />;
+    case "confirmed":
+      return <CheckCircle2 className="size-3 text-green-500" />;
+    case "pending":
+      return <Clock className="size-3 text-yellow-500" />;
+    case "failed":
+      return <AlertCircle className="size-3 text-red-500" />;
+    default:
+      return <Clock className="size-3 text-gray-500" />;
   }
 }
 
@@ -97,14 +164,22 @@ export type WalletSettingsViewProps = {
   matterhornServerClient?: MatterhornServerClient | null;
   runtimeWorkspaceId?: string | null;
   sessionId?: string | null;
-  onTxApprove?: (tx: { to: string; value: string; data?: string; chainId: number }) => void;
+  onTxApprove?: (tx: {
+    to: string;
+    value: string;
+    data?: string;
+    chainId: number;
+  }) => void;
   onTxReject?: () => void;
   compact?: boolean;
 };
 
 type BackendWalletFamilyRow = ReturnType<typeof walletFamilySummary>[number];
 
-function WalletBoundaryList({ safetyCopy, compact = false }: {
+function WalletBoundaryList({
+  safetyCopy,
+  compact = false,
+}: {
   safetyCopy: WalletRuntimeCapability["safetyCopy"];
   compact?: boolean;
 }) {
@@ -117,10 +192,16 @@ function WalletBoundaryList({ safetyCopy, compact = false }: {
   return (
     <div className="grid gap-1 text-xs leading-5 text-dls-secondary">
       {items.map((item) => (
-        <p key={item.label} className={cn(
-          compact ? "py-1" : "rounded-md bg-dls-surface-muted/[0.08] px-3 py-2",
-        )}>
-          <span className="font-medium text-dls-text">{item.label}:</span> {item.body}
+        <p
+          key={item.label}
+          className={cn(
+            compact
+              ? "py-1"
+              : "rounded-md bg-dls-surface-muted/[0.08] px-3 py-2",
+          )}
+        >
+          <span className="font-medium text-dls-text">{item.label}:</span>{" "}
+          {item.body}
         </p>
       ))}
     </div>
@@ -130,52 +211,109 @@ function WalletBoundaryList({ safetyCopy, compact = false }: {
 function protocolLabelAndDetail(
   protocol: WalletProtocol,
   cap: WalletProtocolCapability,
-): { label: string; detail: string; tone: string } {
+): { label: string; status: string; detail: string; tone: string } {
   switch (protocol) {
     case "bittensor":
       return {
         label: "Bittensor",
-        detail: cap.canPreview
-          ? "Read public SS58 data and prepare unsigned actions. Review, sign, and submit them with your own Bittensor signer."
+        status: cap.canSubmit
+          ? "TAO transfer: review & submit"
+          : cap.canPreview
+            ? "Prepare only"
+            : cap.canRead
+              ? "Read only"
+              : "Unavailable",
+        detail: cap.canSubmit
+          ? "Read public SS58 data and prepare TAO transfers. Review and submit the exact transfer with your connected Bittensor wallet. Staking and advanced calls remain external-signer handoffs."
+          : cap.canPreview
+            ? "Read public SS58 data and prepare unsigned actions. Review, sign, and submit them with your own Bittensor signer."
           : "Read public SS58 and coldkey data.",
-        tone: cap.canRead ? "text-cyan-300 bg-cyan-500/10" : "text-dls-secondary bg-dls-surface/75",
+        tone: cap.canRead
+          ? "text-cyan-11 bg-cyan-500/10"
+          : "text-dls-secondary bg-dls-surface/75",
       };
     case "hyperliquid":
       return {
         label: "Hyperliquid",
+        status: cap.canSubmit
+          ? "Order: review & submit"
+          : cap.canPreview
+            ? "Prepare only"
+            : cap.canRead
+              ? "Read only"
+              : "Unavailable",
         detail: cap.canSubmit
           ? "Read markets, prepare the exact order, and review it in the trade ticket. Matterhorn submits only after your connected wallet signs the short-lived intent; agents and watches cannot submit."
           : cap.canPreview
-          ? "Read markets, orderbooks, and funding, then prepare an order draft. Review and submit it in your Hyperliquid client."
-          : "Read markets, orderbooks, and funding.",
-        tone: cap.canRead ? "text-blue-300 bg-blue-500/10" : "text-dls-secondary bg-dls-surface/75",
+            ? "Read markets, orderbooks, and funding, then prepare an order draft. Review and submit it in your Hyperliquid client."
+            : "Read markets, orderbooks, and funding.",
+        tone: cap.canRead
+          ? "text-blue-11 bg-blue-500/10"
+          : "text-dls-secondary bg-dls-surface/75",
       };
     case "polymarket":
       return {
         label: "Polymarket",
-        detail: cap.canPreview
-          ? "Read markets, compliance, and liquidity, then prepare an order draft. Review and submit it in your Polymarket client."
+        status: cap.canSubmit
+          ? "Eligible buy: review & submit"
+          : cap.canPreview
+            ? "Prepare only"
+            : cap.canRead
+              ? "Read only"
+              : "Unavailable",
+        detail: cap.canSubmit
+          ? "Read markets, check compliance, and prepare exact terms. Eligible EOA BUY orders can be reviewed and submitted after authorization from your connected Polygon wallet. Other order and account types remain external handoffs."
+          : cap.canPreview
+            ? "Read markets, compliance, and liquidity, then prepare an order draft. Review and submit it in your Polymarket client."
           : "Read markets, compliance, and liquidity.",
-        tone: cap.canRead ? "text-violet-300 bg-violet-500/10" : "text-dls-secondary bg-dls-surface/75",
+        tone: cap.canRead
+          ? "text-violet-11 bg-violet-500/10"
+          : "text-dls-secondary bg-dls-surface/75",
       };
     case "sui":
       return {
         label: "Sui",
+        status: cap.canSubmit
+          ? "Review & submit"
+          : cap.canPreview
+            ? "Prepare only"
+            : cap.canRead
+              ? "Read only"
+              : "Unavailable",
         detail: cap.canSubmit
           ? "Connect a supported Sui wallet, review the transaction, and approve it in that wallet."
           : "Read public account data and prepare an action to finish in your own Sui wallet.",
-        tone: cap.canRead ? "text-cyan-300 bg-cyan-500/10" : "text-dls-secondary bg-dls-surface/75",
+        tone: cap.canRead
+          ? "text-cyan-11 bg-cyan-500/10"
+          : "text-dls-secondary bg-dls-surface/75",
       };
   }
 }
 
-function evmConnectorStatusLabel(state: string, connected: boolean): { label: string; tone: string } {
-  if (connected) return { label: "Connected", tone: "text-emerald-300 bg-emerald-500/10" };
+function evmConnectorStatusLabel(
+  state: string,
+  connected: boolean,
+): { label: string; tone: string } {
+  if (connected)
+    return { label: "Connected", tone: "text-emerald-11 bg-emerald-500/10" };
   switch (state) {
-    case "available": return { label: "Connect wallet", tone: "text-sky-300 bg-sky-500/10" };
-    case "needs_extension": return { label: "Extension needed", tone: "text-amber-300 bg-amber-500/10" };
-    case "unsupported_runtime": return { label: "Not supported here", tone: "text-gray-400 bg-gray-500/10" };
-    default: return { label: "Unavailable", tone: "text-gray-500 bg-gray-500/10" };
+    case "available":
+      return { label: "Connect wallet", tone: "text-sky-11 bg-sky-500/10" };
+    case "needs_extension":
+      return {
+        label: "Extension needed",
+        tone: "text-amber-12 dark:text-amber-11 bg-amber-500/10",
+      };
+    case "unsupported_runtime":
+      return {
+        label: "Not supported here",
+        tone: "text-gray-11 bg-gray-500/10",
+      };
+    default:
+      return {
+        label: "Unavailable",
+        tone: "text-dls-secondary bg-gray-500/10",
+      };
   }
 }
 
@@ -183,76 +321,141 @@ function WalletProtocolSupportMap(props: {
   capability: WalletRuntimeCapability;
   connected: boolean;
   backendWallets?: BackendWalletFamilyRow[];
+  hyperliquidExecutionReady?: boolean;
+  polymarketWalletTicketAvailable?: boolean;
+  bittensorWalletTicketAvailable?: boolean;
   compact?: boolean;
 }) {
-  const evm = evmConnectorStatusLabel(props.capability.evmConnectorState, props.connected);
-  const backendSui = props.backendWallets?.find((wallet) => wallet.family === "Sui");
+  const [statusGuideOpen, setStatusGuideOpen] = useState(false);
+  const evm = evmConnectorStatusLabel(
+    props.capability.evmConnectorState,
+    props.connected,
+  );
+  const backendSui = props.backendWallets?.find(
+    (wallet) => wallet.family === "Sui",
+  );
   const backendSuiRuntime =
-    props.capability.runtime === "unknown" ? undefined : backendSui?.runtimeSupport?.[props.capability.runtime];
+    props.capability.runtime === "unknown"
+      ? undefined
+      : backendSui?.runtimeSupport?.[props.capability.runtime];
   const backendSuiRuntimeCopy = walletRuntimeSupportSummary(backendSuiRuntime);
   const evmDetail = props.capability.supportsInjectedEvm
     ? "Browser extension wallets such as MetaMask or Rabby can appear when installed and allowed."
     : "Desktop does not connect browser extensions. Use a public address here, then review and submit actions in your own wallet.";
-  const rows: { label: string; status: string; detail: string; tone: string }[] = [
+  const rows: {
+    label: string;
+    status: string;
+    detail: string;
+    tone: string;
+  }[] = [
     {
       label: "EVM wallet",
       status: evm.label,
       detail: evmDetail,
       tone: evm.tone,
     },
-    ...(backendSui ? [{
-      label: "Sui wallet",
-      status: backendSuiRuntimeCopy.status ? backendSuiRuntimeCopy.label : backendCapabilityLabel(backendSui.status),
-      detail: backendSuiRuntimeCopy.status
-        ? backendSuiRuntimeCopy.detail
-        : backendSui.status === "preview"
-          ? "Connect a supported Sui wallet here. You still review and sign every transaction in that wallet. Wallet compatibility is still expanding."
-          : backendSui.label,
-      tone: (backendSuiRuntimeCopy.status ?? backendSui.status) === "unsupported"
-        ? "text-gray-400 bg-gray-500/10"
-        : (backendSuiRuntimeCopy.status ?? backendSui.status) === "preview"
-          ? "text-amber-300 bg-amber-500/10"
-          : (backendSuiRuntimeCopy.status ?? backendSui.status) === "working"
-            ? "text-emerald-300 bg-emerald-500/10"
-            : "text-sky-300 bg-sky-500/10",
-    }] : []),
-    ...(Object.entries(props.capability.protocols) as [WalletProtocol, WalletProtocolCapability][])
+    ...(backendSui
+      ? [
+          {
+            label: "Sui wallet",
+            status: backendSuiRuntimeCopy.status
+              ? backendSuiRuntimeCopy.label
+              : backendCapabilityLabel(backendSui.status),
+            detail: backendSuiRuntimeCopy.status
+              ? backendSuiRuntimeCopy.detail
+              : backendSui.status === "preview"
+                ? "Connect a supported Sui wallet here. You still review and sign every transaction in that wallet. Wallet compatibility is still expanding."
+                : backendSui.label,
+            tone:
+              (backendSuiRuntimeCopy.status ?? backendSui.status) ===
+              "unsupported"
+                ? "text-gray-11 bg-gray-500/10"
+                : (backendSuiRuntimeCopy.status ?? backendSui.status) ===
+                    "preview"
+                  ? "text-amber-12 dark:text-amber-11 bg-amber-500/10"
+                  : (backendSuiRuntimeCopy.status ?? backendSui.status) ===
+                      "working"
+                    ? "text-emerald-11 bg-emerald-500/10"
+                    : "text-sky-11 bg-sky-500/10",
+          },
+        ]
+      : []),
+    ...(
+      Object.entries(props.capability.protocols) as [
+        WalletProtocol,
+        WalletProtocolCapability,
+      ][]
+    )
       .filter(([protocol]) => protocol !== "sui")
-      .map(
-      ([protocol, cap]) => {
-        const { label, detail, tone } = protocolLabelAndDetail(protocol, cap);
-        const submitStatus =
-          cap.canSubmit
-            ? "Review & submit"
-            : cap.canPreview
-              ? "Prepare only"
-              : cap.canRead
-                ? "Read only"
-                : "Unavailable";
-        return { label, status: submitStatus, detail, tone };
-      },
-    ),
+      .map(([protocol, cap]) => {
+        const effectiveCap = (() => {
+          if (protocol === "hyperliquid" && cap.canSubmit) {
+            return {
+              ...cap,
+              canSubmit: props.hyperliquidExecutionReady === true,
+            };
+          }
+          if (
+            protocol === "polymarket" &&
+            props.polymarketWalletTicketAvailable === true
+          ) {
+            return { ...cap, canSubmit: true };
+          }
+          if (
+            protocol === "bittensor" &&
+            props.bittensorWalletTicketAvailable === true
+          ) {
+            return { ...cap, canSubmit: true };
+          }
+          return cap;
+        })();
+        const { label, status, detail, tone } = protocolLabelAndDetail(
+          protocol,
+          effectiveCap,
+        );
+        return { label, status, detail, tone };
+      }),
   ];
 
   if (props.compact) {
     return (
       <details className="group matterhorn-rail-section">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-1 text-sm transition-colors hover:text-dls-text">
+        <summary
+          className={cn(
+            "flex cursor-pointer list-none items-center justify-between gap-3 py-1 text-sm transition-colors hover:text-dls-text",
+            WALLET_DISCLOSURE_SUMMARY_FOCUS_CLASS,
+          )}
+          onKeyDown={handleWalletDisclosureSummaryKeyDown}
+        >
           <span>
-            <span className="block font-medium text-dls-text">Supported wallets and desks</span>
-            <span className="mt-0.5 block text-xs text-dls-secondary">What works here and what you finish elsewhere</span>
+            <span className="block font-medium text-dls-text">
+              Supported wallets and desks
+            </span>
+            <span className="mt-0.5 block text-xs text-dls-secondary">
+              What works here and what you finish elsewhere
+            </span>
           </span>
           <ChevronDown className="size-4 shrink-0 text-dls-muted transition-transform group-open:rotate-180" />
         </summary>
-        <div className="mt-3 grid gap-3 border-t border-dls-border/40 pt-3">
+        <div className="mt-3 grid gap-3 rounded-md bg-dls-surface-muted/[0.055] px-3 py-3">
           <p className="text-xs leading-5 text-dls-secondary">
-            <span className="font-medium text-dls-text">Review &amp; submit</span> still requires your approval in a connected wallet; agents and watches never submit automatically. <span className="font-medium text-dls-text">Prepare only</span> creates a draft for you to finish elsewhere. <span className="font-medium text-dls-text">Limited release</span> means wallet compatibility is still expanding.
+            Only the action named in each row can be reviewed and submitted
+            here, and it always needs your wallet approval. Prepare only makes
+            a draft for another compatible client. Limited release means
+            compatibility is still expanding.
           </p>
           {rows.map((row) => (
             <div key={row.label} className="grid gap-1 text-xs leading-5">
               <div className="flex items-center justify-between gap-3">
                 <span className="font-medium text-dls-text">{row.label}</span>
-                <span className={cn("shrink-0 font-medium", row.tone.split(" ")[0])}>{row.status}</span>
+                <span
+                  className={cn(
+                    "min-w-0 text-right font-medium",
+                    row.tone.split(" ")[0],
+                  )}
+                >
+                  {row.status}
+                </span>
               </div>
               <p className="text-dls-secondary">{row.detail}</p>
             </div>
@@ -263,36 +466,81 @@ function WalletProtocolSupportMap(props: {
   }
 
   return (
-    <section className={cn(
-      "flex flex-col gap-3",
-      "rounded-lg bg-dls-surface-muted/30 px-3 py-3",
-    )}>
-      <div>
-        <h4 className="text-sm font-semibold text-dls-text">Protocol support</h4>
-        <p className="mt-1 text-xs leading-5 text-dls-secondary">
-          Matterhorn either completes the action here or prepares it for you to finish elsewhere.
-        </p>
-      </div>
-      <p className="text-xs leading-5 text-dls-secondary">
-        <span className="font-medium text-dls-text">Review &amp; submit</span> still requires your approval in a connected wallet; agents and watches never submit automatically. <span className="font-medium text-dls-text">Prepare only</span> creates a draft for you to finish elsewhere. <span className="font-medium text-dls-text">Limited release</span> means wallet compatibility is still expanding.
-      </p>
-      <div className="grid gap-2">
+    <section className="flex flex-col gap-2">
+      <h4 className="text-sm font-semibold text-dls-text">Protocol support</h4>
+      <div className="space-y-1 rounded-lg bg-dls-surface-muted/[0.055] p-1">
         {rows.map((row) => (
-          <div key={row.label} className="grid gap-1 rounded-md py-1.5 text-xs leading-5">
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-medium text-dls-text">{row.label}</span>
-              <span className={`shrink-0 rounded-md px-2 py-0.5 font-medium ${row.tone}`}>{row.status}</span>
-            </div>
-            <p className="text-dls-secondary">{row.detail}</p>
-          </div>
+          <details
+            key={row.label}
+            className="group rounded-md px-2 transition-colors hover:bg-dls-surface-muted/[0.08] open:bg-dls-surface-muted/[0.08]"
+          >
+            <summary
+              className={cn(
+                "flex cursor-pointer list-none items-center gap-3 py-2.5 text-xs",
+                WALLET_DISCLOSURE_SUMMARY_FOCUS_CLASS,
+              )}
+              onKeyDown={handleWalletDisclosureSummaryKeyDown}
+            >
+              <span className="min-w-0 flex-1 font-medium text-dls-text">
+                {row.label}
+              </span>
+              <span
+                className={`max-w-[58%] rounded-md px-2 py-0.5 text-right font-medium ${row.tone}`}
+              >
+                {row.status}
+              </span>
+              <ChevronDown className="size-3.5 shrink-0 text-dls-muted transition-transform group-open:rotate-180" />
+            </summary>
+            <p className="pb-3 pr-7 text-xs leading-5 text-dls-secondary">
+              {row.detail}
+            </p>
+          </details>
         ))}
+      </div>
+      <div className="px-1 pt-1 text-xs text-dls-secondary">
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          aria-expanded={statusGuideOpen}
+          onClick={() => setStatusGuideOpen((open) => !open)}
+          className="bg-dls-surface-muted/[0.22] text-dls-secondary hover:bg-dls-surface-muted/[0.38] hover:text-dls-text"
+        >
+          <Info className="size-3" />
+          Action guide
+          <ChevronDown
+            className={cn(
+              "size-3 transition-transform",
+              statusGuideOpen && "rotate-180",
+            )}
+          />
+        </Button>
+        {statusGuideOpen ? (
+          <p role="note" className="mt-2 max-w-2xl leading-5">
+            A review &amp; submit badge applies only to the action named in its row
+            and always needs your wallet approval. Prepare only makes a draft
+            for another compatible client. Limited release means compatibility
+            is still expanding.
+          </p>
+        ) : null}
       </div>
     </section>
   );
 }
 
+function PhantomWalletMark({ icon }: { icon?: string | null }) {
+  return (
+    <img
+      src={icon?.trim() || "/wallet-phantom.svg"}
+      alt=""
+      className="size-8 shrink-0 rounded-md object-cover"
+    />
+  );
+}
+
 function SuiWalletPreviewSection(props: {
   compact?: boolean;
+  integrated?: boolean;
   matterhornServerClient?: MatterhornServerClient | null;
   runtime?: WalletRuntime;
   workspaceId?: string | null;
@@ -304,28 +552,44 @@ function SuiWalletPreviewSection(props: {
   const wallet = useCurrentWallet();
   const phantomSui = usePhantomSui();
   const reportedNetwork = useCurrentNetwork();
-  const network = isSuiMatterhornNetwork(reportedNetwork) ? reportedNetwork : "testnet";
+  const network = isSuiMatterhornNetwork(reportedNetwork)
+    ? reportedNetwork
+    : "testnet";
   const client = suiDAppKit.getClient(network);
   const [error, setError] = useState<string | null>(null);
   const runtime = props.runtime ?? "web";
   const directSuiWalletAvailable = runtime === "web";
+  const integrated = Boolean(props.integrated && directSuiWalletAvailable);
   const suiAddress = account?.address ?? phantomSui.address;
-  const suiWalletName = account?.address ? wallet?.name ?? "Sui" : phantomSui.address ? "Phantom" : "Sui";
+  const suiWalletName = account?.address
+    ? (wallet?.name ?? "Sui")
+    : phantomSui.address
+      ? "Phantom"
+      : "Sui";
   const walletStandardPhantom = wallets.find((availableWallet) =>
     availableWallet.name.toLowerCase().includes("phantom"),
   );
-  const otherSuiWallets = wallets.filter((availableWallet) =>
-    !availableWallet.name.toLowerCase().includes("phantom"),
+  const otherSuiWallets = wallets.filter(
+    (availableWallet) =>
+      !availableWallet.name.toLowerCase().includes("phantom"),
   );
 
   const balanceQuery = useQuery({
-    queryKey: ["sui-wallet-balance", network, suiAddress, props.matterhornServerClient ? "matterhorn" : "wallet"],
+    queryKey: [
+      "sui-wallet-balance",
+      network,
+      suiAddress,
+      props.matterhornServerClient ? "matterhorn" : "wallet",
+    ],
     enabled: Boolean(directSuiWalletAvailable && suiAddress),
     queryFn: async () => {
       if (!suiAddress) throw new Error("No Sui account connected.");
       if (props.matterhornServerClient) {
         try {
-          const response = await props.matterhornServerClient.suiAccount(suiAddress, { network });
+          const response = await props.matterhornServerClient.suiAccount(
+            suiAddress,
+            { network },
+          );
           return {
             balanceMist: response.account.balance.balanceMist,
             sourceLabel: "Matterhorn engine",
@@ -349,7 +613,9 @@ function SuiWalletPreviewSection(props: {
     try {
       await suiDAppKit.connectWallet({ wallet: nextWallet });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not connect Sui wallet.");
+      setError(
+        err instanceof Error ? err.message : "Could not connect Sui wallet.",
+      );
     }
   }, []);
 
@@ -362,31 +628,51 @@ function SuiWalletPreviewSection(props: {
         await phantomSui.disconnect();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not disconnect Sui wallet.");
+      setError(
+        err instanceof Error ? err.message : "Could not disconnect Sui wallet.",
+      );
     }
   }, [account?.address, phantomSui]);
 
-  const busy = connection.isConnecting || connection.isReconnecting || phantomSui.connecting;
+  const busy =
+    connection.isConnecting ||
+    connection.isReconnecting ||
+    phantomSui.connecting;
   if (!directSuiWalletAvailable) {
     return (
-      <section className={cn(
-        "flex flex-col gap-3",
-        props.compact ? "matterhorn-rail-section" : "rounded-md bg-dls-surface-muted/[0.045] px-4 py-4",
-      )}>
+      <section
+        className={cn(
+          "flex flex-col gap-3",
+          props.compact
+            ? "matterhorn-rail-section"
+            : "rounded-md bg-dls-surface-muted/[0.045] px-4 py-4",
+        )}
+      >
         <div className="flex min-w-0 items-start gap-2">
           <div className="flex min-w-0 items-start gap-2">
             <Waves className="mt-0.5 size-4 shrink-0 text-dls-secondary" />
             <div className="min-w-0">
-              <h4 className="text-sm font-semibold text-dls-text">Prepare Sui actions</h4>
+              <h4 className="text-sm font-semibold text-dls-text">
+                Prepare Sui actions
+              </h4>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Matterhorn prepares the action and receipt evidence. Review, sign, and submit it in your Sui wallet or protocol client.
+                Matterhorn prepares the action and receipt evidence. Review,
+                sign, and submit it in your Sui wallet or protocol client.
               </p>
             </div>
           </div>
         </div>
         <div className="grid gap-1 text-xs leading-5 text-dls-secondary">
-          <p><span className="font-medium text-dls-text">Available here:</span> public reads, transfer drafts, copyable transaction details, and receipt import.</p>
-          <p><span className="font-medium text-dls-text">Not here:</span> wallet-extension connect, seed phrases, private keys, raw signatures, or live submit by Matterhorn.</p>
+          <p>
+            <span className="font-medium text-dls-text">Available here:</span>{" "}
+            public reads, transfer drafts, copyable transaction details, and
+            receipt import.
+          </p>
+          <p>
+            <span className="font-medium text-dls-text">Not here:</span>{" "}
+            wallet-extension connect, seed phrases, private keys, raw
+            signatures, or live submit by Matterhorn.
+          </p>
         </div>
         <SuiWorkflowPanel
           embedded
@@ -400,28 +686,51 @@ function SuiWalletPreviewSection(props: {
   }
 
   return (
-    <section className={cn(
-      "flex flex-col gap-3",
-      props.compact ? "matterhorn-rail-section" : "rounded-md bg-dls-surface-muted/[0.045] px-4 py-4",
-    )}>
-      <div className="flex min-w-0 items-start gap-2">
+    <section
+      className={cn(
+        integrated
+          ? "contents"
+          : cn(
+              "flex flex-col gap-3",
+              props.compact
+                ? "matterhorn-rail-section"
+                : "rounded-md bg-dls-surface-muted/[0.045] px-4 py-4",
+            ),
+      )}
+    >
+      {!integrated ? (
         <div className="flex min-w-0 items-start gap-2">
-          <Waves className="mt-0.5 size-4 shrink-0 text-dls-secondary" />
-          <div className="min-w-0">
-            <h4 className="text-sm font-semibold text-dls-text">Sui wallet</h4>
-            <p className="mt-1 text-xs leading-5 text-dls-secondary">
-              Connect your Sui wallet to view its balance and prepare transfers.
-            </p>
+          <div className="flex min-w-0 items-start gap-2">
+            <Waves className="mt-0.5 size-4 shrink-0 text-dls-secondary" />
+            <div className="min-w-0">
+              <h4 className="text-sm font-semibold text-dls-text">
+                Sui wallet
+              </h4>
+              <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                Connect your Sui wallet to view its balance and prepare
+                transfers.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {suiAddress ? (
         <div className="grid gap-3">
           <div className="grid gap-3 rounded-md bg-dls-surface-muted/[0.055] px-3 py-3 sm:grid-cols-3">
-            <WalletRailMetric label="Wallet" value={suiWalletName} />
+            <WalletRailMetric
+              label={integrated ? "Sui wallet" : "Wallet"}
+              value={suiWalletName}
+            />
             <WalletRailMetric label="Network" value={String(network)} />
-            <WalletRailMetric label="Balance" value={balanceQuery.isError ? "Unavailable" : formatSuiBalance(balanceQuery.data?.balanceMist)} />
+            <WalletRailMetric
+              label="Balance"
+              value={
+                balanceQuery.isError
+                  ? "Unavailable"
+                  : formatSuiBalance(balanceQuery.data?.balanceMist)
+              }
+            />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <code className="min-w-0 max-w-full truncate rounded-md bg-background/60 px-2 py-1 font-mono text-xs text-dls-secondary">
@@ -438,16 +747,27 @@ function SuiWalletPreviewSection(props: {
               aria-label="Refresh Sui balance"
               title="Refresh Sui balance"
             >
-              <RefreshCw className={cn("size-3", balanceQuery.isFetching && "animate-spin")} />
+              <RefreshCw
+                className={cn(
+                  "size-3",
+                  balanceQuery.isFetching && "animate-spin",
+                )}
+              />
             </Button>
-            <Button variant="ghost" size="sm" className="text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300" onClick={disconnectSuiWallet}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-red-11 hover:bg-red-500/10 hover:text-red-12"
+              onClick={disconnectSuiWallet}
+            >
               <Unplug className="size-3" />
               Disconnect
             </Button>
           </div>
           {balanceQuery.isError ? (
-            <p className="text-xs leading-5 text-amber-300">
-              Sui balance could not be read. The wallet connection remains local and non-custodial.
+            <p className="text-xs leading-5 text-amber-12 dark:text-amber-11">
+              Sui balance could not be read. The wallet connection remains local
+              and non-custodial.
             </p>
           ) : null}
           <SuiWorkflowPanel
@@ -463,7 +783,11 @@ function SuiWalletPreviewSection(props: {
           {walletStandardPhantom || phantomSui.detected ? (
             <Button
               variant="outline"
-              className="h-auto justify-start gap-3 rounded-md border-0 bg-dls-surface-muted/[0.20] px-3 py-3 shadow-none hover:bg-dls-surface-muted/[0.30]"
+              className={cn(
+                WALLET_CONNECTOR_ACTION_CLASS,
+                "h-auto justify-start gap-3 px-3",
+                props.compact ? "py-2.5" : "py-3",
+              )}
               disabled={busy}
               onClick={() => {
                 if (walletStandardPhantom) {
@@ -473,28 +797,38 @@ function SuiWalletPreviewSection(props: {
                 void phantomSui.connect();
               }}
             >
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-[#ab9ff2]/15 text-[#c9c2ff]">
-                <Wallet className="size-4" />
-              </span>
+              <PhantomWalletMark icon={walletStandardPhantom?.icon} />
               <span className="min-w-0 text-left">
-                <span className="block truncate text-sm font-medium">Phantom</span>
-                <span className="block truncate text-xs text-dls-secondary">Connect Phantom for Sui</span>
+                <span className="block truncate text-sm font-medium">
+                  Phantom
+                </span>
+                <span className="block truncate text-xs text-dls-secondary">
+                  Connect Phantom for Sui
+                </span>
               </span>
-              {phantomSui.connecting ? <RefreshCw className="ml-auto size-3.5 animate-spin" /> : null}
+              {phantomSui.connecting ? (
+                <RefreshCw className="ml-auto size-3.5 animate-spin" />
+              ) : null}
             </Button>
           ) : (
             <a
               href="https://phantom.app/download"
               target="_blank"
               rel="noreferrer"
-              className="flex min-w-0 items-center gap-3 rounded-md bg-dls-surface-muted/[0.20] px-3 py-3 text-dls-text transition-colors hover:bg-dls-surface-muted/[0.30] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ab9ff2]"
+              className={cn(
+                WALLET_CONNECTOR_ACTION_CLASS,
+                "flex min-w-0 items-center gap-3 px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ab9ff2]",
+                props.compact ? "py-2.5" : "py-3",
+              )}
             >
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-[#ab9ff2]/15 text-[#c9c2ff]">
-                <Wallet className="size-4" />
-              </span>
+              <PhantomWalletMark />
               <span className="min-w-0 text-left">
-                <span className="block truncate text-sm font-medium">Phantom</span>
-                <span className="block text-xs text-dls-secondary">Install or enable Phantom for Sui</span>
+                <span className="block truncate text-sm font-medium">
+                  Phantom
+                </span>
+                <span className="block text-xs text-dls-secondary">
+                  Install or enable Phantom for Sui
+                </span>
               </span>
               <ExternalLink className="ml-auto size-3.5 shrink-0 text-dls-secondary" />
             </a>
@@ -503,29 +837,42 @@ function SuiWalletPreviewSection(props: {
             <Button
               key={`${availableWallet.name}-${availableWallet.version}`}
               variant="outline"
-              className="h-auto justify-start gap-3 rounded-md border-0 bg-dls-surface-muted/[0.08] px-3 py-3 shadow-none hover:bg-dls-surface-muted/[0.14]"
+              className={cn(
+                WALLET_CONNECTOR_ACTION_CLASS,
+                "h-auto justify-start gap-3 px-3",
+                props.compact ? "py-2.5" : "py-3",
+              )}
               disabled={busy}
               onClick={() => connectSuiWallet(availableWallet)}
             >
               {availableWallet.icon ? (
-                <img src={availableWallet.icon} alt="" className="size-5 shrink-0 rounded-md" />
+                <img
+                  src={availableWallet.icon}
+                  alt=""
+                  className="size-5 shrink-0 rounded-md"
+                />
               ) : (
                 <Waves className="size-4 shrink-0" />
               )}
               <span className="min-w-0 text-left">
-                <span className="block truncate text-sm font-medium">{availableWallet.name}</span>
+                <span className="block truncate text-sm font-medium">
+                  {availableWallet.name}
+                </span>
                 <span className="block truncate text-xs text-dls-secondary">
-                  {availableWallet.chains.length} supported {availableWallet.chains.length === 1 ? "chain" : "chains"}
+                  {availableWallet.chains.length} supported{" "}
+                  {availableWallet.chains.length === 1 ? "chain" : "chains"}
                 </span>
               </span>
-              {busy ? <RefreshCw className="ml-auto size-3.5 animate-spin" /> : null}
+              {busy ? (
+                <RefreshCw className="ml-auto size-3.5 animate-spin" />
+              ) : null}
             </Button>
           ))}
         </div>
       )}
 
       {error || phantomSui.error ? (
-        <div className="flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-300">
+        <div className="flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-11">
           <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
           <span>{error ?? phantomSui.error}</span>
         </div>
@@ -534,95 +881,136 @@ function SuiWalletPreviewSection(props: {
   );
 }
 
-const RUNTIME_LABELS: Record<WalletRuntime, { label: string; icon: typeof Globe; detail: string }> = {
+const RUNTIME_LABELS: Record<
+  WalletRuntime,
+  { label: string; icon: typeof Globe; detail: string }
+> = {
   web: {
     label: "Web browser",
     icon: Globe,
-    detail: "Injected wallets appear when their extension is installed and allowed on Matterhorn.",
+    detail:
+      "Injected wallets appear when their extension is installed and allowed on Matterhorn.",
   },
   desktop: {
     label: "Desktop app",
     icon: MonitorSmartphone,
-    detail: "Browser wallet extensions do not inject into desktop. Use external signing for on-chain actions.",
+    detail:
+      "Browser wallet extensions do not inject into desktop. Use external signing for on-chain actions.",
   },
   electron: {
     label: "Desktop app",
     icon: MonitorSmartphone,
-    detail: "Electron builds do not support injected wallets. Use external signing for on-chain actions.",
+    detail:
+      "Electron builds do not support injected wallets. Use external signing for on-chain actions.",
   },
   unknown: {
     label: "Unknown runtime",
     icon: MonitorSmartphone,
-    detail: "Wallet capabilities are unknown here. Use web or desktop for full support.",
+    detail:
+      "Wallet capabilities are unknown here. Use web or desktop for full support.",
   },
 };
 
-function WalletRuntimeExplainer(props: { capability: WalletRuntimeCapability; compact?: boolean }) {
-  const { label, icon: RuntimeIcon, detail } = RUNTIME_LABELS[props.capability.runtime];
+function WalletRuntimeExplainer(props: {
+  capability: WalletRuntimeCapability;
+  compact?: boolean;
+}) {
+  const {
+    label,
+    icon: RuntimeIcon,
+    detail,
+  } = RUNTIME_LABELS[props.capability.runtime];
   const strategyNote = (() => {
     if (props.capability.supportsInjectedEvm) {
       return "Browser wallet extensions are available when installed and allowed.";
     }
     switch (props.capability.desktopWalletStrategy) {
-      case "external_signer": return "Matterhorn can prepare actions here. Review, sign, and submit them in your own wallet or protocol client.";
-      case "walletconnect_planned": return "WalletConnect support is planned for this runtime.";
-      case "deep_link_planned": return "Deep-link support is planned for this runtime.";
-      default: return "Direct wallet connection is not available in this runtime.";
+      case "external_signer":
+        return "Matterhorn can prepare actions here. Review, sign, and submit them in your own wallet or protocol client.";
+      case "walletconnect_planned":
+        return "WalletConnect support is planned for this runtime.";
+      case "deep_link_planned":
+        return "Deep-link support is planned for this runtime.";
+      default:
+        return "Direct wallet connection is not available in this runtime.";
     }
   })();
 
   if (props.compact) {
     return (
       <details className="group matterhorn-rail-section">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-1 text-sm transition-colors hover:text-dls-text">
+        <summary
+          className={cn(
+            "flex cursor-pointer list-none items-center justify-between gap-3 py-1 text-sm transition-colors hover:text-dls-text",
+            WALLET_DISCLOSURE_SUMMARY_FOCUS_CLASS,
+          )}
+          onKeyDown={handleWalletDisclosureSummaryKeyDown}
+        >
           <span>
-            <span className="block font-medium text-dls-text">How signing works</span>
-            <span className="mt-0.5 block text-xs text-dls-secondary">{label} · keys stay in your wallet</span>
+            <span className="block font-medium text-dls-text">
+              How signing works
+            </span>
+            <span className="mt-0.5 block text-xs text-dls-secondary">
+              {label} · keys stay in your wallet
+            </span>
           </span>
           <ChevronDown className="size-4 shrink-0 text-dls-muted transition-transform group-open:rotate-180" />
         </summary>
         <div className="mt-3 grid gap-2 border-t border-dls-border/40 pt-3 text-xs leading-5 text-dls-secondary">
           <p>{detail}</p>
           <p>{strategyNote}</p>
-          <WalletBoundaryList compact safetyCopy={props.capability.safetyCopy} />
+          <WalletBoundaryList
+            compact
+            safetyCopy={props.capability.safetyCopy}
+          />
         </div>
       </details>
     );
   }
 
   return (
-    <section className={cn(
-      "rounded-lg bg-dls-surface-muted/25 px-4 py-4",
-    )}>
-      <div className="flex items-start gap-2">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-dls-secondary" />
-        <div className="min-w-0">
-          <h4 className="text-sm font-semibold text-dls-text">Wallet runtime</h4>
-          <p className="mt-1 text-xs leading-5 text-dls-secondary">
-            Matterhorn shows where each action is reviewed, signed, and submitted.
-          </p>
+    <details className="group rounded-lg bg-dls-surface-muted/[0.055] px-4 py-3">
+      <summary
+        className={cn(
+          "flex cursor-pointer list-none items-center gap-3",
+          WALLET_DISCLOSURE_SUMMARY_FOCUS_CLASS,
+        )}
+        onKeyDown={handleWalletDisclosureSummaryKeyDown}
+      >
+        <ShieldCheck className="size-4 shrink-0 text-dls-secondary" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-dls-text">
+            Signing &amp; privacy
+          </span>
+          <span className="mt-0.5 block text-xs text-dls-secondary">
+            {label} · keys stay in your wallet
+          </span>
+        </span>
+        <ChevronDown className="size-4 shrink-0 text-dls-muted transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="mt-3 grid gap-2 rounded-md bg-dls-surface-muted/[0.06] px-3 py-3 text-xs leading-5 text-dls-secondary">
+        <div className="flex items-start gap-2">
+          <RuntimeIcon className="mt-0.5 size-3.5 shrink-0" />
+          <p>{detail}</p>
         </div>
-      </div>
-      <div className="mt-3 grid gap-2">
-        <div className="flex items-start gap-2 rounded-lg bg-dls-surface-muted/[0.08] px-3 py-2 text-xs leading-5">
-          <RuntimeIcon className="mt-0.5 size-3.5 shrink-0 text-dls-secondary" />
-          <div>
-            <span className="font-medium text-dls-text">{label}</span>
-            <span className="text-dls-secondary"> — {detail}</span>
-          </div>
-        </div>
-        <div className="rounded-lg bg-dls-surface-muted/[0.08] px-3 py-2 text-xs leading-5 text-dls-secondary">{strategyNote}</div>
+        <p>{strategyNote}</p>
         {!props.capability.supportsInjectedEvm ? (
-          <div className="rounded-lg bg-dls-surface-muted/[0.08] px-3 py-2 text-xs leading-5 text-dls-secondary">
-            <span className="font-medium text-dls-text">Remote worker:</span> use public addresses in Matterhorn and complete signing in your own wallet or protocol client.
-          </div>
+          <p>
+            <span className="font-medium text-dls-text">Remote worker:</span>{" "}
+            use public addresses in Matterhorn and complete signing in your own
+            wallet or protocol client.
+          </p>
         ) : null}
+        <WalletBoundaryList safetyCopy={props.capability.safetyCopy} />
       </div>
-    </section>
+    </details>
   );
 }
 
-function noEvmConnectorCopy(capability: WalletRuntimeCapability): { title: string; body: string } {
+function noEvmConnectorCopy(capability: WalletRuntimeCapability): {
+  title: string;
+  body: string;
+} {
   if (capability.supportsInjectedEvm) {
     return {
       title: "No EVM wallet connector detected",
@@ -638,8 +1026,12 @@ function noEvmConnectorCopy(capability: WalletRuntimeCapability): { title: strin
 function WalletRailMetric(props: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <div className="text-[11px] font-medium text-dls-secondary">{props.label}</div>
-      <div className="mt-1 truncate font-mono text-sm text-dls-text">{props.value}</div>
+      <div className="text-[11px] font-medium text-dls-secondary">
+        {props.label}
+      </div>
+      <div className="mt-1 truncate font-mono text-sm text-dls-text">
+        {props.value}
+      </div>
     </div>
   );
 }
@@ -664,16 +1056,23 @@ function walletSafetyTitle(action: SecurityLogEntry["action"]): string {
 function walletSafetyTone(riskLevel?: string | null): string {
   switch (riskLevel) {
     case "high":
-      return "text-red-300 bg-red-500/10";
+      return "text-red-11 bg-red-500/10";
     case "medium":
-      return "text-amber-300 bg-amber-500/10";
+      return "text-amber-12 dark:text-amber-11 bg-amber-500/10";
     default:
       return "text-dls-secondary bg-dls-surface-muted/35";
   }
 }
 
-function formatWalletSafetyTime(timestamp: string | number | null | undefined): string {
-  const time = typeof timestamp === "number" ? timestamp : timestamp ? Date.parse(timestamp) : Number.NaN;
+function formatWalletSafetyTime(
+  timestamp: string | number | null | undefined,
+): string {
+  const time =
+    typeof timestamp === "number"
+      ? timestamp
+      : timestamp
+        ? Date.parse(timestamp)
+        : Number.NaN;
   if (!Number.isFinite(time)) return "Recent";
   const diffMs = Date.now() - time;
   if (diffMs < 60_000) return "Just now";
@@ -708,7 +1107,9 @@ type WalletSafetyPolicyForm = {
   mainnetEnabled: boolean;
 };
 
-function walletSafetyPolicyFormFromState(state: WalletStoreSnapshotLike): WalletSafetyPolicyForm {
+function walletSafetyPolicyFormFromState(
+  state: WalletStoreSnapshotLike,
+): WalletSafetyPolicyForm {
   return {
     maxPerTransactionUSD: String(state.maxPerTransactionUSD),
     maxDailySpendUSD: String(state.maxDailySpendUSD),
@@ -727,7 +1128,9 @@ type WalletStoreSnapshotLike = {
   mainnetEnabled: boolean;
 };
 
-function walletSafetyPolicyFormFromServer(policy: MatterhornWalletSafetyPolicy): WalletSafetyPolicyForm {
+function walletSafetyPolicyFormFromServer(
+  policy: MatterhornWalletSafetyPolicy,
+): WalletSafetyPolicyForm {
   return {
     maxPerTransactionUSD: String(policy.maxPerTransactionUSD),
     maxDailySpendUSD: String(policy.maxDailySpendUSD),
@@ -737,13 +1140,10 @@ function walletSafetyPolicyFormFromServer(policy: MatterhornWalletSafetyPolicy):
   };
 }
 
-function positiveFormNumber(value: string, fallback: number, max: number): number {
-  const next = Number(value);
-  if (!Number.isFinite(next) || next <= 0) return fallback;
-  return Math.min(next, max);
-}
-
-function applyWalletSafetyPolicyToStore(store: WalletStore, policy: MatterhornWalletSafetyPolicy): void {
+function applyWalletSafetyPolicyToStore(
+  store: WalletStore,
+  policy: MatterhornWalletSafetyPolicy,
+): void {
   store.setMaxPerTransactionUSD(policy.maxPerTransactionUSD);
   store.setMaxDailySpendUSD(policy.maxDailySpendUSD);
   store.setMaxSlippageBps(policy.maxSlippageBps);
@@ -759,9 +1159,13 @@ function WalletSafetyPolicyControls(props: {
   runtimeWorkspaceId?: string | null;
 }) {
   const { showToast } = useStatusToasts();
-  const [form, setForm] = useState<WalletSafetyPolicyForm>(() => walletSafetyPolicyFormFromState(props.state));
+  const [form, setForm] = useState<WalletSafetyPolicyForm>(() =>
+    walletSafetyPolicyFormFromState(props.state),
+  );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [mainnetConfirmOpen, setMainnetConfirmOpen] = useState(false);
+  const [limitsGuideOpen, setLimitsGuideOpen] = useState(false);
 
   const policyQuery = useQuery({
     queryKey: ["wallet-safety-policy", props.runtimeWorkspaceId],
@@ -770,7 +1174,9 @@ function WalletSafetyPolicyControls(props: {
       if (!props.matterhornServerClient || !props.runtimeWorkspaceId) {
         throw new Error("Matterhorn Desks engine is offline.");
       }
-      return props.matterhornServerClient.getWalletSafetyPolicy(props.runtimeWorkspaceId);
+      return props.matterhornServerClient.getWalletSafetyPolicy(
+        props.runtimeWorkspaceId,
+      );
     },
     staleTime: 20_000,
   });
@@ -791,9 +1197,9 @@ function WalletSafetyPolicyControls(props: {
   ]);
 
   const canWriteWorkspacePolicy = Boolean(
-    props.matterhornServerClient
-    && props.runtimeWorkspaceId
-    && policyQuery.data?.controls.writable !== false,
+    props.matterhornServerClient &&
+    props.runtimeWorkspaceId &&
+    policyQuery.data?.controls.writable !== false,
   );
   const sourceLabel = policyQuery.data
     ? policyQuery.data.storage.exists
@@ -805,17 +1211,48 @@ function WalletSafetyPolicyControls(props: {
         : "Loading"
       : "Local only";
 
-  const updateForm = useCallback((key: keyof WalletSafetyPolicyForm, value: string | boolean) => {
-    setSaveError(null);
-    setForm((current) => ({ ...current, [key]: value }));
-  }, []);
+  const updateForm = useCallback(
+    (key: keyof WalletSafetyPolicyForm, value: string | boolean) => {
+      setSaveError(null);
+      setForm((current) => ({ ...current, [key]: value }));
+    },
+    [],
+  );
 
   const savePolicy = useCallback(async () => {
+    const maxPerTransactionUSD = Number(form.maxPerTransactionUSD);
+    const maxDailySpendUSD = Number(form.maxDailySpendUSD);
+    const maxSlippageBps = Number(form.maxSlippageBps);
+    const validationError =
+      !Number.isFinite(maxPerTransactionUSD) ||
+      maxPerTransactionUSD < 1 ||
+      maxPerTransactionUSD > 1_000_000
+        ? "Per-transaction limit must be between $1 and $1,000,000."
+        : !Number.isFinite(maxDailySpendUSD) ||
+            maxDailySpendUSD < 1 ||
+            maxDailySpendUSD > 10_000_000
+          ? "Daily limit must be between $1 and $10,000,000."
+          : !Number.isInteger(maxSlippageBps) ||
+              maxSlippageBps < 1 ||
+              maxSlippageBps > 10_000
+            ? "Max slippage must be a whole number between 1 and 10,000 bps."
+            : null;
+
+    if (validationError) {
+      setSaveError(validationError);
+      showToast({
+        title: "Check safety boundaries",
+        description: validationError,
+        tone: "error",
+      });
+      return;
+    }
+
     const next = {
-      maxPerTransactionUSD: positiveFormNumber(form.maxPerTransactionUSD, 50, 1_000_000),
-      maxDailySpendUSD: positiveFormNumber(form.maxDailySpendUSD, 100, 10_000_000),
+      maxPerTransactionUSD,
+      maxDailySpendUSD,
       mainnetEnabled: form.mainnetEnabled,
-      maxSlippageBps: positiveFormNumber(form.maxSlippageBps, 100, 10_000),
+      maxSlippageBps,
       preferredNetwork: form.preferredNetwork === "8453" ? 8453 : 84532,
     };
     setSaving(true);
@@ -830,24 +1267,33 @@ function WalletSafetyPolicyControls(props: {
       if (!props.matterhornServerClient || !props.runtimeWorkspaceId) {
         showToast({
           title: "Safety boundaries applied locally",
-          description: "Create or connect a workspace to save them to the project ledger.",
+          description:
+            "Create or connect a workspace to save them to the project ledger.",
           tone: "warning",
           durationMs: 3600,
         });
         return;
       }
-      const response = await props.matterhornServerClient.updateWalletSafetyPolicy(props.runtimeWorkspaceId, next);
+      const response =
+        await props.matterhornServerClient.updateWalletSafetyPolicy(
+          props.runtimeWorkspaceId,
+          next,
+        );
       applyWalletSafetyPolicyToStore(props.store, response.policy);
       setForm(walletSafetyPolicyFormFromServer(response.policy));
       showToast({
         title: "Safety boundaries saved",
-        description: "Future Base transaction reviews will use this workspace policy.",
+        description:
+          "Future Base transaction reviews will use this workspace policy.",
         tone: "success",
         durationMs: 2400,
       });
       await policyQuery.refetch();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Wallet safety policy could not be saved.";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Wallet safety policy could not be saved.";
       setSaveError(message);
       showToast({
         title: "Safety boundaries were not saved",
@@ -870,19 +1316,48 @@ function WalletSafetyPolicyControls(props: {
     "h-9 border-0 bg-dls-surface-muted/[0.24] text-dls-text shadow-none hover:bg-dls-surface-muted/[0.30] focus-visible:bg-dls-surface-muted/[0.30] focus-visible:ring-1 focus-visible:ring-dls-border-hover dark:bg-dls-surface-muted/[0.24] dark:hover:bg-dls-surface-muted/[0.30] dark:focus-visible:bg-dls-surface-muted/[0.30]";
 
   return (
-    <section className={cn(
-      props.compact
-        ? "matterhorn-rail-section"
-        : "rounded-lg bg-dls-surface-muted/[0.045] px-4 py-4",
-    )}>
+    <section
+      className={cn(
+        props.compact
+          ? "matterhorn-rail-section"
+          : "rounded-lg bg-dls-surface-muted/[0.045] px-4 py-4",
+      )}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h4 className="text-sm font-semibold text-dls-text">EVM transaction limits</h4>
-          <p className="mt-1 text-xs leading-5 text-dls-secondary">
-            Applied to Base transactions before they reach your browser wallet. Sui and Bittensor use their own review checks before you finish actions in those wallets.
-          </p>
+          <h4 className="text-sm font-semibold text-dls-text">
+            Base transaction limits
+          </h4>
         </div>
-        <span className="shrink-0 text-xs font-medium text-dls-secondary">{sourceLabel}</span>
+        <span className="shrink-0 text-xs font-medium text-dls-secondary">
+          Base only · {sourceLabel}
+        </span>
+      </div>
+
+      <div className="mt-2 text-xs text-dls-secondary">
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          aria-expanded={limitsGuideOpen}
+          onClick={() => setLimitsGuideOpen((open) => !open)}
+          className="bg-dls-surface-muted/[0.22] text-dls-secondary hover:bg-dls-surface-muted/[0.38] hover:text-dls-text"
+        >
+          <Info className="size-3" />
+          How limits work
+          <ChevronDown
+            className={cn(
+              "size-3 transition-transform",
+              limitsGuideOpen && "rotate-180",
+            )}
+          />
+        </Button>
+        {limitsGuideOpen ? (
+          <p role="note" className="mt-2 max-w-2xl leading-5">
+            Applied before a Base transaction reaches your browser wallet. Sui
+            and Bittensor use their own wallet review checks.
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr))]">
@@ -892,9 +1367,12 @@ function WalletSafetyPolicyControls(props: {
             className={fieldClass}
             inputMode="decimal"
             min={1}
+            max={1_000_000}
             type="number"
             value={form.maxPerTransactionUSD}
-            onChange={(event) => updateForm("maxPerTransactionUSD", event.currentTarget.value)}
+            onChange={(event) =>
+              updateForm("maxPerTransactionUSD", event.currentTarget.value)
+            }
           />
         </label>
         <label className="grid gap-1.5 text-xs font-medium text-dls-secondary">
@@ -903,9 +1381,12 @@ function WalletSafetyPolicyControls(props: {
             className={fieldClass}
             inputMode="decimal"
             min={1}
+            max={10_000_000}
             type="number"
             value={form.maxDailySpendUSD}
-            onChange={(event) => updateForm("maxDailySpendUSD", event.currentTarget.value)}
+            onChange={(event) =>
+              updateForm("maxDailySpendUSD", event.currentTarget.value)
+            }
           />
         </label>
         <label className="grid gap-1.5 text-xs font-medium text-dls-secondary">
@@ -917,14 +1398,18 @@ function WalletSafetyPolicyControls(props: {
             max={10000}
             type="number"
             value={form.maxSlippageBps}
-            onChange={(event) => updateForm("maxSlippageBps", event.currentTarget.value)}
+            onChange={(event) =>
+              updateForm("maxSlippageBps", event.currentTarget.value)
+            }
           />
         </label>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="grid gap-1.5">
-          <span className="text-xs font-medium text-dls-secondary">Base network</span>
+          <span className="text-xs font-medium text-dls-secondary">
+            Base network
+          </span>
           <div className="flex rounded-lg bg-dls-surface-muted/[0.16] p-1">
             {[
               ["84532", "Sepolia"],
@@ -933,13 +1418,20 @@ function WalletSafetyPolicyControls(props: {
               <button
                 key={value}
                 type="button"
+                aria-pressed={form.preferredNetwork === value}
                 className={cn(
                   "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
                   form.preferredNetwork === value
                     ? "bg-dls-surface-muted/45 text-dls-text"
                     : "text-dls-secondary hover:bg-dls-surface-muted/[0.16] hover:text-dls-text",
                 )}
-                onClick={() => updateForm("preferredNetwork", value)}
+                onClick={() => {
+                  if (value === "8453" && !form.mainnetEnabled) {
+                    setMainnetConfirmOpen(true);
+                    return;
+                  }
+                  updateForm("preferredNetwork", value);
+                }}
               >
                 {label}
               </button>
@@ -948,40 +1440,74 @@ function WalletSafetyPolicyControls(props: {
         </div>
         <button
           type="button"
+          aria-pressed={form.mainnetEnabled}
           className={cn(
             "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
             form.mainnetEnabled
               ? "bg-amber-500/12 text-amber-200"
               : "bg-dls-surface-muted/[0.16] text-dls-secondary hover:bg-dls-surface-muted/[0.22] hover:text-dls-text",
           )}
-          onClick={() => updateForm("mainnetEnabled", !form.mainnetEnabled)}
+          onClick={() => {
+            if (form.mainnetEnabled) {
+              updateForm("mainnetEnabled", false);
+              return;
+            }
+            setMainnetConfirmOpen(true);
+          }}
         >
           {form.mainnetEnabled ? "Mainnet enabled" : "Mainnet blocked"}
         </button>
       </div>
 
       {saveError ? (
-        <p className="mt-3 text-xs leading-5 text-red-300">{saveError}</p>
+        <p className="mt-3 text-xs leading-5 text-red-11">{saveError}</p>
       ) : policyQuery.isError ? (
-        <p className="mt-3 text-xs leading-5 text-amber-300">
-          Workspace policy could not load. Local limits still protect this session.
+        <p className="mt-3 text-xs leading-5 text-amber-12 dark:text-amber-11">
+          Workspace policy could not load. Local limits still protect this
+          session.
         </p>
       ) : null}
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <p className="text-xs leading-5 text-dls-secondary">
-          Current spend today: {formatWalletSafetyValue(props.state.dailySpendUSD) ?? "$0.00"}.
+          Current spend today:{" "}
+          {formatWalletSafetyValue(props.state.dailySpendUSD) ?? "$0.00"}.
         </p>
         <Button
           type="button"
           size="sm"
           className="h-8 rounded-md"
-          disabled={saving || (Boolean(props.matterhornServerClient && props.runtimeWorkspaceId) && policyQuery.isLoading)}
+          disabled={
+            saving ||
+            (Boolean(
+              props.matterhornServerClient && props.runtimeWorkspaceId,
+            ) &&
+              policyQuery.isLoading)
+          }
           onClick={savePolicy}
         >
-          {saving ? "Saving..." : canWriteWorkspacePolicy ? "Save policy" : "Apply"}
+          {saving
+            ? "Saving..."
+            : canWriteWorkspacePolicy
+              ? "Save policy"
+              : "Apply"}
         </Button>
       </div>
+      <ConfirmModal
+        open={mainnetConfirmOpen}
+        title="Enable Base mainnet?"
+        message="Mainnet transactions can move real funds. The saved limits still apply, and your wallet must approve every transaction."
+        confirmLabel="Enable mainnet"
+        cancelLabel="Keep blocked"
+        variant="warning"
+        confirmationPhrase="ENABLE MAINNET"
+        onConfirm={() => {
+          updateForm("mainnetEnabled", true);
+          updateForm("preferredNetwork", "8453");
+          setMainnetConfirmOpen(false);
+        }}
+        onCancel={() => setMainnetConfirmOpen(false)}
+      />
     </section>
   );
 }
@@ -1012,37 +1538,69 @@ type WalletSafetyRow =
       source: "Local log";
     };
 
-function walletSafetyRowFromLedger(item: MatterhornProjectDataLedgerEntry): WalletSafetyRow {
+function walletSafetyRowFromLedger(
+  item: MatterhornProjectDataLedgerEntry,
+): WalletSafetyRow {
   const metadata = item.metadata ?? {};
-  const chainId = typeof metadata.chainId === "number" ? metadata.chainId : null;
-  const valueUSD = typeof metadata.valueUSD === "number" ? metadata.valueUSD : null;
-  const riskLevel = typeof metadata.riskLevel === "string" ? metadata.riskLevel : null;
+  const chainId =
+    typeof metadata.chainId === "number" ? metadata.chainId : null;
+  const valueUSD =
+    typeof metadata.valueUSD === "number" ? metadata.valueUSD : null;
+  const riskLevel =
+    typeof metadata.riskLevel === "string" ? metadata.riskLevel : null;
   const txHash = typeof metadata.txHash === "string" ? metadata.txHash : null;
-  const reviewedChainId = typeof metadata.reviewedChainId === "number" ? metadata.reviewedChainId : null;
-  const reviewedTo = typeof metadata.reviewedTo === "string" ? metadata.reviewedTo : null;
-  const reviewedValue = typeof metadata.reviewedValue === "string" ? metadata.reviewedValue : null;
-  const review = reviewedChainId && reviewedTo && reviewedValue
-    ? {
-      reviewed: {
-        chainId: reviewedChainId,
-        to: reviewedTo,
-        value: reviewedValue,
-        valueUSD: typeof metadata.reviewedValueUSD === "number" ? metadata.reviewedValueUSD : valueUSD ?? 0,
-        dataSelector: typeof metadata.reviewedDataSelector === "string" ? metadata.reviewedDataSelector : null,
-        displayValue: typeof metadata.reviewedDisplayValue === "string" ? metadata.reviewedDisplayValue : null,
-        proposedBy: typeof metadata.reviewedProposedBy === "string" ? metadata.reviewedProposedBy : null,
-      },
-      submitted: typeof metadata.submittedChainId === "number" && typeof metadata.submittedTo === "string" && typeof metadata.submittedValue === "string"
-        ? {
-          chainId: metadata.submittedChainId,
-          to: metadata.submittedTo,
-          value: metadata.submittedValue,
-          dataSelector: typeof metadata.submittedDataSelector === "string" ? metadata.submittedDataSelector : null,
-          txHash: typeof metadata.submittedTxHash === "string" ? metadata.submittedTxHash : txHash,
-        }
-        : null,
-    } satisfies WalletSafetyReviewTrail
-    : null;
+  const reviewedChainId =
+    typeof metadata.reviewedChainId === "number"
+      ? metadata.reviewedChainId
+      : null;
+  const reviewedTo =
+    typeof metadata.reviewedTo === "string" ? metadata.reviewedTo : null;
+  const reviewedValue =
+    typeof metadata.reviewedValue === "string" ? metadata.reviewedValue : null;
+  const review =
+    reviewedChainId && reviewedTo && reviewedValue
+      ? ({
+          reviewed: {
+            chainId: reviewedChainId,
+            to: reviewedTo,
+            value: reviewedValue,
+            valueUSD:
+              typeof metadata.reviewedValueUSD === "number"
+                ? metadata.reviewedValueUSD
+                : (valueUSD ?? 0),
+            dataSelector:
+              typeof metadata.reviewedDataSelector === "string"
+                ? metadata.reviewedDataSelector
+                : null,
+            displayValue:
+              typeof metadata.reviewedDisplayValue === "string"
+                ? metadata.reviewedDisplayValue
+                : null,
+            proposedBy:
+              typeof metadata.reviewedProposedBy === "string"
+                ? metadata.reviewedProposedBy
+                : null,
+          },
+          submitted:
+            typeof metadata.submittedChainId === "number" &&
+            typeof metadata.submittedTo === "string" &&
+            typeof metadata.submittedValue === "string"
+              ? {
+                  chainId: metadata.submittedChainId,
+                  to: metadata.submittedTo,
+                  value: metadata.submittedValue,
+                  dataSelector:
+                    typeof metadata.submittedDataSelector === "string"
+                      ? metadata.submittedDataSelector
+                      : null,
+                  txHash:
+                    typeof metadata.submittedTxHash === "string"
+                      ? metadata.submittedTxHash
+                      : txHash,
+                }
+              : null,
+        } satisfies WalletSafetyReviewTrail)
+      : null;
   return {
     id: item.id,
     title: item.title,
@@ -1057,7 +1615,10 @@ function walletSafetyRowFromLedger(item: MatterhornProjectDataLedgerEntry): Wall
   };
 }
 
-function walletSafetyRowFromLocal(entry: SecurityLogEntry, index: number): WalletSafetyRow {
+function walletSafetyRowFromLocal(
+  entry: SecurityLogEntry,
+  index: number,
+): WalletSafetyRow {
   return {
     id: `${entry.timestamp}-${entry.action}-${index}`,
     title: walletSafetyTitle(entry.action),
@@ -1077,39 +1638,50 @@ function WalletSafetyLedger(props: {
   matterhornServerClient?: MatterhornServerClient | null;
   runtimeWorkspaceId?: string | null;
 }) {
-  const [localLog, setLocalLog] = useState<SecurityLogEntry[]>(() => getSecurityLog(5));
-  useEffect(() => subscribeSecurityLog(() => setLocalLog(getSecurityLog(5))), []);
+  const [localLog, setLocalLog] = useState<SecurityLogEntry[]>(() =>
+    getSecurityLog(5),
+  );
+  useEffect(
+    () => subscribeSecurityLog(() => setLocalLog(getSecurityLog(5))),
+    [],
+  );
 
   const ledgerQuery = useQuery({
     queryKey: ["wallet-safety-ledger", props.runtimeWorkspaceId],
     enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
     queryFn: async () => {
-      if (!props.matterhornServerClient || !props.runtimeWorkspaceId) throw new Error("Matterhorn Desks engine is offline.");
-      return props.matterhornServerClient.listProjectDataLedger(props.runtimeWorkspaceId, {
-        kind: "wallet",
-        source: "audit",
-        limit: 8,
-      });
+      if (!props.matterhornServerClient || !props.runtimeWorkspaceId)
+        throw new Error("Matterhorn Desks engine is offline.");
+      return props.matterhornServerClient.listProjectDataLedger(
+        props.runtimeWorkspaceId,
+        {
+          kind: "wallet",
+          source: "audit",
+          limit: 8,
+        },
+      );
     },
     staleTime: 15_000,
   });
 
   const ledgerRows = (ledgerQuery.data?.items ?? [])
-    .filter((item) =>
-      item.eventType === "workspace.wallet.safety_event"
-      || item.metadata?.auditAction === "workspace.wallet.safety_event"
+    .filter(
+      (item) =>
+        item.eventType === "workspace.wallet.safety_event" ||
+        item.metadata?.auditAction === "workspace.wallet.safety_event",
     )
     .slice(0, 5)
     .map(walletSafetyRowFromLedger);
   const localRows = localLog.slice(0, 5).map(walletSafetyRowFromLocal);
   const rows = ledgerRows.length > 0 ? ledgerRows : localRows;
-  const sourceLabel = ledgerRows.length > 0
-    ? "Project ledger"
-    : ledgerQuery.isError
-      ? "Local fallback"
-      : localRows.length > 0
-        ? "Local log"
-        : "Ready";
+  const sourceLabel =
+    ledgerRows.length > 0
+      ? "Project ledger"
+      : ledgerQuery.isError
+        ? "Local fallback"
+        : localRows.length > 0
+          ? "Local log"
+          : "Ready";
 
   if (props.compact && rows.length === 0) return null;
 
@@ -1117,9 +1689,17 @@ function WalletSafetyLedger(props: {
     const latest = rows[0];
     return (
       <details className="group matterhorn-rail-section">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-1 text-sm transition-colors hover:text-dls-text">
+        <summary
+          className={cn(
+            "flex cursor-pointer list-none items-center justify-between gap-3 py-1 text-sm transition-colors hover:text-dls-text",
+            WALLET_DISCLOSURE_SUMMARY_FOCUS_CLASS,
+          )}
+          onKeyDown={handleWalletDisclosureSummaryKeyDown}
+        >
           <span className="min-w-0">
-            <span className="block font-medium text-dls-text">Safety activity</span>
+            <span className="block font-medium text-dls-text">
+              Safety activity
+            </span>
             <span className="mt-0.5 block truncate text-xs text-dls-secondary">
               {latest.title} · {formatWalletSafetyTime(latest.timestamp)}
             </span>
@@ -1133,7 +1713,12 @@ function WalletSafetyLedger(props: {
               <div key={row.id} className="grid gap-1.5 py-1 text-xs leading-5">
                 <div className="flex items-start justify-between gap-3">
                   <p className="font-medium text-dls-text">{row.title}</p>
-                  <span className={cn("shrink-0 text-[10px] font-medium", walletSafetyTone(row.riskLevel).split(" ")[0])}>
+                  <span
+                    className={cn(
+                      "shrink-0 text-[10px] font-medium",
+                      walletSafetyTone(row.riskLevel).split(" ")[0],
+                    )}
+                  >
                     {row.riskLevel ?? "low"}
                   </span>
                 </div>
@@ -1153,72 +1738,128 @@ function WalletSafetyLedger(props: {
   }
 
   return (
-    <section className={cn(
-      props.compact
-        ? "matterhorn-rail-section"
-        : "rounded-lg bg-dls-surface-muted/[0.055] px-4 py-4",
-    )}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h4 className="text-sm font-semibold text-dls-text">Safety ledger</h4>
-          <p className="mt-1 text-xs leading-5 text-dls-secondary">
-            Recent approvals, blocks, and wallet handoff guardrails.
-          </p>
-        </div>
-        <span className="shrink-0 rounded-md bg-dls-surface-muted/30 px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
-          {sourceLabel}
+    <section
+      className={cn(
+        props.compact
+          ? "matterhorn-rail-section"
+          : "rounded-lg bg-dls-surface-muted/[0.055] px-4 py-4",
+      )}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-sm font-semibold text-dls-text">Safety ledger</h4>
+        <span className="shrink-0 text-[11px] font-medium text-dls-secondary">
+          {rows.length} {rows.length === 1 ? "event" : "events"} · {sourceLabel}
         </span>
       </div>
 
       {rows.length === 0 ? (
-        <div className="mt-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-3 text-xs leading-5 text-dls-secondary">
-          <p className="font-medium text-dls-text">No wallet safety events yet</p>
-          <p className="mt-1">
-            Chain blocks, approval expiry, rejected sends, and confirmed approvals will appear here.
-          </p>
+        <div className="mt-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-3 text-xs text-dls-secondary">
+          No safety events yet
         </div>
       ) : (
-        <div className="mt-3 grid gap-2">
+        <div className="mt-3 space-y-1 rounded-md bg-dls-surface-muted/[0.06] p-1">
           {rows.map((row) => {
             const value = formatWalletSafetyValue(row.valueUSD);
+            const approved = row.title.toLowerCase().includes("approved");
             return (
-              <div key={row.id} className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-medium text-dls-text">{row.title}</p>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-dls-secondary">{row.reason}</p>
-                  </div>
-                  <span className={cn("shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium", walletSafetyTone(row.riskLevel))}>
-                    {row.riskLevel ?? "low"}
+              <details
+                key={row.id}
+                className="group rounded-md px-2 transition-colors hover:bg-dls-surface-muted/[0.08] open:bg-dls-surface-muted/[0.08]"
+              >
+                <summary
+                  className={cn(
+                    "flex cursor-pointer list-none items-center gap-3 py-2.5",
+                    WALLET_DISCLOSURE_SUMMARY_FOCUS_CLASS,
+                  )}
+                  onKeyDown={handleWalletDisclosureSummaryKeyDown}
+                >
+                  {approved ? (
+                    <CheckCircle2 className="size-3.5 shrink-0 text-emerald-11" />
+                  ) : (
+                    <AlertCircle className="size-3.5 shrink-0 text-amber-11" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-dls-text">
+                    {row.title}
                   </span>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-dls-muted">
-                  <span>{formatWalletSafetyTime(row.timestamp)}</span>
-                  {row.chainId ? <span>Chain {row.chainId}</span> : null}
-                  {value ? <span>{value}</span> : null}
-                  <span>{row.source}</span>
-                </div>
-                {row.review ? (
-                  <div className="mt-2 rounded-md bg-dls-surface-muted/[0.12] px-2.5 py-2 text-[11px] leading-5 text-dls-secondary">
-                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="font-medium text-dls-text">Reviewed</span>
-                      <span>{row.review.reviewed.displayValue ?? formatWalletSafetyValue(row.review.reviewed.valueUSD) ?? "Transaction"}</span>
-                      {shortWalletAuditText(row.review.reviewed.to) ? <span>{shortWalletAuditText(row.review.reviewed.to)}</span> : null}
-                      {row.review.reviewed.dataSelector ? <span>{row.review.reviewed.dataSelector}</span> : null}
-                    </div>
-                    {row.review.submitted ? (
-                      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-medium text-dls-text">Sent</span>
-                        {shortWalletAuditText(row.review.submitted.to) ? <span>{shortWalletAuditText(row.review.submitted.to)}</span> : null}
-                        {row.review.submitted.dataSelector ? <span>{row.review.submitted.dataSelector}</span> : null}
-                        {shortWalletAuditText(row.review.submitted.txHash ?? row.txHash) ? (
-                          <span>{shortWalletAuditText(row.review.submitted.txHash ?? row.txHash)}</span>
-                        ) : null}
-                      </div>
+                  <span className="hidden shrink-0 text-[11px] text-dls-muted sm:inline">
+                    {formatWalletSafetyTime(row.timestamp)}
+                  </span>
+                  {value ? (
+                    <span className="shrink-0 text-[11px] font-medium text-dls-secondary">
+                      {value}
+                    </span>
+                  ) : null}
+                  <ChevronDown className="size-3.5 shrink-0 text-dls-muted transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="grid gap-2 pb-3 pl-6 text-xs leading-5 text-dls-secondary">
+                  <p>{row.reason}</p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-dls-muted">
+                    <span className="sm:hidden">
+                      {formatWalletSafetyTime(row.timestamp)}
+                    </span>
+                    {row.chainId ? <span>Chain {row.chainId}</span> : null}
+                    <span>{row.source}</span>
+                    {row.riskLevel && row.riskLevel !== "low" ? (
+                      <span
+                        className={cn(
+                          "rounded-md px-2 py-0.5 font-medium",
+                          walletSafetyTone(row.riskLevel),
+                        )}
+                      >
+                        {row.riskLevel}
+                      </span>
                     ) : null}
                   </div>
-                ) : null}
-              </div>
+                  {row.review ? (
+                    <div className="rounded-md bg-dls-surface-muted/[0.12] px-2.5 py-2 text-[11px] leading-5 text-dls-secondary">
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="font-medium text-dls-text">
+                          Reviewed
+                        </span>
+                        <span>
+                          {row.review.reviewed.displayValue ??
+                            formatWalletSafetyValue(
+                              row.review.reviewed.valueUSD,
+                            ) ??
+                            "Transaction"}
+                        </span>
+                        {shortWalletAuditText(row.review.reviewed.to) ? (
+                          <span>
+                            {shortWalletAuditText(row.review.reviewed.to)}
+                          </span>
+                        ) : null}
+                        {row.review.reviewed.dataSelector ? (
+                          <span>{row.review.reviewed.dataSelector}</span>
+                        ) : null}
+                      </div>
+                      {row.review.submitted ? (
+                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="font-medium text-dls-text">
+                            Sent
+                          </span>
+                          {shortWalletAuditText(row.review.submitted.to) ? (
+                            <span>
+                              {shortWalletAuditText(row.review.submitted.to)}
+                            </span>
+                          ) : null}
+                          {row.review.submitted.dataSelector ? (
+                            <span>{row.review.submitted.dataSelector}</span>
+                          ) : null}
+                          {shortWalletAuditText(
+                            row.review.submitted.txHash ?? row.txHash,
+                          ) ? (
+                            <span>
+                              {shortWalletAuditText(
+                                row.review.submitted.txHash ?? row.txHash,
+                              )}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </details>
             );
           })}
         </div>
@@ -1231,9 +1872,84 @@ function evmConnectorKindLabel(connector: { id: string; name: string }) {
   const id = connector.id.toLowerCase();
   const name = connector.name.toLowerCase();
   if (id.includes("walletconnect")) return "WalletConnect";
-  if (id.includes("coinbase") || name.includes("coinbase")) return "Coinbase Wallet";
+  if (id.includes("coinbase") || name.includes("coinbase"))
+    return "Coinbase Wallet";
   if (id.includes("injected")) return "Browser wallet extension";
   return "Wallet connector";
+}
+
+type WalletConnectorIdentity = { id: string; name: string };
+
+function walletConnectionErrorFacts(error: unknown): string {
+  const facts: string[] = [];
+  const queue: unknown[] = [error];
+  const seen = new Set<object>();
+
+  while (queue.length > 0 && facts.length < 24) {
+    const current = queue.shift();
+    if (typeof current === "string" || typeof current === "number") {
+      facts.push(String(current));
+      continue;
+    }
+    if (!current || typeof current !== "object" || seen.has(current)) continue;
+
+    seen.add(current);
+    const record = current as Record<string, unknown>;
+    for (const key of ["name", "message", "shortMessage", "details", "code"]) {
+      const value = record[key];
+      if (typeof value === "string" || typeof value === "number")
+        facts.push(String(value));
+    }
+    for (const key of ["cause", "error"]) {
+      if (record[key] !== undefined) queue.push(record[key]);
+    }
+  }
+
+  return facts.join(" ");
+}
+
+export function walletConnectionErrorMessage(
+  error: unknown,
+  connector: WalletConnectorIdentity | null,
+): string {
+  const facts = walletConnectionErrorFacts(error);
+  const connectorName = connector?.name.trim() || "Wallet connector";
+  const connectorIdentity = `${connector?.id ?? ""} ${connectorName}`;
+
+  if (
+    /user rejected|user denied|rejected request|request rejected|user closed modal|\b4001\b/i.test(
+      facts,
+    )
+  ) {
+    return "Wallet connection was cancelled.";
+  }
+
+  if (/wallet connection timed out/i.test(facts)) {
+    return WALLET_CONNECTION_TIMEOUT_MESSAGE;
+  }
+
+  const missingProvider =
+    /providernotfounderror|connectornotfounderror|(?:provider|connector|extension).{0,48}(?:not found|not available|unavailable|missing|undefined|null|not installed|disabled)|(?:no|missing).{0,16}(?:provider|connector|extension)/i.test(
+      facts,
+    );
+  const missingCoinbaseDependency =
+    /coinbase/i.test(connectorIdentity) &&
+    /(?:cannot find|failed to resolve|missing|not found).{0,80}(?:@coinbase\/wallet-sdk|coinbase wallet sdk)|(?:@coinbase\/wallet-sdk).{0,80}(?:cannot find|failed to resolve|missing|not found)/i.test(
+      facts,
+    );
+  if (missingProvider || missingCoinbaseDependency) {
+    return `${connectorName} is not available in this browser. Install or enable it, then try again.`;
+  }
+
+  if (
+    /wallet.{0,32}locked|locked.{0,32}wallet|unlock (?:the |your )?wallet/i.test(
+      facts,
+    )
+  ) {
+    return `${connectorName} appears to be locked. Unlock it, then try again.`;
+  }
+
+  return `${connectorName} could not connect. Try again, or open the wallet for more details.`;
 }
 
 function WalletConnectorMark({
@@ -1250,7 +1966,8 @@ function WalletConnectorMark({
       ? "/wallet-coinbase.svg"
       : null;
 
-  if (!brandAsset) return <Plug className={cn("shrink-0", className)} aria-hidden="true" />;
+  if (!brandAsset)
+    return <Plug className={cn("shrink-0", className)} aria-hidden="true" />;
 
   return (
     <img
@@ -1273,41 +1990,48 @@ export function WalletSettingsView({
 }: WalletSettingsViewProps) {
   const state = useWalletStore(store);
   const { address: wagmiAddress } = useAccount();
-  const { connect, connectors } = useConnect();
+  const { connectAsync, connectors } = useConnect();
   const { disconnect } = useDisconnect();
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
   const { data: ethBalance } = useBalance({ address: wagmiAddress });
   const [error, setError] = useState<string | null>(null);
+  const [connectingConnectorId, setConnectingConnectorId] = useState<
+    string | null
+  >(null);
+  const connectionAttemptRef = useRef(0);
   const [refreshing, setRefreshing] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Sync wagmi state → wallet store
   const syncStore = useCallback(() => {
     if (wagmiAddress && chainId) {
-      const connectorName = connectors.find((c) => c.id === (store.getSnapshot().connector))?.name ?? null;
+      const connectorName =
+        connectors.find((c) => c.id === store.getSnapshot().connector)?.name ??
+        null;
       const nextConnector = connectorName ?? "connected";
       const current = store.getSnapshot();
       const needsConnectionSync =
-        current.address !== wagmiAddress
-        || current.chainId !== chainId
-        || current.connector !== nextConnector
-        || !current.isConnected
-        || current.isConnecting
-        || Boolean(current.error);
+        current.address !== wagmiAddress ||
+        current.chainId !== chainId ||
+        current.connector !== nextConnector ||
+        !current.isConnected ||
+        current.isConnecting ||
+        Boolean(current.error);
 
       if (needsConnectionSync) {
-        store.setConnected(
-          wagmiAddress,
-          chainId,
-          nextConnector,
-        );
+        store.setConnected(wagmiAddress, chainId, nextConnector);
       }
 
       if (ethBalance) {
-        const nextEthBalance = Number(formatUnits(ethBalance.value, 18)).toFixed(4);
+        const nextEthBalance = Number(
+          formatUnits(ethBalance.value, 18),
+        ).toFixed(4);
         const balanceSnapshot = store.getSnapshot();
-        if (balanceSnapshot.ethBalance !== nextEthBalance || balanceSnapshot.usdcBalance !== "—") {
+        if (
+          balanceSnapshot.ethBalance !== nextEthBalance ||
+          balanceSnapshot.usdcBalance !== "—"
+        ) {
           store.setBalances(
             nextEthBalance,
             "—", // USDC balance requires separate call
@@ -1321,22 +2045,68 @@ export function WalletSettingsView({
     syncStore();
   }, [syncStore]);
 
-  const handleConnect = useCallback(async (connectorId: string) => {
-    setError(null);
-    try {
-      store.setConnecting(true);
-      const connector = connectors.find((c) => c.id === connectorId);
-      if (!connector) throw new Error("Connector not found");
-      await connect({ connector });
-      syncStore();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to connect";
-      setError(msg);
-      store.setError(msg);
-    } finally {
-      store.setConnecting(false);
-    }
-  }, [connect, connectors, store, syncStore]);
+  const handleConnect = useCallback(
+    async (connectorId: string) => {
+      const attemptId = connectionAttemptRef.current + 1;
+      connectionAttemptRef.current = attemptId;
+      setError(null);
+      setConnectingConnectorId(connectorId);
+      const connector = connectors.find(
+        (candidate) => candidate.id === connectorId,
+      );
+      let timeoutId: number | undefined;
+      try {
+        store.setConnecting(true);
+        if (!connector) throw new Error("Connector not found");
+        const connectPromise = connectAsync({ connector });
+        void connectPromise
+          .then(() => {
+            if (connectionAttemptRef.current !== attemptId) {
+              disconnect();
+            }
+          })
+          .catch(() => undefined);
+        await Promise.race([
+          connectPromise,
+          new Promise<never>((_resolve, reject) => {
+            timeoutId = window.setTimeout(
+              () => reject(new Error(WALLET_CONNECTION_TIMEOUT_MESSAGE)),
+              WALLET_CONNECTION_TIMEOUT_MS,
+            );
+          }),
+        ]);
+        if (connectionAttemptRef.current !== attemptId) {
+          disconnect();
+          return;
+        }
+        syncStore();
+      } catch (e) {
+        if (connectionAttemptRef.current !== attemptId) return;
+        const msg = walletConnectionErrorMessage(e, connector ?? null);
+        setError(msg);
+        store.setError(msg);
+        if (msg === WALLET_CONNECTION_TIMEOUT_MESSAGE) {
+          connectionAttemptRef.current += 1;
+          store.setConnecting(false);
+          setConnectingConnectorId(null);
+        }
+      } finally {
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+        if (connectionAttemptRef.current === attemptId) {
+          store.setConnecting(false);
+          setConnectingConnectorId(null);
+        }
+      }
+    },
+    [connectAsync, connectors, disconnect, store, syncStore],
+  );
+
+  const handleCancelConnection = useCallback(() => {
+    connectionAttemptRef.current += 1;
+    store.setConnecting(false);
+    setConnectingConnectorId(null);
+    setError("Wallet connection was cancelled.");
+  }, [store]);
 
   const handleDisconnect = useCallback(async () => {
     try {
@@ -1357,13 +2127,16 @@ export function WalletSettingsView({
     }
   }, [syncStore]);
 
-  const handleSwitchChain = useCallback(async (targetChainId: number) => {
-    try {
-      await switchChain({ chainId: targetChainId });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to switch chain");
-    }
-  }, [switchChain]);
+  const handleSwitchChain = useCallback(
+    async (targetChainId: number) => {
+      try {
+        await switchChain({ chainId: targetChainId });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to switch chain");
+      }
+    },
+    [switchChain],
+  );
 
   const copyAddress = useCallback(() => {
     if (wagmiAddress) {
@@ -1376,20 +2149,47 @@ export function WalletSettingsView({
     : isDesktopRuntime()
       ? "desktop"
       : "web";
-  const capability = useMemo(() => getWalletRuntimeCapability(runtime), [runtime]);
-  const noConnectorCopy = useMemo(() => noEvmConnectorCopy(capability), [capability]);
+  const capability = useMemo(
+    () => getWalletRuntimeCapability(runtime),
+    [runtime],
+  );
+  const noConnectorCopy = useMemo(
+    () => noEvmConnectorCopy(capability),
+    [capability],
+  );
   const backendCapabilitiesQuery = useQuery({
     queryKey: ["wallet-backend-capabilities"],
     enabled: Boolean(matterhornServerClient),
     queryFn: async () => {
-      if (!matterhornServerClient) throw new Error("Matterhorn Desks engine is offline.");
+      if (!matterhornServerClient)
+        throw new Error("Matterhorn Desks engine is offline.");
       return matterhornServerClient.backendCapabilities();
     },
     staleTime: 30_000,
   });
+  const marketExecutionReadinessQuery = useQuery({
+    queryKey: ["wallet-market-execution-readiness"],
+    enabled: Boolean(matterhornServerClient),
+    queryFn: async () => {
+      if (!matterhornServerClient)
+        throw new Error("Matterhorn Desks engine is offline.");
+      return matterhornServerClient.marketExecutionReadiness();
+    },
+    staleTime: 15_000,
+  });
   const backendWallets = backendCapabilitiesQuery.data
     ? walletFamilySummary(backendCapabilitiesQuery.data)
     : undefined;
+  const hyperliquidExecutionReady =
+    marketExecutionReadinessQuery.data?.report.venues.find(
+      (venue) => venue.venue === "hyperliquid",
+    )?.canSubmit === true;
+  const polymarketWalletTicketAvailable =
+    marketExecutionReadinessQuery.data?.report.reviewedWalletTickets
+      .polymarket.available === true;
+  const bittensorWalletTicketAvailable =
+    marketExecutionReadinessQuery.data?.report.reviewedWalletTickets
+      .bittensor.available === true;
 
   const runtimeBadgeLabel: Record<WalletRuntime, string> = {
     web: "Web",
@@ -1404,9 +2204,9 @@ export function WalletSettingsView({
         <section className="matterhorn-rail-section flex flex-col gap-3">
           <div className="flex flex-wrap items-start justify-between gap-2.5">
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-dls-text">Matterhorn Wallet</h3>
+              <h3 className="text-sm font-semibold text-dls-text">Wallets</h3>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Connect an EVM or Sui wallet. Bittensor uses public SS58 reads and external signing.
+                Connect a supported wallet. Signing stays in your wallet.
               </p>
             </div>
             <span className="shrink-0 pt-0.5 text-[11px] font-medium text-dls-secondary">
@@ -1416,76 +2216,168 @@ export function WalletSettingsView({
         </section>
 
         {error ? (
-          <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-400">
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-11"
+          >
             <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
             <span>{error}</span>
           </div>
         ) : null}
 
-        {state.isConnected ? (
-          <section className="flex flex-col gap-4">
-            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr))]">
-              <WalletRailMetric label="Address" value={wagmiAddress ? truncateAddress(wagmiAddress) : "—"} />
-              <WalletRailMetric label="Network" value={state.chainId ? CHAIN_NAMES[state.chainId] ?? "Unknown" : "Unknown"} />
-              <WalletRailMetric label="ETH" value={ethBalance ? Number(formatUnits(ethBalance.value, 18)).toFixed(4) : state.ethBalance ?? "—"} />
-              <WalletRailMetric label="USDC" value={state.usdcBalance ?? "—"} />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={copyAddress} disabled={!wagmiAddress}>
-                <Copy className="size-3" />
-                Copy address
-              </Button>
-              <Button variant="ghost" size="icon-sm" className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text" onClick={handleRefresh} disabled={refreshing} aria-label="Refresh wallet" title="Refresh wallet">
-                <RefreshCw className={cn("size-3", refreshing && "animate-spin")} />
-              </Button>
-              <Button variant="ghost" size="sm" className="text-red-400 hover:bg-red-500/10 hover:text-red-300" onClick={handleDisconnect}>
-                <Unplug className="size-3" />
-                Disconnect
-              </Button>
-            </div>
-          </section>
-        ) : (
-          <section className="flex flex-col gap-1.5 rounded-lg bg-dls-surface-muted/[0.14] p-1.5">
-            {connectors.length > 0 ? (
-              connectors.map((connector) => (
+        <section
+          className={cn(
+            "flex flex-col",
+            state.isConnected
+              ? "gap-4"
+              : "gap-1.5 rounded-lg bg-dls-surface-muted/[0.14] p-1.5",
+          )}
+        >
+          {state.isConnected ? (
+            <>
+              <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr))]">
+                <WalletRailMetric
+                  label="Address"
+                  value={wagmiAddress ? truncateAddress(wagmiAddress) : "—"}
+                />
+                <WalletRailMetric
+                  label="Network"
+                  value={
+                    state.chainId
+                      ? (CHAIN_NAMES[state.chainId] ?? "Unknown")
+                      : "Unknown"
+                  }
+                />
+                <WalletRailMetric
+                  label="ETH"
+                  value={
+                    ethBalance
+                      ? Number(formatUnits(ethBalance.value, 18)).toFixed(4)
+                      : (state.ethBalance ?? "—")
+                  }
+                />
+                <WalletRailMetric
+                  label="USDC"
+                  value={state.usdcBalance ?? "—"}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
                 <Button
-                  key={connector.id}
                   variant="outline"
-                  className="h-auto justify-start gap-3 rounded-md border-0 bg-dls-surface-muted/[0.10] px-3 py-2.5 shadow-none hover:bg-dls-surface-muted/[0.22]"
-                  disabled={state.isConnecting}
-                  onClick={() => handleConnect(connector.id)}
+                  size="sm"
+                  onClick={copyAddress}
+                  disabled={!wagmiAddress}
                 >
-                  <WalletConnectorMark connector={connector} className="size-4" />
-                  <span className="min-w-0 text-left">
-                    <span className="block truncate text-sm font-medium">{connector.name}</span>
-                    <span className="block truncate text-xs text-dls-secondary">
-                      {evmConnectorKindLabel(connector)}
+                  <Copy className="size-3" />
+                  Copy address
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="border-0 bg-transparent text-dls-secondary shadow-none hover:bg-transparent hover:text-dls-text"
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  aria-label="Refresh wallet"
+                  title="Refresh wallet"
+                >
+                  <RefreshCw
+                    className={cn("size-3", refreshing && "animate-spin")}
+                  />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-11 hover:bg-red-500/10 hover:text-red-12"
+                  onClick={handleDisconnect}
+                >
+                  <Unplug className="size-3" />
+                  Disconnect
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              {state.isConnecting && connectingConnectorId ? (
+                <div
+                  role="status"
+                  className="flex items-center justify-between gap-3 px-2 py-1.5 text-xs text-dls-secondary"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <RefreshCw
+                      className="size-3 shrink-0 animate-spin"
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">
+                      Continue in{" "}
+                      {connectors.find(
+                        (connector) => connector.id === connectingConnectorId,
+                      )?.name ?? "your wallet"}
+                      .
                     </span>
                   </span>
-                  {state.isConnecting ? <RefreshCw className="ml-auto size-3.5 animate-spin" /> : null}
-                </Button>
-              ))
-            ) : (
-              <div className="rounded-md bg-dls-surface-muted/[0.14] px-3 py-3 text-sm leading-6 text-dls-secondary">
-                <div className="flex items-center gap-2 font-medium text-dls-text">
-                  <Wallet className="size-4" />
-                  {noConnectorCopy.title}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0 px-2 text-xs"
+                    onClick={handleCancelConnection}
+                  >
+                    Cancel
+                  </Button>
                 </div>
-                <p className="mt-2 text-xs leading-5">
-                  {noConnectorCopy.body}
-                </p>
-              </div>
-            )}
-          </section>
-        )}
-
-        <SuiWalletPreviewSection
-          compact
-          matterhornServerClient={matterhornServerClient}
-          runtime={runtime}
-          workspaceId={runtimeWorkspaceId}
-          sessionId={sessionId}
-        />
+              ) : null}
+              {connectors.length > 0 ? (
+                connectors.map((connector) => (
+                  <Button
+                    key={connector.id}
+                    variant="outline"
+                    className={cn(
+                      WALLET_CONNECTOR_ACTION_CLASS,
+                      "h-auto justify-start gap-3 px-3 py-2.5",
+                    )}
+                    disabled={state.isConnecting}
+                    onClick={() => handleConnect(connector.id)}
+                  >
+                    <WalletConnectorMark
+                      connector={connector}
+                      className="size-4"
+                    />
+                    <span className="min-w-0 text-left">
+                      <span className="block truncate text-sm font-medium">
+                        {connector.name}
+                      </span>
+                      <span className="block truncate text-xs text-dls-secondary">
+                        {evmConnectorKindLabel(connector)}
+                      </span>
+                    </span>
+                    {state.isConnecting &&
+                    connectingConnectorId === connector.id ? (
+                      <RefreshCw className="ml-auto size-3.5 animate-spin" />
+                    ) : null}
+                  </Button>
+                ))
+              ) : (
+                <div className="rounded-md bg-dls-surface-muted/[0.14] px-3 py-3 text-sm leading-6 text-dls-secondary">
+                  <div className="flex items-center gap-2 font-medium text-dls-text">
+                    <Wallet className="size-4" />
+                    {noConnectorCopy.title}
+                  </div>
+                  <p className="mt-2 text-xs leading-5">
+                    {noConnectorCopy.body}
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+          <SuiWalletPreviewSection
+            compact
+            integrated={runtime === "web"}
+            matterhornServerClient={matterhornServerClient}
+            runtime={runtime}
+            workspaceId={runtimeWorkspaceId}
+            sessionId={sessionId}
+          />
+        </section>
         <WalletSafetyPolicyControls
           compact
           store={store}
@@ -1498,7 +2390,15 @@ export function WalletSettingsView({
           matterhornServerClient={matterhornServerClient}
           runtimeWorkspaceId={runtimeWorkspaceId}
         />
-        <WalletProtocolSupportMap compact capability={capability} connected={state.isConnected} backendWallets={backendWallets} />
+        <WalletProtocolSupportMap
+          compact
+          capability={capability}
+          connected={state.isConnected}
+          backendWallets={backendWallets}
+          hyperliquidExecutionReady={hyperliquidExecutionReady}
+          polymarketWalletTicketAvailable={polymarketWalletTicketAvailable}
+          bittensorWalletTicketAvailable={bittensorWalletTicketAvailable}
+        />
         <WalletRuntimeExplainer capability={capability} compact />
       </SettingsStack>
     );
@@ -1509,38 +2409,75 @@ export function WalletSettingsView({
       <SettingsStack>
         <SettingsSection>
           <SettingsSectionHeader>
-            <SettingsSectionHeaderTitle>Matterhorn Wallet</SettingsSectionHeaderTitle>
+            <SettingsSectionHeaderTitle>Wallets</SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Connect EVM and Sui wallets where this runtime supports direct wallet connect. Bittensor actions stay external-signer only.
+              Connect a supported wallet. Signing stays in your wallet.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeader>
 
           <div className="flex flex-col gap-4">
             {error && (
-              <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+              <div
+                role="alert"
+                className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-11"
+              >
                 <AlertCircle className="size-4 shrink-0" />
                 {error}
               </div>
             )}
 
+            {!error && state.isConnecting && connectingConnectorId ? (
+              <div
+                role="status"
+                className="flex items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.14] px-3 py-2 text-xs text-dls-secondary"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <RefreshCw
+                    className="size-3 shrink-0 animate-spin"
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">
+                    Continue in{" "}
+                    {connectors.find(
+                      (connector) => connector.id === connectingConnectorId,
+                    )?.name ?? "your wallet"}
+                    .
+                  </span>
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 shrink-0 px-2 text-xs"
+                  onClick={handleCancelConnection}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : null}
+
             {connectors.map((connector) => (
               <Button
                 key={connector.id}
                 variant="outline"
-                className="flex items-center justify-start gap-3 h-14 px-4"
+                className={cn(
+                  WALLET_CONNECTOR_ACTION_CLASS,
+                  "flex h-14 items-center justify-start gap-3 px-4",
+                )}
                 disabled={state.isConnecting}
                 onClick={() => handleConnect(connector.id)}
               >
                 <WalletConnectorMark connector={connector} className="size-5" />
                 <div className="flex flex-col items-start text-left">
-                  <span className="text-sm font-medium">
-                    {connector.name}
-                  </span>
-                  <span className="text-xs text-gray-8">
+                  <span className="text-sm font-medium">{connector.name}</span>
+                  <span className="text-xs text-dls-secondary">
                     {evmConnectorKindLabel(connector)}
                   </span>
                 </div>
-                {state.isConnecting && <RefreshCw className="size-4 ml-auto animate-spin" />}
+                {state.isConnecting &&
+                connectingConnectorId === connector.id ? (
+                  <RefreshCw className="ml-auto size-4 animate-spin" />
+                ) : null}
               </Button>
             ))}
 
@@ -1553,26 +2490,24 @@ export function WalletSettingsView({
                 <p className="mt-2 text-xs leading-5 text-dls-secondary">
                   {noConnectorCopy.body}
                 </p>
-                <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                  Public Bittensor reads and market previews still work. You can also prepare Sui actions and import receipts.
-                </p>
               </div>
             )}
+            <SuiWalletPreviewSection
+              integrated={runtime === "web"}
+              matterhornServerClient={matterhornServerClient}
+              runtime={runtime}
+              workspaceId={runtimeWorkspaceId}
+              sessionId={sessionId}
+            />
           </div>
         </SettingsSection>
         <SettingsSection>
-          <SuiWalletPreviewSection
-            matterhornServerClient={matterhornServerClient}
-            runtime={runtime}
-            workspaceId={runtimeWorkspaceId}
-            sessionId={sessionId}
-          />
-        </SettingsSection>
-        <SettingsSection>
           <SettingsSectionHeader>
-            <SettingsSectionHeaderTitle>Wallet safety</SettingsSectionHeaderTitle>
+            <SettingsSectionHeaderTitle>
+              Wallet safety
+            </SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Base transaction limits and recent review events. Other wallets use their own review checks before you finish an action.
+              Base limits and recent approvals.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeader>
           <WalletSafetyPolicyControls
@@ -1585,15 +2520,23 @@ export function WalletSettingsView({
             matterhornServerClient={matterhornServerClient}
             runtimeWorkspaceId={runtimeWorkspaceId}
           />
-          <WalletProtocolSupportMap capability={capability} connected={state.isConnected} backendWallets={backendWallets} />
+          <WalletProtocolSupportMap
+            capability={capability}
+            connected={state.isConnected}
+            backendWallets={backendWallets}
+            hyperliquidExecutionReady={hyperliquidExecutionReady}
+            polymarketWalletTicketAvailable={polymarketWalletTicketAvailable}
+            bittensorWalletTicketAvailable={bittensorWalletTicketAvailable}
+          />
           <WalletRuntimeExplainer capability={capability} />
-          <WalletBoundaryList safetyCopy={capability.safetyCopy} />
         </SettingsSection>
       </SettingsStack>
     );
   }
 
-  const chainName = state.chainId ? CHAIN_NAMES[state.chainId] ?? "Unknown Chain" : "Unknown Chain";
+  const chainName = state.chainId
+    ? (CHAIN_NAMES[state.chainId] ?? "Unknown Chain")
+    : "Unknown Chain";
 
   return (
     <SettingsStack>
@@ -1602,10 +2545,10 @@ export function WalletSettingsView({
           <div className="min-w-0">
             <SettingsSectionHeaderTitle>
               <ShieldCheck className="size-4 text-green-400" />
-              Connected wallet
+              Wallets
             </SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Account, network, and balances for this workspace.
+              Connected accounts and available wallet connections.
             </SettingsSectionHeaderDescription>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -1615,7 +2558,7 @@ export function WalletSettingsView({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 border-0 bg-transparent text-xs text-red-400 shadow-none hover:bg-red-500/10 hover:text-red-300"
+              className="h-7 border-0 bg-transparent text-xs text-red-11 shadow-none hover:bg-red-500/10 hover:text-red-12"
               onClick={handleDisconnect}
             >
               <Unplug className="mr-1 size-3" />
@@ -1633,7 +2576,9 @@ export function WalletSettingsView({
                 className="mt-1 flex max-w-full items-center gap-1.5 font-mono text-sm text-dls-secondary transition-colors hover:text-dls-text"
                 onClick={copyAddress}
               >
-                <span className="min-w-0 truncate">{wagmiAddress ? truncateAddress(wagmiAddress) : "—"}</span>
+                <span className="min-w-0 truncate">
+                  {wagmiAddress ? truncateAddress(wagmiAddress) : "—"}
+                </span>
                 <Copy className="size-3 shrink-0" />
               </button>
             </div>
@@ -1642,7 +2587,9 @@ export function WalletSettingsView({
               <div className="text-xs text-dls-muted">Chain</div>
               <div className="mt-1 flex min-w-0 items-center gap-2">
                 <span className="size-1.5 rounded-full bg-green-400" />
-                <span className="min-w-0 truncate text-sm text-dls-secondary">{chainName}</span>
+                <span className="min-w-0 truncate text-sm text-dls-secondary">
+                  {chainName}
+                </span>
                 <ChevronDown className="size-3 shrink-0 text-dls-muted" />
               </div>
             </div>
@@ -1652,12 +2599,16 @@ export function WalletSettingsView({
             <div className="rounded-lg bg-dls-surface-muted/[0.08] px-3 py-2.5">
               <div className="mb-1 text-xs text-dls-muted">ETH Balance</div>
               <div className="font-mono text-base text-dls-text">
-                {ethBalance ? Number(formatUnits(ethBalance.value, 18)).toFixed(4) : "—"}
+                {ethBalance
+                  ? Number(formatUnits(ethBalance.value, 18)).toFixed(4)
+                  : "—"}
               </div>
             </div>
             <div className="rounded-lg bg-dls-surface-muted/[0.08] px-3 py-2.5">
               <div className="mb-1 text-xs text-dls-muted">USDC Balance</div>
-              <div className="font-mono text-base text-dls-text">{state.usdcBalance ?? "—"}</div>
+              <div className="font-mono text-base text-dls-text">
+                {state.usdcBalance ?? "—"}
+              </div>
             </div>
           </div>
 
@@ -1670,13 +2621,13 @@ export function WalletSettingsView({
             aria-label="Refresh balances"
             title="Refresh balances"
           >
-            <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
+            <RefreshCw
+              className={cn("size-3.5", refreshing && "animate-spin")}
+            />
           </Button>
         </div>
-      </SettingsSection>
-
-      <SettingsSection>
         <SuiWalletPreviewSection
+          integrated={runtime === "web"}
           matterhornServerClient={matterhornServerClient}
           runtime={runtime}
           workspaceId={runtimeWorkspaceId}
@@ -1688,7 +2639,7 @@ export function WalletSettingsView({
         <SettingsSectionHeader>
           <SettingsSectionHeaderTitle>Wallet safety</SettingsSectionHeaderTitle>
           <SettingsSectionHeaderDescription>
-            Base transaction limits and recent review events. Other wallets use their own review checks before you finish an action.
+            Base limits and recent approvals.
           </SettingsSectionHeaderDescription>
         </SettingsSectionHeader>
         <WalletSafetyPolicyControls
@@ -1708,7 +2659,8 @@ export function WalletSettingsView({
         <SettingsSectionHeader>
           <SettingsSectionHeaderTitle>Network</SettingsSectionHeaderTitle>
           <SettingsSectionHeaderDescription>
-            Base Sepolia is the default. Enable mainnet only when you intend to spend real funds.
+            Base Sepolia is the default. Enable mainnet only when you intend to
+            spend real funds.
           </SettingsSectionHeaderDescription>
         </SettingsSectionHeader>
 
@@ -1725,11 +2677,20 @@ export function WalletSettingsView({
                 chain.id === 8453 && !state.mainnetEnabled && "opacity-55",
               )}
               onClick={() => handleSwitchChain(chain.id)}
-              disabled={chain.id === chainId || (chain.id === 8453 && !state.mainnetEnabled)}
+              disabled={
+                chain.id === chainId ||
+                (chain.id === 8453 && !state.mainnetEnabled)
+              }
             >
-              <span className="text-sm font-medium text-dls-text">{chain.name}</span>
-              <span className="text-xs text-gray-8">
-                {chain.id === 8453 ? (state.mainnetEnabled ? "Mainnet" : "Mainnet locked") : "Testnet"}
+              <span className="text-sm font-medium text-dls-text">
+                {chain.name}
+              </span>
+              <span className="text-xs text-dls-secondary">
+                {chain.id === 8453
+                  ? state.mainnetEnabled
+                    ? "Mainnet"
+                    : "Mainnet locked"
+                  : "Testnet"}
               </span>
             </button>
           ))}
@@ -1739,7 +2700,9 @@ export function WalletSettingsView({
       {/* Transaction history */}
       <SettingsSection>
         <SettingsSectionHeader>
-          <SettingsSectionHeaderTitle>Transaction History</SettingsSectionHeaderTitle>
+          <SettingsSectionHeaderTitle>
+            Transaction History
+          </SettingsSectionHeaderTitle>
           <SettingsSectionHeaderDescription>
             Recent transactions from this wallet. Max 50 shown.
           </SettingsSectionHeaderDescription>
@@ -1767,7 +2730,7 @@ export function WalletSettingsView({
                       {truncateAddress(tx.hash)}
                     </span>
                   </div>
-                  <div className="text-xs text-gray-8">
+                  <div className="text-xs text-dls-secondary">
                     {new Date(tx.timestamp).toLocaleDateString()} — {tx.status}
                   </div>
                 </div>
@@ -1779,7 +2742,7 @@ export function WalletSettingsView({
                   }
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="shrink-0 text-gray-8 hover:text-gray-10 transition-colors"
+                  className="shrink-0 text-dls-secondary transition-colors hover:text-dls-text"
                 >
                   <ExternalLink className="size-3" />
                 </a>

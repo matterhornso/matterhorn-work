@@ -12,6 +12,24 @@ import { atomicWriteTextFile } from "./atomic-file.js";
 import type { Actor, WorkspaceInfo } from "./types.js";
 import { exists } from "./utils.js";
 
+export const MATTERHORN_RELEASE_DEFAULT_PROVIDER_ID = "opencode";
+export const MATTERHORN_RELEASE_DEFAULT_MODEL_ID = "mimo-v2.5-free";
+
+function isCatalogOnlyProviderId(providerId: string | null | undefined) {
+  return providerId?.trim().toLowerCase() === MATTERHORN_RELEASE_DEFAULT_PROVIDER_ID;
+}
+
+function configuredPromptProviders(
+  catalog: MatterhornBackendModelCatalogSnapshot,
+) {
+  return catalog.providers.filter(
+    (provider) =>
+      provider.connected &&
+      !isCatalogOnlyProviderId(provider.id) &&
+      provider.modelCount > 0,
+  );
+}
+
 function capability(status: MatterhornCapability["status"], label: string, description: string): MatterhornCapability {
   return { status, label, description };
 }
@@ -36,11 +54,21 @@ function fallbackCatalog(catalog?: MatterhornBackendModelCatalogSnapshot): Matte
 
 function defaultModelForCatalog(catalog?: MatterhornBackendModelCatalogSnapshot): MatterhornBackendModelsResponse["defaultModel"] {
   const fallback = {
-    providerId: "opencode",
-    modelId: "big-pickle",
+    providerId: MATTERHORN_RELEASE_DEFAULT_PROVIDER_ID,
+    modelId: MATTERHORN_RELEASE_DEFAULT_MODEL_ID,
     source: "server_default" as const,
   };
   if (!catalog?.serverFetched) return fallback;
+
+  const releaseProvider = catalog.providers.find(
+    (provider) =>
+      provider.id === MATTERHORN_RELEASE_DEFAULT_PROVIDER_ID &&
+      provider.connected &&
+      provider.modelIds.includes(MATTERHORN_RELEASE_DEFAULT_MODEL_ID),
+  );
+  if (releaseProvider) {
+    return fallback;
+  }
 
   const providerIds = [
     ...catalog.connectedProviderIds,
@@ -216,6 +244,8 @@ export function buildBackendModels(input: {
   selection?: MatterhornBackendModelSelectionRecord | null;
 } = {}): MatterhornBackendModelsResponse {
   const catalog = fallbackCatalog(input.catalog);
+  const promptProviders = configuredPromptProviders(catalog);
+  const canAnswerPrompts = promptProviders.length > 0;
   const catalogDefault = defaultModelForCatalog(catalog);
   const selectedDefault = input.selection
     ? {
@@ -235,9 +265,11 @@ export function buildBackendModels(input: {
     routing: {
       answerPath: {
         ...capability(
-          "working",
-          "Local session prompts",
-          "Agent answers are sent through the local agent engine with an explicit providerID/modelID when the user has selected a model.",
+          canAnswerPrompts ? "working" : "needs_setup",
+          canAnswerPrompts ? "Chats and desk tasks" : "Connect a model provider",
+          canAnswerPrompts
+            ? "A connected model provider is available for chats and desk tasks. You can choose a model before you start."
+            : "Connect a model provider before starting chats or desk tasks. The bundled catalog is not an active provider by itself.",
         ),
         transport: "opencode_session_prompt_async",
         requestModelField: "model.providerID_modelID",
@@ -257,9 +289,11 @@ export function buildBackendModels(input: {
       },
       registry: {
         ...capability(
-          "preview",
-          "Local provider list",
-          "The live model list currently comes from the local engine provider list. A server-owned Matterhorn model registry is planned.",
+          catalog.serverFetched ? "working" : "needs_setup",
+          "Model catalog",
+          catalog.serverFetched
+            ? "Matterhorn Desks checked the model providers available in this workspace."
+            : "Matterhorn Desks could not check model providers for this workspace yet.",
         ),
         source: "opencode_provider_list",
         serverOwned: false,
@@ -272,10 +306,10 @@ export function buildBackendModels(input: {
       feedbackUse: "eval_routing_product_quality_only",
     },
     limitations: [
-      "The global endpoint reports the routing contract. Use the workspace endpoint to see the server-normalized local provider catalog for a selected workspace.",
+      "Connect a model provider before starting chats or desk tasks. A model catalog alone does not make a provider ready.",
       input.selection
-        ? "A workspace default model is saved server-side. Stable workspace prompt routes use it when a request omits a model; an explicit app picker override still wins for that app session."
-        : "With no workspace default saved, stable workspace prompt routes use the engine/server default unless the app request includes an explicit picker model.",
+        ? "A workspace default model is saved. You can still choose another available model for a specific chat."
+        : "When a provider is connected, choose a model for this chat or save one as the workspace default.",
       "User feedback is stored for eval, routing, and product quality review only. It is not used for RL or model training by default.",
     ],
   };

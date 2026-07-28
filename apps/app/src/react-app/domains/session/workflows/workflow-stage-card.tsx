@@ -126,9 +126,9 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
       {/* Header row: title + status + action */}
       <div className="grid grid-cols-1 items-start gap-x-2 gap-y-2 sm:flex">
         <div className="col-start-1 row-start-1 min-w-0 sm:flex-1">
-          <p className="text-[12px] font-semibold leading-5 text-dls-text">{title}</p>
+          <p className="text-[13px] font-semibold leading-5 text-dls-text">{title}</p>
           {objective ? (
-            <p className="mt-0.5 text-[11px] leading-4 text-dls-secondary">{objective}</p>
+            <p className="mt-0.5 text-xs leading-[18px] text-dls-secondary">{objective}</p>
           ) : null}
         </div>
         <div className="col-start-1 row-start-2 flex min-w-0 flex-wrap items-center gap-1.5 sm:ml-auto sm:shrink-0">
@@ -142,7 +142,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
               disabled={actionDisabled}
               title={actionTitle}
               className={cn(
-                "h-8 gap-1 rounded-md bg-dls-surface-muted/[0.38] px-2.5 text-[11px] font-semibold hover:bg-dls-surface-muted/[0.52]",
+                "h-8 gap-1 rounded-md bg-dls-surface-muted/[0.38] px-2.5 text-xs font-semibold hover:bg-dls-surface-muted/[0.52]",
                 toneClass ?? "text-[var(--matterhorn-desk-color)]",
                 "hover:text-[var(--matterhorn-desk-color)]",
                 "disabled:cursor-not-allowed disabled:opacity-45",
@@ -158,7 +158,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
 
       {showDetails ? (
         <details className="group mt-2">
-          <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[11px] font-medium leading-4 text-dls-secondary transition-colors hover:text-dls-text marker:hidden">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium leading-[18px] text-dls-secondary transition-colors hover:text-dls-text marker:hidden">
             Details
             <span className="transition-transform group-open:rotate-90" aria-hidden="true">{">"}</span>
           </summary>
@@ -166,7 +166,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
             {hasOutputs ? (
               <li className="inline-flex min-w-0 items-center gap-1.5">
                 <FileOutput className="size-3 shrink-0 text-dls-muted" />
-                <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
+                <span className="min-w-0 text-xs leading-[18px] text-dls-secondary">
                   <span className="font-medium text-dls-text">Outputs:</span>{" "}
                   {outputs!.map((out, i) => (
                     <span key={out.name}>
@@ -191,7 +191,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
             {hasHints ? (
               <li className="inline-flex min-w-0 items-center gap-1.5">
                 <Lightbulb className="size-3 shrink-0 text-dls-muted" />
-                <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
+                <span className="min-w-0 text-xs leading-[18px] text-dls-secondary">
                   <span className="font-medium text-dls-text">Evidence:</span>{" "}
                   {evidenceHints!.join(" / ")}
                 </span>
@@ -200,7 +200,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
             {hasActionHint ? (
               <li className="inline-flex min-w-0 items-center gap-1.5">
                 <ArrowRight className="size-3 shrink-0 text-dls-muted" />
-                <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
+                <span className="min-w-0 text-xs leading-[18px] text-dls-secondary">
                   <span className="font-medium text-dls-text">You:</span> {userActionHint}
                 </span>
               </li>
@@ -208,7 +208,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
             {requiresExternalSigner ? (
               <li className="inline-flex min-w-0 items-center gap-1.5">
                 <Lock className="size-3 shrink-0 text-dls-muted" />
-                <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
+                <span className="min-w-0 text-xs leading-[18px] text-dls-secondary">
                   <span className="font-medium text-dls-text">External signer required</span> - unsigned handoff only
                 </span>
               </li>
@@ -216,7 +216,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
             {requiresCustomerConfirmation ? (
               <li className="inline-flex min-w-0 items-center gap-1.5">
                 <AlertCircle className="size-3 shrink-0 text-dls-muted" />
-                <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
+                <span className="min-w-0 text-xs leading-[18px] text-dls-secondary">
                   <span className="font-medium text-dls-text">Confirmation required</span> before continuing
                 </span>
               </li>
@@ -224,7 +224,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
             {hasSafety ? (
               <li className="inline-flex min-w-0 items-center gap-1.5">
                 <Shield className="size-3 shrink-0 text-dls-muted" />
-                <span className="min-w-0 text-[11px] leading-4 text-dls-secondary">
+                <span className="min-w-0 text-xs leading-[18px] text-dls-secondary">
                   {safetyBoundary}
                 </span>
               </li>

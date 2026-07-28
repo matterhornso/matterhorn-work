@@ -6,11 +6,11 @@ import type { CapabilityUiStatus, CapabilityUiTone } from "./backend-capability-
 import { capabilityStatusLabel, capabilityStatusTone } from "./backend-capability-helpers";
 
 const toneClasses: Record<CapabilityUiTone, string> = {
-  ready: "text-emerald-300",
-  setup: "text-sky-300",
-  preview: "text-amber-300",
+  ready: "text-emerald-11",
+  setup: "text-sky-11",
+  preview: "text-amber-12 dark:text-amber-11",
   neutral: "text-dls-secondary",
-  error: "text-red-300",
+  error: "text-red-11",
 };
 
 function StatusIcon(props: { status: CapabilityUiStatus; className?: string }) {

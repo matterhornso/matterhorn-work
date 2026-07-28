@@ -1,3 +1,9 @@
+---
+name: browser-automation
+description: Internal browser automation for Matterhorn Desks engineering.
+user-invocable: false
+---
+
 # Skill: Browser Automation
 
 ## What I Do

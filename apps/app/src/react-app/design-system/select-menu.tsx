@@ -19,7 +19,7 @@ type SelectMenuProps = {
 };
 
 const triggerClass =
-  "flex w-full items-center justify-between gap-2 rounded-xl border border-dls-border bg-dls-surface px-3.5 py-2.5 text-left text-[14px] text-dls-text shadow-none transition-[border-color,box-shadow] hover:border-dls-border focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.14)] disabled:cursor-not-allowed disabled:opacity-60";
+  "flex w-full items-center justify-between gap-2 rounded-xl border border-dls-border bg-dls-surface px-3.5 py-2.5 text-left text-[14px] text-dls-text shadow-none transition-[border-color,box-shadow] hover:border-dls-border focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dls-accent-rgb)/0.14)] disabled:cursor-not-allowed disabled:opacity-60";
 
 const panelClass =
   "absolute left-0 right-0 top-[calc(100%+6px)] z-[100] max-h-56 overflow-auto rounded-xl border border-dls-border bg-dls-surface py-1 shadow-[var(--dls-shell-shadow)]";

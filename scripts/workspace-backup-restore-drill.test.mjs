@@ -23,6 +23,7 @@ let pendingApproval = null;
 let releaseImport = null;
 let decoyApproved = false;
 let restoreApplied = false;
+let importedMode = null;
 
 function json(response, status, body) {
   response.writeHead(status, { "content-type": "application/json" });
@@ -44,6 +45,7 @@ const server = createServer(async (request, response) => {
     let body = "";
     for await (const chunk of request) body += chunk;
     const parsed = JSON.parse(body);
+    importedMode = parsed.mode;
     pendingApproval = {
       id: "approval-1",
       workspaceId: "ws_restore",
@@ -55,6 +57,7 @@ const server = createServer(async (request, response) => {
     await new Promise((resolve) => { releaseImport = resolve; });
     targetPayload = { ...parsed, workspaceId: "ws_restore", exportedAt: 999 };
     delete targetPayload.previewFingerprint;
+    delete targetPayload.mode;
     restoreApplied = true;
     return json(response, 200, { ok: true });
   }
@@ -114,7 +117,15 @@ try {
   assert.equal(report.ready, true);
   assert.equal(report.sensitiveMode, "exclude");
   assert.equal(report.restore.approvalCompleted, true);
+  assert.equal(report.restore.mode, "replace");
   assert.equal(report.restore.verified, true);
+  assert.deepEqual(importedMode, {
+    opencode: "replace",
+    openwork: "replace",
+    skills: "replace",
+    commands: "replace",
+    files: "replace",
+  });
   assert.deepEqual(report.restore.verificationSummary, {
     total: 2,
     create: 0,

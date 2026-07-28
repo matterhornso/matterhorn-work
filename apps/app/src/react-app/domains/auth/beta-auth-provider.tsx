@@ -15,6 +15,7 @@ import {
   readDenSettings,
   type DenUser,
 } from "@/app/lib/den";
+import { dispatchDenSessionUpdated } from "@/app/lib/den-session-events";
 import { isPublicBetaWebDeployment } from "@/app/lib/matterhorn-deployment";
 import { usePlatform } from "@/react-app/kernel/platform";
 import { useDenAuth } from "@/react-app/domains/cloud/den-auth-provider";
@@ -75,14 +76,20 @@ export function BetaAuthProvider({ children }: BetaAuthProviderProps) {
   }, [platform]);
 
   const signOut = useCallback(async () => {
-    if (isPublicBetaWebDeployment()) {
-      const settings = readDenSettings();
+    const settings = readDenSettings();
+    const hasSessionCredential =
+      isPublicBetaWebDeployment() || Boolean(settings.authToken?.trim());
+
+    if (hasSessionCredential) {
       await createDenClient({
         baseUrl: settings.baseUrl,
         apiBaseUrl: settings.apiBaseUrl,
-      }).signOut().catch(() => undefined);
+        token: settings.authToken,
+      }).signOut();
     }
+
     clearDenSession();
+    dispatchDenSessionUpdated({ status: "signed_out" });
     await denAuth.refresh();
   }, [denAuth]);
 

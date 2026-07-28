@@ -47,6 +47,10 @@ import {
   buildBittensorCardActionContext,
   readBittensorContextFromToolOutput,
 } from "./bittensor-context-store";
+import {
+  reviewedActionHandoffFromCard,
+  stageReviewedActionHandoff,
+} from "../../wallet/reviewed-action-handoff";
 
 type TranscriptPart = Part;
 
@@ -495,27 +499,92 @@ function MessageActionIconButton(props: {
       title={props.title}
       aria-label={props["aria-label"]}
       onClick={() => void props.onClick()}
-      className="inline-flex size-7 items-center justify-center rounded-md text-dls-secondary transition-colors duration-150 hover:bg-dls-hover/55 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+      className="inline-flex size-7 items-center justify-center rounded-md text-dls-secondary transition-colors duration-150 hover:bg-dls-hover/55 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)]"
     >
       {props.children}
     </button>
   );
 }
 
+const CLIPBOARD_WRITE_TIMEOUT_MS = 600;
+
+function copyMessageTextWithSelection(text: string): boolean {
+  if (typeof document === "undefined" || !document.body) return false;
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus({ preventScroll: true });
+  textarea.select();
+  textarea.setSelectionRange(0, text.length);
+
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
+}
+
+async function copyMessageText(text: string): Promise<boolean> {
+  // Run before the first await so embedded browsers keep the click activation.
+  if (copyMessageTextWithSelection(text)) return true;
+
+  let clipboardWrite: Promise<void> | null = null;
+  try {
+    if (navigator.clipboard?.writeText) {
+      clipboardWrite = navigator.clipboard.writeText(text);
+    }
+  } catch {
+    clipboardWrite = null;
+  }
+
+  if (!clipboardWrite) return false;
+
+  try {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error("Clipboard write timed out.")),
+        CLIPBOARD_WRITE_TIMEOUT_MS,
+      );
+    });
+    try {
+      await Promise.race([clipboardWrite, timeout]);
+    } finally {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function CopyButton(props: { getText: () => string }) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle",
+  );
+  const actionLabel =
+    copyState === "copied"
+      ? "Message copied"
+      : copyState === "failed"
+        ? "Copy failed"
+        : "Copy message";
 
   return (
     <MessageActionIconButton
-      title="Copy message"
-      aria-label="Copy message"
+      title={actionLabel}
+      aria-label={actionLabel}
       onClick={async () => {
-        await navigator.clipboard.writeText(props.getText());
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1200);
+        const didCopy = await copyMessageText(props.getText());
+        setCopyState(didCopy ? "copied" : "failed");
+        window.setTimeout(() => setCopyState("idle"), 1800);
       }}
     >
-      {copied ? <Check size={14} /> : <Copy size={14} />}
+      {copyState === "copied" ? <Check size={14} /> : <Copy size={14} />}
     </MessageActionIconButton>
   );
 }
@@ -700,6 +769,7 @@ function FileCard(props: {
 export type BittensorPublicEvidenceCard = {
   version?: string;
   kind?: string;
+  originalKind?: string | null;
   venue?: "auto" | "bittensor" | "hyperliquid" | "polymarket" | string;
   status?: "info" | "success" | "warning" | "danger" | string;
   title?: string;
@@ -734,9 +804,24 @@ function isRecordValue(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function parseToolOutputRecord(output: unknown): Record<string, unknown> | null {
+  if (isRecordValue(output)) return output;
+  if (typeof output !== "string") return null;
+
+  const trimmed = output.trim();
+  if (!trimmed || trimmed.length > 1_000_000) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    return isRecordValue(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function readBittensorCards(output: unknown): BittensorChatCard[] {
-  if (!isRecordValue(output)) return [];
-  const sharedCards = output.sharedCards;
+  const outputRecord = parseToolOutputRecord(output);
+  if (!outputRecord) return [];
+  const sharedCards = outputRecord.sharedCards;
   if (Array.isArray(sharedCards)) {
     const cards = sharedCards
       .filter(isRecordValue)
@@ -744,7 +829,7 @@ function readBittensorCards(output: unknown): BittensorChatCard[] {
       .filter((card): card is BittensorChatCard => Boolean(card));
     if (cards.length) return cards.slice(0, 6);
   }
-  const cards = output.cards;
+  const cards = outputRecord.cards;
   if (!Array.isArray(cards)) return [];
   return cards
     .filter(isRecordValue)
@@ -843,11 +928,19 @@ function sharedCardDetailItems(
     const side = sharedCardText(preview.side);
     const size = sharedCardNumber(preview.size, { digits: 6 });
     const price = sharedCardNumber(preview.price, { prefix: venue === "polymarket" ? "" : "$", digits: 6 });
+    const orderType = sharedCardText(preview.orderType);
     if (asset) items.push({ label: "Asset", value: asset, tone: "default" });
     if (side) items.push({ label: "Side", value: side, tone: "default" });
     if (size) items.push({ label: "Preview size", value: size, tone: "muted" });
-    if (price) items.push({ label: "Preview price", value: price, tone: "muted" });
-    if (preview.canSubmit === false) items.push({ label: "Preview submit", value: "Disabled", tone: "good" });
+    if (price) {
+      const priceLabel = venue === "hyperliquid" && orderType === "market"
+        ? "Indicative mark"
+        : venue === "hyperliquid" && orderType === "limit"
+          ? "Limit price"
+          : "Preview price";
+      items.push({ label: priceLabel, value: price, tone: "muted" });
+    }
+    if (preview.canSubmit === false) items.push({ label: "Agent draft", value: "Review only", tone: "good" });
   }
 
   if (kind === "receipt_status" && receipt) {
@@ -864,8 +957,8 @@ function sharedCardDetailItems(
     if (status) items.push({ label: "Watch status", value: status, tone: status === "triggered" ? "good" : "muted" });
   }
 
-  if (originalKind === "market_execution_chain" && !items.some((item) => item.label === "Preview submit")) {
-    items.push({ label: "Preview submit", value: "Disabled", tone: "good" });
+  if (originalKind === "market_execution_chain" && !items.some((item) => item.label === "Agent draft")) {
+    items.push({ label: "Agent draft", value: "Review only", tone: "good" });
   }
 
   return items;
@@ -898,9 +991,31 @@ function sharedCardHighlightedStep(data: Record<string, unknown> | null): { labe
   return { label, command };
 }
 
-function sharedCardNeedsExternalSigner(kind: string, originalKind: string | null): boolean {
-  if (kind === "external_signer_handoff" || kind === "action_preview") return true;
-  if (originalKind === "market_execution_chain") return true;
+function sharedCardWalletTicket(
+  venue: string,
+  kind: string,
+  originalKind: string | null,
+  data: Record<string, unknown> | null,
+  status: string,
+): string | null {
+  if (kind !== "action_preview") return null;
+  if (venue === "hyperliquid") return "Exact order review";
+  if (venue === "polymarket") {
+    const preview = isRecordValue(data?.preview) ? data.preview : null;
+    const compliance = isRecordValue(preview?.compliance) ? preview.compliance : null;
+    return status !== "danger" && compliance?.status === "allowed" ? "Eligible EOA BUY" : null;
+  }
+  if (venue === "bittensor" && originalKind && /transfer/i.test(originalKind)) return "TAO transfer";
+  return null;
+}
+
+function sharedCardNeedsExternalSigner(kind: string, originalKind: string | null, venue: string): boolean {
+  if (kind === "external_signer_handoff") return true;
+  if (kind === "action_preview") {
+    if (venue === "hyperliquid" || venue === "polymarket") return false;
+    if (venue === "bittensor" && originalKind && /transfer/i.test(originalKind)) return false;
+    return true;
+  }
   return Boolean(originalKind && /(handoff|signing|signed_action|staking_quote|order_preview)/i.test(originalKind));
 }
 
@@ -963,13 +1078,17 @@ function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): Bitten
   const data = isRecordValue(card.data) ? card.data : {};
   const missingContext = sharedCardMissingContext(data, venue, kind);
   const highlightedStep = originalKind === "market_execution_chain" ? sharedCardHighlightedStep(data) : null;
+  const walletTicket = sharedCardWalletTicket(venue, kind, originalKind, data, status);
   const items: NonNullable<BittensorChatCard["items"]> = [
     { label: "Venue", value: venueLabel, tone: venue === "auto" ? "muted" : "default" },
     { label: "Status", value: statusLabel, tone: status === "success" ? "good" : status === "danger" ? "danger" : status === "warning" ? "warning" : "muted" },
     { label: "Can submit", value: safety.canSubmit === false ? "No" : "Unavailable", tone: safety.canSubmit === false ? "good" : "warning" },
     { label: "Live submission", value: safety.liveSubmissionEnabled === false ? "Off" : "Unavailable", tone: safety.liveSubmissionEnabled === false ? "good" : "warning" },
   ];
-  if (sharedCardNeedsExternalSigner(kind, originalKind)) {
+  if (walletTicket) {
+    items.push({ label: "Wallet ticket", value: walletTicket, tone: "warning" });
+  }
+  if (sharedCardNeedsExternalSigner(kind, originalKind, venue)) {
     items.push({ label: "External signer", value: "Required", tone: "warning" });
   }
   if (highlightedStep) {
@@ -987,6 +1106,7 @@ function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): Bitten
   return {
     version: "matterhorn.crypto.shared-card.v1",
     kind,
+    originalKind,
     venue,
     status,
     title: sharedCardDisplayTitle(venueLabel, title, venue),
@@ -1195,6 +1315,7 @@ function BittensorToolCards(props: {
         const warnings = (card.warnings ?? []).filter(Boolean).slice(0, 3);
         const actions = (card.actions ?? []).slice(0, 2);
         const canSaveEvidence = Boolean(props.onSaveEvidence && isBittensorEvidenceCard(card));
+        const reviewedActionHandoff = reviewedActionHandoffFromCard(card);
         return (
           <div
             key={`${card.kind ?? "card"}:${title}:${index}`}
@@ -1241,8 +1362,19 @@ function BittensorToolCards(props: {
                   </div>
                 ) : null}
 
-                {actions.length || canSaveEvidence ? (
+                {actions.length || canSaveEvidence || reviewedActionHandoff ? (
                   <div className="mt-3 flex flex-wrap gap-1.5">
+                    {reviewedActionHandoff ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                        onClick={() => stageReviewedActionHandoff(reviewedActionHandoff)}
+                        title="Open the wallet review ticket with these public draft terms"
+                      >
+                        <Wallet size={12} />
+                        <span>Review in wallet</span>
+                      </button>
+                    ) : null}
                     {canSaveEvidence && props.onSaveEvidence ? (
                       <BittensorEvidenceSaveButton card={card} onSaveEvidence={props.onSaveEvidence} />
                     ) : null}
@@ -1302,12 +1434,28 @@ function StepRow(props: {
     return (
       <div
         data-reasoning="true"
-        className="whitespace-pre-wrap font-sans text-sm leading-[1.65] text-muted-foreground antialiased"
+        className="font-sans text-sm leading-[1.65] text-muted-foreground antialiased"
       >
-        <div className="max-w-[760px]">
-          {preview.headline ? <div className="mb-2 text-muted-foreground">{preview.headline}</div> : null}
-          <div>{preview.body || headline}</div>
-        </div>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
+          aria-expanded={props.expanded}
+          onClick={props.onToggle}
+        >
+          <BrainCircuit size={15} aria-hidden="true" />
+          <span>Reasoning</span>
+          <ChevronDown
+            size={14}
+            className={cn("transition-transform", !props.expanded && "-rotate-90")}
+            aria-hidden="true"
+          />
+        </button>
+        {props.expanded ? (
+          <div className="mt-3 max-w-[760px] whitespace-pre-wrap pl-6">
+            {preview.headline ? <div className="mb-2 text-muted-foreground">{preview.headline}</div> : null}
+            <div>{preview.body || headline}</div>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -1457,14 +1605,14 @@ function OpenTargetIcon(props: { target: OpenTarget }) {
 
   if (props.target.preview === "sheet") {
     return (
-      <span className="inline-flex h-3.5 min-w-5 shrink-0 items-center justify-center rounded-[3px] border border-emerald-500/30 bg-emerald-500/10 px-0.5 text-[6px] font-bold leading-none text-emerald-700">
+      <span className="inline-flex h-4 min-w-6 shrink-0 items-center justify-center rounded-[3px] border border-emerald-500/30 bg-emerald-500/10 px-1 text-[10px] font-bold leading-none text-emerald-700">
         XLS
       </span>
     );
   }
   if (props.target.preview === "markdown") {
     return (
-      <span className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border border-primary/25 bg-primary/10 text-[7px] font-bold leading-none text-primary">
+      <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-[3px] border border-primary/25 bg-primary/10 text-[10px] font-bold leading-none text-primary">
         MD
       </span>
     );
@@ -1701,8 +1849,8 @@ function MessageBlockRow(props: {
         {!props.isNestedVariant ? (
           <div
             className={cn(
-              "flex items-center gap-0.5 select-none transition-opacity duration-150",
-              "opacity-100 pointer-events-auto md:opacity-0 md:pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:group-focus-within:opacity-100 md:group-focus-within:pointer-events-auto",
+              "relative z-10 flex items-center gap-0.5 select-none transition-opacity duration-150",
+              "pointer-events-auto opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100",
               block.isUser ? "absolute right-2 top-2" : "mt-2",
             )}
           >

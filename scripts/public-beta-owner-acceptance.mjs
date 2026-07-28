@@ -359,17 +359,17 @@ function evaluate(config) {
   add("operations_recovery", "operations.backup_restore", "Workspace and encrypted full user-data recovery pass", operationsMeta && allChecksWithPrefixPass(operations, ["backup_", "user_data_recovery_"]) && reportEvidencePasses(operations, ["backup_status", "user_data_recovery_status"], operationsBases), input.reports.operations);
   add("operations_rollback", "operations.rollback_drill", "Rollback between immutable commits restores health", operationsMeta && allChecksWithPrefixPass(operations, ["rollback_"]) && reportEvidencePasses(operations, ["rollback_status"], operationsBases), input.reports.operations);
 
-  const acceptanceMeta = acceptance.version === REPORT_VERSIONS.acceptance
-    && acceptance.ready === true
+  const acceptanceIdentity = acceptance.version === REPORT_VERSIONS.acceptance
     && acceptance.commit === commit
     && isFresh(acceptance.evaluatedAt, config.now);
+  const acceptanceMeta = acceptanceIdentity && acceptance.ready === true;
   const acceptanceBases = [dirname(reports.acceptance.path), ...bases];
   add("two_user_acceptance", "web.deployed_two_user_acceptance", "New-user and returning-user deployed journeys pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["evidence_fresh", "deployed_https", "newUser_journey", "existingUser_journey"]) && reportEvidencePasses(acceptance, ["newUser_journey", "existingUser_journey"], acceptanceBases), input.reports.acceptance);
   add("evm_wallet_acceptance", "wallet.metamask_coinbase", "MetaMask and Coinbase Wallet journeys pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["metamask_journey", "coinbase_journey"]) && reportEvidencePasses(acceptance, ["metamask_journey", "coinbase_journey"], acceptanceBases), input.reports.acceptance);
   add("sui_wallet_acceptance", "wallet.phantom_sui", "Phantom Sui reject and approve-handoff journeys pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["phantom_sui_journey"]) && reportEvidencePasses(acceptance, ["phantom_sui_journey"], acceptanceBases), input.reports.acceptance);
   add("hyperliquid_acceptance", "wallet.hyperliquid_testnet", "Hyperliquid testnet execution and fail-closed boundaries pass with evidence", acceptanceMeta && reportChecksPass(acceptance, ["hyperliquid_testnet_journey"]) && reportEvidencePasses(acceptance, ["hyperliquid_testnet_journey"], acceptanceBases), input.reports.acceptance);
   const oauthIds = expectedOauth.map((id) => `oauth_${id}`);
-  add("oauth_acceptance", "connectors.visible_oauth", "Every and only allowlisted OAuth connector passes acceptance", acceptanceMeta && reportChecksPass(acceptance, [...oauthIds, "oauth_visible_set"]) && expectedOauth.length === (acceptance.acceptedOauthConnectors?.length ?? 0) && expectedOauth.every((id) => acceptance.acceptedOauthConnectors.includes(id)) && reportEvidencePasses(acceptance, oauthIds, acceptanceBases), expectedOauth.join(", ") || "No public OAuth connectors");
+  add("oauth_acceptance", "connectors.visible_oauth", "Every and only allowlisted OAuth connector passes acceptance", acceptanceIdentity && reportChecksPass(acceptance, [...oauthIds, "oauth_visible_set"]) && expectedOauth.length === (acceptance.acceptedOauthConnectors?.length ?? 0) && expectedOauth.every((id) => acceptance.acceptedOauthConnectors.includes(id)) && reportEvidencePasses(acceptance, oauthIds, acceptanceBases), expectedOauth.join(", ") || "No public OAuth connectors");
 
   const desktopMeta = desktop.version === REPORT_VERSIONS.desktop
     && desktop.ready === true

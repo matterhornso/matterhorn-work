@@ -1,9 +1,9 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   ChevronDown,
-  Download,
   Eye,
   RefreshCw,
   Search,
@@ -38,6 +38,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { ConfirmModal } from "../../design-system/modals/confirm-modal";
 import { ErrorState } from "../shell/error-state";
 import {
   applyMatterhornMemoryDeskPolicyDefaults,
@@ -105,9 +106,9 @@ const SUGGESTION_INBOX_FILTERS: Array<{
 const SAVED_SUGGESTION_STATUSES = new Set<MatterhornMemorySuggestionStatus>(["confirmed", "edited"]);
 const NOT_SAVED_SUGGESTION_STATUSES = new Set<MatterhornMemorySuggestionStatus>(["dismissed", "expired", "blocked"]);
 const MEMORY_FIELD_CLASS =
-  "border-transparent bg-dls-surface-raised shadow-none placeholder:text-dls-secondary/80 hover:bg-dls-surface-muted/[0.34] focus-visible:border-[rgba(var(--dls-accent-rgb),0.45)] focus-visible:bg-dls-surface-muted/[0.38] focus-visible:ring-1 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.22)] dark:bg-dls-surface-raised";
+  "border-transparent bg-dls-surface-raised shadow-none placeholder:text-dls-secondary/80 hover:bg-dls-surface-muted/[0.34] focus-visible:border-[rgb(var(--dls-accent-rgb)/0.45)] focus-visible:bg-dls-surface-muted/[0.38] focus-visible:ring-1 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.22)] dark:bg-dls-surface-raised";
 const MEMORY_SELECT_CLASS =
-  "h-10 rounded-md border border-transparent bg-dls-surface-raised px-3 text-sm outline-none transition-colors hover:bg-dls-surface-muted/[0.34] focus:border-[rgba(var(--dls-accent-rgb),0.45)] focus:bg-dls-surface-muted/[0.38] focus:ring-1 focus:ring-[rgba(var(--dls-accent-rgb),0.22)]";
+  "h-10 rounded-md border border-transparent bg-dls-surface-raised px-3 text-sm outline-none transition-colors hover:bg-dls-surface-muted/[0.34] focus:border-[rgb(var(--dls-accent-rgb)/0.45)] focus:bg-dls-surface-muted/[0.38] focus:ring-1 focus:ring-[rgb(var(--dls-accent-rgb)/0.22)]";
 const MEMORY_MUTED_BADGE_CLASS = "border-transparent bg-transparent px-0 text-dls-secondary";
 const MEMORY_ICON_ACTION_CLASS =
   "bg-dls-surface-raised text-dls-secondary shadow-none hover:bg-dls-surface-muted/[0.42] hover:text-dls-text";
@@ -141,7 +142,7 @@ function suggestionStatusMeta(status: MatterhornMemorySuggestionStatus) {
       title: "Edited + saved",
       description: "Saved only after the user reviewed and changed it.",
       className: "border-transparent bg-transparent px-0 text-primary",
-      cardClassName: "bg-[rgba(var(--matterhorn-blue-rgb),0.06)]",
+      cardClassName: "bg-[rgb(var(--matterhorn-blue-rgb)/0.06)]",
     };
   }
   if (status === "dismissed") {
@@ -425,6 +426,7 @@ function useMemorySuggestionInbox(client: MatterhornServerClient | null, workspa
 }
 
 export function MemoryPanel(props: MemoryPanelProps) {
+  const queryClient = useQueryClient();
   const workspaceId = props.workspaceId?.trim() || null;
   const { query, setQuery, records, setRecords, loading, error, refresh } = useMemoryRecords(props.client, workspaceId);
   const {
@@ -444,6 +446,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
   const [suggestionEditDraft, setSuggestionEditDraft] = useState<SuggestionEditDraft | null>(null);
   const [suggestionStatusFilter, setSuggestionStatusFilter] = useState<SuggestionInboxFilter>("needs_review");
   const [manualCaptureOpen, setManualCaptureOpen] = useState(false);
+  const [recordPendingForget, setRecordPendingForget] = useState<MatterhornMemoryRecord | null>(null);
 
   useEffect(() => {
     const handleSuggestions = (event: Event) => {
@@ -548,6 +551,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
       }
       setRecords((current) => current.filter((item) => item.id !== record.id));
       setSelectedRecords((current) => current.filter((item) => item.id !== record.id));
+      setRecordPendingForget(null);
     } catch (nextError) {
       setCaptureError(nextError instanceof Error ? nextError.message : "Could not forget memory.");
     }
@@ -555,14 +559,22 @@ export function MemoryPanel(props: MemoryPanelProps) {
 
   const handleExport = async () => {
     if (!props.client) return;
-    setExportStatus("Exporting public-safe memory bundle...");
+    setExportStatus("Creating public-safe memory export...");
     try {
       const response = workspaceId
         ? await props.client.exportWorkspaceMemory(workspaceId)
         : await props.client.exportMemory();
-      setExportStatus(`Exported ${response.export.recordCount} records. sha256 ${response.export.sha256.slice(0, 12)}...`);
+      if (workspaceId) {
+        await queryClient.invalidateQueries({ queryKey: ["workflow-output-receipts", workspaceId] as const });
+        await queryClient.invalidateQueries({ queryKey: ["project-evidence", workspaceId] });
+        window.dispatchEvent(new Event("matterhorn:project-evidence-updated"));
+        window.dispatchEvent(new Event("matterhorn:task-log-updated"));
+      }
+      setExportStatus(
+        `Saved ${response.export.recordCount}-record export to Outputs.`,
+      );
     } catch (nextError) {
-      setExportStatus(nextError instanceof Error ? nextError.message : "Could not export memory bundle.");
+      setExportStatus(nextError instanceof Error ? nextError.message : "Could not create the memory export.");
     }
   };
 
@@ -786,7 +798,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
         </section>
 
         {visibleSelectedRecords.length ? (
-          <section className="rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3.5">
+          <section className="rounded-lg bg-[rgb(var(--matterhorn-blue-rgb)/0.08)] p-3.5">
             <div className="flex flex-col gap-3">
               <div>
                 <div className="text-sm font-semibold">Using memories in chat</div>
@@ -1130,7 +1142,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     size="sm"
                     className={MEMORY_SECONDARY_ACTION_CLASS}
                     disabled={!record.canDelete}
-                    onClick={() => void handleForget(record)}
+                    onClick={() => setRecordPendingForget(record)}
                   >
                     <Trash2 className="mr-2 size-3.5" />
                     Forget
@@ -1229,19 +1241,35 @@ export function MemoryPanel(props: MemoryPanelProps) {
         <section className="rounded-md bg-dls-surface-muted/[0.08] px-3.5 py-3">
           <div className="flex flex-col gap-3">
             <div>
-              <div className="text-sm font-semibold">Export memory</div>
+              <div className="text-sm font-semibold">Create memory export</div>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Exports include only policy-approved public-safe memory metadata.
+                Saves a public-safe bundle in this workspace&apos;s outputs folder.
               </p>
             </div>
             <Button className={cn("w-full justify-center", MEMORY_SECONDARY_ACTION_CLASS)} variant="ghost" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
-              <Download className="mr-2 size-3.5" />
-              Export memory
+              <Archive className="mr-2 size-3.5" />
+              Create export bundle
             </Button>
           </div>
           {exportStatus ? <div className="mt-3 text-xs text-dls-secondary">{exportStatus}</div> : null}
         </section>
       </div>
+      <ConfirmModal
+        open={Boolean(recordPendingForget)}
+        title="Forget this memory?"
+        message={
+          recordPendingForget
+            ? `"${recordPendingForget.title}" will be removed from this workspace and will no longer be available in chat.`
+            : "This memory will be removed from this workspace."
+        }
+        confirmLabel="Forget memory"
+        cancelLabel="Keep memory"
+        variant="danger"
+        onConfirm={() => {
+          if (recordPendingForget) void handleForget(recordPendingForget);
+        }}
+        onCancel={() => setRecordPendingForget(null)}
+      />
     </div>
   );
 }

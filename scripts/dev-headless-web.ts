@@ -333,6 +333,8 @@ const headlessProcess = spawnLogged(
       : []),
     ...(opencodeRouterRequired ? ["--opencode-router-required"] : []),
     ...(remoteAccessEnabled ? ["--remote-access"] : []),
+    "--cors",
+    "loopback",
     "--openwork-port",
     String(openworkPort),
   ],

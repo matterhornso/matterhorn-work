@@ -2,6 +2,7 @@
 title: Release flow
 description: Step through versioning, tagging, and verification
 name: release
+user-invocable: false
 ---
 
 ## Prepare

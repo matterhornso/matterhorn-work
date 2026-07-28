@@ -127,15 +127,13 @@ describe("Matterhorn app observability contracts", () => {
   test("plain project Home URLs do not restore a persisted side panel", () => {
     const source = readReactAppSource("domains/session/chat/session-page.tsx");
     const routedPanelBlock = source.slice(
-      source.indexOf("const requestedPanel = new URLSearchParams(location.search).get(\"panel\")"),
+      source.indexOf("// The URL is the shareable source of truth"),
       source.indexOf("setActiveWorkflowDeskId(null)"),
     );
 
-    expect(routedPanelBlock).toContain("setCurrentSidePanel(requestedPanel as SidePanelItem)");
-    expect(routedPanelBlock).toContain("return;");
-    expect(routedPanelBlock).toContain("setCurrentSidePanel(null)");
-    expect(routedPanelBlock.indexOf("return;")).toBeLessThan(
-      routedPanelBlock.indexOf("setCurrentSidePanel(null)"),
-    );
+    expect(routedPanelBlock).toContain("setSidePanelState(");
+    expect(routedPanelBlock).toContain("routeSidePanel");
+    expect(routedPanelBlock).not.toContain("setCurrentSidePanel(");
+    expect(routedPanelBlock).not.toContain("navigate(");
   });
 });

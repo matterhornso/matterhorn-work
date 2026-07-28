@@ -5,6 +5,7 @@ import {
   backendCapabilityLabel,
   backendCapabilityTone,
   storageLocationLabel,
+  summarizeModelSelection,
   summarizeModelRoutingPolicy,
   summarizeModelSource,
   walletFamilySummary,
@@ -279,18 +280,20 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("settings-project-data-ledger");
     expect(source).toContain("client.listProjectDataLedger(workspaceId");
     expect(source).toContain("ProjectLedgerControlSummary");
-    expect(source).toContain("Append-only history remains exportable for accountability.");
+    expect(source).toContain("Use the Manage links for user-controlled stores.");
+    expect(source).toContain("Append-only history");
+    expect(source).toContain("Project history");
     expect(source).toContain("client.exportProjectDataLedger(workspaceId");
     expect(source).toContain("client.workspaceBackendSupportReport(workspaceId)");
     expect(source).toContain("copySupportReport");
     expect(source).toContain("writeClipboardText(JSON.stringify(report, null, 2))");
     expect(source).toContain("Billing readiness is included without secrets.");
     expect(source).toContain("The browser blocked clipboard access. Click the page and try again, or use Support report.");
-    expect(source).toContain("summarizeModelRoutingPolicy");
-    expect(source).toContain("Backend status");
+    expect(source).toContain("summarizeModelSelection");
+    expect(source).toContain("Workspace health");
     expect(source).toContain("Support report");
-    expect(source).toContain("Workspace readiness");
-    expect(source).toContain("Wallet families");
+    expect(source).toContain("Workspace setup");
+    expect(source).toContain("Wallet safety");
     expect(source).toContain("Training use");
     expect(source).toContain("controls={workspaceDataControls}");
     const sectionSource = readAppSource("react-app/domains/settings/backend-capabilities/backend-capability-section.tsx");
@@ -315,32 +318,33 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("runtimeWorkspaceId?: string | null");
     expect(source).toContain("backendModels?.catalog");
     expect(source).toContain('catalog?.errorCode === "opencode_unconfigured"');
-    expect(source).toContain("The local agent engine is not running");
-    expect(source).toContain("Start Matterhorn with its managed engine");
-    expect(source).toContain("attach an existing engine URL");
+    expect(source).toContain("Matterhorn Desks is not ready to answer yet");
+    expect(source).toContain("Models could not load");
     expect(source).toContain("buildModelReadinessSummary");
-    expect(source).toContain("Agent model");
-    expect(source).toContain("See what answers prompts");
+    expect(source).toContain(
+      "<LayoutSectionTitle>Model provider</LayoutSectionTitle>",
+    );
+    expect(source).toContain(
+      "Connect a provider, then choose what answers chats and desk tasks",
+    );
     expect(source).toContain("onOpenModelPicker");
-    expect(source).toContain("Change model");
+    expect(source).toContain("Choose model");
     expect(source).toContain("Use workspace default");
-    expect(source).toContain("Save as workspace default");
+    expect(source).toContain("Save for workspace");
     expect(source).toContain("modelReadiness.workspaceDefault");
     expect(source).toContain("modelReadiness.effectiveModel");
-    expect(source).toContain("modelReadiness.answerPath");
-    expect(source).toContain("modelReadiness.providerList");
-    expect(source).toContain("Model catalog could not load");
+    expect(source).toContain("modelReadiness.providerCatalog");
     expect(source).toContain("ModelRoutingRow");
-    expect(source).toContain("Model details");
+    expect(source).toContain("How models work");
     expect(source).toContain("modelReadiness.catalogRows");
-    expect(source).toContain("Model catalog");
+    expect(source).toContain("Available providers");
     expect(source).toContain("row.modelCountLabel");
-    expect(source).toContain("row.sampleModels");
     expect(source).toContain("modelReadiness.trainingPolicy");
     expect(routeSource).toContain("connectedModelCount");
     expect(routeSource).toContain("defaultModelLabel={defaultModelLabel}");
     expect(routeSource).toContain("defaultModelRef={defaultModelRef}");
-    expect(routeSource).toContain("defaultModelProviderId={local.prefs.defaultModel?.providerID ?? null}");
+    expect(routeSource).toContain("defaultModelProviderId={");
+    expect(routeSource).toContain("local.prefs.defaultModel?.providerID ?? null");
     expect(routeSource).toContain("defaultModelId={local.prefs.defaultModel?.modelID ?? null}");
     expect(routeSource).toContain("hasLocalModelOverride={Boolean(local.prefs.defaultModel)}");
     expect(routeSource).toContain("onUseWorkspaceDefault={() =>");
@@ -368,19 +372,29 @@ describe("backend capability UI contract", () => {
     expect(walletSource).toContain("matterhornServerClient.backendCapabilities()");
     expect(walletSource).toContain('wallet.family === "Sui"');
     expect(walletSource).toContain("Sui wallet");
-    expect(walletSource).toContain("Connect EVM and Sui wallets where this runtime supports direct wallet connect.");
-    expect(walletSource).toContain("Connect an EVM or Sui wallet.");
-    expect(walletSource).toContain("prepare Sui actions and import receipts");
+    expect(walletSource).toContain("Wallets");
+    expect(walletSource).toContain(
+      "Connect a supported wallet. Signing stays in your wallet.",
+    );
+    expect(walletSource).toContain("Prepare Sui actions");
     expect(walletSource).toContain('"Prepare only"');
-    expect(walletSource).toContain("Review &amp; submit</span> still requires your approval in a connected wallet");
-    expect(walletSource).toContain("Prepare only</span> creates a draft for you to finish elsewhere");
-    expect(walletSource).toContain("Limited release</span> means wallet compatibility is still expanding");
+    expect(walletSource).toContain("Review & submit");
+    expect(walletSource).toContain("always needs your wallet approval");
+    expect(walletSource).toContain("Prepare only");
+    expect(walletSource).toMatch(
+      /makes a draft\s+for another compatible client/,
+    );
+    expect(walletSource).toContain("Limited release");
+    expect(walletSource).toMatch(/means\s+compatibility is still expanding/);
     expect(walletSource).not.toContain('"Handoff only"');
-    expect(walletSource).toContain("Matterhorn either completes the action here or prepares it for you to finish elsewhere.");
+    expect(walletSource).toContain("Action guide");
+    expect(walletSource).toContain("Signing &amp; privacy");
+    expect(walletSource).not.toContain("Matterhorn either completes the action here or prepares it for you to finish elsewhere.");
     expect(walletSource).not.toContain("Current read, preview, and signing limits.");
     expect(walletSource).toContain("useWallets");
     expect(walletSource).toContain("connectSuiWallet");
-    expect(walletSource).toContain("matterhornServerClient.suiAccount(suiAddress");
+    expect(walletSource).toContain("matterhornServerClient.suiAccount(");
+    expect(walletSource).toContain("suiAddress,");
     expect(walletSource).toContain("account?.address ?? phantomSui.address");
     expect(walletSource).toContain("SuiWorkflowPanel");
     expect(walletSource).toContain("WalletSafetyLedger");
@@ -490,10 +504,14 @@ describe("backend capability UI contract", () => {
 
   test("model and wallet helpers explain limited Sui support instead of hiding it", () => {
     const result = capabilities();
-    expect(summarizeModelSource(result)).toBe("opencode/big-pickle");
-    expect(summarizeModelRoutingPolicy(result)).toContain("Local session prompts");
-    expect(summarizeModelRoutingPolicy(result)).toContain("Local provider list");
-    expect(summarizeModelRoutingPolicy(result)).toContain("model picker");
+    expect(summarizeModelSource(result)).toBe("Included models / Big Pickle");
+    expect(summarizeModelRoutingPolicy(result)).toContain(
+      "Chats and desk tasks use the selected model",
+    );
+    expect(summarizeModelRoutingPolicy(result)).toContain("in Models");
+    expect(summarizeModelSelection(result)).toBe(
+      "You can change the workspace model in Models.",
+    );
     const walletRows = walletFamilySummary(result);
     expect(walletRows.map((row) => [row.family, row.label, row.status])).toEqual([
       ["EVM", "EVM direct connect", "working"],
@@ -517,7 +535,9 @@ describe("backend capability UI contract", () => {
 
     expect(walletViewSource).not.toContain("function suiWalletStatusLabel");
     expect(walletViewSource).not.toContain('"Preview only"');
-    expect(walletViewSource).toContain("Connect an EVM or Sui wallet.");
+    expect(walletViewSource).toContain(
+      "Connect a supported wallet. Signing stays in your wallet.",
+    );
     expect(walletViewSource).toContain("[grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr))]");
     expect(walletViewSource).not.toContain("border-b border-dls-border/45");
     expect(walletViewSource).not.toContain('className="grid grid-cols-2 gap-3"');
@@ -570,8 +590,8 @@ describe("backend capability UI contract", () => {
       },
     } as MatterhornWorkspaceDataMapResponse;
 
-    expect(storageLocationLabel(dataMap.stores.chat)).toBe("/tmp/opencode.db");
-    expect(storageLocationLabel({ ...dataMap.stores.chat, path: undefined })).toBe("Chat runtime");
+    expect(storageLocationLabel(dataMap.stores.chat)).toBe("Managed chat history on this device");
+    expect(storageLocationLabel({ ...dataMap.stores.chat, path: undefined })).toBe("Managed chat history on this device");
     expect(storageLocationLabel(dataMap.stores.notes)).toBe("/tmp/project/notes");
     expect(workspaceDataPolicySummary(dataMap)).toBe("No training use by default.");
   });

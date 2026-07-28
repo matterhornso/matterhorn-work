@@ -178,12 +178,38 @@ try {
     });
   });
 
-  await stage(report, "open_billing", "Open workspace Billing settings", async () => {
+  const billingVisible = await stage(report, "open_billing", "Open workspace Billing settings or verify its launch-policy fallback", async () => {
     await page.goto(billingSettingsUrl(config.url), { waitUntil: "load", timeout: 30_000 });
     await page.waitForFunction(() => (document.querySelector("#root")?.childElementCount ?? 0) > 0, undefined, { timeout: 30_000 });
-    await page.getByRole("heading", { name: "Billing", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+    const billingHeading = page.getByRole("heading", { name: "Billing", exact: true });
+    const overviewHeading = page.getByRole("heading", { name: "Overview", exact: true }).first();
+    await Promise.race([
+      billingHeading.waitFor({ state: "visible", timeout: 20_000 }),
+      overviewHeading.waitFor({ state: "visible", timeout: 20_000 }),
+    ]);
+    if (await billingHeading.isVisible().catch(() => false)) return true;
+    await overviewHeading.waitFor({ state: "visible", timeout: 5_000 });
+    if (!new URL(page.url()).pathname.endsWith("/settings/overview")) {
+      throw new Error(`Hidden Billing route resolved to an unexpected fallback: ${page.url()}`);
+    }
+    if (await page.getByRole("link", { name: "Billing", exact: true }).count()) {
+      throw new Error("Launch policy hides Billing content but still exposes a Billing navigation link.");
+    }
+    report.artifacts.launchPolicy = {
+      billing: "hidden",
+      fallbackUrl: page.url(),
+      outcome: "Hidden by launch policy",
+    };
+    return false;
   });
 
+  if (!billingVisible) {
+    const screenshotPath = resolve(config.outputDir, "billing-launch-policy-fallback.png");
+    await page.screenshot({ path: screenshotPath, fullPage: true });
+    report.artifacts.screenshot = screenshotPath;
+    report.artifacts.finalUrl = page.url();
+    report.ready = true;
+  } else {
   const confirmedPlan = await stage(report, "local_preview_truth", "Verify local preview and no-charge boundaries", async () => {
     await page.getByText("Local preview", { exact: true }).first().waitFor({ state: "visible", timeout: 15_000 });
     await page.getByText("No raw card data is handled by Matterhorn.", { exact: false }).waitFor({ state: "visible" });
@@ -251,6 +277,7 @@ try {
   report.artifacts.screenshot = screenshotPath;
   report.artifacts.finalUrl = page.url();
   report.ready = true;
+  }
 } catch (error) {
   report.error = error instanceof Error ? error.message : String(error);
   report.errors.push(report.error);

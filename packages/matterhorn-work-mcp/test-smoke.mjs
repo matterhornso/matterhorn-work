@@ -1130,7 +1130,7 @@ try {
   for (const expected of [
     "matterhorn_doctor",
     "matterhorn_status",
-    "matterhorn_upstream_openwork_check",
+    "matterhorn_upstream_source_check",
     "matterhorn_list_workspaces",
     "matterhorn_create_session",
     "matterhorn_list_sessions",
@@ -1209,6 +1209,11 @@ try {
   const schemaText = JSON.stringify(listed.result.tools);
   assert.equal(/seed|mnemonic|privateKey|private_key|wallet export/i.test(schemaText), false);
   const descriptionFor = (name) => listed.result.tools.find((tool) => tool.name === name)?.description || "";
+  const cryptoChatTool = listed.result.tools.find((tool) => tool.name === "matterhorn_crypto_chat");
+  assert.ok(cryptoChatTool?.inputSchema?.properties?.destination, "crypto chat must accept a public Bittensor destination");
+  assert.ok(cryptoChatTool?.inputSchema?.properties?.recipient, "crypto chat must accept a public Bittensor recipient");
+  assert.ok(cryptoChatTool?.inputSchema?.properties?.coldkey, "crypto chat must accept a public Bittensor sender");
+  assert.ok(cryptoChatTool?.inputSchema?.properties?.reduceOnly, "crypto chat must accept Hyperliquid reduce-only intent");
   assert.match(descriptionFor("matterhorn_crypto_chat"), /Default first Matterhorn Desks tool/i);
   assert.match(descriptionFor("matterhorn_crypto_readiness"), /customer-readiness report/i);
   assert.match(descriptionFor("matterhorn_memory_search"), /explicit Matterhorn Memory records/i);
@@ -1239,17 +1244,17 @@ try {
   assert.equal(status.status.ok, true);
 
   const upstream = parseToolResult(await mcp.ask("tools/call", {
-    name: "matterhorn_upstream_openwork_check",
+    name: "matterhorn_upstream_source_check",
     arguments: { date: "2026-06-12" },
   }));
   assert.equal(upstream.ok, true);
   assert.equal(upstream.safety.mode, "read_only_intake");
-  assert.equal(upstream.plan.syncBranch, "codex/sync-openwork-2026-06-12");
-  assert.equal(upstream.plan.remoteStatus.status, "skipped");
+  assert.equal(upstream.plan.syncBranch, "codex/sync-runtime-2026-06-12");
+  assert.equal(upstream.plan.remoteStatus.status, "not_configured");
   assert.ok(upstream.plan.conflictZones.some((zone) => zone.name === "Bittensor safety"));
   assert.ok(upstream.plan.conflictZones.some((zone) => zone.name === "Agent control surface"));
-  assert.ok(upstream.plan.verificationCommands.includes("pnpm test:upstream-openwork-sync"));
-  assert.ok(upstream.plan.nextCommands.some((command) => command.includes("git fetch openwork-upstream main")));
+  assert.ok(upstream.plan.verificationCommands.includes("pnpm test:upstream-source-sync"));
+  assert.equal(upstream.plan.nextCommands.length, 0);
 
   const doctor = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_doctor",

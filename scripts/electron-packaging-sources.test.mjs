@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import fs, { readFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
@@ -14,8 +16,20 @@ const desktopRuntime = readFileSync("apps/desktop/electron/runtime.mjs", "utf8")
 const desktopMigration = readFileSync("apps/desktop/electron/migration.mjs", "utf8");
 const desktopUpdater = readFileSync("apps/desktop/electron/updater.mjs", "utf8");
 const helperPrep = readFileSync("apps/desktop/scripts/prepare-computer-use-helper.mjs", "utf8");
+const computerUsePermissionSetup = readFileSync(
+  "packages/handsfree/native/HandsFree/Sources/ComputerUse/PermissionSetupApp.swift",
+  "utf8",
+);
+const electronBuild = readFileSync("apps/desktop/scripts/electron-build.mjs", "utf8");
+const electronDev = readFileSync("apps/desktop/scripts/electron-dev.mjs", "utf8");
 const sidecarPrep = readFileSync("apps/desktop/scripts/prepare-sidecar.mjs", "utf8");
-const { archiveHasEntry } = require("../apps/desktop/scripts/electron-after-pack.cjs");
+const uiMcp = readFileSync("packages/matterhorn-work-ui-mcp/index.mjs", "utf8");
+const matterhornMcp = readFileSync("packages/matterhorn-work-mcp/index.mjs", "utf8");
+const agentBrowserLiveProbe = readFileSync("scripts/agent-browser-live-probe.mjs", "utf8");
+const {
+  archiveHasEntry,
+  assertPackagedRendererUsesRelativeAssets,
+} = require("../apps/desktop/scripts/electron-after-pack.cjs");
 
 assert.equal(
   rootPackage.scripts["test:electron-packaging-sources"],
@@ -45,12 +59,19 @@ assert.equal(
 );
 
 assert.match(electronBuilderConfig, /afterPack: scripts\/electron-after-pack\.cjs/);
+assert.match(electronBuilderConfig, /appId: com\.matterhorn\.desks/);
+assert.match(electronBuilderConfig, /schemes:\s*\n\s+- matterhorn-desks/);
+assert.match(electronBuilderConfig, /NSAllowsArbitraryLoads: false/);
+assert.match(electronBuilderConfig, /NSAllowsLocalNetworking: true/);
 assert.match(electronBuilderConfig, /linux:[\s\S]*executableName: matterhorn-desks/);
 assert.match(electronBuilderConfig, /linux:[\s\S]*syncDesktopName: true/);
 assert.match(electronBuilderConfig, /Matterhorn Desks Automation Helper\.app\/\*\*/);
 assert.match(afterPack, /function loadAsar/);
 assert.match(afterPack, /loaded\.minimatch/);
 assert.match(afterPack, /function resolveResourcesDir/);
+assert.match(afterPack, /function assertPackagedRendererUsesRelativeAssets/);
+assert.match(afterPack, /OPENWORK_ELECTRON_BUILD=1/);
+assert.match(afterPack, /assertPackagedRendererUsesRelativeAssets\(context\)/);
 assert.match(afterPack, /function copyComputerUseHelper/);
 assert.match(afterPack, /async function repairPackagedAppAsar/);
 assert.match(afterPack, /asar\.extractAll/);
@@ -71,11 +92,56 @@ assert.equal(
   true,
   "leading slashes in ASAR entries should not change archive membership",
 );
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "matterhorn-relative-renderer-"));
+  const resourcesDir = path.join(root, "resources");
+  const appDistDir = path.join(resourcesDir, "app-dist");
+  fs.mkdirSync(appDistDir, { recursive: true });
+  const context = {
+    electronPlatformName: "linux",
+    appOutDir: root,
+  };
+  try {
+    fs.writeFileSync(
+      path.join(appDistDir, "index.html"),
+      '<script type="module" src="./assets/app.js"></script><link href="./assets/app.css" rel="stylesheet">',
+    );
+    assert.doesNotThrow(() => assertPackagedRendererUsesRelativeAssets(context));
+
+    fs.writeFileSync(
+      path.join(appDistDir, "index.html"),
+      '<script type="module" src="/assets/app.js"></script>',
+    );
+    assert.throws(
+      () => assertPackagedRendererUsesRelativeAssets(context),
+      /root-relative asset/,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
 assert.match(afterPack, /Matterhorn Desks Automation Helper\.app/);
 assert.match(afterPack, /fs\.cpSync\(sourcePath, targetPath, \{ recursive: true \}\)/);
 assert.match(afterPack, /copyComputerUseHelper\(context\)/);
 assert.match(afterSign, /Matterhorn Desks Automation Helper\.app/);
 assert.match(desktopMain, /Matterhorn Desks Automation Helper\.app/);
+assert.match(helperPrep, /<key>NSPrincipalClass<\/key>\s*<string>NSApplication<\/string>/);
+assert.match(helperPrep, /<key>NSHighResolutionCapable<\/key>\s*<true\/>/);
+assert.match(helperPrep, /function verifyHelperAppForPackaging/);
+assert.match(helperPrep, /cpSync\(appPath, stagedAppPath, \{ recursive: true \}\)/);
+assert.match(helperPrep, /codesign", \["--verify", "--deep", "--strict", "--verbose=2", stagedAppPath\]/);
+assert.match(helperPrep, /verifyHelperAppForPackaging\(\);\s*process\.stdout\.write\(JSON\.stringify\(\{ ok: true, skipped: true, appPath \}/s);
+assert.match(computerUsePermissionSetup, /Return to Matterhorn Desks/);
+assert.doesNotMatch(computerUsePermissionSetup, /OpenWork/);
+assert.match(desktopMain, /const MATTERHORN_DESKS_APP_IDENTIFIER = "com\.matterhorn\.desks"/);
+assert.match(desktopMain, /const MATTERHORN_DESKS_DEV_APP_IDENTIFIER = "com\.matterhorn\.desks\.dev"/);
+assert.match(desktopMain, /const DESKTOP_PROTOCOL_SCHEMES = \["matterhorn-desks", "matterhorn-work", "openwork"\]/);
+assert.match(desktopMain, /entry\.startsWith\("matterhorn-desks:\/\/"\)/);
+assert.match(desktopMain, /const LEGACY_APP_IDENTIFIERS = Object\.freeze/);
+assert.match(desktopMain, /USER_DATA_IDENTITY_MIGRATION_MARKER/);
+assert.match(desktopMain, /function migrateLegacyUserDataIdentityIfNeeded/);
+assert.match(desktopMain, /cpSync\([\s\S]*errorOnExist: false/);
+assert.match(desktopMain, /migrateLegacyUserDataIdentityIfNeeded\(\);/);
 assert.match(desktopMain, /MATTERHORN_WORK_AUTOMATION_HELPER_BINARY/);
 assert.match(desktopMain, /MATTERHORN_WORK_AUTOMATION_HELPER_APP/);
 assert.match(desktopMain, /matterhornso\/matterhorn-work\/tree\/dev\/docs/);
@@ -235,6 +301,9 @@ assert.equal(
   "desktop-managed child processes must not launch with wildcard CORS",
 );
 assert.match(helperPrep, /Matterhorn Desks Automation Helper\.app/);
+assert.match(helperPrep, /const bundleIdentifier = "com\.matterhorn\.desks\.computer-use"/);
+assert.match(helperPrep, /function helperIdentityNeedsRefresh/);
+assert.match(helperPrep, /function refreshPreparedHelperIdentity/);
 assert.match(helperPrep, /spawnSync\("xattr", \["-cr", appPath\]/);
 assert.ok(
   helperPrep.indexOf('spawnSync("xattr", ["-cr", appPath]') <
@@ -250,11 +319,27 @@ assert.ok(
 assert.match(helperPrep, /legacyHelperAppName = "OpenWork Computer Use\.app"/);
 assert.match(helperPrep, /rmSync\(legacyAppPath, \{ recursive: true, force: true \}\)/);
 assert.match(helperPrep, /MATTERHORN_WORK_AUTOMATION_HELPER_FORCE_BUILD/);
+assert.match(electronBuild, /prepare-computer-use-helper\.mjs/);
+assert.match(electronDev, /prepare-computer-use-helper\.mjs/);
+assert.doesNotMatch(
+  electronBuild,
+  /prepare-computer-use-helper\.mjs"\), "--force"/,
+  "packaging should reuse a prepared helper unless MATTERHORN_WORK_AUTOMATION_HELPER_FORCE_BUILD is explicitly set",
+);
+assert.doesNotMatch(
+  electronDev,
+  /prepare-computer-use-helper\.mjs"\), "--force"/,
+  "desktop development should reuse a prepared helper unless MATTERHORN_WORK_AUTOMATION_HELPER_FORCE_BUILD is explicitly set",
+);
 assert.equal(
   sidecarPrep.includes("shell: true"),
   false,
   "sidecar compilation must pass arguments directly without an injectable shell",
 );
+for (const source of [uiMcp, matterhornMcp, agentBrowserLiveProbe]) {
+  assert.match(source, /com\.matterhorn\.desks/);
+  assert.match(source, /com\.differentai\.openwork/);
+}
 assert.equal(
   [
     electronBuilderConfig,

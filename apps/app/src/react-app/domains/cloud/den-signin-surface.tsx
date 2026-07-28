@@ -471,7 +471,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
           </div>
 
           <div className="hidden lg:flex lg:items-center lg:justify-center">
-            <div className="w-full max-w-xl rounded-lg border border-[rgba(var(--matterhorn-blue-rgb),0.45)] bg-[var(--matterhorn-blue)] p-2">
+            <div className="w-full max-w-xl rounded-lg border border-[rgb(var(--matterhorn-blue-rgb)/0.45)] bg-[var(--matterhorn-blue)] p-2">
               <div className="relative z-10 rounded-lg border border-dls-border bg-dls-surface p-6">
                 <ShowcasePanel />
               </div>

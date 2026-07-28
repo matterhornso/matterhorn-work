@@ -7,6 +7,12 @@
 import { createServer } from "node:http";
 
 const SUPPORTED_CHAIN_IDS = new Set([8453, 84532]);
+const MCP_DEBUG = /^(1|true|yes|on)$/i.test(process.env.MATTERHORN_MCP_DEBUG?.trim() ?? "");
+
+function debugEvent(event, details) {
+  if (!MCP_DEBUG) return;
+  process.stderr.write(`${JSON.stringify({ event, ...details })}\n`);
+}
 
 let clientsPromise = null;
 
@@ -138,7 +144,8 @@ process.stdin.on("data", (chunk) => {
         process.stdout.write(jsonRpcError(msg.id, -32000, err instanceof Error ? err.message : "wallet MCP request failed"));
       });
     } catch {
-      process.stderr.write(`MCP parse error: ${trimmed.slice(0, 200)}\n`);
+      debugEvent("parse_error", { inputLength: trimmed.length });
+      process.stderr.write("MCP parse error\n");
     }
   }
 });
@@ -169,7 +176,7 @@ async function handleMessage(msg) {
           const summary = validateSummary(args?.summary);
           if (summary.error) return process.stdout.write(jsonRpcError(id, -32602, summary.error));
           const tx = { to: to.value, value: value.value, data: data.value, chainId, summary: summary.value, status: "pending_approval" };
-          process.stderr.write(JSON.stringify({ event: "tx_approval", tx }) + "\n");
+          debugEvent("tx_approval", { tx });
           return process.stdout.write(jsonRpc(id, { content: [{ type: "text", text: JSON.stringify({ status: "pending_approval", needs_approval: true, tx: { to: tx.to, value: tx.value, data: tx.data } }) }] }));
         }
         case "wallet_signMessage":
@@ -178,7 +185,7 @@ async function handleMessage(msg) {
             if (message.error) return process.stdout.write(jsonRpcError(id, -32602, message.error));
             const description = validateSummary(args?.description ?? "Message signature");
             if (description.error) return process.stdout.write(jsonRpcError(id, -32602, description.error));
-            process.stderr.write(JSON.stringify({ event: "sign_message", message: message.value, description: description.value }) + "\n");
+            debugEvent("sign_message", { message: message.value, description: description.value });
             return process.stdout.write(jsonRpc(id, { content: [{ type: "text", text: JSON.stringify({ status: "pending_approval", needs_approval: true, type: "sign_message", message: message.value }) }] }));
           }
         case "wallet_getBalance":

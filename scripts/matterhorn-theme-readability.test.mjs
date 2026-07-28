@@ -41,12 +41,12 @@ for (const phrase of [
   '[data-theme="dark"]',
   "--dls-app-bg: #05070b",
   "--dls-surface: #0b0f14",
-  "--dls-sidebar: #17202a",
+  "--dls-sidebar: #101720",
   "--dls-canvas: #1b2530",
   "--dls-surface-muted: #263442",
   "--dls-text-primary: #fafcff",
-  "--dls-text-secondary: #d0dae5",
-  "--muted-foreground: #c4ceda",
+  "--dls-text-secondary: #dbe4ee",
+  "--muted-foreground: #d2dbe5",
   "--dls-hover: rgba(56, 189, 248, 0.13)",
 ]) {
   assert.ok(css.includes(phrase), `dark theme should be brighter and more legible: ${phrase}`);
@@ -63,6 +63,19 @@ assert.ok(
   "theme bootstrap should load from a same-origin external script under a strict CSP",
 );
 assert.ok(!indexHtml.includes("<script>"), "app index should not require inline script execution");
+assert.ok(
+  indexHtml.includes('http-equiv="Content-Security-Policy"'),
+  "shared web and packaged desktop entrypoint should declare a document CSP",
+);
+for (const directive of [
+  "script-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "connect-src 'self' http: https: ws: wss:",
+]) {
+  assert.ok(indexHtml.includes(directive), `document CSP should include ${directive}`);
+}
+assert.ok(!indexHtml.includes("'unsafe-eval'"), "document CSP should not allow evaluated scripts");
 assert.ok(themeBootstrap.includes('"openwork.themePref"'), "external theme bootstrap should preserve the current preference key");
 assert.ok(themeBootstrap.includes("document.documentElement.dataset.theme"), "external theme bootstrap should resolve the initial theme");
 

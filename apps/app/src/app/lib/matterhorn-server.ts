@@ -6,6 +6,7 @@ import type {
   MatterhornMemorySuggestionAction,
   MatterhornMemorySuggestionLifecycle,
   MatterhornMemorySuggestionStatus,
+  MarketExecutionReadinessResponse,
   MatterhornNote,
   MatterhornNoteCreateRequest,
   MatterhornNoteListOptions,
@@ -93,7 +94,11 @@ import { isDesktopRuntime } from "../utils";
 import type { ExecResult, OpencodeConfigFile, WorkspaceInfo, WorkspaceList } from "./desktop";
 
 export type MatterhornServerCapabilities = {
-  skills: { read: boolean; write: boolean; source: "openwork" | "opencode" };
+  skills: {
+    read: boolean;
+    write: boolean;
+    source: "matterhorn" | "openwork" | "opencode";
+  };
   hub?: {
     skills?: {
       read: boolean;
@@ -459,6 +464,10 @@ export type MatterhornMemoryExportResponse = {
   export: MatterhornMemoryExportManifest & {
     outputDir?: string;
     manifestPath?: string;
+    recordsPath?: string;
+    sha256Path?: string;
+    workspaceId?: string;
+    workspaceNamespaceTag?: string;
   };
 };
 
@@ -490,6 +499,7 @@ export type MatterhornSkillItem = {
   description: string;
   scope: "project" | "global";
   trigger?: string;
+  userInvocable: boolean;
 };
 
 export type MatterhornSkillContent = {
@@ -1540,6 +1550,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     capabilities: () => requestJson<MatterhornServerCapabilities>(baseUrl, "/capabilities", { token, hostToken, timeoutMs: timeouts.capabilities }),
     backendCapabilities: () =>
       requestJson<MatterhornBackendCapabilitiesResponse>(baseUrl, "/api/backend/capabilities", {
+        token,
+        hostToken,
+        timeoutMs: timeouts.capabilities,
+      }),
+    marketExecutionReadiness: () =>
+      requestJson<MarketExecutionReadinessResponse>(baseUrl, "/api/crypto/market-execution-readiness", {
         token,
         hostToken,
         timeoutMs: timeouts.capabilities,
@@ -2617,11 +2633,13 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     // User-level env vars (host-auth only — desktop shell is the sole caller).
     // See apps/server/src/env-file.ts and apps/app/pr/environment-variables.md.
     listUserEnvKeys: () =>
-      requestJson<{ keys: string[] }>(
-        baseUrl,
-        "/env/keys",
-        { token, hostToken, timeoutMs: timeouts.config },
-      ),
+      hostToken
+        ? requestJson<{ keys: string[] }>(
+            baseUrl,
+            "/env/keys",
+            { token, hostToken, timeoutMs: timeouts.config },
+          )
+        : Promise.resolve({ keys: [] }),
 
     listUserEnv: () =>
       requestJson<{ items: Array<{ key: string; value: string; updatedAt: number }> }>(

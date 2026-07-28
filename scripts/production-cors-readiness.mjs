@@ -110,6 +110,7 @@ function runProductionCorsReadiness(config) {
   const serverConfig = readText("apps/server/src/config.ts");
   const configAliasesTest = readText("apps/server/src/config.compat-aliases.test.ts");
   const devMatterhornLocal = readText("scripts/dev-matterhorn-local.mjs");
+  const devHeadlessWeb = readText("scripts/dev-headless-web.ts");
   const generatedMediaSmoke = readText("scripts/dev-generated-media-smoke.mjs");
   const packageScripts = packageJson.scripts ?? {};
   const envCors = collectEnvCors();
@@ -146,6 +147,14 @@ function runProductionCorsReadiness(config) {
       { source: "scripts/dev-generated-media-smoke.mjs" },
     ),
     status(
+      packageScripts["dev:headless-web"] === "OPENWORK_DEV_MODE=1 bun scripts/dev-headless-web.ts" &&
+        hasLoopbackCorsArg(devHeadlessWeb) &&
+        !hasWildcardCorsArg(devHeadlessWeb),
+      "Headless web launcher",
+      "The dynamic-port web stack passes --cors loopback instead of relying on a fixed development origin.",
+      { source: "scripts/dev-headless-web.ts" },
+    ),
+    status(
       wildcardEnv.length === 0,
       "Environment CORS",
       wildcardEnv.length === 0
@@ -170,6 +179,7 @@ function runProductionCorsReadiness(config) {
         "apps/server/src/config.ts",
         "apps/server/src/config.compat-aliases.test.ts",
         "scripts/dev-matterhorn-local.mjs",
+        "scripts/dev-headless-web.ts",
         "scripts/dev-generated-media-smoke.mjs",
         "package.json",
       ],

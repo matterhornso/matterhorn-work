@@ -1,15 +1,20 @@
 /** @jsxImportSource react */
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { ModelBehaviorSelect } from "@/components/model-behavior-select";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, KeyRound } from "lucide-react";
+import { ArrowLeft, ChevronDown, KeyRound, Plus } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { t } from "@/i18n";
 import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
 import { recordModelReasoningLevelSelection } from "@/app/lib/model-operation-metrics";
 import type { ModelBehaviorOption } from "@/app/types";
+import { resolveProviderDisplayName } from "@/app/utils";
 import { cn } from "@/lib/utils";
 import { ProviderIcon } from "../../../design-system/provider-icon";
 import { SettingsNotice, SettingsStatusBadge } from "../settings-section";
@@ -70,6 +75,8 @@ export type AiSettingsViewProps = {
   cudosStatus?: string | null;
   cudosError?: string | null;
   onConnectCudos?: () => void | Promise<void>;
+  pendingDeskTask?: { deskId: string; title: string } | null;
+  onResumePendingDeskTask?: () => void | Promise<void>;
   onOpenModelPicker: () => void | Promise<void>;
   onUseWorkspaceDefault?: () => void | Promise<void>;
   onOpenProviderAuth: () => void | Promise<void>;
@@ -90,14 +97,22 @@ function providerSourceLabel(source?: ConnectedProvider["source"]) {
   return null;
 }
 
-function providerStatusTone(label: string): "ready" | "warning" | "neutral" {
-  if (label.toLowerCase().includes("connected")) return "ready";
-  if (label.toLowerCase().includes("error") || label.toLowerCase().includes("fail")) return "warning";
-  return "neutral";
+function isMatterhornManagedProvider(
+  provider: Pick<ConnectedProvider, "id" | "name">,
+) {
+  return (
+    provider.id.trim().toLowerCase() === "opencode" ||
+    provider.name.trim().toLowerCase().includes("opencode")
+  );
 }
 
 function catalogProviderSource(source?: string): ConnectedProvider["source"] {
-  if (source === "env" || source === "api" || source === "config" || source === "custom") {
+  if (
+    source === "env" ||
+    source === "api" ||
+    source === "config" ||
+    source === "custom"
+  ) {
     return source;
   }
   return undefined;
@@ -106,10 +121,16 @@ function catalogProviderSource(source?: string): ConnectedProvider["source"] {
 function ModelRoutingRow({ item }: { item: ModelReadinessDetail }) {
   return (
     <div className="grid gap-1 py-2.5 text-sm @md/settings:grid-cols-[9.5rem_1fr] @md/settings:gap-4">
-      <div className="text-xs font-medium text-muted-foreground">{item.label}</div>
+      <div className="text-xs font-medium text-muted-foreground">
+        {item.label}
+      </div>
       <div className="min-w-0">
         <div className="truncate text-dls-text">{item.value}</div>
-        {item.detail ? <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{item.detail}</div> : null}
+        {item.detail ? (
+          <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
+            {item.detail}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -118,8 +139,11 @@ function ModelRoutingRow({ item }: { item: ModelReadinessDetail }) {
 export function AiSettingsView(props: AiSettingsViewProps) {
   const runtimeWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
   const [modelDetailsOpen, setModelDetailsOpen] = useState(false);
+  const [providerDetailsOpen, setProviderDetailsOpen] = useState(false);
   const [localModelStatus, setLocalModelStatus] = useState<string | null>(null);
-  const [workspaceVariantDraft, setWorkspaceVariantDraft] = useState<string | null>(null);
+  const [workspaceVariantDraft, setWorkspaceVariantDraft] = useState<
+    string | null
+  >(null);
   const queryClient = useQueryClient();
   const workspaceBackendModelsQuery = useQuery({
     queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId],
@@ -127,7 +151,8 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     staleTime: 30_000,
     queryFn: async () => {
       const client = props.matterhornServerClient;
-      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Desks engine is offline.");
+      if (!client || !runtimeWorkspaceId)
+        throw new Error("Matterhorn Desks engine is offline.");
       return client.workspaceBackendModels(runtimeWorkspaceId);
     },
   });
@@ -147,7 +172,8 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     staleTime: 30_000,
     queryFn: async () => {
       const client = props.matterhornServerClient;
-      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Desks engine is offline.");
+      if (!client || !runtimeWorkspaceId)
+        throw new Error("Matterhorn Desks engine is offline.");
       return client.workspaceModelSelection(runtimeWorkspaceId);
     },
   });
@@ -156,8 +182,10 @@ export function AiSettingsView(props: AiSettingsViewProps) {
       const client = props.matterhornServerClient;
       const providerId = props.defaultModelProviderId?.trim();
       const modelId = props.defaultModelId?.trim();
-      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Desks engine is offline.");
-      if (!providerId || !modelId) throw new Error("Choose a model before saving a workspace default.");
+      if (!client || !runtimeWorkspaceId)
+        throw new Error("Matterhorn Desks engine is offline.");
+      if (!providerId || !modelId)
+        throw new Error("Choose a model before saving a workspace default.");
       return client.saveWorkspaceModelSelection(runtimeWorkspaceId, {
         providerId,
         modelId,
@@ -172,67 +200,95 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         reasoningLevel: data.selection?.variant,
         source: "workspace",
       });
-      queryClient.setQueryData(["settings-workspace-model-selection", runtimeWorkspaceId], data);
-      void queryClient.invalidateQueries({ queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId] });
+      queryClient.setQueryData(
+        ["settings-workspace-model-selection", runtimeWorkspaceId],
+        data,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId],
+      });
       notifyWorkspaceModelSelectionChanged(runtimeWorkspaceId);
     },
   });
   const clearWorkspaceDefaultMutation = useMutation({
     mutationFn: async () => {
       const client = props.matterhornServerClient;
-      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Desks engine is offline.");
+      if (!client || !runtimeWorkspaceId)
+        throw new Error("Matterhorn Desks engine is offline.");
       return client.clearWorkspaceModelSelection(runtimeWorkspaceId);
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["settings-workspace-model-selection", runtimeWorkspaceId], data);
-      void queryClient.invalidateQueries({ queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId] });
+      queryClient.setQueryData(
+        ["settings-workspace-model-selection", runtimeWorkspaceId],
+        data,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId],
+      });
       notifyWorkspaceModelSelectionChanged(runtimeWorkspaceId);
     },
   });
-  const backendModels = workspaceBackendModelsQuery.data ?? backendModelsQuery.data;
+  const backendModels =
+    workspaceBackendModelsQuery.data ?? backendModelsQuery.data;
   const catalog = backendModels?.catalog;
   const opencodeSetupMissing = catalog?.errorCode === "opencode_unconfigured";
-  const workspaceSelection = workspaceModelSelectionQuery.data?.selection ?? backendModels?.workspaceSelection ?? null;
-  const effectiveWorkspaceModel = workspaceModelSelectionQuery.data?.effectiveModel ?? backendModels?.defaultModel ?? null;
-  const catalogQueryFailed = workspaceBackendModelsQuery.isError || backendModelsQuery.isError;
-  const connectedProviderCount = catalog?.serverFetched ? catalog.connectedProviderCount : props.connectedProviders.length;
+  const workspaceSelection =
+    workspaceModelSelectionQuery.data?.selection ??
+    backendModels?.workspaceSelection ??
+    null;
+  const effectiveWorkspaceModel =
+    workspaceModelSelectionQuery.data?.effectiveModel ??
+    backendModels?.defaultModel ??
+    null;
+  const catalogQueryFailed =
+    workspaceBackendModelsQuery.isError || backendModelsQuery.isError;
+  const connectedProviderCount = catalog?.serverFetched
+    ? catalog.connectedProviderCount
+    : props.connectedProviders.length;
   const connectedModelCount = catalog?.serverFetched
     ? countConnectedCatalogModels(catalog)
     : props.connectedModelCount;
-  const providerCatalogLoading = workspaceBackendModelsQuery.isLoading || backendModelsQuery.isLoading;
-  const catalogProviderById = new Map((catalog?.providers ?? []).map((provider) => [provider.id, provider]));
-  const connectedProviders = props.connectedProviders.length > 0
-    ? props.connectedProviders.map((provider) => {
-      const catalogProvider = catalogProviderById.get(provider.id);
-      return {
-        ...provider,
-        name: catalogProvider?.name || provider.name,
-        source: provider.source ?? catalogProviderSource(catalogProvider?.source),
-        modelCount: catalogProvider?.modelCount ?? provider.modelCount,
-      };
-    })
-    : (catalog?.providers ?? [])
-      .filter((provider) => provider.connected)
-      .map((provider) => ({
-        id: provider.id,
-        name: provider.name,
-        source: catalogProviderSource(provider.source),
-        modelCount: provider.modelCount,
-      }));
-  const providerSummary = catalog?.serverFetched
-    ? `${connectedProviderCount} provider${connectedProviderCount === 1 ? "" : "s"} connected`
-    : !props.matterhornServerClient
-      ? "Agent engine unavailable"
-      : providerCatalogLoading
-      ? "Checking provider connections"
-      : props.providerSummary;
-  const providerStatusLabel = catalog?.serverFetched
-    ? connectedProviderCount > 0 ? "Connected" : "Disconnected"
-    : !props.matterhornServerClient
-      ? "Offline"
-      : providerCatalogLoading
-      ? "Checking"
-      : props.providerStatusLabel;
+  const providerCatalogLoading =
+    workspaceBackendModelsQuery.isLoading || backendModelsQuery.isLoading;
+  const catalogProviderById = new Map(
+    (catalog?.providers ?? []).map((provider) => [provider.id, provider]),
+  );
+  const connectedProviders =
+    props.connectedProviders.length > 0
+      ? props.connectedProviders.map((provider) => {
+          const catalogProvider = catalogProviderById.get(provider.id);
+          return {
+            ...provider,
+            name: catalogProvider?.name || provider.name,
+            source:
+              provider.source ?? catalogProviderSource(catalogProvider?.source),
+            modelCount: catalogProvider?.modelCount ?? provider.modelCount,
+          };
+        })
+      : (catalog?.providers ?? [])
+          .filter((provider) => provider.connected)
+          .map((provider) => ({
+            id: provider.id,
+            name: resolveProviderDisplayName(provider.id, provider.name),
+            source: catalogProviderSource(provider.source),
+            modelCount: provider.modelCount,
+          }));
+  const cudosProvider = connectedProviders.find(
+    (provider) => provider.id.trim().toLowerCase() === "cudos",
+  );
+  const otherConnectedProviders = connectedProviders.filter(
+    (provider) =>
+      !isMatterhornManagedProvider(provider) &&
+      provider.id.trim().toLowerCase() !== "cudos",
+  );
+  const connectedPromptProviders = connectedProviders.filter(
+    (provider) => !isMatterhornManagedProvider(provider),
+  );
+  const modelProviderReady =
+    connectedPromptProviders.length > 0 &&
+    !opencodeSetupMissing &&
+    !catalogQueryFailed;
+  const cudosConnected = Boolean(props.cudosConnected || cudosProvider);
   const modelReadiness = buildModelReadinessSummary({
     currentModelLabel: props.defaultModelLabel,
     currentModelRef: props.defaultModelRef,
@@ -267,7 +323,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
       workspaceSelection.providerId === props.defaultModelProviderId?.trim() &&
       workspaceSelection.modelId === props.defaultModelId?.trim(),
     );
-    setWorkspaceVariantDraft(sameModel ? workspaceSelection?.variant ?? null : null);
+    setWorkspaceVariantDraft(
+      sameModel ? (workspaceSelection?.variant ?? null) : null,
+    );
   }, [
     props.defaultModelId,
     props.defaultModelProviderId,
@@ -289,7 +347,11 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     runtimeWorkspaceId &&
     !selectedModelMatchesWorkspaceDefault,
   );
-  const canUseWorkspaceDefault = Boolean(props.hasLocalModelOverride && workspaceSelection && props.onUseWorkspaceDefault);
+  const canUseWorkspaceDefault = Boolean(
+    props.hasLocalModelOverride &&
+    workspaceSelection &&
+    props.onUseWorkspaceDefault,
+  );
   const modelSelectionStatus =
     localModelStatus ??
     (saveWorkspaceDefaultMutation.error instanceof Error
@@ -303,47 +365,91 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             : null);
 
   return (
-    <LayoutStack>
-      {/* ---- Model routing ---- */}
+    <LayoutStack className="gap-y-8">
       <LayoutSection>
         <LayoutSectionHeader>
-          <LayoutSectionTitle>Agent model</LayoutSectionTitle>
+          <LayoutSectionTitle>Model provider</LayoutSectionTitle>
           <LayoutSectionDescription>
-            See what answers prompts, where the model list comes from, and what is saved for this workspace.
+            Connect a provider, then choose what answers chats and desk tasks.
           </LayoutSectionDescription>
         </LayoutSectionHeader>
+        {props.pendingDeskTask ? (
+          <div
+            className="mt-4 flex flex-col gap-4 rounded-lg border border-dls-accent/30 bg-dls-surface-raised/70 p-4 sm:flex-row sm:items-center sm:justify-between"
+            data-testid="pending-desk-task-handoff"
+          >
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-dls-text">
+                Finish setting up {props.pendingDeskTask.title}
+              </div>
+              <p className="mt-1 text-sm leading-5 text-dls-secondary">
+                Choose a provider and model, then return to this desk task. Nothing has been sent.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button
+                onClick={() => void props.onOpenProviderAuth()}
+                disabled={props.busy || props.providerAuthBusy}
+              >
+                <Plus data-icon="inline-start" />
+                Choose provider
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void props.onResumePendingDeskTask?.()}
+              >
+                <ArrowLeft data-icon="inline-start" />
+                Return to desk
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         {opencodeSetupMissing ? (
           <SettingsNotice>
-            The local agent engine is not running. Start Matterhorn with its managed engine, or attach an existing engine URL before starting chats and desk tasks.
+            Matterhorn Desks is not ready to answer yet. Restart it, then
+            reload this workspace.
           </SettingsNotice>
         ) : null}
 
         {catalogQueryFailed && !opencodeSetupMissing ? (
           <SettingsNotice tone="error">
-            Model catalog could not load. Check the local Matterhorn Desks engine, then refresh this workspace.
+            Models could not load. Check the Matterhorn Desks engine, then
+            refresh this workspace.
           </SettingsNotice>
         ) : null}
 
-        <LayoutSectionItem>
+        <LayoutSectionItem className="rounded-lg bg-dls-surface-raised/65 p-4">
           <LayoutSectionItemHeader>
             <LayoutSectionItemTitle>
-              {modelReadiness.currentChoice.value}
-              <SettingsStatusBadge
-                tone={modelReadiness.statusTone}
-                label={modelReadiness.statusLabel}
-              />
+              {modelReadiness.currentChoice.label}
+              {modelReadiness.statusTone !== "ready" ? (
+                <SettingsStatusBadge
+                  tone={modelReadiness.statusTone}
+                  label={modelReadiness.statusLabel}
+                />
+              ) : null}
             </LayoutSectionItemTitle>
-            <LayoutSectionItemDescription>{modelReadiness.currentChoice.detail}</LayoutSectionItemDescription>
-            <LayoutSectionItemHeaderActions>
-              <Button variant="outline" onClick={() => void props.onOpenModelPicker()} disabled={props.busy}>
-                Change model
-              </Button>
-              {canUseWorkspaceDefault ? (
+            <LayoutSectionItemDescription>
+              {modelProviderReady
+                ? `${modelReadiness.currentChoice.value}. ${modelReadiness.currentChoice.detail}`
+                : "Connect a provider below, then choose a model for chats and desk tasks."}
+            </LayoutSectionItemDescription>
+            {modelProviderReady ? (
+              <LayoutSectionItemHeaderActions>
                 <Button
-                  variant="ghost"
+                  onClick={() => void props.onOpenModelPicker()}
+                  disabled={props.busy}
+                >
+                  Choose model
+                </Button>
+                {canUseWorkspaceDefault ? (
+                <Button
+                  variant="outline"
                   onClick={() => {
-                    setLocalModelStatus("Using the workspace default in this app.");
+                    setLocalModelStatus(
+                      "Using the workspace default in this app.",
+                    );
                     void props.onUseWorkspaceDefault?.();
                   }}
                   disabled={props.busy}
@@ -351,46 +457,47 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                   Use workspace default
                 </Button>
               ) : null}
-              {canSaveWorkspaceDefault ? (
+                {canSaveWorkspaceDefault ? (
                 <Button
                   variant="outline"
                   onClick={() => {
                     setLocalModelStatus(null);
                     saveWorkspaceDefaultMutation.mutate();
                   }}
-                  disabled={props.busy || saveWorkspaceDefaultMutation.isPending}
+                  disabled={
+                    props.busy || saveWorkspaceDefaultMutation.isPending
+                  }
                 >
-                  Save as workspace default
+                  Save for workspace
                 </Button>
               ) : null}
-              {workspaceSelection ? (
+                {workspaceSelection ? (
                 <Button
                   variant="ghost"
                   onClick={() => {
                     setLocalModelStatus(null);
                     clearWorkspaceDefaultMutation.mutate();
                   }}
-                  disabled={props.busy || clearWorkspaceDefaultMutation.isPending}
+                  disabled={
+                    props.busy || clearWorkspaceDefaultMutation.isPending
+                  }
                 >
                   Reset
                 </Button>
               ) : null}
-            </LayoutSectionItemHeaderActions>
+              </LayoutSectionItemHeaderActions>
+            ) : null}
           </LayoutSectionItemHeader>
 
-          <div className="grid gap-1">
-            {[modelReadiness.workspaceDefault, modelReadiness.effectiveModel, modelReadiness.answerPath, modelReadiness.providerList].map((item) => (
-              <ModelRoutingRow key={item.label} item={item} />
-            ))}
-          </div>
-
-          {behaviorOptions.length > 1 ? (
-            <div className="mt-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-2">
+          {modelProviderReady && behaviorOptions.length > 1 ? (
+            <div className="mt-1 border-t border-border/60 pt-3">
               <div className="grid items-center gap-2 py-1.5 @md/settings:grid-cols-[minmax(9rem,1fr)_auto]">
                 <div>
-                  <div className="text-xs font-medium text-dls-text">Workspace reasoning default</div>
+                  <div className="text-xs font-medium text-dls-text">
+                    Workspace reasoning
+                  </div>
                   <div className="text-xs leading-5 text-muted-foreground">
-                    Used by new chats and desk tasks unless this app overrides it.
+                    Default for new chats and desk tasks.
                   </div>
                 </div>
                 <ModelBehaviorSelect
@@ -399,15 +506,21 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                   label={workspaceVariantLabel}
                   options={behaviorOptions}
                   onChange={setWorkspaceVariantDraft}
-                  disabled={props.busy || saveWorkspaceDefaultMutation.isPending}
+                  disabled={
+                    props.busy || saveWorkspaceDefaultMutation.isPending
+                  }
                   isProviderDefault={workspaceVariantDraft == null}
                 />
               </div>
               <div className="grid items-center gap-2 py-1.5 @md/settings:grid-cols-[minmax(9rem,1fr)_auto]">
                 <div>
-                  <div className="text-xs font-medium text-dls-text">Current app override</div>
+                  <div className="text-xs font-medium text-dls-text">
+                    This app
+                  </div>
                   <div className="text-xs leading-5 text-muted-foreground">
-                    {props.currentAppModelVariant ? "Overrides the workspace for this app." : "Inherits the workspace default."}
+                    {props.currentAppModelVariant
+                      ? "Overrides the workspace setting."
+                      : "Uses the workspace setting."}
                   </div>
                 </div>
                 <ModelBehaviorSelect
@@ -430,180 +543,236 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                   defaultLabel="Workspace default"
                 />
               </div>
-              <div className="grid items-center gap-2 py-1.5 text-xs @md/settings:grid-cols-[minmax(9rem,1fr)_auto]">
-                <span className="text-muted-foreground">Provider fallback</span>
-                <span className="text-dls-secondary">{providerDefaultVariantLabel}</span>
-              </div>
             </div>
           ) : null}
 
-          <Collapsible open={modelDetailsOpen} onOpenChange={setModelDetailsOpen}>
+          <Collapsible
+            open={modelDetailsOpen}
+            onOpenChange={setModelDetailsOpen}
+          >
             <CollapsibleTrigger
-              render={(
-                <button
+              render={
+                <Button
                   type="button"
-                  className="flex items-center gap-1.5 text-xs font-medium text-dls-secondary transition-colors hover:text-dls-text"
+                  variant="outline"
+                  size="xs"
+                  className="mt-3 bg-dls-surface-muted/[0.22] text-dls-secondary hover:bg-dls-surface-muted/[0.38] hover:text-dls-text"
                 >
-                  <ChevronDown className={cn("size-3.5 transition-transform", modelDetailsOpen && "rotate-180")} />
-                  Model details
-                </button>
-              )}
+                  How models work
+                  <ChevronDown
+                    className={cn(
+                      "size-3.5 transition-transform",
+                      modelDetailsOpen && "rotate-180",
+                    )}
+                  />
+                </Button>
+              }
             />
             <CollapsibleContent>
-              <div className="mt-2 grid gap-2 text-xs text-dls-secondary @md/settings:grid-cols-2">
-                {[modelReadiness.providerCatalog, modelReadiness.selectionPolicy, ...modelReadiness.details].map((item) => (
-                  <div key={item.label} className="min-w-0">
-                    <span className="text-dls-text">{item.label}</span>
-                    <span className="ml-2">{item.value}</span>
-                    {item.detail ? <div className="mt-1 leading-5">{item.detail}</div> : null}
-                  </div>
+              <div className="mt-2 grid gap-1">
+                {[
+                  modelReadiness.workspaceDefault,
+                  modelReadiness.effectiveModel,
+                  modelReadiness.providerCatalog,
+                ].map((item) => (
+                  <ModelRoutingRow key={item.label} item={item} />
                 ))}
-                {catalog?.connectedProviderIds.length ? (
-                  <div className="min-w-0">
-                    <span className="text-dls-text">Connected providers</span>
-                    <span className="ml-2">{catalog.connectedProviderIds.slice(0, 4).join(", ")}</span>
-                  </div>
-                ) : null}
               </div>
+              <p className="mt-3 border-t border-border/60 pt-3 text-xs leading-5 text-dls-secondary">
+                {modelProviderReady
+                  ? "Choose a model for this chat, then save it here when you want new chats and desk tasks to use the same default."
+                  : "A model catalog is only a list. Connect a provider before chats and desk tasks can start."}
+              </p>
               {modelReadiness.catalogRows.length ? (
-                <div className="mt-3 rounded-md bg-dls-surface-muted/[0.08] px-3 py-3">
-                  <div className="mb-1.5 text-xs font-medium text-dls-text">Model catalog</div>
-                  <div className="grid gap-1">
-                    {modelReadiness.catalogRows.map((row) => (
-                      <div
-                        key={row.providerId}
-                        className="grid gap-1 rounded-md py-2 text-xs @md/settings:grid-cols-[minmax(10rem,14rem)_1fr] @md/settings:gap-4"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate text-dls-text">{row.providerName}</div>
-                          <div className="truncate text-muted-foreground">
-                            {row.providerId} · {row.sourceLabel} · {row.connectedLabel}
-                          </div>
-                        </div>
-                        <div className="min-w-0">
-                          <div className="truncate text-dls-secondary">
-                            {row.modelCountLabel} · Default {row.defaultModel}
-                          </div>
-                          <div className="mt-0.5 truncate text-muted-foreground">{row.sampleModels}</div>
+                <div className="mt-3 border-t border-border/60 pt-3">
+                  <div className="mb-1 text-xs font-medium text-dls-text">
+                    Available providers
+                  </div>
+                  {modelReadiness.catalogRows.map((row) => (
+                    <div
+                      key={row.providerId}
+                      className="flex items-center justify-between gap-3 py-2 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-dls-text">
+                          {row.providerName}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                      <div className="shrink-0 text-dls-secondary">
+                        {row.modelCountLabel}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : null}
+              <p className="mt-3 border-t border-border/60 pt-3 text-xs leading-5 text-dls-secondary">
+                {modelReadiness.trainingPolicy}
+              </p>
             </CollapsibleContent>
           </Collapsible>
 
-          <p className="mt-3 text-xs leading-5 text-dls-secondary">
-            {modelReadiness.trainingPolicy}
-          </p>
           {modelSelectionStatus ? (
-            <p className="mt-2 text-xs leading-5 text-dls-secondary">{modelSelectionStatus}</p>
+            <p className="text-xs leading-5 text-dls-secondary">
+              {modelSelectionStatus}
+            </p>
           ) : null}
         </LayoutSectionItem>
       </LayoutSection>
 
-      {/* ---- Providers ---- */}
-      <LayoutSection>
+      {modelProviderReady ? (
+        <LayoutSection>
         <LayoutSectionHeader>
-          <LayoutSectionTitle>{t("settings.providers_title")}</LayoutSectionTitle>
-          <LayoutSectionDescription>{t("settings.providers_desc")}</LayoutSectionDescription>
+          <LayoutSectionTitle>Available models</LayoutSectionTitle>
+          <LayoutSectionDescription>
+            Models from the providers connected to this workspace.
+          </LayoutSectionDescription>
         </LayoutSectionHeader>
 
-        <LayoutSectionItem className="flex-row flex-wrap items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.09] px-3 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-dls-hover/70 text-dls-text">
-              <KeyRound className="size-4" />
-            </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="text-sm font-medium text-dls-text">CUDOS / ASI:Cloud</span>
-                {props.cudosConnected ? (
-                  <span className="text-xs text-green-11">Credential saved</span>
-                ) : null}
-              </div>
-              <div className="text-xs leading-5 text-muted-foreground">
-                OpenAI-compatible hosted inference with seven selectable models. The API key stays in the local engine auth store.
-              </div>
-            </div>
-          </div>
-          <Button
-            variant={props.cudosConnected ? "outline" : "default"}
-            onClick={() => void props.onConnectCudos?.()}
-            disabled={props.busy || props.providerAuthBusy || props.cudosBusy || !props.onConnectCudos}
-          >
-            {props.cudosBusy
-              ? "Preparing CUDOS"
-              : props.cudosConnected
-                ? "Replace API key"
-                : "Connect CUDOS"}
-          </Button>
-        </LayoutSectionItem>
-        {props.cudosStatus ? <SettingsNotice>{props.cudosStatus}</SettingsNotice> : null}
-        {props.cudosError ? <SettingsNotice tone="error">{props.cudosError}</SettingsNotice> : null}
-
-        <LayoutSectionItem>
-          <LayoutSectionItemHeader>
-            <LayoutSectionItemTitle>
-              {providerSummary}
-              <SettingsStatusBadge
-                tone={providerStatusTone(providerStatusLabel)}
-                label={providerStatusLabel}
-              />
-            </LayoutSectionItemTitle>
-            <LayoutSectionItemHeaderActions>
-              <Button
-                onClick={() => void props.onOpenProviderAuth()}
-                disabled={props.busy || props.providerAuthBusy}
-              >
-                {props.providerAuthBusy
-                  ? t("settings.loading_providers")
-                  : t("settings.connect_provider")}
-              </Button>
-            </LayoutSectionItemHeaderActions>
-          </LayoutSectionItemHeader>
-        </LayoutSectionItem>
-
-        {props.showOpenWorkModelsSubscribe ? (
-          <LayoutSectionItem className="flex-row flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-6 bg-blue-2/30 px-4 py-3">
+        <div className="overflow-hidden rounded-lg bg-dls-surface-raised/55">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
             <div className="flex min-w-0 items-center gap-3">
-              <ProviderIcon providerId="matterhorn" size={20} className="text-blue-11" />
+              <ProviderIcon
+                providerId="matterhorn"
+                size={20}
+                className="text-dls-text"
+              />
               <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-dls-text">Matterhorn Models</div>
+                <div className="truncate text-sm font-medium text-dls-text">
+                  Connected model catalog
+                </div>
                 <div className="text-xs text-muted-foreground">
-                  Frontier intelligence, hand picked for your team&apos;s most ambitious work.
+                  {providerCatalogLoading
+                    ? "Checking models..."
+                    : `${connectedModelCount} model${connectedModelCount === 1 ? "" : "s"} from ${connectedPromptProviders.length} provider${connectedPromptProviders.length === 1 ? "" : "s"}`}
                 </div>
               </div>
             </div>
             <Button
-              onClick={() => void props.onSubscribeOpenWorkModels?.()}
+              variant="outline"
+              onClick={() => void props.onOpenModelPicker()}
+              disabled={
+                props.busy || providerCatalogLoading || opencodeSetupMissing
+              }
+            >
+              Browse models
+            </Button>
+          </div>
+
+          {props.showOpenWorkModelsSubscribe ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-4 py-3.5">
+              <div className="flex min-w-0 items-center gap-3">
+                <ProviderIcon
+                  providerId="matterhorn"
+                  size={20}
+                  className="text-dls-text"
+                />
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-dls-text">
+                    Shared model catalog
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Models managed for your Matterhorn organization.
+                  </div>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => void props.onSubscribeOpenWorkModels?.()}
+                disabled={props.busy || props.providerAuthBusy}
+              >
+                Subscribe
+              </Button>
+            </div>
+          ) : null}
+
+        </div>
+      </LayoutSection>
+      ) : null}
+
+      <LayoutSection>
+        <LayoutSectionHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <LayoutSectionTitle>Model providers</LayoutSectionTitle>
+              <LayoutSectionDescription>
+                Connect a provider account or API key you control.
+              </LayoutSectionDescription>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => void props.onOpenProviderAuth()}
               disabled={props.busy || props.providerAuthBusy}
             >
-              Subscribe
+              <Plus data-icon="inline-start" />
+              {props.providerAuthBusy ? "Loading..." : "Choose provider"}
             </Button>
-          </LayoutSectionItem>
-        ) : null}
+          </div>
+        </LayoutSectionHeader>
 
-        {connectedProviders.length > 0 ? (
-          <div className="space-y-2">
-            {connectedProviders.map((provider) => (
-              <LayoutSectionItem
+        <div className="overflow-hidden rounded-lg bg-dls-surface-raised/55">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+            <div className="flex min-w-0 items-center gap-3">
+              <KeyRound className="size-5 shrink-0 text-dls-secondary" />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-sm font-medium text-dls-text">
+                    ASI:Cloud
+                  </span>
+                  {cudosConnected ? (
+                    <span className="text-xs text-dls-secondary">
+                      Connected
+                    </span>
+                  ) : null}
+                </div>
+                <div className="text-xs leading-5 text-muted-foreground">
+                  {cudosConnected
+                    ? "7 models available"
+                    : "Connect your CUDOS API key to use seven models"}
+                </div>
+              </div>
+            </div>
+            <Button
+              variant={cudosConnected ? "outline" : "default"}
+              onClick={() => void props.onConnectCudos?.()}
+              disabled={
+                props.busy ||
+                props.providerAuthBusy ||
+                props.cudosBusy ||
+                !props.onConnectCudos
+              }
+            >
+              {props.cudosBusy
+                ? "Opening..."
+                : cudosConnected
+                  ? "Update CUDOS key"
+                  : "Add CUDOS API key"}
+            </Button>
+          </div>
+
+          {otherConnectedProviders.map((provider) => {
+            const providerName = resolveProviderDisplayName(
+              provider.id,
+              provider.name,
+            );
+            return (
+              <div
                 key={provider.id}
-                className="flex-row flex-wrap items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.075] px-3 py-2.5"
+                className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-4 py-3.5"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <ProviderIcon providerId={provider.id} size={20} className="text-dls-text" />
+                  <ProviderIcon
+                    providerId={provider.id}
+                    size={20}
+                    className="text-dls-text"
+                  />
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium text-dls-text">{provider.name}</span>
-                      {props.cloudProviderIds?.has(provider.id) ? (
-                        <span className="shrink-0 rounded-full border border-blue-6 bg-blue-2 px-2 py-0.5 text-[10px] font-medium text-blue-11">
-                          Cloud
-                        </span>
-                      ) : null}
+                    <div className="truncate text-sm font-medium text-dls-text">
+                      {providerName}
                     </div>
-                    <div className="truncate font-mono text-xs text-muted-foreground">
-                      {provider.id}
+                    <div className="truncate text-xs text-muted-foreground">
+                      {props.cloudProviderIds?.has(provider.id)
+                        ? "Managed by your organization"
+                        : (providerSourceLabel(provider.source) ?? provider.id)}
                       {provider.modelCount != null
                         ? ` · ${provider.modelCount} model${provider.modelCount === 1 ? "" : "s"}`
                         : ""}
@@ -628,26 +797,68 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                         : t("settings.managed_by_env")}
                   </Button>
                 ) : null}
-              </LayoutSectionItem>
-            ))}
-          </div>
-        ) : null}
+              </div>
+            );
+          })}
+        </div>
 
+        {props.cudosStatus ? (
+          <SettingsNotice>{props.cudosStatus}</SettingsNotice>
+        ) : null}
+        {props.cudosError ? (
+          <SettingsNotice tone="error">{props.cudosError}</SettingsNotice>
+        ) : null}
         {props.providerConnectError ? (
-          <SettingsNotice tone="error">{props.providerConnectError}</SettingsNotice>
+          <SettingsNotice tone="error">
+            {props.providerConnectError}
+          </SettingsNotice>
         ) : null}
         {props.providerDisconnectStatus ? (
           <SettingsNotice>{props.providerDisconnectStatus}</SettingsNotice>
         ) : null}
         {props.providerDisconnectError ? (
-          <SettingsNotice tone="error">{props.providerDisconnectError}</SettingsNotice>
+          <SettingsNotice tone="error">
+            {props.providerDisconnectError}
+          </SettingsNotice>
         ) : null}
 
-        <LayoutSectionItemFootnote>{t("settings.api_keys_info")}</LayoutSectionItemFootnote>
+        <Collapsible
+          open={providerDetailsOpen}
+          onOpenChange={setProviderDetailsOpen}
+        >
+          <CollapsibleTrigger
+            render={
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                className="bg-dls-surface-muted/[0.22] text-dls-secondary hover:bg-dls-surface-muted/[0.38] hover:text-dls-text"
+              >
+                <ChevronDown
+                  className={cn(
+                    "size-3.5 transition-transform",
+                    providerDetailsOpen && "rotate-180",
+                  )}
+                />
+                Provider and data details
+              </Button>
+            }
+          />
+          <CollapsibleContent>
+            <div className="mt-2 max-w-[70ch] space-y-2 text-xs leading-5 text-dls-secondary">
+              <LayoutSectionItemFootnote>
+                {t("settings.api_keys_info")}
+              </LayoutSectionItemFootnote>
+              <p>
+                Provider credentials stay in this workspace runtime. A model
+                becomes available only after its provider is connected.
+              </p>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </LayoutSection>
 
       {props.cloudProvidersView}
-
     </LayoutStack>
   );
 }

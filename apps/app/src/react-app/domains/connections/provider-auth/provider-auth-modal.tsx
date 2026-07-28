@@ -49,7 +49,7 @@ type ProviderOAuthSession = ProviderOAuthStartResult & {
 
 const PROVIDER_LABELS: Record<string, string> = {
   matterhorn: "Matterhorn Desks",
-  opencode: "Matterhorn-Code Zen",
+  opencode: "Matterhorn Models",
   openai: "OpenAI",
   anthropic: "Anthropic",
   google: "Google",
@@ -58,6 +58,15 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 const OPENWORK_MODELS_PROVIDER_ID = "matterhorn";
+
+const RECOMMENDED_PROVIDER_IDS = new Set([
+  "cudos",
+  "openai",
+  "anthropic",
+  "google",
+  "openrouter",
+  "ollama",
+]);
 
 export type ProviderAuthModalProps = {
   open: boolean;
@@ -96,6 +105,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
   const [oauthCodeInput, setOauthCodeInput] = useState("");
   const [oauthSession, setOauthSession] = useState<ProviderOAuthSession | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [browseAllProviders, setBrowseAllProviders] = useState(false);
   const [activeEntryIndex, setActiveEntryIndex] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
   const [pollingBusy, setPollingBusy] = useState(false);
@@ -110,12 +120,12 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
   const autoOpenedPreferredProviderIdRef = useRef<string | null>(null);
 
   const formatProviderName = (id: string, fallback?: string) => {
-    const named = fallback?.trim();
-    if (named) return named;
-
     const normalized = id.trim();
     const mapped = PROVIDER_LABELS[normalized.toLowerCase()];
     if (mapped) return mapped;
+
+    const named = fallback?.trim();
+    if (named) return named;
 
     const cleaned = normalized.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
     if (!cleaned) return id;
@@ -150,17 +160,9 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
     return normalizedId === "anthropic" || normalizedName === "anthropic";
   };
 
-  const isOpencodeZenProvider = (id: string) => id.trim().toLowerCase() === "opencode";
-
-  const OPENCODE_ZEN_KEY_URL = "https://opencode.ai/auth";
-
-  const openExternalUrl = async (url: string) => {
-    if (!url) return;
-    if (isDesktopRuntime()) {
-      await openDesktopUrl(url);
-      return;
-    }
-    window.open(url, "_blank", "noopener,noreferrer");
+  const isBundledInternalProvider = (id: string, fallbackName?: string) => {
+    const identity = `${id} ${fallbackName ?? ""}`.trim().toLowerCase();
+    return identity.includes("opencode") || identity.includes("openwork");
   };
 
   const isClaudeProMaxMethod = (method: ProviderAuthMethod) => {
@@ -177,6 +179,10 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
     const nextEntries = Object.keys(methods)
       .flatMap((id) => {
         const provider = providersById.get(id);
+        // The bundled catalog is already available as Matterhorn Models. It is
+        // not a separate provider account for customers to configure.
+        if (isBundledInternalProvider(id, provider?.name)) return [];
+
         const entryMethods = (methods[id] ?? []).filter((method) => {
           if (isAnthropicProvider(id, provider?.name) && isClaudeProMaxMethod(method)) {
             return false;
@@ -231,6 +237,23 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
     });
   }, [entries, searchQuery]);
 
+  const recommendedEntries = useMemo(
+    () =>
+      entries.filter(
+        (entry) =>
+          entry.connected ||
+          RECOMMENDED_PROVIDER_IDS.has(entry.id.trim().toLowerCase()),
+      ),
+    [entries],
+  );
+
+  const showingAllEntries =
+    browseAllProviders || searchQuery.trim().length > 0 || recommendedEntries.length === 0;
+  const visibleEntries = showingAllEntries
+    ? filteredEntries
+    : recommendedEntries;
+  const hiddenProviderCount = Math.max(0, entries.length - recommendedEntries.length);
+
   const oauthInstructions = oauthSession?.authorization.instructions?.trim() ?? "";
   const isOpenAiHeadlessSession = Boolean(
     oauthSession && oauthSession.providerId === "openai" && oauthSession.methodLabel.toLowerCase().includes("headless"),
@@ -268,6 +291,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
     setOauthCodeInput("");
     setOauthSession(null);
     setSearchQuery("");
+    setBrowseAllProviders(false);
     setActiveEntryIndex(0);
     setLocalError(null);
     setOauthCodeCopied(false);
@@ -305,13 +329,13 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
 
   useEffect(() => {
     if (!props.open || resolvedView !== "list") return;
-    const total = filteredEntries.length;
+    const total = visibleEntries.length;
     if (total <= 0) {
       setActiveEntryIndex(0);
       return;
     }
     setActiveEntryIndex((current) => Math.max(0, Math.min(current, total - 1)));
-  }, [filteredEntries.length, props.open, resolvedView]);
+  }, [props.open, resolvedView, visibleEntries.length]);
 
   useEffect(() => {
     if (!props.open || resolvedView !== "list") return;
@@ -674,7 +698,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
       if (nativeEvent.isComposing || nativeEvent.keyCode === 229) {
         return;
       }
-      const entry = filteredEntries[activeEntryIndex];
+      const entry = visibleEntries[activeEntryIndex];
       if (!entry) return;
       event.preventDefault();
       handleEntrySelect(entry);
@@ -699,9 +723,6 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
     if (method.type === "cloud") {
       return method.description ?? "Use the provider and credential managed by your organization.";
     }
-    if (isOpencodeZenProvider(entry.id)) {
-      return "Sign in to Matterhorn-Code Zen with an API key to unlock paid models alongside the free tier.";
-    }
     return "Paste a secret key that Matterhorn stores locally on this device.";
   };
 
@@ -714,9 +735,10 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
     >
       <DialogContent className="flex max-h-[calc(100vh-2rem)] min-h-0 w-full max-w-lg flex-col overflow-hidden sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Connect providers</DialogTitle>
+          <DialogTitle>Add a model provider</DialogTitle>
           <DialogDescription>
-            Sign in to services or use providers managed by your organization.
+            Start with a provider you already use. API keys stay in the local
+            Matterhorn engine on this device.
           </DialogDescription>
         </DialogHeader>
 
@@ -740,10 +762,13 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                     <input
                       ref={searchInputRef}
                       type="text"
-                      placeholder="Filter providers by name or ID"
+                      placeholder="Search all providers"
                       value={searchQuery}
                       onChange={(event) => {
                         setSearchQuery(event.currentTarget.value);
+                        if (event.currentTarget.value.trim()) {
+                          setBrowseAllProviders(true);
+                        }
                         setActiveEntryIndex(0);
                       }}
                       autoComplete="off"
@@ -754,13 +779,49 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                     />
                   </div>
 
-                  {filteredEntries.length ? (
-                    filteredEntries.map((entry, index) => (
+                  {!showingAllEntries && hiddenProviderCount > 0 ? (
+                    <div className="flex items-center justify-between gap-3 px-1">
+                      <div className="text-xs text-gray-10">Recommended providers</div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-8 px-2 text-xs"
+                        onClick={() => {
+                          setBrowseAllProviders(true);
+                          setActiveEntryIndex(0);
+                        }}
+                        disabled={actionDisabled}
+                      >
+                        Browse all providers
+                      </Button>
+                    </div>
+                  ) : browseAllProviders && !searchQuery.trim() && hiddenProviderCount > 0 ? (
+                    <div className="flex items-center justify-between gap-3 px-1">
+                      <div className="text-xs text-gray-10">All available providers</div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-8 px-2 text-xs"
+                        onClick={() => {
+                          setBrowseAllProviders(false);
+                          setActiveEntryIndex(0);
+                        }}
+                        disabled={actionDisabled}
+                      >
+                        Show recommended
+                      </Button>
+                    </div>
+                  ) : null}
+
+                  {visibleEntries.length ? (
+                    visibleEntries.map((entry, index) => (
                       <button
                         key={entry.id}
                         type="button"
-                        className={`w-full group flex items-start gap-3.5 rounded-lg px-3.5 py-3 text-left transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
-                          index === activeEntryIndex ? "bg-gray-3/60" : "hover:bg-gray-3/30"
+                        className={`w-full group flex items-start gap-3.5 rounded-lg border px-3.5 py-3 text-left transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
+                          index === activeEntryIndex
+                            ? "border-gray-6/70 bg-gray-3/60"
+                            : "border-transparent hover:border-gray-6/50 hover:bg-gray-3/30"
                         }`}
                         disabled={actionDisabled}
                         onMouseEnter={() => setActiveEntryIndex(index)}
@@ -784,9 +845,9 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                                   Connected
                                 </div>
                               ) : (
-                                <div className="text-[12px] font-medium text-gray-9 group-hover:text-gray-12 transition-colors flex items-center gap-0.5 opacity-80 group-hover:opacity-100">
+                                <div className="text-[12px] font-medium text-gray-10 group-hover:text-gray-12 transition-colors flex items-center gap-0.5">
                                   Connect
-                                  <ChevronRight size={14} className="opacity-0 -ml-2 group-hover:opacity-100 group-hover:ml-0 transition-all duration-200" />
+                                  <ChevronRight size={14} />
                                 </div>
                               )}
                             </div>
@@ -816,11 +877,11 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                     ))
                   ) : (
                     <div className="text-sm text-gray-10 pt-2">
-                      {entries.length ? "No providers match your search." : "No providers available."}
+                      {entries.length ? "No providers match your search." : "No providers are available in this runtime."}
                     </div>
                   )}
 
-                  <div className="text-[11px] text-gray-9">Arrow keys to navigate, Enter to select.</div>
+                  <div className="text-[11px] text-gray-9">Use arrow keys to navigate and Enter to connect.</div>
                 </div>
               ) : null}
 
@@ -861,34 +922,16 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <div className="text-sm font-medium text-gray-12">{selectedEntry.name}</div>
-                      <div className="text-xs text-gray-10 mt-1">
-                        {isOpencodeZenProvider(selectedEntry.id)
-                          ? "Sign in to Matterhorn-Code Zen with an API key from opencode.ai/auth."
-                          : "Paste your API key to connect."}
-                      </div>
+                      <div className="text-xs text-gray-10 mt-1">Paste your API key to connect.</div>
                     </div>
                     <Button variant="outline" onClick={handleBack} disabled={actionDisabled}>
                       Back
                     </Button>
                   </div>
-                  {isOpencodeZenProvider(selectedEntry.id) ? (
-                    <div className="rounded-lg border border-indigo-5/30 bg-indigo-3/15 px-3 py-2.5 text-xs text-indigo-12 space-y-1.5">
-                      <div>
-                        Matterhorn-Code Zen gives you access to the best coding models. Free models keep working without a key.
-                      </div>
-                      <button
-                        type="button"
-                        className="text-indigo-11 hover:text-indigo-12 underline underline-offset-2 font-medium"
-                        onClick={() => void openExternalUrl(OPENCODE_ZEN_KEY_URL)}
-                      >
-                        Get an API key →
-                      </button>
-                    </div>
-                  ) : null}
                   <TextInput
                     label="API key"
                     type="password"
-                    placeholder={isOpencodeZenProvider(selectedEntry.id) ? "ock_..." : "sk-..."}
+                    placeholder="sk-..."
                     value={apiKeyInput}
                     onChange={(event) => {
                       setApiKeyInput(event.currentTarget.value);
@@ -955,7 +998,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                 <div className="rounded-lg border border-blue-6/50 bg-blue-2/25 shadow-sm p-5 space-y-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <div className="text-sm font-medium text-gray-12">Matterhorn Models</div>
+                      <div className="text-sm font-medium text-gray-12">Shared model catalog</div>
                       <div className="text-xs text-gray-10 mt-1">
                         Frontier intelligence, hand picked for your team&apos;s most ambitious work.
                       </div>

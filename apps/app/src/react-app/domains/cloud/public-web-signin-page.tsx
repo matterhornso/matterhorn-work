@@ -54,11 +54,11 @@ export function PublicWebSigninPage({
 
           <p className="public-auth-kicker">Public beta</p>
           <h1 id="public-auth-title" className="public-auth-title">
-            Your AI workspace for serious work.
+            Serious work deserves more than a chat.
           </h1>
           <p className="public-auth-description">
-            Sign in to open your private workspace, focused protocol desks,
-            saved evidence, notes, and review-first workflows.
+            Work inside focused AI desks that understand context, use tools,
+            prepare actions, and preserve a reliable record.
           </p>
 
           <div className="public-auth-actions" aria-label="Matterhorn account actions">

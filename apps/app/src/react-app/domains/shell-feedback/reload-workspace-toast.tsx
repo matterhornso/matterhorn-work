@@ -52,9 +52,7 @@ function describeTrigger(
       : "MCP config changed. Reload to apply.";
   }
   if (type === "config") {
-    return trimmedName
-      ? `Config '${trimmedName}' ${verb}. Reload to apply.`
-      : "Config changed. Reload to apply.";
+    return `Engine configuration ${verb}. Reload to apply.`;
   }
   if (type === "agent") {
     return trimmedName

@@ -51,7 +51,8 @@ describe("project feedback UI contract", () => {
     const source = readReactSource("domains/settings/pages/overview-view.tsx");
 
     expect(source).toContain("exportProjectLedger");
-    expect(source).toContain("client.exportProjectDataLedger(workspaceId, { limit: 300 })");
+    expect(source).toContain("client.exportProjectDataLedger(workspaceId, {");
+    expect(source).toContain("limit: 300");
     expect(source).toContain("exportPayload.manifest.itemCount");
     expect(source).toContain("exportSupportReport");
     expect(source).toContain("client.workspaceBackendSupportReport(workspaceId)");
@@ -63,7 +64,12 @@ describe("project feedback UI contract", () => {
     expect(source).toContain("exportable");
     expect(source).toContain("deletable");
     expect(source).toContain("append-only");
-    expect(source).toContain("Feedback is eval/routing/product-quality only");
+    expect(source).toContain(
+      "Local feedback stored for product quality and routing. No training by default.",
+    );
+    expect(source).toContain(
+      "Explicit feedback only. Product quality and routing, not training.",
+    );
   });
 
   test("settings overview exposes a local feedback review surface", () => {

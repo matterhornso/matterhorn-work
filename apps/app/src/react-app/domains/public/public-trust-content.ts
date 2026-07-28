@@ -13,6 +13,18 @@ export function isPublicTrustPath(pathname: string): boolean {
   return PUBLIC_TRUST_PATHS.includes(normalized as PublicTrustPath);
 }
 
+export function shouldGatePublicWebEntry(input: {
+  publicBetaWeb: boolean;
+  requireSignin: boolean;
+  pathname: string;
+}): boolean {
+  return (
+    input.publicBetaWeb &&
+    input.requireSignin &&
+    !isPublicTrustPath(input.pathname)
+  );
+}
+
 export const MATTERHORN_SUPPORT_EMAIL = "support@matterhorn.work";
 export const MATTERHORN_DOCS_URL =
   "https://github.com/matterhornso/matterhorn-work/tree/dev/docs";

@@ -69,9 +69,9 @@ export const WEB_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       connectionMode: "external_handoff",
       canRead: true,
       canPreview: true,
-      canSubmit: false,
-      liveSubmissionEnabled: false,
-      signerRequirement: "external_signer",
+      canSubmit: true,
+      liveSubmissionEnabled: true,
+      signerRequirement: "client_signer",
       custody: false,
       secretInputsAllowed: false,
     },
@@ -89,8 +89,8 @@ export const WEB_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       connectionMode: "injected_evm",
       canRead: true,
       canPreview: true,
-      canSubmit: false,
-      liveSubmissionEnabled: false,
+      canSubmit: true,
+      liveSubmissionEnabled: true,
       signerRequirement: "client_signer",
       custody: false,
       secretInputsAllowed: false,
@@ -110,7 +110,7 @@ export const WEB_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
     publicAddressLine:
       "Only public wallet addresses are used. Paste or connect an address to preview read-only data.",
     externalSignerLine:
-      "Bittensor submissions require your external signer. Sui signing stays in your connected wallet. Matterhorn never creates or holds keys.",
+      "Direct TAO transfers and Sui actions stay in connected wallets. Bittensor staking and advanced calls require an external signer. Matterhorn never creates or holds keys.",
     forbiddenSecretsLine:
       "Never paste a private key, seed phrase, API secret, raw signature, signed payload, or wallet export into Matterhorn.",
   },

@@ -54,8 +54,8 @@ import {
 import {
   backendCapabilityLabel,
   backendCapabilityTone,
-  storageLocationLabel,
 } from "../backend-capability-status";
+import { settingsStorageLocationLabel } from "../state/privacy-display";
 import { useStatusToasts } from "../../shell-feedback/status-toasts";
 
 export type GeneratedMediaSettingsViewProps = {
@@ -486,7 +486,7 @@ function DataControlRows(props: { stores: MatterhornDataControlStore[]; loading:
                   <span>{store.store.label}</span>
                 </div>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                  {storageLocationLabel(store.store)} · {store.retention.label}
+                  {settingsStorageLocationLabel(store.store)} · {store.retention.label}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-dls-muted">
                   {store.export.label}: {store.export.summary}

@@ -122,6 +122,10 @@ export interface HyperliquidOrderPreviewInput {
   asset?: string | null;
   side?: HyperliquidSide | null;
   size?: number | string | null;
+  /** Explicit execution intent. Market previews use a live indicative mark, while limit previews require a limit price. */
+  orderType?: "market" | "limit" | null;
+  /** The review ticket defaults to testnet; mainnet remains an explicit user choice in the ticket. */
+  network?: "testnet" | "mainnet" | null;
   price?: number | string | null;
   reduceOnly?: boolean | null;
   slippageTolerance?: number | string | null;
@@ -194,6 +198,8 @@ export interface HyperliquidActionPreview {
   side: HyperliquidSide;
   size: number;
   sizeAsset: string;
+  orderType: "market" | "limit";
+  network: "testnet" | "mainnet";
   price: number | null;
   priceAsset: "USDC";
   slippageTolerance: number | null;
@@ -276,6 +282,8 @@ export interface HyperliquidChatExecutionInput {
   direction?: HyperliquidWatchDirection | string | null;
   side?: HyperliquidSide | null;
   size?: number | string | null;
+  orderType?: "market" | "limit" | null;
+  network?: "testnet" | "mainnet" | null;
   price?: number | string | null;
   limit?: number | string | null;
   slippageTolerance?: number | string | null;
@@ -695,10 +703,16 @@ export function extractHyperliquidOrderInput(input: HyperliquidChatExecutionInpu
   const side = input.side ?? extractSide(message);
   const size = input.size ?? extractNumberAfter(message, /\b(size|amount|qty|quantity)\b/i) ?? extractNumberBeforeAsset(message, asset);
   const price = input.price ?? extractNumberAfter(message, /\b(price|at|limit)\b/i);
+  const orderType = input.orderType
+    ?? (/\bmarket(?:\s+order)?\b/i.test(message)
+      ? "market"
+      : (/\blimit(?:\s+order)?\b/i.test(message) || price !== null ? "limit" : "market"));
   return {
     asset,
     side,
     size,
+    orderType,
+    network: input.network ?? "testnet",
     price,
     reduceOnly: input.reduceOnly ?? (Boolean(closeIntent?.isClose) || /\breduce[\s-]?only\b/i.test(message)),
     slippageTolerance: input.slippageTolerance,
@@ -909,15 +923,20 @@ export async function prepareHyperliquidOrderPreview(
   const side = input.side ?? null;
   const size = numberOrNull(input.size);
   const explicitPrice = numberOrNull(input.price);
+  const orderType = input.orderType === "limit" ? "limit" : "market";
+  const network = input.network === "mainnet" ? "mainnet" : "testnet";
   const slippageTolerance = numberOrNull(input.slippageTolerance);
   const warnings = [
-    "Preview only: Matterhorn does not submit Hyperliquid orders in this milestone.",
+    "Agent draft only: review the exact order in the connected-wallet ticket before anything can be authorized.",
     "No API wallet secret, private key, or signature is accepted or stored.",
-    "Compliance and jurisdiction checks are not complete; do not treat this as executable.",
+    "Wallet submission requires an enabled deployment, an eligible connected wallet, and your explicit approval of a short-lived intent.",
   ];
   if (!asset) throw new Error("asset is required for a Hyperliquid order preview");
   if (!side || !["buy", "sell", "long", "short"].includes(side)) throw new Error("side must be buy, sell, long, or short");
   if (!size || size <= 0) throw new Error("positive size is required for a Hyperliquid order preview");
+  if (orderType === "limit" && (explicitPrice === null || explicitPrice <= 0)) {
+    throw new Error("positive price is required for a limit order preview");
+  }
 
   const reduceOnly = Boolean(input.reduceOnly) || Boolean(input.closeIntent?.isClose);
 
@@ -932,7 +951,7 @@ export async function prepareHyperliquidOrderPreview(
     warnings.push(err instanceof Error ? "Could not fetch live mark price: " + err.message : "Could not fetch live mark price.");
   }
 
-  const price = explicitPrice ?? markPx;
+  const price = orderType === "limit" ? explicitPrice : markPx;
   if (price === null) warnings.push("No explicit price or mark price is available; preview cannot estimate notional.");
 
   // Best-effort marketability/slippage from the public orderbook.
@@ -968,19 +987,23 @@ export async function prepareHyperliquidOrderPreview(
     asset,
     side,
     size,
+    orderType,
+    network,
     price,
     reduceOnly,
     slippageTolerance,
     canSubmit: false,
   };
   const previewSha256 = sha256(actionPayload);
+  const priceText = price === null
+    ? ""
+    : orderType === "limit"
+      ? " at " + formatNumber(price) + " USDC"
+      : " near " + formatNumber(price) + " USDC";
   const notionalText = notionalUsd === null
     ? size + " " + asset
-    : size + " " + asset + " (~" + formatNumber(notionalUsd) + " USDC notional)" + (price === null ? "" : " near " + formatNumber(price) + " USDC");
+    : size + " " + asset + " (~" + formatNumber(notionalUsd) + " USDC notional)" + priceText;
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-  const consequence = (reduceOnly ? "Reduce-only preview. " : "")
-    + "If executed outside Matterhorn, this would attempt to " + side + " " + notionalText + " on Hyperliquid. "
-    + "Matterhorn will not sign or submit it.";
   return {
     version: "matterhorn.market.action-preview.v1",
     venue: "hyperliquid",
@@ -994,6 +1017,8 @@ export async function prepareHyperliquidOrderPreview(
     side,
     size,
     sizeAsset: asset,
+    orderType,
+    network,
     price,
     priceAsset: "USDC",
     slippageTolerance,
@@ -1005,8 +1030,10 @@ export async function prepareHyperliquidOrderPreview(
     closeContext,
     expiresAt,
     fees: [{ label: "Trading fee estimate", amount: null, asset: "USDC" }],
-    consequence,
-    confirmationText: "I understand this is preview-only in Matterhorn. External signing/execution is not enabled; Matterhorn never holds keys or submits to Hyperliquid.",
+    consequence: (reduceOnly ? "Reduce-only draft. " : "")
+      + "This would " + side + " " + notionalText + " on Hyperliquid. "
+      + "The agent draft cannot sign or submit; review the exact terms in the wallet ticket before requesting a connected-wallet approval.",
+    confirmationText: "I understand this is an agent-prepared draft. I must review the exact terms and explicitly approve any wallet request. Matterhorn never holds keys or signatures.",
     previewSha256,
     source: nowSource(markPx === null ? ["Live mark price unavailable for preview."] : []),
     compliance: {
@@ -1759,7 +1786,7 @@ export async function executeHyperliquidChatWorkflow(
       venue: "hyperliquid",
       intent,
       execution: "answered",
-      responseText: "Hyperliquid support is read-only plus preview-only right now. I can list markets, inspect public account state, show an orderbook, and prepare a non-submittable order preview. I will not ask for API wallet secrets or submit trades.",
+      responseText: "I can list markets, inspect public account state, show an orderbook, and prepare exact order terms. The agent draft cannot submit. To execute, use the separate Hyperliquid trade ticket, review every field, and authorize the short-lived intent in your connected wallet. Agents and watches cannot submit, and I will never ask for API wallet secrets.",
       cards: [],
       warnings: [],
     };

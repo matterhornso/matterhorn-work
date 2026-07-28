@@ -34,6 +34,31 @@ export function useSessionWallet(store: WalletStore) {
   const { signMessageAsync } = useSignMessage();
   const safetyPolicy = useMemo(() => walletSafetyPolicyFromSnapshot(state), [state]);
 
+  const simulatePreparedTransaction = useCallback(async (request: {
+    chainId: number;
+    to: `0x${string}`;
+    value: bigint;
+    data?: `0x${string}`;
+  }) => {
+    if (!publicClient || !wagmiAddress) {
+      return { status: "unavailable" as const, error: "Simulation service is unavailable." };
+    }
+    try {
+      await publicClient.call({
+        account: wagmiAddress,
+        to: request.to,
+        value: request.value,
+        data: request.data,
+      });
+      return { status: "passed" as const };
+    } catch (error) {
+      return {
+        status: "failed" as const,
+        error: error instanceof Error ? error.message : "Transaction simulation failed.",
+      };
+    }
+  }, [publicClient, wagmiAddress]);
+
   // Build the session context for injection into agent prompts
   const walletContext: SessionWalletContext = useMemo(() => {
     const chainName = state.chainId ? CHAIN_NAMES[state.chainId] ?? null : null;
@@ -59,6 +84,7 @@ export function useSessionWallet(store: WalletStore) {
       forceTestnet: FORCE_TESTNET || !state.mainnetEnabled,
       chainName: (id) => CHAIN_NAMES[id] ?? `chain ${id}`,
       policy: approvalPolicyFromSafetyPolicy(safetyPolicy),
+      simulateTransaction: simulatePreparedTransaction,
       sendTransaction: sendTransactionAsync,
       onTransaction: (tx) => store.addTransaction(tx),
       onDailySpend: (amountUSD) => store.incrementDailySpendUSD(amountUSD),
@@ -76,6 +102,7 @@ export function useSessionWallet(store: WalletStore) {
     safetyPolicy,
     wagmiAddress,
     chainId,
+    simulatePreparedTransaction,
     sendTransactionAsync,
     store,
   ]);
@@ -132,13 +159,14 @@ export function useSessionWallet(store: WalletStore) {
       const analysis = analyzeWalletTransaction({ chainId: currentChainId, to, value, data });
       const valueUSD = analysis.valueUSD;
       let riskLevel: "low" | "medium" | "high" = "low";
-      if (!whitelisted) riskLevel = "high";
+      if (!analysis.valueUSDIsKnown || !whitelisted) riskLevel = "high";
       else if (valueUSD > state.maxPerTransactionUSD) riskLevel = "medium";
       else if (valueUSD + state.dailySpendUSD > state.maxDailySpendUSD) riskLevel = "medium";
 
       const now = Date.now();
       const blockingReasons = evaluateWalletApprovalAgainstPolicy({
         valueUSD,
+        valueUSDIsKnown: analysis.valueUSDIsKnown,
         policy: safetyPolicy,
         isSwap: analysis.isSwap,
         now,
@@ -209,6 +237,7 @@ export function useSessionWallet(store: WalletStore) {
         forceTestnet: FORCE_TESTNET || !state.mainnetEnabled,
         chainName: (id) => CHAIN_NAMES[id] ?? `chain ${id}`,
         policy: approvalPolicyFromSafetyPolicy(safetyPolicy),
+        simulateTransaction: simulatePreparedTransaction,
         sendTransaction: sendTransactionAsync,
         onTransaction: (tx) => store.addTransaction(tx),
         onDailySpend: (amountUSD) => store.incrementDailySpendUSD(amountUSD),
@@ -222,6 +251,7 @@ export function useSessionWallet(store: WalletStore) {
     [
       wagmiAddress,
       chainId,
+      simulatePreparedTransaction,
       sendTransactionAsync,
       store,
       state.chainId,

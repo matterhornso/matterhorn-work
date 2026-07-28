@@ -275,6 +275,54 @@ function startFakeOpencode() {
     }
   };
 
+  const appendAssistantMessage = (sessionId, parentId, text, now) => {
+    messageSequence += 1;
+    const messageId = `msg_smoke_${String(messageSequence).padStart(3, "0")}`;
+    const partId = `prt_smoke_${String(messageSequence).padStart(3, "0")}`;
+    const nextMessages = messages.get(sessionId) || [];
+    nextMessages.push({
+      info: {
+        id: messageId,
+        sessionID: sessionId,
+        role: "assistant",
+        time: { created: now, completed: now },
+        parentID: parentId,
+        modelID: "smoke-model",
+        providerID: "matterhorn-smoke",
+        mode: "work",
+        agent: "matterhorn",
+        path: { cwd: workspaceRoot, root: workspaceRoot },
+        cost: 0,
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+        finish: "stop",
+      },
+      parts: [
+        {
+          id: partId,
+          messageID: messageId,
+          sessionID: sessionId,
+          type: "text",
+          text,
+        },
+      ],
+    });
+    messages.set(sessionId, nextMessages);
+  };
+
+  const seedAssistantResponse = (sessionId, now) => {
+    appendAssistantMessage(
+      sessionId,
+      "",
+      "This isolated acceptance workspace is ready. I can help you verify a workflow without touching a real wallet, provider key, or workspace.",
+      now,
+    );
+  };
+
   const createSession = (request, body) => {
     sessionSequence += 1;
     const id = `ses_generated_media_smoke_${String(sessionSequence).padStart(3, "0")}`;
@@ -291,6 +339,7 @@ function startFakeOpencode() {
     };
     sessions.set(id, session);
     messages.set(id, []);
+    seedAssistantResponse(id, now);
     return session;
   };
 
@@ -307,6 +356,7 @@ function startFakeOpencode() {
     };
     sessions.set(sessionId, session);
     messages.set(sessionId, []);
+    seedAssistantResponse(sessionId, now);
     return session;
   };
 
@@ -314,15 +364,26 @@ function startFakeOpencode() {
     all: [
       {
         id: "opencode",
-        name: "OpenCode",
+        name: "Matterhorn included catalog",
         source: "config",
         models: {
           "big-pickle": { name: "Big Pickle" },
         },
       },
+      {
+        id: "matterhorn-smoke",
+        name: "Matterhorn smoke provider",
+        source: "config",
+        models: {
+          "smoke-model": { name: "Smoke model" },
+        },
+      },
     ],
-    default: { opencode: "big-pickle" },
-    connected: ["opencode"],
+    default: {
+      opencode: "big-pickle",
+      "matterhorn-smoke": "smoke-model",
+    },
+    connected: ["opencode", "matterhorn-smoke"],
   };
   const mcpStatuses = {
     wallet: { status: "connected" },
@@ -364,8 +425,26 @@ function startFakeOpencode() {
       return;
     }
 
+    if (url.pathname === "/provider/auth" && request.method === "GET") {
+      json(response, 200, {
+        anthropic: [{ type: "api", label: "API key" }],
+      });
+      return;
+    }
+
     if (url.pathname === "/mcp" && request.method === "GET") {
       json(response, 200, mcpStatuses);
+      return;
+    }
+
+    if (url.pathname === "/command" && request.method === "GET") {
+      json(response, 200, [
+        {
+          name: "help",
+          description: "Show the available Matterhorn Desks actions.",
+          source: "command",
+        },
+      ]);
       return;
     }
 
@@ -471,17 +550,23 @@ function startFakeOpencode() {
           ? textPart.text.trim()
           : "Generated media smoke prompt";
         const nextMessages = messages.get(sessionId) || [];
+        const userMessageId = `msg_smoke_${String(messageSequence).padStart(3, "0")}`;
         nextMessages.push({
           info: {
-            id: `msg_smoke_${String(messageSequence).padStart(3, "0")}`,
+            id: userMessageId,
             sessionID: sessionId,
             role: "user",
-            time: { created: now, completed: now },
+            time: { created: now },
+            agent: "matterhorn",
+            model: {
+              providerID: "matterhorn-smoke",
+              modelID: "smoke-model",
+            },
           },
           parts: [
             {
               id: `prt_smoke_${String(messageSequence).padStart(3, "0")}`,
-              messageID: `msg_smoke_${String(messageSequence).padStart(3, "0")}`,
+              messageID: userMessageId,
               sessionID: sessionId,
               type: "text",
               text,
@@ -489,6 +574,12 @@ function startFakeOpencode() {
           ],
         });
         messages.set(sessionId, nextMessages);
+        appendAssistantMessage(
+          sessionId,
+          userMessageId,
+          "I received your request in the isolated acceptance workspace. The simulated response is complete and no external action was taken.",
+          now,
+        );
         session.time.updated = now;
         sessions.set(sessionId, session);
         json(response, 200, { ok: true });
@@ -688,6 +779,9 @@ async function main() {
       VITE_MATTERHORN_WORK_TOKEN: clientToken,
       VITE_MATTERHORN_WORK_HOST_TOKEN: hostToken,
       VITE_MATTERHORN_WORK_FORCE_SETTINGS: "1",
+      // The disposable server below supplies a mock image provider and storage relay.
+      // Enable the otherwise launch-gated UI only for this end-to-end smoke fixture.
+      VITE_MATTERHORN_GENERATED_MEDIA_ENABLED: "1",
     },
   });
 

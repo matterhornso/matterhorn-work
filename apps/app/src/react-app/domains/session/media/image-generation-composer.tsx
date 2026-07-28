@@ -60,7 +60,7 @@ export function ImageGenerationComposer(props: ImageGenerationComposerProps) {
           <span>Use chat draft</span>
           <button
             type="button"
-            className="rounded-md px-2 py-1 text-[11px] font-semibold text-dls-text transition-colors hover:bg-dls-hover/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--matterhorn-blue-rgb),0.28)]"
+            className="rounded-md px-2 py-1 text-[11px] font-semibold text-dls-text transition-colors hover:bg-dls-hover/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--matterhorn-blue-rgb)/0.28)]"
             disabled={props.isGenerating}
             onClick={() => setPrompt(suggestedPrompt)}
           >

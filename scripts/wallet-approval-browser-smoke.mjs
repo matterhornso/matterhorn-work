@@ -15,6 +15,7 @@ const REVIEWED_VALUE_HEX = "0x2386f26fc10000";
 const BASE_SEPOLIA_HEX = "0x14a34";
 const BASE_MAINNET_ID = 8453;
 const SIMULATION_ROUTE_GLOB = "**/workspace/**/wallet/simulate-transaction";
+const SAFETY_EVENT_ROUTE_GLOB = "**/workspace/**/wallet/safety-events";
 
 function parseArgs(argv = process.argv.slice(2)) {
   const flags = new Set();
@@ -69,7 +70,8 @@ Expected stack:
 Boundaries:
   This smoke proves a reviewed transaction is sent exactly to the injected mock
   wallet on Base Sepolia, and that a blocked mainnet request does not reach the
-  wallet. It never connects a real wallet or submits an on-chain transaction.
+  wallet. It never connects a real wallet, submits an on-chain transaction, or
+  persists synthetic wallet events to the selected workspace ledger.
 `);
 }
 
@@ -420,6 +422,34 @@ async function runSmoke(config) {
     page = await context.newPage();
     let simulationMode = "passed";
 
+    await page.route(SAFETY_EVENT_ROUTE_GLOB, async (route) => {
+      const request = route.request();
+      if (request.method() !== "POST") {
+        await route.continue();
+        return;
+      }
+
+      const input = request.postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          event: {
+            safetyAction: input.action,
+            chainId: input.chainId,
+            to: input.to,
+            valueUSD: input.valueUSD,
+            riskLevel: input.riskLevel,
+            reason: input.reason,
+            sessionId: null,
+            txHash: input.txHash ?? null,
+            review: input.review ?? null,
+          },
+        }),
+      });
+    });
+
     await page.route(SIMULATION_ROUTE_GLOB, async (route) => {
       const status = simulationMode === "failed" ? "failed" : "passed";
       await route.fulfill({
@@ -506,6 +536,24 @@ async function runSmoke(config) {
       }
       await page.getByRole("button", { name: /^Reject$/ }).click();
       simulationMode = "passed";
+    });
+
+    await stage(report, "reject_reviewed_transaction", "Cancel reviewed Base Sepolia transaction", async () => {
+      const sentCountBefore = await page.evaluate(() => window.__matterhornWalletSmoke.sentTransactions.length);
+      await dispatchApprovalRequest(page, { chainId: 84532 });
+      const approvalDialog = page.getByRole("dialog", { name: /Transaction Approval/i });
+      await approvalDialog.waitFor({ state: "visible", timeout: 15_000 });
+      await page.getByText(/Passed pre-approval simulation/i).waitFor({ state: "visible", timeout: 10_000 });
+      const approveButton = page.getByRole("button", { name: /^Approve$/ });
+      if (!(await approveButton.isEnabled())) {
+        throw new Error("Valid simulated transaction could not be reviewed before cancellation.");
+      }
+      await page.getByRole("button", { name: /^Reject$/ }).click();
+      await approvalDialog.waitFor({ state: "hidden", timeout: 10_000 });
+      const sentCountAfter = await page.evaluate(() => window.__matterhornWalletSmoke.sentTransactions.length);
+      if (sentCountAfter !== sentCountBefore) {
+        throw new Error(`Cancelled review reached wallet. Sent transaction count changed from ${sentCountBefore} to ${sentCountAfter}.`);
+      }
     });
 
     await stage(report, "approve_reviewed_transaction", "Approve reviewed Base Sepolia transaction", async () => {

@@ -38,7 +38,7 @@ describe("reasoning display", () => {
     expect(html).not.toContain("We should inspect the settings preference first.");
   });
 
-  test("renders enabled reasoning as prose without a leading Thinking label", () => {
+  test("keeps enabled reasoning behind a labeled disclosure", () => {
     const messages: UIMessage[] = [
       {
         id: "assistant-1",
@@ -63,7 +63,9 @@ describe("reasoning display", () => {
     );
 
     expect(html).toContain('data-reasoning="true"');
-    expect(html).toContain("We should inspect the settings preference first.");
+    expect(html).toContain("Reasoning");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("We should inspect the settings preference first.");
     expect(html).not.toContain("Thinking:");
     expect(html).not.toContain("font-mono");
   });

@@ -24,6 +24,7 @@ import {
 } from "./billing.js";
 import { MatterhornBillingAccountStore } from "./billing-account-store.js";
 import { MatterhornGeneratedImageStore } from "./generated-image-store.js";
+import { countDurableGeneratedImageUsage } from "./generated-media-usage.js";
 import { MatterhornImageNftDraftStore } from "./image-nft-draft-store.js";
 import type { Actor, ServerConfig, WorkspaceInfo } from "./types.js";
 
@@ -431,7 +432,7 @@ export function addBillingRoutes(addRoute: RouteAdder, ctx: BillingRouteContext)
     const subscription = effectiveMatterhornBillingSubscription(storedSubscription);
     const usagePeriod = billingUsagePeriodForSubscription(subscription);
     const usage = {
-      generatedImages: images.filter((image) => isBillingUsageTimestampInPeriod(image.createdAt, usagePeriod)).length,
+      generatedImages: await countDurableGeneratedImageUsage(workspace, images, usagePeriod),
       generatedImagesResetsAt: usagePeriod.resetsAt,
       nftDrafts: drafts.filter((draft) => isBillingUsageTimestampInPeriod(draft.createdAt, usagePeriod)).length,
       nftDraftsResetsAt: usagePeriod.resetsAt,

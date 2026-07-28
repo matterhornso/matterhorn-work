@@ -66,6 +66,12 @@ async function parseSkillEntry(
         : typeof data.when === "string"
           ? data.when
           : extractTriggerFromBody(body);
+    const userInvocable =
+      typeof data["user-invocable"] === "boolean"
+        ? data["user-invocable"]
+        : typeof data.userInvocable === "boolean"
+          ? data.userInvocable
+          : true;
     validateSkillName(name);
     validateDescription(description);
     if (name !== entryName) return null;
@@ -75,6 +81,7 @@ async function parseSkillEntry(
       path: skillPath,
       scope,
       trigger: trigger.trim() || undefined,
+      userInvocable,
     };
   } catch {
     return null;

@@ -9,8 +9,10 @@ describe("stable launch language policy", () => {
       .map((option) => option.value)).toEqual(["en"]);
   });
 
-  test("requires an explicit build flag for experimental locales", () => {
+  test("allows an explicit build flag only in development builds", () => {
     const values = resolveLanguageOptions({
+      DEV: true,
+      MODE: "development",
       VITE_MATTERHORN_EXPERIMENTAL_LOCALES_ENABLED: "1",
     }).map((option) => option.value);
 
@@ -18,5 +20,16 @@ describe("stable launch language policy", () => {
     expect(values).toContain("fr");
     expect(values).toContain("ja");
     expect(values.length).toBeGreaterThan(1);
+  });
+
+  test("cannot expose unreviewed locales in production", () => {
+    const values = resolveLanguageOptions({
+      DEV: false,
+      PROD: true,
+      MODE: "production",
+      VITE_MATTERHORN_EXPERIMENTAL_LOCALES_ENABLED: "1",
+    }).map((option) => option.value);
+
+    expect(values).toEqual(["en"]);
   });
 });

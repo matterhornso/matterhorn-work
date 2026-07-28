@@ -27,11 +27,11 @@ describe("desk task starters", () => {
 
   test("uses one catalog for focused desks and in-session desk launches", () => {
     const focusedDeskSource = readFileSync(
-      "apps/app/src/react-app/domains/session/chat/session-page.tsx",
+      new URL("../src/react-app/domains/session/chat/session-page.tsx", import.meta.url),
       "utf8",
     );
     const sessionDeskSource = readFileSync(
-      "apps/app/src/react-app/domains/session/surface/session-surface.tsx",
+      new URL("../src/react-app/domains/session/surface/session-surface.tsx", import.meta.url),
       "utf8",
     );
 
@@ -47,8 +47,12 @@ describe("desk task starters", () => {
     const bittensorPrompts = MATTERHORN_DESK_TASK_STARTERS.bittensor.map((starter) => starter.prompt).join(" ");
     const suiPrompts = MATTERHORN_DESK_TASK_STARTERS.sui.map((starter) => starter.prompt).join(" ");
 
-    expect(polymarketPrompts).toContain("Live submission: Off");
-    expect(polymarketPrompts).toContain("do not place a bet");
+    expect(polymarketPrompts).toContain("Agent draft non-submittable");
+    expect(polymarketPrompts).toContain("separate connected-wallet trade ticket");
+    expect(polymarketPrompts).toContain("eligible EOA BUY order");
+    expect(polymarketPrompts).toContain("Never place or auto-execute a bet");
+    expect(polymarketPrompts).toContain("describe market or trade");
+    expect(polymarketPrompts).not.toContain("<paste market URL or slug>");
     expect(hyperliquidPrompts).toContain("dedicated trade ticket");
     expect(hyperliquidPrompts).toContain("connected-wallet approval");
     expect(bittensorPrompts).toContain("external Bittensor-compatible signer");

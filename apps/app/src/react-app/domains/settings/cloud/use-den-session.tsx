@@ -448,18 +448,31 @@ export function useDenSession({
     if (authBusy) return;
 
     setAuthBusy(true);
+    setAuthError(null);
     try {
       if (hasSessionCredential) {
         await client.signOut();
       }
+      clearSignedInState(t("den.status_signed_out"));
     } catch {
-      // Ignore remote sign-out failures.
+      const message =
+        "Sign out could not be completed. Your session is still active.";
+      setAuthError(message);
+      showToast({
+        title: "Could not sign out",
+        description: "Check your connection and try again.",
+        tone: "error",
+      });
     } finally {
       setAuthBusy(false);
     }
-
-    clearSignedInState(t("den.status_signed_out"));
-  }, [authBusy, clearSignedInState, client, hasSessionCredential]);
+  }, [
+    authBusy,
+    clearSignedInState,
+    client,
+    hasSessionCredential,
+    showToast,
+  ]);
 
   const handleActiveOrgChange = React.useCallback(
     async (nextId: string) => {

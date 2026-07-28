@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { createServer } from "node:http";
 import net from "node:net";
-import { existsSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import {
   cp,
   mkdir,
@@ -33,12 +33,31 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NATIVE_DEEP_LINK_EVENT = "matterhorn:deep-link-native";
 const NATIVE_MENU_OPEN_SETTINGS_EVENT = "openwork:native-menu:open-settings";
 const NATIVE_MENU_TOGGLE_SIDEBAR_EVENT = "openwork:native-menu:toggle-sidebar";
-const TAURI_APP_IDENTIFIER = "com.differentai.openwork";
-const DEV_APP_IDENTIFIER = "com.differentai.openwork.dev";
-const DESKTOP_PROTOCOL_SCHEMES = ["matterhorn-work", "openwork"];
+const MATTERHORN_DESKS_APP_IDENTIFIER = "com.matterhorn.desks";
+const MATTERHORN_DESKS_DEV_APP_IDENTIFIER = "com.matterhorn.desks.dev";
+const LEGACY_APP_IDENTIFIERS = Object.freeze([
+  "com.differentai.openwork",
+  "com.matterhorn.work",
+]);
+// Matterhorn Desks owns the primary deep link. Older schemes remain aliases so
+// existing local installs and shared links continue to open without data loss.
+const DESKTOP_PROTOCOL_SCHEMES = ["matterhorn-desks", "matterhorn-work", "openwork"];
 const isDevMode = process.env.OPENWORK_DEV_MODE === "1";
 const APP_NAME = isDevMode ? "Matterhorn Desks - Dev" : "Matterhorn Desks";
-const APP_IDENTIFIER = isDevMode ? DEV_APP_IDENTIFIER : TAURI_APP_IDENTIFIER;
+const APP_IDENTIFIER = isDevMode
+  ? MATTERHORN_DESKS_DEV_APP_IDENTIFIER
+  : MATTERHORN_DESKS_APP_IDENTIFIER;
+const LEGACY_APP_IDENTIFIER_CANDIDATES = Object.freeze(
+  LEGACY_APP_IDENTIFIERS.map((identifier) => (isDevMode ? `${identifier}.dev` : identifier)),
+);
+const USER_DATA_IDENTITY_MIGRATION_MARKER = "matterhorn-desks-identity-migration.v1.json";
+const TRANSIENT_USER_DATA_ENTRIES = new Set([
+  ".DS_Store",
+  "DevToolsActivePort",
+  "SingletonCookie",
+  "SingletonLock",
+  "SingletonSocket",
+]);
 const RELEASE_DOWNLOAD_BASE_URL = "https://github.com/matterhornso/matterhorn-work/releases/latest/download";
 const RELEASE_PAGE_URL = "https://github.com/matterhornso/matterhorn-work/releases/latest";
 const DOCS_PAGE_URL = "https://github.com/matterhornso/matterhorn-work/tree/dev/docs";
@@ -164,9 +183,10 @@ async function openComputerUseSetupApp() {
   child.unref();
 }
 
-// Production Electron shares the same on-disk state folder as the Tauri shell
-// so in-place migration is a no-op for almost every file. Dev mode uses the
-// separate dev identifier so it can run beside the production app.
+// Matterhorn Desks owns its public desktop identity. On the first launch we
+// make a non-destructive copy of an older app identity's local state into the
+// new folder, then leave the original untouched so rollback remains possible.
+// Dev mode uses a separate identity so it can run beside the production app.
 //
 // Override via MATTERHORN_WORK_ELECTRON_USERDATA so dogfooders can isolate their
 // Electron install from the real app. Keep OPENWORK_ELECTRON_USERDATA as a
@@ -189,6 +209,74 @@ if (userDataOverride) {
     path.join(app.getPath("appData"), APP_IDENTIFIER),
   );
 }
+
+function meaningfulUserDataEntries(directory) {
+  try {
+    return readdirSync(directory).filter(
+      (entry) =>
+        entry !== USER_DATA_IDENTITY_MIGRATION_MARKER &&
+        !TRANSIENT_USER_DATA_ENTRIES.has(entry),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function migrateLegacyUserDataIdentityIfNeeded() {
+  if (userDataOverride) return;
+
+  const targetDirectory = app.getPath("userData");
+  const migrationMarker = path.join(targetDirectory, USER_DATA_IDENTITY_MIGRATION_MARKER);
+  try {
+    mkdirSync(targetDirectory, { recursive: true });
+    if (existsSync(migrationMarker)) return;
+
+    const targetEntries = meaningfulUserDataEntries(targetDirectory);
+    let sourceIdentifier = null;
+    let copiedEntries = 0;
+    let status = targetEntries.length > 0 ? "target-has-data" : "no-legacy-data";
+
+    if (targetEntries.length === 0) {
+      for (const legacyIdentifier of LEGACY_APP_IDENTIFIER_CANDIDATES) {
+        const sourceDirectory = path.join(app.getPath("appData"), legacyIdentifier);
+        if (!existsSync(sourceDirectory)) continue;
+        const sourceEntries = meaningfulUserDataEntries(sourceDirectory);
+        if (sourceEntries.length === 0) continue;
+
+        for (const entry of sourceEntries) {
+          cpSync(
+            path.join(sourceDirectory, entry),
+            path.join(targetDirectory, entry),
+            { recursive: true, force: false, errorOnExist: false, preserveTimestamps: true },
+          );
+        }
+        sourceIdentifier = legacyIdentifier;
+        copiedEntries = sourceEntries.length;
+        status = "copied";
+        break;
+      }
+    }
+
+    writeFileSync(
+      migrationMarker,
+      `${JSON.stringify({
+        version: 1,
+        status,
+        sourceIdentifier,
+        copiedEntries,
+        migratedAt: new Date().toISOString(),
+      }, null, 2)}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+    if (status === "copied") {
+      console.info(`[migration] copied local Matterhorn state from ${sourceIdentifier}`);
+    }
+  } catch (error) {
+    console.warn("[migration] Matterhorn Desks identity migration skipped", error);
+  }
+}
+
+migrateLegacyUserDataIdentityIfNeeded();
 
 // Resolve and cache the app icon (reused for BrowserWindow + mac dock).
 // Packaged builds ship icons via electron-builder config, but for `dev:electron`
@@ -552,7 +640,10 @@ let activeBrowserTabId = null;
 let browserViewVisible = false;
 let lastBrowserBounds = null;
 let browserTabCounter = 0;
-const BROWSER_DEFAULT_URL = "https://www.google.com";
+// A fresh embedded tab stays blank until the user or an approved control action
+// explicitly supplies a destination. Loading a default site here can race a
+// requested navigation while the browser panel is mounting.
+const BROWSER_DEFAULT_URL = "about:blank";
 const MENU_OVERLAY_HTML = "overlay.html";
 const MENU_OVERLAY_WIDTH = 196;
 const MENU_OVERLAY_HEIGHT = 176;
@@ -1237,9 +1328,10 @@ function createBrowserTab(url = "about:blank", { select = true } = {}) {
   const tab = { tabId, view, favicon: null };
   browserTabs.set(tabId, tab);
   browserTabOrder.push(tabId);
-  // Load about:blank immediately to preempt persistent-session restore.
-  // Cookies live on the session object, not the document — they survive this.
-  view.webContents.loadURL("about:blank");
+  // Do not restore a prior document into a new tab. Cookies remain scoped to
+  // the persistent session, while the document only goes where this action asks.
+  const initialUrl = normalizeBrowserUrl(url, "about:blank");
+  view.webContents.loadURL(initialUrl);
   view.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
     if (isAllowedExternalUrl(targetUrl)) void shell.openExternal(targetUrl);
     return { action: "deny" };
@@ -1268,10 +1360,6 @@ function createBrowserTab(url = "about:blank", { select = true } = {}) {
     selectBrowserTab(tabId);
   } else {
     sendBrowserState();
-  }
-  const finalUrl = normalizeBrowserUrl(url, "about:blank");
-  if (finalUrl !== "about:blank") {
-    view.webContents.loadURL(finalUrl);
   }
   return tab;
 }
@@ -1386,10 +1474,9 @@ function sendBrowserState() {
  * Attach the browser view to the main window.
  * @param {object} bounds — { x, y, width, height }
  * @param {object} [opts]
- * @param {boolean} [opts.preloadDefault=true] - load default URL if the view has no URL
  * @param {boolean} [opts.ensureTab=true] - create a blank tab if needed
  */
-function attachBrowserView(bounds, { preloadDefault = true, ensureTab = true } = {}) {
+function attachBrowserView(bounds, { ensureTab = true } = {}) {
   if (!mainWindow) return;
   lastBrowserBounds = bounds;
   browserViewVisible = true;
@@ -1398,10 +1485,6 @@ function attachBrowserView(bounds, { preloadDefault = true, ensureTab = true } =
   attachActiveBrowserView();
   if (bounds.width > 0 && bounds.height > 0) {
     view?.setBounds(bounds);
-  }
-  const url = view?.webContents.getURL();
-  if (preloadDefault && (!url || url === "about:blank")) {
-    view?.webContents.loadURL(BROWSER_DEFAULT_URL);
   }
   sendBrowserState();
 }
@@ -1443,10 +1526,12 @@ function forwardedDeepLinks(argv) {
     .map((entry) => entry.trim())
     .filter(
       (entry) =>
-        entry.startsWith("openwork://") ||
-        entry.startsWith("openwork-dev://") ||
+        entry.startsWith("matterhorn-desks://") ||
+        entry.startsWith("matterhorn-desks-dev://") ||
         entry.startsWith("matterhorn-work://") ||
         entry.startsWith("matterhorn-work-dev://") ||
+        entry.startsWith("openwork://") ||
+        entry.startsWith("openwork-dev://") ||
         entry.startsWith("https://") ||
         entry.startsWith("http://"),
     );

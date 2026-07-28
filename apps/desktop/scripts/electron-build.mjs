@@ -31,7 +31,11 @@ function run(command, args, cwd, env) {
 }
 
 run(nodeCmd, [resolve(__dirname, "prepare-sidecar.mjs"), "--force", "--outdir", electronSidecarDir], desktopRoot);
-run(nodeCmd, [resolve(__dirname, "prepare-computer-use-helper.mjs"), "--force", "--outdir", electronHelperDir], desktopRoot);
+// The helper script performs a clean build when no helper exists and accepts an
+// explicit force flag through MATTERHORN_WORK_AUTOMATION_HELPER_FORCE_BUILD.
+// Reusing a prepared, signed helper keeps packaging reproducible on machines
+// where the active Command Line Tools SDK cannot compile Swift.
+run(nodeCmd, [resolve(__dirname, "prepare-computer-use-helper.mjs"), "--outdir", electronHelperDir], desktopRoot);
 // Build the server TS → JS so Electron can import it in-process
 run(pnpmCmd, ["--filter", "matterhorn-work-server", "build"], repoRoot);
 // OPENWORK_ELECTRON_BUILD tells Vite to emit relative asset paths so

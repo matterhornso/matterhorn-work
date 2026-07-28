@@ -21,7 +21,7 @@ const subnet = {
   emission: 12.5,
   tempo: 360,
   updatedAt: "2026-06-09T00:00:00.000Z",
-  source: "mock",
+  source: "curated-fallback",
 };
 
 const detail = {
@@ -1569,7 +1569,18 @@ try {
   assert.equal(JSON.parse(explain.result.content[0].text).subnet.netuid, 14);
 
   const compare = await ask({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "bittensor_compare_subnets", arguments: { netuids: [14] } } });
-  assert.equal(JSON.parse(compare.result.content[0].text).comparison.length, 1);
+  const comparePayload = JSON.parse(compare.result.content[0].text);
+  assert.equal(comparePayload.comparison.length, 1);
+  const customerCard = comparePayload.cards[0];
+  const sourceItem = customerCard.items.find((item) => item.label === "Source");
+  assert.equal(sourceItem.value, "Reference metadata");
+  assert.equal(JSON.stringify({
+    title: customerCard.title,
+    subtitle: customerCard.subtitle,
+    summary: customerCard.summary,
+    items: customerCard.items,
+    warnings: customerCard.warnings,
+  }).includes("curated-fallback"), false);
 
   const wallet = await ask({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "bittensor_get_wallet_positions", arguments: { ss58Address: VALID_SS58 } } });
   assert.equal(JSON.parse(wallet.result.content[0].text).wallet.providerStatus, "provider_unavailable");

@@ -183,8 +183,19 @@ function contextsAreEqual(left: BittensorSessionContext | null | undefined, righ
 }
 
 export function readBittensorContextFromToolOutput(output: unknown): BittensorSessionContext | null {
-  if (!isRecordValue(output)) return null;
-  return sanitizeBittensorSessionContext(output.context);
+  const outputRecord = (() => {
+    if (isRecordValue(output)) return output;
+    if (typeof output !== "string") return null;
+    const trimmed = output.trim();
+    if (!trimmed || trimmed.length > 1_000_000) return null;
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      return isRecordValue(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  })();
+  return outputRecord ? sanitizeBittensorSessionContext(outputRecord.context) : null;
 }
 
 export function readBittensorContextFromEventDetail(detail: unknown): BittensorSessionContext | null {

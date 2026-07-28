@@ -66,6 +66,17 @@ const stages = buildStages({
 assert.ok(stages.some((item) => item.id === "scope_inventory"));
 assert.ok(stages.some((item) => item.id === "candidate_manifest"));
 assert.ok(stages.some((item) => item.id === "secret_scan"));
+assert.deepEqual(
+  stages.find((item) => item.id === "dependency_audit").command,
+  [
+    "node",
+    "scripts/dependency-bulk-audit.mjs",
+    "--lockfile",
+    "pnpm-lock.yaml",
+    "--audit-level",
+    "low",
+  ],
+);
 assert.ok(stages.some((item) => item.id === "app_tests"));
 assert.ok(stages.some((item) => item.id === "server_tests"));
 assert.ok(stages.some((item) => item.id === "production_build"));
@@ -160,10 +171,12 @@ assert.equal(git("commit", "-m", "fixture").status, 0);
 const cleanIdentity = getSourceIdentity(fingerprintRepo);
 mkdirSync(join(fingerprintRepo, "qa-reports"), { recursive: true });
 writeFileSync(join(fingerprintRepo, "qa-reports", "evidence.json"), "{}\n");
+mkdirSync(join(fingerprintRepo, "outputs"), { recursive: true });
+writeFileSync(join(fingerprintRepo, "outputs", "generated.json"), "{}\n");
 const evidenceIdentity = getSourceIdentity(fingerprintRepo);
 assert.equal(evidenceIdentity.workingTreeFingerprint, cleanIdentity.workingTreeFingerprint);
 assert.equal(evidenceIdentity.dirty, false);
-assert.equal(evidenceIdentity.preserveOnlyPathCount, 1);
+assert.equal(evidenceIdentity.preserveOnlyPathCount, 2);
 writeFileSync(join(fingerprintRepo, "source.txt"), "two\n");
 const changedIdentity = getSourceIdentity(fingerprintRepo);
 assert.notEqual(changedIdentity.workingTreeFingerprint, cleanIdentity.workingTreeFingerprint);

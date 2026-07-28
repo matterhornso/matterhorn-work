@@ -75,7 +75,7 @@ export function loadPluginsFromConfig(
     onList(next);
   } catch (e) {
     onList([]);
-    onError(e instanceof Error ? e.message : "Failed to parse opencode.json");
+    onError(e instanceof Error ? e.message : "Failed to read the local plugin configuration.");
   }
 }
 

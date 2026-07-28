@@ -497,7 +497,9 @@ export function createExtensionsStore(options: {
         config: config as never,
       })) as { ok: boolean; stderr?: string; stdout?: string };
       if (!result.ok) {
-        throw new Error(result.stderr || result.stdout || "Failed to write .opencode/openwork.json");
+        throw new Error(
+          "Could not update the workspace extension configuration. Check folder access and try again.",
+        );
       }
       return true;
     }

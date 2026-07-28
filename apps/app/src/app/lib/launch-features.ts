@@ -43,10 +43,20 @@ export const MATTERHORN_LAUNCH_FEATURES = resolveMatterhornLaunchFeaturePolicy(
   MATTERHORN_CLOUD_ENABLED,
 );
 
+const INTERNAL_SETTINGS_TABS = new Set<SettingsTab>([
+  "advanced",
+  "debug",
+  "environment",
+  "marketplace",
+  "recovery",
+  "skills",
+]);
+
 export function isSettingsTabVisibleAtLaunch(
   tab: SettingsTab,
   policy: MatterhornLaunchFeaturePolicy = MATTERHORN_LAUNCH_FEATURES,
 ): boolean {
+  if (INTERNAL_SETTINGS_TABS.has(tab)) return false;
   if (tab === "generated-media") return policy.generatedMedia;
   if (tab === "billing") return policy.billing;
   if (["cloud-account", "cloud-marketplaces", "cloud-workers", "cloud-providers"].includes(tab)) {

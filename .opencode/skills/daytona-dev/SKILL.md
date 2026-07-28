@@ -1,3 +1,9 @@
+---
+name: daytona-dev
+description: Internal Daytona development environment maintenance.
+user-invocable: false
+---
+
 # Skill: Daytona Dev Environment
 
 Launch the OpenWork Electron app in a Daytona cloud sandbox. The real desktop

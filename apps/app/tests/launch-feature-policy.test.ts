@@ -45,6 +45,11 @@ describe("stable launch feature policy", () => {
     expect(isSettingsTabVisibleAtLaunch("generated-media", stablePolicy)).toBe(false);
     expect(isSettingsTabVisibleAtLaunch("billing", stablePolicy)).toBe(false);
     expect(isSettingsTabVisibleAtLaunch("cloud-account", stablePolicy)).toBe(false);
+    expect(isSettingsTabVisibleAtLaunch("advanced", stablePolicy)).toBe(false);
+    expect(isSettingsTabVisibleAtLaunch("debug", stablePolicy)).toBe(false);
+    expect(isSettingsTabVisibleAtLaunch("environment", stablePolicy)).toBe(false);
+    expect(isSettingsTabVisibleAtLaunch("marketplace", stablePolicy)).toBe(false);
+    expect(isSettingsTabVisibleAtLaunch("recovery", stablePolicy)).toBe(false);
     expect(getCloudSettingsTabs()).toEqual([]);
   });
 

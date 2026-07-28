@@ -1,6 +1,11 @@
 import { basename, join } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import { MATTERHORN_DESK_AGENT_MANIFESTS } from "@matterhorn-work/types/desk-agents";
+import {
+  buildMatterhornDeskAgentSystemPrompt,
+  buildMatterhornDeskRuntimeTools,
+  MATTERHORN_DESK_AGENT_MANIFESTS,
+  type MatterhornDeskAgentManifest,
+} from "@matterhorn-work/types/desk-agents";
 
 import { ensureDir, exists } from "./utils.js";
 import { ApiError } from "./errors.js";
@@ -146,27 +151,27 @@ function resolveAgentTemplate(): string {
 }
 
 function renderDeskAgentRuntimePermissions(
-  agent: (typeof MATTERHORN_DESK_AGENT_MANIFESTS)[keyof typeof MATTERHORN_DESK_AGENT_MANIFESTS],
+  agent: MatterhornDeskAgentManifest,
 ): string {
-  const entries = Object.entries(agent.runtimePermissions ?? {});
+  const entries = Object.entries(agent.toolPolicy.permissions);
   if (entries.length === 0) return "";
   return `permission:\n${entries.map(([permission, action]) => `  ${permission}: ${action}`).join("\n")}\n`;
 }
 
 function renderDeskAgentRuntimeTools(
-  agent: (typeof MATTERHORN_DESK_AGENT_MANIFESTS)[keyof typeof MATTERHORN_DESK_AGENT_MANIFESTS],
+  agent: MatterhornDeskAgentManifest,
 ): string {
-  const entries = Object.entries(agent.runtimeTools ?? {});
-  if (entries.length === 0) return "";
-  return `tools:\n  "*": false\n${entries.map(([tool, enabled]) => `  "${tool}": ${enabled}`).join("\n")}\n`;
+  const runtimeTools = buildMatterhornDeskRuntimeTools(agent);
+  if (!runtimeTools) return "";
+  return `tools:\n${Object.entries(runtimeTools).map(([tool, enabled]) => `  "${tool}": ${enabled}`).join("\n")}\n`;
 }
 
-function renderDeskAgentTemplate(agent: (typeof MATTERHORN_DESK_AGENT_MANIFESTS)[keyof typeof MATTERHORN_DESK_AGENT_MANIFESTS]): string {
+function renderDeskAgentTemplate(agent: MatterhornDeskAgentManifest): string {
   return `---
 description: ${agent.description}
 mode: primary
-temperature: 0.2
-${renderDeskAgentRuntimePermissions(agent)}${renderDeskAgentRuntimeTools(agent)}matterhorn_desk_agent: v1
+temperature: ${agent.modelPolicy.temperature}
+${renderDeskAgentRuntimePermissions(agent)}${renderDeskAgentRuntimeTools(agent)}matterhorn_desk_agent: v2
 matterhorn_desk_id: ${agent.deskId}
 agent_id: ${agent.agentId}
 workflow_id: ${agent.workflowId}
@@ -176,7 +181,7 @@ output_desk_id: ${agent.outputDeskId}
 
 # ${agent.displayName}
 
-${agent.instructions}
+${buildMatterhornDeskAgentSystemPrompt(agent)}
 
 ${MATTERHORN_ARTIFACT_GUIDANCE}
 `;
@@ -246,12 +251,13 @@ async function ensureMatterhornDeskAgents(workspaceRoot: string): Promise<boolea
   await ensureDir(agentsDir);
   let changed = false;
   for (const agent of Object.values(MATTERHORN_DESK_AGENT_MANIFESTS)) {
+    if (agent.toolPolicy.runtimeKind !== "managed_desk") continue;
     const agentPath = join(agentsDir, `${agent.agentId}.md`);
     const content = renderDeskAgentTemplate(agent);
     const normalizedContent = content.endsWith("\n") ? content : `${content}\n`;
     if (await exists(agentPath)) {
       const current = await readFile(agentPath, "utf8");
-      if (!current.includes("matterhorn_desk_agent: v1") || current === normalizedContent) continue;
+      if (!/matterhorn_desk_agent: v[12]/.test(current) || current === normalizedContent) continue;
     }
     await writeFile(agentPath, normalizedContent, "utf8");
     changed = true;

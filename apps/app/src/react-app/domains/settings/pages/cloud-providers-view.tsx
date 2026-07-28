@@ -210,17 +210,13 @@ export function CloudProvidersView({
 
   if (!isSignedIn) {
     if (!MATTERHORN_CLOUD_ENABLED) {
+      if (embedded) return null;
       const unavailableNotice = (
         <SettingsNotice>
-          Matterhorn Cloud provider sharing is not available in this build. Local providers remain available from the model picker.
+          Team provider sharing is not included in this local build.
         </SettingsNotice>
       );
-      return embedded ? unavailableNotice : (
-        <SettingsStack>
-          <Separator />
-          {unavailableNotice}
-        </SettingsStack>
-      );
+      return <SettingsStack>{unavailableNotice}</SettingsStack>;
     }
 
     const notice = (

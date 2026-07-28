@@ -28,32 +28,62 @@ export function buildMarketExecutionReadinessReport(checkedAt = new Date().toISO
       {
         venue: "polymarket",
         routeFamily: "polymarket.orders",
-        executionMode: "preview_only",
+        executionMode: "reviewed_wallet_ticket",
         liveSubmissionEnabled: false,
         canSubmit: false,
-        supportedNow: ["read", "preview", "compliance_check", "external_sign_request", "redacted_artifact_validation", "public_receipt_import"],
-        blockedNow: ["live_submit", "custodial_signing", "exchange_secret_storage", "compliance_bypass"],
-        missingBeforeLiveSubmit: [
-          "independent security review",
-          "jurisdiction/compliance review",
-          "external signer UX approval",
-          "testnet signed-artifact evidence",
-          "operator kill-switch rehearsal",
+        supportedNow: [
+          "read",
+          "preview",
+          "compliance_check",
+          "eligible_eoa_buy_wallet_ticket",
+          "external_sign_request",
+          "redacted_artifact_validation",
+          "public_receipt",
         ],
+        blockedNow: [
+          "agent_submit",
+          "automatic_submit",
+          "sell_order_wallet_ticket",
+          "proxy_account_wallet_ticket",
+          "custodial_signing",
+          "exchange_secret_storage",
+          "compliance_bypass",
+        ],
+        missingBeforeLiveSubmit: [],
       },
     ],
+    reviewedWalletTickets: {
+      hyperliquid: {
+        available: hyperliquidExecution,
+        scope: "Exact, expiring testnet orders by default; mainnet requires typed confirmation and the deployment kill switch.",
+      },
+      polymarket: {
+        available: true,
+        scope: "Compliance-allowed EOA BUY orders on Polygon. Sell and proxy-account flows remain external handoffs.",
+      },
+      bittensor: {
+        available: true,
+        scope: "TAO transfers through an installed Bittensor extension. Staking and advanced calls remain external-signer previews.",
+      },
+    },
     controls: [
       { id: "preview_hash_binding", status: "pass", summary: "Hyperliquid submission signs an exact, expiring server intent; legacy handoffs retain stable public hashes." },
       { id: "external_signer_only", status: "pass", summary: "The connected wallet signs each Hyperliquid intent. Matterhorn never signs or custodies keys." },
       { id: "redacted_artifact_validation", status: "pass", summary: "Only public/redacted signed-artifact metadata can be validated." },
       { id: "public_receipt_import", status: "pass", summary: "Receipt evidence is public status only and not treated as exchange submission authority." },
       { id: "route_level_kill_switch", status: "pass", summary: hyperliquidExecution ? "The deployment kill switch enables Hyperliquid execution." : "The deployment kill switch currently disables Hyperliquid execution." },
-      { id: "live_submit_routes", status: hyperliquidExecution ? "pass" : "blocked", summary: hyperliquidExecution ? "Hyperliquid exposes a wallet-signed, intent-bound submit route. Polymarket has no submit route." : "No live market submission is enabled for this deployment." },
+      {
+        id: "live_submit_routes",
+        status: hyperliquidExecution ? "pass" : "blocked",
+        summary: hyperliquidExecution
+          ? "Hyperliquid exposes a wallet-signed, intent-bound server submit route. Eligible Polymarket EOA BUY orders use a separate browser wallet ticket."
+          : "The Hyperliquid server submit route is disabled. Eligible Polymarket EOA BUY orders still use the separate browser wallet ticket.",
+      },
     ],
     nextActions: hyperliquidExecution
       ? [
           "Test a small Hyperliquid order on testnet with the connected wallet before using mainnet.",
-          "Keep Polymarket on compliance-gated read/preview and external handoff flows.",
+          "Owner-test one compliance-allowed Polymarket EOA BUY order with a disposable test wallet and minimal test assets.",
           "Run pnpm test:market-execution-safety-gate before release.",
         ]
       : [
@@ -81,18 +111,21 @@ export function buildMarketExecutionReadinessCard(report = buildMarketExecutionR
     kind: "market_execution_readiness",
     title: "Market execution readiness",
     summary: hyperliquidEnabled
-      ? "Hyperliquid supports connected-wallet execution. Polymarket remains read/preview and external-handoff only."
-      : "Hyperliquid execution is disabled by the deployment kill switch. Polymarket remains preview-only.",
+      ? "Agents prepare drafts only. Hyperliquid and eligible Polymarket BUY orders continue through separate connected-wallet tickets."
+      : "Hyperliquid execution is disabled by the deployment kill switch. Eligible Polymarket BUY orders can still use a separate connected-wallet ticket.",
     tone: hyperliquidEnabled ? "good" : "warning",
     source: { source: "matterhorn.execution-readiness", freshness: "live" },
     items: [
       { label: "Hyperliquid", value: hyperliquidEnabled ? "Wallet-approved execution" : "Execution disabled", tone: hyperliquidEnabled ? "good" : "warning" },
-      { label: "Polymarket", value: "Execution disabled", tone: "warning" },
-      { label: "Can submit", value: hyperliquidEnabled ? "Hyperliquid only" : "No", tone: hyperliquidEnabled ? "good" : "warning" },
+      { label: "Polymarket", value: "Eligible EOA BUY ticket", tone: "good" },
+      { label: "Agent submission", value: "No", tone: "good" },
       { label: "Automatic execution", value: "Off", tone: "good" },
       { label: "Secrets accepted", value: "No", tone: "good" },
     ],
-    warnings: ["Every Hyperliquid order still requires review and a matching connected-wallet signature. Agents cannot submit orders."],
+    warnings: [
+      "Every order requires exact-term review and connected-wallet authorization. Agents and watches cannot submit orders.",
+      "Polymarket sell orders and proxy-account flows remain external handoffs in this release.",
+    ],
     data: { report },
   } as const;
 }

@@ -64,7 +64,7 @@ export function SettingsShell(props: SettingsShellProps) {
     const ActiveIcon = getSettingsTabIcon(props.activeTab);
     return (
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-dls-background">
-        <header className="flex h-11 shrink-0 items-center justify-between gap-2 px-3 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.08)] mac:titlebar-drag">
+        <header className="flex h-11 shrink-0 items-center justify-between gap-2 px-3 shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)] mac:titlebar-drag">
           <div className="flex min-w-0 items-center gap-2 mac:titlebar-no-drag">
             <ActiveIcon className="size-4 shrink-0 text-dls-secondary" />
             <span className="truncate text-sm font-semibold text-dls-text">{title}</span>
@@ -129,7 +129,7 @@ export function SettingsShell(props: SettingsShellProps) {
           backendSettingsSections={props.backendSettingsSections}
         />
         <SidebarInset className="min-h-0 overflow-hidden bg-background mac:bg-background/80 mac:[&_header]:transition-[padding-left] mac:[&_header]:duration-200 mac:[&_header]:ease-linear mac:peer-data-[state=collapsed]:[&_header]:pl-16 [&_header]:pl-16 md:[&_header]:pl-6">
-          <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <header className="flex h-9 shrink-0 items-center justify-between px-4 md:hidden mac:titlebar-drag">
               <div className="flex min-w-0 items-center gap-2">
                 <SidebarTrigger className="mac:titlebar-no-drag md:hidden" />
@@ -176,7 +176,7 @@ export function SettingsShell(props: SettingsShellProps) {
             </div>
 
             {props.footer}
-          </main>
+          </div>
         </SidebarInset>
       </SidebarProvider>
     </div>

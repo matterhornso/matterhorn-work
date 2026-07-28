@@ -574,7 +574,7 @@ export default function MarketplaceView() {
           <button
             key={tab}
             className={cn(
-              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.18)]",
+              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dls-accent-rgb)/0.18)]",
               activeTab === tab
                 ? "bg-dls-surface-muted/[0.12] text-dls-text"
                 : "text-dls-secondary hover:bg-dls-surface-muted/[0.07] hover:text-dls-text",

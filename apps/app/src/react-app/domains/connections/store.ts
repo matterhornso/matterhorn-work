@@ -48,6 +48,22 @@ export type ConnectionsStoreSnapshot = {
   mcpAuthNeedsReload: boolean;
 };
 
+export type McpConnectionResult =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
+const MCP_IMPLEMENTATION_LEAK = /\b(?:open(?:code|work)|opencode\.jsonc|local_[\w-]+)\b|\.opencode\b/i;
+
+function customerFacingMcpError(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message.trim() : "";
+  return message && !MCP_IMPLEMENTATION_LEAK.test(message) ? message : fallback;
+}
+
 type MutableState = ConnectionsStoreSnapshot;
 
 export type ConnectionsStore = ReturnType<typeof createConnectionsStore>;
@@ -348,7 +364,10 @@ export function createConnectionsStore(options: {
           ...current,
           mcpServers: [],
           mcpStatuses: {},
-          mcpStatus: error instanceof Error ? error.message : "Failed to load MCP servers",
+          mcpStatus: customerFacingMcpError(
+            error,
+            "Could not load workspace MCPs. Refresh and try again.",
+          ),
         }));
         return;
       }
@@ -421,7 +440,7 @@ export function createConnectionsStore(options: {
           ...current,
           mcpServers: [],
           mcpStatuses: {},
-          mcpStatus: "No opencode.json found yet. Create one by connecting an MCP.",
+          mcpStatus: "No workspace MCP configuration yet. Add an MCP to create one.",
         }));
         return;
       }
@@ -449,12 +468,15 @@ export function createConnectionsStore(options: {
         ...current,
         mcpServers: [],
         mcpStatuses: {},
-        mcpStatus: error instanceof Error ? error.message : "Failed to load MCP servers",
+        mcpStatus: customerFacingMcpError(
+          error,
+          "Could not load workspace MCPs. Refresh and try again.",
+        ),
       }));
     }
   }
 
-  async function connectMcp(entry: McpDirectoryInfo) {
+  async function connectMcp(entry: McpDirectoryInfo): Promise<McpConnectionResult> {
     const startedAt = perfNow();
     const matterhornSnapshot = getOpenworkSnapshot();
     const isRemoteWorkspace =
@@ -470,15 +492,30 @@ export function createConnectionsStore(options: {
       projectDir: projectDir || null,
     });
 
-    const { matterhornClient, matterhornWorkspaceId, canUseMatterhornServer } =
-      await resolveWritableOpenworkTarget();
+    let writableTarget: Awaited<ReturnType<typeof resolveWritableOpenworkTarget>>;
+    try {
+      writableTarget = await resolveWritableOpenworkTarget();
+    } catch (error) {
+      const message = customerFacingMcpError(error, t("mcp.connect_failed"));
+      setStateField("mcpStatus", message);
+      finishPerf(options.developerMode(), "mcp.connect", "error", startedAt, {
+        name: entry.name,
+        type: entryType,
+        error: error instanceof Error ? error.message : safeStringify(error),
+      });
+      return { ok: false, message };
+    }
+    const { matterhornClient, matterhornWorkspaceId, canUseMatterhornServer } = writableTarget;
 
     if (isRemoteWorkspace && !canUseMatterhornServer) {
       setStateField("mcpStatus", "Matterhorn Desks server unavailable. MCP config is read-only.");
       finishPerf(options.developerMode(), "mcp.connect", "blocked", startedAt, {
         reason: "matterhorn-server-unavailable",
       });
-      return;
+      return {
+        ok: false,
+        message: "Matterhorn Desks server unavailable. MCP config is read-only.",
+      };
     }
 
     if (!canUseMatterhornServer && !isDesktopRuntime()) {
@@ -486,7 +523,7 @@ export function createConnectionsStore(options: {
       finishPerf(options.developerMode(), "mcp.connect", "blocked", startedAt, {
         reason: "desktop-required",
       });
-      return;
+      return { ok: false, message: t("mcp.desktop_required") };
     }
 
     if (!isRemoteWorkspace && !projectDir) {
@@ -494,25 +531,51 @@ export function createConnectionsStore(options: {
       finishPerf(options.developerMode(), "mcp.connect", "blocked", startedAt, {
         reason: "missing-workspace",
       });
-      return;
+      return { ok: false, message: t("mcp.pick_workspace_first") };
     }
 
-    const activeClient = await ensureActiveClient();
+    let activeClient: Client | null;
+    try {
+      activeClient = await ensureActiveClient();
+    } catch (error) {
+      const message = t("mcp.connect_server_first");
+      setStateField("mcpStatus", message);
+      finishPerf(options.developerMode(), "mcp.connect", "error", startedAt, {
+        name: entry.name,
+        type: entryType,
+        reason: "active-client-unavailable",
+        error: error instanceof Error ? error.message : safeStringify(error),
+      });
+      return { ok: false, message };
+    }
     if (!activeClient) {
       setStateField("mcpStatus", t("mcp.connect_server_first"));
       finishPerf(options.developerMode(), "mcp.connect", "blocked", startedAt, {
         reason: "no-active-client",
       });
-      return;
+      return { ok: false, message: t("mcp.connect_server_first") };
     }
 
-    const resolvedProjectDir = await resolveProjectDir(activeClient, projectDir);
+    let resolvedProjectDir: string;
+    try {
+      resolvedProjectDir = await resolveProjectDir(activeClient, projectDir);
+    } catch (error) {
+      const message = t("mcp.pick_workspace_first");
+      setStateField("mcpStatus", message);
+      finishPerf(options.developerMode(), "mcp.connect", "error", startedAt, {
+        name: entry.name,
+        type: entryType,
+        reason: "workspace-discovery-failed",
+        error: error instanceof Error ? error.message : safeStringify(error),
+      });
+      return { ok: false, message };
+    }
     if (!resolvedProjectDir) {
       setStateField("mcpStatus", t("mcp.pick_workspace_first"));
       finishPerf(options.developerMode(), "mcp.connect", "blocked", startedAt, {
         reason: "missing-workspace-after-discovery",
       });
-      return;
+      return { ok: false, message: t("mcp.pick_workspace_first") };
     }
 
     const slug = entry.id ?? getMcpServerName(entry);
@@ -585,7 +648,7 @@ export function createConnectionsStore(options: {
           const details = parseErrors
             .map((entry) => printParseErrorCode(entry.error))
             .join(", ");
-          throw new Error(`Failed to parse opencode config: ${details}`);
+          throw new Error(`Failed to parse the workspace MCP configuration: ${details}`);
         }
 
         let updated = raw;
@@ -605,7 +668,9 @@ export function createConnectionsStore(options: {
           updated.endsWith("\n") ? updated : `${updated}\n`,
         ) as { ok: boolean; stderr?: string; stdout?: string };
         if (!writeResult.ok) {
-          throw new Error(writeResult.stderr || writeResult.stdout || "Failed to write opencode.json");
+          throw new Error(
+            "Could not update the workspace MCP configuration. Check folder access and try again.",
+          );
         }
       }
 
@@ -662,16 +727,16 @@ export function createConnectionsStore(options: {
         type: entryType,
         slug,
       });
+      return { ok: true };
     } catch (error) {
-      setStateField(
-        "mcpStatus",
-        error instanceof Error ? error.message : t("mcp.connect_failed"),
-      );
+      const message = customerFacingMcpError(error, t("mcp.connect_failed"));
+      setStateField("mcpStatus", message);
       finishPerf(options.developerMode(), "mcp.connect", "error", startedAt, {
         name: entry.name,
         type: entryType,
         error: error instanceof Error ? error.message : safeStringify(error),
       });
+      return { ok: false, message };
     } finally {
       setStateField("mcpConnectingName", null);
     }
@@ -869,7 +934,7 @@ export function createConnectionsStore(options: {
     } catch (error) {
       setStateField(
         "mcpStatus",
-        error instanceof Error ? error.message : t("mcp.toggle_failed"),
+        customerFacingMcpError(error, t("mcp.toggle_failed")),
       );
     }
   }

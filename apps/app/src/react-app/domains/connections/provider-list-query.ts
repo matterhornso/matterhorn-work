@@ -98,8 +98,33 @@ export function getConnectedProviderItems(value: ProviderListResponse | null | u
   );
 }
 
+/**
+ * The local runtime publishes its bundled model catalogue under this provider
+ * ID. It is useful for discovery, but it is not proof that an inference
+ * provider is configured to answer a prompt.
+ */
+export function isCatalogOnlyProviderId(providerId: string | null | undefined) {
+  return providerId?.trim().toLowerCase() === "opencode";
+}
+
+export function getConnectedPromptProviderItems(
+  value: ProviderListResponse | null | undefined,
+) {
+  return getConnectedProviderItems(value).filter(
+    (provider) =>
+      !isCatalogOnlyProviderId(provider.id) &&
+      Object.keys(provider.models ?? {}).length > 0,
+  );
+}
+
+export function hasConnectedPromptProvider(
+  value: ProviderListResponse | null | undefined,
+) {
+  return getConnectedPromptProviderItems(value).length > 0;
+}
+
 export function getConnectedProviderSnapshot(value: ProviderListResponse | null | undefined): ConnectedProviderSnapshot {
-  return getConnectedProviderItems(value)
+  return getConnectedPromptProviderItems(value)
     .map((provider) => ({
       id: provider.id,
       name: provider.name,
@@ -116,7 +141,7 @@ export function isModelAvailableInConnectedProviders(
   model: ModelRef | null | undefined,
 ) {
   if (!model?.providerID || !model.modelID) return true;
-  return getConnectedProviderItems(value).some(
+  return getConnectedPromptProviderItems(value).some(
     (provider) => provider.id === model.providerID && Boolean(provider.models?.[model.modelID]),
   );
 }

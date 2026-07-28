@@ -87,7 +87,6 @@ const STATUS_LABELS: Record<ProtocolDeskVisualStatus, string> = {
 };
 
 const MARKET_STATUS_LABELS: Partial<Record<CustomerProtocolDeskId, string>> = {
-  hyperliquid: "Wallet-approved execution",
   polymarket: "Compliance-gated handoff",
 };
 
@@ -140,10 +139,13 @@ function capabilityBullets(manifest: ProtocolDeskManifest): string[] {
 
 function safetySummary(manifest: ProtocolDeskManifest): string {
   if (manifest.id === "bittensor") {
-    return "Public SS58 reads and unsigned previews only. External signer required; no seed phrases, private keys, or wallet exports.";
+    return "Agents prepare drafts only. TAO transfers require exact review and connected Bittensor-wallet approval; staking and advanced calls remain external handoffs.";
   }
-  if (manifest.id === "hyperliquid" || manifest.id === "polymarket") {
-    return "Runs read and preview tasks, then prepares drafts for you to finish in your own wallet or client. Matterhorn never stores keys, API secrets, raw signatures, or signed payloads.";
+  if (manifest.id === "hyperliquid") {
+    return "Agents prepare drafts only. Exact orders require separate review and connected-wallet authorization before one-time submission.";
+  }
+  if (manifest.id === "polymarket") {
+    return "Agents prepare drafts only. Eligible EOA BUY orders require compliance approval, exact review, and connected Polygon-wallet authorization.";
   }
   if (manifest.id === "sui") {
     return "Use your Sui wallet on web. On desktop, Matterhorn prepares the action for you to finish in your own wallet. Matterhorn stores previews and public receipts only.";
@@ -162,13 +164,13 @@ function safetySummary(manifest: ProtocolDeskManifest): string {
 
 function railTitle(manifest: ProtocolDeskManifest): string {
   if (manifest.id === "bittensor") {
-    return "Bittensor: TAO wallet reads, subnets, validators, watches, receipts, and unsigned staking previews";
+    return "Bittensor: TAO reads, subnets, validators, reviewed transfers, staking previews, watches, and receipts";
   }
   if (manifest.id === "hyperliquid") {
-    return "Hyperliquid: orderbooks, exposure, funding, watches, and wallet-approved orders";
+    return "Hyperliquid: orderbooks, exposure, funding, watches, and order previews";
   }
   if (manifest.id === "polymarket") {
-    return "Polymarket: markets, outcomes, liquidity, compliance, watches, and trade handoffs";
+    return "Polymarket: markets, liquidity, compliance, watches, and wallet-approved BUY orders";
   }
   if (manifest.id === "sui") {
     return "Sui: account reads, transfer previews, wallet handoffs, and receipt evidence";
@@ -186,13 +188,13 @@ function sessionTitle(manifest: ProtocolDeskManifest): string {
 
 function sessionBoundary(manifest: ProtocolDeskManifest): string {
   if (manifest.id === "bittensor") {
-    return "Public SS58/coldkey/hotkey context only. External signer required for actions.";
+    return "Public wallet details and transfer drafts. You approve TAO transfers in your wallet; staking and advanced actions finish in an external signer.";
   }
   if (manifest.id === "hyperliquid") {
-    return "Runs read-only market/account checks and prepares external-client handoffs. Matterhorn never stores API secrets or signs orders.";
+    return "Runs market and account checks, then prepares exact orders for separate review and connected-wallet approval. Agents cannot submit.";
   }
   if (manifest.id === "polymarket") {
-    return "Runs market research, compliance checks, and external-wallet handoffs. Blocked regions get no executable bet fields.";
+    return "Runs market research and compliance checks. Eligible EOA BUY orders continue through a separate connected-wallet ticket; blocked regions get no executable terms.";
   }
   if (manifest.id === "sui") {
     return "Runs public Sui account reads and transfer previews. Web signing happens in the connected wallet; desktop signing stays external.";
@@ -215,7 +217,7 @@ export function getCustomerProtocolDeskVisual(id: CustomerProtocolDeskId | strin
     shortDescription: manifest.shortDescription,
     category: manifest.category,
     status: manifest.status,
-    statusLabel: protocolDeskStatusLabel(manifest.status, manifest.id),
+    statusLabel: agent?.capabilityPolicy.statusLabel ?? protocolDeskStatusLabel(manifest.status, manifest.id),
     routeOrPanelId: manifest.routeOrPanelId,
     logoAssetKey: manifest.logoAssetKey,
     fallbackInitials: brandAsset?.fallbackInitials ?? manifest.displayName.slice(0, 2).toUpperCase(),
@@ -231,10 +233,10 @@ export function getCustomerProtocolDeskVisual(id: CustomerProtocolDeskId | strin
     emptyStateCopy: manifest.emptyStateCopy,
     degradedStateCopy: manifest.degradedStateCopy,
     capabilityBullets: capabilityBullets(manifest),
-    safetySummary: safetySummary(manifest),
+    safetySummary: agent?.capabilityPolicy.summary ?? safetySummary(manifest),
     railTitle: railTitle(manifest),
     sessionTitle: sessionTitle(manifest),
-    sessionBoundary: sessionBoundary(manifest),
+    sessionBoundary: agent?.capabilityPolicy.summary ?? sessionBoundary(manifest),
     agentId: agent?.agentId,
     agentName: agent?.displayName ?? `${manifest.displayName} Agent`,
     agentDescription: agent?.description ?? manifest.shortDescription,

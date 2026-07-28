@@ -10,7 +10,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router";
 import type {
   AgentPartInput,
   FilePartInput,
@@ -20,7 +20,7 @@ import type {
 import type { MatterhornBackendModelSelectionResponse } from "@matterhorn-work/types/backend-models";
 
 import { createClient, unwrap } from "../../app/lib/opencode";
-import { forkSession, listCommands, revertSession, shellInSession } from "../../app/lib/opencode-session";
+import { forkSession, revertSession, shellInSession } from "../../app/lib/opencode-session";
 import {
   buildMatterhornWorkspaceBaseUrl,
   createMatterhornServerClient,
@@ -83,6 +83,14 @@ import { t } from "../../i18n";
 import { useLocal } from "../kernel/local-provider";
 import { usePlatform } from "../kernel/platform";
 import { SessionPage } from "../domains/session/chat/session-page";
+import {
+  clearPendingDeskTask,
+  isPendingDeskTaskId,
+  readPendingDeskTaskNavigation,
+  readPendingDeskTaskReturn,
+  writePendingDeskTask,
+  type PendingDeskTaskNavigation,
+} from "./pending-desk-task";
 import { useQuickJot } from "../domains/notes";
 import { isDesktopProviderBlocked } from "../../app/cloud/desktop-app-restrictions";
 import { useCheckDesktopRestriction } from "../domains/cloud/desktop-config-provider";
@@ -146,12 +154,21 @@ import { useControlAction, type MatterhornControlAction } from "./control/contro
 import { useReactRenderWatchdog } from "./react-render-watchdog";
 import { useWallet } from "../domains/wallet/WalletProvider";
 import {
+  buildDirectResponseSystemPrompt,
   buildMatterhornOrientationSystemPrompt,
   buildCryptoSystemPrompt,
   shouldInjectMatterhornOrientationPrompt,
   shouldInjectCryptoPrompt,
 } from "../domains/wallet/prompts/crypto-system-prompt";
-import { getMatterhornDeskAgentById } from "@matterhorn-work/types/desk-agents";
+import {
+  buildMatterhornDeskAgentSystemPrompt,
+  getMatterhornDeskAgentById,
+} from "@matterhorn-work/types/desk-agents";
+import { getCustomerProtocolDeskVisual } from "../domains/session/workflows/protocol-desk-ui";
+import {
+  buildMatterhornPublicWalletContext,
+  compileMatterhornSessionSystemContext,
+} from "../domains/session/context/session-system-context";
 
 import { readDenSettings } from "../../app/lib/den";
 import { denSessionUpdatedEvent } from "../../app/lib/den-session-events";
@@ -184,12 +201,14 @@ import {
 } from "../domains/settings/model-selection-events";
 import { legacySessionRoute, workspaceNotesRoute, workspaceRunHistoryRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
 import { GLOBAL_HOME_SIDE_PANEL_KEY, useUiStateStore } from "./ui-state-store";
+import { unavailableWorkspaceToast } from "./route-recovery";
 import { WorkspaceProvider } from "./workspace-provider";
 import type { OpenTarget } from "../domains/session/artifacts/open-target";
 import type { SettingsSurfaceProps } from "./settings-route";
 import {
   ensureProviderListQuery,
-  getConnectedProviderItems,
+  getConnectedPromptProviderItems,
+  hasConnectedPromptProvider,
   isModelAvailableInConnectedProviders,
   refreshProviderListAfterEngineReload,
   useProviderListQuery,
@@ -306,7 +325,7 @@ function workspaceLabel(workspace: MatterhornWorkspaceInfo) {
 function customerModelProviderLabel(provider: ProviderListItem) {
   const raw = provider.name?.trim() || provider.id;
   if (/opencode/i.test(raw) || /opencode/i.test(provider.id)) {
-    return "Matterhorn Models";
+    return "Included models";
   }
   return raw;
 }
@@ -607,6 +626,16 @@ export function SessionRoute() {
   const routeWorkspaceId = params.workspaceId?.trim() || "";
   const selectedSessionId = params.sessionId?.trim() || null;
   const isWorkspaceHistoryRoute = Boolean(routeWorkspaceId && /\/history\/?$/.test(location.pathname));
+  // A stored hint is for the settings screen to survive a refresh. It is
+  // consumed here only after the person explicitly returns from setup; the
+  // short-lived marker survives React Router's state loss during bootstrap.
+  const pendingDeskTask = useMemo(
+    () => (
+      readPendingDeskTaskNavigation(location.state) ??
+      readPendingDeskTaskReturn(location.search)
+    ),
+    [location.search, location.state],
+  );
   const navigateToWorkspaceSession = useCallback((workspaceId: string, sessionId?: string | null, options?: { replace?: boolean; state?: unknown }) => {
     const id = workspaceId.trim();
     if (!id) {
@@ -631,6 +660,16 @@ export function SessionRoute() {
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [legacySelectedWorkspaceId, setLegacySelectedWorkspaceId] = useState<string>(() => readActiveWorkspaceId() ?? "");
   const selectedWorkspaceId = routeWorkspaceId || legacySelectedWorkspaceId;
+  const handlePendingDeskTaskRestored = useCallback(() => {
+    const workspaceId = selectedWorkspaceId || routeWorkspaceId;
+    clearPendingDeskTask(workspaceId);
+    navigateToWorkspaceSession(workspaceId, selectedSessionId, { replace: true });
+  }, [
+    navigateToWorkspaceSession,
+    routeWorkspaceId,
+    selectedSessionId,
+    selectedWorkspaceId,
+  ]);
   const selectedWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? (selectedWorkspaceId ? null : workspaces[0] ?? null),
     [selectedWorkspaceId, workspaces],
@@ -671,6 +710,7 @@ export function SessionRoute() {
   const sessionsByWorkspaceIdRef = useRef<Record<string, any[]>>({});
   const pendingCreatedSessionIdsRef = useRef<Record<string, Record<string, number>>>({});
   const staleSessionRecoveryRef = useRef("");
+  const staleWorkspaceRecoveryRef = useRef("");
   const startupRetryTimerRef = useRef<number | null>(null);
   const [retryingWorkspaceIds, setRetryingWorkspaceIds] = useState<string[]>([]);
   const launchActivatedWorkspaceIdsRef = useRef(new Set<string>());
@@ -1505,14 +1545,22 @@ export function SessionRoute() {
   useEffect(() => {
     if (loading) return;
     if (routeWorkspaceId && workspaces.length > 0 && !workspaces.some((workspace) => workspace.id === routeWorkspaceId)) {
-      const fallbackWorkspaceId = workspaces.some((workspace) => workspace.id === legacySelectedWorkspaceId)
-        ? legacySelectedWorkspaceId
-        : workspaces[0]?.id || "";
-      if (fallbackWorkspaceId) {
-        navigateToWorkspaceSession(fallbackWorkspaceId, selectedSessionId, { replace: true });
+      const fallbackWorkspace = workspaces.find((workspace) => workspace.id === legacySelectedWorkspaceId)
+        ?? workspaces[0]
+        ?? null;
+      if (fallbackWorkspace) {
+        if (staleWorkspaceRecoveryRef.current !== routeWorkspaceId) {
+          staleWorkspaceRecoveryRef.current = routeWorkspaceId;
+          showToast(unavailableWorkspaceToast(routeWorkspaceId, workspaceLabel(fallbackWorkspace)));
+        }
+        navigate(
+          `${workspaceSessionRoute(fallbackWorkspace.id, selectedSessionId)}${location.search}`,
+          { replace: true },
+        );
       }
       return;
     }
+    if (routeWorkspaceId) staleWorkspaceRecoveryRef.current = "";
     if (!routeWorkspaceId && selectedWorkspaceId) {
       navigate(`${workspaceSessionRoute(selectedWorkspaceId, selectedSessionId)}${location.search}`, { replace: true });
       return;
@@ -1524,10 +1572,10 @@ export function SessionRoute() {
     legacySelectedWorkspaceId,
     location.search,
     navigate,
-    navigateToWorkspaceSession,
     routeWorkspaceId,
     selectedSessionId,
     selectedWorkspaceId,
+    showToast,
     workspaces,
   ]);
 
@@ -1763,7 +1811,7 @@ export function SessionRoute() {
     client: opencodeClient,
     baseUrl: opencodeBaseUrl,
     directory: selectedWorkspaceRoot || undefined,
-    enabled: modelPickerOpen,
+    enabled: Boolean(selectedWorkspaceId),
   });
   const refreshWorkspaceModelSelection = useCallback((options?: { signal?: AbortSignal }) => {
     if (!client || !selectedWorkspaceId) {
@@ -1802,28 +1850,32 @@ export function SessionRoute() {
     workspaceModelSelection,
   }), [local.prefs.defaultModel, workspaceModelSelection]);
   const selectedPromptModel = selectedPromptModelResolution.model;
+  const promptProviderReady = hasConnectedPromptProvider(providerListQuery.data);
   const selectedModelUnavailable = Boolean(
-    selectedPromptModel &&
+    !selectedPromptModel ||
+      providerListQuery.isLoading ||
+      providerListQuery.isError ||
+      !promptProviderReady ||
+      isDesktopProviderBlocked({
+        providerId: selectedPromptModel.providerID,
+        checkRestriction: checkDesktopRestriction,
+      }) ||
       (
-        isDesktopProviderBlocked({
-          providerId: selectedPromptModel.providerID,
-          checkRestriction: checkDesktopRestriction,
-        }) ||
-        (
-          providerListQuery.data &&
-          checkDesktopRestriction({ restriction: "allowCustomProviders" }) &&
-          !providerConnectedIds.some(
-            (providerId) => providerId.trim() === selectedPromptModel.providerID.trim(),
-          )
-        ) ||
-        (
-          providerListQuery.data &&
-          !isModelAvailableInConnectedProviders(providerListQuery.data, selectedPromptModel)
+        providerListQuery.data &&
+        checkDesktopRestriction({ restriction: "allowCustomProviders" }) &&
+        !providerConnectedIds.some(
+          (providerId) => providerId.trim() === selectedPromptModel.providerID.trim(),
         )
+      ) ||
+      (
+        providerListQuery.data &&
+        !isModelAvailableInConnectedProviders(providerListQuery.data, selectedPromptModel)
       ),
   );
+  // A person can always open a blank chat in a healthy workspace. Model readiness
+  // governs sending and immediate desk runs, not organising work or drafting context.
   const canCreateTask = Boolean(
-    opencodeClient && selectedWorkspaceId && !loading && !selectedWorkspaceError && !selectedModelUnavailable,
+    opencodeClient && selectedWorkspaceId && !loading && !selectedWorkspaceError,
   );
 
   const sessionProviderAuthStateRef = useRef({
@@ -2067,7 +2119,7 @@ export function SessionRoute() {
     (!canCreateTask && !routeError && !selectedWorkspaceError);
 
   useEffect(() => {
-    if (!opencodeClient || !modelPickerOpen) {
+    if (!opencodeClient) {
       setProviders([]);
       setProviderDefaults({});
       setProviderConnectedIds([]);
@@ -2134,6 +2186,8 @@ export function SessionRoute() {
     return () => {
       cancelled = true;
     };
+  // Keep the catalogue synchronized when the picker opens without making
+  // provider readiness depend on the picker being visible.
   }, [denSessionVersion, modelPickerOpen, opencodeBaseUrl, opencodeClient, selectedWorkspaceRoot]);
 
   const modelLabel = selectedPromptModel
@@ -2235,7 +2289,7 @@ export function SessionRoute() {
           seenIds = new Set();
         }
         const options: ModelOption[] = [];
-        for (const provider of getConnectedProviderItems(data)) {
+        for (const provider of getConnectedPromptProviderItems(data)) {
           const modelIds = Object.keys(provider.models);
           const isNew = !seenIds.has(provider.id) || recentProviderIds.has(provider.id);
           for (const id of modelIds) {
@@ -2296,20 +2350,31 @@ export function SessionRoute() {
   }, [checkDesktopRestriction, modelOptions]);
 
   const listSlashCommands = useCallback(async (): Promise<SlashCommandOption[]> => {
-    // engineReloadVersion is included so the callback identity changes after
-    // an engine reload, which invalidates the composer's command list cache
-    // and causes it to re-fetch (picking up newly created skills).
+    // Matterhorn Desks gives people purpose-built desk actions, not the raw
+    // repository command catalog used to maintain this app. Skills, extensions,
+    // and MCPs have their own customer-facing surfaces in the composer.
+    // Keep this reactive to an engine reload so an explicit customer-command
+    // catalog has a safe insertion point here in the future.
     void engineReloadVersion;
-    if (!opencodeClient) return [];
-    return listCommands(opencodeClient, selectedWorkspaceRoot || undefined);
-  }, [engineReloadVersion, opencodeClient, selectedWorkspaceRoot]);
+    return [];
+  }, [engineReloadVersion]);
 
-  const handleOpenSettings = useCallback((route = "/settings/general", workspaceId = sidebarActiveWorkspaceId) => {
+  const handleOpenSettings = useCallback((
+    route = "/settings/general",
+    workspaceId = sidebarActiveWorkspaceId,
+    navigationState?: { pendingDeskTask?: PendingDeskTaskNavigation },
+  ) => {
     const sessionId = workspaceId === sidebarActiveWorkspaceId ? selectedSessionId : null;
     const tab = route.replace(/^\/settings\/?/, "").replace(/^\/+|\/+$/g, "") || "general";
     const target = workspaceId ? workspaceSettingsRoute(workspaceId, tab) : route;
     writeActiveWorkspaceId(workspaceId || null);
-    navigate(target, { state: { workspaceId, sessionId } });
+    navigate(target, {
+      state: {
+        workspaceId,
+        sessionId,
+        ...navigationState,
+      },
+    });
   }, [navigate, selectedSessionId, sidebarActiveWorkspaceId]);
 
   const buildSessionSystemContext = useCallback(async (
@@ -2318,6 +2383,9 @@ export function SessionRoute() {
     agentId?: string | null,
     requestedExecutionMode: MatterhornExecutionMode = executionMode,
   ) => {
+    const deskAgent = getMatterhornDeskAgentById(agentId);
+    const isGeneralMatterhornAgent = !agentId || agentId === "matterhorn";
+    const contextPolicy = deskAgent?.contextPolicy;
     const envRuntimeKey = buildMatterhornEnvRuntimeKey({
       baseUrl: client?.baseUrl ?? null,
       pid: matterhornServerHostInfoState?.pid ?? null,
@@ -2328,32 +2396,36 @@ export function SessionRoute() {
       runtimeKey: envRuntimeKey,
     });
 
-    // Build wallet session context (Feature 2)
-    const walletContext = wallet.snapshot.isConnected
-      ? `\n\n## Wallet Context\nConnected wallet: ${wallet.snapshot.address}\nChain ID: ${wallet.snapshot.chainId}\nETH: ${wallet.snapshot.ethBalance ?? "unknown"}\nUSDC: ${wallet.snapshot.usdcBalance ?? "unknown"}\nYou can use the wallet MCP tools to check balances, sign messages, and prepare transactions on behalf of the user.`
+    const includeWalletPublicContext = isGeneralMatterhornAgent || contextPolicy?.includeWalletPublicContext === true;
+    const walletContext = wallet.snapshot.isConnected && includeWalletPublicContext
+      ? buildMatterhornPublicWalletContext({
+          address: wallet.snapshot.address,
+          chainId: wallet.snapshot.chainId,
+          ethBalance: wallet.snapshot.ethBalance,
+          usdcBalance: wallet.snapshot.usdcBalance,
+        })
       : "";
 
-    // Crypto system prompt injected conditionally when the message is crypto-related.
-    // Bittensor and market read/preview flows are public/external-signer-first
-    // and should not require an EVM wallet connection before the agent can
-    // see the Matterhorn crypto tools and safety rules.
-    const matterhornOrientationPrompt = shouldInjectMatterhornOrientationPrompt(text)
+    const includeCryptoSafetyPolicy = isGeneralMatterhornAgent || contextPolicy?.includeCryptoSafetyPolicy === true;
+    const includeWorkspaceOrientation = isGeneralMatterhornAgent || contextPolicy?.includeWorkspaceOrientation === true;
+    const matterhornOrientationPrompt = includeWorkspaceOrientation && shouldInjectMatterhornOrientationPrompt(text)
       ? buildMatterhornOrientationSystemPrompt()
       : "";
 
     const cryptoPrompt =
-      shouldInjectCryptoPrompt(text)
+      includeCryptoSafetyPolicy && shouldInjectCryptoPrompt(text)
         ? buildCryptoSystemPrompt(
-            wallet.snapshot.isConnected ? wallet.snapshot.address : null,
-            wallet.snapshot.isConnected ? wallet.snapshot.chainId : null,
-            wallet.snapshot.isConnected ? wallet.snapshot.ethBalance : null,
-            wallet.snapshot.isConnected ? wallet.snapshot.usdcBalance : null,
+            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.address : null,
+            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.chainId : null,
+            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.ethBalance : null,
+            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.usdcBalance : null,
           )
         : "";
 
     const responsePerspectivePrompt = buildResponsePerspectiveSystemPrompt(responsePerspective);
     const executionModePrompt = buildMatterhornExecutionModeSystemPrompt(requestedExecutionMode);
-    const deskAgentInstructions = getMatterhornDeskAgentById(agentId)?.instructions ?? "";
+    const directResponsePrompt = buildDirectResponseSystemPrompt();
+    const deskAgentInstructions = deskAgent ? buildMatterhornDeskAgentSystemPrompt(deskAgent) : "";
     let workflowRunPrompt = "";
     if (client && selectedWorkspaceId && agentId) {
       try {
@@ -2375,7 +2447,21 @@ export function SessionRoute() {
       }
     }
 
-    return [envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt, deskAgentInstructions, workflowRunPrompt, responsePerspectivePrompt, executionModePrompt].filter(Boolean).join("\n") || undefined;
+    return compileMatterhornSessionSystemContext([
+      { id: "execution_mode", content: executionModePrompt },
+      { id: "desk_contract", content: deskAgentInstructions },
+      { id: "direct_response", content: directResponsePrompt },
+      {
+        id: "environment_metadata",
+        content: envSystemContext,
+        enabled: isGeneralMatterhornAgent || contextPolicy?.includeEnvironmentVariableNames === true,
+      },
+      { id: "wallet_public_metadata", content: walletContext },
+      { id: "crypto_safety", content: cryptoPrompt },
+      { id: "workspace_orientation", content: matterhornOrientationPrompt },
+      { id: "workflow_run", content: workflowRunPrompt },
+      { id: "response_perspective", content: responsePerspectivePrompt },
+    ]);
   }, [client, executionMode, matterhornServerHostInfoState?.pid, matterhornServerHostInfoState?.port, responsePerspective, selectedWorkspaceId, wallet.snapshot]);
 
   const selectedAgentRef = useRef<string | null>(selectedAgent);
@@ -2449,6 +2535,9 @@ export function SessionRoute() {
         setModelPickerQuery("");
         setModelPickerOpen(true);
       },
+      onOpenAiProviders: () => {
+        handleOpenSettings("/settings/ai");
+      },
       modelPickerOpen: compactModelPickerOpen,
       modelUnavailable: selectedModelUnavailable,
       selectedModel: selectedPromptModel ?? { providerID: "", modelID: "" },
@@ -2463,8 +2552,8 @@ export function SessionRoute() {
         }));
         setCompactModelPickerOpen(false);
       },
-      onOpenSettingsSection: (section: "commands" | "skills" | "mcps" | "plugins") => {
-        handleOpenSettings(section === "skills" ? "/settings/skills" : section === "mcps" ? "/settings/extensions/mcp" : section === "plugins" ? "/settings/extensions/plugins" : "/settings/general");
+      onOpenSettingsSection: (section: "commands" | "skills" | "mcps" | "extensions" | "plugins") => {
+        handleOpenSettings(section === "skills" ? "/settings/skills" : section === "mcps" || section === "extensions" ? "/settings/extensions/mcp" : section === "plugins" ? "/settings/extensions/plugins" : "/settings/general");
       },
       onSendDraft: async (draft: ComposerDraft) => {
         const text = (draft.resolvedText ?? draft.text).trim();
@@ -2487,6 +2576,11 @@ export function SessionRoute() {
             sessionID: selectedSessionId,
             command: draft.command.name,
             arguments: draft.command.arguments,
+            model: selectedPromptModel
+              ? `${selectedPromptModel.providerID}/${selectedPromptModel.modelID}`
+              : undefined,
+            agent: selectedAgent ?? undefined,
+            ...(modelVariantValue ? { variant: modelVariantValue } : {}),
           });
           if (result.error) {
             throw new Error(serializeSDKError(result.error));
@@ -2511,8 +2605,11 @@ export function SessionRoute() {
           throw new Error(serializeSDKError(result.error));
         }
       },
-      onDraftChange: () => {
-        // Draft persistence will be wired once the full React shell owns session state.
+      onDraftChange: (draft: ComposerDraft) => {
+        saveSessionDraft(selectedWorkspaceId, selectedSessionId, {
+          text: draft.text,
+          mode: draft.mode,
+        });
       },
       onSessionMissing: recoverMissingSession,
       attachmentsEnabled: true,
@@ -2563,23 +2660,48 @@ export function SessionRoute() {
       },
       isRemoteWorkspace: selectedWorkspace?.workspaceType === "remote",
       isSandboxWorkspace: selectedWorkspace ? isSandboxWorkspace(selectedWorkspace) : false,
-      onRevertToMessage: (messageId: string) => {
+      onRevertToMessage: async (messageId: string) => {
         if (executionMode !== "work") {
-          console.warn(`[revert] blocked in ${executionMode} mode; switch to Work mode first`);
+          showToast({
+            title: "Switch to Work mode to revert",
+            description: "Reverting changes the conversation history, so it is only available in Work mode.",
+            tone: "warning",
+            durationMs: 3200,
+          });
           return;
         }
-        void (async () => {
+        try {
           try {
-            // Abort any running generation first, like the actions-store does
-            try { await opencodeClient.session.abort({ sessionID: selectedSessionId }); } catch { /* ok if not running */ }
-            await revertSession(opencodeClient, selectedSessionId, messageId);
-            // Force a full reload of the session to pick up reverted state
-            navigateToWorkspaceSession(selectedWorkspaceId, selectedSessionId);
-            void refreshRouteState();
-          } catch (error) {
-            console.warn("[revert] failed", error);
+            await opencodeClient.session.abort({ sessionID: selectedSessionId });
+          } catch {
+            // The session may already be idle.
           }
-        })();
+          await revertSession(opencodeClient, selectedSessionId, messageId);
+          if (selectedWorkspaceEndpoint) {
+            const snapshot = await selectedWorkspaceEndpoint.client.getSessionSnapshot(
+              selectedWorkspaceEndpoint.workspaceId,
+              selectedSessionId,
+              { limit: 140 },
+            );
+            getReactQueryClient().setQueryData(
+              ["react-session-snapshot", selectedWorkspaceId, selectedSessionId],
+              snapshot.item,
+            );
+          }
+          showToast({
+            title: "Conversation reverted",
+            description: "Later messages were removed and the prompt is ready to edit.",
+            tone: "success",
+            durationMs: 2400,
+          });
+        } catch (error) {
+          showToast({
+            title: "Could not revert conversation",
+            description: describeRouteError(error),
+            tone: "error",
+            durationMs: 3600,
+          });
+        }
       },
       onForkAtMessage: (messageId: string) => {
         if (executionMode !== "work") {
@@ -2643,9 +2765,11 @@ export function SessionRoute() {
     selectedModelUnavailable,
     selectedPromptModel,
     selectedWorkspace,
+    selectedWorkspaceEndpoint,
     selectedWorkspaceId,
     selectedWorkspaceRoot,
     sessionsByWorkspaceId,
+    showToast,
     token,
   ]);
 
@@ -3222,7 +3346,7 @@ export function SessionRoute() {
       providers={providers}
       mcpConnectedCount={0}
       onSendFeedback={() => setFeedbackDialogOpen(true)}
-      onOpenSettings={() => handleOpenSettings("/settings/general")}
+      onOpenSettings={() => handleOpenSettings("/settings/ai")}
       providerAuthModal={sessionProviderAuthSnapshot.providerAuthModalOpen ? {
         open: true,
         loading: false,
@@ -3248,6 +3372,8 @@ export function SessionRoute() {
       } : null}
       settingsSlot={renderEmbeddedSettingsSurface("extensions")}
       settingsSlotForPath={renderEmbeddedSettingsSurface}
+      pendingDeskTask={pendingDeskTask}
+      onPendingDeskTaskRestored={handlePendingDeskTaskRestored}
       sidebar={{
         workspaceSessionGroups,
         selectedWorkspaceId,
@@ -3365,15 +3491,28 @@ export function SessionRoute() {
               return false;
             }
             if (options?.sendImmediately && selectedModelUnavailable) {
+              const deskId = options.deskId ?? getMatterhornDeskAgentById(agent)?.deskId;
+              const pendingDeskTask = isPendingDeskTaskId(deskId)
+                ? {
+                    deskId,
+                    title: title || getCustomerProtocolDeskVisual(deskId)?.agentName || "Desk task",
+                  }
+                : undefined;
+              if (pendingDeskTask) {
+                writePendingDeskTask(workspaceId, pendingDeskTask);
+              }
               recordInspectorEvent("desk.task_launch.failed", {
                 ...taskLaunchEvent,
                 reason: "model_unavailable",
               });
-              setModelPickerQuery("");
-              setModelPickerOpen(true);
+              handleOpenSettings("/settings/ai", workspaceId, { pendingDeskTask });
               showToast({
-                title: "Choose a model to start the task",
-                description: "Connect or pick an available model, then start the task again.",
+                title: pendingDeskTask
+                  ? `Finish setting up ${pendingDeskTask.title}`
+                  : "Connect a model provider to start the task",
+                description: pendingDeskTask
+                  ? "Choose a provider and model, then return to this desk task. Nothing has been sent."
+                  : "Add a provider in Models, then choose one of its available models.",
                 tone: "warning",
                 durationMs: 5200,
               });
@@ -3772,7 +3911,7 @@ export function SessionRoute() {
       }}
       onOpenSettings={() => {
         setModelPickerOpen(false);
-        handleOpenSettings("/settings/general");
+        handleOpenSettings("/settings/ai");
       }}
       onClose={() => { setModelPickerOpen(false); setRecentProviderIds(new Set()); }}
     />

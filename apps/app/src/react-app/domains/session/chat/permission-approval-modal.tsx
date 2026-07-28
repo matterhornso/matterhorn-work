@@ -206,7 +206,7 @@ export function PermissionApprovalModal(props: PermissionApprovalModalProps) {
   const Icon = presentation.isDoomLoop ? RefreshCcw : ShieldCheck;
   const iconClass = presentation.isDoomLoop
     ? "bg-amber-3/30 text-amber-11"
-    : "bg-[rgba(var(--dls-accent-rgb),0.1)] text-dls-accent";
+    : "bg-[rgb(var(--dls-accent-rgb)/0.1)] text-dls-accent";
 
   useEffect(() => {
     previousActiveElementRef.current =

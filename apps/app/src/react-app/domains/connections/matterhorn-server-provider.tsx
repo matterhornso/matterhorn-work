@@ -24,7 +24,7 @@ export function MatterhornServerProvider(props: {
 export function useOpenworkServer() {
   const store = use(MatterhornServerContext);
   if (!store) {
-    throw new Error("useOpenworkServer must be used within an MatterhornServerProvider");
+    throw new Error("Matterhorn server access must be used within a MatterhornServerProvider.");
   }
 
   useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);

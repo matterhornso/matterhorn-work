@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 
 import { useEffect, useMemo, useSyncExternalStore } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation } from "react-router";
 
 import { ACTIVE_WORKSPACE_CHANGED_EVENT, readActiveWorkspaceId } from "../../shell/session-memory";
 import { useQuickJotContext } from "./quick-jot-provider";

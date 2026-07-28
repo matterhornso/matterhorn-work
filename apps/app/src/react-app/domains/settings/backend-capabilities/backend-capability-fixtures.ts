@@ -69,7 +69,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
   server: baseServer(),
   models: {
     ...cap("working", "Models"),
-    defaultModel: { providerId: "opencode", modelId: "big-pickle" },
+    defaultModel: { providerId: "opencode", modelId: "mimo-v2.5-free" },
     providerListSource: "opencode",
     selectedModelSource: "local_preferences",
     routing: {
@@ -80,7 +80,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
       preferenceStore: "local_preferences",
       cloudProviderImport: true,
     },
-    description: "Default model is opencode/big-pickle.",
+    description: "Default model is opencode/mimo-v2.5-free.",
   },
   providers: {
     ...cap("working", "Providers"),
