@@ -56,8 +56,9 @@ describe("Generated media settings surface", () => {
     expect(route).toMatch(
       /onOpenImageProviderSetup=\{\(\) =>\s*openExtensionDetail\("openai-image-gen"\)\s*\}/,
     );
+    expect(route).toContain("MATTERHORN_LAUNCH_FEATURES.billing");
     expect(route).toContain(
-      'onOpenBilling={() => navigateSettingsPath("billing")}',
+      '? () => navigateSettingsPath("billing")',
     );
     expect(route).toContain('navigateSettingsPath("extensions/mcp")');
     expect(route).toContain("detailEntryRequest={extensionDetailRequest}");

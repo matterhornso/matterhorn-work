@@ -127,7 +127,11 @@ export function UpdatesView(props: UpdatesViewProps) {
       <LayoutSectionItem>
         <LayoutSectionItemHeader>
           <LayoutSectionItemTitle>
-            {updateState === "checking"
+            {updateState === "idle" && updateChecksUnavailable
+              ? props.webDeployment
+                ? "Desktop updates"
+                : "Update checks unavailable"
+              : updateState === "checking"
               ? t("settings.update_checking")
               : updateState === "available"
                 ? t("settings.update_available_version", undefined, {

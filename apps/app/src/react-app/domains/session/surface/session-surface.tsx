@@ -1328,14 +1328,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const chatStreaming = !waitingForUser && (
     sending || liveStatus.type === "busy" || liveStatus.type === "retry"
   );
-
-  useEffect(() => {
-    if (!chatStreaming) return;
-    const id = window.setInterval(() => {
-      void snapshotQuery.refetch();
-    }, 2_000);
-    return () => window.clearInterval(id);
-  }, [chatStreaming, snapshotQuery.refetch]);
   const renderedMessages = useMemo(
     () => deriveRenderedSessionMessages({ transcriptState, snapshot }),
     [snapshot, transcriptState],
@@ -1463,6 +1455,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
   }, [noVisibleAssistantOutputBaseline, renderedMessages]);
   const showAssistantWaitState = awaitingAssistantBaseline !== null && !assistantOutputAfterAwaitStart;
   const showAssistantRespondingState = awaitingAssistantBaseline !== null && assistantOutputAfterAwaitStart && chatStreaming;
+  // A prompt can be accepted before the engine snapshot reports "busy" or
+  // includes the optimistic user turn. Keep polling and cancellation active
+  // during that gap so the transcript, composer, and backend stay in sync.
+  const sessionRunActive = chatStreaming || showAssistantWaitState;
   const effectiveActivityStatus: SessionActivityStatus = sessionActivityStatus !== "idle"
     ? sessionActivityStatus
     : showAssistantWaitState
@@ -1483,6 +1479,15 @@ export function SessionSurface(props: SessionSurfaceProps) {
   ) : reserveAssistantStatusSpace ? (
     <AssistantStatusSpacer />
   ) : null;
+
+  useEffect(() => {
+    if (!sessionRunActive) return;
+    const id = window.setInterval(() => {
+      void snapshotQuery.refetch();
+    }, 2_000);
+    return () => window.clearInterval(id);
+  }, [sessionRunActive, snapshotQuery.refetch]);
+
   useReactRenderWatchdog("SessionSurface", {
     sessionId: props.sessionId,
     workspaceId: props.workspaceId,
@@ -1781,7 +1786,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   }, [activeWorkflowDeskAgent, attachments, bittensorContext, buildDraft, clearComposerSession, draft, memoryContext, props.modelVariant, props.onDraftChange, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft]);
 
   const handleAbort = useCallback(async () => {
-    if (!chatStreaming) return;
+    if (!sessionRunActive) return;
     suppressNextAbortFailureRef.current = true;
     setError(null);
     try {
@@ -1799,7 +1804,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       suppressNextAbortFailureRef.current = false;
       setError({ message: nextError instanceof Error ? nextError.message : "Failed to stop run." });
     }
-  }, [chatStreaming, opencodeClient, props.sessionId, props.workspaceId, snapshotQuery.refetch]);
+  }, [opencodeClient, props.sessionId, props.workspaceId, sessionRunActive, snapshotQuery.refetch]);
 
   const handleDismissError = useCallback(() => {
     setError(null);
@@ -2547,7 +2552,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                 <Suspense fallback={<div className="px-6 py-8 text-sm text-muted-foreground">Loading transcript...</div>}>
                   <SessionTranscript
                     messages={renderedMessages}
-                    isStreaming={chatStreaming}
+                    isStreaming={sessionRunActive}
                     developerMode={props.developerMode}
                     showThinking={showThinking}
                     scrollElement={() => scrollRef.current}
@@ -2572,10 +2577,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
             )}
           </div>
         </div>
-        {renderedMessages.length > 0 && hasTranscriptJumpTarget && (!sessionScroll.isAtBottom || (!chatStreaming && sessionScroll.topClippedMessageId)) ? (
+        {renderedMessages.length > 0 && hasTranscriptJumpTarget && (!sessionScroll.isAtBottom || (!sessionRunActive && sessionScroll.topClippedMessageId)) ? (
           <div className="pointer-events-none absolute bottom-4 left-1/2 z-40 flex -translate-x-1/2 justify-center sm:bottom-5">
             <div className="pointer-events-auto flex items-center gap-0.5 rounded-md bg-dls-surface-muted/70 p-0.5 shadow-[0_1px_4px_rgba(0,0,0,0.2)]">
-              {!chatStreaming && sessionScroll.topClippedMessageId ? (
+              {!sessionRunActive && sessionScroll.topClippedMessageId ? (
                 <button
                   type="button"
                   className="inline-flex h-7 items-center gap-1 rounded px-2 text-[11px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover/70 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)]"
@@ -2616,11 +2621,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
           onDraftChange={handleComposerDraftChange}
         onSend={handleSend}
         onStop={handleAbort}
-        busy={chatStreaming}
+        busy={sessionRunActive}
         disabled={model.transitionState !== "idle" || Boolean(props.modelUnavailable)}
         modelUnavailable={Boolean(props.modelUnavailable)}
         onOpenAiProviders={props.onOpenAiProviders}
-        statusLabel={statusLabel(snapshot ?? undefined, chatStreaming)}
+        statusLabel={statusLabel(snapshot ?? undefined, sessionRunActive)}
         showModelPicker={shellConfig.modelPicker && !props.modelUnavailable}
         modelPickerOpen={props.modelPickerOpen}
         selectedModel={props.selectedModel}

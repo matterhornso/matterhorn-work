@@ -407,6 +407,13 @@ function startFakeOpencode() {
       return;
     }
 
+    if (url.pathname === "/instance/dispose" && request.method === "POST") {
+      // Match the real OpenCode reload contract without discarding the synthetic
+      // sessions that browser QA may still be inspecting after preferences save.
+      json(response, 200, { disposed: true });
+      return;
+    }
+
     if (url.pathname === "/config" && request.method === "GET") {
       json(response, 200, {
         disabled_providers: [],

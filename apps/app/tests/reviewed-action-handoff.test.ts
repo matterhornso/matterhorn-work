@@ -27,6 +27,24 @@ describe("agent card to wallet review handoff", () => {
     expect(walletPanel).toContain("title=\"Wallet submission unavailable\"");
     expect(walletPanel).toContain("disabled={executionUnavailable || !firstConnector || connectPending}");
     expect(walletPanel).toContain("executionAvailable={marketExecutionReadiness?.reviewedWalletTickets.hyperliquid.available ?? null}");
+    expect(walletPanel).toContain("const activeExecutionAvailable = marketExecutionReadiness === null");
+    expect(walletPanel).toContain("venueRuntimePresentation(");
+    expect(walletPanel).toContain("Prepare only in this deployment");
+    expect(walletPanel).toContain("Prepare-only boundary");
+    expect(walletPanel).toContain("this deployment cannot submit them");
+    expect(walletPanel).toContain('activeExecutionAvailable === false ? "Unavailable" : "Checking"');
+  });
+
+  it("does not advertise or allow Polymarket submission when the runtime route is unavailable", () => {
+    const walletPanel = readFileSync(
+      resolve(import.meta.dir, "../src/react-app/domains/wallet/pages/BittensorPanel.tsx"),
+      "utf8",
+    );
+
+    expect(walletPanel).toContain("executionAvailable={marketExecutionReadiness?.reviewedWalletTickets.polymarket.available ?? null}");
+    expect(walletPanel).toContain("Wallet submission is not enabled in this deployment. Keep this reviewed draft");
+    expect(walletPanel).toContain("disabled={executionUnavailable || busy !== null || !isConnected || !onPolygon");
+    expect(walletPanel).toContain("This deployment prepares reviewed drafts but does not create wallet credentials or submit orders.");
   });
 
   it("sanitizes a Hyperliquid preview into exact public order terms", () => {

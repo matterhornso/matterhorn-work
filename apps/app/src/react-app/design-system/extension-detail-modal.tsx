@@ -106,6 +106,12 @@ const kindDesc: Record<ExtensionKind, string> = {
   extension: "A Matterhorn extension that adds tools, providers, or integrations to your workspace.",
 };
 
+export function customerVisibleManifestLabel(label: string): string {
+  return label
+    .replace(/^openwork(?=[-_.])/i, "matterhorn")
+    .replace(/\bOpenWork\b/gi, "Matterhorn Desks");
+}
+
 const uiControlClientConfig = `{
   "mcpServers": {
     "matterhorn-ui": {
@@ -313,7 +319,7 @@ export function ExtensionDetailModal(props: ExtensionDetailModalProps) {
                         <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Resources</div>
                         <div className="flex flex-wrap gap-1.5">
                           {resourceLabels.map((label) => (
-                            <span key={label} className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground">{label}</span>
+                            <span key={label} className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground">{customerVisibleManifestLabel(label)}</span>
                           ))}
                         </div>
                       </div>
@@ -323,7 +329,7 @@ export function ExtensionDetailModal(props: ExtensionDetailModalProps) {
                         <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Contributions</div>
                         <div className="flex flex-wrap gap-1.5">
                           {contributionLabels.map((label) => (
-                            <span key={label} className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground">{label}</span>
+                            <span key={label} className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground">{customerVisibleManifestLabel(label)}</span>
                           ))}
                         </div>
                       </div>

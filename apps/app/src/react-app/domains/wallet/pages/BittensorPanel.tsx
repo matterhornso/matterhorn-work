@@ -659,7 +659,7 @@ function mondayBetaScenarioMode(scenario: CustomerBetaDemoScenario): "bittensor"
   return scenario.mapsToCustomerTemplateId === "bittensor_operator" ? "bittensor" : "crypto";
 }
 
-const VENUE_DESKS: Record<CryptoVenue, {
+type VenueDeskDefinition = {
   label: string;
   shortLabel: string;
   workspaceTitle: string;
@@ -671,7 +671,9 @@ const VENUE_DESKS: Record<CryptoVenue, {
   signer: string;
   source: string;
   prompts: { label: string; summary: string; prompt: string }[];
-}> = {
+};
+
+const VENUE_DESKS: Record<CryptoVenue, VenueDeskDefinition> = {
   bittensor: {
     label: "Bittensor",
     shortLabel: "TAO",
@@ -775,6 +777,52 @@ const VENUE_DESKS: Record<CryptoVenue, {
     ],
   },
 };
+
+function venueRuntimePresentation(
+  venue: CryptoVenue,
+  base: VenueDeskDefinition,
+  executionAvailable: boolean | null,
+): VenueDeskDefinition {
+  if (executionAvailable === true) return base;
+
+  const availabilityLabel = executionAvailable === null ? "Checking" : "Not enabled";
+  const submissionLabel = executionAvailable === null ? "Checking" : "Unavailable";
+  const signerLabel = executionAvailable === null ? "Checking availability" : "Finish in a compatible wallet or client";
+
+  if (venue === "bittensor") {
+    return {
+      ...base,
+      headline: "Research Bittensor and prepare reviewed TAO actions.",
+      description: "Check public wallets, compare validators, and prepare unsigned staking or transfer actions. Finish them with a compatible Bittensor signer.",
+      statusLabel: "Read and prepare",
+      canSubmit: availabilityLabel,
+      liveSubmission: submissionLabel,
+      signer: signerLabel,
+    };
+  }
+
+  if (venue === "hyperliquid") {
+    return {
+      ...base,
+      headline: "Research Hyperliquid and prepare exact perpetual orders.",
+      description: "Inspect orderbooks, exposure, funding, and open orders, then prepare a market or limit order to finish in a compatible Hyperliquid client.",
+      statusLabel: "Read and prepare",
+      canSubmit: availabilityLabel,
+      liveSubmission: submissionLabel,
+      signer: signerLabel,
+    };
+  }
+
+  return {
+    ...base,
+    headline: "Analyze prediction markets and prepare reviewed orders.",
+    description: "Find markets, explain probabilities and liquidity, check compliance, then prepare an eligible order to finish in the Polymarket client.",
+    statusLabel: "Read and prepare",
+    canSubmit: availabilityLabel,
+    liveSubmission: submissionLabel,
+    signer: signerLabel,
+  };
+}
 type ReadinessCheck = {
   id?: string;
   label?: string;
@@ -1218,7 +1266,13 @@ function HyperliquidTradeExecution({
   );
 }
 
-function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketDraftHandoff | null }) {
+function PolymarketTradeExecution({
+  initialDraft,
+  executionAvailable,
+}: {
+  initialDraft?: PolymarketDraftHandoff | null;
+  executionAvailable: boolean | null;
+}) {
   const { address, isConnected } = useAccount();
   const { connectors, connect, isPending: connectPending } = useConnect();
   const { data: walletClient } = useWalletClient();
@@ -1308,6 +1362,14 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
   }, [amountUsdc, marketId, outcome, slippageTolerance]);
 
   const signAndSubmit = useCallback(async () => {
+    if (executionAvailable !== true) {
+      setTradeError(
+        executionAvailable === false
+          ? "Wallet submission is not enabled in this deployment. Keep this reviewed draft and finish it in the Polymarket client."
+          : "Wallet submission availability is still being checked. Wait for the readiness check before submitting.",
+      );
+      return;
+    }
     if (!prepared || !walletClient || !address) return;
     if (confirmation !== POLYMARKET_LIVE_CONFIRMATION) {
       setTradeError(`Type ${POLYMARKET_LIVE_CONFIRMATION} before submitting.`);
@@ -1347,19 +1409,27 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
     } finally {
       setBusy(null);
     }
-  }, [address, confirmation, handoff, prepared, walletClient]);
+  }, [address, confirmation, executionAvailable, handoff, prepared, walletClient]);
 
   const firstConnector = connectors.find((connector) => connector.id !== "injected") ?? connectors[0];
   const onPolygon = walletClient?.chain?.id === POLYMARKET_CHAIN_ID;
   const shortWalletAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null;
+  const executionUnavailable = executionAvailable !== true;
+  const executionStatusMessage = executionAvailable === false
+    ? "Wallet submission is not enabled in this deployment."
+    : "Checking whether this deployment can submit wallet-authorized orders.";
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold text-dls-text">Buy an outcome</div>
+          <div className="text-sm font-semibold text-dls-text">
+            {executionUnavailable ? "Prepare an outcome order" : "Buy an outcome"}
+          </div>
           <p className="mt-1 max-w-xl text-xs leading-5 text-dls-secondary">
-            The agent prepares the market terms and compliance check. You review the maximum loss, then your connected wallet authorizes the order on Polygon.
+            {executionUnavailable
+              ? "The agent prepares the market terms, compliance check, and maximum-loss review. Finish the reviewed draft in the Polymarket client."
+              : "The agent prepares the market terms and compliance check. You review the maximum loss, then your connected wallet authorizes the order on Polygon."}
           </p>
         </div>
         <div className="text-right text-[11px] leading-5 text-dls-secondary">
@@ -1368,7 +1438,11 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
         </div>
       </div>
 
-      {!isConnected ? (
+      {executionUnavailable ? (
+        <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Prepare only">
+          {executionStatusMessage} You can still prepare and review an exact order draft here.
+        </Notice>
+      ) : !isConnected ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-dls-surface-muted/30 px-3 py-3">
           <p className="text-xs leading-5 text-dls-secondary">Connect the EVM wallet that holds your Polymarket funds.</p>
           <Button size="sm" disabled={!firstConnector || connectPending} onClick={() => firstConnector && connect({ connector: firstConnector })}>
@@ -1436,7 +1510,12 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
           </label>
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={resetReview} disabled={busy !== null}>Edit order</Button>
-            <Button size="sm" onClick={() => void signAndSubmit()} disabled={busy !== null || !isConnected || !onPolygon || confirmation !== POLYMARKET_LIVE_CONFIRMATION}>
+            <Button
+              size="sm"
+              title={executionUnavailable ? "Wallet submission unavailable" : undefined}
+              onClick={() => void signAndSubmit()}
+              disabled={executionUnavailable || busy !== null || !isConnected || !onPolygon || confirmation !== POLYMARKET_LIVE_CONFIRMATION}
+            >
               {busy === "submit" ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : <Shield className="mr-2 size-3.5" />}
               Authorize and submit
             </Button>
@@ -1459,7 +1538,9 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
       ) : null}
       {tradeError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Polymarket order">{tradeError}</Notice> : null}
       <p className="text-[11px] leading-5 text-dls-secondary">
-        Browser-wallet EOA accounts are supported in this release. The temporary CLOB credential exists only in memory for this submission and is cleared immediately afterward.
+        {executionUnavailable
+          ? "This deployment prepares reviewed drafts but does not create wallet credentials or submit orders."
+          : "Browser-wallet EOA accounts are supported in this release. The temporary CLOB credential exists only in memory for this submission and is cleared immediately afterward."}
       </p>
     </div>
   );
@@ -2299,18 +2380,31 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const marketSdkValidationPrivateSdkState = marketSdkValidation?.safety?.runsPrivateSdkSigning === false && marketSdkValidation?.safety?.callsExchanges === false
     ? "No"
     : CHECK_PENDING_LABEL;
-  const activeVenue = VENUE_DESKS[venue];
+  const activeExecutionAvailable = marketExecutionReadiness === null
+    ? null
+    : marketExecutionReadiness.reviewedWalletTickets[venue].available;
+  const activeVenue = venueRuntimePresentation(
+    venue,
+    VENUE_DESKS[venue],
+    activeExecutionAvailable,
+  );
   const activeManifest = VENUE_PROTOCOL_MANIFESTS[venue];
   const activeManifestStatus = activeVenue.statusLabel;
   const activeManifestCanSubmit = activeVenue.canSubmit;
   const activeManifestLiveSubmission = activeVenue.liveSubmission;
   const activeManifestSigner = activeVenue.signer;
-  const activeSafetyBadge = venue === "bittensor"
-    ? "TAO transfer with wallet review"
-    : venue === "hyperliquid"
-      ? "Wallet approval required"
-      : "Eligible BUY with wallet approval";
-  const activeSafetyCopy = venue === "bittensor"
+  const activeSafetyBadge = activeExecutionAvailable === null
+    ? "Checking wallet route"
+    : activeExecutionAvailable === false
+      ? "Prepare only in this deployment"
+      : venue === "bittensor"
+        ? "TAO transfer with wallet review"
+        : venue === "hyperliquid"
+          ? "Wallet approval required"
+          : "Eligible BUY with wallet approval";
+  const activeSafetyCopy = activeExecutionAvailable !== true
+    ? `${activeVenue.description} Matterhorn never accepts private keys, seed phrases, API secrets, raw signatures, signed payloads, or wallet exports.`
+    : venue === "bittensor"
     ? "Matterhorn can prepare an exact TAO transfer for review and submission by your connected Bittensor wallet. Staking, unstaking, delegation, and advanced calls remain external-signer handoffs. Never paste seed phrases, private keys, mnemonics, or wallet exports."
     : venue === "hyperliquid"
       ? "Hyperliquid orders can submit only after you review the network, asset, side, size, price or slippage boundary, and reduce-only state, then sign the exact short-lived intent in your connected wallet. Matterhorn never accepts private keys or API secrets."
@@ -2471,9 +2565,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <Metric label="Signer" value={activeVenue.signer} compact />
                 </div>
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Source: {activeVenue.source}. {venue === "hyperliquid"
-                    ? "Agent prompts prepare context only. To trade, use the order ticket below, review every field, and approve the exact intent in your connected wallet."
-                    : "Ask the Polymarket Agent in plain English, review the prepared terms, then use the ticket below to authorize an eligible BUY order in your connected Polygon wallet."}
+                  Source: {activeVenue.source}. {activeExecutionAvailable === true
+                    ? venue === "hyperliquid"
+                      ? "Agent prompts prepare context only. To trade, use the order ticket below, review every field, and approve the exact intent in your connected wallet."
+                      : "Ask the Polymarket Agent in plain English, review the prepared terms, then use the ticket below to authorize an eligible BUY order in your connected Polygon wallet."
+                    : "Agent prompts and the ticket below prepare reviewed terms only. Finish the draft in a compatible external client."}
                 </p>
               </div>
             </Section>
@@ -2491,6 +2587,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               <Section title="Trade Polymarket" icon={<ArrowUpDown className="size-4" />}>
                 <PolymarketTradeExecution
                   initialDraft={draftHandoff?.protocol === "polymarket" ? draftHandoff.draft : null}
+                  executionAvailable={marketExecutionReadiness?.reviewedWalletTickets.polymarket.available ?? null}
                 />
               </Section>
             ) : null}
@@ -2498,9 +2595,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <Section title={venue === "hyperliquid" ? "Standard Hyperliquid actions" : "Standard Polymarket actions"} icon={<BrainCircuit className="size-4" />}>
               <p className="mb-3 text-xs leading-5 text-dls-secondary">
                 These stage editable {activeVenue.label} Agent tasks in the composer. The full instruction stays editable before you send. Agent prompts never auto-execute.{" "}
-                {venue === "hyperliquid"
-                  ? "Orders require a separate review and wallet signature in the trade ticket."
-                  : "Orders require a separate compliance-gated review and wallet authorization in the trade ticket."}
+                {activeExecutionAvailable === true
+                  ? venue === "hyperliquid"
+                    ? "Orders require a separate review and wallet signature in the trade ticket."
+                    : "Orders require a separate compliance-gated review and wallet authorization in the trade ticket."
+                  : "This deployment prepares drafts for review; it does not submit them."}
               </p>
               <div className="grid gap-2">
                 {activeVenue.prompts.map((item) => (
@@ -2523,23 +2622,49 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <Section title={venue === "hyperliquid" ? "Exchange safeguards" : "Market preview controls"} icon={<Shield className="size-4" />}>
               <div className="space-y-3">
                 <div className="rounded-lg bg-[var(--protocol-desk-soft)] px-3 py-2.5">
-                  <p className="text-xs font-semibold text-dls-text">{venue === "hyperliquid" ? "Wallet-authorized execution" : "Compliance-gated execution"}</p>
+                  <p className="text-xs font-semibold text-dls-text">
+                    {activeExecutionAvailable === true
+                      ? venue === "hyperliquid"
+                        ? "Wallet-authorized execution"
+                        : "Compliance-gated execution"
+                      : activeExecutionAvailable === false
+                        ? "Prepare-only boundary"
+                        : "Checking execution boundary"}
+                  </p>
                   <p className="mt-1 text-[11px] leading-5 text-dls-secondary">
-                    {venue === "hyperliquid"
-                      ? "Every order is hash-bound to the reviewed terms, expires quickly, can submit once, and must be signed by the connected wallet. Mainnet also requires a typed live-order confirmation."
-                      : "Eligible EOA BUY orders can submit only after compliance passes and the connected Polygon wallet authorizes the exact order."}
+                    {activeExecutionAvailable === true
+                      ? venue === "hyperliquid"
+                        ? "Every order is hash-bound to the reviewed terms, expires quickly, can submit once, and must be signed by the connected wallet. Mainnet also requires a typed live-order confirmation."
+                        : "Eligible EOA BUY orders can submit only after compliance passes and the connected Polygon wallet authorizes the exact order."
+                      : activeExecutionAvailable === false
+                        ? `Matterhorn can prepare and review ${activeVenue.label} order terms here, but this deployment cannot submit them.`
+                        : "Matterhorn is checking whether this deployment can submit a wallet-authorized order."}
                   </p>
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
                   <Metric label="Readiness" value={venue === "hyperliquid" ? hyperliquidReadinessState : polymarketReadinessState} compact />
-                  <Metric label="Execution" value={venue === "hyperliquid" ? "Wallet approved" : "Compliance + wallet"} compact />
-                  <Metric label="Can submit" value={venue === "hyperliquid" ? "After signature" : "Eligible EOA BUY"} compact />
+                  <Metric
+                    label="Execution"
+                    value={activeExecutionAvailable === true
+                      ? venue === "hyperliquid" ? "Wallet approved" : "Compliance + wallet"
+                      : activeExecutionAvailable === false ? "Unavailable" : "Checking"}
+                    compact
+                  />
+                  <Metric
+                    label="Can submit"
+                    value={activeExecutionAvailable === true
+                      ? venue === "hyperliquid" ? "After signature" : "Eligible EOA BUY"
+                      : activeExecutionAvailable === false ? "No" : "Checking"}
+                    compact
+                  />
                   <Metric label="SDK evidence" value={marketSdkValidationState} compact />
                 </div>
                 <Notice tone="info" icon={<Shield className="size-4" />} title="Execution boundary">
-                  {venue === "hyperliquid"
-                    ? "Matterhorn submits only a short-lived order intent that this server prepared and your connected wallet signed. It does not accept private keys, API secrets, arbitrary signed payloads, alternate exchange URLs, or automatic watch-triggered orders."
-                    : "Matterhorn prepares the exact Polymarket order and checks compliance first. An eligible browser-wallet EOA must authorize it. This release does not support sell orders, proxy accounts, watch-triggered orders, or unattended execution."}
+                  {activeExecutionAvailable === true
+                    ? venue === "hyperliquid"
+                      ? "Matterhorn submits only a short-lived order intent that this server prepared and your connected wallet signed. It does not accept private keys, API secrets, arbitrary signed payloads, alternate exchange URLs, or automatic watch-triggered orders."
+                      : "Matterhorn prepares the exact Polymarket order and checks compliance first. An eligible browser-wallet EOA must authorize it. This release does not support sell orders, proxy accounts, watch-triggered orders, or unattended execution."
+                    : "Matterhorn can prepare an exact reviewed draft in this deployment. Submission remains in a compatible external client, and no wallet secret or signature enters Matterhorn."}
                 </Notice>
                 <details className="group rounded-md bg-dls-surface-muted/[0.10] px-3 py-2">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--protocol-desk-rgb)/0.30)] [&::-webkit-details-marker]:hidden">

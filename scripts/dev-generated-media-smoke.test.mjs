@@ -16,10 +16,11 @@ assert.ok(
     script.includes("requestDirectory(request)") &&
     script.includes('url.pathname === "/session"') &&
     script.includes('url.pathname === "/session/status"') &&
+    script.includes('url.pathname === "/instance/dispose"') &&
     script.includes('request.method === "PATCH"') &&
     script.includes('action === "prompt_async"') &&
     script.includes('action === "todo"'),
-  "generated-media smoke launcher should include a fake OpenCode engine for browser chat sessions and title updates",
+  "generated-media smoke launcher should include a fake OpenCode engine for browser chat sessions, title updates, and reload recovery",
 );
 assert.ok(
   script.includes("--opencode-base-url") && script.includes("Fake OpenCode"),

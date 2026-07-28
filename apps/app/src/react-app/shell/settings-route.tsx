@@ -187,6 +187,7 @@ import {
   MATTERHORN_CLOUD_ENABLED,
 } from "../../app/lib/den";
 import {
+  MATTERHORN_LAUNCH_FEATURES,
   isExtensionVisibleAtLaunch,
   isSettingsTabRouteEnabledAtLaunch,
 } from "../../app/lib/launch-features";
@@ -3384,7 +3385,11 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             onOpenImageProviderSetup={() =>
               openExtensionDetail("openai-image-gen")
             }
-            onOpenBilling={() => navigateSettingsPath("billing")}
+            onOpenBilling={
+              MATTERHORN_LAUNCH_FEATURES.billing
+                ? () => navigateSettingsPath("billing")
+                : undefined
+            }
           />
         );
       case "marketplace":

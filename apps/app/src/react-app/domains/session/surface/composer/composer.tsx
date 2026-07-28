@@ -1573,27 +1573,43 @@ export function ReactSessionComposer(props: ComposerProps) {
               </div>
 
               {/*
-                Single action button that toggles between Stop generating and Run task.
-                When busy with no draft: Stop generating (cancels current run).
-                When busy with a draft: Run task (queues a follow-up).
-                When idle: Run task.
+                Keep cancellation available for the entire active run. A drafted
+                follow-up can still be queued, but it must never replace Stop.
               */}
               <div className="ml-auto flex shrink-0 items-end gap-1.5">
-                {props.busy && !canSend ? (
-                  <button
-                    type="button"
-                    onClick={props.onStop}
-                    className="inline-flex h-8 max-h-8 items-center gap-1.5 rounded-md bg-dls-hover/70 px-2.5 text-[12px] font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)]"
-                    title={t("composer.stop")}
-                  >
-                    <Square size={10} fill="currentColor" />
-                    <span>{t("composer.stop")}</span>
-                  </button>
+                {props.busy ? (
+                  <>
+                    {canSend ? (
+                      <button
+                        type="button"
+                        onClick={props.onSend}
+                        disabled={props.disabled}
+                        className={`inline-flex h-9 max-h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-medium transition-colors ${
+                          props.disabled
+                            ? "bg-dls-hover/35 text-dls-secondary/65"
+                            : "bg-[var(--dls-accent)] text-[var(--dls-accent-fg)] hover:bg-[var(--dls-accent-hover)]"
+                        }`}
+                        title={t("composer.run_task")}
+                      >
+                        <ArrowUp size={15} />
+                        <span>{t("composer.run_task")}</span>
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={props.onStop}
+                      className="inline-flex h-8 max-h-8 items-center gap-1.5 rounded-md bg-dls-hover/70 px-2.5 text-[12px] font-medium text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)]"
+                      title={t("composer.stop")}
+                    >
+                      <Square size={10} fill="currentColor" />
+                      <span>{t("composer.stop")}</span>
+                    </button>
+                  </>
                 ) : (
                   <button
                     type="button"
-                    onClick={canSend ? props.onSend : props.busy ? props.onStop : undefined}
-                    disabled={props.disabled || (!canSend && !props.busy)}
+                    onClick={canSend ? props.onSend : undefined}
+                    disabled={props.disabled || !canSend}
                     className={`inline-flex h-9 max-h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-medium transition-colors ${
                       !canSend || props.disabled
                         ? "bg-dls-hover/35 text-dls-secondary/65"

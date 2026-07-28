@@ -16,6 +16,7 @@ describe("Web update settings contract", () => {
       "const updateChecksUnavailable = props.webDeployment",
     );
     expect(source).toContain("props.busy || updateChecksUnavailable");
+    expect(source).toContain('? "Desktop updates"');
     expect(source).toContain(
       'props.webDeployment ? t("settings.updates_desktop_only")',
     );
