@@ -347,7 +347,8 @@ for (const phrase of [
 }
 
 for (const phrase of [
-  "Stop generating (cancels current run)",
+  "Keep cancellation available for the entire active run.",
+  "onClick={props.onStop}",
   "All models",
   "Change model",
   'aria-label={`${t("composer.assistant_identity")} ${label}`}',

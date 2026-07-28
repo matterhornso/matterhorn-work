@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile, mkdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 
 import { ensureWorkspaceFiles } from "./workspace-init.js";
 import { openworkExtensionsPreviewPluginPath } from "./openwork-extensions-plugin-path.js";
@@ -96,7 +96,8 @@ describe("ensureWorkspaceFiles", () => {
   test("uses shipped extension preview plugin", async () => {
     const pluginPath = openworkExtensionsPreviewPluginPath();
     const plugin = await readFile(pluginPath, "utf8");
-    expect(pluginPath).toContain(join("opencode-plugins", "openwork-extensions-preview.ts"));
+    expect(pluginPath).toContain(join("opencode-plugins", "openwork-extensions-preview."));
+    expect([".ts", ".js"]).toContain(extname(pluginPath));
     expect(plugin).toContain("openwork_extension_call");
   });
 
