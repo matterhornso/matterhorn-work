@@ -6,7 +6,7 @@
   "desktopName": "Matterhorn Desks",
   "author": {
     "name": "Matterhorn",
-    "email": "support@matterhorn.so"
+    "email": "updates@matterhorn.so"
   },
   "main": "electron/main.mjs",
   "type": "module",

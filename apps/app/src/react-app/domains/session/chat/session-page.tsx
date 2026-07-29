@@ -2018,6 +2018,8 @@ export function SessionPage(props: SessionPageProps) {
     if (options?.primePrompt && !(props.selectedSessionId && props.surface)) {
       pendingProtocolRailPanelRef.current = panel;
     }
+    setActiveWorkflowDeskId(null);
+    setWorkflowLaunchState(null);
     setCurrentSidePanel(panel);
     if (options?.primePrompt) primeProtocolRailPrompt(panel, options);
   }, [primeProtocolRailPrompt, props.selectedSessionId, props.surface, setCurrentSidePanel]);

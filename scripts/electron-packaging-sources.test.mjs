@@ -8,6 +8,11 @@ import path from "node:path";
 const require = createRequire(import.meta.url);
 const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
 const desktopPackage = JSON.parse(readFileSync("apps/desktop/package.json", "utf8"));
+assert.equal(
+  desktopPackage.author?.email,
+  "updates@matterhorn.so",
+  "desktop package metadata should use the public Matterhorn support address",
+);
 const electronBuilderConfig = readFileSync("apps/desktop/electron-builder.yml", "utf8");
 const afterPack = readFileSync("apps/desktop/scripts/electron-after-pack.cjs", "utf8");
 const afterSign = readFileSync("apps/desktop/scripts/electron-after-sign.cjs", "utf8");

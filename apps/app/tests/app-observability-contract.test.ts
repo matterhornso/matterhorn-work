@@ -124,6 +124,21 @@ describe("Matterhorn app observability contracts", () => {
     );
   });
 
+  test("desk rail navigation clears an active workflow before opening another desk", () => {
+    const source = readReactAppSource("domains/session/chat/session-page.tsx");
+    const openVenueRailPaneBlock = source.slice(
+      source.indexOf("const openVenueRailPane = useCallback"),
+      source.indexOf("const removeAccessibleTarget = useCallback"),
+    );
+
+    expect(openVenueRailPaneBlock).toContain("setActiveWorkflowDeskId(null)");
+    expect(openVenueRailPaneBlock).toContain("setWorkflowLaunchState(null)");
+    expect(openVenueRailPaneBlock).toContain("setCurrentSidePanel(panel)");
+    expect(openVenueRailPaneBlock.indexOf("setActiveWorkflowDeskId(null)")).toBeLessThan(
+      openVenueRailPaneBlock.indexOf("setCurrentSidePanel(panel)"),
+    );
+  });
+
   test("plain project Home URLs do not restore a persisted side panel", () => {
     const source = readReactAppSource("domains/session/chat/session-page.tsx");
     const routedPanelBlock = source.slice(
