@@ -1038,6 +1038,7 @@ export interface BittensorWatchPolicyPreset {
 
 export type BittensorWatch = {
   id: string;
+  ownerScope?: string;
   kind: "subnet" | "wallet" | "validator" | "emissions" | "slippage";
   label: string;
   netuid: number | null;
@@ -1868,6 +1869,7 @@ function normalizePersistedWatch(value: unknown): BittensorWatch | null {
   const validatorHotkey = firstString(record, ["validatorHotkey", "validator_hotkey", "hotkey"]);
   return {
     id,
+    ownerScope: firstString(record, ["ownerScope", "owner_scope"]) ?? undefined,
     kind: kind as BittensorWatch["kind"],
     label: firstString(record, ["label"]) ?? "Bittensor watch",
     netuid: netuid !== null && Number.isInteger(netuid) ? netuid : null,
@@ -10062,9 +10064,11 @@ export async function analyzeBittensorWalletIntelligence(ss58Address: string): P
   };
 }
 
-export function listBittensorWatches(): BittensorWatch[] {
+export function listBittensorWatches(ownerScope?: string): BittensorWatch[] {
   loadPersistedWatchlist();
-  return [...watchlist.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return [...watchlist.values()]
+    .filter((watch) => ownerScope ? watch.ownerScope === ownerScope : !watch.ownerScope)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 export function clearBittensorWatches(): number {
@@ -10075,11 +10079,15 @@ export function clearBittensorWatches(): number {
   return cleared;
 }
 
-export function createBittensorWatch(input: Partial<BittensorWatch>): BittensorWatch {
+export function createBittensorWatch(
+  input: Partial<BittensorWatch>,
+  ownerScope?: string,
+): BittensorWatch {
   loadPersistedWatchlist();
   const id = `bt-watch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const watch: BittensorWatch = {
     id,
+    ...(ownerScope ? { ownerScope } : {}),
     kind: input.kind ?? "subnet",
     label: input.label?.trim() || "Bittensor watch",
     netuid: typeof input.netuid === "number" && Number.isInteger(input.netuid) ? input.netuid : null,
@@ -10341,8 +10349,8 @@ export async function evaluateBittensorWatch(watch: BittensorWatch): Promise<Bit
   });
 }
 
-export async function evaluateBittensorWatches(): Promise<BittensorWatchEvaluation[]> {
-  const watches = listBittensorWatches();
+export async function evaluateBittensorWatches(ownerScope?: string): Promise<BittensorWatchEvaluation[]> {
+  const watches = listBittensorWatches(ownerScope);
   return Promise.all(watches.map((watch) => evaluateBittensorWatch(watch)));
 }
 

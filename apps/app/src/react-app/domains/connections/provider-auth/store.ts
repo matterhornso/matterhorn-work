@@ -1077,17 +1077,18 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     workerType: "local" | "remote",
     cloudProviders: DenOrgLlmProvider[],
   ) => {
+    const canManageProviderCredentials = isDesktopRuntime();
     const merged = Object.fromEntries(
       Object.entries(methods ?? {}).map(([id, providerMethods]) => [
         id,
         (providerMethods ?? []).map((method, methodIndex) => ({
           ...method,
           methodIndex,
-        })),
+        })).filter((method) => canManageProviderCredentials || method.type === "cloud"),
       ]),
     ) as Record<string, ProviderAuthMethod[]>;
 
-    for (const provider of availableProviders ?? []) {
+    for (const provider of canManageProviderCredentials ? availableProviders ?? [] : []) {
       const id = provider.id?.trim();
       if (!id) continue;
       if (isDesktopProviderBlocked({ providerId: id, checkRestriction: options.checkDesktopAppRestriction })) continue;
@@ -1160,6 +1161,11 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     methodIndex?: number,
   ): Promise<ProviderOAuthStartResult> {
     setStateField("providerAuthError", null);
+    if (!isDesktopRuntime()) {
+      throw new Error(
+        "Provider credentials are managed by this Matterhorn web deployment.",
+      );
+    }
     const c = options.client();
     if (!c) {
       throw new Error(t("providers.not_connected"));
@@ -1265,6 +1271,11 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     code?: string,
   ) {
     setStateField("providerAuthError", null);
+    if (!isDesktopRuntime()) {
+      throw new Error(
+        "Provider credentials are managed by this Matterhorn web deployment.",
+      );
+    }
     const c = options.client();
     if (!c) {
       throw new Error(t("providers.not_connected"));
@@ -1340,6 +1351,11 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
 
   async function submitProviderApiKey(providerId: string, apiKey: string) {
     setStateField("providerAuthError", null);
+    if (!isDesktopRuntime()) {
+      throw new Error(
+        "API keys can only be added in the desktop app or an isolated worker.",
+      );
+    }
     const c = options.client();
     if (!c) {
       throw new Error(t("providers.not_connected"));

@@ -66,4 +66,43 @@ describe("CUDOS provider preset", () => {
       "[CUDOS_PROVIDER_ID]: buildCudosProviderConfig()",
     );
   });
+
+  test("keeps provider secrets out of the shared public-web runtime", () => {
+    const storeSource = readFileSync(
+      resolve(import.meta.dir, "../src/react-app/domains/connections/provider-auth/store.ts"),
+      "utf8",
+    );
+    const modalSource = readFileSync(
+      resolve(import.meta.dir, "../src/react-app/domains/connections/provider-auth/provider-auth-modal.tsx"),
+      "utf8",
+    );
+    const settingsSource = readFileSync(
+      resolve(import.meta.dir, "../src/react-app/shell/settings-route.tsx"),
+      "utf8",
+    );
+    const viewSource = readFileSync(
+      resolve(import.meta.dir, "../src/react-app/domains/settings/pages/ai-view.tsx"),
+      "utf8",
+    );
+
+    expect(storeSource).toContain("isDesktopRuntime()");
+    expect(storeSource).toContain(
+      "API keys can only be added in the desktop app or an isolated worker.",
+    );
+    expect(storeSource).toContain(
+      "Provider credentials are managed by this Matterhorn web deployment.",
+    );
+    expect(modalSource).toContain(
+      'method.type !== "cloud"',
+    );
+    expect(settingsSource).toContain(
+      "providerCredentialsManaged={!isDesktopRuntime()}",
+    );
+    expect(settingsSource).toContain(
+      "isDesktopRuntime() ? connectCudosProvider : undefined",
+    );
+    expect(viewSource).toContain(
+      "Matterhorn manages the provider used by this web workspace.",
+    );
+  });
 });

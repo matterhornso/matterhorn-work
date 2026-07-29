@@ -19,5 +19,8 @@ describe("Web update settings contract", () => {
     expect(source).toContain(
       'props.webDeployment ? t("settings.updates_desktop_only")',
     );
+    expect(source).toContain(
+      '!props.webDeployment && updateState === "error" && updateErrorMessage',
+    );
   });
 });

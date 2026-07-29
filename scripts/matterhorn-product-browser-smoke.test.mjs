@@ -2,7 +2,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const script = readFileSync("scripts/matterhorn-product-browser-smoke.mjs", "utf8");
+const script = readFileSync(
+  "scripts/matterhorn-product-browser-smoke.mjs",
+  "utf8",
+);
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 
 assert.ok(
@@ -38,6 +41,7 @@ assert.ok(
 );
 
 for (const stageId of [
+  "auth_signup",
   "open_app",
   "home_shell",
   "wallet_readiness",
@@ -57,7 +61,10 @@ for (const stageId of [
   "settings_billing",
   "settings_generated_media",
 ]) {
-  assert.ok(script.includes(stageId), `product browser smoke should report stage ${stageId}`);
+  assert.ok(
+    script.includes(stageId),
+    `product browser smoke should report stage ${stageId}`,
+  );
 }
 
 for (const visibleText of [
@@ -125,7 +132,7 @@ for (const visibleText of [
   "Matterhorn smoke provider",
   "Smoke model",
   "Add CUDOS API key",
-  "Choose provider",
+  "Unavailable in this deployment",
   "Add a model provider",
   "CUDOS / ASI:Cloud",
   "Billing",
@@ -140,9 +147,22 @@ for (const visibleText of [
   "Diagnostics and readiness report",
   "Storage and data controls",
 ]) {
-  assert.ok(script.includes(visibleText), `product browser smoke should exercise ${visibleText}`);
+  assert.ok(
+    script.includes(visibleText),
+    `product browser smoke should exercise ${visibleText}`,
+  );
 }
 
+assert.ok(
+  script.includes("/api/auth/sign-up/email") &&
+    script.includes("/api/den/v1/me") &&
+    script.includes("organizationWorkspaceId"),
+  "product browser smoke should create a fresh account, restore its session, and use its isolated workspace",
+);
+assert.ok(
+  script.includes("The web build exposed a raw provider-key control."),
+  "product browser smoke should reject raw provider-key controls in the web build",
+);
 assert.ok(
   script.includes('getByLabel("Copy project path").count()'),
   "product browser smoke should reject exposed local project path controls on the web",
@@ -153,7 +173,7 @@ assert.ok(
 );
 
 assert.ok(
-  script.includes("waitForEvent(\"download\"") &&
+  script.includes('waitForEvent("download"') &&
     script.includes("matterhorn-backend-support") &&
     script.includes("suggestedFilename") &&
     script.includes("offlineDiagnostics"),
@@ -186,7 +206,7 @@ assert.ok(
 );
 assert.ok(
   script.includes("async function ensureWorkspaceHomeVisible") &&
-    script.includes('getByRole("button", { name: "Back to Home", exact: true })') &&
+    script.includes('name: "Back to Home"') &&
     script.includes("await ensureWorkspaceHomeVisible(page);"),
   "product browser smoke should recover to workspace Home when a focused desk remains mounted",
 );
@@ -206,10 +226,12 @@ assert.ok(
   "product browser smoke should prove a desk task either sends a real prompt into a concrete chat session or pauses safely at provider setup without sending work",
 );
 assert.ok(
-  script.includes('browser.newContext({ viewport: { width: 390, height: 844 } })') &&
+  script.includes("const storageState = await context.storageState()") &&
+    script.includes("storageState,") &&
+    script.includes("viewport: { width: 390, height: 844 }") &&
     script.includes('getByTestId("session-composer-shell")') &&
     script.includes("directSessionReloadUrl"),
-  "product browser smoke should prove persisted chat URLs survive a fresh mobile browser context",
+  "product browser smoke should prove persisted chat URLs and authentication survive a fresh mobile browser context",
 );
 assert.ok(
   script.includes("async function assertNoVisible") &&
@@ -219,7 +241,9 @@ assert.ok(
   "product browser smoke should reject raw prompt and policy copy in focused desk defaults",
 );
 assert.ok(
-  script.includes('page.locator("main").getByRole("heading", { name: "Billing", exact: true }).last()'),
+  script.includes('.locator("main")') &&
+    script.includes('name: "Billing"') &&
+    script.includes("billingHeading"),
   "product browser smoke should scope Billing heading assertions to the settings content area",
 );
 assert.ok(
@@ -231,9 +255,9 @@ assert.ok(
   "product browser smoke should keep optional dev-stack workspace probes out of strict errors and warning noise",
 );
 assert.ok(
-  script.includes("page.on(\"console\"") &&
-    script.includes("page.on(\"response\"") &&
-    script.includes("page.on(\"pageerror\"") &&
+  script.includes('page.on("console"') &&
+    script.includes('page.on("response"') &&
+    script.includes('page.on("pageerror"') &&
     script.includes("resourceWarnings") &&
     script.includes("networkFailures") &&
     script.includes("ignoredNetworkResponses") &&

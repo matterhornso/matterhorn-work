@@ -26,6 +26,26 @@ describe("managed OpenCode Matterhorn MCP", () => {
     expect(config.plugin).toContain("opencode-chrome-devtools");
   });
 
+  test("registers the server-managed ASI:Cloud catalog without embedding its API key", () => {
+    const content = buildManagedOpencodeRuntimeConfig({
+      serverUrl: "http://127.0.0.1:4130/",
+      clientToken: "test-client-token",
+      enableCudosProvider: true,
+    });
+    const config = JSON.parse(content);
+    expect(config.provider.cudos).toMatchObject({
+      npm: "@ai-sdk/openai-compatible",
+      name: "CUDOS / ASI:Cloud",
+      env: ["CUDOS_API_KEY"],
+      options: {
+        baseURL: "https://inference.asicloud.cudos.org/v1",
+      },
+    });
+    expect(Object.keys(config.provider.cudos.models)).toHaveLength(7);
+    expect(content).not.toContain("sk-");
+    expect(content).not.toContain("apiKey");
+  });
+
   test("keeps the authenticated MCP config out of workspace files", async () => {
     const root = await mkdtemp(join(tmpdir(), "matterhorn-managed-mcp-"));
     try {

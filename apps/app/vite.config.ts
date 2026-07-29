@@ -8,6 +8,9 @@ import tailwindcss from "@tailwindcss/vite";
 
 const portValue = Number.parseInt(process.env.PORT ?? "", 10);
 const devPort = Number.isFinite(portValue) && portValue > 0 ? portValue : 5173;
+const devApiTarget =
+  process.env.VITE_MATTERHORN_DEV_API_TARGET?.trim() ||
+  "http://127.0.0.1:3222";
 const allowedHosts = new Set<string>();
 const envAllowedHosts = process.env.VITE_ALLOWED_HOSTS ?? "";
 
@@ -110,6 +113,12 @@ export default defineConfig({
     port: devPort,
     strictPort: true,
     ...(allowedHosts.size > 0 ? { allowedHosts: Array.from(allowedHosts) } : {}),
+    proxy: {
+      "/api": {
+        target: devApiTarget,
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     target: "esnext",

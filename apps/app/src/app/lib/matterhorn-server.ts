@@ -1428,6 +1428,7 @@ async function requestJson<T>(
       method: options.method ?? "GET",
       headers: buildHeaders(options.token, options.hostToken),
       body: options.body ? JSON.stringify(options.body) : undefined,
+      credentials: "same-origin",
     },
     options.timeoutMs ?? DEFAULT_OPENWORK_SERVER_TIMEOUT_MS,
   );
@@ -1470,6 +1471,7 @@ async function requestMultipartRaw(
       method: options.method ?? "POST",
       headers: buildAuthHeaders(options.token, options.hostToken),
       body: options.body,
+      credentials: "same-origin",
     },
     options.timeoutMs ?? DEFAULT_OPENWORK_SERVER_TIMEOUT_MS,
   );

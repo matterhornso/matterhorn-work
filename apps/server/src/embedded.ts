@@ -46,9 +46,11 @@ export type EmbeddedServerHandle = {
 export async function startEmbeddedServer(options: EmbeddedServerOptions): Promise<EmbeddedServerHandle> {
   const config = await resolveServerConfig(options);
   const serverUrl = `http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${config.port}`;
-  const opencodeModelsUrl = process.env.OPENWORK_DEV_MODE === "1"
-    ? "http://localhost:8791/models"
-    : "https://models.openworklabs.com/";
+  const modelCatalogUrl =
+    process.env.MATTERHORN_MODELS_URL?.trim() ||
+    (process.env.OPENWORK_DEV_MODE === "1"
+      ? "http://localhost:8791/models"
+      : process.env.OPENWORK_MODELS_URL?.trim());
 
   // Spawn managed OpenCode if requested and no explicit base URL was provided.
   let managedOpencode: ManagedOpencodeServer | null = null;
@@ -65,6 +67,7 @@ export async function startEmbeddedServer(options: EmbeddedServerOptions): Promi
       const managedRuntimeConfig = buildManagedOpencodeRuntimeConfig({
         serverUrl,
         clientToken: config.token,
+        enableCudosProvider: Boolean(process.env.CUDOS_API_KEY?.trim()),
       });
       const cwd = options.opencodeCwd
         || process.env.OPENWORK_MANAGED_OPENCODE_CWD?.trim()
@@ -79,7 +82,7 @@ export async function startEmbeddedServer(options: EmbeddedServerOptions): Promi
           OPENWORK_SERVER_URL: serverUrl,
           OPENWORK_SERVER_TOKEN: config.token,
           OPENCODE_CONFIG_CONTENT: managedRuntimeConfig,
-          OPENCODE_MODELS_URL: opencodeModelsUrl,
+          ...(modelCatalogUrl ? { OPENCODE_MODELS_URL: modelCatalogUrl } : {}),
         },
         onEvent: options.onManagedOpencodeEvent,
       });

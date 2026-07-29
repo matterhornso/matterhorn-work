@@ -106,9 +106,9 @@ interface LayoutSectionItemTitleProps {
 
 export function LayoutSectionItemTitle({ children, className }: LayoutSectionItemTitleProps) {
   return (
-    <h4 data-slot="item-title" className={cn("flex items-center gap-2 text-base font-medium text-foreground group-data-section/section:text-sm", className)}>
+    <h3 data-slot="item-title" className={cn("flex items-center gap-2 text-base font-medium text-foreground group-data-section/section:text-sm", className)}>
       {children}
-    </h4>
+    </h3>
   );
 }
 

@@ -187,9 +187,9 @@ interface SettingsItemHeaderTitleProps {
 
 export function SettingsSectionHeaderTitle({ children, className }: SettingsItemHeaderTitleProps) {
   return (
-    <div className={cn("flex items-center gap-2 text-base font-medium text-dls-text", className)}>
+    <h3 className={cn("flex items-center gap-2 text-base font-medium text-dls-text", className)}>
       {children}
-    </div>
+    </h3>
   );
 }
 

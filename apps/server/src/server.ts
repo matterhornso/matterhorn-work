@@ -344,6 +344,12 @@ import { installHubSkill, listHubSkills } from "./skill-hub.js";
 import { deleteCommand, listCommands, repairCommands, upsertCommand } from "./commands.js";
 import { ApiError, formatError } from "./errors.js";
 import {
+  MatterhornAuthError,
+  MatterhornAuthStore,
+  resolveMatterhornDataRoot,
+  type MatterhornAuthSession,
+} from "./auth-store.js";
+import {
   readJsoncFile,
   updateJsoncExternalDirectoryPermission,
   updateJsoncPath,
@@ -712,6 +718,8 @@ function logRequest(input: {
 const DEFAULT_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_RATE_LIMIT_READ_MAX_REQUESTS = 4_800;
 const DEFAULT_RATE_LIMIT_WRITE_MAX_REQUESTS = 1_200;
+const AUTH_ATTEMPT_WINDOW_MS = 10 * 60_000;
+const AUTH_ATTEMPT_MAX_REQUESTS = 10;
 
 type RequestRateLimiter = {
   check: (
@@ -766,6 +774,25 @@ function createRequestRateLimiter(config: RequestRateLimitConfig | undefined): R
         allowed: false,
         retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
       };
+    },
+  };
+}
+
+function createAuthAttemptLimiter() {
+  const buckets = new Map<string, { count: number; resetAt: number }>();
+  return {
+    check(key: string): boolean {
+      const now = Date.now();
+      let bucket = buckets.get(key);
+      if (!bucket || now >= bucket.resetAt) {
+        bucket = { count: 0, resetAt: now + AUTH_ATTEMPT_WINDOW_MS };
+        buckets.set(key, bucket);
+      }
+      bucket.count += 1;
+      return bucket.count <= AUTH_ATTEMPT_MAX_REQUESTS;
+    },
+    reset(key: string): void {
+      buckets.delete(key);
     },
   };
 }
@@ -873,12 +900,21 @@ interface RequestContext {
   reloadEvents: ReloadEventStore;
   tokens: TokenService;
   actor?: Actor;
+  matterhornSession?: MatterhornAuthSession;
+  matterhornWorkspace?: WorkspaceInfo;
 }
+
+type ClientAccess = {
+  actor: Actor;
+  session?: MatterhornAuthSession;
+  workspace?: WorkspaceInfo;
+};
 
 export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const approvals = new ApprovalService(config.approval);
   const reloadEvents = new ReloadEventStore();
   const tokens = new TokenService(config);
+  const authStore = new MatterhornAuthStore();
   const env = new EnvService();
   const logger = createServerLogger(config);
   const createWatcherHandle = () => config.reloadWatchers === false
@@ -896,7 +932,15 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     watcherHandle = createWatcherHandle();
   };
   const operationalMetrics = new OperationalMetrics();
-  const routes = createRoutes(config, approvals, tokens, env, restartReloadWatchers, operationalMetrics);
+  const routes = createRoutes(
+    config,
+    approvals,
+    tokens,
+    authStore,
+    env,
+    restartReloadWatchers,
+    operationalMetrics,
+  );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit);
 
   const serverOptions: {
@@ -945,9 +989,10 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
         authMode = "client";
         routeTemplate = "/w/:id/opencode/*";
         try {
-          const actor = await requireClient(request, config, tokens);
-          assertOpencodeProxyAllowed(actor, request.method, mount.restPath);
-          const workspace = await resolveWorkspace(config, mount.workspaceId);
+          const access = await requireClientAccess(request, config, tokens, authStore);
+          assertMatterhornWorkspaceAccess(mount.workspaceId, access);
+          assertOpencodeProxyAllowed(access.actor, request.method, mount.restPath);
+          const workspace = access.workspace ?? await resolveWorkspace(config, mount.workspaceId);
           proxyService = "opencode";
           proxyBaseUrl = workspace.baseUrl?.trim() || undefined;
           const response = await proxyOpencodeRequest({ config, request, url, workspace, proxyPath: mount.restPath });
@@ -1015,12 +1060,16 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       if (url.pathname === "/opencode" || url.pathname.startsWith("/opencode/")) {
         authMode = "client";
         routeTemplate = "/opencode/*";
-        proxyBaseUrl = config.workspaces[0]?.baseUrl?.trim() || undefined;
         try {
-          const actor = await requireClient(request, config, tokens);
-          assertOpencodeProxyAllowed(actor, request.method, url.pathname);
+          const access = await requireClientAccess(request, config, tokens, authStore);
+          const workspace = access.workspace ?? config.workspaces[0];
+          if (!workspace) {
+            throw new ApiError(404, "workspace_not_found", "Workspace not found");
+          }
+          proxyBaseUrl = workspace.baseUrl?.trim() || undefined;
+          assertOpencodeProxyAllowed(access.actor, request.method, url.pathname);
           proxyService = "opencode";
-          const response = await proxyOpencodeRequest({ config, request, url, workspace: config.workspaces[0] });
+          const response = await proxyOpencodeRequest({ config, request, url, workspace });
           return finalize(response);
         } catch (error) {
           const apiError = error instanceof ApiError
@@ -1040,13 +1089,23 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       authMode = route.auth;
       routeTemplate = route.path;
       try {
+        const clientAccess =
+          route.auth === "client"
+            ? await requireClientAccess(request, config, tokens, authStore)
+            : undefined;
+        if (clientAccess) {
+          const requestedWorkspaceId = route.path.startsWith("/workspace/:id")
+            ? route.params.id
+            : undefined;
+          assertMatterhornWorkspaceAccess(requestedWorkspaceId, clientAccess);
+        }
         const actor =
           route.auth === "host-token"
             ? requireHostToken(request, config)
             : route.auth === "host"
               ? await requireHost(request, config, tokens)
               : route.auth === "client"
-                ? await requireClient(request, config, tokens)
+                ? clientAccess?.actor
                 : undefined;
         const response = await route.handler({
           request,
@@ -1057,6 +1116,8 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
           reloadEvents,
           tokens,
           actor,
+          matterhornSession: clientAccess?.session,
+          matterhornWorkspace: clientAccess?.workspace,
         });
         return finalize(response);
       } catch (error) {
@@ -1082,6 +1143,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     stop: async (closeActiveConnections?: boolean) => {
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);
+      authStore.close();
       await (server.stop as unknown as (closeActiveConnections?: boolean) => void | Promise<void>)(closeActiveConnections);
     },
   };
@@ -1191,7 +1253,7 @@ function createWorkspaceOpencodeClient(config: ServerConfig, workspace: Workspac
   const connection = resolveWorkspaceOpencodeConnection(config, workspace);
   const baseUrl = connection.baseUrl?.trim();
   if (!baseUrl) {
-    throw new ApiError(400, "opencode_unconfigured", "OpenCode base URL is missing for this workspace");
+    throw new ApiError(400, "opencode_unconfigured", "Agent runtime is not connected for this workspace");
   }
   const directory = resolveOpencodeDirectory(workspace);
   const directoryFetch = directory ? createOpencodeDirectoryFetch(directory) : undefined;
@@ -1373,7 +1435,7 @@ async function proxyOpencodeRequest(input: {
   const workspace = input.workspace;
   const baseUrl = workspace ? resolveWorkspaceOpencodeConnection(input.config, workspace).baseUrl?.trim() ?? "" : "";
   if (!baseUrl) {
-    throw new ApiError(400, "opencode_unconfigured", "OpenCode base URL is missing for this workspace");
+    throw new ApiError(400, "opencode_unconfigured", "Agent runtime is not connected for this workspace");
   }
 
   const proxyPath = input.proxyPath ?? input.url.pathname;
@@ -1603,6 +1665,189 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+const MATTERHORN_SESSION_COOKIE = "mh_session";
+const MATTERHORN_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
+function optionalStringBodyField(
+  body: Record<string, unknown>,
+  field: string,
+): string | undefined {
+  const value = body[field];
+  return typeof value === "string" ? value : undefined;
+}
+
+function stringBodyField(
+  body: Record<string, unknown>,
+  field: string,
+): string {
+  return optionalStringBodyField(body, field) ?? "";
+}
+
+function parseCookieHeader(header: string | null): Map<string, string> {
+  const cookies = new Map<string, string>();
+  if (!header) return cookies;
+  for (const entry of header.split(";")) {
+    const separator = entry.indexOf("=");
+    if (separator <= 0) continue;
+    const name = entry.slice(0, separator).trim();
+    const value = entry.slice(separator + 1).trim();
+    if (!name) continue;
+    try {
+      cookies.set(name, decodeURIComponent(value));
+    } catch {
+      cookies.set(name, value);
+    }
+  }
+  return cookies;
+}
+
+function matterhornSessionToken(request: Request): string | null {
+  const authorization = request.headers.get("authorization")?.trim() ?? "";
+  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (bearer) return bearer;
+  return parseCookieHeader(request.headers.get("cookie")).get(
+    MATTERHORN_SESSION_COOKIE,
+  ) ?? null;
+}
+
+function matterhornCookieSessionToken(request: Request): string | null {
+  return parseCookieHeader(request.headers.get("cookie")).get(
+    MATTERHORN_SESSION_COOKIE,
+  ) ?? null;
+}
+
+function matterhornSessionCookie(
+  request: Request,
+  token: string,
+  options?: { clear?: boolean },
+): string {
+  const forwardedProtocol =
+    request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  const secure =
+    new URL(request.url).protocol === "https:" || forwardedProtocol === "https";
+  const value = options?.clear ? "" : encodeURIComponent(token);
+  const maxAge = options?.clear ? 0 : MATTERHORN_SESSION_MAX_AGE_SECONDS;
+  return [
+    `${MATTERHORN_SESSION_COOKIE}=${value}`,
+    "Path=/",
+    `Max-Age=${maxAge}`,
+    "HttpOnly",
+    "SameSite=Lax",
+    secure ? "Secure" : "",
+  ].filter(Boolean).join("; ");
+}
+
+function matterhornAuthResponse(
+  request: Request,
+  body: unknown,
+  token: string,
+): Response {
+  const response = jsonResponse(body);
+  response.headers.append(
+    "Set-Cookie",
+    matterhornSessionCookie(request, token),
+  );
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
+function withMatterhornAuthErrorMapping<T>(callback: () => T): T {
+  try {
+    return callback();
+  } catch (error) {
+    if (!(error instanceof MatterhornAuthError)) throw error;
+    const status =
+      error.code === "invalid_credentials" || error.code === "unauthorized"
+        ? 401
+        : error.code === "email_taken" ||
+            error.code === "organization_slug_taken"
+          ? 409
+          : 400;
+    throw new ApiError(status, error.code, error.message);
+  }
+}
+
+function requireMatterhornSessionToken(
+  request: Request,
+  authStore: MatterhornAuthStore,
+): string {
+  const token = matterhornSessionToken(request);
+  if (!token || !authStore.getSession(token)) {
+    throw new ApiError(401, "unauthorized", "Sign in to continue.");
+  }
+  return token;
+}
+
+function requireMatterhornAuthSession(
+  request: Request,
+  authStore: MatterhornAuthStore,
+): MatterhornAuthSession {
+  const token = requireMatterhornSessionToken(request, authStore);
+  const session = authStore.getSession(token);
+  if (!session) {
+    throw new ApiError(401, "unauthorized", "Sign in to continue.");
+  }
+  return session;
+}
+
+function matterhornActiveOrganization(
+  authStore: MatterhornAuthStore,
+  session: MatterhornAuthSession,
+) {
+  return authStore
+    .listOrganizations(session.user.id)
+    .find((organization) => organization.id === session.activeOrgId) ?? null;
+}
+
+function matterhornOrganizationWorkspaceId(organizationId: string): string {
+  const digest = createHash("sha256")
+    .update(`matterhorn-web-workspace:${organizationId}`)
+    .digest("hex")
+    .slice(0, 16);
+  return `ws_web_${digest}`;
+}
+
+async function ensureMatterhornOrganizationWorkspace(
+  config: ServerConfig,
+  authStore: MatterhornAuthStore,
+  session: MatterhornAuthSession,
+): Promise<WorkspaceInfo> {
+  const organization = matterhornActiveOrganization(authStore, session);
+  if (!organization) {
+    throw new ApiError(
+      403,
+      "organization_access_denied",
+      "Select an organization you can access.",
+    );
+  }
+
+  const workspaceId = matterhornOrganizationWorkspaceId(organization.id);
+  const workspacePath = join(
+    resolveMatterhornDataRoot(),
+    "web-workspaces",
+    organization.id,
+  );
+  let workspace = config.workspaces.find((entry) => entry.id === workspaceId);
+  if (!workspace) {
+    workspace = {
+      id: workspaceId,
+      name: organization.name,
+      path: workspacePath,
+      preset: "starter",
+      workspaceType: "local",
+      ...inheritWorkspaceOpencodeConnection(config),
+    };
+    config.workspaces = [...config.workspaces, workspace];
+  }
+  if (!config.authorizedRoots.some(
+    (root) => resolve(root) === resolve(workspacePath),
+  )) {
+    config.authorizedRoots = [...config.authorizedRoots, workspacePath];
+  }
+  await ensureDir(workspacePath);
+  return resolveWorkspace(config, workspaceId);
+}
+
 function resolveMatterhornMemoryRoot(): string {
   return (
     process.env.MATTERHORN_WORK_MEMORY_ROOT?.trim() ||
@@ -1678,6 +1923,12 @@ function workspaceLocalMemoryRoot(workspace: WorkspaceInfo): string {
 function memoryVaultForWorkspace(defaultVault: MatterhornMemoryVault, workspace: WorkspaceInfo): MatterhornMemoryVault {
   if (workspaceMemoryStorageMode() !== "workspace_local_vault") return defaultVault;
   return createMatterhornMemoryVault(workspaceLocalMemoryRoot(workspace));
+}
+
+function memoryVaultForRequest(defaultVault: MatterhornMemoryVault, ctx: RequestContext): MatterhornMemoryVault {
+  return ctx.matterhornWorkspace
+    ? memoryVaultForWorkspace(defaultVault, ctx.matterhornWorkspace)
+    : defaultVault;
 }
 
 function workspaceMemoryStorageDetails(workspace: WorkspaceInfo, defaultVault: MatterhornMemoryVault) {
@@ -2565,6 +2816,55 @@ async function requireClient(request: Request, config: ServerConfig, tokens: Tok
   }
   const clientId = request.headers.get("x-openwork-client-id") ?? undefined;
   return { type: "remote", clientId, tokenHash: hashToken(token), scope };
+}
+
+async function requireClientAccess(
+  request: Request,
+  config: ServerConfig,
+  tokens: TokenService,
+  authStore: MatterhornAuthStore,
+): Promise<ClientAccess> {
+  const authorization = request.headers.get("authorization")?.trim() ?? "";
+  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? null;
+  const cookie = matterhornCookieSessionToken(request);
+
+  // Browser sessions are first-party and should win over an unrelated bearer
+  // header injected by an extension or reverse proxy.
+  for (const token of [cookie, bearer]) {
+    if (!token) continue;
+    const session = authStore.getSession(token);
+    if (!session) continue;
+    return {
+      actor: {
+        type: "remote",
+        clientId: session.user.id,
+        tokenHash: hashToken(token),
+        scope: "owner",
+      },
+      session,
+      workspace: await ensureMatterhornOrganizationWorkspace(
+        config,
+        authStore,
+        session,
+      ),
+    };
+  }
+
+  return { actor: await requireClient(request, config, tokens) };
+}
+
+function assertMatterhornWorkspaceAccess(
+  requestedWorkspaceId: string | undefined,
+  access: ClientAccess,
+): void {
+  if (
+    access.workspace &&
+    requestedWorkspaceId &&
+    requestedWorkspaceId !== access.workspace.id
+  ) {
+    // Do not reveal whether another account's workspace exists.
+    throw new ApiError(404, "workspace_not_found", "Workspace not found");
+  }
 }
 
 function requireHostToken(request: Request, config: ServerConfig): Actor {
@@ -4595,13 +4895,25 @@ function memoryMutationWorkspaceId(body: Record<string, unknown>): string | unde
   return undefined;
 }
 
-async function resolveMemoryMutationWorkspace(config: ServerConfig, body: Record<string, unknown>): Promise<WorkspaceInfo | null> {
+async function resolveMemoryMutationWorkspace(
+  ctx: RequestContext,
+  body: Record<string, unknown>,
+): Promise<WorkspaceInfo | null> {
   const workspaceId = memoryMutationWorkspaceId(body);
-  if (workspaceId) return resolveWorkspace(config, workspaceId);
-  const first = config.workspaces[0];
+  if (workspaceId) {
+    if (
+      ctx.matterhornWorkspace &&
+      workspaceId !== ctx.matterhornWorkspace.id
+    ) {
+      throw new ApiError(404, "workspace_not_found", "Workspace not found");
+    }
+    return resolveWorkspace(ctx.config, workspaceId);
+  }
+  if (ctx.matterhornWorkspace) return ctx.matterhornWorkspace;
+  const first = ctx.config.workspaces[0];
   if (!first) return null;
   try {
-    return await resolveWorkspace(config, first.id);
+    return await resolveWorkspace(ctx.config, first.id);
   } catch {
     return null;
   }
@@ -5694,6 +6006,7 @@ function createRoutes(
   config: ServerConfig,
   approvals: ApprovalService,
   tokens: TokenService,
+  authStore: MatterhornAuthStore,
   env: EnvService,
   onWorkspacesChanged: () => void,
   operationalMetrics: OperationalMetrics,
@@ -5703,6 +6016,7 @@ function createRoutes(
   const fileSessions = new FileSessionStore();
   const googleWorkspaceConnectFlows = createGoogleWorkspaceConnectFlowManager(config);
   const memoryVault = createMatterhornMemoryVault(resolveMatterhornMemoryRoot());
+  const authAttemptLimiter = createAuthAttemptLimiter();
   const workflowRuns = new WorkflowRunEngine({
     persistenceRoot: config.workspaces[0]?.path ?? process.cwd(),
     onEvent: recordWorkflowTaskEvent,
@@ -5751,6 +6065,107 @@ function createRoutes(
   const recordWorkspaceFileEvent = (workspaceId: string, input: { type: "write" | "delete" | "rename" | "mkdir"; path: string; toPath?: string; revision?: string }) => {
     return fileSessions.recordWorkspaceEvent({ workspaceId, ...input });
   };
+
+  addRoute(routes, "POST", "/api/auth/sign-up/email", "none", async ({ request }) => {
+    const body = await readJsonBody(request, 16 * 1024, "Sign-up");
+    const email = stringBodyField(body, "email");
+    const attemptKey = `sign-up:${email.trim().toLowerCase()}`;
+    if (!authAttemptLimiter.check(attemptKey)) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many account attempts. Try again in a few minutes.",
+      );
+    }
+    const session = withMatterhornAuthErrorMapping(() =>
+      authStore.createAccount({
+        email,
+        password: stringBodyField(body, "password"),
+        name: optionalStringBodyField(body, "name"),
+      }),
+    );
+    return matterhornAuthResponse(request, {
+      user: session.user,
+      organization: matterhornActiveOrganization(authStore, session),
+    }, session.token);
+  });
+
+  addRoute(routes, "POST", "/api/auth/sign-in/email", "none", async ({ request }) => {
+    const body = await readJsonBody(request, 16 * 1024, "Sign-in");
+    const email = stringBodyField(body, "email");
+    const attemptKey = `sign-in:${email.trim().toLowerCase()}`;
+    if (!authAttemptLimiter.check(attemptKey)) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many sign-in attempts. Try again in a few minutes.",
+      );
+    }
+    const session = withMatterhornAuthErrorMapping(() =>
+      authStore.signIn(
+        email,
+        stringBodyField(body, "password"),
+      ),
+    );
+    authAttemptLimiter.reset(attemptKey);
+    return matterhornAuthResponse(request, {
+      user: session.user,
+      organization: matterhornActiveOrganization(authStore, session),
+    }, session.token);
+  });
+
+  addRoute(routes, "POST", "/api/auth/sign-out", "none", async ({ request }) => {
+    const token = matterhornSessionToken(request);
+    if (token) authStore.signOut(token);
+    const response = jsonResponse({ ok: true });
+    response.headers.append(
+      "Set-Cookie",
+      matterhornSessionCookie(request, "", { clear: true }),
+    );
+    return response;
+  });
+
+  addRoute(routes, "GET", "/api/den/v1/me", "none", async ({ request }) => {
+    const session = requireMatterhornAuthSession(request, authStore);
+    return jsonResponse({
+      user: session.user,
+      activeOrgId: session.activeOrgId,
+      activeOrgSlug: session.activeOrgSlug,
+    });
+  });
+
+  addRoute(routes, "GET", "/api/den/v1/me/orgs", "none", async ({ request }) => {
+    const session = requireMatterhornAuthSession(request, authStore);
+    return jsonResponse({
+      orgs: authStore.listOrganizations(session.user.id),
+      activeOrgId: session.activeOrgId,
+      activeOrgSlug: session.activeOrgSlug,
+    });
+  });
+
+  addRoute(routes, "POST", "/api/den/v1/me/active-organization", "none", async ({ request }) => {
+    const token = requireMatterhornSessionToken(request, authStore);
+    const body = await readJsonBody(request, 16 * 1024, "Workspace selection");
+    const organization = withMatterhornAuthErrorMapping(() =>
+      authStore.setActiveOrganization(token, {
+        organizationId: optionalStringBodyField(body, "organizationId"),
+        organizationSlug: optionalStringBodyField(body, "organizationSlug"),
+      }),
+    );
+    return jsonResponse({ organization });
+  });
+
+  addRoute(routes, "POST", "/api/auth/organization/create", "none", async ({ request }) => {
+    const token = requireMatterhornSessionToken(request, authStore);
+    const body = await readJsonBody(request, 16 * 1024, "Workspace creation");
+    const organization = withMatterhornAuthErrorMapping(() =>
+      authStore.createOrganization(token, {
+        name: stringBodyField(body, "name"),
+        slug: stringBodyField(body, "slug"),
+      }),
+    );
+    return jsonResponse({ organization });
+  });
 
   addRoute(routes, "GET", "/health", "none", async () => {
     return jsonResponse({ ok: true, version: SERVER_VERSION, opencodeVersion: OPENCODE_VERSION, uptimeMs: Date.now() - config.startedAt });
@@ -6299,9 +6714,12 @@ function createRoutes(
     return jsonResponse(await googleWorkspaceRunScopeSmokeTest(config));
   });
 
-  addRoute(routes, "GET", "/workspaces", "client", async () => {
-    const active = config.workspaces[0] ?? null;
-    const items = config.workspaces.map(serializeWorkspace);
+  addRoute(routes, "GET", "/workspaces", "client", async (ctx) => {
+    const visible = ctx.matterhornWorkspace
+      ? [ctx.matterhornWorkspace]
+      : config.workspaces;
+    const active = ctx.matterhornWorkspace ?? config.workspaces[0] ?? null;
+    const items = visible.map(serializeWorkspace);
     return jsonResponse({ items, workspaces: items, activeId: active?.id ?? null });
   });
 
@@ -8755,8 +9173,25 @@ function createRoutes(
     return jsonResponse(result);
   });
 
-  const hyperliquidWatchStore = new Map<string, HyperliquidWatchDescriptor>();
-  const polymarketWatchStore = new Map<string, PolymarketWatchDescriptor>();
+  const hyperliquidWatchStores = new Map<string, Map<string, HyperliquidWatchDescriptor>>();
+  const polymarketWatchStores = new Map<string, Map<string, PolymarketWatchDescriptor>>();
+
+  const clientStateNamespace = (ctx: RequestContext): string =>
+    ctx.matterhornWorkspace
+      ? `workspace:${ctx.matterhornWorkspace.id}`
+      : `client:${ctx.actor?.tokenHash ?? "legacy"}`;
+
+  const watchStoreForRequest = <T>(
+    stores: Map<string, Map<string, T>>,
+    ctx: RequestContext,
+  ): Map<string, T> => {
+    const namespace = clientStateNamespace(ctx);
+    const existing = stores.get(namespace);
+    if (existing) return existing;
+    const created = new Map<string, T>();
+    stores.set(namespace, created);
+    return created;
+  };
 
   const coerceHyperliquidWatch = (value: unknown): HyperliquidWatchDescriptor | null => {
     if (!isRecord(value) || value.version !== "matterhorn.hyperliquid.watch.v1") return null;
@@ -9002,13 +9437,13 @@ function createRoutes(
       threshold: body.threshold === undefined ? null : body.threshold as never,
       direction: typeof body.direction === "string" ? body.direction : null,
     });
-    hyperliquidWatchStore.set(watch.id, watch);
+    watchStoreForRequest(hyperliquidWatchStores, ctx).set(watch.id, watch);
     const check = await checkHyperliquidWatchDescriptor(watch, hyperliquidProvider);
     return jsonResponse({ success: true, watch, check, cards: [buildHyperliquidWatchCard(watch, check)] });
   });
 
-  addRoute(routes, "GET", "/api/hyperliquid/watches", "client", async () => {
-    const watches = Array.from(hyperliquidWatchStore.values());
+  addRoute(routes, "GET", "/api/hyperliquid/watches", "client", async (ctx) => {
+    const watches = Array.from(watchStoreForRequest(hyperliquidWatchStores, ctx).values());
     return jsonResponse({ success: true, watches, count: watches.length });
   });
 
@@ -9023,7 +9458,7 @@ function createRoutes(
       ? [explicit]
       : Array.isArray(body.watches)
         ? body.watches.map(coerceHyperliquidWatch).filter((watch): watch is HyperliquidWatchDescriptor => Boolean(watch))
-        : Array.from(hyperliquidWatchStore.values());
+        : Array.from(watchStoreForRequest(hyperliquidWatchStores, ctx).values());
     const checks = await Promise.all(watches.map((watch) => checkHyperliquidWatchDescriptor(watch, hyperliquidProvider)));
     return jsonResponse({
       success: true,
@@ -9047,7 +9482,7 @@ function createRoutes(
       ? [explicit]
       : Array.isArray(body.watches)
         ? body.watches.map(coerceHyperliquidWatch).filter((watch): watch is HyperliquidWatchDescriptor => Boolean(watch))
-        : Array.from(hyperliquidWatchStore.values());
+        : Array.from(watchStoreForRequest(hyperliquidWatchStores, ctx).values());
     const checks = await Promise.all(watches.map((watch) => checkHyperliquidWatchDescriptor(watch, hyperliquidProvider)));
     const selected = selectHyperliquidWatchAlert(watches, checks, readMarketWatchAlertIndex(body));
     const prompt = buildHyperliquidWatchAlertReviewPrompt(selected.check, selected.watch);
@@ -9078,8 +9513,8 @@ function createRoutes(
     });
   });
 
-  addRoute(routes, "GET", "/api/hyperliquid/watches/digest", "client", async () => {
-    const watches = Array.from(hyperliquidWatchStore.values());
+  addRoute(routes, "GET", "/api/hyperliquid/watches/digest", "client", async (ctx) => {
+    const watches = Array.from(watchStoreForRequest(hyperliquidWatchStores, ctx).values());
     const checks = await Promise.all(watches.map((watch) => checkHyperliquidWatchDescriptor(watch, hyperliquidProvider)));
     return jsonResponse({ success: true, digest: buildHyperliquidWatchDigest(checks), checks });
   });
@@ -9387,11 +9822,16 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/memory/search", "client", async (ctx) => {
     try {
-      const records = await memoryVault.searchRecords({
+      const requestVault = memoryVaultForRequest(memoryVault, ctx);
+      const records = await requestVault.searchRecords({
         query: ctx.url.searchParams.get("q") ?? ctx.url.searchParams.get("query") ?? undefined,
         kind: ctx.url.searchParams.get("kind") as MatterhornMemoryRecord["kind"] | null ?? undefined,
-        scope: ctx.url.searchParams.get("scope") as MatterhornMemoryRecord["scope"] | null ?? undefined,
-        tags: normalizeMemoryTags(ctx.url.searchParams.get("tags")),
+        scope: ctx.matterhornWorkspace
+          ? "workspace"
+          : ctx.url.searchParams.get("scope") as MatterhornMemoryRecord["scope"] | null ?? undefined,
+        tags: ctx.matterhornWorkspace
+          ? workspaceMemoryQueryTags(ctx.matterhornWorkspace, normalizeMemoryTags(ctx.url.searchParams.get("tags")))
+          : normalizeMemoryTags(ctx.url.searchParams.get("tags")),
         limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
         includeDeleted: ctx.url.searchParams.get("includeDeleted") === "true" || ctx.url.searchParams.get("include_deleted") === "true",
       });
@@ -9404,10 +9844,15 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/memory/entities", "client", async (ctx) => {
     try {
-      const records = await memoryVault.listRecords({
+      const requestVault = memoryVaultForRequest(memoryVault, ctx);
+      const records = await requestVault.listRecords({
         kind: ctx.url.searchParams.get("kind") as MatterhornMemoryRecord["kind"] | null ?? undefined,
-        scope: ctx.url.searchParams.get("scope") as MatterhornMemoryRecord["scope"] | null ?? undefined,
-        tags: normalizeMemoryTags(ctx.url.searchParams.get("tags")),
+        scope: ctx.matterhornWorkspace
+          ? "workspace"
+          : ctx.url.searchParams.get("scope") as MatterhornMemoryRecord["scope"] | null ?? undefined,
+        tags: ctx.matterhornWorkspace
+          ? workspaceMemoryQueryTags(ctx.matterhornWorkspace, normalizeMemoryTags(ctx.url.searchParams.get("tags")))
+          : normalizeMemoryTags(ctx.url.searchParams.get("tags")),
         limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
         includeDeleted: ctx.url.searchParams.get("includeDeleted") === "true" || ctx.url.searchParams.get("include_deleted") === "true",
       });
@@ -9419,9 +9864,13 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/api/memory/entities/:id", "client", async (ctx) => {
-    const record = await memoryVault.getRecord(ctx.params.id);
+    const requestVault = memoryVaultForRequest(memoryVault, ctx);
+    const record = await requestVault.getRecord(ctx.params.id);
     if (!record) {
       throw new ApiError(404, "memory_not_found", "Memory record not found");
+    }
+    if (ctx.matterhornWorkspace) {
+      assertWorkspaceMemoryRecord(record, ctx.matterhornWorkspace);
     }
     assertMemoryRecordAllowedForSurface(record, memorySurface(ctx.url));
     return jsonResponse({ success: true, record });
@@ -9744,10 +10193,13 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     try {
       const body = await readJsonBody(ctx.request);
-      const auditWorkspace = await resolveMemoryMutationWorkspace(config, body);
-      const record = coerceMemoryRecord(body.record ?? body);
+      const auditWorkspace = await resolveMemoryMutationWorkspace(ctx, body);
+      const requestVault = memoryVaultForRequest(memoryVault, ctx);
+      const record = ctx.matterhornWorkspace
+        ? namespaceWorkspaceMemoryRecord(coerceMemoryRecord(body.record ?? body), ctx.matterhornWorkspace)
+        : coerceMemoryRecord(body.record ?? body);
       assertMemoryRecordAllowedForSurface(record, memorySurface(ctx.url));
-      const result = await memoryVault.captureRecord(record);
+      const result = await requestVault.captureRecord(record);
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
         action: "memory.capture",
         target: result.record.id,
@@ -9772,8 +10224,13 @@ function createRoutes(
           "Memory suggestions cannot be planned from seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, or secret-shaped fields.",
         );
       }
-      const plan = planMatterhornMemorySuggestions(input);
-      return jsonResponse({ success: true, ...plan });
+      const plan = planMatterhornMemorySuggestions(
+        ctx.matterhornWorkspace ? { ...input, workspaceId: ctx.matterhornWorkspace.id } : input,
+      );
+      const suggestions = ctx.matterhornWorkspace
+        ? plan.suggestions.map((suggestion) => namespaceWorkspaceMemorySuggestion(suggestion, ctx.matterhornWorkspace!))
+        : plan.suggestions;
+      return jsonResponse({ success: true, ...plan, suggestions, count: suggestions.length });
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw memoryApiError(error);
@@ -9785,8 +10242,9 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     try {
       const body = await readJsonBody(ctx.request);
-      const auditWorkspace = await resolveMemoryMutationWorkspace(config, body);
-      const namespaceWorkspace = memoryMutationWorkspaceId(body) ? auditWorkspace : null;
+      const auditWorkspace = await resolveMemoryMutationWorkspace(ctx, body);
+      const namespaceWorkspace = ctx.matterhornWorkspace ?? (memoryMutationWorkspaceId(body) ? auditWorkspace : null);
+      const requestVault = memoryVaultForRequest(memoryVault, ctx);
       const input = (body.input && typeof body.input === "object" && !Array.isArray(body.input)
         ? body.input
         : body) as MatterhornMemorySuggestionPlanInput;
@@ -9801,7 +10259,7 @@ function createRoutes(
       const suggestions = namespaceWorkspace
         ? plan.suggestions.map((suggestion) => namespaceWorkspaceMemorySuggestion(suggestion, namespaceWorkspace))
         : plan.suggestions;
-      const inbox = await memoryVault.storeSuggestions(suggestions);
+      const inbox = await requestVault.storeSuggestions(suggestions);
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
         action: "memory.suggestions.create",
         target: "memory-suggestions",
@@ -9816,13 +10274,17 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/memory/suggestions", "client", async (ctx) => {
     try {
-      const entries = await memoryVault.listSuggestions({
+      const requestVault = memoryVaultForRequest(memoryVault, ctx);
+      const entries = await requestVault.listSuggestions({
         status: coerceMemorySuggestionStatus(ctx.url.searchParams.get("status")),
         desk: ctx.url.searchParams.get("desk") as MatterhornMemorySuggestion["desk"] | null ?? undefined,
         includeResolved: ctx.url.searchParams.get("includeResolved") === "true" || ctx.url.searchParams.get("include_resolved") === "true",
         limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
       });
-      return jsonResponse({ success: true, entries, count: entries.length });
+      const filteredEntries = ctx.matterhornWorkspace
+        ? entries.filter((entry) => memorySuggestionBelongsToWorkspace(entry.suggestion, ctx.matterhornWorkspace!))
+        : entries;
+      return jsonResponse({ success: true, entries: filteredEntries, count: filteredEntries.length });
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw memoryApiError(error);
@@ -9830,9 +10292,13 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/api/memory/suggestions/:id", "client", async (ctx) => {
-    const entry = await memoryVault.getSuggestion(ctx.params.id);
+    const requestVault = memoryVaultForRequest(memoryVault, ctx);
+    const entry = await requestVault.getSuggestion(ctx.params.id);
     if (!entry) {
       throw new ApiError(404, "memory_suggestion_not_found", "Memory suggestion not found");
+    }
+    if (ctx.matterhornWorkspace) {
+      assertWorkspaceMemorySuggestion(entry, ctx.matterhornWorkspace);
     }
     return jsonResponse({ success: true, entry });
   });
@@ -9842,15 +10308,19 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     try {
       const body = await readJsonBody(ctx.request);
-      const auditWorkspace = await resolveMemoryMutationWorkspace(config, body);
-      const namespaceWorkspace = memoryMutationWorkspaceId(body) ? auditWorkspace : null;
+      const auditWorkspace = await resolveMemoryMutationWorkspace(ctx, body);
+      const namespaceWorkspace = ctx.matterhornWorkspace ?? (memoryMutationWorkspaceId(body) ? auditWorkspace : null);
+      const requestVault = memoryVaultForRequest(memoryVault, ctx);
       const action = coerceMemorySuggestionAction(body.action);
       const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
         ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
         : undefined;
-      const entry = await memoryVault.getSuggestion(ctx.params.id);
+      const entry = await requestVault.getSuggestion(ctx.params.id);
       if (!entry) {
         throw new ApiError(404, "memory_suggestion_not_found", "Memory suggestion not found");
+      }
+      if (ctx.matterhornWorkspace) {
+        assertWorkspaceMemorySuggestion(entry, ctx.matterhornWorkspace);
       }
       const effectiveAction = action ?? entry.suggestion.userAction;
       const namespacedPatch = namespaceWorkspace && (effectiveAction === "confirm" || effectiveAction === "edit")
@@ -9862,7 +10332,7 @@ function createRoutes(
           memorySurface(ctx.url),
         );
       }
-      const result = await memoryVault.resolveStoredSuggestion(ctx.params.id, {
+      const result = await requestVault.resolveStoredSuggestion(ctx.params.id, {
         action,
         patch: namespacedPatch,
         reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
@@ -9884,8 +10354,9 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     try {
       const body = await readJsonBody(ctx.request);
-      const auditWorkspace = await resolveMemoryMutationWorkspace(config, body);
-      const namespaceWorkspace = memoryMutationWorkspaceId(body) ? auditWorkspace : null;
+      const auditWorkspace = await resolveMemoryMutationWorkspace(ctx, body);
+      const namespaceWorkspace = ctx.matterhornWorkspace ?? (memoryMutationWorkspaceId(body) ? auditWorkspace : null);
+      const requestVault = memoryVaultForRequest(memoryVault, ctx);
       const rawSuggestion = coerceMemorySuggestion(body.suggestion ?? body);
       const action = coerceMemorySuggestionAction(body.action);
       const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
@@ -9904,7 +10375,7 @@ function createRoutes(
           memorySurface(ctx.url),
         );
       }
-      const result = await memoryVault.resolveSuggestion(suggestion, {
+      const result = await requestVault.resolveSuggestion(suggestion, {
         action,
         patch: namespacedPatch,
         reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
@@ -9926,15 +10397,24 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     try {
       const body = await readJsonBody(ctx.request);
-      const auditWorkspace = await resolveMemoryMutationWorkspace(config, body);
+      const auditWorkspace = await resolveMemoryMutationWorkspace(ctx, body);
+      const requestVault = memoryVaultForRequest(memoryVault, ctx);
       const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
         ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
         : body as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>;
-      const existingRecord = await memoryVault.getRecord(ctx.params.id);
+      const existingRecord = await requestVault.getRecord(ctx.params.id);
       if (existingRecord) {
+        if (ctx.matterhornWorkspace) {
+          assertWorkspaceMemoryRecord(existingRecord, ctx.matterhornWorkspace);
+        }
         assertMemoryRecordAllowedForSurface({ ...existingRecord, ...patch } as MatterhornMemoryRecord, memorySurface(ctx.url));
       }
-      const record = await memoryVault.updateRecord(ctx.params.id, patch);
+      const record = await requestVault.updateRecord(
+        ctx.params.id,
+        ctx.matterhornWorkspace && existingRecord
+          ? namespaceWorkspaceMemoryPatch(existingRecord, patch, ctx.matterhornWorkspace)
+          : patch,
+      );
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
         action: "memory.record.update",
         target: record.id,
@@ -9950,8 +10430,12 @@ function createRoutes(
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     try {
-      const auditWorkspace = await resolveMemoryMutationWorkspace(config, {});
-      const result = await memoryVault.forgetRecord(ctx.params.id, "Deleted through Matterhorn Desks memory API.");
+      const auditWorkspace = await resolveMemoryMutationWorkspace(ctx, {});
+      const requestVault = memoryVaultForRequest(memoryVault, ctx);
+      if (ctx.matterhornWorkspace) {
+        assertWorkspaceMemoryRecord(await requestVault.getRecord(ctx.params.id), ctx.matterhornWorkspace);
+      }
+      const result = await requestVault.forgetRecord(ctx.params.id, "Deleted through Matterhorn Desks memory API.");
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
         action: "memory.record.forget",
         target: ctx.params.id,
@@ -9968,7 +10452,8 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     try {
       const body = await readJsonBody(ctx.request);
-      const auditWorkspace = await resolveMemoryMutationWorkspace(config, body);
+      const auditWorkspace = await resolveMemoryMutationWorkspace(ctx, body);
+      const requestVault = memoryVaultForRequest(memoryVault, ctx);
       const id = typeof body.id === "string" ? body.id.trim() : "";
       if (!id) {
         throw new ApiError(400, "invalid_memory_id", "id is required");
@@ -9976,7 +10461,10 @@ function createRoutes(
       const reason = typeof body.reason === "string" && body.reason.trim()
         ? body.reason.trim()
         : "User requested memory deletion.";
-      const result = await memoryVault.forgetRecord(id, reason);
+      if (ctx.matterhornWorkspace) {
+        assertWorkspaceMemoryRecord(await requestVault.getRecord(id), ctx.matterhornWorkspace);
+      }
+      const result = await requestVault.forgetRecord(id, reason);
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
         action: "memory.record.forget",
         target: id,
@@ -9994,11 +10482,12 @@ function createRoutes(
     requireClientScope(ctx, "collaborator");
     try {
       const body = await readJsonBody(ctx.request);
-      const auditWorkspace = await resolveMemoryMutationWorkspace(config, body);
+      const auditWorkspace = await resolveMemoryMutationWorkspace(ctx, body);
+      const requestVault = memoryVaultForRequest(memoryVault, ctx);
       const outputDir = typeof body.outputDir === "string" && body.outputDir.trim()
         ? body.outputDir.trim()
-        : join(memoryVault.rootDir, "Exports", `memory-export-${Date.now()}`);
-      const result = await memoryVault.exportBundle(outputDir);
+        : join(requestVault.rootDir, "Exports", `memory-export-${Date.now()}`);
+      const result = await requestVault.exportBundle(outputDir);
       await recordMemoryMutationAudit(auditWorkspace, ctx, {
         action: "memory.export",
         target: result.outputDir,
@@ -10399,13 +10888,13 @@ function createRoutes(
     }
     const market = await polymarketProvider.getMarket(marketId);
     const watch = buildPolymarketWatchDescriptor(market);
-    polymarketWatchStore.set(watch.id, watch);
+    watchStoreForRequest(polymarketWatchStores, ctx).set(watch.id, watch);
     const check = await checkPolymarketWatchDescriptor(watch, polymarketProvider);
     return jsonResponse({ success: true, market, watch, check, cards: [buildPolymarketWatchCard(watch, check)] });
   });
 
-  addRoute(routes, "GET", "/api/polymarket/watches", "client", async () => {
-    const watches = Array.from(polymarketWatchStore.values());
+  addRoute(routes, "GET", "/api/polymarket/watches", "client", async (ctx) => {
+    const watches = Array.from(watchStoreForRequest(polymarketWatchStores, ctx).values());
     return jsonResponse({ success: true, watches, count: watches.length });
   });
 
@@ -10420,7 +10909,7 @@ function createRoutes(
       ? [explicit]
       : Array.isArray(body.watches)
         ? body.watches.map(coercePolymarketWatch).filter((watch): watch is PolymarketWatchDescriptor => Boolean(watch))
-        : Array.from(polymarketWatchStore.values());
+        : Array.from(watchStoreForRequest(polymarketWatchStores, ctx).values());
     const checks = await Promise.all(watches.map((watch) => checkPolymarketWatchDescriptor(watch, polymarketProvider)));
     return jsonResponse({
       success: true,
@@ -10444,7 +10933,7 @@ function createRoutes(
       ? [explicit]
       : Array.isArray(body.watches)
         ? body.watches.map(coercePolymarketWatch).filter((watch): watch is PolymarketWatchDescriptor => Boolean(watch))
-        : Array.from(polymarketWatchStore.values());
+        : Array.from(watchStoreForRequest(polymarketWatchStores, ctx).values());
     const checks = await Promise.all(watches.map((watch) => checkPolymarketWatchDescriptor(watch, polymarketProvider)));
     const selected = selectPolymarketWatchAlert(watches, checks, readMarketWatchAlertIndex(body));
     const prompt = buildPolymarketWatchAlertReviewPrompt(selected.check, selected.watch);
@@ -10473,8 +10962,8 @@ function createRoutes(
     });
   });
 
-  addRoute(routes, "GET", "/api/polymarket/watches/digest", "client", async () => {
-    const watches = Array.from(polymarketWatchStore.values());
+  addRoute(routes, "GET", "/api/polymarket/watches/digest", "client", async (ctx) => {
+    const watches = Array.from(watchStoreForRequest(polymarketWatchStores, ctx).values());
     const checks = await Promise.all(watches.map((watch) => checkPolymarketWatchDescriptor(watch, polymarketProvider)));
     return jsonResponse({ success: true, digest: buildPolymarketWatchDigest(checks), checks });
   });
@@ -11877,8 +12366,8 @@ function createRoutes(
     return jsonResponse({ success: true, comparison, cards: buildBittensorValidatorComparisonCards(comparison) });
   });
 
-  addRoute(routes, "GET", "/api/bittensor/monitoring/watchlist", "client", async () => {
-    const watches = listBittensorWatches();
+  addRoute(routes, "GET", "/api/bittensor/monitoring/watchlist", "client", async (ctx) => {
+    const watches = listBittensorWatches(clientStateNamespace(ctx));
     return jsonResponse({ success: true, watches, cards: buildBittensorWatchCards(watches) });
   });
 
@@ -11890,6 +12379,7 @@ function createRoutes(
       typeof body.kind === "string" && ["subnet", "wallet", "validator", "emissions", "slippage"].includes(body.kind)
         ? (body.kind as BittensorWatch["kind"])
         : "subnet";
+    const ownerScope = clientStateNamespace(ctx);
     const watch = createBittensorWatch({
       kind: watchKind,
       label: typeof body.label === "string" ? body.label : undefined,
@@ -11898,18 +12388,18 @@ function createRoutes(
       validatorHotkey: typeof body.validatorHotkey === "string" ? body.validatorHotkey : null,
       threshold: body.threshold === null || body.threshold === undefined || body.threshold === "" ? null : Number(body.threshold),
       reason: typeof body.reason === "string" ? body.reason : null,
-    });
-    const watches = listBittensorWatches();
+    }, ownerScope);
+    const watches = listBittensorWatches(ownerScope);
     return jsonResponse({ success: true, watch, watches, cards: buildBittensorWatchCards([watch]) });
   });
 
-  addRoute(routes, "GET", "/api/bittensor/monitoring/check", "client", async () => {
-    const evaluations = await evaluateBittensorWatches();
+  addRoute(routes, "GET", "/api/bittensor/monitoring/check", "client", async (ctx) => {
+    const evaluations = await evaluateBittensorWatches(clientStateNamespace(ctx));
     return jsonResponse({ success: true, evaluations, cards: buildBittensorWatchEvaluationCards(evaluations) });
   });
 
   addRoute(routes, "GET", "/api/bittensor/monitoring/digest", "client", async (ctx) => {
-    const evaluations = await evaluateBittensorWatches();
+    const evaluations = await evaluateBittensorWatches(clientStateNamespace(ctx));
     const maxAlertsParam = ctx.url.searchParams.get("maxAlerts") ?? ctx.url.searchParams.get("max_alerts");
     const includeOk = ctx.url.searchParams.get("includeOk") === "true" || ctx.url.searchParams.get("include_ok") === "true";
     const maxAlerts = maxAlertsParam ? Number(maxAlertsParam) : null;
@@ -12631,7 +13121,7 @@ function buildOpencodeReloadUrl(baseUrl: string, directory?: string | null): str
     }
     return url.toString();
   } catch {
-    throw new ApiError(400, "opencode_url_invalid", "OpenCode base URL is invalid");
+    throw new ApiError(400, "opencode_url_invalid", "Agent runtime address is invalid");
   }
 }
 
@@ -12649,7 +13139,7 @@ async function reloadOpencodeEngine(config: ServerConfig, workspace: WorkspaceIn
   const connection = resolveWorkspaceOpencodeConnection(config, workspace);
   const baseUrl = connection.baseUrl?.trim() ?? "";
   if (!baseUrl) {
-    throw new ApiError(400, "opencode_unconfigured", "OpenCode base URL is missing for this workspace");
+    throw new ApiError(400, "opencode_unconfigured", "Agent runtime is not connected for this workspace");
   }
 
   const directory = resolveOpencodeDirectory(workspace);
@@ -12661,7 +13151,7 @@ async function reloadOpencodeEngine(config: ServerConfig, workspace: WorkspaceIn
   const response = await fetch(targetUrl, { method: "POST", headers });
   if (response.ok) return;
   const body = parseOpencodeErrorBody(await response.text());
-  throw new ApiError(502, "opencode_reload_failed", "OpenCode reload failed", {
+  throw new ApiError(502, "opencode_reload_failed", "Agent runtime reload failed", {
     status: response.status,
     body,
   });
@@ -12871,7 +13361,7 @@ async function materializeBlueprintSessions(config: ServerConfig, workspace: Wor
     const sessionId =
       result && typeof result === "object" && "id" in result && typeof result.id === "string" ? result.id.trim() : "";
     if (!sessionId) {
-      throw new ApiError(502, "opencode_failed", "OpenCode session did not return an id");
+      throw new ApiError(502, "opencode_failed", "Agent runtime did not return a session id");
     }
     seedOpencodeSessionMessages({
       sessionId,

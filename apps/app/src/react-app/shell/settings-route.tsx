@@ -2895,7 +2895,10 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             cudosBusy={cudosProviderBusy}
             cudosStatus={cudosProviderStatus}
             cudosError={cudosProviderError}
-            onConnectCudos={connectCudosProvider}
+            providerCredentialsManaged={!isDesktopRuntime()}
+            onConnectCudos={
+              isDesktopRuntime() ? connectCudosProvider : undefined
+            }
             pendingDeskTask={pendingDeskTask}
             onResumePendingDeskTask={() => {
               if (!pendingDeskTask || !selectedWorkspaceId) return;

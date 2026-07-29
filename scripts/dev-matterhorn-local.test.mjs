@@ -19,6 +19,10 @@ assert.ok(
   "dev:matterhorn-local should still wire the local app to the Matterhorn server",
 );
 assert.ok(
+  script.includes("VITE_MATTERHORN_DEV_API_TARGET: serverUrl"),
+  "dev:matterhorn-local should proxy same-origin API requests to the exact server instance it starts",
+);
+assert.ok(
   script.includes('"apps", "app"') && script.includes('"node_modules", ".bin"') && script.includes("existsSync(viteBin)"),
   "dev:matterhorn-local should prefer the installed app Vite binary before invoking pnpm",
 );

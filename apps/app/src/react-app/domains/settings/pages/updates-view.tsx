@@ -127,21 +127,25 @@ export function UpdatesView(props: UpdatesViewProps) {
       <LayoutSectionItem>
         <LayoutSectionItemHeader>
           <LayoutSectionItemTitle>
-            {updateState === "checking"
-              ? t("settings.update_checking")
-              : updateState === "available"
-                ? t("settings.update_available_version", undefined, {
-                    version: updateVersion ?? "",
-                  })
-                : updateState === "downloading"
-                  ? t("settings.update_downloading")
-                  : updateState === "ready"
-                    ? t("settings.update_ready_version", undefined, {
+            {props.webDeployment
+              ? "Desktop updates"
+              : updateState === "idle" && updateChecksUnavailable
+                ? "Update checks unavailable"
+                : updateState === "checking"
+                   ? t("settings.update_checking")
+                   : updateState === "available"
+                     ? t("settings.update_available_version", undefined, {
                         version: updateVersion ?? "",
                       })
-                    : updateState === "error"
-                      ? t("settings.update_check_failed")
-                      : t("settings.update_uptodate")}
+                    : updateState === "downloading"
+                      ? t("settings.update_downloading")
+                      : updateState === "ready"
+                        ? t("settings.update_ready_version", undefined, {
+                            version: updateVersion ?? "",
+                          })
+                        : updateState === "error"
+                          ? t("settings.update_check_failed")
+                          : t("settings.update_uptodate")}
           </LayoutSectionItemTitle>
           <LayoutSectionItemDescription>
             {updateState === "idle" && updateLastCheckedAt
@@ -208,7 +212,9 @@ export function UpdatesView(props: UpdatesViewProps) {
           />
         ) : null}
 
-        {updateState === "error" && updateErrorMessage ? (
+        {!props.webDeployment &&
+        updateState === "error" &&
+        updateErrorMessage ? (
           <Alert variant="destructive">
             <CircleAlert />
             <AlertDescription>{updateErrorMessage}</AlertDescription>
