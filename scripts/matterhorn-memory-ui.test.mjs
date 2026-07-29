@@ -32,7 +32,7 @@ for (const expected of [
   "title={`${memoryInboxLabel}",
   "memorySuggestionUnreadCount",
   "refreshMemorySuggestionUnreadCount",
-  "Memory inbox: no pending suggestions",
+  "Memory review: no pending suggestions",
   "pending suggestions",
   "matterhorn:memory-suggestions-changed",
 ]) {
@@ -165,9 +165,8 @@ for (const expected of [
 }
 
 for (const expected of [
-  "Remember this",
+  "Nothing is saved until you choose Remember or Save edited.",
   "Suggestion inbox",
-  "nothing is saved unless you confirm",
   "visible Memory suggestion",
   "resolveStoredMemorySuggestion",
   "listMemorySuggestions",
@@ -181,10 +180,10 @@ for (const expected of [
   "SUGGESTION_INBOX_FILTERS",
   "suggestionStatusFilter",
   "filteredSuggestionEntries",
-  "Memory inbox lifecycle summary",
+  "Memory review",
   "Memory inbox filters",
   "Needs review",
-  "Saved history",
+  "Saved",
   "Not saved",
   "Loading suggestion inbox",
   "No suggestions match this filter",
@@ -195,32 +194,26 @@ for (const expected of [
   "Dismissed",
   "Expired",
   "Blocked",
-  "Lifecycle state",
-  "Available actions:",
-  "Confirm, edit, or dismiss.",
-  "Dismiss from view only",
-  "read-only lifecycle history",
+  "Remember",
+  "Edit",
+  "Dismiss",
   "Why suggested",
   "Trigger:",
-  "Boundary:",
+  "Desk rule:",
   "Source:",
-  "dismissal window:",
+  "Dismissal window:",
   "suggestionDeskReason",
   "read/preview/watch context only",
   "Edit before saving",
-  "Save edited memory",
-  "No hidden save",
+  "Save edited",
   "canActOnSuggestion",
   "showActiveSuggestionActions",
   "shouldHideSuggestionContent",
-  "Blocked suggestion content hidden",
-  "Matterhorn hides the proposed title, body, source, and Why suggested details",
-  "No title, body, source, confidence detail, or trigger text is rendered",
+  "Matterhorn blocked this suggestion before it could become memory. The proposed content stays hidden.",
   "This suggestion is stale and cannot be saved",
   "Dismiss from view",
-  "Policy protected",
-  "Content redacted",
-  "edited cards are already saved",
+  "Blocked by policy",
+  "Saved only after the user reviewed and changed it.",
   "flex flex-wrap gap-2",
   "Remember visible Memory suggestion",
   "Edit visible Memory suggestion before saving",
@@ -233,12 +226,12 @@ for (const expected of [
   "This looks like secret material",
   "Use in chat",
   "Forget",
-  "Export evidence",
-  "No hidden memory",
+  "Create memory export",
+  "do not use hidden memory",
   "Desk policy",
   "MCP/API",
-  "Longevity becomes restricted by default",
-  "market memories cannot be exported or shared with MCP/API",
+  "Longevity memory stays opt-in and restricted by default",
+  "Market memory is read/preview/watch context only",
   "seed phrases",
   "private keys",
   "raw signatures",
@@ -288,8 +281,8 @@ assert.doesNotMatch(memoryPanel, /pending.*Saved|Saved.*pending/, "pending state
 // State 2 — edited: already saved, read-only actions
 for (const marker of [
   'status === "edited"',
-  "edited cards are already saved",
-  "read-only lifecycle history",
+  "Saved edited",
+  "Saved only after the user reviewed and changed it.",
 ]) {
   assert.match(memoryPanel, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `edited state missing: ${marker}`)
 }
@@ -298,16 +291,15 @@ for (const marker of [
 for (const marker of [
   'status === "confirmed"',
   "Remembered",
-  "read-only lifecycle history",
+  "Saved as visible memory after user confirmation.",
 ]) {
   assert.match(memoryPanel, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `confirmed state missing: ${marker}`)
 }
 
-// State 4 — dismissed: no Confirm button (falls through to read-only)
+// State 4 — dismissed: recorded as not saved and exposes no action path.
 assert.match(memoryPanel, /status === "dismissed"/)
-assert.match(memoryPanel, /Dismiss from view only/)
-// dismissed never satisfies canActOnSuggestion (only pending does)
-assert.match(memoryPanel, /return "Available actions: none\. This card is read-only lifecycle history\."/)
+assert.match(memoryPanel, /Kept out of memory and suppressed for this trigger window\./)
+assert.match(memoryPanel, /entry\.status === "pending"/)
 
 // State 5 — expired: dismiss-from-view only, stale notice
 for (const marker of [
@@ -322,8 +314,8 @@ for (const marker of [
 // State 6 — blocked: policy-protected, content redacted
 for (const marker of [
   'status === "blocked"',
-  "Policy protected",
-  "Content redacted",
+  "Blocked by policy",
+  "The proposed content stays hidden.",
   "shouldHideSuggestionContent",
 ]) {
   assert.match(memoryPanel, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `blocked state missing: ${marker}`)

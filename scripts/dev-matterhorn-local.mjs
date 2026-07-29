@@ -370,6 +370,7 @@ async function main() {
       ...process.env,
       CI: "true",
       OPENWORK_DEV_MODE: "1",
+      VITE_MATTERHORN_DEV_API_TARGET: serverUrl,
       VITE_MATTERHORN_WORK_URL: serverUrl,
       VITE_MATTERHORN_WORK_TOKEN: clientToken,
       VITE_MATTERHORN_WORK_HOST_TOKEN: hostToken,

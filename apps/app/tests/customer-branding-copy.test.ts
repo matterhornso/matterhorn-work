@@ -68,7 +68,7 @@ describe("customer-facing Matterhorn Desks branding", () => {
     expect(publicSignIn).toContain("<span>Matterhorn Desks</span>");
     expect(publicSignIn).toContain("Serious work deserves more than a chat.");
     expect(publicSignIn).toContain(
-      "Work inside focused AI desks that understand context, use tools,",
+      "Open a private workspace for focused AI desks, tools, and durable",
     );
     expect(welcome).toContain("Matterhorn Desks");
     expect(builder).toContain("productName: Matterhorn Desks");

@@ -1466,6 +1466,7 @@ export function McpView(props: McpViewProps) {
             className="absolute left-3 top-1/2 -translate-y-1/2 text-dls-secondary"
           />
           <input
+            aria-label="Search MCPs, connectors, and skills"
             className="w-full rounded-lg border border-dls-border bg-dls-surface py-2 pl-9 pr-3 text-xs text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-2 focus:ring-[rgb(var(--dls-accent-rgb)/0.2)]"
             placeholder="Search MCPs, connectors, and skills..."
             value={search}

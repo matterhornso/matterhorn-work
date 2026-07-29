@@ -94,9 +94,10 @@ function runChecks(sources) {
     "Stable workspace prompt route resolves model before sending",
     FILES.serverRoute,
     containsAll(serverRoute, [
-      "resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body))",
-      "sessionPromptAuditMetadata(body, modelResolution)",
-      "...(modelResolution.model ? { model: modelResolution.model } : {})",
+      "await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body))",
+      "sessionPromptAuditMetadata(",
+      "modelResolution,",
+      "modelResolution.model ? { model: modelResolution.model } : {}",
       "metadata: auditMetadata",
     ]),
     "The workspace /sessions/:sessionId/messages route must normalize model precedence and audit the source.",
@@ -139,7 +140,7 @@ function runChecks(sources) {
     FILES.settingsAiView,
     containsAll(settingsAiView, [
       "Use workspace default",
-      "Save as workspace default",
+      "Save for workspace",
       "saveWorkspaceModelSelection",
       "clearWorkspaceModelSelection",
       "notifyWorkspaceModelSelectionChanged",
@@ -152,11 +153,11 @@ function runChecks(sources) {
     "Settings copy explains precedence",
     FILES.settingsReadiness,
     containsAll(settingsReadiness, [
-      "follows the saved workspace default",
-      "Local app overrides can still apply",
-      "Chats and desk tasks call session.promptAsync",
+      "This chat follows the workspace default.",
+      "Used for new chats and desk tasks unless you choose another model.",
+      "You can still choose another model for a chat.",
     ]),
-    "Settings should say the workspace default is used when there is no local app override.",
+    "Settings should explain in plain language that a chat choice overrides the saved workspace default.",
   ));
 
   checks.push(makeCheck(

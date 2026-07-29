@@ -3002,7 +3002,11 @@ export function SessionPage(props: SessionPageProps) {
             </ResizablePanel>
               {dockedSidePanelOpen ? (
               <>
-                <ResizableHandle withHandle className="hidden lg:flex" />
+                <ResizableHandle
+                  withHandle
+                  aria-label="Resize side panel"
+                  className="hidden lg:flex"
+                />
                 <ResizablePanel
                   panelRef={browserPanelRef}
                   defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}

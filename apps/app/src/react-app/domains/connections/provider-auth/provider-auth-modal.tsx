@@ -95,6 +95,7 @@ export type ProviderAuthModalProps = {
 export default function ProviderAuthModal(props: ProviderAuthModalProps) {
   const workerType = props.workerType === "remote" ? "remote" : "local";
   const isRemoteWorker = workerType === "remote";
+  const canManageProviderCredentials = isDesktopRuntime();
 
   const [view, setView] = useState<
     "list" | "method" | "api" | "cloud" | "oauth-code" | "oauth-auto" | "matterhorn-subscribe"
@@ -184,6 +185,9 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
         if (isBundledInternalProvider(id, provider?.name)) return [];
 
         const entryMethods = (methods[id] ?? []).filter((method) => {
+          if (!canManageProviderCredentials && method.type !== "cloud") {
+            return false;
+          }
           if (isAnthropicProvider(id, provider?.name) && isClaudeProMaxMethod(method)) {
             return false;
           }
@@ -218,7 +222,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
     }
 
     return nextEntries;
-  }, [isRemoteWorker, props.authMethods, props.connectedProviderIds, props.providers, props.showOpenWorkModelsSubscribe]);
+  }, [canManageProviderCredentials, isRemoteWorker, props.authMethods, props.connectedProviderIds, props.providers, props.showOpenWorkModelsSubscribe]);
 
   const selectedEntry = useMemo(
     () => entries.find((entry) => entry.id === selectedProviderId) ?? null,
@@ -737,8 +741,9 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
         <DialogHeader>
           <DialogTitle>Add a model provider</DialogTitle>
           <DialogDescription>
-            Start with a provider you already use. API keys stay in the local
-            Matterhorn engine on this device.
+            {canManageProviderCredentials
+              ? "Connect a provider you already use. API keys stay in the local Matterhorn engine on this device."
+              : "Connect an account approved for this workspace. Provider secrets are managed by Matterhorn."}
           </DialogDescription>
         </DialogHeader>
 

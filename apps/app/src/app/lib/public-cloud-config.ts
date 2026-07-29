@@ -28,13 +28,19 @@ export type PublicCloudConfig = {
  * client. The release readiness gate requires both URLs in production.
  */
 export function readPublicCloudConfig(): PublicCloudConfig {
+  const sameOriginBaseUrl =
+    typeof window !== "undefined" &&
+    (window.location.protocol === "http:" ||
+      window.location.protocol === "https:")
+      ? window.location.origin
+      : DEFAULT_PUBLIC_CLOUD_URL;
   const baseUrl = normalizeHttpUrl(
     import.meta.env.VITE_MATTERHORN_CLOUD_URL,
-    DEFAULT_PUBLIC_CLOUD_URL,
+    sameOriginBaseUrl,
   );
   const apiBaseUrl = normalizeHttpUrl(
     import.meta.env.VITE_MATTERHORN_CLOUD_API_URL,
-    `${baseUrl}/api`,
+    `${baseUrl}/api/den`,
   );
 
   return {

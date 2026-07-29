@@ -59,6 +59,7 @@ if (!config.opencodeBaseUrl && process.env.OPENWORK_MANAGE_OPENCODE === "1") {
     const managedRuntimeConfig = buildManagedOpencodeRuntimeConfig({
       serverUrl,
       clientToken: config.token,
+      enableCudosProvider: Boolean(process.env.CUDOS_API_KEY?.trim()),
     });
     const managedOpencodeCwd = process.env.OPENWORK_MANAGED_OPENCODE_CWD?.trim() || workspace.path;
     await mkdir(managedOpencodeCwd, { recursive: true });
@@ -70,6 +71,9 @@ if (!config.opencodeBaseUrl && process.env.OPENWORK_MANAGE_OPENCODE === "1") {
         OPENWORK_SERVER_URL: serverUrl,
         OPENWORK_SERVER_TOKEN: config.token,
         OPENCODE_CONFIG_CONTENT: managedRuntimeConfig,
+        ...(process.env.MATTERHORN_MODELS_URL?.trim()
+          ? { OPENCODE_MODELS_URL: process.env.MATTERHORN_MODELS_URL.trim() }
+          : {}),
       },
       onEvent: logManagedOpencodeEvent,
     });
