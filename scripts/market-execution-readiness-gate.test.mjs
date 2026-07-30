@@ -52,7 +52,7 @@ for (const required of [
   "Connected-Wallet Hyperliquid Execution",
   "MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED",
   "SUBMIT LIVE ORDER",
-  "Polymarket has no submit route",
+  "Polymarket has no server submit route",
   "Reject stale previews and hash mismatches",
   "Matterhorn stores only public receipt data",
 ]) {
