@@ -53,6 +53,9 @@ for (const phrase of [
   'RELEASE_NAME="Matterhorn Desks $TAG"',
   'if [[ "$TAG" == *-* ]]',
   'prerelease="true"',
+  'if [[ "$TAG" == *-public-beta-rc.* ]]',
+  'unsigned_public_beta="true"',
+  "This public-beta macOS build is unsigned.",
   'if [ "$prerelease" = "true" ]',
   'publish_sidecars="false"',
   'publish_npm="false"',
@@ -67,6 +70,11 @@ for (const phrase of [
   '--source-commit "$source_commit"',
   "--strict",
   "trust-chain-${{ matrix.artifact }}",
+  "Package Electron (macOS public beta, unsigned)",
+  "Create unsigned macOS public-beta checksums",
+  "CSC_IDENTITY_AUTO_DISCOVERY: false",
+  "MACOS_NOTARIZE: false",
+  "matterhorn-${{ matrix.artifact }}-SHA256SUMS.txt",
 ]) {
   assert.ok(releaseWorkflow.includes(phrase), `release workflow missing safety policy: ${phrase}`);
 }
@@ -96,6 +104,41 @@ assert.equal(
   false,
   "release dispatch must not allow a draft bypass before assets are ready",
 );
+
+const unsignedMacPackageIndex = releaseWorkflow.indexOf("Package Electron (macOS public beta, unsigned)");
+assert.ok(unsignedMacPackageIndex >= 0, "release workflow must retain the unsigned public-beta macOS package step");
+const unsignedMacPackageEnd = releaseWorkflow.indexOf(
+  "Create unsigned macOS public-beta checksums",
+  unsignedMacPackageIndex,
+);
+const unsignedMacPackageBlock = releaseWorkflow.slice(unsignedMacPackageIndex, unsignedMacPackageEnd);
+for (const phrase of [
+  "env.UNSIGNED_PUBLIC_BETA == 'true'",
+  "CSC_IDENTITY_AUTO_DISCOVERY: false",
+  "MACOS_NOTARIZE: false",
+  "--publish never",
+]) {
+  assert.ok(unsignedMacPackageBlock.includes(phrase), `unsigned public-beta macOS packaging missing: ${phrase}`);
+}
+
+const rejectUnnotarizedIndex = releaseWorkflow.indexOf("Reject unnotarized macOS Electron release");
+const rejectUnnotarizedEnd = releaseWorkflow.indexOf("Build Electron app", rejectUnnotarizedIndex);
+const rejectUnnotarizedBlock = releaseWorkflow.slice(rejectUnnotarizedIndex, rejectUnnotarizedEnd);
+assert.ok(
+  rejectUnnotarizedBlock.includes("env.UNSIGNED_PUBLIC_BETA != 'true'"),
+  "stable macOS releases must continue to reject an unnotarized build outside the explicit beta path",
+);
+
+const signedMacPackageIndex = releaseWorkflow.indexOf("Package Electron (macOS, signed + notarized)");
+const signedMacPackageEnd = releaseWorkflow.indexOf("Package Electron (macOS public beta, unsigned)", signedMacPackageIndex);
+const signedMacPackageBlock = releaseWorkflow.slice(signedMacPackageIndex, signedMacPackageEnd);
+for (const phrase of [
+  "env.MACOS_NOTARIZE == 'true'",
+  "CSC_LINK:",
+  "APPLE_API_KEY:",
+]) {
+  assert.ok(signedMacPackageBlock.includes(phrase), `signed macOS packaging must remain fail-closed: ${phrase}`);
+}
 
 function jobBlock(jobName) {
   const marker = `\n  ${jobName}:`;

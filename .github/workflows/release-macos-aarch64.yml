@@ -74,6 +74,7 @@ jobs:
       publish: ${{ steps.resolve.outputs.publish }}
       prerelease: ${{ steps.resolve.outputs.prerelease }}
       notarize: ${{ steps.resolve.outputs.notarize }}
+      unsigned_public_beta: ${{ steps.resolve.outputs.unsigned_public_beta }}
       build_electron: ${{ steps.resolve.outputs.build_electron }}
       publish_sidecars: ${{ steps.resolve.outputs.publish_sidecars }}
       publish_npm: ${{ steps.resolve.outputs.publish_npm }}
@@ -149,7 +150,18 @@ jobs:
           fi
           notarize="${INPUT_NOTARIZE:-}"
           if [ -z "$notarize" ]; then
-            notarize="${DEFAULT_NOTARIZE:-true}"
+            if [[ "$TAG" == *-public-beta-rc.* ]]; then
+              notarize="false"
+            else
+              notarize="${DEFAULT_NOTARIZE:-true}"
+            fi
+          fi
+
+          unsigned_public_beta="false"
+          if [[ "$TAG" == *-public-beta-rc.* ]] && [ "$notarize" != "true" ]; then
+            unsigned_public_beta="true"
+            printf -v RELEASE_BODY '%s\n\n> This public-beta macOS build is unsigned. Verify the published SHA-256 checksum before installing and follow the documented unsigned-app installation steps.' \
+              "$RELEASE_BODY"
           fi
 
           build_electron="${INPUT_BUILD_ELECTRON:-}"
@@ -194,6 +206,7 @@ jobs:
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           echo "notarize=$notarize" >> "$GITHUB_OUTPUT"
+          echo "unsigned_public_beta=$unsigned_public_beta" >> "$GITHUB_OUTPUT"
           echo "build_electron=$build_electron" >> "$GITHUB_OUTPUT"
           echo "publish_sidecars=$publish_sidecars" >> "$GITHUB_OUTPUT"
           echo "publish_npm=$publish_npm" >> "$GITHUB_OUTPUT"
@@ -267,6 +280,7 @@ jobs:
     env:
       RELEASE_TAG: ${{ needs.resolve-release.outputs.release_tag }}
       MACOS_NOTARIZE: ${{ needs.resolve-release.outputs.notarize }}
+      UNSIGNED_PUBLIC_BETA: ${{ needs.resolve-release.outputs.unsigned_public_beta }}
 
     strategy:
       fail-fast: false
@@ -376,10 +390,10 @@ jobs:
           echo "NOTARY_KEY_PATH=$NOTARY_KEY_PATH" >> "$GITHUB_ENV"
 
       - name: Reject unnotarized macOS Electron release
-        if: matrix.os_type == 'macos' && env.MACOS_NOTARIZE != 'true'
+        if: matrix.os_type == 'macos' && env.MACOS_NOTARIZE != 'true' && env.UNSIGNED_PUBLIC_BETA != 'true'
         shell: bash
         run: |
-          echo "macOS Electron release assets must be notarized. Re-run with notarize=true or set MACOS_NOTARIZE=true." >&2
+          echo "Stable macOS Electron release assets must be signed and notarized. Only public-beta RC tags may use the explicit unsigned beta path." >&2
           exit 1
 
       - name: Build Electron app
@@ -405,6 +419,34 @@ jobs:
             ${{ matrix.electron_args }} \
             --publish never
 
+      - name: Package Electron (macOS public beta, unsigned)
+        if: matrix.os_type == 'macos' && env.UNSIGNED_PUBLIC_BETA == 'true'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          MACOS_NOTARIZE: false
+        run: |
+          set -euo pipefail
+          pnpm --dir apps/desktop exec electron-builder \
+            --config electron-builder.yml \
+            ${{ matrix.electron_args }} \
+            --publish never
+
+      - name: Create unsigned macOS public-beta checksums
+        if: matrix.os_type == 'macos' && env.UNSIGNED_PUBLIC_BETA == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(apps/desktop/dist-electron/matterhorn-*.dmg apps/desktop/dist-electron/matterhorn-*.zip)
+          if [ "${#assets[@]}" -lt 2 ]; then
+            echo "Unsigned public-beta macOS packaging did not produce both DMG and ZIP assets." >&2
+            exit 1
+          fi
+          (
+            cd apps/desktop/dist-electron
+            shasum -a 256 matterhorn-*.dmg matterhorn-*.zip
+          ) > "apps/desktop/dist-electron/matterhorn-${{ matrix.artifact }}-SHA256SUMS.txt"
+
       - name: Package Electron (Linux)
         if: matrix.os_type == 'linux'
         run: |
@@ -425,7 +467,7 @@ jobs:
             --publish never
 
       - name: Verify macOS public release trust chain
-        if: matrix.os_type == 'macos'
+        if: matrix.os_type == 'macos' && env.MACOS_NOTARIZE == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -439,7 +481,7 @@ jobs:
             --json-output "apps/desktop/dist-electron/desktop-public-release-${{ matrix.artifact }}.json"
 
       - name: Upload macOS trust-chain evidence
-        if: matrix.os_type == 'macos'
+        if: matrix.os_type == 'macos' && env.MACOS_NOTARIZE == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: trust-chain-${{ matrix.artifact }}
@@ -459,7 +501,7 @@ jobs:
             exit 1
           fi
           gh release upload "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
-          if [ "${{ matrix.os_type }}" = "macos" ]; then
+          if [ "${{ matrix.os_type }}" = "macos" ] && [ "$MACOS_NOTARIZE" = "true" ]; then
             gh release upload "$RELEASE_TAG" \
               "apps/desktop/dist-electron/desktop-public-release-${{ matrix.artifact }}.json" \
               --repo "$GITHUB_REPOSITORY" --clobber
