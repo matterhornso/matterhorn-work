@@ -167,6 +167,17 @@ describe("DeskWorkflowStagePanel — uses WorkflowStageCard", () => {
     expect(panelSrc).toContain('return "failed"');
     expect(panelSrc).toContain('return "cancelled"');
   });
+
+  test("workflow desks give new users a direct model setup recovery", () => {
+    const pageSrc = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(pageSrc).toContain("modelUnavailable: boolean;");
+    expect(pageSrc).toContain('"Connect a model before starting a desk task."');
+    expect(pageSrc).toContain("onOpenModelSettings");
+    expect(pageSrc).toContain("Set up model");
+    expect(pageSrc).toContain("modelUnavailable={Boolean(props.modelUnavailable)}");
+    expect(pageSrc).toContain("onOpenModelSettings={props.onOpenSettings}");
+  });
 });
 
 describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", () => {
@@ -287,7 +298,12 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, visibleUserIntent");
     expect(src).toContain("agent: agentIdForDesk(deskId)");
     expect(src).toContain("launchAgent: true");
-    expect(src).toContain('status: props.matterhornServerClient ? "ready" : "failed"');
+    expect(src).toContain('!props.matterhornServerClient');
+    expect(src).toContain('? "failed"');
+    expect(src).toContain(': modelUnavailable');
+    expect(src).toContain('? "setup_required"');
+    expect(src).toContain(': "ready"');
+    expect(src).toContain("Connect a model before starting a stage. Nothing has been sent.");
     expect(src).toContain("Choose a stage to begin. Outputs will save under");
     expect(src).toContain('status: "launching"');
     expect(src).not.toContain("Started. Outputs will save under");

@@ -2401,6 +2401,16 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           timeoutMs: timeouts.config,
         },
       ),
+    workflowTemplates: () =>
+      requestJson<{
+        ok?: boolean;
+        version?: string;
+        customerTemplates?: unknown[];
+      }>(baseUrl, "/api/workflows/templates", {
+        token,
+        hostToken,
+        timeoutMs: timeouts.status,
+      }),
     listWorkflowRuns: (options?: {
       workspaceId?: string;
       sessionId?: string;

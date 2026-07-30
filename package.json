@@ -26,6 +26,7 @@
     "smoke:outputs-browser": "node scripts/outputs-browser-smoke.mjs --strict",
     "test:outputs-browser-smoke": "node scripts/outputs-browser-smoke.test.mjs",
     "smoke:matterhorn-product-browser": "node scripts/matterhorn-product-browser-smoke.mjs --strict",
+    "smoke:matterhorn-product-browser:hosted": "node scripts/matterhorn-product-browser-smoke.mjs --strict --hosted-account",
     "test:matterhorn-product-browser-smoke": "node scripts/matterhorn-product-browser-smoke.test.mjs",
     "smoke:rc16-control-acceptance": "node scripts/rc16-control-acceptance.mjs --strict",
     "test:rc16-control-acceptance": "node scripts/rc16-control-acceptance.test.mjs",

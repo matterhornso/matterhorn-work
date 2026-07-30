@@ -21,7 +21,8 @@ assert.ok(
     script.includes("MATTERHORN_PRODUCT_BROWSER_OUTPUT_DIR") &&
     script.includes("MATTERHORN_PRODUCT_BROWSER_STRICT") &&
     script.includes("MATTERHORN_PRODUCT_BROWSER_REQUIRE_DESK_RESULTS") &&
-    script.includes("MATTERHORN_PRODUCT_BROWSER_DESK_RESULT_TIMEOUT_MS"),
+    script.includes("MATTERHORN_PRODUCT_BROWSER_DESK_RESULT_TIMEOUT_MS") &&
+    script.includes("MATTERHORN_PRODUCT_BROWSER_HOSTED_ACCOUNT"),
   "product browser smoke should expose URL, output, and strict env controls",
 );
 assert.ok(
@@ -156,8 +157,16 @@ for (const visibleText of [
 assert.ok(
   script.includes("/api/auth/sign-up/email") &&
     script.includes("/api/den/v1/me") &&
-    script.includes("organizationWorkspaceId"),
-  "product browser smoke should create a fresh account, restore its session, and use its isolated workspace",
+    script.includes("organizationWorkspaceId") &&
+    script.includes("--hosted-account") &&
+    script.includes('mode: "fixture-workspace"'),
+  "product browser smoke should explicitly separate fresh hosted-account certification from local fixture coverage",
+);
+assert.ok(
+  script.includes("assertCurrentWorkspaceRoute") &&
+    script.includes("left the expected workspace") &&
+    script.includes('"Project history"'),
+  "product browser smoke should reject silent workspace route drift",
 );
 assert.ok(
   script.includes("The web build exposed a raw provider-key control."),
@@ -219,7 +228,7 @@ assert.ok(
     script.includes("provider_setup_required") &&
     script.includes('getByTestId("pending-desk-task-handoff")') &&
     script.includes('name: "Return to desk"') &&
-    script.includes("Nothing has been sent yet.") &&
+    script.includes("Connect a model before starting a stage. Nothing has been sent.") &&
     script.includes('page.getByTestId("session-composer-shell")') &&
     script.includes("startedDeskTaskEvents") &&
     script.includes("startedDeskTaskSessions"),

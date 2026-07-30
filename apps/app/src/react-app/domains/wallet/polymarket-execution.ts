@@ -44,13 +44,22 @@ export function assertPolymarketPreparedOrder(order: PolymarketPreparedOrder, no
   if (!order.marketId || !order.tokenId || !order.outcome) {
     throw new Error("The prepared order is missing its market, outcome, or CLOB token.");
   }
-  if (!(order.amountUsdc > 0) || !(order.maxLossUsdc > 0)) {
+  if (
+    !Number.isFinite(order.amountUsdc)
+    || !Number.isFinite(order.maxLossUsdc)
+    || !(order.amountUsdc > 0)
+    || !(order.maxLossUsdc > 0)
+  ) {
     throw new Error("The prepared order amount must be positive.");
+  }
+  if (Math.abs(order.amountUsdc - order.maxLossUsdc) > 0.000001) {
+    throw new Error("The reviewed spend no longer matches the maximum loss. Prepare the order again.");
   }
   if (order.compliance.status !== "allowed") {
     throw new Error(order.compliance.reason || "Polymarket trading is unavailable in this region.");
   }
-  if (new Date(order.expiresAt).getTime() <= now) {
+  const expiresAt = new Date(order.expiresAt).getTime();
+  if (!Number.isFinite(expiresAt) || expiresAt <= now) {
     throw new Error("This Polymarket review expired. Prepare the order again.");
   }
 }
@@ -78,10 +87,10 @@ export async function submitPolymarketOrder(args: {
     args.walletClient,
   );
   const credentials = await unauthenticated.createOrDeriveApiKey();
-  if (!credentials?.key || !credentials.secret || !credentials.passphrase) {
-    throw new Error("Polymarket did not return temporary order credentials.");
-  }
   try {
+    if (!credentials?.key || !credentials.secret || !credentials.passphrase) {
+      throw new Error("Polymarket did not return temporary order credentials.");
+    }
     const client = new ClobClient(
       POLYMARKET_CLOB_HOST,
       Chain.POLYGON,
@@ -112,8 +121,10 @@ export async function submitPolymarketOrder(args: {
       submittedAt: new Date().toISOString(),
     };
   } finally {
-    credentials.key = "";
-    credentials.secret = "";
-    credentials.passphrase = "";
+    if (credentials) {
+      credentials.key = "";
+      credentials.secret = "";
+      credentials.passphrase = "";
+    }
   }
 }

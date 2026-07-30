@@ -102,6 +102,8 @@ import {
   prepareBittensorExtrinsic,
   reviewBittensorSubnetAdapterEvidence,
   runBittensorSubnetAdapterDryRun,
+  serializeBittensorWatch,
+  serializeBittensorWatchEvaluation,
   submitSignedBittensorExtrinsic,
   validateBittensorSubnetAdapterManifest,
   validateBittensorSubnetAdapterResult,
@@ -11402,6 +11404,7 @@ function createRoutes(
       : null;
     const result = await executeBittensorChatWorkflow({
       message,
+      ownerScope: clientStateNamespace(ctx),
       contextId: typeof body.contextId === "string" ? body.contextId : null,
       context: body.context && typeof body.context === "object" && !Array.isArray(body.context)
         ? body.context as BittensorChatExecutionInput["context"]
@@ -11421,7 +11424,7 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/api/bittensor/chat/context/:contextId", "client", async (ctx) => {
-    const context = getBittensorChatContext(ctx.params.contextId);
+    const context = getBittensorChatContext(ctx.params.contextId, clientStateNamespace(ctx));
     if (!context) {
       throw new ApiError(404, "context_not_found", "Bittensor chat context was not found or has expired.");
     }
@@ -12368,7 +12371,11 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/bittensor/monitoring/watchlist", "client", async (ctx) => {
     const watches = listBittensorWatches(clientStateNamespace(ctx));
-    return jsonResponse({ success: true, watches, cards: buildBittensorWatchCards(watches) });
+    return jsonResponse({
+      success: true,
+      watches: watches.map(serializeBittensorWatch),
+      cards: buildBittensorWatchCards(watches),
+    });
   });
 
   addRoute(routes, "POST", "/api/bittensor/monitoring/watchlist", "client", async (ctx) => {
@@ -12390,12 +12397,21 @@ function createRoutes(
       reason: typeof body.reason === "string" ? body.reason : null,
     }, ownerScope);
     const watches = listBittensorWatches(ownerScope);
-    return jsonResponse({ success: true, watch, watches, cards: buildBittensorWatchCards([watch]) });
+    return jsonResponse({
+      success: true,
+      watch: serializeBittensorWatch(watch),
+      watches: watches.map(serializeBittensorWatch),
+      cards: buildBittensorWatchCards([watch]),
+    });
   });
 
   addRoute(routes, "GET", "/api/bittensor/monitoring/check", "client", async (ctx) => {
     const evaluations = await evaluateBittensorWatches(clientStateNamespace(ctx));
-    return jsonResponse({ success: true, evaluations, cards: buildBittensorWatchEvaluationCards(evaluations) });
+    return jsonResponse({
+      success: true,
+      evaluations: evaluations.map(serializeBittensorWatchEvaluation),
+      cards: buildBittensorWatchEvaluationCards(evaluations),
+    });
   });
 
   addRoute(routes, "GET", "/api/bittensor/monitoring/digest", "client", async (ctx) => {

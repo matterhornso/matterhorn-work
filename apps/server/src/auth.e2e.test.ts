@@ -458,6 +458,46 @@ describe("public account authentication", () => {
     expect(bittensorWatchesA.payload.watches).toHaveLength(1);
     expect(bittensorWatchesB.payload.watches).toHaveLength(0);
 
+    const bittensorChatWatch = await jsonRequest(
+      app.base,
+      "/api/bittensor/chat/execute",
+      {
+        cookie: cookieA,
+        body: { message: "monitor subnet 14 emissions" },
+      },
+    );
+    expect(bittensorChatWatch.response.status).toBe(200);
+    expect(bittensorChatWatch.payload.execution).toBe("answered");
+    expect(bittensorChatWatch.payload.data.watch.ownerScope).toBeUndefined();
+    expect(bittensorChatWatch.payload.context.id).toMatch(/^bt-chat-/);
+
+    const chatWatchesA = await jsonRequest(
+      app.base,
+      "/api/bittensor/monitoring/watchlist",
+      { cookie: cookieA },
+    );
+    const chatWatchesB = await jsonRequest(
+      app.base,
+      "/api/bittensor/monitoring/watchlist",
+      { cookie: cookieB },
+    );
+    expect(chatWatchesA.payload.watches).toHaveLength(2);
+    expect(chatWatchesB.payload.watches).toHaveLength(0);
+
+    const ownBittensorContext = await jsonRequest(
+      app.base,
+      `/api/bittensor/chat/context/${bittensorChatWatch.payload.context.id}`,
+      { cookie: cookieA },
+    );
+    const guessedBittensorContext = await jsonRequest(
+      app.base,
+      `/api/bittensor/chat/context/${bittensorChatWatch.payload.context.id}`,
+      { cookie: cookieB },
+    );
+    expect(ownBittensorContext.response.status).toBe(200);
+    expect(guessedBittensorContext.response.status).toBe(404);
+    expect(guessedBittensorContext.payload.code).toBe("context_not_found");
+
     const hyperliquidWatch = await jsonRequest(
       app.base,
       "/api/hyperliquid/watches",
