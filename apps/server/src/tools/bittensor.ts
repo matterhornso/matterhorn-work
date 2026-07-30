@@ -1066,6 +1066,25 @@ export interface BittensorWatchEvaluation {
   checkedAt: string;
 }
 
+export type PublicBittensorWatch = Omit<BittensorWatch, "ownerScope">;
+export type PublicBittensorWatchEvaluation = Omit<BittensorWatchEvaluation, "watch"> & {
+  watch: PublicBittensorWatch;
+};
+
+export function serializeBittensorWatch(watch: BittensorWatch): PublicBittensorWatch {
+  const { ownerScope: _ownerScope, ...publicWatch } = watch;
+  return publicWatch;
+}
+
+export function serializeBittensorWatchEvaluation(
+  evaluation: BittensorWatchEvaluation,
+): PublicBittensorWatchEvaluation {
+  return {
+    ...evaluation,
+    watch: serializeBittensorWatch(evaluation.watch),
+  };
+}
+
 export interface BittensorReadinessCheck {
   id: string;
   label: string;
@@ -1176,6 +1195,7 @@ export type BittensorChatContext = {
 
 export type BittensorChatExecutionInput = {
   message: string;
+  ownerScope?: string;
   contextId?: string | null;
   context?: Partial<BittensorChatContext> | null;
   ss58Address?: string | null;
@@ -6256,7 +6276,7 @@ function isRiskiestWatchQuestion(message: string): boolean {
     /\bcreate watches\b.*\b(positions|exposure|wallet|risk)\b/i.test(message);
 }
 
-function watchFromSuggestion(suggestion: BittensorWatchSuggestion): BittensorWatch {
+function watchFromSuggestion(suggestion: BittensorWatchSuggestion, ownerScope?: string): BittensorWatch {
   return createBittensorWatch({
     kind: suggestion.kind,
     label: suggestion.label,
@@ -6265,7 +6285,7 @@ function watchFromSuggestion(suggestion: BittensorWatchSuggestion): BittensorWat
     validatorHotkey: suggestion.validatorHotkey ?? null,
     threshold: suggestion.threshold,
     reason: suggestion.reason,
-  });
+  }, ownerScope);
 }
 
 function uniqueWatchSuggestions(suggestions: BittensorWatchSuggestion[]): BittensorWatchSuggestion[] {
@@ -6367,14 +6387,22 @@ function mergeBittensorChatContexts(
   };
 }
 
-export function getBittensorChatContext(contextId: string): BittensorChatContext | null {
+function bittensorChatContextStorageKey(contextId: string, ownerScope?: string): string {
+  return `${ownerScope?.trim() || "legacy"}:${contextId}`;
+}
+
+export function getBittensorChatContext(contextId: string, ownerScope?: string): BittensorChatContext | null {
   const normalized = normalizeContextId(contextId);
-  return normalized ? chatContexts.get(normalized) ?? null : null;
+  return normalized
+    ? chatContexts.get(bittensorChatContextStorageKey(normalized, ownerScope)) ?? null
+    : null;
 }
 
 function resolveBittensorChatContext(input: BittensorChatExecutionInput): BittensorChatContext | null {
   const storedId = normalizeContextId(input.contextId);
-  const stored = storedId ? chatContexts.get(storedId) ?? null : null;
+  const stored = storedId
+    ? chatContexts.get(bittensorChatContextStorageKey(storedId, input.ownerScope)) ?? null
+    : null;
   const inline = sanitizeBittensorChatContext(input.context);
   return mergeBittensorChatContexts(stored, inline);
 }
@@ -6413,7 +6441,7 @@ function buildBittensorChatContext(
     updatedAt: nowIso(),
     warnings: uniqueWarnings(previous?.warnings, result.warnings).slice(0, 8),
   };
-  chatContexts.set(context.id, context);
+  chatContexts.set(bittensorChatContextStorageKey(context.id, input.ownerScope), context);
   while (chatContexts.size > 128) {
     const firstKey = chatContexts.keys().next().value;
     if (!firstKey) break;
@@ -7147,7 +7175,8 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
 
   if (plan.intent === "monitor") {
     if (isWatchCheckQuestion(message)) {
-      const evaluations = await evaluateBittensorWatches();
+      const evaluations = await evaluateBittensorWatches(input.ownerScope);
+      const publicEvaluations = evaluations.map(serializeBittensorWatchEvaluation);
       const warningCount = evaluations.filter((evaluation) => evaluation.status !== "ok").length;
       return {
         plan: { ...answeredPlan, intent: "monitor", responseCards: ["watchlist"] },
@@ -7155,7 +7184,7 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
           ? `Checked ${evaluations.length} Bittensor watch(es); ${warningCount} need attention.`
           : "No Bittensor watches are configured yet.",
         cards: buildBittensorWatchEvaluationCards(evaluations),
-        data: { evaluations },
+        data: { evaluations: publicEvaluations },
         warnings: uniqueWarnings(warnings, warningCount ? ["At least one watch needs attention; use the card action to investigate."] : []),
         requiresClarification: false,
         clarificationQuestion: null,
@@ -7169,14 +7198,15 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       }
       const report = await analyzeBittensorWalletIntelligence(ss58Address);
       const suggestions = uniqueWatchSuggestions(report.watchSuggestions).slice(0, resolveExecutionLimit(input, 4));
-      const watches = suggestions.map(watchFromSuggestion);
+      const watches = suggestions.map((suggestion) => watchFromSuggestion(suggestion, input.ownerScope));
+      const publicWatches = watches.map(serializeBittensorWatch);
       return {
         plan: { ...answeredPlan, intent: "monitor", responseCards: ["watchlist", "intelligence_report"] },
         responseText: watches.length
           ? `Created ${watches.length} Bittensor watch(es) from the riskiest visible wallet exposure for ${shortSs58(ss58Address)}.`
           : `I analyzed ${shortSs58(ss58Address)}, but there were no watch suggestions in the current provider data.`,
         cards: [...buildBittensorWatchCards(watches), buildBittensorWalletIntelligenceCard(report)],
-        data: { watches, intelligence: report },
+        data: { watches: publicWatches, intelligence: report },
         warnings: uniqueWarnings(warnings, report.warnings, ["Watches use public/provider data and may be delayed if live providers are unavailable."]),
         requiresClarification: false,
         clarificationQuestion: null,
@@ -7212,14 +7242,15 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       label: labelForWatch(message, kind, netuid, validatorHotkey ?? ss58Address),
       threshold: null,
       reason: "Created from Bittensor chat monitoring request.",
-    });
+    }, input.ownerScope);
+    const publicWatch = serializeBittensorWatch(watch);
     return {
       plan: { ...answeredPlan, intent: "monitor", responseCards: ["watchlist"] },
       responseText: netuid !== null
         ? `Created a ${kind} watch for subnet ${netuid}.`
         : `Created a ${kind} watch for ${validatorHotkey ?? ss58Address ? shortSs58(validatorHotkey ?? ss58Address ?? "") : "the requested Bittensor address"}.`,
       cards: buildBittensorWatchCards([watch]),
-      data: { watch },
+      data: { watch: publicWatch },
       warnings: uniqueWarnings(warnings, ["Watches use public/provider data and may be delayed if live providers are unavailable."]),
       requiresClarification: false,
       clarificationQuestion: null,
@@ -12605,7 +12636,7 @@ export function buildBittensorWatchCards(watches: BittensorWatch[]): BittensorCh
       summary: "No Bittensor watches are configured yet.",
       tone: "default",
       items: [cardItem("Watches", 0, "muted")],
-      data: { watches },
+      data: { watches: [] },
     }];
   }
   return watches.slice(0, 6).map((watch) => ({
@@ -12630,7 +12661,7 @@ export function buildBittensorWatchCards(watches: BittensorWatch[]): BittensorCh
         payload: { prompt: actionPromptForWatch(watch), watchId: watch.id },
       }]
       : [],
-    data: { watch },
+    data: { watch: serializeBittensorWatch(watch) },
   }));
 }
 
@@ -12642,7 +12673,7 @@ export function buildBittensorWatchEvaluationCards(evaluations: BittensorWatchEv
       summary: "No Bittensor watches are configured yet.",
       tone: "default",
       items: [cardItem("Watches checked", 0, "muted")],
-      data: { evaluations },
+      data: { evaluations: [] },
     }];
   }
   const visibleEvaluations = evaluations
@@ -12696,7 +12727,7 @@ export function buildBittensorWatchEvaluationCards(evaluations: BittensorWatchEv
         },
       })),
     warnings: evaluation.status === "ok" ? [] : [evaluation.summary],
-    data: { evaluation },
+    data: { evaluation: serializeBittensorWatchEvaluation(evaluation) },
   }));
 }
 

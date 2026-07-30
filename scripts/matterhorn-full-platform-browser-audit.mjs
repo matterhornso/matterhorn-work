@@ -47,7 +47,12 @@ const panelSurfaces = [
   ["desk-sui", "sui", ["Sui desk"]],
 ];
 
-const chatSurfaceMarkers = ["Perspective", "Start work", "Start with a Matterhorn workflow"];
+const chatSurfaceMarkers = [
+  "Cautious",
+  "Perspective",
+  "Start work",
+  "Start with a Matterhorn workflow",
+];
 
 function workspaceId() {
   const match = new URL(baseUrl).pathname.match(/^\/workspace\/([^/]+)/);

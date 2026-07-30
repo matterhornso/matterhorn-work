@@ -120,10 +120,12 @@ describe("AI provider UI contract", () => {
   });
 
   test("uses the Matterhorn brand mark for the included model catalog", () => {
+    const viewSource = readReactSource("domains/settings/pages/ai-view.tsx");
     const providerIconSource = readReactSource(
       "design-system/provider-icon.tsx",
     );
 
+    expect(viewSource).toContain("providerName={providerName}");
     expect(providerIconSource).toContain(
       'const isMatterhorn = hasProviderFamily("matterhorn")',
     );

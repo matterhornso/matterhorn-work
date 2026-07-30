@@ -11,6 +11,12 @@ import {
   matterhornDeskAgentIdForDesk,
 } from "@matterhorn-work/types/desk-agents";
 import {
+  createMatterhornServerClient,
+  DEFAULT_OPENWORK_SERVER_PORT,
+  normalizeMatterhornServerUrl,
+  readMatterhornServerSettings,
+} from "../../../../app/lib/matterhorn-server";
+import {
   getCustomerProtocolDeskVisual,
   protocolDeskIdForChatMode,
   protocolDeskIdForWorkspace,
@@ -610,9 +616,17 @@ function normalizeWorkflowTemplateCopy(template: CustomerWorkflowTemplate): Cust
 }
 
 export async function fetchCustomerWorkflowTemplates(): Promise<CustomerWorkflowTemplate[]> {
-  const response = await fetch("/api/workflows/templates");
-  if (!response.ok) throw new Error(`Could not load workflow templates (${response.status})`);
-  const json = await response.json() as CustomerWorkflowTemplateResponse;
+  const settings = readMatterhornServerSettings();
+  const baseUrl =
+    settings.urlOverride ??
+    normalizeMatterhornServerUrl(`127.0.0.1:${settings.portOverride ?? DEFAULT_OPENWORK_SERVER_PORT}`);
+  if (!baseUrl) throw new Error("Could not resolve the Matterhorn Desks engine.");
+
+  const json = await createMatterhornServerClient({
+    baseUrl,
+    token: settings.token,
+    hostToken: settings.hostToken,
+  }).workflowTemplates();
   return normalizeCustomerWorkflowTemplates(json);
 }
 

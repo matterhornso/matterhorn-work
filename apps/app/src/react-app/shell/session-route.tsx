@@ -3344,6 +3344,7 @@ export function SessionRoute() {
       startupPhase={effectiveLoading ? "nativeInit" : "ready"}
       providerConnectedIds={providerConnectedIds}
       providers={providers}
+      modelUnavailable={selectedModelUnavailable}
       mcpConnectedCount={0}
       onSendFeedback={() => setFeedbackDialogOpen(true)}
       onOpenSettings={() => handleOpenSettings("/settings/ai")}

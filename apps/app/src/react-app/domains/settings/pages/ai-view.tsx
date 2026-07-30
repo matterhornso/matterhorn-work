@@ -773,6 +773,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 <div className="flex min-w-0 items-center gap-3">
                   <ProviderIcon
                     providerId={provider.id}
+                    providerName={providerName}
                     size={20}
                     className="text-dls-text"
                   />

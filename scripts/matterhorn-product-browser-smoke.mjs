@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { chromium } from "playwright";
 
 const repoRoot = resolve(import.meta.dirname, "..");
-const DEFAULT_URL = "http://127.0.0.1:5182/workspace/ws_d6a5b5572860/session";
+const DEFAULT_URL = "http://127.0.0.1:5182/workspace/ws_9d76fd6566f5/session";
 const DEFAULT_OUTPUT_DIR = "qa-reports/matterhorn-product-browser-smoke";
 
 function parseArgs(argv = process.argv.slice(2)) {
@@ -41,6 +41,9 @@ function parseArgs(argv = process.argv.slice(2)) {
     requireDeskResults:
       flags.has("--require-desk-results") ||
       process.env.MATTERHORN_PRODUCT_BROWSER_REQUIRE_DESK_RESULTS === "1",
+    hostedAccount:
+      flags.has("--hosted-account") ||
+      process.env.MATTERHORN_PRODUCT_BROWSER_HOSTED_ACCOUNT === "1",
     deskResultTimeoutMs: Number(
       values.get("--desk-result-timeout-ms") ||
         process.env.MATTERHORN_PRODUCT_BROWSER_DESK_RESULT_TIMEOUT_MS ||
@@ -74,6 +77,8 @@ Options:
   --require-desk-results
                        Wait for every desk task to finish with assistant output.
                        Use this against a real managed-engine stack, not the fixture stack.
+  --hosted-account     Create a fresh account and certify its isolated hosted workspace.
+                       Omit this for the local generated-media fixture stack.
   --desk-result-timeout-ms <ms>
                        Per-desk completion timeout. Default: 120000.
   --json               Print the full JSON report.
@@ -148,6 +153,15 @@ function workspaceUrlForId(appUrl, workspaceId, pathSuffix = "session") {
   url.search = "";
   url.hash = "";
   return url.toString();
+}
+
+function assertCurrentWorkspaceRoute(page, expectedWorkspaceId, label) {
+  const actualWorkspaceId = workspaceIdFromUrl(page.url());
+  if (actualWorkspaceId !== expectedWorkspaceId) {
+    throw new Error(
+      `${label} left the expected workspace. Expected ${expectedWorkspaceId}, received ${actualWorkspaceId || "no workspace"} at ${page.url()}.`,
+    );
+  }
 }
 
 function organizationWorkspaceId(organizationId) {
@@ -605,7 +619,7 @@ async function startPrimaryDeskTask(page, config, desk) {
       .waitFor({ state: "visible", timeout: 15_000 });
     await page
       .getByText(
-        "Choose a stage to start this task. Nothing has been sent yet.",
+        "Connect a model before starting a stage. Nothing has been sent.",
         { exact: true },
       )
       .waitFor({ state: "visible", timeout: 15_000 });
@@ -725,22 +739,44 @@ async function runSmoke(config) {
     await stage(
       report,
       "auth_signup",
-      "Create and restore a fresh web account",
+      "Establish the QA workspace identity",
       async () => {
+        if (config.hostedAccount) {
+          const account = await createQaAccount(context, config.url);
+          config.url = workspaceUrlForId(config.url, account.workspaceId);
+          report.url = config.url;
+          report.artifacts.auth = {
+            mode: "email-password",
+            freshAccount: true,
+            email: account.email,
+            organizationId: account.organizationId,
+            workspaceId: account.workspaceId,
+          };
+          return;
+        }
+
+        const workspaceId = workspaceIdFromUrl(config.url);
+        if (!workspaceId) {
+          throw new Error(
+            `Fixture smoke URL must contain a workspace id: ${config.url}`,
+          );
+        }
         const account = await createQaAccount(context, config.url);
-        config.url = workspaceUrlForId(config.url, account.workspaceId);
-        report.url = config.url;
         report.artifacts.auth = {
-          mode: "email-password",
+          mode: "fixture-workspace",
           freshAccount: true,
           email: account.email,
           organizationId: account.organizationId,
-          workspaceId: account.workspaceId,
+          workspaceId,
         };
       },
     );
 
     await stage(report, "open_app", "Open Matterhorn app", async () => {
+      const expectedWorkspaceId = workspaceIdFromUrl(config.url);
+      if (!expectedWorkspaceId) {
+        throw new Error(`Could not parse workspace id from ${config.url}`);
+      }
       await page.goto(config.url, { waitUntil: "load", timeout: 30_000 });
       await page.locator("body").waitFor({ state: "visible", timeout: 15_000 });
       await page.waitForFunction(
@@ -751,7 +787,8 @@ async function runSmoke(config) {
       await page
         .getByLabel("Workspace home")
         .waitFor({ state: "visible", timeout: 20_000 });
-      report.artifacts.workspaceId = workspaceIdFromUrl(config.url);
+      assertCurrentWorkspaceRoute(page, expectedWorkspaceId, "App open");
+      report.artifacts.workspaceId = expectedWorkspaceId;
     });
 
     await stage(
@@ -987,7 +1024,13 @@ async function runSmoke(config) {
       "Open full Project history",
       async () => {
         const historyUrl = workspaceUrl(config.url, "history");
+        const expectedWorkspaceId = workspaceIdFromUrl(config.url);
         await page.goto(historyUrl, { waitUntil: "load", timeout: 30_000 });
+        assertCurrentWorkspaceRoute(
+          page,
+          expectedWorkspaceId,
+          "Project history",
+        );
         await page
           .locator("main")
           .getByRole("heading", { name: "Project history", exact: true })

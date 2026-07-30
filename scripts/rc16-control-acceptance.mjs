@@ -687,26 +687,52 @@ await acceptanceCase(
 
 await acceptanceCase(
   "AI-PROVIDER",
-  "Choose provider",
-  "Opens the available provider catalog without exposing legacy engine branding",
+  "Provider catalog or managed provider state",
+  "Opens the provider catalog when available, otherwise shows a truthful deployment-managed state",
   async () => {
-    await clickVisible(page.getByRole("button", { name: "Choose provider", exact: true }), "Choose provider");
-    let dialog = await firstVisible(page.getByRole("dialog"), "provider dialog");
-    if (LEGACY_BRANDS.test(await dialog.innerText())) {
-      throw new Error("Legacy engine provider is visible in the provider catalog.");
-    }
-    const search = await firstVisible(
-      dialog.getByPlaceholder("Search all providers"),
-      "provider search",
+    const chooseProvider = await visibleOrNull(
+      page.getByRole("button", { name: "Choose provider", exact: true }),
     );
-    await search.fill("CUDOS");
-    await settle(page, 250);
-    if (LEGACY_BRANDS.test(await dialog.innerText())) {
-      throw new Error("Legacy engine branding appeared after filtering providers.");
+    if (chooseProvider) {
+      await chooseProvider.click();
+      const dialog = await firstVisible(page.getByRole("dialog"), "provider dialog");
+      if (LEGACY_BRANDS.test(await dialog.innerText())) {
+        throw new Error("Legacy engine provider is visible in the provider catalog.");
+      }
+      const search = await firstVisible(
+        dialog.getByPlaceholder("Search all providers"),
+        "provider search",
+      );
+      await search.fill("CUDOS");
+      await settle(page, 250);
+      if (LEGACY_BRANDS.test(await dialog.innerText())) {
+        throw new Error("Legacy engine branding appeared after filtering providers.");
+      }
+      await page.keyboard.press("Escape");
+      await dialog.waitFor({ state: "hidden", timeout: 10_000 });
+      return "Provider catalog opened, filtered, and closed without exposing a credential";
     }
-    await page.keyboard.press("Escape");
-    await dialog.waitFor({ state: "hidden", timeout: 10_000 });
-    return "Provider catalog opened, filtered, and closed without exposing a credential";
+
+    await assertText(page, "Model providers");
+    await assertText(page, "ASI:Cloud");
+    await firstVisible(
+      page.getByText(
+        "Matterhorn manages the provider used by this web workspace.",
+        { exact: true },
+      ),
+      "deployment-managed provider description",
+    );
+    const providerText = await page.locator("main").innerText();
+    if (!/(?:Unavailable in this deployment|Connected|models? available through Matterhorn)/i.test(providerText)) {
+      throw new Error(`Managed provider status is unclear: ${providerText}`);
+    }
+    if (LEGACY_BRANDS.test(providerText)) {
+      throw new Error("Legacy engine branding is visible in the managed provider state.");
+    }
+    if (/sk-[A-Za-z0-9_-]{12,}/.test(providerText)) {
+      throw new Error("Managed provider state exposes a credential.");
+    }
+    return "Deployment-managed provider availability is clear and exposes no credential";
   },
 );
 

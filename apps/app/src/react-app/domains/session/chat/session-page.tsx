@@ -183,10 +183,6 @@ const MemoryPanel = lazy(() => import("../../memory/memory-panel").then((module)
 const NotesPanel = lazy(() => import("../../notes/notes-page").then((module) => ({
   default: module.NotesPage,
 })));
-const CommandPalette = lazy(() => import("../../wallet/components/CommandPalette").then((module) => ({
-  default: module.CommandPalette,
-})));
-
 const STARTUP_SKELETON_ROWS = [
   { id: "intro", titleWidth: "42%", bodyWidth: "88%" },
   { id: "middle", titleWidth: "56%", bodyWidth: "88%" },
@@ -568,14 +564,18 @@ function WorkflowDeskHomeSurface({
   launchState,
   matterhornServerClient,
   runtimeWorkspaceId,
+  modelUnavailable,
   onBackHome,
+  onOpenModelSettings,
   onStartStage,
 }: {
   deskId: WorkflowDeskId;
   launchState: WorkflowDeskLaunchState | null;
   matterhornServerClient: MatterhornServerClient | null;
   runtimeWorkspaceId: string | null;
+  modelUnavailable: boolean;
   onBackHome: () => void;
+  onOpenModelSettings: () => void;
   onStartStage: (stageId: string, prompt: string) => void;
 }) {
   const visual = getCustomerProtocolDeskVisual(deskId);
@@ -593,6 +593,7 @@ function WorkflowDeskHomeSurface({
   const startTaskBlocked = Boolean(
     !matterhornServerClient ||
     !readinessWorkspaceId ||
+    modelUnavailable ||
     (startTaskFeature && !startTaskFeature.ready),
   );
   const startTaskBlocker = !matterhornServerClient
@@ -603,12 +604,16 @@ function WorkflowDeskHomeSurface({
         ? `Start task needs ${startTaskFeature.blockingCheckIds
           .map((checkId) => readinessQuery.data?.checks[checkId]?.label ?? checkId)
           .join(", ")}.`
-        : null;
+        : modelUnavailable
+          ? "Connect a model before starting a desk task."
+          : null;
   const startTaskActionLabel = !matterhornServerClient
     ? "Engine offline"
     : !readinessWorkspaceId
       ? "Open workspace"
-      : "Platform setup";
+      : modelUnavailable
+        ? "Model required"
+        : "Unavailable";
   const taskStatus = launchState?.status === "launching" ? "running" : (
     launchState?.status === "staging"
       ? "staged"
@@ -647,6 +652,8 @@ function WorkflowDeskHomeSurface({
                 </h2>
                 {launchState?.status === "failed" ? (
                   <span className="text-[11px] font-semibold text-rose-300">Needs attention</span>
+                ) : launchState?.status === "setup_required" ? (
+                  <span className="text-[11px] font-semibold text-amber-300">Model needed</span>
                 ) : launchState?.status === "ready" ? (
                   <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">Ready</span>
                 ) : launchState?.status === "launching" ? (
@@ -671,9 +678,21 @@ function WorkflowDeskHomeSurface({
         </section>
 
         {startTaskBlocker ? (
-          <div className="flex items-start gap-2 rounded-lg bg-dls-surface/50 px-3 py-2 text-xs leading-5 text-dls-secondary">
-            <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" />
-            <span>{startTaskBlocker}</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-dls-surface/50 px-3 py-2 text-xs leading-5 text-dls-secondary">
+            <span className="flex min-w-0 items-start gap-2">
+              <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" />
+              <span>{startTaskBlocker}</span>
+            </span>
+            {modelUnavailable && matterhornServerClient && readinessWorkspaceId ? (
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-dls-surface-muted/[0.38] px-2.5 py-1.5 font-semibold text-dls-text transition-colors hover:bg-dls-surface-muted/[0.52] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                onClick={onOpenModelSettings}
+              >
+                <Settings2 className="size-3.5" aria-hidden="true" />
+                Set up model
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -1026,7 +1045,7 @@ type StatusBarOverrides = Pick<
 
 type WorkflowDeskLaunchState = {
   deskId: WorkflowDeskId;
-  status: "idle" | "staging" | "ready" | "launching" | "failed";
+  status: "idle" | "setup_required" | "staging" | "ready" | "launching" | "failed";
   run: MatterhornWorkflowRun | null;
   message: string | null;
   intent: string | null;
@@ -1120,6 +1139,7 @@ export type SessionPageProps = {
   startupPhase: BootPhase;
   providerConnectedIds: string[];
   providers?: ProviderListItem[];
+  modelUnavailable?: boolean;
   mcpConnectedCount: number;
   onSendFeedback: () => void;
   onOpenSettings: () => void;
@@ -1225,20 +1245,7 @@ export function SessionPage(props: SessionPageProps) {
   const sessionWallet = useSessionWallet(wallet.store);
   useJobCron(wallet.store);
   const currentWalletRuntime = useMemo(() => homeWalletRuntime(), []);
-  const [commandOpen, setCommandOpen] = useState(false);
   const { showToast } = useStatusToasts();
-
-  // Cmd+K / Ctrl+K command palette
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setCommandOpen((o) => !o);
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   const { openQuickJot } = useQuickJot();
   const workspaceNotesId = (props.runtimeWorkspaceId ?? "").trim();
@@ -1688,15 +1695,22 @@ export function SessionPage(props: SessionPageProps) {
     setActiveWorkflowDeskId(deskId);
 
     if (!options?.launchAgent) {
+      const modelUnavailable = Boolean(props.modelUnavailable);
       setWorkflowLaunchState({
         deskId,
-        status: props.matterhornServerClient ? "ready" : "failed",
+        status: !props.matterhornServerClient
+          ? "failed"
+          : modelUnavailable
+            ? "setup_required"
+            : "ready",
         run: null,
-        message: props.matterhornServerClient
-          ? options?.recovery
-            ? "Choose a stage to start this task. Nothing has been sent yet."
-            : `Choose a stage to begin. Outputs will save under outputs/${getCustomerProtocolDeskVisual(deskId)?.outputDeskId ?? deskId}/<session-slug>/`
-          : "Matterhorn Desks engine is unavailable for this project. Retry the connection or restart Matterhorn Desks if it stays offline.",
+        message: !props.matterhornServerClient
+          ? "Matterhorn Desks engine is unavailable for this project. Retry the connection or restart Matterhorn Desks if it stays offline."
+          : modelUnavailable
+            ? "Connect a model before starting a stage. Nothing has been sent."
+            : options?.recovery
+              ? "Choose a stage to start this task. Nothing has been sent yet."
+              : `Choose a stage to begin. Outputs will save under outputs/${getCustomerProtocolDeskVisual(deskId)?.outputDeskId ?? deskId}/<session-slug>/`,
         intent: visibleUserIntent,
       });
       return;
@@ -1768,6 +1782,7 @@ export function SessionPage(props: SessionPageProps) {
     props.matterhornServerClient,
     props.selectedWorkspaceId,
     props.sidebar,
+    props.modelUnavailable,
     setCurrentSidePanel,
   ]);
 
@@ -2602,7 +2617,9 @@ export function SessionPage(props: SessionPageProps) {
                       launchState={workflowLaunchState}
                       matterhornServerClient={props.matterhornServerClient}
                       runtimeWorkspaceId={props.runtimeWorkspaceId}
+                      modelUnavailable={Boolean(props.modelUnavailable)}
                       onBackHome={closeWorkflowDesk}
+                      onOpenModelSettings={props.onOpenSettings}
                       onStartStage={(stageId, prompt) => {
                         openWorkflowDesk(activeWorkflowDeskId, prompt, {
                           stageId,
@@ -3325,22 +3342,6 @@ export function SessionPage(props: SessionPageProps) {
         onSimulateTransaction={props.matterhornServerClient && outputReceiptWorkspaceId ? simulateWalletTransaction : undefined}
         onExecuteBatchStep={sessionWallet.executeBatchStep}
       />
-
-      {commandOpen ? (
-        <LazyModalBoundary>
-          <CommandPalette
-            open={commandOpen}
-            onClose={() => setCommandOpen(false)}
-            commands={[
-              { id: "send", label: "Send tokens", shortcut: "→ Send", action: () => {/* open send panel */} },
-              { id: "swap", label: "Swap tokens (CoW)", shortcut: "→ Swap", action: () => {/* open swap panel */} },
-              { id: "aave", label: "Aave deposits", shortcut: "→ Aave", action: () => {/* open aave panel */} },
-              { id: "bridge", label: "Bridge assets", shortcut: "→ Bridge", action: () => {/* open bridge panel */} },
-              { id: "agent", label: "Agent workspace", shortcut: "→ Agent", action: () => {/* open agent panel */} },
-            ]}
-          />
-        </LazyModalBoundary>
-      ) : null}
 
       {/* Cloud provider notifications are now handled globally by CloudProvidersToast in app-root.tsx */}
     </div>
