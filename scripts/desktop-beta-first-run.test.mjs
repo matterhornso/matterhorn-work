@@ -202,6 +202,10 @@ const report = JSON.parse(result.stdout);
 assert.equal(report.version, "matterhorn.desktop.release-doctor.v1");
 assert.equal(report.ready, true);
 assert.equal(report.copyDiagnostics.customerBoundary.bittensor, "Bittensor: public read, unsigned preview, and external-signer workflow");
+assert.equal(
+  report.copyDiagnostics.customerBoundary.hyperliquidPolymarket,
+  "Hyperliquid: exact-intent connected-wallet execution; Polymarket: eligible wallet-reviewed buy, sell, and cancel tickets",
+);
 assert.ok(report.checks.some((check) => check.id === "artifact.dir" && check.status === "pass"));
 assert.ok(report.checks.some((check) => check.id === "server.health" && check.status === "skip"));
 assert.equal(/privateKey|apiSecret|rawSignature|signedPayload/.test(result.stdout), false);

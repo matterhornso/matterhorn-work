@@ -351,7 +351,7 @@ const report = {
     ],
     customerBoundary: {
       bittensor: "Bittensor: public read, unsigned preview, and external-signer workflow",
-      hyperliquidPolymarket: "Hyperliquid: exact-intent connected-wallet execution; Polymarket: preview/external-signer only",
+      hyperliquidPolymarket: "Hyperliquid: exact-intent connected-wallet execution; Polymarket: eligible wallet-reviewed buy, sell, and cancel tickets",
       servicesWellness: "Services and wellness: workflow packs only; unavailable operator services remain disabled",
     },
   },
