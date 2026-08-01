@@ -37,8 +37,8 @@ for (const token of [
   assert.ok(walletRuntime.includes(token), `wallet-runtime.ts missing ${token}`);
 }
 
-// 3. Web Hyperliquid may use the guarded connected-wallet execution flow.
-// Polymarket and every non-web runtime remain non-submitting.
+// 3. Web Hyperliquid and Polymarket may use guarded connected-wallet execution.
+// Every non-web runtime remains non-submitting.
 const webProtocolsBlock = extractObjectBlock(walletRuntime, "WEB_WALLET_RUNTIME_CAPABILITY");
 const webHyperliquidBlock = extractObjectBlock(webProtocolsBlock, "hyperliquid: ");
 assert.ok(webHyperliquidBlock, "web wallet runtime block must exist for hyperliquid");
@@ -63,10 +63,23 @@ assert.ok(
 
 const webPolymarketBlock = extractObjectBlock(webProtocolsBlock, "polymarket: ");
 assert.ok(webPolymarketBlock, "web wallet runtime block must exist for polymarket");
-assert.ok(webPolymarketBlock.includes("canSubmit: false"), "Polymarket must disable canSubmit");
 assert.ok(
-  webPolymarketBlock.includes("liveSubmissionEnabled: false"),
-  "Polymarket must disable live submission",
+  webPolymarketBlock.includes('connectionMode: "injected_evm"'),
+  "web Polymarket execution must use an injected wallet",
+);
+assert.ok(webPolymarketBlock.includes("canSubmit: true"), "web Polymarket may submit");
+assert.ok(
+  webPolymarketBlock.includes("liveSubmissionEnabled: true"),
+  "web Polymarket may expose guarded live submission",
+);
+assert.ok(
+  webPolymarketBlock.includes('signerRequirement: "client_signer"'),
+  "web Polymarket submission must require the client wallet",
+);
+assert.ok(webPolymarketBlock.includes("custody: false"), "web Polymarket must remain non-custodial");
+assert.ok(
+  webPolymarketBlock.includes("secretInputsAllowed: false"),
+  "web Polymarket must reject secret inputs",
 );
 
 for (const capabilityName of [
