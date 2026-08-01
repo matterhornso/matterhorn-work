@@ -157,7 +157,11 @@ for (const visibleText of [
 assert.ok(
   script.includes("/api/auth/sign-up/email") &&
     script.includes("/api/den/v1/me") &&
-    script.includes("organizationWorkspaceId") &&
+    script.includes('new URL("/workspaces", serverUrl || origin)') &&
+    script.includes("--server-url") &&
+    script.includes(
+      "Fresh-user workspace provisioning did not return one isolated active workspace.",
+    ) &&
     script.includes("--hosted-account") &&
     script.includes('mode: "fixture-workspace"'),
   "product browser smoke should explicitly separate fresh hosted-account certification from local fixture coverage",
@@ -228,7 +232,9 @@ assert.ok(
     script.includes("provider_setup_required") &&
     script.includes('getByTestId("pending-desk-task-handoff")') &&
     script.includes('name: "Return to desk"') &&
-    script.includes("Connect a model before starting a stage. Nothing has been sent.") &&
+    script.includes(
+      "Connect a model before starting a stage. Nothing has been sent.",
+    ) &&
     script.includes('page.getByTestId("session-composer-shell")') &&
     script.includes("startedDeskTaskEvents") &&
     script.includes("startedDeskTaskSessions"),
