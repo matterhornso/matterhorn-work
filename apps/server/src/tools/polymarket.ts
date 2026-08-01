@@ -215,6 +215,37 @@ export interface PolymarketActionPreview {
   canSubmit: false;
 }
 
+export interface PolymarketSellMarketabilityEstimate {
+  referencePrice: number | null;
+  estimatedFillPrice: number | null;
+  estimatedSlippagePct: number | null;
+  requestedShares: number;
+  estimatedProceedsUsdc: number | null;
+  depthSufficient: boolean | null;
+  note: string;
+}
+
+export interface PolymarketSellPreview {
+  version: "matterhorn.polymarket.sell-preview.v1";
+  venue: "polymarket";
+  action: "sell_shares";
+  marketId: string;
+  tokenId: string;
+  marketLabel: string;
+  outcome: string;
+  shares: number;
+  estimatedFillPrice: number | null;
+  estimatedProceedsUsdc: number | null;
+  slippageTolerance: number | null;
+  marketability: PolymarketSellMarketabilityEstimate;
+  expiresAt: string;
+  previewSha256: string;
+  compliance: PolymarketComplianceStatus;
+  source: PolymarketSource;
+  warnings: string[];
+  canSubmit: false;
+}
+
 /**
  * External-signer handoff. Matterhorn turns an unsigned preview into a packet
  * the user signs and submits with THEIR OWN wallet. Matterhorn never signs,
@@ -711,7 +742,7 @@ export class PolymarketInfoProvider implements PolymarketProvider {
       const haystack = (market.question + " " + (market.description ?? "") + " " + (market.eventTitle ?? "")).toLowerCase();
       return terms.every((term) => haystack.includes(term));
     });
-    return (matched.length > 0 ? matched : markets).slice(0, capped);
+    return (terms.length === 0 ? markets : matched).slice(0, capped);
   }
 
   async searchEvents(query: string, limit: number | null = 8): Promise<PolymarketEventSummary[]> {
@@ -1284,6 +1315,49 @@ export function estimatePolymarketFill(asks: PolymarketBookLevel[], amountUsdc: 
   };
 }
 
+/** Walk bids from best to worst to estimate USDC proceeds for a share sale. */
+export function estimatePolymarketSellFill(bids: PolymarketBookLevel[], shares: number): PolymarketSellMarketabilityEstimate {
+  const sorted = [...bids].sort((a, b) => b.price - a.price);
+  if (sorted.length === 0) {
+    return {
+      referencePrice: null,
+      estimatedFillPrice: null,
+      estimatedSlippagePct: null,
+      requestedShares: shares,
+      estimatedProceedsUsdc: null,
+      depthSufficient: null,
+      note: "No bid-side liquidity; sale proceeds could not be estimated.",
+    };
+  }
+  const reference = sorted[0].price;
+  let remaining = shares;
+  let sold = 0;
+  let proceeds = 0;
+  for (const level of sorted) {
+    if (remaining <= 0) break;
+    const takeShares = Math.min(level.size, remaining);
+    sold += takeShares;
+    proceeds += takeShares * level.price;
+    remaining -= takeShares;
+  }
+  const averagePrice = sold > 0 ? proceeds / sold : null;
+  const slippagePct = averagePrice !== null && reference > 0
+    ? Math.abs((reference - averagePrice) / reference) * 100
+    : null;
+  const depthSufficient = remaining <= 1e-9;
+  return {
+    referencePrice: reference,
+    estimatedFillPrice: averagePrice === null ? null : Number(averagePrice.toFixed(6)),
+    estimatedSlippagePct: slippagePct === null ? null : Number(slippagePct.toFixed(4)),
+    requestedShares: shares,
+    estimatedProceedsUsdc: Number(proceeds.toFixed(4)),
+    depthSufficient,
+    note: depthSufficient
+      ? "Estimated from visible bid levels; live fills may differ."
+      : "Visible bids cover only part of the requested shares; the order may fill partially.",
+  };
+}
+
 // ---------------------------------------------------------------------------
 // External-signer handoff + receipt verification.
 //
@@ -1842,7 +1916,7 @@ export async function executePolymarketChatWorkflow(
       intent,
       execution: "answered",
       responseText:
-        "I can search prediction markets, explain odds and liquidity, inspect the CLOB orderbook, check compliance, and prepare exact order terms. The agent draft cannot submit. An eligible EOA BUY order can continue in the separate Polymarket ticket for exact review and connected Polygon wallet authorization. Sell orders, proxy accounts, agents, and watches cannot submit. I never ask for API secrets or wallet keys. " + RISK_DISCLAIMER,
+        "I can search prediction markets, explain odds and liquidity, inspect the CLOB orderbook, check compliance, and prepare exact order terms. The agent draft cannot submit. Eligible buy, sell, and cancel actions continue in the separate Polymarket ticket for exact review and connected Polygon-wallet authorization. Proxy accounts, agents, and watches cannot submit. I never ask for API secrets or wallet keys. " + RISK_DISCLAIMER,
       cards: [],
       warnings: [],
     };
@@ -2099,6 +2173,74 @@ export async function preparePolymarketOrderFromRequest(
     throw new Error("outcome is required; options: " + (market.outcomes.join(", ") || "unknown"));
   }
   return preparePolymarketOrderPreview({ market, outcome, side, amountUsdc: input.amountUsdc, compliance, slippageTolerance: input.slippageTolerance ?? null }, provider);
+}
+
+export async function preparePolymarketSellPreviewFromRequest(
+  input: { marketId: string; outcome?: string | null; side?: PolymarketSide | null; shares: number; slippageTolerance?: number | null },
+  provider: PolymarketProvider = polymarketProvider,
+): Promise<PolymarketSellPreview> {
+  if (!input.marketId) throw new Error("marketId is required for a Polymarket sell preview");
+  if (!(input.shares > 0)) throw new Error("a positive share quantity is required for a Polymarket sell preview");
+  const market = await provider.getMarket(input.marketId);
+  if (!market.active || market.closed) throw new Error("This Polymarket market is not active.");
+  const side: PolymarketSide = input.side ?? "yes";
+  const outcome = chooseOutcome(market, input.outcome ?? null, side);
+  if (!outcome || !market.tokenIds[outcome]) {
+    throw new Error("outcome is required; options: " + (market.outcomes.join(", ") || "unknown"));
+  }
+  const compliance = await provider.checkCompliance();
+  if (compliance.status !== "allowed") {
+    throw new Error(compliance.reason || "Polymarket trading is unavailable in this region.");
+  }
+  const tokenId = market.tokenIds[outcome];
+  const orderbook = await provider.getOrderbook(tokenId, { marketId: market.id, outcome });
+  const marketability = estimatePolymarketSellFill(orderbook.bids, input.shares);
+  const slippageTolerance = numberOrNull(input.slippageTolerance);
+  const warnings = [
+    "Review required: a connected EVM wallet must authorize the exact sale before submission.",
+    "Wallet authorization and CLOB API credentials stay in browser memory and are never accepted or stored by the Matterhorn backend.",
+    RISK_DISCLAIMER,
+  ];
+  if (marketability.depthSufficient === false) {
+    warnings.push("Visible bid depth is insufficient to sell the full quantity; a fill-and-kill order may only fill part of it.");
+  }
+  if (
+    slippageTolerance !== null
+    && marketability.estimatedSlippagePct !== null
+    && marketability.estimatedSlippagePct > slippageTolerance
+  ) {
+    warnings.push("Estimated slippage exceeds your selected tolerance.");
+  }
+  const previewSha256 = sha256({
+    venue: "polymarket",
+    action: "sell_shares",
+    marketId: market.id,
+    outcome,
+    shares: input.shares,
+    estimatedFillPrice: marketability.estimatedFillPrice,
+    estimatedProceedsUsdc: marketability.estimatedProceedsUsdc,
+    slippageTolerance,
+  });
+  return {
+    version: "matterhorn.polymarket.sell-preview.v1",
+    venue: "polymarket",
+    action: "sell_shares",
+    marketId: market.id,
+    tokenId,
+    marketLabel: market.question,
+    outcome,
+    shares: input.shares,
+    estimatedFillPrice: marketability.estimatedFillPrice,
+    estimatedProceedsUsdc: marketability.estimatedProceedsUsdc,
+    slippageTolerance,
+    marketability,
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    previewSha256,
+    compliance,
+    source: market.source,
+    warnings,
+    canSubmit: false,
+  };
 }
 
 function clarification(

@@ -502,7 +502,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     toolSummary:
       "19 tools for chat, wallet reads, readiness, subnets, watches, and receipts.",
     boundary:
-      "Public reads and transfer drafts. Direct TAO transfers move to a separate wallet review; staking and advanced actions use an external signer. Never paste seeds, keys, mnemonics, signatures, signed payloads, or wallet exports.",
+      "Public reads plus transfer, stake, and unstake drafts. Supported calls move to a separate connected-wallet review; unsupported advanced calls stay unavailable. Never paste seeds, keys, mnemonics, signatures, signed payloads, or wallet exports.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
     docs: mcpDocs(
       "bittensor",
@@ -512,15 +512,15 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
           title: "Use this MCP for",
           items: [
             "TAO balance, stake, hotkey, coldkey, subnet, validator, and watch context.",
-            "Transfer drafts, staking and subnet previews, and public receipt evidence.",
-            "Customer evidence bundles and readiness checks before a wallet or external-signing step.",
+            "Transfer, stake, and unstake drafts plus subnet previews and public receipt evidence.",
+            "Customer evidence bundles and readiness checks before a connected-wallet review.",
           ],
         },
         {
           title: "How it works",
           items: [
             "Reads use public SS58, coldkey, hotkey, subnet, validator, and receipt data.",
-            "Transfer drafts can move to a separate installed-wallet review; staking and advanced previews create handoff packets.",
+            "Transfer, stake, and unstake drafts can move to a separate installed-wallet review; unsupported advanced calls are not offered.",
             "Matterhorn never stores signing material; public receipts can be imported as evidence.",
           ],
         },
@@ -528,7 +528,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
           title: "Safety boundary",
           items: [
             "Matterhorn never asks for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
-            "Direct TAO transfers require exact wallet review; staking and advanced actions use an external signer.",
+            "Transfer, stake, and unstake calls require exact connected-wallet review; unsupported advanced calls stay unavailable.",
             "Any live sidecar submission remains explicitly separated from the default MCP flow.",
           ],
         },

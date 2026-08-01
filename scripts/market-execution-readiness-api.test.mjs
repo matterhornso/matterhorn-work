@@ -31,7 +31,7 @@ const contractSurface = `${route}\n${readinessHelper}`;
 
 for (const phrase of [
   "matterhorn.market.execution-readiness.v1",
-  "readyForLiveSubmission: hyperliquidExecution",
+  "readyForLiveSubmission: true",
   'status: hyperliquidExecution ? "ready" : "review"',
   'venue: "hyperliquid"',
   'venue: "polymarket"',
@@ -46,7 +46,7 @@ for (const phrase of [
   "nonCustodial: true",
   "liveSubmissionEnabled: hyperliquidExecution",
   "canSubmit: hyperliquidExecution",
-  "signsOrSubmits: hyperliquidExecution",
+  "signsOrSubmits: true",
   "acceptsSecrets: false",
 ]) {
   assert.ok(contractSurface.includes(phrase), `execution-readiness contract should include ${phrase}`);

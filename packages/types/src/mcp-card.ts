@@ -88,7 +88,7 @@ export const BITTENSOR_MCP_CARD: McpCardConnectivity = {
   displayName: "Matterhorn Bittensor",
   deskId: "bittensor",
   description:
-    "Read Bittensor subnet, stake, and balance data. Prepare unsigned previews and external-signer handoffs.",
+    "Read Bittensor subnet, stake, and balance data. Prepare transfer, stake, and unstake calls for exact connected-wallet review.",
   status: "preview",
   installCommands: [
     installCmd("codex", "matterhorn-bittensor"),
@@ -99,8 +99,8 @@ export const BITTENSOR_MCP_CARD: McpCardConnectivity = {
   supportedTools: [
     { name: "bittensor_read_balance", description: "Read a public SS58 balance", isReadOnly: true },
     { name: "bittensor_read_stake", description: "Read stake and delegate state", isReadOnly: true },
-    { name: "bittensor_preview_stake", description: "Preview a stake action", isReadOnly: true },
-    { name: "bittensor_prepare_stake_handoff", description: "Build an external-signer handoff", isReadOnly: false },
+    { name: "bittensor_preview_stake", description: "Prepare a reviewed stake action", isReadOnly: true },
+    { name: "bittensor_prepare_stake_handoff", description: "Build a connected-wallet review handoff", isReadOnly: false },
   ],
   testCommand: "matterhorn-work mcp test matterhorn-bittensor --subnet 1",
   safetyBoundary: baseSafetyBoundary(),

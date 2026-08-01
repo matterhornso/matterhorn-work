@@ -175,7 +175,7 @@ assertNoSubmitRoute("Polymarket server routes", polymarketRoutes);
 
 const hyperliquidExecution = mustContain("apps/server/src/tools/hyperliquid-live-execution.ts", [
   "recoverTypedDataAddress",
-  "Wallet signature does not authorize this exact order intent",
+  "Wallet signature does not authorize this exact action intent",
   "oneTimeSubmission: true",
   "privateKeysAccepted: false",
   "apiSecretsAccepted: false",
@@ -186,8 +186,8 @@ const hyperliquidExecution = mustContain("apps/server/src/tools/hyperliquid-live
   "MATTERHORN_HYPERLIQUID_MAX_ORDER_USDC",
   "MAX_PENDING_INTENTS_PER_OWNER",
   "MAX_STORED_INTENTS",
-  "Too many pending order confirmations",
-  "order-review queue is temporarily full",
+  "Too many pending action confirmations",
+  "action-review queue is temporarily full",
   "different signed-in session",
   "this.lastNonce + 1",
 ]);

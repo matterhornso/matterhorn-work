@@ -4,6 +4,8 @@ export type SuiWorkflowAvailabilityInput = {
   sender: string | null | undefined;
   recipient: string | null | undefined;
   amountSui: string | null | undefined;
+  transactionDetailsReady?: boolean;
+  transactionDetailsReason?: string | null;
   previewReady: boolean;
   previewSender?: string | null;
   connectedAddress?: string | null;
@@ -53,6 +55,14 @@ function firstBlockingReason(input: SuiWorkflowAvailabilityInput): {
   }
   if (!hasValue(input.sender)) {
     return { nextAction: "enter_sender", reason: "Enter the public sender address." };
+  }
+  if (input.transactionDetailsReady !== undefined) {
+    return input.transactionDetailsReady
+      ? { nextAction: "prepare_preview", reason: null }
+      : {
+          nextAction: "enter_recipient",
+          reason: input.transactionDetailsReason?.trim() || "Complete the transaction details.",
+        };
   }
   if (!hasValue(input.recipient)) {
     return { nextAction: "enter_recipient", reason: "Enter the public recipient address." };

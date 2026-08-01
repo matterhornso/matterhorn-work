@@ -26,7 +26,7 @@ for (const phrase of [
   "Bittensor readiness",
   "Hyperliquid wallet execution",
   "Polymarket wallet ticket",
-  "Eligible EOA BUY ticket",
+  "Eligible Polymarket buy, sell, and cancel actions",
   "Market execution safety",
   "pnpm smoke:customer-ready-crypto",
   "matterhorn-work crypto customer-packet",

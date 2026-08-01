@@ -145,13 +145,16 @@ import {
   validateDeskTaskInput,
   type DeskTaskInputRequirement,
 } from "../workflows/desk-task-inputs";
-import { MATTERHORN_DESK_TASK_STARTERS } from "../workflows/desk-task-starters";
+import {
+  MATTERHORN_DESK_TASK_STARTERS,
+  type MatterhornDeskTaskStarter,
+} from "../workflows/desk-task-starters";
 import {
   stageWorkflowRun,
   startWorkflowRun,
 } from "../workflows/workflow-run-client";
 import { getArtifactNoteContext } from "../artifacts/artifact-note-context";
-import { getChatDraftConfig } from "@matterhorn-work/types";
+import { getChatDraftConfig, type ReviewedActionOperation } from "@matterhorn-work/types";
 import { matterhornDeskAgentIdForDesk } from "@matterhorn-work/types/desk-agents";
 import type { MatterhornWorkflowRun } from "@matterhorn-work/types/workflow-runs";
 
@@ -744,16 +747,18 @@ function ProtocolDeskEmptyState({
   matterhornServerClient,
   runtimeWorkspaceId,
   onUsePrompt,
+  onOpenReviewedAction,
   onBackHome,
 }: {
   panel: VenueSidePanel;
   matterhornServerClient: MatterhornServerClient | null;
   runtimeWorkspaceId: string | null;
   onUsePrompt: (prompt: string, title?: string) => boolean | void | Promise<boolean | void>;
+  onOpenReviewedAction: (protocol: VenueSidePanel, operation?: ReviewedActionOperation) => void;
   onBackHome: () => void;
 }) {
   const visual = getCustomerProtocolDeskVisual(panel);
-  const prompts = MATTERHORN_DESK_TASK_STARTERS[panel];
+  const prompts: readonly MatterhornDeskTaskStarter[] = MATTERHORN_DESK_TASK_STARTERS[panel];
   const draftConfig = getChatDraftConfig(panel);
   const [launchingTaskTitle, setLaunchingTaskTitle] = useState<string | null>(null);
   const [pendingInput, setPendingInput] = useState<{
@@ -805,7 +810,7 @@ function ProtocolDeskEmptyState({
       ? "Open workspace"
       : "Platform setup";
   const deskSafetyInfo = panel === "bittensor"
-    ? "Uses public wallet details and prepares transfer drafts. You approve TAO transfers in your wallet; staking and advanced actions finish in an external signer."
+    ? "Uses public wallet details and prepares exact transaction drafts. You approve transfer, stake, and unstake calls in your connected Bittensor wallet; unsupported advanced calls stay unavailable."
     : panel === "polymarket"
       ? "Runs market research, compliance checks, and external-wallet handoffs. Matterhorn never places bets inside the app."
       : panel === "sui"
@@ -832,7 +837,11 @@ function ProtocolDeskEmptyState({
       });
   }, [onUsePrompt]);
 
-  const handleTaskAction = useCallback((item: { title: string; prompt: string }) => {
+  const handleTaskAction = useCallback((item: MatterhornDeskTaskStarter) => {
+    if (item.reviewedAction) {
+      onOpenReviewedAction(item.reviewedAction, item.reviewedActionOperation);
+      return;
+    }
     const requirement = getDeskTaskInputRequirement(item.prompt);
     if (!requirement) {
       startTask(item.prompt, item.title);
@@ -846,7 +855,7 @@ function ProtocolDeskEmptyState({
     });
     setTaskInputValue("");
     setTaskInputError(null);
-  }, [panel, startTask]);
+  }, [onOpenReviewedAction, panel, startTask]);
 
   const handleTaskInputSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -954,6 +963,7 @@ function ProtocolDeskEmptyState({
         {prompts.map((item) => {
           const isLaunching = launchingTaskTitle === item.title;
           const inputRequirement = getDeskTaskInputRequirement(item.prompt);
+          const opensReviewedAction = Boolean(item.reviewedAction);
           const pendingInputKey = `${panel}:${item.title}`;
           const inputOpen = pendingInput?.key === pendingInputKey;
           const inputId = `desk-task-input-${panel}-${item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
@@ -973,9 +983,21 @@ function ProtocolDeskEmptyState({
                 objective={item.detail}
                 status="idle"
                 evidenceHints={[evidenceHint]}
-                actionLabel={isLaunching ? "Starting..." : startTaskBlocked ? startTaskActionLabel : inputRequirement?.actionLabel ?? draftConfig?.confirmCtaLabel ?? "Start task"}
-                actionDisabled={startTaskBlocked || Boolean(launchingTaskTitle)}
-                actionTitle={startTaskBlocker ?? inputRequirement?.helpText ?? undefined}
+                actionLabel={opensReviewedAction
+                  ? item.reviewedActionLabel ?? (item.reviewedAction === "bittensor"
+                    ? "Open transfer ticket"
+                    : item.reviewedAction === "sui"
+                      ? "Open transfer ticket"
+                    : "Open trade ticket")
+                  : isLaunching
+                    ? "Starting..."
+                    : startTaskBlocked
+                      ? startTaskActionLabel
+                      : inputRequirement?.actionLabel ?? draftConfig?.confirmCtaLabel ?? "Start task"}
+                actionDisabled={Boolean(launchingTaskTitle) || (!opensReviewedAction && startTaskBlocked)}
+                actionTitle={opensReviewedAction
+                  ? "Open the exact review, wallet approval, and submission flow."
+                  : startTaskBlocker ?? inputRequirement?.helpText ?? undefined}
                 onAction={() => handleTaskAction(item)}
               />
               {inputOpen ? (
@@ -1389,6 +1411,8 @@ export function SessionPage(props: SessionPageProps) {
     [location.search, workspaceNotesAvailable],
   );
   const activeSidePanel = routeSidePanel;
+  const [reviewedActionEntryProtocol, setReviewedActionEntryProtocol] = useState<VenueSidePanel | null>(null);
+  const [reviewedActionEntryOperation, setReviewedActionEntryOperation] = useState<ReviewedActionOperation | null>(null);
   const browserRailActive = activeSidePanel === "browser";
   const artifactRailActive = activeSidePanel === "artifacts";
   const showArtifactRailItem = hasArtifactTargets || artifactRailActive;
@@ -1398,7 +1422,11 @@ export function SessionPage(props: SessionPageProps) {
   const memoryRailActive = activeSidePanel === "memory";
   const notesRailActive = activeSidePanel === "notes";
   const walletRailActive = activeSidePanel === "wallet";
-  const focusedProtocolPanel = !props.selectedSessionId && isVenueSidePanel(activeSidePanel) ? activeSidePanel : null;
+  const focusedProtocolPanel = !props.selectedSessionId
+    && isVenueSidePanel(activeSidePanel)
+    && reviewedActionEntryProtocol !== activeSidePanel
+    ? activeSidePanel
+    : null;
   const visibleSidePanel = focusedProtocolPanel ? null : activeSidePanel;
   const sidePanelOpen = visibleSidePanel !== null;
   const isMobileViewport = useIsMobile();
@@ -1583,7 +1611,11 @@ export function SessionPage(props: SessionPageProps) {
   }, [navigate, setSidePanelState, sidePanelScopeId]);
 
   useEffect(
-    () => subscribeReviewedActionHandoff((handoff) => setCurrentSidePanel(handoff.protocol)),
+    () => subscribeReviewedActionHandoff((handoff) => {
+      setReviewedActionEntryProtocol(handoff.protocol);
+      setReviewedActionEntryOperation(handoff.draft.operation);
+      setCurrentSidePanel(handoff.protocol);
+    }),
     [setCurrentSidePanel],
   );
 
@@ -1923,6 +1955,8 @@ export function SessionPage(props: SessionPageProps) {
     });
   }, []);
   const closeRightPane = useCallback(() => {
+    setReviewedActionEntryProtocol(null);
+    setReviewedActionEntryOperation(null);
     setCurrentSidePanel(null);
   }, [setCurrentSidePanel]);
   const openBrowserRailPane = useCallback(() => {
@@ -2033,6 +2067,8 @@ export function SessionPage(props: SessionPageProps) {
     if (options?.primePrompt && !(props.selectedSessionId && props.surface)) {
       pendingProtocolRailPanelRef.current = panel;
     }
+    setReviewedActionEntryProtocol(null);
+    setReviewedActionEntryOperation(null);
     setCurrentSidePanel(panel);
     if (options?.primePrompt) primeProtocolRailPrompt(panel, options);
   }, [primeProtocolRailPrompt, props.selectedSessionId, props.surface, setCurrentSidePanel]);
@@ -2096,6 +2132,7 @@ export function SessionPage(props: SessionPageProps) {
         matterhornServerClient={props.matterhornServerClient}
         workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
         sessionId={props.selectedSessionId}
+        initialOperation={reviewedActionEntryProtocol === "sui" ? reviewedActionEntryOperation : null}
         compact
         onEvidenceSaved={() => void outputReceiptsQuery.refetch()}
       />
@@ -2110,6 +2147,8 @@ export function SessionPage(props: SessionPageProps) {
         gasPriceGwei={sessionWallet.gasPriceGwei}
         blockExplorerUrl={sessionWallet.blockExplorerUrl}
         initialVenue={visibleSidePanel}
+        openReviewedAction={reviewedActionEntryProtocol === visibleSidePanel}
+        initialReviewedActionOperation={reviewedActionEntryOperation}
       />
     </div>
   ) : (
@@ -2641,6 +2680,11 @@ export function SessionPage(props: SessionPageProps) {
                         matterhornServerClient={props.matterhornServerClient}
                         runtimeWorkspaceId={props.runtimeWorkspaceId}
                         onBackHome={returnToProjectHome}
+                        onOpenReviewedAction={(protocol, operation) => {
+                          setReviewedActionEntryProtocol(protocol);
+                          setReviewedActionEntryOperation(operation ?? null);
+                          setCurrentSidePanel(protocol);
+                        }}
                         onUsePrompt={(prompt, title) => {
                           const clearFocusedDesk = () => {
                             if (typeof window !== "undefined") {

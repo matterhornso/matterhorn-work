@@ -191,7 +191,7 @@ describe("project evidence routes", () => {
       sessionSlug: "sess_sui_evidence",
       source: "task_events",
     });
-    expect(preview.payload.evidence.outputPath).toContain("outputs/sui/sess_sui_evidence/transfer-preview-");
+    expect(preview.payload.evidence.outputPath).toContain("outputs/sui/sess_sui_evidence/transfer_sui-preview-");
     expect(existsSync(join(dir, preview.payload.evidence.outputPath))).toBe(true);
 
     const previewFile = JSON.parse(readFileSync(join(dir, preview.payload.evidence.outputPath), "utf8"));
@@ -201,8 +201,8 @@ describe("project evidence routes", () => {
       workspaceId: "ws_evidence",
       safety: {
         custody: false,
-        canSubmit: false,
-        liveSubmissionEnabled: false,
+        canSubmit: true,
+        liveSubmissionEnabled: true,
         signingInMatterhorn: false,
       },
     });

@@ -33,7 +33,7 @@ for (const phrase of [
   "Research and execute Hyperliquid perpetual orders with wallet review.",
   "Analyze prediction markets and trade with wallet approval.",
   "Actions",
-  "Matterhorn can prepare an exact TAO transfer for review and submission by your connected Bittensor wallet.",
+  "Matterhorn can prepare exact TAO transfer, stake, and unstake calls for review and submission by your connected Bittensor wallet.",
   "Standard Bittensor actions",
   "Standard Hyperliquid actions",
   "Standard Polymarket actions",
@@ -48,14 +48,14 @@ for (const phrase of [
   "Import receipt",
   "Explain coldkey/hotkey",
   "Prepare unsigned preview",
-  "Prepare staking and advanced actions",
+  "Prepare staking",
   "Public fields only",
   "ProtocolBrandLogo",
   "formatBittensorProviderError",
   "editable Bittensor Agent task",
   'outcome: "Wallet snapshot"',
   'outcome: "Stake position summary"',
-  'outcome: "Unsigned stake preview"',
+  'outcome: "Reviewed stake transaction"',
   'outcome: "Receipt status"',
   "This button creates an unsigned preview only.",
   "Matterhorn server did not answer",
@@ -79,9 +79,27 @@ assert.ok(
   panel.includes('BITTENSOR_BETA_MODE && venue === "bittensor" && tab === "demo"'),
   "Stable builds should keep beta operator content behind the explicit beta flag",
 );
-for (const phrase of ["Read and preview", '"Preview only"', "Matterhorn uses public reads and external signer/client handoffs"]) {
+for (const phrase of [
+  "Read and preview",
+  '"Preview only"',
+  "Wallet execution",
+  "Connect wallet to submit",
+  "Review, sign, and submit",
+  "Authorize and submit",
+  "Open order ticket",
+  "Submission disabled",
+]) {
   assert.ok(panel.includes(phrase), `Stable protocol UI should use release-accurate copy: ${phrase}`);
 }
+assert.equal(
+  panel.includes('const value = venue === "bittensor"') && panel.includes(': "Preview only"'),
+  false,
+  "The wallet execution summary must not collapse market venues into a generic preview-only state",
+);
+assert.ok(
+  panel.includes('document.getElementById(`${venue}-trade-ticket`)?.scrollIntoView'),
+  "Market wallet actions should open the active venue's reviewed trade ticket",
+);
 
 // 4. The six Ask Agent task button labels exist.
 for (const label of [
@@ -156,7 +174,7 @@ for (const phrase of [
   "pnpm test:wellness-creator-workflow && node scripts/wellness-creator-workflow.mjs --check",
   "Copy launch check",
   "Release boundary",
-  "Agents prepare drafts only. Connected-wallet tickets can submit reviewed TAO transfers, Hyperliquid orders, and eligible Polymarket BUY orders.",
+  "Agents prepare drafts only. Connected-wallet tickets can submit reviewed Bittensor transfer/stake/unstake calls, Hyperliquid actions, and eligible Polymarket buy/sell/cancel actions.",
   "Longevity remains a separate, non-medical workflow.",
   "Longevity workflow: Standalone",
   "Not Web3, not medical advice, and no live payments or email.",
@@ -166,11 +184,11 @@ for (const phrase of [
 
 // 6. Safety status: the three venue lines + the wallet-approved boundary.
 for (const phrase of [
-  "Public reads, unsigned staking previews, and reviewed TAO transfers.",
+  "Public reads and reviewed TAO transfer, stake, and unstake calls.",
   "The connected wallet signs; Matterhorn never holds keys.",
   "Manual execution is available in the trade ticket after exact-order review and connected-wallet approval.",
   "Agent prompts and watches never auto-submit.",
-  "Eligible EOA BUY orders require compliance checks, exact review, and connected Polygon wallet authorization.",
+  "Eligible EOA buy, sell, and cancel actions require compliance checks, exact review, and connected Polygon wallet authorization.",
   "Matterhorn never custodies keys or signs silently.",
   "each supported action requires a separate, short-lived wallet approval.",
   "Public reads work without connecting an EVM wallet.",
@@ -203,14 +221,14 @@ for (const phrase of [
   "Can submit",
   "Live submission",
   "Compliance gated",
-  "Eligible EOA BUY orders",
+  "Eligible EOA buy, sell, and cancel actions",
   "Copy signer examples",
   "Signer request",
 ]) {
   assert.ok(panel.includes(phrase), `Panel should include reviewed market execution copy: ${phrase}`);
 }
 
-assert.ok(panel.includes('/api/hyperliquid/orders/execution-intent'), "Hyperliquid ticket must request a server-issued intent");
+assert.ok(panel.includes('/api/hyperliquid/actions/execution-intent'), "Hyperliquid ticket must request a server-issued exact-action intent");
 assert.ok(panel.includes('/api/hyperliquid/orders/submit'), "Hyperliquid ticket must expose the wallet-approved submit route");
 assert.ok(panel.includes('/api/polymarket/orders/handoff'), "Polymarket ticket must request a compliance-gated handoff");
 assert.ok(

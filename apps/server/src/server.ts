@@ -142,6 +142,7 @@ import {
 } from "./tools/hyperliquid.js";
 import {
   hyperliquidExecutionIntentStore,
+  type CreateHyperliquidActionExecutionIntentInput,
   type CreateHyperliquidExecutionIntentInput,
   type SubmitHyperliquidExecutionInput,
 } from "./tools/hyperliquid-live-execution.js";
@@ -164,6 +165,7 @@ import {
   preparePolymarketExternalSignRequestFromRequest,
   preparePolymarketHandoffFromRequest,
   preparePolymarketOrderFromRequest,
+  preparePolymarketSellPreviewFromRequest,
   validatePolymarketRedactedArtifactEnvelope,
   type PolymarketWatchCheckResult,
   type PolymarketWatchDescriptor,
@@ -173,11 +175,11 @@ import {
   buildSuiAccountCard,
   buildSuiTransactionReceipt,
   buildSuiTransactionReceiptCard,
-  buildSuiTransferPreview,
+  buildSuiTransactionPreview,
   buildSuiTransactionPreviewCard,
   SuiInputError,
   type SuiTransactionReceiptInput,
-  type SuiTransferPreviewInput,
+  type SuiTransactionPreviewInput,
   suiProvider,
 } from "./tools/sui.js";
 import {
@@ -10553,15 +10555,15 @@ function createRoutes(
         id: "polymarket.wallet_ticket",
         label: "Polymarket wallet ticket",
         status: "pass" as const,
-        summary: "Agents prepare non-submitting drafts. Compliance-allowed EOA BUY orders can continue through a separate Polygon wallet ticket; sell and proxy-account flows remain external handoffs.",
+        summary: "Agents prepare non-submitting drafts. Compliance-allowed EOA buy, sell, and cancel actions continue through a separate Polygon wallet ticket; proxy-account and advanced flows remain external handoffs.",
       },
       {
         id: "market.execution_safety",
         label: "Market execution safety",
         status: "pass" as const,
         summary: hyperliquidExecution
-          ? "Hyperliquid submission is bound to a server-issued intent and recovered signer address. Eligible Polymarket BUY orders require a separate exact-term wallet ticket. Matterhorn accepts no private keys or API secrets."
-          : "Hyperliquid execution is disabled. Eligible Polymarket BUY orders still require a separate exact-term wallet ticket. Matterhorn accepts no private keys or API secrets.",
+          ? "Hyperliquid submission is bound to a server-issued intent and recovered signer address. Eligible Polymarket buy, sell, and cancel actions require a separate exact-term wallet ticket. Matterhorn accepts no private keys or API secrets."
+          : "Hyperliquid execution is disabled. Eligible Polymarket buy, sell, and cancel actions still require a separate exact-term wallet ticket. Matterhorn accepts no private keys or API secrets.",
       },
     ];
     const blockers = [
@@ -10607,7 +10609,7 @@ function createRoutes(
         items: [
           { label: "Bittensor", value: bittensor.status, tone: bittensor.status === "pass" ? "good" : bittensor.status === "warning" ? "warning" : "danger" },
           { label: "Hyperliquid", value: hyperliquidExecution ? "Wallet-approved execution" : "Execution disabled", tone: hyperliquidExecution ? "good" : "warning" },
-          { label: "Polymarket", value: "Eligible EOA BUY ticket", tone: "good" },
+          { label: "Polymarket", value: "Buy · sell · cancel", tone: "good" },
           { label: "Automatic execution", value: "Off", tone: "good" },
         ],
         warnings,
@@ -10790,9 +10792,6 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/hyperliquid/orders/execution-intent", "client", async (ctx) => {
-    if (!isHyperliquidExecutionEnabled()) {
-      throw new ApiError(503, "hyperliquid_execution_disabled", "Hyperliquid execution is disabled for this deployment.");
-    }
     requireClientScope(ctx, "collaborator");
     const ownerKey = hyperliquidExecutionOwnerKey(ctx);
     const body = await readJsonBody(ctx.request);
@@ -10826,6 +10825,33 @@ function createRoutes(
       return jsonResponse({ success: true, intent });
     } catch (err) {
       throw new ApiError(400, "invalid_hyperliquid_execution_intent", err instanceof Error ? err.message : "Could not prepare Hyperliquid execution intent");
+    }
+  });
+
+  addRoute(routes, "POST", "/api/hyperliquid/actions/execution-intent", "client", async (ctx) => {
+    requireClientScope(ctx, "collaborator");
+    const ownerKey = hyperliquidExecutionOwnerKey(ctx);
+    const body = await readJsonBody(ctx.request);
+    const allowedKeysByOperation: Record<string, Set<string>> = {
+      place_order: new Set(["operation", "network", "signerAddress", "asset", "side", "size", "orderType", "limitPrice", "slippageBps", "reduceOnly"]),
+      cancel_order: new Set(["operation", "network", "signerAddress", "asset", "orderId"]),
+      modify_order: new Set(["operation", "network", "signerAddress", "asset", "orderId", "side", "size", "orderType", "limitPrice", "slippageBps", "reduceOnly"]),
+      close_position: new Set(["operation", "network", "signerAddress", "asset", "side", "size", "orderType", "limitPrice", "slippageBps"]),
+    };
+    const operation = typeof body.operation === "string" ? body.operation : "";
+    const allowedKeys = allowedKeysByOperation[operation];
+    if (!allowedKeys) {
+      throw new ApiError(400, "invalid_hyperliquid_action_intent", "operation must be place_order, cancel_order, modify_order, or close_position.");
+    }
+    const extraKey = Object.keys(body).find((key) => !allowedKeys.has(key));
+    if (extraKey) {
+      throw new ApiError(400, "invalid_hyperliquid_action_intent", `Unexpected ${operation} field: ${extraKey}. Private keys, API secrets, signatures, and custom payloads are not accepted.`);
+    }
+    try {
+      const intent = await hyperliquidExecutionIntentStore.createAction(body as unknown as CreateHyperliquidActionExecutionIntentInput, ownerKey);
+      return jsonResponse({ success: true, intent });
+    } catch (err) {
+      throw new ApiError(400, "invalid_hyperliquid_action_intent", err instanceof Error ? err.message : "Could not prepare Hyperliquid action intent");
     }
   });
 
@@ -10990,6 +11016,26 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "POST", "/api/polymarket/orders/sell-preview", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenPolymarketCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Polymarket preview input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    try {
+      const preview = await preparePolymarketSellPreviewFromRequest({
+        marketId: typeof body.marketId === "string" ? body.marketId : "",
+        outcome: typeof body.outcome === "string" ? body.outcome : null,
+        side: typeof body.side === "string" ? body.side as never : null,
+        shares: Number(body.shares),
+        slippageTolerance: body.slippageTolerance === undefined ? null : Number(body.slippageTolerance),
+      });
+      return jsonResponse({ success: true, preview });
+    } catch (err) {
+      throw new ApiError(400, "invalid_polymarket_sell_preview", err instanceof Error ? err.message : "Could not prepare Polymarket sell preview");
+    }
+  });
+
   addRoute(routes, "POST", "/api/polymarket/chat/execute", "client", async (ctx) => {
     const body = await readJsonBody(ctx.request);
     const message = typeof body.message === "string" ? body.message : "";
@@ -11118,7 +11164,7 @@ function createRoutes(
   addRoute(routes, "POST", "/api/sui/transactions/preview", "client", async (ctx) => {
     const body = await readJsonBody(ctx.request);
     try {
-      const preview = buildSuiTransferPreview(body as SuiTransferPreviewInput);
+      const preview = buildSuiTransactionPreview(body as SuiTransactionPreviewInput);
       return jsonResponse({ success: true, preview, cards: [buildSuiTransactionPreviewCard(preview)] });
     } catch (err) {
       throw suiApiError(err);
@@ -11144,13 +11190,13 @@ function createRoutes(
       ? (body as Record<string, unknown>).payload
       : body;
     try {
-      const preview = buildSuiTransferPreview(payload as SuiTransferPreviewInput);
+      const preview = buildSuiTransactionPreview(payload as SuiTransactionPreviewInput);
       const cards = [buildSuiTransactionPreviewCard(preview)];
       const bodyRecord = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {};
       const requestedSessionId = typeof bodyRecord.sessionId === "string" ? bodyRecord.sessionId.trim() : "";
       const sessionSlug = normalizeSessionSlug(requestedSessionId || `sui_${preview.id}`);
       const taskId = preview.id;
-      const outputPath = `outputs/sui/${sessionSlug}/transfer-preview-${preview.previewSha256.slice(0, 16)}.json`;
+      const outputPath = `outputs/sui/${sessionSlug}/${preview.kind}-preview-${preview.previewSha256.slice(0, 16)}.json`;
 
       await recordSuiWorkspaceEvidence({
         workspace,
@@ -11158,7 +11204,7 @@ function createRoutes(
         taskId,
         sessionSlug,
         outputPath,
-        summary: "Sui transfer preview saved",
+        summary: `Sui ${preview.kind.replaceAll("_", " ")} preview saved`,
         auditAction: "workspace.sui.preview.create",
         outputPayload: {
           version: "matterhorn.sui.workspace-evidence.v1",
@@ -11169,8 +11215,8 @@ function createRoutes(
           cards,
           safety: {
             custody: false,
-            canSubmit: false,
-            liveSubmissionEnabled: false,
+            canSubmit: true,
+            liveSubmissionEnabled: true,
             signingInMatterhorn: false,
           },
         },

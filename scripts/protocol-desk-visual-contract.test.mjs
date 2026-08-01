@@ -154,11 +154,12 @@ for (const [id, block] of Object.entries(deskBlocks)) {
   }
 }
 
-// 6. Safety invariants: no desk accepts secrets. Hyperliquid alone exposes
-//    manual, connected-wallet execution; every other desk remains no-submit.
+// 6. Safety invariants: no desk accepts secrets. Financial completion occurs
+//    only in a separate user-authorized wallet surface; agents remain no-submit.
+const walletAuthorizedDeskIds = new Set(["bittensor", "hyperliquid", "polymarket", "sui"]);
 for (const [id, block] of Object.entries(deskBlocks)) {
   assert.ok(
-    block.includes(`liveSubmissionEnabled: ${id === "hyperliquid" ? "true" : "false"}`),
+    block.includes(`liveSubmissionEnabled: ${walletAuthorizedDeskIds.has(id) ? "true" : "false"}`),
     `${id} must declare the expected live-submission boundary`,
   );
   assert.ok(block.includes("acceptsPrivateKeys: false"), `${id} must not accept private keys`);
@@ -168,7 +169,7 @@ for (const [id, block] of Object.entries(deskBlocks)) {
   assert.ok(block.includes("acceptsSignedPayloads: false"), `${id} must not accept signed payloads`);
   assert.ok(block.includes("acceptsWalletExports: false"), `${id} must not accept wallet exports`);
   assert.ok(
-    block.includes(`allowsRealFunds: ${id === "hyperliquid" ? "true" : "false"}`),
+    block.includes(`allowsRealFunds: ${walletAuthorizedDeskIds.has(id) ? "true" : "false"}`),
     `${id} must declare the expected real-funds boundary`,
   );
   assert.ok(block.includes("medicalClaimsAllowed: false"), `${id} must not allow medical claims`);
@@ -178,7 +179,7 @@ for (const [id, block] of Object.entries(deskBlocks)) {
 for (const id of ["hyperliquid", "polymarket"]) {
   const block = deskBlocks[id];
   assert.ok(
-    block.includes(`status: "${id === "hyperliquid" ? "live" : "preview_only"}"`),
+    block.includes(`status: "${id === "hyperliquid" ? "live" : "beta_ready"}"`),
     `${id} must expose the expected customer status`,
   );
   assert.ok(block.includes("requiresExternalSigner: false"), `${id} must not require external signer`);
@@ -200,7 +201,7 @@ for (const id of ["hyperliquid", "polymarket"]) {
     .toLowerCase();
   const forbidden = id === "hyperliquid"
     ? ["seed phrase", "raw signature", "signed payload", "custody"]
-    : ["private key", "seed phrase", "api secret", "raw signature", "signed payload", "custody", "live submission", "submit", "sign"];
+    : ["private key", "seed phrase", "api secret", "raw signature", "signed payload", "custody"];
   for (const phrase of forbidden) {
     assert.equal(
       marketCopy.includes(phrase),
@@ -211,13 +212,16 @@ for (const id of ["hyperliquid", "polymarket"]) {
   if (id === "hyperliquid") {
     assert.ok(marketCopy.includes("connected wallet"), "Hyperliquid must explain the connected-wallet boundary");
     assert.ok(marketCopy.includes("exact reviewed order"), "Hyperliquid must explain exact-order review");
+  } else {
+    assert.ok(marketCopy.includes("eligible eoa buy"), "Polymarket must explain the supported BUY boundary");
+    assert.ok(marketCopy.includes("connected polygon wallet"), "Polymarket must explain wallet authorization");
   }
 }
 
 // 8. Bittensor manifest distinguishes SS58/coldkey/hotkey from EVM wallet.
 const bittensorBlock = deskBlocks.bittensor;
 assert.ok(bittensorBlock.includes('status: "beta_ready"'), "Bittensor must be beta_ready");
-assert.ok(bittensorBlock.includes("requiresExternalSigner: true"), "Bittensor must require external signer");
+assert.ok(bittensorBlock.includes("requiresExternalSigner: false"), "Bittensor connected-wallet transfers must not require an external signer");
 const bittensorLower = bittensorBlock.toLowerCase();
 assert.ok(bittensorLower.includes("ss58"), "Bittensor manifest must mention SS58");
 assert.ok(
@@ -358,8 +362,8 @@ for (const id of expectedDeskIds) {
 const expectedReadinessTones = {
   bittensor: "beta_ready",
   hyperliquid: "live",
-  polymarket: "preview_only",
-  sui: "preview_only",
+  polymarket: "beta_ready",
+  sui: "beta_ready",
   wellness: "workflow_ready",
   memory: "beta_ready",
   mcps: "local_only",
@@ -384,13 +388,13 @@ const expectedStatusLabels = {
     extensionStatus: "built_in_live",
   },
   polymarket: {
-    backendStatus: "preview",
-    actionStatus: "preview_only",
+    backendStatus: "live",
+    actionStatus: "live",
     extensionStatus: "built_in_live",
   },
   sui: {
-    backendStatus: "preview",
-    actionStatus: "preview_only",
+    backendStatus: "live",
+    actionStatus: "live",
     extensionStatus: "built_in_live",
   },
   wellness: {
@@ -418,22 +422,22 @@ for (const [id, expected] of Object.entries(expectedStatusLabels)) {
   }
 }
 
-// 21. Bittensor remains beta-ready and external-signer only.
+// 21. Bittensor supports connected-wallet transfers and external-signer staking.
 assert.ok(deskBlocks.bittensor.includes('status: "beta_ready"'), "Bittensor must be beta_ready");
 assert.ok(deskBlocks.bittensor.includes('actionStatus: "external_signer"'), "Bittensor actionStatus must be external_signer");
 assert.ok(deskBlocks.bittensor.includes('backendStatus: "partial"'), "Bittensor backendStatus must be partial");
-assert.ok(deskBlocks.bittensor.includes("requiresExternalSigner: true"), "Bittensor must require external signer");
+assert.ok(deskBlocks.bittensor.includes("requiresExternalSigner: false"), "Bittensor transfers must support connected-wallet approval");
 
-// 22. Hyperliquid is wallet-approved; Polymarket remains preview-only. Neither accepts secrets.
+// 22. Hyperliquid and eligible Polymarket BUY orders are wallet-approved. Neither accepts secrets.
 assert.ok(deskBlocks.hyperliquid.includes('status: "live"'), "Hyperliquid must be live");
 assert.ok(deskBlocks.hyperliquid.includes('actionStatus: "live"'), "Hyperliquid actionStatus must be live");
 assert.ok(deskBlocks.hyperliquid.includes('backendStatus: "live"'), "Hyperliquid backendStatus must be live");
 assert.ok(deskBlocks.hyperliquid.includes("liveSubmissionEnabled: true"), "Hyperliquid must enable wallet-approved submission");
 
-assert.ok(deskBlocks.polymarket.includes('status: "preview_only"'), "Polymarket must be preview_only");
-assert.ok(deskBlocks.polymarket.includes('actionStatus: "preview_only"'), "Polymarket actionStatus must be preview_only");
-assert.ok(deskBlocks.polymarket.includes('backendStatus: "preview"'), "Polymarket backendStatus must be preview");
-assert.ok(deskBlocks.polymarket.includes("liveSubmissionEnabled: false"), "Polymarket must disable live submission");
+assert.ok(deskBlocks.polymarket.includes('status: "beta_ready"'), "Polymarket must be beta_ready");
+assert.ok(deskBlocks.polymarket.includes('actionStatus: "live"'), "Polymarket actionStatus must be live");
+assert.ok(deskBlocks.polymarket.includes('backendStatus: "live"'), "Polymarket backendStatus must be live");
+assert.ok(deskBlocks.polymarket.includes("liveSubmissionEnabled: true"), "Polymarket must enable wallet-approved submission");
 
 for (const id of ["hyperliquid", "polymarket"]) {
   assert.ok(deskBlocks[id].includes("acceptsPrivateKeys: false"), `${id} must not accept private keys`);

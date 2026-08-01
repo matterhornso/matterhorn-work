@@ -73,7 +73,7 @@ describe("customer workflow template launch cards", () => {
       allowsRealFunds: true,
     });
 
-    expect(polymarket?.prompt).toContain("eligible EOA BUY order");
+    expect(polymarket?.prompt).toContain("buy, sell, and cancel actions");
     expect(polymarket?.prompt).toContain("separate connected-wallet ticket");
     expect(polymarket?.prompt).toContain("agents cannot submit");
 

@@ -455,15 +455,15 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("directWalletAvailable");
     expect(source).toContain("Desktop handoff:");
     expect(source).toContain("Copy handoff");
-    expect(source).toContain("Prepare handoff");
+    expect(source).toContain("Review transaction");
     expect(source).toContain("Handoff ready");
-    expect(source).toContain("Sign in wallet");
+    expect(source).toContain("Review in wallet");
     expect(source).not.toContain("Prepare preview");
     expect(source).not.toContain("Sign preview");
     expect(source).toContain("matterhorn:task-log-updated");
     expect(source).toContain("matterhorn:project-evidence-updated");
     expect(source).toContain("embedded?: boolean");
-    expect(source).toContain("!directWalletAvailable || connectedAddress");
+    expect(source).toContain("directWalletAvailable && connectedAddress");
     expect(source).toContain("account?.address ?? phantomSui.address");
     expect(source).not.toContain("No custody");
     expect(source).not.toContain("Sui wallet workflow");

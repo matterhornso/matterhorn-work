@@ -5,6 +5,7 @@ import {
   SuiInputError,
   SuiPublicReadProvider,
   buildSuiAccountCard,
+  buildSuiTransactionPreview,
   buildSuiTransactionReceipt,
   buildSuiTransactionReceiptCard,
   buildSuiTransferPreview,
@@ -122,7 +123,7 @@ describe("Sui public read provider", () => {
     expect(serialized).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
   });
 
-  test("builds non-submittable Sui transfer previews", () => {
+  test("builds wallet-authorized Sui transfer previews", () => {
     const preview = buildSuiTransferPreview({
       network: "testnet",
       sender: SHORT_ADDRESS,
@@ -143,8 +144,8 @@ describe("Sui public read provider", () => {
       amountMist: "1250000000",
       amountSui: "1.25",
       custody: false,
-      canSubmit: false,
-      liveSubmissionEnabled: false,
+      canSubmit: true,
+      liveSubmissionEnabled: true,
       signerPolicy: "client_wallet_required",
       requiresWalletStandard: true,
     });
@@ -152,6 +153,57 @@ describe("Sui public read provider", () => {
     expect(preview.handoff.action).toBe("sign_and_execute_in_wallet");
     expect(card.kind).toBe("sui_transaction_preview");
     expect(serialized).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
+  });
+
+  test("builds custom coin, object, and batch transaction previews", () => {
+    const coin = buildSuiTransactionPreview({
+      kind: "transfer_coin",
+      network: "testnet",
+      sender: SHORT_ADDRESS,
+      recipient: "0x3",
+      amountSui: "2.5",
+      coinType: "0x2::test_coin::TEST_COIN",
+    }, { now: () => NOW });
+    const object = buildSuiTransactionPreview({
+      kind: "transfer_object",
+      network: "testnet",
+      sender: SHORT_ADDRESS,
+      recipient: "0x3",
+      objectId: "0x4",
+    }, { now: () => NOW });
+    const batch = buildSuiTransactionPreview({
+      kind: "batch_transfer_sui",
+      network: "testnet",
+      sender: SHORT_ADDRESS,
+      transfers: [
+        { recipient: "0x3", amountSui: "1" },
+        { recipient: "0x4", amountMist: "250000000" },
+      ],
+    }, { now: () => NOW });
+
+    expect(coin).toMatchObject({
+      kind: "transfer_coin",
+      amountMist: "2500000000",
+      canSubmit: true,
+      liveSubmissionEnabled: true,
+      handoff: { action: "sign_and_execute_in_wallet" },
+    });
+    expect(coin.coinType).toMatch(/::test_coin::TEST_COIN$/);
+    expect(object).toMatchObject({
+      kind: "transfer_object",
+      objectId: "0x0000000000000000000000000000000000000000000000000000000000000004",
+      canSubmit: true,
+      liveSubmissionEnabled: true,
+    });
+    expect(batch).toMatchObject({
+      kind: "batch_transfer_sui",
+      canSubmit: true,
+      liveSubmissionEnabled: true,
+      transfers: [
+        { amountMist: "1000000000", amountSui: "1" },
+        { amountMist: "250000000", amountSui: "0.25" },
+      ],
+    });
   });
 
   test("rejects invalid Sui transfer preview inputs", () => {
@@ -171,6 +223,24 @@ describe("Sui public read provider", () => {
       amountSui: "1",
       privateKey: "nope",
     } as never)).toThrow(SuiInputError);
+    expect(() => buildSuiTransactionPreview({
+      kind: "transfer_coin",
+      sender: SHORT_ADDRESS,
+      recipient: "0x3",
+      amountSui: "1",
+      coinType: "not-a-coin-type",
+    })).toThrow(SuiInputError);
+    expect(() => buildSuiTransactionPreview({
+      kind: "transfer_object",
+      sender: SHORT_ADDRESS,
+      recipient: "0x3",
+      objectId: "not-an-object-id",
+    })).toThrow(SuiInputError);
+    expect(() => buildSuiTransactionPreview({
+      kind: "batch_transfer_sui",
+      sender: SHORT_ADDRESS,
+      transfers: [{ recipient: "0x3", amountSui: "1" }],
+    })).toThrow(SuiInputError);
   });
 
   test("builds public Sui transaction receipts without signature material", () => {

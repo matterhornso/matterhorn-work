@@ -24,6 +24,11 @@ function finiteNumber(value: unknown): number | null {
   return null;
 }
 
+function finiteInteger(value: unknown): number | null {
+  const parsed = finiteNumber(value);
+  return parsed !== null && Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function nonEmptyText(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -33,6 +38,26 @@ function safeSlippageBps(value: unknown): number {
   if (parsed === null || parsed <= 0) return 100;
   const bps = parsed <= 50 ? parsed * 100 : parsed;
   return Math.min(5_000, Math.max(1, Math.round(bps)));
+}
+
+function publicOrderIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((orderId) => nonEmptyText(orderId))
+    .filter((orderId): orderId is string => orderId !== null)
+    .slice(0, 100);
+}
+
+function publicSuiTransfers(value: unknown): Array<{ recipient: string; amount: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) return [];
+    const recipient = nonEmptyText(entry.recipient);
+    const amount = finiteNumber(entry.amount ?? entry.amountSui);
+    return recipient && amount !== null && amount > 0
+      ? [{ recipient, amount: String(amount) }]
+      : [];
+  }).slice(0, 16);
 }
 
 export function reviewedActionHandoffFromCard(card: SharedActionCard): ReviewedActionDraftHandoff | null {
@@ -51,62 +76,282 @@ export function reviewedActionHandoffFromCard(card: SharedActionCard): ReviewedA
     const side = nonEmptyText(preview.side)?.toLowerCase();
     const size = finiteNumber(preview.size);
     const price = finiteNumber(preview.price);
+    const orderId = finiteInteger(preview.orderId);
     const orderType = preview.orderType === "limit" ? "limit" : "market";
-    if (asset && (side === "buy" || side === "sell") && size !== null && size > 0) {
+    const rawOperation = nonEmptyText(preview.operation ?? preview.action)?.toLowerCase();
+    const operation = rawOperation === "cancel" || rawOperation === "cancel_order"
+      ? "cancel_order"
+      : rawOperation === "modify" || rawOperation === "modify_order"
+        ? "modify_order"
+        : rawOperation === "close" || rawOperation === "close_position"
+          ? "close_position"
+          : "place_order";
+    const network = preview.network === "mainnet" ? "mainnet" : "testnet";
+    if (asset && operation === "cancel_order" && orderId !== null) {
       candidate = {
         version: "matterhorn.reviewed-action-handoff.v1",
         protocol: "hyperliquid",
         source: "agent-card",
         draft: {
-          network: preview.network === "mainnet" ? "mainnet" : "testnet",
+          operation,
+          network,
           asset: asset.toUpperCase(),
-          side,
-          size,
-          orderType,
-          limitPrice: orderType === "limit" && price !== null && price > 0 ? price : null,
-          slippageBps: safeSlippageBps(preview.slippageTolerance),
-          reduceOnly: preview.reduceOnly === true,
+          orderId,
+          side: null,
+          size: null,
+          orderType: null,
+          limitPrice: null,
+          slippageBps: null,
+          reduceOnly: null,
         },
       };
+    } else if (
+      asset
+      && (side === "buy" || side === "sell")
+      && size !== null
+      && size > 0
+      && (operation !== "modify_order" || orderId !== null)
+    ) {
+      candidate = operation === "close_position"
+        ? {
+            version: "matterhorn.reviewed-action-handoff.v1",
+            protocol: "hyperliquid",
+            source: "agent-card",
+            draft: {
+              operation: "close_position",
+              network,
+              asset: asset.toUpperCase(),
+              orderId: null,
+              side,
+              size,
+              orderType: "market",
+              limitPrice: null,
+              slippageBps: safeSlippageBps(preview.slippageTolerance),
+              reduceOnly: true,
+            },
+          }
+        : operation === "modify_order"
+          ? {
+              version: "matterhorn.reviewed-action-handoff.v1",
+              protocol: "hyperliquid",
+              source: "agent-card",
+              draft: {
+                operation: "modify_order",
+                network,
+                asset: asset.toUpperCase(),
+                orderId: orderId!,
+                side,
+                size,
+                orderType,
+                limitPrice: orderType === "limit" && price !== null && price > 0 ? price : null,
+                slippageBps: safeSlippageBps(preview.slippageTolerance),
+                reduceOnly: preview.reduceOnly === true,
+              },
+            }
+          : {
+              version: "matterhorn.reviewed-action-handoff.v1",
+              protocol: "hyperliquid",
+              source: "agent-card",
+              draft: {
+                operation: "place_order",
+                network,
+                asset: asset.toUpperCase(),
+                orderId: null,
+                side,
+                size,
+                orderType,
+                limitPrice: orderType === "limit" && price !== null && price > 0 ? price : null,
+                slippageBps: safeSlippageBps(preview.slippageTolerance),
+                reduceOnly: preview.reduceOnly === true,
+              },
+            };
     }
   } else if (card.venue === "polymarket") {
+    const rawOperation = nonEmptyText(preview.operation ?? preview.action)?.toLowerCase();
+    const operation = rawOperation === "sell" || rawOperation === "sell_order"
+      ? "sell"
+      : rawOperation === "cancel" || rawOperation === "cancel_order" || rawOperation === "cancel_orders"
+        ? "cancel"
+        : "buy";
     const marketId = nonEmptyText(preview.marketId);
     const outcome = nonEmptyText(preview.outcome);
-    const amountUsdc = finiteNumber(preview.size);
+    const amountUsdc = finiteNumber(preview.amountUsdc ?? preview.size);
+    const amountShares = finiteNumber(preview.amountShares ?? preview.shares ?? preview.size);
     const slippage = finiteNumber(preview.slippageTolerance);
-    if (
-      marketId
-      && outcome
-      && amountUsdc !== null
-      && amountUsdc > 0
-      && isRecord(preview.compliance)
-      && preview.compliance.status === "allowed"
-    ) {
+    const orderIds = publicOrderIds(preview.orderIds);
+    const singleOrderId = nonEmptyText(preview.orderId);
+    if (singleOrderId && !orderIds.includes(singleOrderId)) orderIds.push(singleOrderId);
+    const cancelAll = preview.cancelAll === true;
+    if (operation === "cancel" && (cancelAll || orderIds.length > 0)) {
       candidate = {
         version: "matterhorn.reviewed-action-handoff.v1",
         protocol: "polymarket",
         source: "agent-card",
         draft: {
-          marketId,
-          outcome,
-          amountUsdc,
-          slippageTolerance: slippage !== null && slippage > 0 ? Math.min(slippage, 50) : 2,
+          operation,
+          marketId: null,
+          outcome: null,
+          amountUsdc: null,
+          amountShares: null,
+          slippageTolerance: null,
+          orderIds,
+          cancelAll,
         },
       };
+    } else if (
+      marketId
+      && outcome
+      && ((operation === "buy" && amountUsdc !== null && amountUsdc > 0)
+        || (operation === "sell" && amountShares !== null && amountShares > 0))
+      && isRecord(preview.compliance)
+      && preview.compliance.status === "allowed"
+    ) {
+      const commonDraft = {
+        marketId,
+        outcome,
+        slippageTolerance: slippage !== null && slippage > 0 ? Math.min(slippage, 50) : 2,
+        orderIds: [] as [],
+        cancelAll: false as const,
+      };
+      candidate = operation === "buy"
+        ? {
+            version: "matterhorn.reviewed-action-handoff.v1",
+            protocol: "polymarket",
+            source: "agent-card",
+            draft: {
+              operation: "buy",
+              ...commonDraft,
+              amountUsdc: amountUsdc!,
+              amountShares: null,
+            },
+          }
+        : {
+            version: "matterhorn.reviewed-action-handoff.v1",
+            protocol: "polymarket",
+            source: "agent-card",
+            draft: {
+              operation: "sell",
+              ...commonDraft,
+              amountUsdc: null,
+              amountShares: amountShares!,
+            },
+          };
     }
-  } else if (card.venue === "bittensor" && preview.action === "transfer") {
+  } else if (card.venue === "bittensor") {
+    const rawOperation = nonEmptyText(preview.operation ?? preview.action)?.toLowerCase();
+    const operation = rawOperation === "stake" || rawOperation === "unstake" ? rawOperation : "transfer";
     const destination = nonEmptyText(preview.destination);
     const amountTao = finiteNumber(preview.amountTao);
-    const sender = nonEmptyText(preview.coldkey);
-    if (destination && amountTao !== null && amountTao > 0) {
+    const sender = nonEmptyText(preview.sender ?? preview.coldkey);
+    const hotkey = nonEmptyText(preview.hotkey ?? preview.validatorHotkey);
+    const netuid = finiteInteger(preview.netuid);
+    if (operation === "transfer" && destination && amountTao !== null && amountTao > 0) {
       candidate = {
         version: "matterhorn.reviewed-action-handoff.v1",
         protocol: "bittensor",
         source: "agent-card",
         draft: {
+          operation,
           sender,
           destination,
+          hotkey: null,
+          netuid: null,
           amountTao: String(amountTao),
+        },
+      };
+    } else if (operation !== "transfer" && hotkey && netuid !== null && amountTao !== null && amountTao > 0) {
+      candidate = {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "bittensor",
+        source: "agent-card",
+        draft: {
+          operation,
+          sender,
+          destination: null,
+          hotkey,
+          netuid,
+          amountTao: String(amountTao),
+        },
+      };
+    }
+  } else if (card.venue === "sui") {
+    const rawOperation = nonEmptyText(preview.operation ?? preview.action ?? preview.kind)?.toLowerCase();
+    const operation = rawOperation === "transfer_coin" || rawOperation === "send_coin"
+      ? "transfer_coin"
+      : rawOperation === "transfer_object" || rawOperation === "send_object" || rawOperation === "send_nft"
+        ? "transfer_object"
+        : rawOperation === "batch_transfer_sui" || rawOperation === "batch_transfer"
+          ? "batch_transfer_sui"
+          : "transfer_sui";
+    const network = preview.network === "mainnet" ? "mainnet" : "testnet";
+    const sender = nonEmptyText(preview.sender);
+    const recipient = nonEmptyText(preview.recipient);
+    const amount = finiteNumber(preview.amount ?? preview.amountSui);
+    const coinType = nonEmptyText(preview.coinType);
+    const objectId = nonEmptyText(preview.objectId);
+    const transfers = publicSuiTransfers(preview.transfers);
+    if (operation === "batch_transfer_sui" && transfers.length >= 2) {
+      candidate = {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "sui",
+        source: "agent-card",
+        draft: {
+          operation,
+          network,
+          sender,
+          recipient: null,
+          amount: null,
+          coinType: null,
+          objectId: null,
+          transfers,
+        },
+      };
+    } else if (operation === "transfer_object" && recipient && objectId) {
+      candidate = {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "sui",
+        source: "agent-card",
+        draft: {
+          operation,
+          network,
+          sender,
+          recipient,
+          amount: null,
+          coinType: null,
+          objectId,
+          transfers: [],
+        },
+      };
+    } else if (operation === "transfer_coin" && recipient && amount !== null && amount > 0 && coinType) {
+      candidate = {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "sui",
+        source: "agent-card",
+        draft: {
+          operation,
+          network,
+          sender,
+          recipient,
+          amount: String(amount),
+          coinType,
+          objectId: null,
+          transfers: [],
+        },
+      };
+    } else if (operation === "transfer_sui" && recipient && amount !== null && amount > 0) {
+      candidate = {
+        version: "matterhorn.reviewed-action-handoff.v1",
+        protocol: "sui",
+        source: "agent-card",
+        draft: {
+          operation,
+          network,
+          sender,
+          recipient,
+          amount: String(amount),
+          coinType: null,
+          objectId: null,
+          transfers: [],
         },
       };
     }

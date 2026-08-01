@@ -122,13 +122,13 @@ type CustomerWorkflowTemplateResponse = {
 };
 
 const MARKET_HANDOFF_SUFFIX =
-  "Prepare exact order terms when asked. The Agent draft cannot submit. An eligible EOA BUY order can continue in the separate connected-wallet ticket after compliance passes and the user authorizes the exact order. Sell orders, proxy accounts, watches, and agents cannot submit. Matterhorn never signs or holds keys.";
+  "Prepare exact order terms when asked. The Agent draft cannot submit. Eligible EOA buy, sell, and cancel actions continue in the separate connected-wallet ticket after compliance passes and the user authorizes the exact action. Proxy accounts, watches, and agents cannot submit. Matterhorn never signs or holds keys.";
 
 const HYPERLIQUID_EXECUTION_SUFFIX =
   "Research and prepare an exact order draft, but never claim the Agent placed it. The user must review it in the separate trade ticket and authorize its short-lived intent with a connected wallet before Matterhorn submits it. Agents and watches cannot submit. Never request keys, raw signatures, or API secrets.";
 
 const BITTENSOR_SUFFIX =
-  "Use public wallet context only. TAO transfers can continue in the separate transfer ticket after exact review and connected Bittensor-wallet authorization. Staking, unstaking, delegation, and advanced calls remain external-signer previews. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";
+  "Use public wallet context only. TAO transfers, staking, and unstaking continue in a separate transaction ticket after exact review and connected Bittensor-wallet authorization. Delegation and advanced calls stay unavailable until separately audited. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";
 
 const SUI_SUFFIX =
   "Use public Sui account context only. Prepare non-custodial previews, and keep signing inside the user's Sui wallet or external client. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";
@@ -229,7 +229,7 @@ function demoStatusLabel(status: CustomerBetaDemoScenario["status"]): string {
 
 function safetySummary(template: CustomerWorkflowTemplate): string {
   if (template.routing.chatMode === "bittensor") {
-    return "TAO transfers require exact connected-wallet review. Staking and advanced calls stay external-signer previews. No secrets.";
+    return "TAO transfer, stake, and unstake calls require exact connected-wallet review. Unsupported advanced calls stay unavailable. No secrets.";
   }
   if (template.routing.chatMode === "hyperliquid") {
     return "Read and preview tasks with external-client handoff.";
@@ -332,7 +332,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     id: "bittensor_operator",
     name: "Use Bittensor",
     summary: "Read TAO and subnet context, compare validators, and prepare reviewed Bittensor transactions.",
-    promise: "TAO transfers can be authorized in a connected Bittensor wallet. Staking and advanced calls remain external handoffs.",
+    promise: "TAO transfers, staking, and unstaking can be authorized in a connected Bittensor wallet. Advanced calls remain unavailable until audited.",
     category: "bittensor",
     status: "beta_ready",
     examplePrompts: ["Show my TAO", "Which subnet is useful for image generation?", "Compare validators on subnet 14"],
@@ -398,9 +398,9 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     id: "polymarket_researcher",
     name: "Use Polymarket",
     summary: "Research Polymarket outcomes, liquidity, and eligibility before preparing exact trade terms.",
-    promise: "Eligible EOA BUY orders can be authorized in a connected Polygon wallet after compliance passes.",
+    promise: "Eligible buy, sell, and cancel actions can be authorized in a connected Polygon wallet after compliance passes.",
     category: "markets",
-    status: "preview_only",
+    status: "beta_ready",
     examplePrompts: ["Summarize this Polymarket market", "Check Polymarket compliance"],
     launch: {
       primaryCta: "Open Polymarket desk",
@@ -412,7 +412,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "polymarket",
       accent: "matterhorn_blue",
-      shortDescription: "Research markets and compliance, then review eligible wallet-approved BUY orders.",
+      shortDescription: "Research markets and compliance, then review eligible wallet-approved buy, sell, and cancel actions.",
     },
     routing: { chatMode: "polymarket", opensPanel: "polymarket", startsSession: true },
     safetyBoundaries: {

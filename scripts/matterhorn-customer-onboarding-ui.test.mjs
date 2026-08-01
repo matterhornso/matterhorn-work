@@ -154,7 +154,7 @@ for (const phrase of [
   "Risk details stay behind each info button.",
   "Outputs and receipts stay with this project.",
   "Wallet details",
-  "Agents prepare drafts only. TAO transfers require exact review and connected Bittensor-wallet approval; staking and advanced calls remain external handoffs.",
+  "Agents prepare drafts only. TAO transfers, stake, and unstake calls require exact review and connected Bittensor-wallet approval. Other runtime calls remain unavailable until separately audited.",
   "Agents prepare drafts only.",
   "blocked regions get no executable terms.",
   "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.",
@@ -202,7 +202,7 @@ for (const phrase of [
   "starterWorkflowCapabilityItems",
   "`${manifest.displayName} session`",
   "Longevity workflow session",
-  "Public wallet details and transfer drafts. You approve TAO transfers in your wallet; staking and advanced actions finish in an external signer.",
+  "Public wallet details and transaction drafts. You approve TAO transfers, stake, and unstake calls in your connected wallet; unsupported advanced calls are not presented as executable.",
   "Matterhorn never signs or holds keys.",
   "blocked regions get no executable terms.",
   "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.",
@@ -212,7 +212,7 @@ for (const phrase of [
   "Non-medical workflow",
   "Show my TAO",
   "Compare validators",
-  "Prepare an order",
+  "Place an order",
   "Draft an order for exact review and connected-wallet approval.",
   "execution requires a separate review and wallet signature in the Hyperliquid desk",
   "Summarize this Polymarket market",
@@ -444,7 +444,12 @@ assert.equal(sessionSurface.includes("Stage agent task"), false, "session starte
 assert.equal(settingsRoute.includes("border-l border-dls-border/30 pl-3"), false, "MCP setup should avoid hard left-rule dividers");
 
 assert.ok(walletPanel.includes('lazy(() => import("./pages/BittensorPanel"))'), "Protocol rail should mount the venue panel");
-assert.ok(walletPanel.includes("<BittensorPanel initialVenue={initialVenue} />"), "Protocol panel should render the selected workspace");
+assert.ok(
+  walletPanel.includes("<BittensorPanel")
+    && walletPanel.includes("initialVenue={initialVenue}")
+    && walletPanel.includes("openReviewedAction={openReviewedAction}"),
+  "Protocol panel should render the selected workspace and preserve reviewed-action launch intent",
+);
 assert.equal(walletPanel.includes("EVM wallet not connected"), false, "no-wallet protocol panel should not block content with a bottom overlay");
 assert.ok(sessionPage.includes("GLOBAL_HOME_SIDE_PANEL_KEY"), "home should keep right-rail panels usable before a session exists");
 assert.ok(sessionPage.includes("ProtocolDeskEmptyState"), "protocol launchers should open a focused desk start state before staging an agent task");
@@ -462,9 +467,9 @@ assert.ok(workflowTemplates.includes('primaryPanelRouteId: manifest.primaryPanel
 assert.ok(workflowTemplates.includes('launchBehavior: manifest.launchBehavior'), "app launcher metadata should preserve manifest launch behavior");
 assert.ok(workflowTemplates.includes('canSubmit: false'), "app launcher metadata should keep market submit disabled");
 assert.ok(workflowTemplates.includes('liveExecutionEnabled: false'), "app launcher metadata should keep live execution disabled");
-assert.ok(protocolDeskUi.includes("Bittensor: TAO reads, subnets, validators, reviewed transfers, staking previews, watches, and receipts"), "Bittensor rail tooltip should explain protocol-specific work");
-assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, exposure, funding, watches, and order previews"), "Hyperliquid rail tooltip should explain protocol-specific work");
-assert.ok(protocolDeskUi.includes("Polymarket: markets, liquidity, compliance, watches, and wallet-approved BUY orders"), "Polymarket rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Bittensor: TAO reads, subnets, validators, wallet-reviewed transfers, stake, unstake, watches, and receipts"), "Bittensor rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, exposure, funding, watches, and wallet-reviewed place, cancel, modify, and close actions"), "Hyperliquid rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Polymarket: markets, liquidity, compliance, watches, and wallet-reviewed buy, sell, and cancel actions"), "Polymarket rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes('w-[var(--nav-rail-width-compact)]'), "right rail should use a compact responsive width before wide desktop");
 assert.ok(sessionPage.includes('2xl:w-[var(--nav-rail-width)]'), "right rail should expand to readable customer desk labels on wide desktop");
 assert.ok(appCss.includes("--nav-rail-width-compact: 88px;"), "compact right rail should be wide enough for readable desk labels");
@@ -869,7 +874,7 @@ for (const phrase of [
   "matterhorn-work mcp config --target claude --profile full",
   "matterhorn-work mcp config --target claude-desktop --profile full",
   "matterhorn-work mcp config --target cursor --profile full",
-  "Public reads and transfer drafts.",
+  "Public reads plus transfer, stake, and unstake drafts.",
   "Compliance-gated handoff only. No live submit.",
   "review and submit it with your own signer or client.",
   "Never paste seeds, keys, mnemonics, signatures, signed payloads, or wallet exports.",
@@ -1076,8 +1081,8 @@ for (const phrase of [
   "EVM wallet",
   "Review & submit",
   "Prepare only",
-  "Read public SS58 data and prepare TAO transfers.",
-  "Staking and advanced calls remain external-signer handoffs.",
+  "Read public SS58 data and prepare TAO transfer, stake, or unstake calls.",
+  "Unsupported advanced calls stay unavailable.",
   "WalletBoundaryList",
   "safetyCopy.forbiddenSecretsLine",
   "keys stay in your wallet",

@@ -10,6 +10,12 @@ assert.ok(
   "generated-media smoke launcher should explain its purpose",
 );
 assert.ok(
+  script.includes('MATTERHORN_MEDIA_SMOKE_APP_PORT?.trim() || "5282"') &&
+    script.includes("QA-only simulator") &&
+    script.includes("No live model, market, wallet, or submission was called."),
+  "generated-media smoke launcher should avoid the normal product port and visibly identify synthetic responses",
+);
+assert.ok(
   script.includes("startFakeOpencode") &&
     script.includes("ensureSession") &&
     script.includes("decodeURIComponent(raw)") &&

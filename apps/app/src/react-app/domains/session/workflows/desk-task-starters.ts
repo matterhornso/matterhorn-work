@@ -1,3 +1,5 @@
+import type { ReviewedActionOperation } from "@matterhorn-work/types";
+
 export type MatterhornDeskTaskStarterDesk =
   | "bittensor"
   | "hyperliquid"
@@ -10,12 +12,15 @@ export type MatterhornDeskTaskStarter = {
   title: string;
   detail: string;
   prompt: string;
+  reviewedAction?: "hyperliquid" | "polymarket" | "bittensor" | "sui";
+  reviewedActionOperation?: ReviewedActionOperation;
+  reviewedActionLabel?: string;
 };
 
 /**
- * Desk-specific starter tasks. These remain prompts instead of hidden automation:
- * the selected desk agent gathers any missing public context and keeps its signer,
- * compliance, and safety boundary visible before it prepares a result.
+ * Desk-specific starter tasks. Research tasks remain editable prompts. Transaction
+ * starters open an explicit reviewed-action ticket so model availability can never
+ * be mistaken for wallet or execution availability.
  */
 export const MATTERHORN_DESK_TASK_STARTERS = {
   bittensor: [
@@ -57,21 +62,30 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     },
     {
       id: "stake-preview",
-      title: "Prepare stake preview",
-      detail: "Draft an unsigned stake handoff for external review.",
-      prompt: "Prepare a Bittensor stake preview. Ask for public coldkey, validator hotkey, amount, and subnet if needed. Keep it unsigned and require an external Bittensor-compatible signer.",
+      title: "Stake TAO",
+      detail: "Prepare exact stake terms for connected-wallet review.",
+      prompt: "Prepare a Bittensor stake transaction. Ask for public coldkey, validator hotkey, amount, and subnet if needed. Keep the Agent draft non-submittable, then open the Bittensor action ticket where my installed wallet reviews, signs, and broadcasts the exact call.",
+      reviewedAction: "bittensor",
+      reviewedActionOperation: "stake",
+      reviewedActionLabel: "Open stake ticket",
     },
     {
       id: "unstake-preview",
-      title: "Prepare unstake preview",
-      detail: "Draft an unsigned unstake handoff for external review.",
-      prompt: "Prepare a Bittensor unstake preview. Ask for public coldkey, validator hotkey, amount, and subnet if needed. Keep it unsigned and require an external Bittensor-compatible signer.",
+      title: "Unstake TAO",
+      detail: "Prepare exact unstake terms for connected-wallet review.",
+      prompt: "Prepare a Bittensor unstake transaction. Ask for public coldkey, validator hotkey, amount, and subnet if needed. Keep the Agent draft non-submittable, then open the Bittensor action ticket where my installed wallet reviews, signs, and broadcasts the exact call.",
+      reviewedAction: "bittensor",
+      reviewedActionOperation: "unstake",
+      reviewedActionLabel: "Open unstake ticket",
     },
     {
       id: "transfer-preview",
       title: "Send TAO",
       detail: "Prepare exact transfer terms for connected-wallet review.",
       prompt: "Prepare a Bittensor TAO transfer. Ask for public sender, public recipient, and amount. Keep the Agent draft non-submittable, then direct me to the separate Bittensor transfer ticket where my installed wallet reviews, signs, and broadcasts the exact Finney call.",
+      reviewedAction: "bittensor",
+      reviewedActionOperation: "transfer",
+      reviewedActionLabel: "Open transfer ticket",
     },
     {
       id: "import-receipt",
@@ -125,9 +139,39 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     },
     {
       id: "order-preview",
-      title: "Prepare an order",
+      title: "Place an order",
       detail: "Draft an order for exact review and connected-wallet approval.",
       prompt: "Prepare a Hyperliquid order. Ask for network, symbol, side, size, market or limit, slippage, and reduce-only state. Chat prepares a reviewable draft but does not submit it; execution requires a separate review and wallet signature in the Hyperliquid desk.",
+      reviewedAction: "hyperliquid",
+      reviewedActionOperation: "place_order",
+      reviewedActionLabel: "Open order ticket",
+    },
+    {
+      id: "cancel-order",
+      title: "Cancel an order",
+      detail: "Review an exact order cancellation before wallet approval.",
+      prompt: "Cancel a Hyperliquid order. Ask for network, public wallet address, and numeric order ID. Keep the Agent draft non-submittable, then open the Hyperliquid trade ticket for exact review and connected-wallet authorization.",
+      reviewedAction: "hyperliquid",
+      reviewedActionOperation: "cancel_order",
+      reviewedActionLabel: "Open cancel ticket",
+    },
+    {
+      id: "modify-order",
+      title: "Modify an order",
+      detail: "Replace an open order after exact wallet review.",
+      prompt: "Modify a Hyperliquid order. Ask for network, public wallet address, numeric order ID, symbol, side, size, order type, limit price if needed, slippage, and reduce-only state. Keep the Agent draft non-submittable, then open the Hyperliquid trade ticket for exact review and connected-wallet authorization.",
+      reviewedAction: "hyperliquid",
+      reviewedActionOperation: "modify_order",
+      reviewedActionLabel: "Open modify ticket",
+    },
+    {
+      id: "close-position",
+      title: "Close a position",
+      detail: "Prepare a reduce-only close for wallet review.",
+      prompt: "Close a Hyperliquid position. Ask for network, public wallet address, symbol, side, size, order type, limit price if needed, and slippage. Use reduce-only terms. Keep the Agent draft non-submittable, then open the Hyperliquid trade ticket for exact review and connected-wallet authorization.",
+      reviewedAction: "hyperliquid",
+      reviewedActionOperation: "close_position",
+      reviewedActionLabel: "Open close ticket",
     },
     {
       id: "wallet-approved-trade",
@@ -187,15 +231,30 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     },
     {
       id: "preview-trade",
-      title: "Prepare a trade",
+      title: "Buy an outcome",
       detail: "Resolve the market and prepare exact terms for wallet review.",
-      prompt: "Prepare a Polymarket trade from this request: <describe market or trade, or paste a Polymarket URL>. Resolve the exact public market and ask for outcome, amount, and price only if missing. Check compliance. Keep the Agent draft non-submittable, then direct an eligible EOA BUY order to the separate connected-wallet trade ticket for final review and authorization.",
+      prompt: "Prepare a Polymarket BUY order from this request: <describe market or trade, or paste a Polymarket URL>. Resolve the exact public market and ask for outcome, amount, and price only if missing. Check compliance. Keep the Agent draft non-submittable, then open the connected-wallet trade ticket for final review and authorization.",
+      reviewedAction: "polymarket",
+      reviewedActionOperation: "buy",
+      reviewedActionLabel: "Open buy ticket",
     },
     {
-      id: "prepare-handoff",
-      title: "Prepare wallet handoff",
-      detail: "Draft an external handoff for unsupported order types.",
-      prompt: "Prepare a Polymarket compliance-gated external-wallet handoff from this request: <describe market or trade, or paste a Polymarket URL>. Ask for the outcome and amount only if they are missing. Use this handoff for sell orders, proxy accounts, or other flows the connected-wallet ticket does not support. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
+      id: "sell-shares",
+      title: "Sell shares",
+      detail: "Prepare exact sell terms for connected-wallet review.",
+      prompt: "Prepare a Polymarket SELL order from this request: <describe market or trade, or paste a Polymarket URL>. Resolve the exact public market and ask for outcome, shares, and price only if missing. Check compliance. Keep the Agent draft non-submittable, then open the connected-wallet trade ticket for final review and authorization.",
+      reviewedAction: "polymarket",
+      reviewedActionOperation: "sell",
+      reviewedActionLabel: "Open sell ticket",
+    },
+    {
+      id: "cancel-order",
+      title: "Cancel orders",
+      detail: "Cancel one order or all eligible open orders after review.",
+      prompt: "Prepare a Polymarket order cancellation. Ask for the public wallet address and either exact public order IDs or confirmation to cancel all eligible orders. Keep the Agent draft non-submittable, then open the connected-wallet trade ticket for final review and authorization.",
+      reviewedAction: "polymarket",
+      reviewedActionOperation: "cancel",
+      reviewedActionLabel: "Open cancel ticket",
     },
     {
       id: "import-receipt",
@@ -237,15 +296,39 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
     },
     {
       id: "sui-transfer-preview",
-      title: "Preview a SUI transfer",
-      detail: "Prepare a non-custodial transfer before wallet signing.",
+      title: "Review a SUI transfer",
+      detail: "Prepare the exact transfer, then sign it in your Sui wallet.",
       prompt: "Prepare a Sui transfer preview. Ask for public sender address, recipient address, network, amount, and memo if needed. Signing must happen in my connected Sui wallet on web or an external Sui wallet/client on desktop.",
+      reviewedAction: "sui",
+      reviewedActionOperation: "transfer_sui",
+      reviewedActionLabel: "Open transfer ticket",
     },
     {
       id: "token-transfer-preview",
-      title: "Preview a token transfer",
-      detail: "Prepare a non-custodial transfer with a public coin type.",
+      title: "Review a token transfer",
+      detail: "Prepare a token transfer, then sign it in your Sui wallet.",
       prompt: "Prepare a Sui token transfer preview. Ask for public sender address, recipient address, network, amount, and public coin type if needed. Keep it non-custodial and require wallet signing outside chat.",
+      reviewedAction: "sui",
+      reviewedActionOperation: "transfer_coin",
+      reviewedActionLabel: "Open transfer ticket",
+    },
+    {
+      id: "object-transfer",
+      title: "Transfer an object or NFT",
+      detail: "Prepare an object transfer for connected-wallet review.",
+      prompt: "Prepare a Sui object transfer. Ask for public sender address, recipient address, network, and public object ID. Keep the Agent draft non-submittable, then open the Sui ticket where my connected wallet reviews, signs, and submits the exact transfer.",
+      reviewedAction: "sui",
+      reviewedActionOperation: "transfer_object",
+      reviewedActionLabel: "Open object transfer",
+    },
+    {
+      id: "batch-transfer",
+      title: "Send SUI to multiple recipients",
+      detail: "Prepare a batch of native SUI transfers for one wallet review.",
+      prompt: "Prepare a batch SUI transfer. Ask for public sender address, network, and each public recipient and amount. Keep the Agent draft non-submittable, then open the Sui ticket where my connected wallet reviews, signs, and submits the exact batch.",
+      reviewedAction: "sui",
+      reviewedActionOperation: "batch_transfer_sui",
+      reviewedActionLabel: "Open batch transfer",
     },
     {
       id: "review-transfer-fees",

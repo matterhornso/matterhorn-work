@@ -614,6 +614,25 @@ describe("Protocol state mutations enforce client scope and workspace mode", () 
     }
   });
 
+  test("Hyperliquid draft preparation stays available when live submission is disabled", async () => {
+    process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED = "false";
+    const { base, collaboratorToken } = await boot();
+
+    const draft = await jsonFetch(base, "/api/hyperliquid/orders/execution-intent", collaboratorToken, {
+      method: "POST",
+      body: JSON.stringify({ unexpected: true }),
+    });
+    expect(draft.response.status).toBe(400);
+    expect(draft.payload.code).toBe("invalid_hyperliquid_execution_intent");
+
+    const submission = await jsonFetch(base, "/api/hyperliquid/orders/submit", collaboratorToken, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    expect(submission.response.status).toBe(503);
+    expect(submission.payload.code).toBe("hyperliquid_execution_disabled");
+  });
+
   test("Hyperliquid execution tickets require a collaborator before intent validation", async () => {
     process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED = "true";
     const { base, collaboratorToken, viewerToken } = await boot();

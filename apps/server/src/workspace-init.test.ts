@@ -49,7 +49,7 @@ describe("ensureWorkspaceFiles", () => {
       expect(bittensorAgent).toContain('"*": false');
       expect(bittensorAgent).toContain('"matterhorn-work_matterhorn_bittensor_chat": true');
       expect(bittensorAgent).toContain('"matterhorn-work_matterhorn_crypto_chat": true');
-      expect(bittensorAgent).toContain("complete direct TAO transfer request");
+      expect(bittensorAgent).toContain("complete TAO transfer, stake, or unstake request");
       expect(bittensorAgent).toContain("typed Review in wallet card");
       expect(bittensorAgent).toContain("sole source for subnet IDs, names, and capabilities");
       expect(bittensorAgent).toContain("current subnet recommendations are unavailable");
@@ -70,7 +70,7 @@ describe("ensureWorkspaceFiles", () => {
       expect(polymarketAgent).toContain("websearch: deny");
       expect(polymarketAgent).toContain('"matterhorn-work_matterhorn_polymarket_search_markets": true');
       expect(polymarketAgent).toContain('"matterhorn-work_matterhorn_crypto_chat": true');
-      expect(polymarketAgent).toContain("eligible EOA BUY orders");
+      expect(polymarketAgent).toContain("buy, sell, and cancel actions");
       expect(polymarketAgent).toContain("typed Review in wallet card");
       expect(suiAgent).toContain("Sui Agent");
       expect(suiAgent).toContain("matterhorn_desk_id: sui");

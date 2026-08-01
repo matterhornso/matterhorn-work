@@ -232,7 +232,7 @@ describe("unified crypto chat router", () => {
     expect(result.intent).toBe("market_execution_readiness");
     expect(result.execution).toBe("read_only");
     expect(result.requiresClarification).toBe(false);
-    expect(result.responseText).toContain("Agent drafts never submit");
+    expect(result.responseText).toContain("Agent submission: Off");
     expect(result.responseText).toContain("separate reviewed wallet ticket");
     expect(result.responseText).toContain("Watches and agents cannot sign or submit");
     expect(result.cards[0]).toMatchObject({
@@ -249,10 +249,10 @@ describe("unified crypto chat router", () => {
       readyForLiveSubmission?: boolean;
       safety?: { canSubmit?: boolean; liveSubmissionEnabled?: boolean; signsOrSubmits?: boolean };
     };
-    expect(report.readyForLiveSubmission).toBe(false);
-    expect(report.safety?.canSubmit).toBe(false);
-    expect(report.safety?.liveSubmissionEnabled).toBe(false);
-    expect(report.safety?.signsOrSubmits).toBe(false);
+    expect(report.readyForLiveSubmission).toBe(true);
+    expect(report.safety?.canSubmit).toBe(true);
+    expect(report.safety?.liveSubmissionEnabled).toBe(true);
+    expect(report.safety?.signsOrSubmits).toBe(true);
     result.sharedCards.forEach((card) => expectSharedCardContract(card, "auto"));
     expect(JSON.stringify(result)).not.toContain("/orders/submit");
 
@@ -280,14 +280,14 @@ describe("unified crypto chat router", () => {
     expect(result.intent).toBe("market_execution_chain");
     expect(result.execution).toBe("read_only");
     expect(result.requiresClarification).toBe(false);
-    expect(result.responseText).toContain("agent draft, exact-term wallet ticket");
-    expect(result.responseText).toContain("connected-wallet authorization");
-    expect(result.responseText).toContain("reviewed terms are immutable");
+    expect(result.responseText).toContain("agent prepares exact terms");
+    expect(result.responseText).toContain("connected wallet authorizes each supported submission");
+    expect(result.responseText).toContain("Reviewed terms are immutable");
     expect(result.responseText).toContain("watches cannot execute");
     expect(result.responseText).toContain("never takes private keys");
     expect(result.cards[0]).toMatchObject({
       kind: "market_execution_chain",
-      title: "Market execution chain",
+      title: "Legacy evidence chain",
     });
     expect(result.sharedCards[0]).toMatchObject({
       kind: "readiness_report",
@@ -339,12 +339,12 @@ describe("unified crypto chat router", () => {
     expect(result.execution).toBe("read_only");
     expect(result.responseText).toContain("External sign request");
     expect(result.responseText).toContain("Use only public/redacted inputs");
-    expect(result.responseText).toContain("hash mismatches fail closed");
-    expect(result.responseText).toContain("separate exact-term wallet ticket");
+    expect(result.responseText).toContain("fail closed on hash mismatches");
+    expect(result.responseText).toContain("separate exact-term connected-wallet ticket");
     expect(result.responseText).toContain("never takes private keys");
     expect(result.cards[0]).toMatchObject({
       kind: "market_execution_chain",
-      title: "Market execution chain: External sign request",
+      title: "Legacy evidence chain: External sign request",
     });
     expect(result.sharedCards[0]).toMatchObject({
       kind: "readiness_report",

@@ -11,9 +11,9 @@ describe("agent card to wallet review handoff", () => {
       "utf8",
     );
 
-    expect(sessionPage).toContain(
-      'subscribeReviewedActionHandoff((handoff) => setCurrentSidePanel(handoff.protocol))',
-    );
+    expect(sessionPage).toContain("subscribeReviewedActionHandoff((handoff) => {");
+    expect(sessionPage).toContain("setReviewedActionEntryProtocol(handoff.protocol);");
+    expect(sessionPage).toContain("setCurrentSidePanel(handoff.protocol);");
   });
 
   it("makes a disabled Hyperliquid submission route clear before wallet connection", () => {
@@ -24,8 +24,12 @@ describe("agent card to wallet review handoff", () => {
 
     expect(walletPanel).toContain("const executionUnavailable = executionAvailable !== true;");
     expect(walletPanel).toContain("const executionStatusMessage = executionAvailable === false");
-    expect(walletPanel).toContain("title=\"Wallet submission unavailable\"");
-    expect(walletPanel).toContain("disabled={executionUnavailable || !firstConnector || connectPending}");
+    expect(walletPanel).toContain('value: "Review, sign, and submit"');
+    expect(walletPanel).toContain("disabled={!firstConnector || connectPending}");
+    expect(walletPanel).toContain("disabled={executionUnavailable || busy !== null || !isConnected");
+    expect(walletPanel).toContain("onClick={reviewAction} disabled={busy !== null}");
+    expect(walletPanel).toContain("Connect wallet to continue");
+    expect(walletPanel).toContain("Prepare wallet signature");
     expect(walletPanel).toContain("executionAvailable={marketExecutionReadiness?.reviewedWalletTickets.hyperliquid.available ?? null}");
   });
 
@@ -50,8 +54,10 @@ describe("agent card to wallet review handoff", () => {
       protocol: "hyperliquid",
       source: "agent-card",
       draft: {
+        operation: "place_order",
         network: "testnet",
         asset: "BTC",
+        orderId: null,
         side: "buy",
         size: 0.001,
         orderType: "market",
@@ -149,7 +155,7 @@ describe("agent card to wallet review handoff", () => {
     })?.protocol).toBe("polymarket");
   });
 
-  it("hands off Bittensor transfers but keeps staking and advanced calls prepare-only", () => {
+  it("hands off Bittensor transfer, stake, and unstake drafts without signed payloads", () => {
     const transfer = reviewedActionHandoffFromCard({
       kind: "action_preview",
       venue: "bittensor",
@@ -170,8 +176,11 @@ describe("agent card to wallet review handoff", () => {
       protocol: "bittensor",
       source: "agent-card",
       draft: {
+        operation: "transfer",
         sender: "5Sender",
         destination: "5Destination",
+        hotkey: null,
+        netuid: null,
         amountTao: "0.25",
       },
     });
@@ -182,10 +191,106 @@ describe("agent card to wallet review handoff", () => {
       data: {
         preview: {
           action: "stake",
-          destination: "5Destination",
+          sender: "5Sender",
+          hotkey: "5Hotkey",
+          netuid: 7,
           amountTao: 1,
         },
       },
-    })).toBeNull();
+    })?.draft).toEqual({
+      operation: "stake",
+      sender: "5Sender",
+      destination: null,
+      hotkey: "5Hotkey",
+      netuid: 7,
+      amountTao: "1",
+    });
+  });
+
+  it("sanitizes Hyperliquid cancel and Polymarket sell/cancel cards", () => {
+    expect(reviewedActionHandoffFromCard({
+      kind: "action_preview",
+      venue: "hyperliquid",
+      data: { preview: { operation: "cancel_order", network: "mainnet", asset: "ETH", orderId: 42 } },
+    })?.draft).toEqual({
+      operation: "cancel_order",
+      network: "mainnet",
+      asset: "ETH",
+      orderId: 42,
+      side: null,
+      size: null,
+      orderType: null,
+      limitPrice: null,
+      slippageBps: null,
+      reduceOnly: null,
+    });
+    expect(reviewedActionHandoffFromCard({
+      kind: "action_preview",
+      venue: "polymarket",
+      data: {
+        preview: {
+          operation: "sell",
+          marketId: "market-1",
+          outcome: "No",
+          amountShares: 2,
+          compliance: { status: "allowed" },
+        },
+      },
+    })?.draft).toMatchObject({
+      operation: "sell",
+      amountUsdc: null,
+      amountShares: 2,
+    });
+    expect(reviewedActionHandoffFromCard({
+      kind: "action_preview",
+      venue: "polymarket",
+      data: { preview: { operation: "cancel", orderIds: ["order_public_123"] } },
+    })?.draft).toMatchObject({
+      operation: "cancel",
+      orderIds: ["order_public_123"],
+      cancelAll: false,
+    });
+  });
+
+  it("sanitizes every supported Sui transfer card and feeds the Sui review panel", () => {
+    const recipientA = `0x${"a".repeat(64)}`;
+    const recipientB = `0x${"b".repeat(64)}`;
+    const objectId = `0x${"c".repeat(64)}`;
+
+    expect(reviewedActionHandoffFromCard({
+      kind: "action_preview",
+      venue: "sui",
+      data: { preview: { operation: "transfer_sui", network: "testnet", recipient: recipientA, amount: 0.5 } },
+    })?.draft).toMatchObject({
+      operation: "transfer_sui",
+      recipient: recipientA,
+      amount: "0.5",
+    });
+    expect(reviewedActionHandoffFromCard({
+      kind: "action_preview",
+      venue: "sui",
+      data: { preview: { operation: "transfer_coin", recipient: recipientA, amount: 2, coinType: "0x2::coin::COIN" } },
+    })?.draft).toMatchObject({ operation: "transfer_coin", coinType: "0x2::coin::COIN" });
+    expect(reviewedActionHandoffFromCard({
+      kind: "action_preview",
+      venue: "sui",
+      data: { preview: { operation: "transfer_object", recipient: recipientA, objectId } },
+    })?.draft).toMatchObject({ operation: "transfer_object", objectId });
+    expect(reviewedActionHandoffFromCard({
+      kind: "action_preview",
+      venue: "sui",
+      data: { preview: { operation: "batch_transfer_sui", transfers: [
+        { recipient: recipientA, amount: "0.1" },
+        { recipient: recipientB, amount: "0.2" },
+      ] } },
+    })?.draft).toMatchObject({ operation: "batch_transfer_sui" });
+
+    const suiPanel = readFileSync(
+      resolve(import.meta.dir, "../src/react-app/domains/wallet/sui-workflow-panel.tsx"),
+      "utf8",
+    );
+    expect(suiPanel).toContain("subscribeReviewedActionHandoff");
+    expect(suiPanel).toContain("setTransactionKind(draft.operation)");
+    expect(suiPanel).toContain("setBatchTransfers(");
   });
 });

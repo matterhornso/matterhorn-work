@@ -237,7 +237,9 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
 
     expect(hyperliquidTitles).toContain("Read orderbook depth");
     expect(hyperliquidTitles).toContain("Review a wallet-approved trade");
-    expect(polymarketTitles).toContain("Prepare wallet handoff");
+    expect(polymarketTitles).toContain("Buy an outcome");
+    expect(polymarketTitles).toContain("Sell shares");
+    expect(polymarketTitles).toContain("Cancel orders");
   });
 
   test("focused desk task cards launch the agent instead of hiding a draft", () => {
@@ -250,7 +252,14 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("if (started === false && !taskSessionCreated) setCurrentSidePanel(focusedProtocolPanel)");
     expect(src).toContain("launchingTaskTitle");
     expect(src).toContain("Starting {launchingTaskTitle} in a new chat.");
-    expect(src).toContain('actionLabel={isLaunching ? "Starting..."');
+    expect(src).toContain('item.reviewedAction === "bittensor"');
+    expect(src).toContain('"Open transfer ticket"');
+    expect(src).toContain('"Open trade ticket"');
+    expect(src).toContain(': isLaunching');
+    expect(src).toContain('? "Starting..."');
+    expect(src).toContain(
+      "onOpenReviewedAction(item.reviewedAction, item.reviewedActionOperation)",
+    );
     expect(src).not.toContain("draftedPromptTitle");
     expect(src).toContain("Nothing has been sent yet.");
     expect(src).not.toContain("Draft ready");
@@ -316,12 +325,15 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("protocol-desk-readiness");
     expect(src).toContain("matterhornServerClient.workspaceReadiness(readinessWorkspaceId)");
     expect(src).toContain("features.start_desk_task");
-    expect(src).toContain(': startTaskBlocked ? startTaskActionLabel');
+    expect(src).toContain(': startTaskBlocked');
+    expect(src).toContain('? startTaskActionLabel');
     expect(src).toContain('? "Engine offline"');
     expect(src).toContain('? "Open workspace"');
     expect(src).toContain(': "Platform setup"');
-    expect(src).toContain("actionDisabled={startTaskBlocked || Boolean(launchingTaskTitle)}");
-    expect(src).toContain("actionTitle={startTaskBlocker ?? inputRequirement?.helpText ?? undefined}");
+    expect(src).toContain("actionDisabled={Boolean(launchingTaskTitle) || (!opensReviewedAction && startTaskBlocked)}");
+    expect(src).toContain('opensReviewedAction');
+    expect(src).toContain('"Open the exact review, wallet approval, and submission flow."');
+    expect(src).toContain("startTaskBlocker ?? inputRequirement?.helpText ?? undefined");
     expect(src).toContain("getDeskTaskInputRequirement(item.prompt)");
     expect(src).toContain("buildDeskTaskPromptWithInput(pendingInput.prompt, pendingInput.requirement, taskInputValue)");
   });

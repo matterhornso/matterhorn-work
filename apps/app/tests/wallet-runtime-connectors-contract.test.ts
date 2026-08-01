@@ -318,8 +318,14 @@ describe("wallet runtime connector contract", () => {
     expect(walletViewSource).toContain("Connect Phantom for Sui");
     expect(walletViewSource).toContain("Install or enable Phantom for Sui");
     expect(walletViewSource).toContain("https://phantom.app/download");
-    expect(suiWorkflowSource).toContain(
+    expect(suiWorkflowSource).not.toContain(
       "!directWalletAvailable || connectedAddress",
+    );
+    expect(suiWorkflowSource).toContain(
+      "You can prepare exact transfer terms now. Connect the sender wallet only when you are ready to sign and submit.",
+    );
+    expect(suiWorkflowSource).toContain(
+      'disabled={!canSignPreview || busyAction === "sign"}',
     );
     expect(suiWorkflowSource).toContain(
       "account?.address ?? phantomSui.address",
@@ -388,9 +394,9 @@ describe("wallet runtime connector contract", () => {
     expect(source).toMatch(
       /cap\.canSubmit\s*\? "Read markets, prepare the exact order/,
     );
-    expect(source).toContain('"TAO transfer: review & submit"');
+    expect(source).toContain('"Transfer, stake, unstake: review & submit"');
     expect(source).toContain('"Order: review & submit"');
-    expect(source).toContain('"Eligible buy: review & submit"');
+    expect(source).toContain('"Buy, sell, cancel: review & submit"');
     expect(source).toContain("agents and watches cannot submit");
     expect(source).toContain(
       "A review &amp; submit badge applies only to the action named in its row",

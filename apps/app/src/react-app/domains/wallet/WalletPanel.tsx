@@ -11,6 +11,7 @@ import { TransactionHistory } from "./components/TransactionHistory";
 import { TokenIcon } from "./components/TokenIcon";
 import { getSecurityLog, subscribeSecurityLog, type SecurityLogEntry } from "./state/security-log";
 import { useTokenPrices } from "./hooks/useTokenPrices";
+import type { ReviewedActionOperation } from "@matterhorn-work/types";
 
 const PortfolioView = lazy(() => import("./pages/PortfolioView"));
 const CowSwapPanel = lazy(() => import("./pages/CowSwapPanel"));
@@ -83,9 +84,18 @@ export type WalletPanelProps = {
   gasPriceGwei?: number | null;
   blockExplorerUrl?: (hash: string) => string;
   initialVenue?: CryptoVenue;
+  openReviewedAction?: boolean;
+  initialReviewedActionOperation?: ReviewedActionOperation | null;
 };
 
-export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenue = "bittensor" }: WalletPanelProps) {
+export function WalletPanel({
+  store,
+  gasPriceGwei,
+  blockExplorerUrl,
+  initialVenue = "bittensor",
+  openReviewedAction = false,
+  initialReviewedActionOperation = null,
+}: WalletPanelProps) {
   const state = useWalletStore(store);
   const [expanded, setExpanded] = useState(false);
   const [activePanel, setActivePanel] = useState<PanelType>("crypto");
@@ -153,7 +163,11 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
             </div>
           </div>
         }>
-          <BittensorPanel initialVenue={initialVenue} />
+          <BittensorPanel
+            initialVenue={initialVenue}
+            openReviewedAction={openReviewedAction}
+            initialOperation={initialReviewedActionOperation}
+          />
         </Suspense>
       </div>
     );
@@ -363,7 +377,11 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
               </div>
             </div>
           }>
-            <BittensorPanel initialVenue={initialVenue} />
+            <BittensorPanel
+              initialVenue={initialVenue}
+              openReviewedAction={openReviewedAction}
+              initialOperation={initialReviewedActionOperation}
+            />
           </Suspense>
           <button
             type="button"

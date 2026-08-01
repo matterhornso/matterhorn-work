@@ -1,15 +1,18 @@
 /** @jsxImportSource react */
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowUpDown,
   BarChart3,
   BrainCircuit,
+  CircleX,
   ChevronDown,
   Copy,
   Database,
   ExternalLink,
+  FileText,
   Info,
+  ListChecks,
   Loader2,
   RefreshCw,
   Search,
@@ -26,19 +29,23 @@ import { useAccount, useConnect, useSignTypedData, useSwitchChain, useWalletClie
 import { ProtocolBrandLogo } from "../../session/workflows/protocol-brand-logo";
 import {
   POLYMARKET_CHAIN_ID,
+  POLYMARKET_CANCEL_ALL_CONFIRMATION,
+  POLYMARKET_CANCEL_CONFIRMATION,
   POLYMARKET_LIVE_CONFIRMATION,
+  cancelPolymarketOrders,
+  normalizePolymarketOrderIds,
   submitPolymarketOrder,
   type PolymarketPreparedOrder,
   type PolymarketPublicReceipt,
 } from "../polymarket-execution";
 import {
-  BITTENSOR_TRANSFER_CONFIRMATION,
-  createBittensorTransferPreview,
+  createBittensorWalletActionPreview,
   listBittensorExtensionAccounts,
-  submitBittensorTransfer,
+  submitBittensorWalletAction,
   type BittensorExtensionAccount,
   type BittensorPublicReceipt,
-  type BittensorTransferPreview,
+  type BittensorWalletAction,
+  type BittensorWalletActionPreview,
 } from "../bittensor-execution";
 import type {
   BittensorActionQuote,
@@ -49,6 +56,7 @@ import type {
   MarketExecutionChainGuide,
   MarketExecutionReadinessReport,
   ReviewedActionDraftHandoff,
+  ReviewedActionOperation,
 } from "@matterhorn-work/types";
 import {
   MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY,
@@ -65,6 +73,10 @@ import {
   subscribeReviewedActionHandoff,
   takePendingReviewedActionHandoff,
 } from "../reviewed-action-handoff";
+import {
+  createHyperliquidReviewDraft,
+  type HyperliquidReviewDraft,
+} from "../hyperliquid-review-draft";
 
 const WATCH_ADDRESS_KEY = "matterhorn:bittensor:watchAddress";
 const FAVORITES_KEY = "matterhorn:bittensor:favorites";
@@ -77,16 +89,18 @@ type BittensorDraftHandoff = Extract<ReviewedActionDraftHandoff, { protocol: "bi
 
 type HyperliquidExecutionIntent = {
   intentId: string;
+  operation: "place_order" | "cancel_order" | "modify_order" | "close_position";
   network: "testnet" | "mainnet";
   signerAddress: `0x${string}`;
   asset: string;
-  side: "buy" | "sell";
-  size: number;
-  orderType: "market" | "limit";
-  orderPrice: number;
-  estimatedNotionalUsdc: number;
-  slippageBps: number;
-  reduceOnly: boolean;
+  side: "buy" | "sell" | null;
+  size: number | null;
+  orderType: "market" | "limit" | null;
+  orderPrice: number | null;
+  estimatedNotionalUsdc: number | null;
+  slippageBps: number | null;
+  reduceOnly: boolean | null;
+  orderId: number | null;
   expiresAt: string;
   typedData: {
     domain: {
@@ -104,16 +118,18 @@ type HyperliquidExecutionIntent = {
     primaryType: "Agent";
     message: { source: "a" | "b"; connectionId: `0x${string}` };
   };
-  confirmation: { required: boolean; phrase: "SUBMIT LIVE ORDER" | null };
+  confirmation: { required: boolean; phrase: "SUBMIT LIVE ORDER" | "SUBMIT LIVE ACTION" | null };
   safety: { maxOrderNotionalUsdc: number };
 };
 
 type HyperliquidExecutionReceipt = {
   intentId: string;
+  operation: "place_order" | "cancel_order" | "modify_order" | "close_position";
   network: "testnet" | "mainnet";
   asset: string;
-  side: "buy" | "sell";
-  size: number;
+  side: "buy" | "sell" | null;
+  size: number | null;
+  orderId: number | null;
   status: "submitted" | "rejected" | "uncertain";
   submittedAt: string;
   venueResponse: unknown;
@@ -140,14 +156,55 @@ type PolymarketPreviewResponse = {
   error?: { message?: string };
 };
 
-type BittensorTransferPreviewResponse = {
+type PolymarketSellPreviewResponse = {
   success?: boolean;
   preview?: {
-    action: "transfer";
+    marketId: string;
+    tokenId: string;
+    marketLabel: string;
+    outcome: string;
+    shares: number;
+    estimatedFillPrice: number | null;
+    estimatedProceedsUsdc: number | null;
+    previewSha256: string;
+    expiresAt: string;
+    compliance: { status: "allowed" | "blocked" | "unknown"; reason: string | null };
+    warnings: string[];
+  };
+  error?: { message?: string };
+};
+
+type PolymarketMarketSearchResult = {
+  id: string;
+  question: string;
+  slug: string | null;
+  outcomes: string[];
+  outcomePrices: Record<string, number>;
+  volume: number | null;
+  liquidity: number | null;
+  endDate: string | null;
+  source: {
+    freshness: "live" | "recent" | "stale" | "fallback" | "unknown";
+    fetchedAt: string;
+  };
+};
+
+type PolymarketMarketSearchResponse = {
+  success?: boolean;
+  markets?: PolymarketMarketSearchResult[];
+  error?: { message?: string };
+};
+
+type BittensorWalletActionPreviewResponse = {
+  success?: boolean;
+  preview?: {
+    action: BittensorWalletAction;
     network: "finney" | "test" | "local";
     amountTao: number | null;
     coldkey: string | null;
     destination: string | null;
+    hotkey: string | null;
+    netuid: number | null;
     feeTao: number | null;
     warnings: string[];
     consequenceSummary: string;
@@ -264,7 +321,7 @@ const MONDAY_BETA_LAUNCH_CHECKLIST = [
     title: "Crypto safety smoke is green",
     owner: "Operator",
     commandKey: "mondayBetaQuickSmoke",
-    proof: "Bittensor TAO transfers, Hyperliquid orders, and eligible Polymarket BUY orders require exact review and connected-wallet approval. Agents and watches cannot submit.",
+    proof: "Bittensor transfer/stake/unstake calls, Hyperliquid actions, and eligible Polymarket buy/sell/cancel actions require exact review and connected-wallet approval. Agents and watches cannot submit.",
   },
   {
     id: "beta-app-typecheck",
@@ -323,7 +380,7 @@ const CUSTOMER_DEMO_PROMPTS = [
     id: "external-signer-preview",
     label: "Signer preview",
     betaVisible: true,
-    prompt: "Matterhorn protocol task: Explain the signing boundary across Bittensor, Hyperliquid, and Polymarket. A connected wallet can review and submit TAO transfers, Hyperliquid orders, and eligible Polymarket BUY orders from separate tickets. Bittensor staking and unsupported Polymarket account or order types remain external handoffs. Matterhorn never signs, custodies keys, or auto-executes.",
+    prompt: "Matterhorn protocol task: Explain the signing boundary across Bittensor, Hyperliquid, and Polymarket. A connected wallet can review and submit Bittensor transfer/stake/unstake calls, Hyperliquid place/cancel/modify/close actions, and eligible Polymarket buy/sell/cancel actions from separate tickets. Unsupported advanced calls stay unavailable. Matterhorn never signs, custodies keys, or auto-executes.",
   },
   {
     id: "market-execution-readiness",
@@ -379,14 +436,14 @@ const BETA_TRY_PROMPTS = [
     label: "compare validators on subnet 14",
     mode: "bittensor",
     prompt:
-      "Bittensor Agent task: Compare validators on subnet 14 using public metagraph context. Explain stake, trust, and emissions in beginner language. Any staking action requires an external Bittensor-compatible signer; Matterhorn cannot sign or broadcast.",
+      "Bittensor Agent task: Compare validators on subnet 14 using public metagraph context. Explain stake, trust, and emissions in beginner language. Any staking action requires exact review and approval in a connected Bittensor wallet; Matterhorn cannot sign or broadcast on the user's behalf.",
   },
   {
     id: "beta-stake-1-tao",
     label: "prepare staking 1 TAO",
     mode: "bittensor",
     prompt:
-      "Bittensor Agent task: Prepare a preview for staking 1 TAO: show netuid, validator hotkey, expected alpha, fee, slippage, and warnings. Make clear this is a preview only and must be signed in an external Bittensor-compatible signer. Never ask for seed phrases or private keys.",
+      "Bittensor Agent task: Prepare a reviewed stake for 1 TAO: show netuid, validator hotkey, expected alpha, fee, slippage, and warnings. The user must review and submit the exact call in a connected Bittensor wallet. Never ask for seed phrases or private keys.",
   },
   {
     id: "beta-hl-orderbook",
@@ -464,7 +521,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
     intent: "Compare",
     title: "Compare validators",
     summary: "Compare validator hotkeys for a subnet using public validator/metagraph context.",
-    safety: "No staking unless approved externally",
+    safety: "No staking without connected-wallet approval",
     outcome: "Validator ranking",
     formAction: "compare",
     prompt:
@@ -475,24 +532,24 @@ const BITTENSOR_STANDARD_ACTIONS = [
     step: "5",
     intent: "Preview",
     title: "Prepare stake preview",
-    summary: "Prepare an unsigned stake preview with netuid, validator hotkey, expected alpha, fee, and slippage.",
-    safety: "External signer required",
-    outcome: "Unsigned stake preview",
+    summary: "Prepare an exact stake review with netuid, validator hotkey, expected alpha, fee, and slippage.",
+    safety: "Connected wallet approval",
+    outcome: "Reviewed stake transaction",
     formAction: "stake",
     prompt:
-      "Bittensor Agent task: Prepare a stake preview using the netuid, amount, and validator hotkey in context. Show consequence, fee, slippage, expected alpha, warnings, and the exact external-signing handoff. Never ask for seed phrases or private keys.",
+      "Bittensor Agent task: Prepare a stake transaction using the netuid, amount, and validator hotkey in context. Show consequence, fee, slippage, expected alpha, and warnings, then send the user to the connected-wallet review ticket. Never ask for seed phrases or private keys.",
   },
   {
     id: "unstake-preview",
     step: "6",
     intent: "Preview",
     title: "Prepare unstake preview",
-    summary: "Review an unsigned unstake preview and explain the consequence before external signing.",
-    safety: "External signer required",
-    outcome: "Unsigned unstake preview",
+    summary: "Review the exact unstake call and its consequence before approving it in your connected wallet.",
+    safety: "Connected wallet approval",
+    outcome: "Reviewed unstake transaction",
     formAction: "unstake",
     prompt:
-      "Bittensor Agent task: Prepare an unstake preview using the netuid, amount, and validator hotkey in context. Explain expected TAO/alpha effects, slippage, fee, warnings, and the external-signing step. Never ask for seed phrases or private keys.",
+      "Bittensor Agent task: Prepare an unstake transaction using the netuid, amount, and validator hotkey in context. Explain expected TAO/alpha effects, slippage, fee, and warnings, then send the user to the connected-wallet review ticket. Never ask for seed phrases or private keys.",
   },
   {
     id: "transfer-preview",
@@ -532,11 +589,11 @@ const BITTENSOR_STANDARD_ACTIONS = [
     step: "10",
     intent: "Learn",
     title: "Explain coldkey/hotkey",
-    summary: "Clarify Bittensor wallet concepts, staking exposure, and external signer boundaries.",
+    summary: "Clarify Bittensor wallet concepts, staking exposure, and connected-wallet approval boundaries.",
     safety: "No secrets requested",
     outcome: "Plain-English explainer",
     prompt:
-      "Bittensor Agent task: Explain coldkeys, hotkeys, SS58 public addresses, validator hotkeys, staking exposure, and external signer boundaries in beginner language. Make clear that Matterhorn never needs seed phrases, private keys, mnemonics, wallet exports, raw signatures, or signed payloads.",
+      "Bittensor Agent task: Explain coldkeys, hotkeys, SS58 public addresses, validator hotkeys, staking exposure, and connected-wallet approval boundaries in beginner language. Make clear that Matterhorn never needs seed phrases, private keys, mnemonics, wallet exports, raw signatures, or signed payloads.",
   },
 ] satisfies Array<{
   id: string;
@@ -679,9 +736,9 @@ const VENUE_DESKS: Record<CryptoVenue, {
     headline: "Start with your TAO, then choose what to do next.",
     description: "Check public wallets, compare validators, prepare staking actions, and send reviewed TAO transfers from a connected Bittensor wallet.",
     statusLabel: "Read, prepare, and transfer",
-    canSubmit: "TAO transfers",
+    canSubmit: "Transfer, stake, and unstake",
     liveSubmission: "After wallet approval",
-    signer: "Connected wallet; external signer for staking",
+    signer: "Connected Bittensor wallet",
     source: "Subtensor sidecar, TAO.app, or fallback data",
     prompts: [
       {
@@ -701,8 +758,8 @@ const VENUE_DESKS: Record<CryptoVenue, {
       },
       {
         label: "Prepare staking",
-        summary: "Build an unsigned stake preview to review and submit with your own Bittensor signer.",
-        prompt: "Bittensor Agent task: Prepare staking 1 TAO safely. Ask for netuid and validator hotkey if missing. Return an unsigned preview only and explain that external signing is required.",
+        summary: "Build an exact stake call to review and submit with your connected Bittensor wallet.",
+        prompt: "Bittensor Agent task: Prepare staking 1 TAO safely. Ask for netuid and validator hotkey if missing. Return an exact review draft and explain that connected-wallet approval is required.",
       },
     ],
   },
@@ -747,7 +804,7 @@ const VENUE_DESKS: Record<CryptoVenue, {
     headline: "Analyze prediction markets and trade with wallet approval.",
     description: "Find markets, explain probabilities and liquidity, check compliance, then review and authorize an eligible order in your connected Polygon wallet.",
     statusLabel: "Compliance gated",
-    canSubmit: "Eligible EOA BUY orders",
+    canSubmit: "Eligible buy, sell, and cancel actions",
     liveSubmission: "After wallet authorization",
     signer: "Connected Polygon wallet",
     source: "Polymarket Gamma/Data/CLOB public reads and fixture/testnet evidence",
@@ -931,14 +988,17 @@ function buildBittensorChatPrompt(prompt: string, context: Record<string, unknow
 
 function HyperliquidTradeExecution({
   initialDraft,
+  initialOperation,
   executionAvailable,
 }: {
   initialDraft?: HyperliquidDraftHandoff | null;
+  initialOperation?: HyperliquidExecutionIntent["operation"] | null;
   executionAvailable?: boolean | null;
 }) {
   const { address, isConnected } = useAccount();
   const { connectors, connect, isPending: connectPending } = useConnect();
   const { signTypedDataAsync } = useSignTypedData();
+  const [operation, setOperation] = useState<HyperliquidExecutionIntent["operation"]>("place_order");
   const [network, setNetwork] = useState<"testnet" | "mainnet">("testnet");
   const [asset, setAsset] = useState("BTC");
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -947,6 +1007,8 @@ function HyperliquidTradeExecution({
   const [limitPrice, setLimitPrice] = useState("");
   const [slippageBps, setSlippageBps] = useState("100");
   const [reduceOnly, setReduceOnly] = useState(false);
+  const [orderId, setOrderId] = useState("");
+  const [reviewDraft, setReviewDraft] = useState<HyperliquidReviewDraft | null>(null);
   const [intent, setIntent] = useState<HyperliquidExecutionIntent | null>(null);
   const [liveConfirmation, setLiveConfirmation] = useState("");
   const [receipt, setReceipt] = useState<HyperliquidExecutionReceipt | null>(null);
@@ -959,6 +1021,7 @@ function HyperliquidTradeExecution({
     : "Matterhorn could not verify that Hyperliquid wallet submission is enabled for this deployment.";
 
   const resetReview = useCallback(() => {
+    setReviewDraft(null);
     setIntent(null);
     setReceipt(null);
     setTradeError(null);
@@ -966,65 +1029,109 @@ function HyperliquidTradeExecution({
   }, []);
 
   useEffect(() => {
+    if (initialDraft || !initialOperation) return;
+    setOperation(initialOperation);
+    resetReview();
+  }, [initialDraft, initialOperation, resetReview]);
+
+  useEffect(() => {
     if (!initialDraft) return;
+    setOperation(initialDraft.operation);
     setNetwork(initialDraft.network);
     setAsset(initialDraft.asset);
-    setSide(initialDraft.side);
-    setSize(String(initialDraft.size));
-    setOrderType(initialDraft.orderType);
+    setOrderId(initialDraft.orderId === null ? "" : String(initialDraft.orderId));
+    if (initialDraft.side !== null) setSide(initialDraft.side);
+    if (initialDraft.size !== null) setSize(String(initialDraft.size));
+    if (initialDraft.orderType !== null) setOrderType(initialDraft.orderType);
     setLimitPrice(initialDraft.limitPrice === null ? "" : String(initialDraft.limitPrice));
-    setSlippageBps(String(initialDraft.slippageBps));
-    setReduceOnly(initialDraft.reduceOnly);
+    if (initialDraft.slippageBps !== null) setSlippageBps(String(initialDraft.slippageBps));
+    if (initialDraft.reduceOnly !== null) setReduceOnly(initialDraft.reduceOnly);
     resetReview();
+    setReviewDraft(initialDraft);
   }, [initialDraft, resetReview]);
 
+  const reviewAction = useCallback(() => {
+    try {
+      const draft = createHyperliquidReviewDraft({
+        operation,
+        network,
+        asset,
+        side,
+        size,
+        orderType,
+        limitPrice,
+        slippageBps,
+        reduceOnly,
+        orderId,
+      });
+      setReviewDraft(draft);
+      setIntent(null);
+      setReceipt(null);
+      setTradeError(null);
+      setLiveConfirmation("");
+    } catch (error) {
+      setTradeError(error instanceof Error ? error.message : "Could not review the Hyperliquid action.");
+    }
+  }, [asset, limitPrice, network, operation, orderId, orderType, reduceOnly, side, size, slippageBps]);
+
   const prepareIntent = useCallback(async () => {
-    if (executionUnavailable) {
-      setTradeError(`${executionStatusMessage} You can still review the exact draft; a release owner must complete testnet acceptance before enabling this route.`);
+    if (!reviewDraft) {
+      setTradeError("Review the exact Hyperliquid action before preparing it for wallet signing.");
       return;
     }
     if (!address) {
-      setTradeError("Connect an EVM wallet first. The connected address must own or be authorized for the Hyperliquid account.");
+      setTradeError("Connect the EVM wallet authorized for this Hyperliquid account to prepare the signing intent.");
       return;
     }
     setBusy("prepare");
     setTradeError(null);
     setReceipt(null);
     try {
+      const actionBody = reviewDraft.operation === "cancel_order"
+        ? {
+            operation: reviewDraft.operation,
+            network: reviewDraft.network,
+            signerAddress: address,
+            asset: reviewDraft.asset,
+            orderId: reviewDraft.orderId,
+          }
+        : {
+            operation: reviewDraft.operation,
+            network: reviewDraft.network,
+            signerAddress: address,
+            asset: reviewDraft.asset,
+            ...(reviewDraft.operation === "modify_order" ? { orderId: reviewDraft.orderId } : {}),
+            side: reviewDraft.side,
+            size: reviewDraft.size,
+            orderType: reviewDraft.orderType,
+            limitPrice: reviewDraft.limitPrice,
+            slippageBps: reviewDraft.slippageBps,
+            ...(reviewDraft.operation === "close_position" ? {} : { reduceOnly: reviewDraft.reduceOnly }),
+          };
       const { response, json } = await fetchMatterhornApiJson<{
         success?: boolean;
         intent?: HyperliquidExecutionIntent;
         error?: { message?: string };
-      }>("/api/hyperliquid/orders/execution-intent", {
+      }>("/api/hyperliquid/actions/execution-intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          network,
-          signerAddress: address,
-          asset,
-          side,
-          size: Number(size),
-          orderType,
-          limitPrice: orderType === "limit" ? Number(limitPrice) : null,
-          slippageBps: Number(slippageBps),
-          reduceOnly,
-        }),
+        body: JSON.stringify(actionBody),
       });
       if (!response.ok || !json.success || !json.intent) {
-        throw new Error(json.error?.message ?? "Could not prepare the Hyperliquid order.");
+        throw new Error(json.error?.message ?? "Could not prepare the Hyperliquid action.");
       }
       setIntent(json.intent);
     } catch (error) {
-      setTradeError(error instanceof Error ? error.message : "Could not prepare the Hyperliquid order.");
+      setTradeError(error instanceof Error ? error.message : "Could not prepare the Hyperliquid action.");
     } finally {
       setBusy(null);
     }
-  }, [address, asset, executionStatusMessage, executionUnavailable, limitPrice, network, orderType, reduceOnly, side, size, slippageBps]);
+  }, [address, reviewDraft]);
 
   const signAndSubmit = useCallback(async () => {
     if (!intent || !address) return;
     if (intent.network === "mainnet" && liveConfirmation !== intent.confirmation.phrase) {
-      setTradeError("Type SUBMIT LIVE ORDER before sending a mainnet order.");
+      setTradeError(`Type ${intent.confirmation.phrase} before sending a mainnet action.`);
       return;
     }
     setBusy("submit");
@@ -1050,10 +1157,10 @@ function HyperliquidTradeExecution({
       if (!response.ok || json.receipt.status !== "submitted") {
         setTradeError(json.receipt.status === "uncertain"
           ? "Submission status is uncertain. Check your Hyperliquid open orders before trying again."
-          : "Hyperliquid rejected the order. Review the receipt before preparing another order.");
+          : "Hyperliquid rejected the action. Review the receipt before preparing another action.");
       }
     } catch (error) {
-      setTradeError(error instanceof Error ? error.message : "Wallet signing or order submission failed.");
+      setTradeError(error instanceof Error ? error.message : "Wallet signing or action submission failed.");
     } finally {
       setBusy(null);
     }
@@ -1061,16 +1168,61 @@ function HyperliquidTradeExecution({
 
   const shortWalletAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null;
   const firstConnector = connectors.find((connector) => connector.id !== "injected") ?? connectors[0];
+  const operationCopy: Record<HyperliquidExecutionIntent["operation"], { label: string; title: string; description: string }> = {
+    place_order: { label: "Place", title: "Place a perpetual order", description: "Create a new market or limit order." },
+    cancel_order: { label: "Cancel", title: "Cancel an open order", description: "Cancel one open order by its Hyperliquid order ID." },
+    modify_order: { label: "Modify", title: "Modify an open order", description: "Replace an open order with the exact terms you review." },
+    close_position: { label: "Close", title: "Close a position", description: "Submit a reduce-only IOC order for the size you choose." },
+  };
+  const activeOperation = operationCopy[operation];
+  const needsOrderId = operation === "cancel_order" || operation === "modify_order";
+  const showsOrderTerms = operation !== "cancel_order";
+  const reviewRows: Array<[string, string]> = intent
+    ? intent.operation === "cancel_order"
+      ? [
+          ["Action", "Cancel order"],
+          ["Asset", intent.asset],
+          ["Order ID", String(intent.orderId)],
+          ["Network", intent.network === "mainnet" ? "Mainnet · real funds" : "Testnet"],
+          ["Expires", new Date(intent.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })],
+        ]
+      : [
+          ["Action", operationCopy[intent.operation].label],
+          ["Order", `${intent.size} ${intent.asset}`],
+          [intent.orderType === "market" ? "Slippage boundary" : "Limit price", intent.orderPrice === null ? "Not available" : `$${intent.orderPrice.toLocaleString()}`],
+          ["Estimated notional", intent.estimatedNotionalUsdc === null ? "Not available" : `$${intent.estimatedNotionalUsdc.toLocaleString()}`],
+          ["Network", intent.network === "mainnet" ? "Mainnet · real funds" : "Testnet"],
+          ["Reduce only", intent.reduceOnly ? "Yes" : "No"],
+          ...(intent.orderId === null ? [] : [["Order ID", String(intent.orderId)] as [string, string]]),
+          ["Expires", new Date(intent.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })],
+        ]
+    : reviewDraft
+      ? reviewDraft.operation === "cancel_order"
+        ? [
+            ["Action", "Cancel order"],
+            ["Asset", reviewDraft.asset],
+            ["Order ID", String(reviewDraft.orderId)],
+            ["Network", reviewDraft.network === "mainnet" ? "Mainnet · real funds" : "Testnet"],
+          ]
+        : [
+            ["Action", operationCopy[reviewDraft.operation].label],
+            ["Order", `${reviewDraft.size} ${reviewDraft.asset}`],
+            [reviewDraft.orderType === "market" ? "Max slippage" : "Limit price", reviewDraft.orderType === "market" ? `${reviewDraft.slippageBps} bps` : `$${reviewDraft.limitPrice?.toLocaleString()}`],
+            ["Network", reviewDraft.network === "mainnet" ? "Mainnet · real funds" : "Testnet"],
+            ["Reduce only", reviewDraft.reduceOnly ? "Yes" : "No"],
+            ...(reviewDraft.orderId === null ? [] : [["Order ID", String(reviewDraft.orderId)] as [string, string]]),
+          ]
+      : [];
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold text-dls-text">Place a perpetual order</div>
+          <div className="text-sm font-semibold text-dls-text">{activeOperation.title}</div>
           <p className="mt-1 max-w-xl text-xs leading-5 text-dls-secondary">
             {executionUnavailable
-              ? `The agent can prepare the exact order. ${executionStatusMessage} Keys and API secrets never enter Matterhorn.`
-              : "Review the exact order, sign it in your connected wallet, then Matterhorn submits that short-lived intent to Hyperliquid. Keys and API secrets never enter Matterhorn."}
+              ? `The agent can prepare the exact action. ${executionStatusMessage}`
+              : `${activeOperation.description} Matterhorn submits only after you review and sign the short-lived intent.`}
           </p>
         </div>
         <div className="text-right text-[11px] leading-5 text-dls-secondary">
@@ -1080,20 +1232,43 @@ function HyperliquidTradeExecution({
       </div>
 
       {executionUnavailable ? (
-        <Notice tone="info" icon={<Shield className="size-4" />} title="Wallet submission unavailable">
-          Agent drafts remain available for review. {executionStatusMessage}
+        <Notice tone="info" icon={<Shield className="size-4" />} title="Action review available">
+          You can connect a wallet and review the exact action now. {executionStatusMessage}
         </Notice>
       ) : null}
 
       {!isConnected ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-dls-surface-muted/30 px-3 py-3">
           <p className="text-xs leading-5 text-dls-secondary">Connect the wallet associated with your Hyperliquid account.</p>
-          <Button size="sm" disabled={executionUnavailable || !firstConnector || connectPending} onClick={() => firstConnector && connect({ connector: firstConnector })}>
+          <Button size="sm" disabled={!firstConnector || connectPending} onClick={() => firstConnector && connect({ connector: firstConnector })}>
             {connectPending ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : <Wallet className="mr-2 size-3.5" />}
             Connect wallet
           </Button>
         </div>
       ) : null}
+
+      <div className="grid grid-cols-4 gap-1 rounded-lg bg-dls-surface-muted/30 p-1" aria-label="Hyperliquid action">
+        {(Object.keys(operationCopy) as Array<HyperliquidExecutionIntent["operation"]>).map((item) => (
+          <button
+            key={item}
+            type="button"
+            aria-pressed={operation === item}
+            onClick={() => {
+              setOperation(item);
+              if (item === "close_position") setReduceOnly(true);
+              resetReview();
+            }}
+            className={cn(
+              "h-9 rounded-md text-xs font-semibold transition-colors",
+              operation === item
+                ? "bg-dls-surface-raised text-dls-text shadow-sm"
+                : "text-dls-secondary hover:bg-dls-surface-muted/40 hover:text-dls-text",
+            )}
+          >
+            {operationCopy[item].label}
+          </button>
+        ))}
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="space-y-1.5 text-xs text-dls-secondary">
@@ -1107,164 +1282,321 @@ function HyperliquidTradeExecution({
           Asset
           <Input value={asset} onChange={(event) => { setAsset(event.target.value.toUpperCase()); resetReview(); }} placeholder="BTC" />
         </label>
-        <fieldset className="space-y-1.5 text-xs text-dls-secondary">
-          <legend>Side</legend>
-          <div className="grid h-10 grid-cols-2 rounded-lg bg-dls-surface-muted/35 p-1">
-            {(["buy", "sell"] as const).map((item) => (
-              <button
-                key={item}
-                type="button"
-                aria-pressed={side === item}
-                onClick={() => { setSide(item); resetReview(); }}
-                className={cn("rounded-md text-xs font-semibold capitalize transition-colors", side === item ? item === "buy" ? "bg-emerald-500/18 text-emerald-200" : "bg-red-500/18 text-red-200" : "text-dls-secondary hover:text-dls-text")}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
-        </fieldset>
-        <label className="space-y-1.5 text-xs text-dls-secondary">
-          Size
-          <Input value={size} inputMode="decimal" onChange={(event) => { setSize(event.target.value); resetReview(); }} placeholder="0.001" />
-        </label>
-        <label className="space-y-1.5 text-xs text-dls-secondary">
-          Order type
-          <select value={orderType} onChange={(event) => { setOrderType(event.target.value as "market" | "limit"); resetReview(); }} className="h-10 w-full rounded-lg border-0 bg-dls-surface-muted/45 px-3 text-sm text-dls-text outline-none ring-1 ring-dls-border/35 focus:ring-[var(--protocol-desk-accent)]">
-            <option value="market">Market</option>
-            <option value="limit">Limit</option>
-          </select>
-        </label>
-        {orderType === "limit" ? (
+        {needsOrderId ? (
           <label className="space-y-1.5 text-xs text-dls-secondary">
-            Limit price (USDC)
-            <Input value={limitPrice} inputMode="decimal" onChange={(event) => { setLimitPrice(event.target.value); resetReview(); }} placeholder="65000" />
+            Open order ID
+            <Input value={orderId} inputMode="numeric" onChange={(event) => { setOrderId(event.target.value); resetReview(); }} placeholder="123456789" />
           </label>
-        ) : (
-          <label className="space-y-1.5 text-xs text-dls-secondary">
-            Max slippage
-            <div className="relative">
-              <Input value={slippageBps} inputMode="numeric" onChange={(event) => { setSlippageBps(event.target.value); resetReview(); }} />
-              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-dls-secondary">bps</span>
-            </div>
-          </label>
-        )}
+        ) : null}
+        {showsOrderTerms ? (
+          <>
+            <fieldset className="space-y-1.5 text-xs text-dls-secondary">
+              <legend>{operation === "close_position" ? "Closing side" : "Side"}</legend>
+              <div className="grid h-10 grid-cols-2 rounded-lg bg-dls-surface-muted/35 p-1">
+                {(["buy", "sell"] as const).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    aria-pressed={side === item}
+                    onClick={() => { setSide(item); resetReview(); }}
+                    className={cn("rounded-md text-xs font-semibold capitalize transition-colors", side === item ? item === "buy" ? "bg-emerald-500/18 text-emerald-200" : "bg-red-500/18 text-red-200" : "text-dls-secondary hover:text-dls-text")}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            <label className="space-y-1.5 text-xs text-dls-secondary">
+              {operation === "close_position" ? "Size to close" : "Size"}
+              <Input value={size} inputMode="decimal" onChange={(event) => { setSize(event.target.value); resetReview(); }} placeholder="0.001" />
+            </label>
+            <label className="space-y-1.5 text-xs text-dls-secondary">
+              Order type
+              <select value={orderType} onChange={(event) => { setOrderType(event.target.value as "market" | "limit"); resetReview(); }} disabled={operation === "close_position"} className="h-10 w-full rounded-lg border-0 bg-dls-surface-muted/45 px-3 text-sm text-dls-text outline-none ring-1 ring-dls-border/35 focus:ring-[var(--protocol-desk-accent)] disabled:opacity-70">
+                <option value="market">Market</option>
+                <option value="limit">Limit</option>
+              </select>
+            </label>
+            {orderType === "limit" && operation !== "close_position" ? (
+              <label className="space-y-1.5 text-xs text-dls-secondary">
+                Limit price (USDC)
+                <Input value={limitPrice} inputMode="decimal" onChange={(event) => { setLimitPrice(event.target.value); resetReview(); }} placeholder="65000" />
+              </label>
+            ) : (
+              <label className="space-y-1.5 text-xs text-dls-secondary">
+                Max slippage
+                <div className="relative">
+                  <Input value={slippageBps} inputMode="numeric" onChange={(event) => { setSlippageBps(event.target.value); resetReview(); }} />
+                  <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-dls-secondary">bps</span>
+                </div>
+              </label>
+            )}
+          </>
+        ) : null}
       </div>
 
-      <label className="flex cursor-pointer items-center gap-2 text-xs text-dls-secondary">
-        <input type="checkbox" checked={reduceOnly} onChange={(event) => { setReduceOnly(event.target.checked); resetReview(); }} className="size-4 accent-[var(--protocol-desk-accent)]" />
-        Reduce-only order
-      </label>
+      {operation === "close_position" ? (
+        <p className="text-xs text-dls-secondary">Choose sell to close a long position or buy to close a short. Reduce-only is enforced.</p>
+      ) : showsOrderTerms ? (
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-dls-secondary">
+          <input type="checkbox" checked={reduceOnly} onChange={(event) => { setReduceOnly(event.target.checked); resetReview(); }} className="size-4 accent-[var(--protocol-desk-accent)]" />
+          Reduce-only order
+        </label>
+      ) : null}
 
-      {intent ? (
+      {reviewDraft ? (
         <div className="space-y-3 rounded-lg bg-dls-surface-muted/30 px-3 py-3">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs font-semibold text-dls-text">Review exact order</span>
-            <span className={cn("text-xs font-semibold capitalize", intent.side === "buy" ? "text-emerald-300" : "text-red-300")}>{intent.side}</span>
+            <span className="text-xs font-semibold text-dls-text">Review exact action</span>
+            {reviewDraft.side ? (
+              <span className={cn("text-xs font-semibold capitalize", reviewDraft.side === "buy" ? "text-emerald-300" : "text-red-300")}>{reviewDraft.side}</span>
+            ) : (
+              <span className="text-xs font-semibold text-dls-text">{operationCopy[reviewDraft.operation].label}</span>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs sm:grid-cols-3">
-            {[
-              ["Order", `${intent.size} ${intent.asset}`],
-              [intent.orderType === "market" ? "Slippage boundary" : "Limit price", `$${intent.orderPrice.toLocaleString()}`],
-              ["Estimated notional", `$${intent.estimatedNotionalUsdc.toLocaleString()}`],
-              ["Network", intent.network === "mainnet" ? "Mainnet · real funds" : "Testnet"],
-              ["Reduce only", intent.reduceOnly ? "Yes" : "No"],
-              ["Expires", new Date(intent.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })],
-            ].map(([label, value]) => (
+            {reviewRows.map(([label, value]) => (
               <div key={label}>
                 <div className="text-[10px] text-dls-secondary">{label}</div>
                 <div className="mt-0.5 font-medium text-dls-text">{value}</div>
               </div>
             ))}
           </div>
-          {intent.network === "mainnet" ? (
+          {intent?.network === "mainnet" && intent.confirmation.phrase ? (
             <label className="block space-y-1.5 text-xs text-red-200">
-              Type <span className="font-semibold">SUBMIT LIVE ORDER</span>
+              Type <span className="font-semibold">{intent.confirmation.phrase}</span>
               <Input value={liveConfirmation} onChange={(event) => setLiveConfirmation(event.target.value)} autoComplete="off" />
             </label>
           ) : null}
           <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={resetReview} disabled={busy !== null}>Edit order</Button>
-            <Button size="sm" onClick={() => void signAndSubmit()} disabled={executionUnavailable || busy !== null || !isConnected || (intent.network === "mainnet" && liveConfirmation !== intent.confirmation.phrase)}>
-              {busy === "submit" ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : <Shield className="mr-2 size-3.5" />}
-              Sign and submit
-            </Button>
+            <Button variant="ghost" size="sm" onClick={resetReview} disabled={busy !== null}>Edit action</Button>
+            {!isConnected ? (
+              <Button size="sm" disabled={!firstConnector || connectPending} onClick={() => firstConnector && connect({ connector: firstConnector })}>
+                {connectPending ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : <Wallet className="mr-2 size-3.5" />}
+                Connect wallet to continue
+              </Button>
+            ) : !intent ? (
+              <Button size="sm" onClick={() => void prepareIntent()} disabled={executionUnavailable || busy !== null}>
+                {busy === "prepare" ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : <Shield className="mr-2 size-3.5" />}
+                Prepare wallet signature
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => void signAndSubmit()} disabled={executionUnavailable || busy !== null || !isConnected || (intent.network === "mainnet" && liveConfirmation !== intent.confirmation.phrase)}>
+                {busy === "submit" ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : <Shield className="mr-2 size-3.5" />}
+                Sign and submit
+              </Button>
+            )}
           </div>
         </div>
       ) : (
         <div className="flex justify-end">
-          <Button size="sm" onClick={() => void prepareIntent()} disabled={executionUnavailable || busy !== null || !isConnected}>
-            {busy === "prepare" ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : null}
-            Review order
+          <Button size="sm" onClick={reviewAction} disabled={busy !== null}>
+            Review action
           </Button>
         </div>
       )}
 
       {receipt ? (
         <div className={cn("rounded-lg px-3 py-3 text-xs leading-5", receipt.status === "submitted" ? "bg-emerald-500/10 text-emerald-200" : "bg-red-500/10 text-red-200")}>
-          <div className="font-semibold">{receipt.status === "submitted" ? "Order sent to Hyperliquid" : `Order ${receipt.status}`}</div>
+          <div className="font-semibold">{receipt.status === "submitted" ? `${operationCopy[receipt.operation].label} action sent to Hyperliquid` : `Action ${receipt.status}`}</div>
           <div className="mt-1 opacity-80">Receipt {receipt.intentId.slice(0, 8)} · {new Date(receipt.submittedAt).toLocaleString()}</div>
         </div>
       ) : null}
-      {tradeError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Hyperliquid order">{tradeError}</Notice> : null}
+      {tradeError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Hyperliquid action">{tradeError}</Notice> : null}
       <p className="text-[11px] leading-5 text-dls-secondary">
         {executionUnavailable
-          ? `${executionStatusMessage} This deployment cannot sign or submit a Hyperliquid order.`
-          : orderType === "market"
-            ? "Market orders use an IOC limit at your slippage boundary."
-            : "Limit orders use the exact price shown in the review."}{" "}
-        The connected wallet must already have a funded Hyperliquid account. Matterhorn never stores the wallet signature after submission.
+          ? `${executionStatusMessage} Exact action review remains available, but this deployment cannot submit it.`
+          : operation === "cancel_order"
+            ? "Cancellation is bound to the exact order ID shown in review."
+            : operation === "modify_order"
+              ? "Modification atomically replaces the selected open order with the reviewed terms."
+              : operation === "close_position"
+                ? "Position closing uses a reduce-only IOC order at the reviewed slippage boundary."
+                : orderType === "market"
+                  ? "Market orders use an IOC limit at the reviewed slippage boundary."
+                  : "Limit orders use the exact price shown in review."}{" "}
+        The connected wallet must be authorized for the Hyperliquid account. Matterhorn never stores the wallet signature after submission.
       </p>
     </div>
   );
 }
 
-function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketDraftHandoff | null }) {
+function PolymarketTradeExecution({
+  initialDraft,
+  initialOperation,
+}: {
+  initialDraft?: PolymarketDraftHandoff | null;
+  initialOperation?: "buy" | "sell" | "cancel" | null;
+}) {
   const { address, isConnected } = useAccount();
   const { connectors, connect, isPending: connectPending } = useConnect();
   const { data: walletClient } = useWalletClient();
   const { switchChainAsync, isPending: switchPending } = useSwitchChain();
+  const [tradeAction, setTradeAction] = useState<"BUY" | "SELL" | "CANCEL">("BUY");
   const [marketId, setMarketId] = useState("");
   const [outcome, setOutcome] = useState("Yes");
   const [amountUsdc, setAmountUsdc] = useState("5");
+  const [amountShares, setAmountShares] = useState("1");
   const [slippageTolerance, setSlippageTolerance] = useState("2");
+  const [cancelOrderIds, setCancelOrderIds] = useState("");
+  const [cancelAll, setCancelAll] = useState(false);
+  const [cancelReview, setCancelReview] = useState<{ orderIds: string[]; cancelAll: boolean } | null>(null);
   const [prepared, setPrepared] = useState<PolymarketPreparedOrder | null>(null);
   const [handoff, setHandoff] = useState<Record<string, unknown> | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [receipt, setReceipt] = useState<PolymarketPublicReceipt | null>(null);
   const [busy, setBusy] = useState<"prepare" | "submit" | null>(null);
   const [tradeError, setTradeError] = useState<string | null>(null);
+  const [marketQuery, setMarketQuery] = useState("");
+  const [markets, setMarkets] = useState<PolymarketMarketSearchResult[]>([]);
+  const [marketSearchBusy, setMarketSearchBusy] = useState(false);
+  const [marketSearchError, setMarketSearchError] = useState<string | null>(null);
 
   const resetReview = useCallback(() => {
     setPrepared(null);
     setHandoff(null);
+    setCancelReview(null);
     setConfirmation("");
     setReceipt(null);
     setTradeError(null);
   }, []);
 
   useEffect(() => {
+    if (initialDraft || !initialOperation) return;
+    setTradeAction(initialOperation.toUpperCase() as "BUY" | "SELL" | "CANCEL");
+    resetReview();
+  }, [initialDraft, initialOperation, resetReview]);
+
+  useEffect(() => {
     if (!initialDraft) return;
-    setMarketId(initialDraft.marketId);
-    setOutcome(initialDraft.outcome);
-    setAmountUsdc(String(initialDraft.amountUsdc));
-    setSlippageTolerance(String(initialDraft.slippageTolerance));
+    setTradeAction(initialDraft.operation.toUpperCase() as "BUY" | "SELL" | "CANCEL");
+    setMarketId(initialDraft.marketId ?? "");
+    setOutcome(initialDraft.outcome ?? "");
+    if (initialDraft.amountUsdc !== null) setAmountUsdc(String(initialDraft.amountUsdc));
+    if (initialDraft.amountShares !== null) setAmountShares(String(initialDraft.amountShares));
+    if (initialDraft.slippageTolerance !== null) setSlippageTolerance(String(initialDraft.slippageTolerance));
+    setCancelOrderIds(initialDraft.orderIds.join(", "));
+    setCancelAll(initialDraft.cancelAll);
     resetReview();
   }, [initialDraft, resetReview]);
 
+  const searchMarkets = useCallback(async (query: string) => {
+    setMarketSearchBusy(true);
+    setMarketSearchError(null);
+    try {
+      const params = new URLSearchParams({ q: query.trim(), limit: "8" });
+      const { response, json } = await fetchMatterhornApiJson<PolymarketMarketSearchResponse>(
+        `/api/polymarket/markets?${params.toString()}`,
+      );
+      if (!response.ok || !json.success || !Array.isArray(json.markets)) {
+        throw new Error(json.error?.message ?? "Could not load Polymarket markets.");
+      }
+      setMarkets(json.markets);
+      if (json.markets.length === 0) {
+        setMarketSearchError("No active markets matched that search.");
+      }
+    } catch (error) {
+      setMarkets([]);
+      setMarketSearchError(error instanceof Error ? error.message : "Could not load Polymarket markets.");
+    } finally {
+      setMarketSearchBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void searchMarkets("");
+  }, [searchMarkets]);
+
+  const selectedMarket = useMemo(
+    () => markets.find((market) => market.id === marketId) ?? null,
+    [marketId, markets],
+  );
+
+  const selectMarket = useCallback((market: PolymarketMarketSearchResult) => {
+    setMarketId(market.id);
+    setOutcome(market.outcomes.find((candidate) => candidate.toLowerCase() === "yes") ?? market.outcomes[0] ?? "Yes");
+    resetReview();
+  }, [resetReview]);
+
+  const submitMarketSearch = useCallback((event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void searchMarkets(marketQuery);
+  }, [marketQuery, searchMarkets]);
+
+  const marketFreshnessLabel = useCallback((freshness: PolymarketMarketSearchResult["source"]["freshness"]) => {
+    if (freshness === "live") return "Live";
+    if (freshness === "recent") return "Recent";
+    if (freshness === "fallback") return "Fallback data";
+    if (freshness === "stale") return "Stale data";
+    return "Source age unknown";
+  }, []);
+
   const prepareOrder = useCallback(async () => {
-    const amount = Number(amountUsdc);
-    if (!marketId.trim()) {
-      setTradeError("Enter the public Polymarket market ID prepared by the agent.");
+    if (tradeAction === "CANCEL") {
+      try {
+        const orderIds = cancelAll ? [] : normalizePolymarketOrderIds(cancelOrderIds);
+        setCancelReview({ orderIds, cancelAll });
+        setConfirmation("");
+        setReceipt(null);
+        setTradeError(null);
+      } catch (error) {
+        setTradeError(error instanceof Error ? error.message : "Could not review this cancellation.");
+      }
       return;
     }
-    if (!(amount > 0)) {
-      setTradeError("Enter a positive USDC amount.");
+    const amount = Number(amountUsdc);
+    const shares = Number(amountShares);
+    if (!marketId.trim()) {
+      setTradeError("Select an active market or enter its exact public market ID.");
+      return;
+    }
+    if (tradeAction === "BUY" && !(amount > 0)) {
+      setTradeError("Enter a positive USDC amount to spend.");
+      return;
+    }
+    if (tradeAction === "SELL" && !(shares > 0)) {
+      setTradeError("Enter a positive share quantity to sell.");
       return;
     }
     setBusy("prepare");
     setTradeError(null);
     setReceipt(null);
     try {
+      if (tradeAction === "SELL") {
+        const { response, json } = await fetchMatterhornApiJson<PolymarketSellPreviewResponse>("/api/polymarket/orders/sell-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            marketId: marketId.trim(),
+            outcome: outcome.trim() || null,
+            side: "yes",
+            shares,
+            slippageTolerance: Number(slippageTolerance),
+          }),
+        });
+        if (!response.ok || !json.success || !json.preview) {
+          throw new Error(json.error?.message ?? "Could not prepare the Polymarket sale.");
+        }
+        setPrepared({
+          tradeSide: "SELL",
+          marketId: json.preview.marketId,
+          tokenId: json.preview.tokenId,
+          marketLabel: json.preview.marketLabel,
+          outcome: json.preview.outcome,
+          amountUsdc: null,
+          amountShares: json.preview.shares,
+          estimatedFillPrice: json.preview.estimatedFillPrice,
+          estimatedShares: json.preview.shares,
+          estimatedProceedsUsdc: json.preview.estimatedProceedsUsdc,
+          maxLossUsdc: null,
+          previewSha256: json.preview.previewSha256,
+          expiresAt: json.preview.expiresAt,
+          compliance: json.preview.compliance,
+          warnings: json.preview.warnings,
+        });
+        setHandoff(null);
+        return;
+      }
       const { response, json } = await fetchMatterhornApiJson<PolymarketPreviewResponse>("/api/polymarket/orders/handoff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1286,13 +1618,16 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
         throw new Error("The agent preview is missing an exact market, outcome, token, amount, or risk value.");
       }
       setPrepared({
+        tradeSide: "BUY",
         marketId: json.preview.marketId,
         tokenId: json.preview.tokenId,
         marketLabel: json.preview.marketLabel,
         outcome: json.preview.outcome,
         amountUsdc: json.preview.size,
+        amountShares: null,
         estimatedFillPrice: json.preview.price,
         estimatedShares: json.preview.estimatedShares,
+        estimatedProceedsUsdc: null,
         maxLossUsdc: json.preview.risk.maxLossUsdc,
         previewSha256: json.preview.previewSha256,
         expiresAt: json.preview.expiresAt,
@@ -1305,12 +1640,17 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
     } finally {
       setBusy(null);
     }
-  }, [amountUsdc, marketId, outcome, slippageTolerance]);
+  }, [amountShares, amountUsdc, cancelAll, cancelOrderIds, marketId, outcome, slippageTolerance, tradeAction]);
 
   const signAndSubmit = useCallback(async () => {
-    if (!prepared || !walletClient || !address) return;
-    if (confirmation !== POLYMARKET_LIVE_CONFIRMATION) {
-      setTradeError(`Type ${POLYMARKET_LIVE_CONFIRMATION} before submitting.`);
+    if ((!prepared && !cancelReview) || !walletClient || !address) return;
+    const requiredConfirmation = cancelReview
+      ? cancelReview.cancelAll
+        ? POLYMARKET_CANCEL_ALL_CONFIRMATION
+        : POLYMARKET_CANCEL_CONFIRMATION
+      : POLYMARKET_LIVE_CONFIRMATION;
+    if (confirmation !== requiredConfirmation) {
+      setTradeError(`Type ${requiredConfirmation} before continuing.`);
       return;
     }
     if (walletClient.chain?.id !== POLYMARKET_CHAIN_ID) {
@@ -1320,6 +1660,16 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
     setBusy("submit");
     setTradeError(null);
     try {
+      if (cancelReview) {
+        const publicReceipt = await cancelPolymarketOrders({
+          walletClient,
+          orderIds: cancelReview.orderIds,
+          cancelAll: cancelReview.cancelAll,
+        });
+        setReceipt(publicReceipt);
+        return;
+      }
+      if (!prepared) return;
       const publicReceipt = await submitPolymarketOrder({ walletClient, order: prepared });
       setReceipt(publicReceipt);
       if (handoff) {
@@ -1336,7 +1686,7 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
               status: publicReceipt.status,
               marketId: prepared.marketId,
               outcome: prepared.outcome,
-              side: "yes",
+              side: prepared.tradeSide.toLowerCase(),
               submittedAt: publicReceipt.submittedAt,
             },
           }),
@@ -1347,19 +1697,27 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
     } finally {
       setBusy(null);
     }
-  }, [address, confirmation, handoff, prepared, walletClient]);
+  }, [address, cancelReview, confirmation, handoff, prepared, walletClient]);
 
   const firstConnector = connectors.find((connector) => connector.id !== "injected") ?? connectors[0];
   const onPolygon = walletClient?.chain?.id === POLYMARKET_CHAIN_ID;
   const shortWalletAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null;
+  const actionTitle = tradeAction === "BUY" ? "Buy an outcome" : tradeAction === "SELL" ? "Sell outcome shares" : "Cancel open orders";
+  const requiredConfirmation = cancelReview
+    ? cancelReview.cancelAll
+      ? POLYMARKET_CANCEL_ALL_CONFIRMATION
+      : POLYMARKET_CANCEL_CONFIRMATION
+    : POLYMARKET_LIVE_CONFIRMATION;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold text-dls-text">Buy an outcome</div>
+          <div className="text-sm font-semibold text-dls-text">{actionTitle}</div>
           <p className="mt-1 max-w-xl text-xs leading-5 text-dls-secondary">
-            The agent prepares the market terms and compliance check. You review the maximum loss, then your connected wallet authorizes the order on Polygon.
+            {tradeAction === "CANCEL"
+              ? "Choose exact order IDs or cancel every open order. Your connected wallet authorizes access to your Polymarket account."
+              : "Select a live market, review the exact terms and compliance result, then authorize the order with your connected wallet."}
           </p>
         </div>
         <div className="text-right text-[11px] leading-5 text-dls-secondary">
@@ -1367,6 +1725,78 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
           <div>{onPolygon ? "Polygon · real funds" : "Polygon required"}</div>
         </div>
       </div>
+
+      <div className="inline-flex min-h-9 rounded-lg bg-dls-surface-muted/45 p-1" aria-label="Polymarket action">
+        {(["BUY", "SELL", "CANCEL"] as const).map((candidate) => (
+          <button
+            key={candidate}
+            type="button"
+            className={cn(
+              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--protocol-desk-accent)]",
+              tradeAction === candidate ? "bg-dls-active text-dls-text" : "text-dls-secondary hover:text-dls-text",
+            )}
+            onClick={() => {
+              setTradeAction(candidate);
+              resetReview();
+            }}
+          >
+            {candidate === "BUY" ? "Buy" : candidate === "SELL" ? "Sell" : "Cancel orders"}
+          </button>
+        ))}
+      </div>
+
+      {tradeAction !== "CANCEL" ? <div className="space-y-2">
+        <form className="flex gap-2" onSubmit={submitMarketSearch}>
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-dls-secondary" />
+            <Input
+              value={marketQuery}
+              onChange={(event) => setMarketQuery(event.target.value)}
+              className="pl-9"
+              placeholder="Search active markets"
+              aria-label="Search active Polymarket markets"
+            />
+          </div>
+          <Button type="submit" size="sm" variant="outline" disabled={marketSearchBusy}>
+            {marketSearchBusy ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : null}
+            Search
+          </Button>
+        </form>
+
+        {markets.length > 0 ? (
+          <div className="divide-y divide-dls-border/30 overflow-hidden rounded-lg bg-dls-surface-muted/25">
+            {markets.map((market) => {
+              const yesPrice = market.outcomePrices.Yes ?? market.outcomePrices.yes ?? null;
+              const selected = market.id === marketId;
+              return (
+                <button
+                  key={market.id}
+                  type="button"
+                  className={cn(
+                    "flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-dls-hover/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--protocol-desk-accent)]",
+                    selected && "bg-[var(--protocol-desk-soft)]",
+                  )}
+                  onClick={() => selectMarket(market)}
+                >
+                  <span className="min-w-0">
+                    <span className="line-clamp-2 text-xs font-medium leading-5 text-dls-text">{market.question}</span>
+                    <span className="mt-0.5 block text-[10px] text-dls-secondary">
+                      {marketFreshnessLabel(market.source.freshness)}
+                      {market.liquidity === null ? "" : ` · $${Math.round(market.liquidity).toLocaleString()} liquidity`}
+                    </span>
+                  </span>
+                  <span className="shrink-0 pt-0.5 text-xs font-semibold text-[var(--protocol-desk-accent)]">
+                    {yesPrice === null ? "Select" : `${Math.round(yesPrice * 100)}% Yes`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : marketSearchBusy ? (
+          <div className="h-24 animate-pulse rounded-lg bg-dls-surface-muted/25" aria-label="Loading active markets" />
+        ) : null}
+        {marketSearchError ? <p className="text-xs leading-5 text-amber-200">{marketSearchError}</p> : null}
+      </div> : null}
 
       {!isConnected ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-dls-surface-muted/30 px-3 py-3">
@@ -1386,18 +1816,88 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
         </div>
       ) : null}
 
+      {tradeAction === "CANCEL" ? (
+        <div className="space-y-3 rounded-lg bg-dls-surface-muted/25 px-3 py-3">
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={cancelAll}
+            className={cn(
+              "flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--protocol-desk-accent)]",
+              cancelAll ? "bg-red-500/10 text-red-100" : "bg-dls-surface-muted/35 text-dls-text hover:bg-dls-hover/70",
+            )}
+            onClick={() => {
+              setCancelAll((value) => !value);
+              resetReview();
+            }}
+          >
+            <span>
+              <span className="block text-xs font-semibold">Cancel every open order</span>
+              <span className="mt-0.5 block text-[11px] text-dls-secondary">Clear every currently open order for this wallet.</span>
+            </span>
+            <span className={cn("size-4 rounded-full border", cancelAll ? "border-red-300 bg-red-300" : "border-dls-border")} />
+          </button>
+          {!cancelAll ? (
+            <label className="block space-y-1.5 text-xs text-dls-secondary">
+              Exact order IDs
+              <Input
+                value={cancelOrderIds}
+                onChange={(event) => { setCancelOrderIds(event.target.value); resetReview(); }}
+                placeholder="Paste IDs separated by commas"
+                autoComplete="off"
+              />
+            </label>
+          ) : null}
+        </div>
+      ) : (
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="space-y-1.5 text-xs text-dls-secondary sm:col-span-2">
-          Market ID
-          <Input value={marketId} onChange={(event) => { setMarketId(event.target.value); resetReview(); }} placeholder="Ask the agent to find a market, then use its public ID" />
+          Exact market ID
+          <Input
+            value={marketId}
+            onChange={(event) => { setMarketId(event.target.value); resetReview(); }}
+            placeholder="Select a live market above or enter its public ID"
+          />
+          {selectedMarket ? (
+            <span className="block text-[11px] leading-5 text-dls-text">{selectedMarket.question}</span>
+          ) : null}
         </label>
+        {selectedMarket?.outcomes.length ? (
+          <fieldset className="space-y-1.5 text-xs text-dls-secondary">
+            <legend>Outcome</legend>
+            <div className="grid min-h-10 grid-cols-2 rounded-lg bg-dls-surface-muted/35 p-1">
+              {selectedMarket.outcomes.slice(0, 2).map((candidate) => (
+                <button
+                  key={candidate}
+                  type="button"
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-xs transition-colors",
+                    outcome === candidate ? "bg-dls-active text-dls-text" : "text-dls-secondary hover:text-dls-text",
+                  )}
+                  onClick={() => { setOutcome(candidate); resetReview(); }}
+                >
+                  {candidate}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        ) : (
+          <label className="space-y-1.5 text-xs text-dls-secondary">
+            Outcome
+            <Input value={outcome} onChange={(event) => { setOutcome(event.target.value); resetReview(); }} placeholder="Yes" />
+          </label>
+        )}
         <label className="space-y-1.5 text-xs text-dls-secondary">
-          Outcome
-          <Input value={outcome} onChange={(event) => { setOutcome(event.target.value); resetReview(); }} placeholder="Yes" />
-        </label>
-        <label className="space-y-1.5 text-xs text-dls-secondary">
-          Amount (USDC)
-          <Input value={amountUsdc} inputMode="decimal" onChange={(event) => { setAmountUsdc(event.target.value); resetReview(); }} />
+          {tradeAction === "BUY" ? "Amount (USDC)" : "Shares to sell"}
+          <Input
+            value={tradeAction === "BUY" ? amountUsdc : amountShares}
+            inputMode="decimal"
+            onChange={(event) => {
+              if (tradeAction === "BUY") setAmountUsdc(event.target.value);
+              else setAmountShares(event.target.value);
+              resetReview();
+            }}
+          />
         </label>
         <label className="space-y-1.5 text-xs text-dls-secondary">
           Max estimated slippage
@@ -1407,6 +1907,7 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
           </div>
         </label>
       </div>
+      )}
 
       {prepared ? (
         <div className="space-y-3 rounded-lg bg-dls-surface-muted/30 px-3 py-3">
@@ -1416,14 +1917,20 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
           </div>
           <p className="text-xs font-medium leading-5 text-dls-text">{prepared.marketLabel}</p>
           <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs sm:grid-cols-3">
-            {[
-              ["Spend", `$${prepared.amountUsdc.toFixed(2)} USDC`],
+            {(prepared.tradeSide === "BUY" ? [
+              ["Spend", `$${(prepared.amountUsdc ?? 0).toFixed(2)} USDC`],
               ["Estimated fill", prepared.estimatedFillPrice === null ? "Unavailable" : `${(prepared.estimatedFillPrice * 100).toFixed(1)}¢`],
               ["Estimated shares", prepared.estimatedShares?.toFixed(3) ?? "Unavailable"],
-              ["Maximum loss", `$${prepared.maxLossUsdc.toFixed(2)}`],
+              ["Maximum loss", `$${(prepared.maxLossUsdc ?? 0).toFixed(2)}`],
               ["Network", "Polygon · real funds"],
               ["Expires", new Date(prepared.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })],
-            ].map(([label, value]) => (
+            ] : [
+              ["Shares", (prepared.amountShares ?? 0).toFixed(3)],
+              ["Estimated fill", prepared.estimatedFillPrice === null ? "Unavailable" : `${(prepared.estimatedFillPrice * 100).toFixed(1)}¢`],
+              ["Estimated proceeds", prepared.estimatedProceedsUsdc === null ? "Unavailable" : `$${prepared.estimatedProceedsUsdc.toFixed(2)} USDC`],
+              ["Network", "Polygon · real funds"],
+              ["Expires", new Date(prepared.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })],
+            ]).map(([label, value]) => (
               <div key={label}>
                 <div className="text-[10px] text-dls-secondary">{label}</div>
                 <div className="mt-0.5 font-medium text-dls-text">{value}</div>
@@ -1442,18 +1949,43 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
             </Button>
           </div>
         </div>
+      ) : cancelReview ? (
+        <div className="space-y-3 rounded-lg bg-red-500/7 px-3 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-semibold text-dls-text">Review cancellation</span>
+            <span className="text-xs font-medium text-red-200">
+              {cancelReview.cancelAll ? "All open orders" : `${cancelReview.orderIds.length} selected`}
+            </span>
+          </div>
+          {!cancelReview.cancelAll ? (
+            <p className="break-all text-[11px] leading-5 text-dls-secondary">{cancelReview.orderIds.join(", ")}</p>
+          ) : (
+            <p className="text-[11px] leading-5 text-red-100">Every open Polymarket order for this account will be cancelled.</p>
+          )}
+          <label className="block space-y-1.5 text-xs text-red-200">
+            Type <span className="font-semibold">{requiredConfirmation}</span>
+            <Input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" />
+          </label>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={resetReview} disabled={busy !== null}>Edit cancellation</Button>
+            <Button size="sm" onClick={() => void signAndSubmit()} disabled={busy !== null || !isConnected || !onPolygon || confirmation !== requiredConfirmation}>
+              {busy === "submit" ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : <CircleX className="mr-2 size-3.5" />}
+              Authorize cancellation
+            </Button>
+          </div>
+        </div>
       ) : (
         <div className="flex justify-end">
           <Button size="sm" onClick={() => void prepareOrder()} disabled={busy !== null}>
             {busy === "prepare" ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : null}
-            Review order
+            {tradeAction === "CANCEL" ? "Review cancellation" : "Review order"}
           </Button>
         </div>
       )}
 
       {receipt ? (
         <div className="rounded-lg bg-emerald-500/10 px-3 py-3 text-xs leading-5 text-emerald-200">
-          <div className="font-semibold">Order sent to Polymarket</div>
+          <div className="font-semibold">{tradeAction === "CANCEL" ? "Cancellation sent to Polymarket" : "Order sent to Polymarket"}</div>
           <div className="mt-1 opacity-80">{receipt.orderId ? `Order ${receipt.orderId}` : receipt.status} · {new Date(receipt.submittedAt).toLocaleString()}</div>
         </div>
       ) : null}
@@ -1465,13 +1997,22 @@ function PolymarketTradeExecution({ initialDraft }: { initialDraft?: PolymarketD
   );
 }
 
-function BittensorTransferExecution({ initialDraft }: { initialDraft?: BittensorDraftHandoff | null }) {
+function BittensorConnectedWalletExecution({
+  initialDraft,
+  initialOperation,
+}: {
+  initialDraft?: BittensorDraftHandoff | null;
+  initialOperation?: BittensorWalletAction | null;
+}) {
+  const [walletAction, setWalletAction] = useState<BittensorWalletAction>("transfer");
   const [accounts, setAccounts] = useState<BittensorExtensionAccount[]>([]);
   const [sender, setSender] = useState("");
   const [destination, setDestination] = useState("");
+  const [hotkey, setHotkey] = useState("");
+  const [netuid, setNetuid] = useState("1");
   const [amountTao, setAmountTao] = useState("0.1");
-  const [backendPreview, setBackendPreview] = useState<BittensorTransferPreviewResponse["preview"] | null>(null);
-  const [prepared, setPrepared] = useState<BittensorTransferPreview | null>(null);
+  const [backendPreview, setBackendPreview] = useState<BittensorWalletActionPreviewResponse["preview"] | null>(null);
+  const [prepared, setPrepared] = useState<BittensorWalletActionPreview | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [receipt, setReceipt] = useState<BittensorPublicReceipt | null>(null);
   const [busy, setBusy] = useState<"connect" | "prepare" | "submit" | null>(null);
@@ -1487,9 +2028,18 @@ function BittensorTransferExecution({ initialDraft }: { initialDraft?: Bittensor
   }, []);
 
   useEffect(() => {
+    if (initialDraft || !initialOperation) return;
+    setWalletAction(initialOperation);
+    resetReview();
+  }, [initialDraft, initialOperation, resetReview]);
+
+  useEffect(() => {
     if (!initialDraft) return;
+    setWalletAction(initialDraft.operation);
     if (initialDraft.sender) setSender(initialDraft.sender);
-    setDestination(initialDraft.destination);
+    setDestination(initialDraft.destination ?? "");
+    setHotkey(initialDraft.hotkey ?? "");
+    if (initialDraft.netuid !== null) setNetuid(String(initialDraft.netuid));
     setAmountTao(initialDraft.amountTao);
     resetReview();
   }, [initialDraft, resetReview]);
@@ -1508,46 +2058,67 @@ function BittensorTransferExecution({ initialDraft }: { initialDraft?: Bittensor
     }
   }, []);
 
-  const prepareTransfer = useCallback(async () => {
+  const prepareWalletAction = useCallback(async () => {
     setBusy("prepare");
     setTransferError(null);
     setEvidenceWarning(null);
     try {
       if (!sender) throw new Error("Connect and choose the Bittensor account that will send TAO.");
-      const { response, json } = await fetchMatterhornApiJson<BittensorTransferPreviewResponse>("/api/bittensor/extrinsics/prepare", {
+      const parsedNetuid = Number(netuid);
+      if (walletAction !== "transfer" && (!Number.isInteger(parsedNetuid) || parsedNetuid < 0)) {
+        throw new Error("Enter a valid non-negative subnet netuid.");
+      }
+      const { response, json } = await fetchMatterhornApiJson<BittensorWalletActionPreviewResponse>("/api/bittensor/extrinsics/prepare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "transfer",
+          action: walletAction,
           amountTao,
           coldkey: sender,
-          destination,
+          destination: walletAction === "transfer" ? destination : null,
+          hotkey: walletAction === "transfer" ? null : hotkey,
+          netuid: walletAction === "transfer" ? null : parsedNetuid,
         }),
       });
       if (!response.ok || !json.success || !json.preview) {
-        throw new Error(json.error?.message ?? "Matterhorn could not prepare the Bittensor transfer.");
+        throw new Error(json.error?.message ?? `Matterhorn could not prepare the Bittensor ${walletAction}.`);
       }
       if (json.preview.network !== "finney") {
         throw new Error("Connected-wallet transfers currently require the Bittensor Finney network.");
       }
-      if (json.preview.destination !== destination.trim()) {
-        throw new Error("The destination is not a valid Bittensor SS58 address.");
-      }
       if (json.preview.amountTao === null || json.preview.amountTao <= 0) {
         throw new Error("Enter a valid TAO amount greater than zero.");
       }
-      const unsafeDestination = json.preview.warnings.some((warning) => /destination.*not.*valid/i.test(warning));
-      if (unsafeDestination) throw new Error("The destination is not a valid Bittensor SS58 address.");
+      if (walletAction === "transfer" && json.preview.destination !== destination.trim()) {
+        throw new Error("The destination is not a valid Bittensor SS58 address.");
+      }
+      if (walletAction !== "transfer" && json.preview.hotkey !== hotkey.trim()) {
+        throw new Error("The validator hotkey is not a valid Bittensor SS58 address.");
+      }
+      const invalidPublicAddress = json.preview.warnings.some((warning) => /(?:destination|hotkey).*not.*valid/i.test(warning));
+      if (invalidPublicAddress) throw new Error("The public Bittensor address is not valid.");
 
-      const reviewed = createBittensorTransferPreview({
-        sender,
-        destination: json.preview.destination,
-        amountTao,
-        feeTao: json.preview.feeTao,
-        warnings: json.preview.warnings.filter((warning) =>
-          !/unsigned preview|external .*signer|cannot sign|cannot broadcast/i.test(warning)
-        ),
-      });
+      const reviewedWarnings = json.preview.warnings.filter((warning) =>
+        !/unsigned preview|external .*signer|cannot sign|cannot broadcast/i.test(warning)
+      );
+      const reviewed = walletAction === "transfer"
+        ? createBittensorWalletActionPreview({
+            action: "transfer",
+            sender,
+            destination: json.preview.destination ?? "",
+            amountTao,
+            feeTao: json.preview.feeTao,
+            warnings: reviewedWarnings,
+          })
+        : createBittensorWalletActionPreview({
+            action: walletAction,
+            sender,
+            hotkey: json.preview.hotkey ?? "",
+            netuid: json.preview.netuid ?? parsedNetuid,
+            amountTao,
+            feeTao: json.preview.feeTao,
+            warnings: reviewedWarnings,
+          });
       setBackendPreview(json.preview);
       setPrepared(reviewed);
       setConfirmation("");
@@ -1555,11 +2126,11 @@ function BittensorTransferExecution({ initialDraft }: { initialDraft?: Bittensor
     } catch (error) {
       setBackendPreview(null);
       setPrepared(null);
-      setTransferError(error instanceof Error ? error.message : "Could not prepare the Bittensor transfer.");
+      setTransferError(error instanceof Error ? error.message : `Could not prepare the Bittensor ${walletAction}.`);
     } finally {
       setBusy(null);
     }
-  }, [amountTao, destination, sender]);
+  }, [amountTao, destination, hotkey, netuid, sender, walletAction]);
 
   const signAndSubmit = useCallback(async () => {
     if (!prepared || !backendPreview) return;
@@ -1567,7 +2138,7 @@ function BittensorTransferExecution({ initialDraft }: { initialDraft?: Bittensor
     setTransferError(null);
     setEvidenceWarning(null);
     try {
-      const publicReceipt = await submitBittensorTransfer({
+      const publicReceipt = await submitBittensorWalletAction({
         preview: prepared,
         confirmation,
       });
@@ -1584,7 +2155,7 @@ function BittensorTransferExecution({ initialDraft }: { initialDraft?: Bittensor
               status: "submitted",
               txHash: publicReceipt.txHash,
               blockHash: publicReceipt.blockHash,
-              message: "Connected Bittensor wallet finalized the reviewed TAO transfer.",
+              message: `Connected Bittensor wallet finalized the reviewed ${publicReceipt.action}.`,
               explorerUrl: null,
             },
           }),
@@ -1594,33 +2165,77 @@ function BittensorTransferExecution({ initialDraft }: { initialDraft?: Bittensor
         }
       } catch (error) {
         setEvidenceWarning(
-          `The transfer finalized, but Matterhorn could not save its public receipt: ${
+          `The ${prepared.action} finalized, but Matterhorn could not save its public receipt: ${
             error instanceof Error ? error.message : "unknown evidence error"
           }`,
         );
       }
     } catch (error) {
-      setTransferError(error instanceof Error ? error.message : "The Bittensor wallet did not complete the transfer.");
+      setTransferError(error instanceof Error ? error.message : `The Bittensor wallet did not complete the ${prepared.action}.`);
     } finally {
       setBusy(null);
     }
   }, [backendPreview, confirmation, prepared]);
 
   const shortSender = sender ? shortAddress(sender) : "Not connected";
+  const actionCopy = {
+    transfer: {
+      label: "Transfer",
+      title: "Transfer TAO",
+      summary: "Send TAO to another public SS58 address.",
+      review: "Review exact transfer",
+    },
+    stake: {
+      label: "Stake",
+      title: "Stake TAO",
+      summary: "Add TAO stake to a validator on a subnet.",
+      review: "Review exact stake",
+    },
+    unstake: {
+      label: "Unstake",
+      title: "Unstake TAO",
+      summary: "Remove TAO stake from a validator on a subnet.",
+      review: "Review exact unstake",
+    },
+  } as const;
+  const selectedCopy = actionCopy[walletAction];
+  const requiredConfirmation = prepared?.confirmation.phrase ?? "";
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold text-dls-text">Send TAO</div>
+          <div className="text-sm font-semibold text-dls-text">{selectedCopy.title}</div>
           <p className="mt-1 max-w-xl text-xs leading-5 text-dls-secondary">
-            Matterhorn prepares the exact Finney transfer. Your Bittensor wallet shows the chain call, signs it, and broadcasts it.
+            {selectedCopy.summary} Your connected wallet shows and authorizes the exact Finney call.
           </p>
         </div>
         <div className="text-right text-[11px] leading-5 text-dls-secondary">
           <div className={cn("font-medium", sender ? "text-emerald-300" : "text-dls-secondary")}>{shortSender}</div>
-          <div>Finney · real TAO</div>
+          <div>Finney · connected-wallet approval</div>
         </div>
+      </div>
+
+      <div className="inline-flex rounded-lg bg-dls-surface-muted/35 p-1" aria-label="Bittensor transaction type">
+        {(Object.keys(actionCopy) as BittensorWalletAction[]).map((item) => (
+          <button
+            key={item}
+            type="button"
+            className={cn(
+              "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+              walletAction === item
+                ? "bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]"
+                : "text-dls-secondary hover:bg-dls-hover/45 hover:text-dls-text",
+            )}
+            onClick={() => {
+              setWalletAction(item);
+              setTransferError(null);
+              resetReview();
+            }}
+          >
+            {actionCopy[item].label}
+          </button>
+        ))}
       </div>
 
       {accounts.length === 0 ? (
@@ -1635,7 +2250,7 @@ function BittensorTransferExecution({ initialDraft }: { initialDraft?: Bittensor
         </div>
       ) : (
         <label className="block space-y-1.5 text-xs text-dls-secondary">
-          Sending account
+          Signing account
           <select
             value={sender}
             onChange={(event) => { setSender(event.currentTarget.value); resetReview(); }}
@@ -1650,16 +2265,39 @@ function BittensorTransferExecution({ initialDraft }: { initialDraft?: Bittensor
         </label>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
-        <label className="space-y-1.5 text-xs text-dls-secondary">
-          Recipient SS58 address
-          <Input
-            value={destination}
-            onChange={(event) => { setDestination(event.target.value); resetReview(); }}
-            placeholder="5..."
-            autoComplete="off"
-          />
-        </label>
+      <div className={cn("grid gap-3", walletAction === "transfer" ? "sm:grid-cols-[minmax(0,1fr)_10rem]" : "sm:grid-cols-[minmax(0,1fr)_8rem_10rem]")}>
+        {walletAction === "transfer" ? (
+          <label className="space-y-1.5 text-xs text-dls-secondary">
+            Recipient SS58 address
+            <Input
+              value={destination}
+              onChange={(event) => { setDestination(event.target.value); resetReview(); }}
+              placeholder="5..."
+              autoComplete="off"
+            />
+          </label>
+        ) : (
+          <>
+            <label className="space-y-1.5 text-xs text-dls-secondary">
+              Validator hotkey
+              <Input
+                value={hotkey}
+                onChange={(event) => { setHotkey(event.target.value); resetReview(); }}
+                placeholder="5..."
+                autoComplete="off"
+              />
+            </label>
+            <label className="space-y-1.5 text-xs text-dls-secondary">
+              Netuid
+              <Input
+                value={netuid}
+                inputMode="numeric"
+                onChange={(event) => { setNetuid(event.target.value); resetReview(); }}
+                autoComplete="off"
+              />
+            </label>
+          </>
+        )}
         <label className="space-y-1.5 text-xs text-dls-secondary">
           Amount (TAO)
           <Input
@@ -1674,37 +2312,44 @@ function BittensorTransferExecution({ initialDraft }: { initialDraft?: Bittensor
       {prepared ? (
         <div className="space-y-3 rounded-lg bg-dls-surface-muted/30 px-3 py-3">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs font-semibold text-dls-text">Review exact transfer</span>
+            <span className="text-xs font-semibold text-dls-text">{selectedCopy.review}</span>
             <span className="text-xs font-semibold text-[var(--protocol-desk-accent)]">{prepared.amountTao} TAO</span>
           </div>
           <div className="grid gap-2 text-xs sm:grid-cols-2">
             <div>
-              <div className="text-[10px] text-dls-secondary">From</div>
+              <div className="text-[10px] text-dls-secondary">Signing account</div>
               <div className="mt-0.5 break-all font-mono text-dls-text">{prepared.sender}</div>
             </div>
             <div>
-              <div className="text-[10px] text-dls-secondary">To</div>
-              <div className="mt-0.5 break-all font-mono text-dls-text">{prepared.destination}</div>
+              <div className="text-[10px] text-dls-secondary">{prepared.action === "transfer" ? "Recipient" : "Validator hotkey"}</div>
+              <div className="mt-0.5 break-all font-mono text-dls-text">{prepared.action === "transfer" ? prepared.destination : prepared.hotkey}</div>
             </div>
+            {prepared.action !== "transfer" ? (
+              <div>
+                <div className="text-[10px] text-dls-secondary">Subnet</div>
+                <div className="mt-0.5 font-medium text-dls-text">Netuid {prepared.netuid}</div>
+              </div>
+            ) : null}
             <div>
               <div className="text-[10px] text-dls-secondary">Network</div>
-              <div className="mt-0.5 font-medium text-dls-text">Bittensor Finney · real TAO</div>
+              <div className="mt-0.5 font-medium text-dls-text">Bittensor Finney</div>
             </div>
             <div>
               <div className="text-[10px] text-dls-secondary">Estimated fee</div>
               <div className="mt-0.5 font-medium text-dls-text">{prepared.feeTao === null ? "Wallet will estimate" : `${prepared.feeTao} TAO`}</div>
             </div>
           </div>
+          <p className="text-xs leading-5 text-dls-secondary">{prepared.consequenceSummary}</p>
           <label className="block space-y-1.5 text-xs text-red-200">
-            Type <span className="font-semibold">{BITTENSOR_TRANSFER_CONFIRMATION}</span>
+            Type <span className="font-semibold">{requiredConfirmation}</span>
             <Input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" />
           </label>
           <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={resetReview} disabled={busy !== null}>Edit transfer</Button>
+            <Button variant="ghost" size="sm" onClick={resetReview} disabled={busy !== null}>Edit {prepared.action}</Button>
             <Button
               size="sm"
               onClick={() => void signAndSubmit()}
-              disabled={busy !== null || confirmation !== BITTENSOR_TRANSFER_CONFIRMATION}
+              disabled={busy !== null || confirmation !== requiredConfirmation}
             >
               {busy === "submit" ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : <Shield className="mr-2 size-3.5" />}
               Review in wallet
@@ -1713,21 +2358,21 @@ function BittensorTransferExecution({ initialDraft }: { initialDraft?: Bittensor
         </div>
       ) : (
         <div className="flex justify-end">
-          <Button size="sm" onClick={() => void prepareTransfer()} disabled={busy !== null || !sender}>
+          <Button size="sm" onClick={() => void prepareWalletAction()} disabled={busy !== null || !sender}>
             {busy === "prepare" ? <Loader2 className="mr-2 size-3.5 animate-spin" /> : null}
-            Review transfer
+            Review {walletAction}
           </Button>
         </div>
       )}
 
       {receipt ? (
         <div className="rounded-lg bg-emerald-500/10 px-3 py-3 text-xs leading-5 text-emerald-200">
-          <div className="font-semibold">TAO transfer finalized</div>
+          <div className="font-semibold">Bittensor {receipt.action} finalized</div>
           <div className="mt-1 break-all opacity-80">Transaction {receipt.txHash} · Block {receipt.blockHash}</div>
         </div>
       ) : null}
       {evidenceWarning ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Receipt not saved">{evidenceWarning}</Notice> : null}
-      {transferError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Bittensor transfer">{transferError}</Notice> : null}
+      {transferError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Bittensor transaction">{transferError}</Notice> : null}
       <p className="text-[11px] leading-5 text-dls-secondary">
         Matterhorn receives only public account, transaction, and block hashes. Seed phrases, private keys, and raw signatures never enter Matterhorn.
       </p>
@@ -1735,7 +2380,15 @@ function BittensorTransferExecution({ initialDraft }: { initialDraft?: Bittensor
   );
 }
 
-export default function BittensorPanel({ initialVenue = "bittensor" }: { initialVenue?: CryptoVenue }) {
+export default function BittensorPanel({
+  initialVenue = "bittensor",
+  openReviewedAction = false,
+  initialOperation = null,
+}: {
+  initialVenue?: CryptoVenue;
+  openReviewedAction?: boolean;
+  initialOperation?: ReviewedActionOperation | null;
+}) {
   const [venue, setVenue] = useState<CryptoVenue>(initialVenue);
   const [tab, setTab] = useState<Tab>("overview");
   const [draftHandoff, setDraftHandoff] = useState<ReviewedActionDraftHandoff | null>(null);
@@ -1777,11 +2430,12 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
   useEffect(() => {
     setVenue(initialVenue);
-    setTab("overview");
-  }, [initialVenue]);
+    setTab(openReviewedAction && initialVenue === "bittensor" ? "actions" : "overview");
+  }, [initialVenue, openReviewedAction]);
 
   useEffect(() => {
     const applyHandoff = (handoff: ReviewedActionDraftHandoff) => {
+      if (handoff.protocol === "sui") return;
       setDraftHandoff(handoff);
       setVenue(handoff.protocol);
       setTab(handoff.protocol === "bittensor" ? "actions" : "overview");
@@ -2146,7 +2800,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   };
 
   const askAgentAboutMarketExecutionReadiness = async () => {
-    const prompt = "Matterhorn protocol task: Review the current Hyperliquid and Polymarket execution contract. Explain which agent/server controls are passing, how the separate connected-wallet tickets submit exact reviewed terms, which Polymarket BUY accounts are eligible, which cases remain external handoffs, and the next safe operator action. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
+    const prompt = "Matterhorn protocol task: Review the current Hyperliquid and Polymarket execution contract. Explain which agent/server controls are passing, how the separate connected-wallet tickets submit exact reviewed terms, which Polymarket buy, sell, and cancel actions are eligible, which cases remain external handoffs, and the next safe operator action. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
     await sendToChat(prompt, { marketExecutionReadiness }, { mode: "crypto", source: "market-execution-readiness-panel" });
   };
 
@@ -2309,12 +2963,12 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
     ? "TAO transfer with wallet review"
     : venue === "hyperliquid"
       ? "Wallet approval required"
-      : "Eligible BUY with wallet approval";
+      : "Eligible buy, sell, or cancel with wallet approval";
   const activeSafetyCopy = venue === "bittensor"
-    ? "Matterhorn can prepare an exact TAO transfer for review and submission by your connected Bittensor wallet. Staking, unstaking, delegation, and advanced calls remain external-signer handoffs. Never paste seed phrases, private keys, mnemonics, or wallet exports."
+    ? "Matterhorn can prepare exact TAO transfer, stake, and unstake calls for review and submission by your connected Bittensor wallet. Unsupported advanced calls stay unavailable until audited. Never paste seed phrases, private keys, mnemonics, or wallet exports."
     : venue === "hyperliquid"
       ? "Hyperliquid orders can submit only after you review the network, asset, side, size, price or slippage boundary, and reduce-only state, then sign the exact short-lived intent in your connected wallet. Matterhorn never accepts private keys or API secrets."
-      : "Eligible Polymarket EOA BUY orders can submit only after compliance passes and you authorize the exact order in a connected Polygon wallet. Sell orders, proxy accounts, watches, and agents cannot submit. Matterhorn never accepts private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
+      : "Eligible Polymarket EOA buy, sell, and cancel actions can submit only after compliance passes and you authorize the exact action in a connected Polygon wallet. Proxy accounts, watches, and agents cannot submit. Matterhorn never accepts private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
 
   return (
     <div
@@ -2419,9 +3073,18 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           venue={venue}
           watchAddress={watchAddress}
           wallet={wallet}
-          onOpenWallet={() => {
-            setVenue("bittensor");
-            setTab("wallet");
+          executionAvailable={venue === "hyperliquid"
+            ? marketExecutionReadiness?.reviewedWalletTickets.hyperliquid.available ?? null
+            : true}
+          onOpenAction={() => {
+            if (venue === "bittensor") {
+              setTab("wallet");
+              return;
+            }
+            document.getElementById(`${venue}-trade-ticket`)?.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
           }}
         />
         {venue === "bittensor" ? (
@@ -2473,26 +3136,32 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <p className="text-xs leading-5 text-dls-secondary">
                   Source: {activeVenue.source}. {venue === "hyperliquid"
                     ? "Agent prompts prepare context only. To trade, use the order ticket below, review every field, and approve the exact intent in your connected wallet."
-                    : "Ask the Polymarket Agent in plain English, review the prepared terms, then use the ticket below to authorize an eligible BUY order in your connected Polygon wallet."}
+                    : "Ask the Polymarket Agent in plain English, review the prepared terms, then use the ticket below to authorize an eligible buy, sell, or cancel action in your connected Polygon wallet."}
                 </p>
               </div>
             </Section>
 
             {venue === "hyperliquid" ? (
-              <Section title="Trade Hyperliquid" icon={<ArrowUpDown className="size-4" />}>
-                <HyperliquidTradeExecution
-                  initialDraft={draftHandoff?.protocol === "hyperliquid" ? draftHandoff.draft : null}
-                  executionAvailable={marketExecutionReadiness?.reviewedWalletTickets.hyperliquid.available ?? null}
-                />
-              </Section>
+              <div id="hyperliquid-trade-ticket" className="scroll-mt-4">
+                <Section title="Trade Hyperliquid" icon={<ArrowUpDown className="size-4" />}>
+                  <HyperliquidTradeExecution
+                    initialDraft={draftHandoff?.protocol === "hyperliquid" ? draftHandoff.draft : null}
+                    initialOperation={initialOperation === "place_order" || initialOperation === "cancel_order" || initialOperation === "modify_order" || initialOperation === "close_position" ? initialOperation : null}
+                    executionAvailable={marketExecutionReadiness?.reviewedWalletTickets.hyperliquid.available ?? null}
+                  />
+                </Section>
+              </div>
             ) : null}
 
             {venue === "polymarket" ? (
-              <Section title="Trade Polymarket" icon={<ArrowUpDown className="size-4" />}>
-                <PolymarketTradeExecution
-                  initialDraft={draftHandoff?.protocol === "polymarket" ? draftHandoff.draft : null}
-                />
-              </Section>
+              <div id="polymarket-trade-ticket" className="scroll-mt-4">
+                <Section title="Trade Polymarket" icon={<ArrowUpDown className="size-4" />}>
+                  <PolymarketTradeExecution
+                    initialDraft={draftHandoff?.protocol === "polymarket" ? draftHandoff.draft : null}
+                    initialOperation={initialOperation === "buy" || initialOperation === "sell" || initialOperation === "cancel" ? initialOperation : null}
+                  />
+                </Section>
+              </div>
             ) : null}
 
             <Section title={venue === "hyperliquid" ? "Standard Hyperliquid actions" : "Standard Polymarket actions"} icon={<BrainCircuit className="size-4" />}>
@@ -2527,19 +3196,19 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <p className="mt-1 text-[11px] leading-5 text-dls-secondary">
                     {venue === "hyperliquid"
                       ? "Every order is hash-bound to the reviewed terms, expires quickly, can submit once, and must be signed by the connected wallet. Mainnet also requires a typed live-order confirmation."
-                      : "Eligible EOA BUY orders can submit only after compliance passes and the connected Polygon wallet authorizes the exact order."}
+                      : "Eligible EOA buy, sell, and cancel actions can submit only after compliance passes and the connected Polygon wallet authorizes the exact action."}
                   </p>
                 </div>
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
                   <Metric label="Readiness" value={venue === "hyperliquid" ? hyperliquidReadinessState : polymarketReadinessState} compact />
                   <Metric label="Execution" value={venue === "hyperliquid" ? "Wallet approved" : "Compliance + wallet"} compact />
-                  <Metric label="Can submit" value={venue === "hyperliquid" ? "After signature" : "Eligible EOA BUY"} compact />
+                  <Metric label="Can submit" value={venue === "hyperliquid" ? "After signature" : "Eligible buy/sell/cancel"} compact />
                   <Metric label="SDK evidence" value={marketSdkValidationState} compact />
                 </div>
                 <Notice tone="info" icon={<Shield className="size-4" />} title="Execution boundary">
                   {venue === "hyperliquid"
                     ? "Matterhorn submits only a short-lived order intent that this server prepared and your connected wallet signed. It does not accept private keys, API secrets, arbitrary signed payloads, alternate exchange URLs, or automatic watch-triggered orders."
-                    : "Matterhorn prepares the exact Polymarket order and checks compliance first. An eligible browser-wallet EOA must authorize it. This release does not support sell orders, proxy accounts, watch-triggered orders, or unattended execution."}
+                    : "Matterhorn prepares the exact Polymarket action and checks compliance first. An eligible browser-wallet EOA must authorize each buy, sell, or cancel. Proxy accounts, watch-triggered orders, and unattended execution are not supported in this release."}
                 </Notice>
                 <details className="group rounded-md bg-dls-surface-muted/[0.10] px-3 py-2">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--protocol-desk-rgb)/0.30)] [&::-webkit-details-marker]:hidden">
@@ -2588,11 +3257,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <Metric label="Custody" value="Never" compact />
                 </div>
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Use this desk for TAO balance reads, subnet discovery, validator comparison, watchlists, receipts, and unsigned staking previews. Matterhorn never asks for seed phrases, private keys, mnemonics, or wallet exports.
+                  Use this desk for TAO balance reads, subnet discovery, validator comparison, watchlists, receipts, and reviewed transfer, stake, or unstake calls. Matterhorn never asks for seed phrases, private keys, mnemonics, or wallet exports.
                 </p>
               </div>
             </Section>
-            <Section title="Standard Bittensor actions" icon={<BrainCircuit className="size-4" />}>
+            <Section title="Standard Bittensor actions" icon={<ListChecks className="size-4" />}>
               <p className="mb-3 text-sm leading-6 text-dls-secondary">
                 These are the core Bittensor workflows Matterhorn should make easy. Each one stages an editable Bittensor Agent task with public context; nothing auto-sends, signs, broadcasts, stakes, unstakes, transfers, or asks for wallet secrets.
               </p>
@@ -2760,7 +3429,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 })}
               </div>
               <Notice tone="info" icon={<Shield className="size-4" />} title="Release boundary">
-                Agents prepare drafts only. Connected-wallet tickets can submit reviewed TAO transfers, Hyperliquid orders, and eligible Polymarket BUY orders. Longevity remains a separate, non-medical workflow.
+                Agents prepare drafts only. Connected-wallet tickets can submit reviewed Bittensor transfer/stake/unstake calls, Hyperliquid actions, and eligible Polymarket buy/sell/cancel actions. Longevity remains a separate, non-medical workflow.
               </Notice>
             </Section>
 
@@ -2769,7 +3438,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                   <p className="text-xs font-semibold text-dls-text">Bittensor</p>
                   <p className="mt-1 break-words text-[11px] leading-5 text-dls-secondary">
-                    Public reads, unsigned staking previews, and reviewed TAO transfers. The connected wallet signs; Matterhorn never holds keys.
+                    Public reads and reviewed TAO transfer, stake, and unstake calls. The connected wallet signs; Matterhorn never holds keys.
                   </p>
                 </div>
                 <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
@@ -2781,7 +3450,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <div className="min-w-0 rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                   <p className="text-xs font-semibold text-dls-text">Polymarket</p>
                   <p className="mt-1 break-words text-[11px] leading-5 text-dls-secondary">
-                    Eligible EOA BUY orders require compliance checks, exact review, and connected Polygon wallet authorization.
+                    Eligible EOA buy, sell, and cancel actions require compliance checks, exact review, and connected Polygon wallet authorization.
                   </p>
                 </div>
                 <p className="break-words text-[11px] leading-5 text-dls-secondary">
@@ -2817,7 +3486,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 </div>
                 {BITTENSOR_BETA_MODE ? (
                   <p className="text-xs leading-5 text-sky-200">
-                    Bittensor beta boundary: market desks are hidden in Bittensor-only mode. Connected-wallet TAO transfers remain explicit, one-at-a-time actions.
+                    Bittensor beta boundary: market desks are hidden in Bittensor-only mode. Connected-wallet transfer, stake, and unstake calls remain explicit, one-at-a-time actions.
                   </p>
                 ) : null}
                 {cryptoReadinessBlocker ? (
@@ -2827,7 +3496,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 ) : cryptoReadinessWarnings[0] ? (
                   <p className="text-xs leading-5 text-amber-300">{cryptoReadinessWarnings[0].label ?? "Protocol readiness"}: {cryptoReadinessWarnings[0].summary ?? "Review before production use."}</p>
                 ) : cryptoReadiness?.ready && readiness?.ready ? (
-                  <p className="text-xs leading-5 text-emerald-300">Protocol readiness is green within each desk boundary: Bittensor reviewed TAO transfers, Hyperliquid wallet-approved execution, and eligible Polymarket BUY execution.</p>
+                  <p className="text-xs leading-5 text-emerald-300">Protocol readiness is green within each desk boundary: Bittensor reviewed transfer/stake/unstake calls, Hyperliquid wallet-approved actions, and eligible Polymarket buy/sell/cancel actions.</p>
                 ) : (
                   <p className="text-xs leading-5 text-dls-secondary">Check readiness before customer use.</p>
                 )}
@@ -2864,11 +3533,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <div className="grid grid-cols-1 gap-2">
                   <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                     <p className="text-xs font-semibold text-dls-text">Bittensor: Read, prepare, and transfer</p>
-                    <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Connected-wallet TAO transfers; external-signer handoff for staking and advanced calls.</p>
+                    <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Connected-wallet TAO transfer, stake, and unstake calls; unsupported advanced calls stay unavailable.</p>
                   </div>
                   <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                     <p className="text-xs font-semibold text-dls-text">Markets: Wallet-approved trading</p>
-                    <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Hyperliquid and eligible Polymarket BUY orders require exact review and a fresh wallet approval.</p>
+                    <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Hyperliquid and eligible Polymarket buy, sell, and cancel actions require exact review and a fresh wallet approval.</p>
                   </div>
                   <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2">
                     <p className="text-xs font-semibold text-dls-text">Longevity workflow: Standalone</p>
@@ -2896,11 +3565,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <Metric label="Hyperliquid agent route" value={marketVenueState("hyperliquid")} compact />
                   <Metric label="Polymarket agent route" value={marketVenueState("polymarket")} compact />
                   <Metric label="Hyperliquid ticket" value="Wallet approved" compact />
-                  <Metric label="Polymarket ticket" value="Eligible EOA BUY" compact />
+                  <Metric label="Polymarket ticket" value="Eligible buy/sell/cancel" compact />
                   <Metric label="Controls" value={marketExecutionControls.length ? `${marketExecutionPassedControls}/${marketExecutionControls.length}` : "Unknown"} compact />
                 </div>
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Agent artifacts never submit. Separate wallet tickets can submit exact, expiring Hyperliquid orders and eligible Polymarket BUY orders after compliance and connected-wallet authorization.
+                  Agent artifacts never submit. Separate wallet tickets can submit exact, expiring Hyperliquid actions and eligible Polymarket buy, sell, and cancel actions after compliance and connected-wallet authorization.
                 </p>
                 {marketExecutionBlockedControls > 0 ? (
                   <p className="text-xs leading-5 text-amber-300">
@@ -3123,7 +3792,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   "Automatic execution off",
                   "Wallet approval per action",
                   "Polymarket compliance gate",
-                  "Bittensor staking uses external signer",
+                  "Bittensor actions require connected-wallet approval",
                 ].map((item) => (
                   <div key={item} className="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200">
                     {item}
@@ -3134,7 +3803,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 No seed phrases, private keys, API secrets, raw signatures, arbitrary signed payloads, wallet exports, custody, or automatic execution.
               </p>
               <p className="mt-2 text-xs leading-5 text-dls-secondary">
-                Every supported transfer or trade uses a separate reviewed ticket and connected-wallet approval. Unsupported Bittensor staking calls and Polymarket sell/proxy flows stay external handoffs.
+                Every supported transfer or trade uses a separate reviewed ticket and connected-wallet approval. Unsupported advanced Bittensor calls and Polymarket proxy-account flows stay unavailable.
               </p>
               {BITTENSOR_BETA_MODE ? (
                 <p className="mt-2 text-xs leading-5 text-dls-secondary">
@@ -3274,9 +3943,9 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
         {venue === "bittensor" && tab === "actions" && (
           <div className="space-y-4">
             <Notice tone="info" icon={<Shield className="size-4" />} title="Reviewed Bittensor actions">
-              TAO transfers can be reviewed and submitted through a connected Bittensor wallet. Staking and advanced calls remain unsigned previews for external signing.
+              Transfer, stake, and unstake calls can be reviewed and submitted through a connected Bittensor wallet. Advanced calls remain external-signer handoffs until their runtime contracts are audited.
             </Notice>
-            <Section title="Standard Bittensor actions" icon={<BrainCircuit className="size-4" />}>
+            <Section title="Standard Bittensor actions" icon={<ListChecks className="size-4" />}>
               <div className="space-y-3">
                 <p className="text-sm leading-6 text-dls-secondary">
                   Start from the common Bittensor workflows below. These stage an editable Bittensor Agent task with public context;
@@ -3285,19 +3954,20 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <BittensorStandardActionList onAction={(item) => void askAgentForStandardBittensorAction(item)} />
               </div>
             </Section>
-            <Section title="Transfer TAO" icon={<Wallet className="size-4" />}>
-              <BittensorTransferExecution
+            <Section title="Transfer and stake" icon={<Wallet className="size-4" />}>
+              <BittensorConnectedWalletExecution
                 initialDraft={draftHandoff?.protocol === "bittensor" ? draftHandoff.draft : null}
+                initialOperation={initialOperation === "transfer" || initialOperation === "stake" || initialOperation === "unstake" ? initialOperation : null}
               />
             </Section>
-            <Section title="Prepare staking and advanced actions" icon={<ArrowUpDown className="size-4" />}>
+            <Section title="Agent preview and validator comparison" icon={<ArrowUpDown className="size-4" />}>
               <div className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-[1fr_0.9fr]">
                   <div className="rounded-lg bg-[var(--protocol-desk-soft)] px-3 py-2.5 text-xs leading-5 text-dls-secondary">
                     <div className="font-semibold text-[var(--protocol-desk-accent)]">How this works</div>
                     <div className="mt-1">
-                      Choose an action, add only public routing details, then review the quote. These staking and comparison
-                      previews are never signed or broadcast here; finish an approved action in an external Bittensor-compatible signer.
+                      Use this research preview to compare validators or inspect expected stake effects. To submit transfer, stake,
+                      or unstake, use the connected-wallet ticket above; Matterhorn never auto-signs or auto-submits.
                     </div>
                   </div>
                   <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2.5 text-xs leading-5 text-dls-secondary">
@@ -3340,7 +4010,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     Missing context is safe. The Bittensor Agent can ask for the exact public netuid, hotkey, or address before a preview is trusted. This button creates an unsigned preview only.
                   </div>
                   <Button className="gap-1.5 rounded-md bg-[var(--protocol-desk-accent)] text-[var(--matterhorn-ink)] hover:opacity-90" onClick={requestQuote} disabled={quoteLoading}>
-                    {quoteLoading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpDown className="size-4" />}
+                    {quoteLoading ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}
                     Prepare unsigned preview
                   </Button>
                 </div>
@@ -3433,37 +4103,69 @@ function UnifiedWalletPanel({
   venue,
   watchAddress,
   wallet,
-  onOpenWallet,
+  executionAvailable,
+  onOpenAction,
 }: {
   venue: CryptoVenue;
   watchAddress: string;
   wallet: BittensorWalletSnapshot | null;
-  onOpenWallet: () => void;
+  executionAvailable: boolean | null;
+  onOpenAction: () => void;
 }) {
-  const label = venue === "bittensor" ? "SS58 public wallet" : "External wallet/client";
-  const value = venue === "bittensor"
-    ? (watchAddress.trim() ? shortAddress(watchAddress.trim()) : "Not connected")
-    : "Preview only";
+  const action = venue === "bittensor"
+    ? {
+        label: "TAO transfer, stake, and unstake",
+        value: watchAddress.trim() ? "Review and submit in wallet" : "Connect wallet to submit",
+        detail: "Prepare the exact call here, then approve it in your connected Bittensor wallet. Unsupported advanced calls are not shown as executable.",
+        button: watchAddress.trim() ? "Open wallet" : "Connect wallet",
+      }
+    : venue === "hyperliquid"
+      ? executionAvailable === true
+        ? {
+            label: "Perpetual orders",
+            value: "Review, sign, and submit",
+            detail: "Review the exact order, sign its short-lived intent in your connected EVM wallet, and submit it from the trade ticket.",
+            button: "Open order ticket",
+          }
+        : executionAvailable === false
+          ? {
+              label: "Perpetual orders",
+              value: "Submission disabled",
+              detail: "Order preparation works, but this deployment has not enabled wallet submission. No order can be sent until the execution gate is enabled.",
+              button: "Review order ticket",
+            }
+          : {
+              label: "Perpetual orders",
+              value: "Checking submission",
+              detail: "Matterhorn is checking whether reviewed wallet submission is enabled for this deployment.",
+              button: "Open order ticket",
+            }
+      : {
+          label: "Eligible buy, sell, and cancel actions",
+          value: "Authorize and submit",
+          detail: "Choose an eligible market, review the maximum loss, then authorize and submit with your connected Polygon wallet.",
+          button: "Open order ticket",
+        };
   return (
     <div className="rounded-lg bg-dls-surface-muted/35 px-3 py-2.5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-semibold text-dls-text">
             <Wallet className="size-4 text-[var(--protocol-desk-accent)]" />
-            Matterhorn Wallet
+            Wallet execution
           </div>
           <div className="mt-1 text-xs leading-5 text-dls-secondary">
-            {label}: <span className="font-mono text-dls-text">{value}</span>
+            {action.label}: <span className="font-medium text-dls-text">{action.value}</span>
             {venue === "bittensor" && wallet?.providerStatus === "ok" ? (
               <span> · {formatNumber(wallet.estimatedValueTao)} TAO tracked</span>
             ) : null}
           </div>
           <div className="mt-1 text-[11px] leading-5 text-dls-secondary">
-            Matterhorn uses public reads and external signer/client handoffs; it never takes custody or secrets.
+            {action.detail}
           </div>
         </div>
-        <Button variant="outline" size="sm" className="shrink-0 text-xs" onClick={onOpenWallet}>
-          {venue === "bittensor" ? "Open wallet" : "Wallet status"}
+        <Button variant="outline" size="sm" className="shrink-0 text-xs" onClick={onOpenAction}>
+          {action.button}
         </Button>
       </div>
     </div>

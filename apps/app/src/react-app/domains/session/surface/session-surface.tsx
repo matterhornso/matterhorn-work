@@ -156,6 +156,8 @@ import {
   MATTERHORN_DESK_TASK_STARTERS,
   type MatterhornDeskTaskStarterDesk,
 } from "../workflows/desk-task-starters";
+import { reviewedActionHandoffFromComposer } from "../workflows/reviewed-action-command";
+import { stageReviewedActionHandoff } from "../../wallet/reviewed-action-handoff";
 import {
   getMatterhornDeskAgent,
   getMatterhornDeskAgentById,
@@ -292,11 +294,11 @@ function MatterhornDeskFocusedEmptyState({
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint] ?? FileText;
   const prompts = MATTERHORN_DESK_TASK_STARTERS[mode];
   const boundary = mode === "bittensor"
-    ? "Uses public wallet details and prepares transfer drafts. You approve TAO transfers in your wallet; staking and advanced actions finish in an external signer."
+    ? "Uses public wallet details and prepares transaction drafts. You approve TAO transfers, staking, and unstaking in your wallet; unsupported advanced calls stay unavailable."
     : mode === "wellness"
       ? "Standalone longevity workflow. Educational only, non-medical, and no live payments/email/hosting."
     : mode === "polymarket"
-      ? "Runs market research, compliance checks, and external-wallet handoffs. Matterhorn never places bets inside the app."
+      ? "Runs market research and compliance checks, then prepares supported buy, sell, or cancel actions for exact connected-wallet approval."
       : mode === "sui"
         ? "Runs public Sui account reads and transfer previews. Signing stays in your Sui wallet or external client."
         : "Agent tasks run market and account checks and prepare order context, but cannot submit. Manual execution is available only in the Hyperliquid panel after exact review and connected-wallet approval.";
@@ -1704,6 +1706,40 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const handleSend = useCallback(async () => {
     const text = draft.trim();
     if (!text && attachments.length === 0) return;
+    const reviewedActionHandoff = attachments.length === 0
+      ? reviewedActionHandoffFromComposer(text, activeWorkflowDeskAgent?.deskId)
+      : null;
+    if (reviewedActionHandoff && stageReviewedActionHandoff(reviewedActionHandoff)) {
+      setError(null);
+      recordInspectorEvent("session.reviewed_action.staged_from_composer", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        protocol: reviewedActionHandoff.protocol,
+      });
+      if (activeWorkflowDeskAgent) {
+        void stageWorkflowRun(props.client, {
+          workspaceId: props.workspaceId,
+          sessionId: props.sessionId,
+          deskId: activeWorkflowDeskAgent.deskId,
+          actionId: activeWorkflowDeskAgent.defaultActionId,
+          stageId: activeWorkflowDeskAgent.defaultStageId,
+          visibleUserIntent: text,
+        })
+          .then((run) => startWorkflowRun(props.client, run.workflowRunId))
+          .catch((error) => {
+            recordInspectorEvent("session.workflow_run.failed", {
+              workspaceId: props.workspaceId,
+              sessionId: props.sessionId,
+              deskId: activeWorkflowDeskAgent.deskId,
+              agentId: activeWorkflowDeskAgent.agentId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+      }
+      clearComposerSession(props.sessionId);
+      props.onDraftChange(buildDraft("", []));
+      return;
+    }
     // Intentionally allow sending while the assistant is still streaming.
     // OpenCode accepts follow-up user turns mid-run and queues them; if the
     // backend can't accept the follow-up it'll surface an error via the
@@ -2088,6 +2124,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
     typeComposerText,
   ]);
 
+  const localReviewedActionReady = useMemo(
+    () => attachments.length === 0 && reviewedActionHandoffFromComposer(draft.trim(), activeWorkflowDeskAgent?.deskId) !== null,
+    [activeWorkflowDeskAgent?.deskId, attachments.length, draft],
+  );
+
   const handleSaveBittensorEvidence = useCallback(async (card: BittensorPublicEvidenceCard) => {
     const publicCard = publicBittensorEvidenceCard(card);
     const title = typeof publicCard.title === "string" && publicCard.title.trim()
@@ -2202,13 +2243,16 @@ export function SessionSurface(props: SessionSurfaceProps) {
     label: "Send the composer prompt",
     description: "Send the currently visible composer draft to the active session.",
     sideEffect: "mutation",
-    disabled: props.modelUnavailable || (!draft.trim() && attachments.length === 0) || model.transitionState !== "idle",
+    disabled:
+      (Boolean(props.modelUnavailable) && !localReviewedActionReady) ||
+      (!draft.trim() && attachments.length === 0) ||
+      model.transitionState !== "idle",
     targetRef: composerShellRef,
     execute: async () => {
       await handleSend();
       return true;
     },
-  }), [attachments.length, draft, handleSend, model.transitionState, props.modelUnavailable]);
+  }), [attachments.length, draft, handleSend, localReviewedActionReady, model.transitionState, props.modelUnavailable]);
   useControlAction(composerSendControlAction);
 
   const composerStopControlAction = useMemo<MatterhornControlAction>(() => ({
@@ -2617,7 +2661,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
         onSend={handleSend}
         onStop={handleAbort}
         busy={chatStreaming}
-        disabled={model.transitionState !== "idle" || Boolean(props.modelUnavailable)}
+        disabled={model.transitionState !== "idle"}
+        sendDisabled={model.transitionState !== "idle" || (Boolean(props.modelUnavailable) && !localReviewedActionReady)}
         modelUnavailable={Boolean(props.modelUnavailable)}
         onOpenAiProviders={props.onOpenAiProviders}
         statusLabel={statusLabel(snapshot ?? undefined, chatStreaming)}

@@ -99,8 +99,8 @@ export const WEB_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       connectionMode: "wallet_standard",
       canRead: true,
       canPreview: true,
-      canSubmit: false,
-      liveSubmissionEnabled: false,
+      canSubmit: true,
+      liveSubmissionEnabled: true,
       signerRequirement: "client_signer",
       custody: false,
       secretInputsAllowed: false,
@@ -110,7 +110,7 @@ export const WEB_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
     publicAddressLine:
       "Only public wallet addresses are used. Paste or connect an address to preview read-only data.",
     externalSignerLine:
-      "Direct TAO transfers and Sui actions stay in connected wallets. Bittensor staking and advanced calls require an external signer. Matterhorn never creates or holds keys.",
+      "Bittensor transfer, stake, and unstake calls and supported Sui actions stay in connected wallets. Unsupported advanced calls are not presented as executable. Matterhorn never creates or holds keys.",
     forbiddenSecretsLine:
       "Never paste a private key, seed phrase, API secret, raw signature, signed payload, or wallet export into Matterhorn.",
   },

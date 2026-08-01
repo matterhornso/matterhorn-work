@@ -66,6 +66,7 @@ describe("HyperliquidExecutionIntentStore", () => {
     }, OWNER_A);
 
     expect(intent.asset).toBe("BTC");
+    expect(intent.operation).toBe("place_order");
     expect(intent.orderPrice).toBe(65650);
     expect(intent.estimatedNotionalUsdc).toBe(65);
     expect(intent.typedData.message.source).toBe("b");
@@ -114,7 +115,7 @@ describe("HyperliquidExecutionIntentStore", () => {
       intentId: intent.intentId,
       signerAddress: ACCOUNT.address,
       signature,
-    }, OWNER_A)).rejects.toThrow("Wallet signature does not authorize this exact order intent");
+    }, OWNER_A)).rejects.toThrow("Wallet signature does not authorize this exact action intent");
   });
 
   test("requires the explicit phrase for mainnet", async () => {
@@ -192,7 +193,7 @@ describe("HyperliquidExecutionIntentStore", () => {
     await store.create(input, OWNER_A);
     await store.create(input, OWNER_A);
     await store.create(input, OWNER_A);
-    await expect(store.create(input, OWNER_A)).rejects.toThrow("Too many pending order confirmations");
+    await expect(store.create(input, OWNER_A)).rejects.toThrow("Too many pending action confirmations");
   });
 
   test("bounds the short-lived order-review queue across authenticated sessions", async () => {
@@ -211,7 +212,7 @@ describe("HyperliquidExecutionIntentStore", () => {
     for (let index = 0; index < 250; index += 1) {
       await store.create(input, `test-owner-${index}`);
     }
-    await expect(store.create(input, "test-owner-overflow")).rejects.toThrow("order-review queue is temporarily full");
+    await expect(store.create(input, "test-owner-overflow")).rejects.toThrow("action-review queue is temporarily full");
 
     now += 90_001;
     await expect(store.create(input, "test-owner-after-expiry")).resolves.toMatchObject({ asset: "BTC" });
@@ -227,5 +228,74 @@ describe("HyperliquidExecutionIntentStore", () => {
     expect(hashHyperliquidAction(action, 1_750_000_000_000)).not.toBe(hashHyperliquidAction(action, 1_750_000_000_001));
     expect(hashHyperliquidAction(action, 1_750_000_000_000, null, 1_750_000_090_000))
       .not.toBe(hashHyperliquidAction(action, 1_750_000_000_000, null, 1_750_000_090_001));
+  });
+
+  test("prepares and submits a wallet-authorized cancellation", async () => {
+    const { fetcher, exchangeBodies } = createFetcher();
+    const store = new HyperliquidExecutionIntentStore({ fetcher, now: () => 1_750_000_000_000 });
+    const intent = await store.createAction({
+      operation: "cancel_order",
+      network: "testnet",
+      signerAddress: ACCOUNT.address,
+      asset: "BTC",
+      orderId: 456,
+    }, OWNER_A);
+
+    expect(intent).toMatchObject({ operation: "cancel_order", orderId: 456, side: null, size: null });
+    const signature = await ACCOUNT.signTypedData(intent.typedData);
+    await expect(store.submit({ intentId: intent.intentId, signerAddress: ACCOUNT.address, signature }, OWNER_A))
+      .resolves.toMatchObject({ operation: "cancel_order", orderId: 456, status: "submitted" });
+    expect(exchangeBodies.at(-1)).toMatchObject({
+      action: { type: "cancel", cancels: [{ a: 0, o: 456 }] },
+    });
+  });
+
+  test("prepares a replacement order using Hyperliquid's modify action", async () => {
+    const { fetcher, exchangeBodies } = createFetcher();
+    const store = new HyperliquidExecutionIntentStore({ fetcher, now: () => 1_750_000_000_000 });
+    const intent = await store.createAction({
+      operation: "modify_order",
+      network: "testnet",
+      signerAddress: ACCOUNT.address,
+      asset: "BTC",
+      orderId: 789,
+      side: "sell",
+      size: 0.002,
+      orderType: "limit",
+      limitPrice: 66_000,
+      reduceOnly: false,
+    }, OWNER_A);
+
+    const signature = await ACCOUNT.signTypedData(intent.typedData);
+    await store.submit({ intentId: intent.intentId, signerAddress: ACCOUNT.address, signature }, OWNER_A);
+    expect(exchangeBodies.at(-1)).toMatchObject({
+      action: {
+        type: "modify",
+        oid: 789,
+        order: { a: 0, b: false, p: "66000", s: "0.002", r: false, t: { limit: { tif: "Gtc" } } },
+      },
+    });
+  });
+
+  test("forces close-position orders to be reduce-only IOC actions", async () => {
+    const { fetcher, exchangeBodies } = createFetcher();
+    const store = new HyperliquidExecutionIntentStore({ fetcher, now: () => 1_750_000_000_000 });
+    const intent = await store.createAction({
+      operation: "close_position",
+      network: "testnet",
+      signerAddress: ACCOUNT.address,
+      asset: "BTC",
+      side: "sell",
+      size: 0.003,
+      orderType: "market",
+      slippageBps: 75,
+    }, OWNER_A);
+
+    expect(intent).toMatchObject({ operation: "close_position", reduceOnly: true });
+    const signature = await ACCOUNT.signTypedData(intent.typedData);
+    await store.submit({ intentId: intent.intentId, signerAddress: ACCOUNT.address, signature }, OWNER_A);
+    expect(exchangeBodies.at(-1)).toMatchObject({
+      action: { type: "order", orders: [{ a: 0, b: false, r: true, t: { limit: { tif: "Ioc" } } }] },
+    });
   });
 });

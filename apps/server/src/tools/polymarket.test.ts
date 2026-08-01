@@ -14,12 +14,14 @@ import {
   preparePolymarketHandoffFromRequest,
   preparePolymarketExternalSignRequestFromRequest,
   estimatePolymarketFill,
+  estimatePolymarketSellFill,
   executePolymarketChatWorkflow,
   extractPolymarketOrderInput,
   findForbiddenPolymarketCredentialInput,
   planPolymarketChat,
   preparePolymarketOrderFromRequest,
   preparePolymarketOrderPreview,
+  preparePolymarketSellPreviewFromRequest,
   validatePolymarketRedactedArtifactEnvelope,
   verifyPolymarketReceipt,
   type PolymarketBookLevel,
@@ -137,6 +139,11 @@ describe("Polymarket provider reads", () => {
     expect(markets[0].outcomePrices.Yes).toBeCloseTo(0.62);
     expect(markets[0].tokenIds.Yes).toBe("token-yes");
     expect(markets[0].source.source).toContain("gamma.test");
+  });
+
+  test("does not substitute unrelated markets when a search has no matches", async () => {
+    const markets = await provider().searchMarkets("definitely-not-present", 10);
+    expect(markets).toEqual([]);
   });
 
   test("reads market detail and parses JSON-encoded fields", async () => {
@@ -315,6 +322,24 @@ describe("Polymarket preview math", () => {
     expect(fill.depthSufficient).toBe(false);
   });
 
+  test("estimatePolymarketSellFill walks bids for a share sale", () => {
+    const bids: PolymarketBookLevel[] = [
+      { price: 0.61, size: 10, raw: null },
+      { price: 0.6, size: 20, raw: null },
+    ];
+    const fill = estimatePolymarketSellFill(bids, 15);
+    expect(fill.depthSufficient).toBe(true);
+    expect(fill.estimatedProceedsUsdc).toBeCloseTo(9.1, 4);
+    expect(fill.estimatedFillPrice).toBeCloseTo(9.1 / 15, 6);
+  });
+
+  test("estimatePolymarketSellFill reports partial visible depth", () => {
+    const fill = estimatePolymarketSellFill([{ price: 0.61, size: 2, raw: null }], 10);
+    expect(fill.depthSufficient).toBe(false);
+    expect(fill.estimatedProceedsUsdc).toBeCloseTo(1.22, 4);
+    expect(fill.note).toMatch(/part/i);
+  });
+
   test("preparePolymarketOrderPreview is never submittable", async () => {
     const market = await provider().getMarket("0xmarket-ai");
     const compliance = { status: "allowed" as const, reason: null, jurisdiction: "US", checkedAt: "t", source: "mock" };
@@ -323,6 +348,44 @@ describe("Polymarket preview math", () => {
     expect(preview.version).toBe("matterhorn.market.action-preview.v1");
     expect(preview.warnings.join(" ")).toContain("connected EVM wallet");
     expect(preview.warnings.join(" ")).toContain("exact order");
+  });
+
+  test("preparePolymarketSellPreviewFromRequest returns an exact wallet-reviewed sale", async () => {
+    const preview = await preparePolymarketSellPreviewFromRequest({
+      marketId: "0xmarket-ai",
+      outcome: "Yes",
+      side: "yes",
+      shares: 5,
+      slippageTolerance: 1,
+    }, provider());
+    expect(preview.action).toBe("sell_shares");
+    expect(preview.tokenId).toBe("token-yes");
+    expect(preview.shares).toBe(5);
+    expect(preview.estimatedProceedsUsdc).toBeCloseTo(3.05, 4);
+    expect(preview.canSubmit).toBe(false);
+    expect(preview.previewSha256).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  test("preparePolymarketSellPreviewFromRequest fails closed when compliance blocks trading", async () => {
+    await expect(preparePolymarketSellPreviewFromRequest({
+      marketId: "0xmarket-ai",
+      outcome: "Yes",
+      shares: 5,
+    }, provider({ blocked: true }))).rejects.toThrow(/restricted/i);
+  });
+
+  test("preparePolymarketSellPreviewFromRequest rejects inactive markets", async () => {
+    const inactiveProvider: PolymarketProvider = {
+      ...provider(),
+      async getMarket() {
+        return { ...await provider().getMarket("0xmarket-ai"), active: false };
+      },
+    };
+    await expect(preparePolymarketSellPreviewFromRequest({
+      marketId: "0xmarket-ai",
+      outcome: "Yes",
+      shares: 5,
+    }, inactiveProvider)).rejects.toThrow(/not active/i);
   });
 });
 

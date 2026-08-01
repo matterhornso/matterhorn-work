@@ -128,8 +128,8 @@ describe("unified crypto chat execute route", () => {
     expect(payload.venue).toBe("auto");
     expect(payload.intent).toBe("market_execution_readiness");
     expect(payload.execution).toBe("read_only");
-    expect(payload.responseText).toContain("Can submit: No");
-    expect(payload.responseText).toContain("Live submission: Off");
+    expect(payload.responseText).toContain("Agent submission: Off");
+    expect(payload.responseText).toContain("separate reviewed wallet ticket");
     expect(payload.sharedCards[0]).toMatchObject({
       version: "matterhorn.crypto.shared-card.v1",
       kind: "readiness_report",
@@ -139,8 +139,8 @@ describe("unified crypto chat execute route", () => {
         canSubmit: false,
       },
     });
-    expect(payload.data.report.readyForLiveSubmission).toBe(false);
-    expect(payload.data.report.safety.signsOrSubmits).toBe(false);
+    expect(payload.data.report.readyForLiveSubmission).toBe(true);
+    expect(payload.data.report.safety.signsOrSubmits).toBe(true);
     expect(JSON.stringify(payload)).not.toContain("/orders/submit");
     expect(forbiddenFieldPath(payload)).toBeNull();
   });
@@ -157,8 +157,8 @@ describe("unified crypto chat execute route", () => {
     expect(payload.venue).toBe("auto");
     expect(payload.intent).toBe("market_execution_chain");
     expect(payload.execution).toBe("read_only");
-    expect(payload.responseText).toContain("Can submit: No");
-    expect(payload.responseText).toContain("Live submission: Off");
+    expect(payload.responseText).toContain("connected wallet authorizes each supported submission");
+    expect(payload.responseText).toContain("legacy evidence chain");
     expect(payload.sharedCards[0]).toMatchObject({
       version: "matterhorn.crypto.shared-card.v1",
       kind: "readiness_report",
@@ -187,8 +187,8 @@ describe("unified crypto chat execute route", () => {
     expect(payload.intent).toBe("market_execution_step_guidance");
     expect(payload.execution).toBe("read_only");
     expect(payload.responseText).toContain("External sign request");
-    expect(payload.responseText).toContain("Can submit: No");
-    expect(payload.responseText).toContain("Live submission: Off");
+    expect(payload.responseText).toContain("cannot submit");
+    expect(payload.responseText).toContain("fail closed on hash mismatches");
     expect(payload.data.highlightedStep.id).toBe("external_sign_request");
     expect(payload.sharedCards[0]).toMatchObject({
       version: "matterhorn.crypto.shared-card.v1",
@@ -251,7 +251,7 @@ describe("unified crypto chat execute route", () => {
     });
     expect(payload.cards[0]).toMatchObject({
       kind: "market_execution_chain",
-      title: "Market execution chain",
+      title: "Legacy evidence chain",
     });
     expect(JSON.stringify(payload)).not.toContain("/orders/submit");
     expect(forbiddenFieldPath(payload)).toBeNull();

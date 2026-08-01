@@ -201,7 +201,8 @@ describe("Settings overview backend capability integration", () => {
 
     expect(source).toContain("non-custodial");
     expect(source).toContain("Bittensor:");
-    expect(source).toContain("Staking and advanced calls remain");
+    expect(source).toContain("reviewed transfer, stake, and unstake calls");
+    expect(source).toContain("Unsupported advanced calls stay unavailable.");
     expect(source).toContain("Hyperliquid:</");
     expect(source).toContain("manual orders use a separate trade ticket");
     expect(source).toContain("agents and watches cannot submit");
@@ -223,8 +224,8 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain('dataMode === "curated_fallback"');
     expect(source).toContain('venue.venue === "hyperliquid"');
     expect(source).toContain('venue.venue === "polymarket"');
-    expect(source).toContain("Live reads · TAO transfers");
-    expect(source).toContain("Fallback reads · TAO transfers");
+    expect(source).toContain("Live reads · Wallet actions");
+    expect(source).toContain("Fallback reads · Wallet actions");
     expect(source).toContain("Wallet-approved execution");
     expect(source).toContain("Live submission is enabled only through the exact-order trade ticket");
     expect(source).toContain("Live submission is disabled by the deployment execution switch");

@@ -47,7 +47,7 @@ export default {
   "blueprint.starter_command_title": "Create a reusable command",
   "blueprint.starter_connect_openai_desc": "Review model and provider status in Settings.",
   "blueprint.starter_connect_openai_title": "Check models",
-  "blueprint.starter_csv_desc": "Explore subnets, public TAO wallet reads, validator comparisons, and unsigned staking previews.",
+  "blueprint.starter_csv_desc": "Explore subnets, public TAO wallet reads, validator comparisons, and reviewed staking actions.",
   "blueprint.starter_csv_prompt": "Open the Bittensor desk and help me choose a safe first task. Use public SS58 and subnet context only.",
   "blueprint.starter_csv_title": "Use Bittensor desk",
   "blueprint.starter_hyperliquid_desc": "Read market/account context and draft external-client handoffs without in-app submission.",

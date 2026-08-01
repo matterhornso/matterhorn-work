@@ -130,7 +130,7 @@ for (const required of [
   "Bittensor Beta",
   "Bittensor beta boundary",
   "market desks are hidden in Bittensor-only mode",
-  "Connected-wallet TAO transfers remain explicit, one-at-a-time actions.",
+  "Connected-wallet transfer, stake, and unstake calls remain explicit, one-at-a-time actions.",
 ]) {
   assert.ok(panel.includes(required), `Bittensor panel missing ${required}`);
 }

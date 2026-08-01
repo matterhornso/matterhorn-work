@@ -85,6 +85,7 @@ type ComposerProps = {
   onStop: () => void | Promise<void>;
   busy: boolean;
   disabled: boolean;
+  sendDisabled?: boolean;
   modelUnavailable?: boolean;
   onOpenAiProviders?: () => void;
   statusLabel: string;
@@ -1593,9 +1594,9 @@ export function ReactSessionComposer(props: ComposerProps) {
                   <button
                     type="button"
                     onClick={canSend ? props.onSend : props.busy ? props.onStop : undefined}
-                    disabled={props.disabled || (!canSend && !props.busy)}
+                    disabled={(props.sendDisabled ?? props.disabled) || (!canSend && !props.busy)}
                     className={`inline-flex h-9 max-h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-medium transition-colors ${
-                      !canSend || props.disabled
+                      !canSend || (props.sendDisabled ?? props.disabled)
                         ? "bg-dls-hover/35 text-dls-secondary/65"
                         : "bg-[var(--dls-accent)] text-[var(--dls-accent-fg)] hover:bg-[var(--dls-accent-hover)]"
                     }`}
@@ -1809,7 +1810,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                   type="button"
                   className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[rgb(var(--dls-accent-rgb)/0.16)] px-2.5 text-xs font-semibold text-dls-text transition-colors hover:bg-[rgb(var(--dls-accent-rgb)/0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.35)]"
                   onClick={props.onOpenAiProviders}
-                  title="Connect a model provider to send messages"
+                  title="Connect a model for general chat. Complete reviewed-action commands can still open a local ticket."
                 >
                   <Plug size={12} />
                   Connect a model
