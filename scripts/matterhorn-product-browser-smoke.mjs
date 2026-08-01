@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
@@ -53,6 +52,10 @@ function parseArgs(argv = process.argv.slice(2)) {
       values.get("--url") ||
       process.env.MATTERHORN_PRODUCT_BROWSER_URL ||
       DEFAULT_URL,
+    serverUrl:
+      values.get("--server-url") ||
+      process.env.MATTERHORN_PRODUCT_BROWSER_SERVER_URL ||
+      "",
     outputDir: resolve(
       repoRoot,
       values.get("--output-dir") ||
@@ -72,6 +75,8 @@ Usage:
 
 Options:
   --url <url>          Matterhorn app URL. Defaults to the dev-generated-media-smoke app URL.
+  --server-url <url>   Engine URL when local development serves the API on a separate port.
+                       Production web deployments should omit this to use the app origin.
   --output-dir <dir>   Evidence directory. Default: ${DEFAULT_OUTPUT_DIR}
   --strict             Exit nonzero on smoke failure or browser console/page errors.
   --require-desk-results
@@ -164,15 +169,7 @@ function assertCurrentWorkspaceRoute(page, expectedWorkspaceId, label) {
   }
 }
 
-function organizationWorkspaceId(organizationId) {
-  const digest = createHash("sha256")
-    .update(`matterhorn-web-workspace:${organizationId}`)
-    .digest("hex")
-    .slice(0, 16);
-  return `ws_web_${digest}`;
-}
-
-async function createQaAccount(context, appUrl) {
+async function createQaAccount(context, appUrl, serverUrl = "") {
   const origin = new URL(appUrl).origin;
   const email = `product-smoke-${Date.now()}-${process.pid}@example.test`;
   const response = await context.request.post(
@@ -217,10 +214,37 @@ async function createQaAccount(context, appUrl) {
     );
   }
 
+  const workspacesResponse = await context.request.get(
+    new URL("/workspaces", serverUrl || origin).toString(),
+  );
+  const workspacesPayload = await workspacesResponse.json().catch(() => null);
+  if (!workspacesResponse.ok()) {
+    throw new Error(
+      `Fresh-user workspace provisioning failed (${workspacesResponse.status()}).`,
+    );
+  }
+  const workspaceId =
+    workspacesPayload &&
+    typeof workspacesPayload === "object" &&
+    typeof workspacesPayload.activeId === "string"
+      ? workspacesPayload.activeId.trim()
+      : "";
+  const items =
+    workspacesPayload &&
+    typeof workspacesPayload === "object" &&
+    Array.isArray(workspacesPayload.items)
+      ? workspacesPayload.items
+      : [];
+  if (!workspaceId || items.length !== 1 || items[0]?.id !== workspaceId) {
+    throw new Error(
+      "Fresh-user workspace provisioning did not return one isolated active workspace.",
+    );
+  }
+
   return {
     email,
     organizationId,
-    workspaceId: organizationWorkspaceId(organizationId),
+    workspaceId,
   };
 }
 
@@ -742,7 +766,11 @@ async function runSmoke(config) {
       "Establish the QA workspace identity",
       async () => {
         if (config.hostedAccount) {
-          const account = await createQaAccount(context, config.url);
+          const account = await createQaAccount(
+            context,
+            config.url,
+            config.serverUrl,
+          );
           config.url = workspaceUrlForId(config.url, account.workspaceId);
           report.url = config.url;
           report.artifacts.auth = {
@@ -761,7 +789,11 @@ async function runSmoke(config) {
             `Fixture smoke URL must contain a workspace id: ${config.url}`,
           );
         }
-        const account = await createQaAccount(context, config.url);
+        const account = await createQaAccount(
+          context,
+          config.url,
+          config.serverUrl,
+        );
         report.artifacts.auth = {
           mode: "fixture-workspace",
           freshAccount: true,
