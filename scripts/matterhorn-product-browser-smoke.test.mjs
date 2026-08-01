@@ -94,7 +94,7 @@ for (const visibleText of [
   "Check compliance",
   "Describe market",
   "Describe the market or trade",
-  "Review a SUI transfer",
+  "Review transfer fees",
   "7 stages",
   "Run in chat",
   "Start task",
