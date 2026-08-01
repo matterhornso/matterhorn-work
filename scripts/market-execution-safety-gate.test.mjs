@@ -175,7 +175,7 @@ assertNoSubmitRoute("Polymarket server routes", polymarketRoutes);
 
 const hyperliquidExecution = mustContain("apps/server/src/tools/hyperliquid-live-execution.ts", [
   "recoverTypedDataAddress",
-  "Wallet signature does not authorize this exact order intent",
+  "Wallet signature does not authorize this exact action intent",
   "oneTimeSubmission: true",
   "privateKeysAccepted: false",
   "apiSecretsAccepted: false",
@@ -186,8 +186,8 @@ const hyperliquidExecution = mustContain("apps/server/src/tools/hyperliquid-live
   "MATTERHORN_HYPERLIQUID_MAX_ORDER_USDC",
   "MAX_PENDING_INTENTS_PER_OWNER",
   "MAX_STORED_INTENTS",
-  "Too many pending order confirmations",
-  "order-review queue is temporarily full",
+  "Too many pending action confirmations",
+  "action-review queue is temporarily full",
   "different signed-in session",
   "this.lastNonce + 1",
 ]);
@@ -243,13 +243,15 @@ mustContain("docs/market-execution-readiness-security-gate.md", [
   "Connected-Wallet Hyperliquid Execution",
   "MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED",
   "SUBMIT LIVE ORDER",
-  "Polymarket remains read/preview only",
+  "Connected-Wallet Polymarket BUY Ticket",
+  "SUBMIT POLYMARKET ORDER",
+  "Polymarket agent and server tools remain read/preview only",
 ]);
 
 mustContain("docs/polymarket-read-preview.md", [
-  "External-Signer Execution",
-  "without Matterhorn ever holding a key, signing, submitting, or broadcasting",
-  "never the signature, API key, or submission",
+  "Agent And External-Handoff Execution",
+  "Separate browser-wallet BUY ticket",
+  "The tool layer produces economic terms only",
   "Private keys, API secrets, signatures, signed actions, or signed payloads",
   "canSubmit: false",
   "requiresClientValidation",

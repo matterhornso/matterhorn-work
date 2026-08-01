@@ -15,6 +15,7 @@ const {
   WELLNESS_DESK_ACTION_REGISTRY,
   MEMORY_DESK_ACTION_REGISTRY,
   MCPS_DESK_ACTION_REGISTRY,
+  DESK_TRANSACTION_LIFECYCLE_STAGES,
   getDeskActionManifest,
   listDeskActions,
   listAllDeskActionIds,
@@ -33,6 +34,14 @@ for (const token of [
   "DeskActionExecutionState",
   "DeskActionCardKind",
   "DeskActionSafetyBoundary",
+  "DeskActionUserCompletion",
+  "DeskActionUserCompletionSurface",
+  "DeskActionUserCompletionResult",
+  "DESK_ACTION_USER_COMPLETION_SURFACES",
+  "DESK_ACTION_USER_COMPLETION_RESULTS",
+  "DeskActionTransactionContract",
+  "defineDeskTransactionContract",
+  "user_authorized_submit",
   "DEFAULT_DESK_ACTION_SAFETY_BOUNDARY",
   "DESK_ACTION_REGISTRY",
   "BITTENSOR_DESK_ACTION_REGISTRY",
@@ -139,7 +148,77 @@ for (const deskId of ["hyperliquid", "polymarket", "sui"]) {
   }
 }
 
-// 8. Wellness actions are educational/non-medical and planned-not-live for live services.
+// 8. Financial actions expose a truthful, separate user-authorized completion path.
+const expectedFinancialCompletions = {
+  bittensor_prepare_stake: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+  bittensor_prepare_unstake: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+  bittensor_prepare_transfer: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+  hyperliquid_preview_order: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+  hyperliquid_cancel_order: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+  hyperliquid_modify_order: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+  hyperliquid_close_position: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+  polymarket_preview_trade: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+  polymarket_sell: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+  polymarket_cancel_order: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+  sui_transfer_preview: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+  sui_coin_transfer: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+  sui_object_transfer: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+  sui_batch_transfer: ["connected_wallet", "submitted_transaction", "user_authorized_submit"],
+};
+
+for (const [actionId, [surface, result, executionState]] of Object.entries(expectedFinancialCompletions)) {
+  const action = allActions.find((candidate) => candidate.id === actionId);
+  assert.ok(action, `${actionId} must exist`);
+  assert.deepEqual(
+    [action.userCompletion?.surface, action.userCompletion?.result],
+    [surface, result],
+    `${actionId} must declare its user-authorized completion`,
+  );
+  assert.equal(action.executionState, executionState, `${actionId} must expose its truthful execution state`);
+  assert.ok(action.userCompletion?.actionLabel, `${actionId} must label the completion action`);
+  assert.equal(action.safetyBoundary.canSubmit, false, `${actionId} agent must not submit`);
+  assert.equal(action.safetyBoundary.liveSubmissionEnabled, false, `${actionId} agent must not enable submission`);
+
+  const transaction = action.transaction;
+  assert.ok(transaction, `${actionId} must declare a transaction contract`);
+  assert.equal(transaction.version, "matterhorn.desk.transaction.contract.v1", `${actionId} must use the current transaction contract`);
+  assert.equal(transaction.agentCanSignOrSubmit, false, `${actionId} agent must never sign or submit`);
+  assert.equal(transaction.reviewRequired, true, `${actionId} must require review`);
+  assert.equal(transaction.approvalRequiredEveryTime, true, `${actionId} must require approval every time`);
+  assert.equal(transaction.receiptRequired, true, `${actionId} must require a public receipt`);
+  assert.equal(transaction.userCanCommitRealFunds, transaction.userCanComplete, `${actionId} completion and funds flags must agree`);
+  assert.ok(transaction.walletKinds.length > 0, `${actionId} must name at least one wallet kind`);
+  assert.ok(transaction.networks.length > 0, `${actionId} must name at least one network`);
+  assert.deepEqual(
+    transaction.lifecycle,
+    DESK_TRANSACTION_LIFECYCLE_STAGES,
+    `${actionId} must expose the complete transaction lifecycle`,
+  );
+  assert.equal(
+    transaction.availableInsideMatterhorn,
+    transaction.supportLevel === "connected_wallet",
+    `${actionId} must truthfully declare in-app completion`,
+  );
+}
+
+// 9. Workspace actions create a durable, non-financial result.
+for (const actionId of [
+  "wellness_build_program",
+  "wellness_generate_artifacts",
+  "wellness_package_service",
+  "memory_forget_record",
+  "memory_export",
+]) {
+  const action = allActions.find((candidate) => candidate.id === actionId);
+  assert.ok(action, `${actionId} must exist`);
+  assert.deepEqual(
+    [action.userCompletion?.surface, action.userCompletion?.result],
+    ["workspace", "workspace_output"],
+    `${actionId} must complete in the workspace`,
+  );
+}
+
+// 10. Wellness actions are educational/non-medical and planned-not-live for live services.
 const wellnessActions = Object.values(WELLNESS_DESK_ACTION_REGISTRY);
 const wellnessText = wellnessActions.map((a) => `${a.title} ${a.description}`).join(" ").toLowerCase();
 assert.ok(
@@ -152,7 +231,7 @@ assert.ok(
   "Wellness must have at least one planned_not_live action for live services",
 );
 
-// 9. MCPs desk actions expose install/use guidance only, no secrets.
+// 11. MCPs desk actions expose install/use guidance only, no secrets.
 const mcpsActions = Object.values(MCPS_DESK_ACTION_REGISTRY);
 const mcpsText = mcpsActions.map((a) => `${a.title} ${a.description}`).join(" ").toLowerCase();
 for (const forbidden of ["private key", "seed phrase", "api secret", "raw signature", "signed payload", "wallet export", "custody"]) {

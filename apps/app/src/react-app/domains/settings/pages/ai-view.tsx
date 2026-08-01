@@ -74,6 +74,7 @@ export type AiSettingsViewProps = {
   cudosBusy?: boolean;
   cudosStatus?: string | null;
   cudosError?: string | null;
+  providerCredentialsManaged?: boolean;
   onConnectCudos?: () => void | Promise<void>;
   pendingDeskTask?: { deskId: string; title: string } | null;
   onResumePendingDeskTask?: () => void | Promise<void>;
@@ -695,17 +696,21 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             <div className="flex flex-col gap-1">
               <LayoutSectionTitle>Model providers</LayoutSectionTitle>
               <LayoutSectionDescription>
-                Connect a provider account or API key you control.
+                {props.providerCredentialsManaged
+                  ? "Matterhorn manages the provider used by this web workspace."
+                  : "Connect a provider account or API key you control."}
               </LayoutSectionDescription>
             </div>
-            <Button
-              variant="outline"
-              onClick={() => void props.onOpenProviderAuth()}
-              disabled={props.busy || props.providerAuthBusy}
-            >
-              <Plus data-icon="inline-start" />
-              {props.providerAuthBusy ? "Loading..." : "Choose provider"}
-            </Button>
+            {!props.providerCredentialsManaged ? (
+              <Button
+                variant="outline"
+                onClick={() => void props.onOpenProviderAuth()}
+                disabled={props.busy || props.providerAuthBusy}
+              >
+                <Plus data-icon="inline-start" />
+                {props.providerAuthBusy ? "Loading..." : "Choose provider"}
+              </Button>
+            ) : null}
           </div>
         </LayoutSectionHeader>
 
@@ -725,28 +730,34 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                   ) : null}
                 </div>
                 <div className="text-xs leading-5 text-muted-foreground">
-                  {cudosConnected
-                    ? "7 models available"
-                    : "Connect your CUDOS API key to use seven models"}
+                  {props.providerCredentialsManaged
+                    ? cudosConnected
+                      ? "7 models available through Matterhorn"
+                      : "Unavailable in this deployment"
+                    : cudosConnected
+                      ? "7 models available"
+                      : "Connect your CUDOS API key to use seven models"}
                 </div>
               </div>
             </div>
-            <Button
-              variant={cudosConnected ? "outline" : "default"}
-              onClick={() => void props.onConnectCudos?.()}
-              disabled={
-                props.busy ||
-                props.providerAuthBusy ||
-                props.cudosBusy ||
-                !props.onConnectCudos
-              }
-            >
-              {props.cudosBusy
-                ? "Opening..."
-                : cudosConnected
-                  ? "Update CUDOS key"
-                  : "Add CUDOS API key"}
-            </Button>
+            {!props.providerCredentialsManaged ? (
+              <Button
+                variant={cudosConnected ? "outline" : "default"}
+                onClick={() => void props.onConnectCudos?.()}
+                disabled={
+                  props.busy ||
+                  props.providerAuthBusy ||
+                  props.cudosBusy ||
+                  !props.onConnectCudos
+                }
+              >
+                {props.cudosBusy
+                  ? "Opening..."
+                  : cudosConnected
+                    ? "Update CUDOS key"
+                    : "Add CUDOS API key"}
+              </Button>
+            ) : null}
           </div>
 
           {otherConnectedProviders.map((provider) => {
@@ -762,6 +773,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 <div className="flex min-w-0 items-center gap-3">
                   <ProviderIcon
                     providerId={provider.id}
+                    providerName={providerName}
                     size={20}
                     className="text-dls-text"
                   />

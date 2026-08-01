@@ -736,13 +736,28 @@ export type MatterhornSuiBalanceResponse = {
   balance: MatterhornSuiBalanceSnapshot;
 };
 
-export type MatterhornSuiTransferPreviewInput = {
-  network?: MatterhornSuiNetwork;
-  kind?: "transfer_sui";
-  sender: string;
+export type MatterhornSuiTransactionKind =
+  | "transfer_sui"
+  | "transfer_coin"
+  | "transfer_object"
+  | "batch_transfer_sui";
+
+export type MatterhornSuiBatchTransferInput = {
   recipient: string;
   amountMist?: string | number;
   amountSui?: string | number;
+};
+
+export type MatterhornSuiTransferPreviewInput = {
+  network?: MatterhornSuiNetwork;
+  kind?: MatterhornSuiTransactionKind;
+  sender: string;
+  recipient?: string;
+  amountMist?: string | number;
+  amountSui?: string | number;
+  coinType?: string;
+  objectId?: string;
+  transfers?: MatterhornSuiBatchTransferInput[];
   memo?: string;
 };
 
@@ -751,15 +766,22 @@ export type MatterhornSuiTransactionPreview = {
   id: string;
   family: "sui";
   network: MatterhornSuiNetwork;
-  kind: "transfer_sui";
+  kind: MatterhornSuiTransactionKind;
   sender: string;
-  recipient: string;
-  amountMist: string;
-  amountSui: string;
+  recipient?: string;
+  amountMist?: string;
+  amountSui?: string;
+  coinType?: string;
+  objectId?: string;
+  transfers?: Array<{
+    recipient: string;
+    amountMist: string;
+    amountSui: string;
+  }>;
   memo?: string;
   custody: false;
-  canSubmit: false;
-  liveSubmissionEnabled: false;
+  canSubmit: true;
+  liveSubmissionEnabled: true;
   signerPolicy: "client_wallet_required";
   requiresWalletStandard: true;
   previewSha256: string;
@@ -771,10 +793,17 @@ export type MatterhornSuiTransactionPreview = {
     network: MatterhornSuiNetwork;
     chain: `sui:${MatterhornSuiNetwork}`;
     unsignedIntent: {
-      kind: "transfer_sui";
+      kind: MatterhornSuiTransactionKind;
       sender: string;
-      recipient: string;
-      amountMist: string;
+      recipient?: string;
+      amountMist?: string;
+      coinType?: string;
+      objectId?: string;
+      transfers?: Array<{
+        recipient: string;
+        amountMist: string;
+        amountSui: string;
+      }>;
     };
   };
   warnings: string[];
@@ -1428,6 +1457,7 @@ async function requestJson<T>(
       method: options.method ?? "GET",
       headers: buildHeaders(options.token, options.hostToken),
       body: options.body ? JSON.stringify(options.body) : undefined,
+      credentials: "same-origin",
     },
     options.timeoutMs ?? DEFAULT_OPENWORK_SERVER_TIMEOUT_MS,
   );
@@ -1470,6 +1500,7 @@ async function requestMultipartRaw(
       method: options.method ?? "POST",
       headers: buildAuthHeaders(options.token, options.hostToken),
       body: options.body,
+      credentials: "same-origin",
     },
     options.timeoutMs ?? DEFAULT_OPENWORK_SERVER_TIMEOUT_MS,
   );
@@ -2399,6 +2430,16 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           timeoutMs: timeouts.config,
         },
       ),
+    workflowTemplates: () =>
+      requestJson<{
+        ok?: boolean;
+        version?: string;
+        customerTemplates?: unknown[];
+      }>(baseUrl, "/api/workflows/templates", {
+        token,
+        hostToken,
+        timeoutMs: timeouts.status,
+      }),
     listWorkflowRuns: (options?: {
       workspaceId?: string;
       sessionId?: string;

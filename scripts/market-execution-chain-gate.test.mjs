@@ -65,11 +65,10 @@ for (const required of [
 for (const required of [
   "market_execution_chain",
   "matterhorn.market.execution-chain-guide.v1",
-  "agent draft, exact-term wallet ticket",
-  "artifact reconciliation",
-  "public receipt import",
-  "Can submit: No",
-  "Live submission: Off",
+  "connected wallet authorizes each supported submission",
+  "legacy evidence chain",
+  "exact-term connected-wallet ticket",
+  "public/redacted inputs",
 ]) {
   assert.ok(cryptoChat.includes(required) || cryptoChatTest.includes(required), `unified crypto chat should expose safe execution-chain context: ${required}`);
 }

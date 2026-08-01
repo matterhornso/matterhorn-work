@@ -279,7 +279,7 @@ describe("Wallet approval security contract", () => {
 
     expect(panelSource).toContain("Place a perpetual order");
     expect(panelSource).toContain("signTypedDataAsync(intent.typedData)");
-    expect(panelSource).toContain("/api/hyperliquid/orders/execution-intent");
+    expect(panelSource).toContain("/api/hyperliquid/actions/execution-intent");
     expect(panelSource).toContain("/api/hyperliquid/orders/submit");
     expect(panelSource).toContain("Agent prompts never auto-execute");
     expect(readinessSource).toContain(
@@ -289,7 +289,7 @@ describe("Wallet approval security contract", () => {
     expect(serverSource).toContain("hyperliquid_execution_disabled");
     expect(executionSource).toContain("recoverTypedDataAddress");
     expect(executionSource).toContain(
-      "Wallet signature does not authorize this exact order intent",
+      "Wallet signature does not authorize this exact action intent",
     );
     expect(executionSource).toContain("oneTimeSubmission: true");
     expect(executionSource).toContain("privateKeysAccepted: false");

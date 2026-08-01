@@ -110,16 +110,27 @@ matterhorn-work polymarket watch act \
 
 `watch act` only converts a triggered/degraded watch into a deterministic read-only crypto-chat review. It does not sign, submit, broadcast, auto-execute, or accept API secrets, private keys, raw signatures, or signed payloads.
 
-## External-Signer Execution (non-custodial)
+## Agent And External-Handoff Execution (non-custodial)
 
-Users can take a preview live **without Matterhorn ever holding a key, signing, submitting, or broadcasting**. The flow mirrors the shared `external_signer_required` / `MarketReceipt` contract:
+Agent, MCP, CLI, watch, and server routes never submit. Their flow mirrors the shared `external_signer_required` / `MarketReceipt` contract:
 
 1. **Preview** → an `unsigned_preview` (`canSubmit: false`).
 2. **Signing handoff** — `buildPolymarketSigningHandoff(preview)` produces a `PolymarketSigningHandoff`: the public order terms, the EIP-712 signing scheme (Polymarket CLOB on Polygon, chain 137), a `previewSha256` binding, a `handoffSha256`, and an expiry. `externalSignerOnly: true`, `canSubmit: false`. It refuses a compliance-blocked preview and never fabricates a signature.
-3. **The user signs and submits with their own wallet**, entirely outside Matterhorn (via Polymarket's official CLOB client). Matterhorn produces the economic terms only — never the signature, API key, or submission.
+3. **The user signs and submits with their own wallet**, either in an eligible browser-wallet ticket described below or outside Matterhorn. The tool layer produces economic terms only — never the signature, API key, or submission.
 4. **Receipt verification** — `verifyPolymarketReceipt(handoff, receipt)` validates a returned **public** receipt (order id / tx hash / status) against the handoff hashes, market, outcome, and side, and emits a `MarketReceipt`-shaped result. It **rejects any signing material** in the receipt (raw signatures / signed payloads are never accepted).
 
-Matterhorn stays non-custodial end to end: no key import, no API-secret storage, no signing, no broadcasting, and no acceptance of signing material on the way back in. `liveSubmissionEnabled` for Matterhorn remains `false` — the **user** executes, not Matterhorn.
+Matterhorn stays non-custodial end to end: no key import, no server-side API-secret storage, no server signing, and no acceptance of signing material on the way back in. `liveSubmissionEnabled` for the agent/tool artifact remains `false`.
+
+### Separate browser-wallet BUY ticket
+
+The web app also has a separate, explicitly reviewed ticket for eligible EOA BUY orders. It is not an agent, MCP, CLI, watch, or server submit capability.
+
+- A fresh server preview must identify the exact market, outcome, CLOB token, USDC spend, maximum loss, public hash, compliance result, and expiry.
+- Compliance must be `allowed`; blocked or unknown results fail closed.
+- The user connects an EOA wallet on Polygon and types `SUBMIT POLYMARKET ORDER`.
+- The official `@polymarket/clob-client` creates temporary browser-local credentials and submits a BUY FAK market order.
+- Temporary credentials are cleared immediately after the attempt. Only a public receipt is sent back to Matterhorn's server.
+- Sell orders, proxy accounts, agents, watches, automatic submission, and unattended retries are not supported.
 
 ### EIP-712 order typed-data (opt-in, validation-gated)
 
@@ -133,7 +144,7 @@ Config: `POLYMARKET_EXCHANGE_ADDRESS` (required to emit typed-data), `POLYMARKET
 
 ## Security Posture
 
-The tool was adversarially audited (12-probe sweep, codified as regression tests). It is read-only + preview-only, so there are no smart contracts, custody, signing, or key handling in this code — the only key material it touches is material it **rejects**.
+The tool layer was adversarially audited (12-probe sweep, codified as regression tests). It is read-only + preview-only, so there are no smart contracts, custody, signing, or key handling in that layer — the only key material it touches is material it **rejects**. The separate browser ticket has its own wallet, chain, compliance, expiry, exact-review, and credential-cleanup tests.
 
 | Surface | Risk | Mitigation |
 | --- | --- | --- |
@@ -142,7 +153,8 @@ The tool was adversarially audited (12-probe sweep, codified as regression tests
 | Provider reads | SSRF / path traversal via market/token id | `encodeURIComponent` on ids; host only from fixed config base URLs |
 | Market mapping & watch | Hostile `__proto__` outcome label | `__proto__`/`constructor`/`prototype` labels skipped — no prototype pollution |
 | Preview math | Hostile orderbook / dates (negative, NaN, unparseable) | Non-finite filtered on parse; `Date.parse` guarded; division guarded |
-| Order submission | A live-trade path slipping in | No HTTP `POST`, no signing, no submit route; every preview `canSubmit: false` (allowed and blocked); statically asserted by the readiness gate |
+| Agent/tool submission | A live-trade path slipping into automation | No server submit route; every tool preview keeps `canSubmit: false`; statically asserted by the readiness gate |
+| Browser-wallet ticket | Changed or unattended live order | Separate UI only; exact unexpired review, allowed compliance, Polygon EOA wallet, typed confirmation, BUY-only FAK order, and immediate credential cleanup |
 
 Forbidden values are never echoed in errors, logs, reports, or test snapshots. Known heuristic limits: phrases under 12 words, Unicode-homoglyph keys, and `Symbol`-keyed secrets are not flagged (JSON/HTTP payloads cannot carry `Symbol` keys). `responseText`/cards carry untrusted third-party strings (Gamma questions) — the renderer must escape them; this module returns data only.
 
@@ -156,7 +168,7 @@ pnpm test:polymarket-read-preview-qa
 node scripts/polymarket-read-preview-qa.mjs --self-test --strict --json
 ```
 
-The QA harness self-test runs offline with mocked Gamma/CLOB/geoblock endpoints; without `--self-test` it makes read-only requests to the public Polymarket endpoints. It checks discovery, market detail, orderbook, geoblock, a preview-only order (`canSubmit: false`; blocked compliance yields no executable price/size), and credential-shaped payload rejection. The readiness gate statically asserts the tool keeps `canSubmit: false`, exposes no submit/sign/exchange route, and rejects the full forbidden-credential vocabulary.
+The QA harness self-test runs offline with mocked Gamma/CLOB/geoblock endpoints; without `--self-test` it makes read-only requests to the public Polymarket endpoints. It checks discovery, market detail, orderbook, geoblock, a preview-only order (`canSubmit: false`; blocked compliance yields no executable price/size), and credential-shaped payload rejection. The readiness gate statically asserts the tool keeps `canSubmit: false`, exposes no server submit/sign route, rejects the full forbidden-credential vocabulary, and confines browser submission to the reviewed ticket.
 
 ## Scope Notes
 

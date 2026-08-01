@@ -84,7 +84,13 @@ describe("Matterhorn desk agent architecture", () => {
   });
 
   test("requires typed wallet-review cards for complete protocol action requests", () => {
-    for (const deskId of ["bittensor", "hyperliquid", "polymarket"] as const) {
+    const bittensor = MATTERHORN_DESK_AGENT_MANIFESTS.bittensor;
+    expect(bittensor.toolPolicy.work).toContain("matterhorn-work_matterhorn_bittensor_chat");
+    expect(bittensor.instructions).toContain("call the bounded Bittensor action tool exactly once");
+    expect(bittensor.instructions).toContain("Review in wallet");
+    expect(bittensor.instructions).toContain("do not replace it with a prose-only");
+
+    for (const deskId of ["hyperliquid", "polymarket"] as const) {
       const agent = MATTERHORN_DESK_AGENT_MANIFESTS[deskId];
       expect(agent.toolPolicy.work).toContain("matterhorn-work_matterhorn_crypto_chat");
       expect(agent.instructions).toContain("you MUST call matterhorn-work_matterhorn_crypto_chat exactly once");
@@ -103,8 +109,13 @@ describe("Matterhorn desk agent architecture", () => {
         "utf8",
       );
 
-      expect(checkedIn).toContain('"matterhorn-work_matterhorn_crypto_chat": true');
-      expect(checkedIn).toContain("you MUST call matterhorn-work_matterhorn_crypto_chat exactly once");
+      if (deskId === "bittensor") {
+        expect(checkedIn).toContain('"matterhorn-work_matterhorn_bittensor_chat": true');
+        expect(checkedIn).toContain("call the bounded Bittensor action tool exactly once");
+      } else {
+        expect(checkedIn).toContain('"matterhorn-work_matterhorn_crypto_chat": true');
+        expect(checkedIn).toContain("you MUST call matterhorn-work_matterhorn_crypto_chat exactly once");
+      }
       expect(checkedIn).toContain("typed Review in wallet card");
     }
   });

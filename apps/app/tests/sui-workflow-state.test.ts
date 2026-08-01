@@ -56,6 +56,32 @@ describe("Sui workflow state", () => {
     expect(result.nextAction).toBe("prepare_preview");
   });
 
+  test("uses transaction-specific readiness for coin, object, and batch actions", () => {
+    const blocked = getSuiWorkflowAvailability({
+      ...READY_INPUT,
+      recipient: "",
+      amountSui: "",
+      transactionDetailsReady: false,
+      transactionDetailsReason: "Add at least two valid recipients and amounts.",
+    });
+    const ready = getSuiWorkflowAvailability({
+      ...READY_INPUT,
+      recipient: "",
+      amountSui: "",
+      transactionDetailsReady: true,
+    });
+
+    expect(blocked).toMatchObject({
+      canPreparePreview: false,
+      preparePreviewReason: "Add at least two valid recipients and amounts.",
+    });
+    expect(ready).toMatchObject({
+      canPreparePreview: true,
+      preparePreviewReason: null,
+      nextAction: "prepare_preview",
+    });
+  });
+
   test("requires the connected Sui wallet to match the handoff sender", () => {
     const result = getSuiWorkflowAvailability({
       ...READY_INPUT,

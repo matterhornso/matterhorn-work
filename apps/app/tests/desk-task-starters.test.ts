@@ -41,6 +41,32 @@ describe("desk task starters", () => {
     expect(sessionDeskSource).not.toContain("MATTERHORN_DESK_EMPTY_PROMPTS");
   });
 
+  test("routes serious desk actions to reviewed tickets without requiring a model", () => {
+    expect(MATTERHORN_DESK_TASK_STARTERS.hyperliquid.find((starter) => starter.id === "order-preview")).toMatchObject({ reviewedAction: "hyperliquid", reviewedActionOperation: "place_order" });
+    expect(MATTERHORN_DESK_TASK_STARTERS.hyperliquid.find((starter) => starter.id === "cancel-order")).toMatchObject({ reviewedAction: "hyperliquid", reviewedActionOperation: "cancel_order" });
+    expect(MATTERHORN_DESK_TASK_STARTERS.hyperliquid.find((starter) => starter.id === "modify-order")).toMatchObject({ reviewedAction: "hyperliquid", reviewedActionOperation: "modify_order" });
+    expect(MATTERHORN_DESK_TASK_STARTERS.hyperliquid.find((starter) => starter.id === "close-position")).toMatchObject({ reviewedAction: "hyperliquid", reviewedActionOperation: "close_position" });
+    expect(MATTERHORN_DESK_TASK_STARTERS.polymarket.find((starter) => starter.id === "preview-trade")).toMatchObject({ reviewedAction: "polymarket", reviewedActionOperation: "buy" });
+    expect(MATTERHORN_DESK_TASK_STARTERS.polymarket.find((starter) => starter.id === "sell-shares")).toMatchObject({ reviewedAction: "polymarket", reviewedActionOperation: "sell" });
+    expect(MATTERHORN_DESK_TASK_STARTERS.polymarket.find((starter) => starter.id === "cancel-order")).toMatchObject({ reviewedAction: "polymarket", reviewedActionOperation: "cancel" });
+    expect(MATTERHORN_DESK_TASK_STARTERS.polymarket.find((starter) => starter.id === "discover-markets")?.reviewedAction).toBeUndefined();
+    expect(MATTERHORN_DESK_TASK_STARTERS.bittensor.find((starter) => starter.id === "stake-preview")).toMatchObject({ reviewedAction: "bittensor", reviewedActionOperation: "stake" });
+    expect(MATTERHORN_DESK_TASK_STARTERS.bittensor.find((starter) => starter.id === "unstake-preview")).toMatchObject({ reviewedAction: "bittensor", reviewedActionOperation: "unstake" });
+    expect(MATTERHORN_DESK_TASK_STARTERS.bittensor.find((starter) => starter.id === "transfer-preview")).toMatchObject({ reviewedAction: "bittensor", reviewedActionOperation: "transfer" });
+    expect(MATTERHORN_DESK_TASK_STARTERS.sui.find((starter) => starter.id === "sui-transfer-preview")).toMatchObject({ reviewedAction: "sui", reviewedActionOperation: "transfer_sui" });
+    expect(MATTERHORN_DESK_TASK_STARTERS.sui.find((starter) => starter.id === "token-transfer-preview")).toMatchObject({ reviewedAction: "sui", reviewedActionOperation: "transfer_coin" });
+    expect(MATTERHORN_DESK_TASK_STARTERS.sui.find((starter) => starter.id === "object-transfer")).toMatchObject({ reviewedAction: "sui", reviewedActionOperation: "transfer_object" });
+    expect(MATTERHORN_DESK_TASK_STARTERS.sui.find((starter) => starter.id === "batch-transfer")).toMatchObject({ reviewedAction: "sui", reviewedActionOperation: "batch_transfer_sui" });
+
+    const focusedDeskSource = readFileSync(
+      new URL("../src/react-app/domains/session/chat/session-page.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(focusedDeskSource).toContain("onOpenReviewedAction(item.reviewedAction, item.reviewedActionOperation)");
+    expect(focusedDeskSource).toContain("openReviewedAction={reviewedActionEntryProtocol === visibleSidePanel}");
+    expect(focusedDeskSource).toContain("!opensReviewedAction && startTaskBlocked");
+  });
+
   test("keeps market and wallet starter tasks within their declared safety boundaries", () => {
     const polymarketPrompts = MATTERHORN_DESK_TASK_STARTERS.polymarket.map((starter) => starter.prompt).join(" ");
     const hyperliquidPrompts = MATTERHORN_DESK_TASK_STARTERS.hyperliquid.map((starter) => starter.prompt).join(" ");
@@ -48,14 +74,22 @@ describe("desk task starters", () => {
     const suiPrompts = MATTERHORN_DESK_TASK_STARTERS.sui.map((starter) => starter.prompt).join(" ");
 
     expect(polymarketPrompts).toContain("Agent draft non-submittable");
-    expect(polymarketPrompts).toContain("separate connected-wallet trade ticket");
-    expect(polymarketPrompts).toContain("eligible EOA BUY order");
+    expect(polymarketPrompts).toContain("connected-wallet trade ticket");
+    expect(polymarketPrompts).toContain("Polymarket SELL order");
+    expect(polymarketPrompts).toContain("Polymarket order cancellation");
     expect(polymarketPrompts).toContain("Never place or auto-execute a bet");
     expect(polymarketPrompts).toContain("describe market or trade");
     expect(polymarketPrompts).not.toContain("<paste market URL or slug>");
     expect(hyperliquidPrompts).toContain("dedicated trade ticket");
     expect(hyperliquidPrompts).toContain("connected-wallet approval");
-    expect(bittensorPrompts).toContain("external Bittensor-compatible signer");
+    expect(hyperliquidPrompts).toContain("Cancel a Hyperliquid order");
+    expect(hyperliquidPrompts).toContain("Modify a Hyperliquid order");
+    expect(hyperliquidPrompts).toContain("Close a Hyperliquid position");
+    expect(bittensorPrompts).toContain("Bittensor stake transaction");
+    expect(bittensorPrompts).toContain("Bittensor unstake transaction");
+    expect(bittensorPrompts).toContain("installed wallet reviews, signs, and broadcasts");
     expect(suiPrompts).toContain("connected Sui wallet on web");
+    expect(suiPrompts).toContain("Sui object transfer");
+    expect(suiPrompts).toContain("batch SUI transfer");
   });
 });

@@ -1,3 +1,8 @@
+import {
+  defineDeskTransactionContract,
+  type DeskActionTransactionContract,
+} from "./desk-transactions";
+
 // Desk Action Manifest contract for production Desk V2 action surfaces.
 // This file defines every action a user can invoke from a desk launcher or chat thread,
 // including required context, safety boundaries, execution state, prompt templates,
@@ -6,6 +11,7 @@
 export const DESK_ACTION_EXECUTION_STATES = [
   "live_read",
   "preview_only",
+  "user_authorized_submit",
   "external_signer_required",
   "planned_not_live",
 ] as const;
@@ -22,6 +28,27 @@ export const DESK_ACTION_CARD_KINDS = [
   "empty_card",
 ] as const;
 export type DeskActionCardKind = (typeof DESK_ACTION_CARD_KINDS)[number];
+
+export const DESK_ACTION_USER_COMPLETION_SURFACES = [
+  "connected_wallet",
+  "external_signer",
+  "workspace",
+] as const;
+export type DeskActionUserCompletionSurface = (typeof DESK_ACTION_USER_COMPLETION_SURFACES)[number];
+
+export const DESK_ACTION_USER_COMPLETION_RESULTS = [
+  "submitted_transaction",
+  "public_receipt",
+  "workspace_output",
+] as const;
+export type DeskActionUserCompletionResult = (typeof DESK_ACTION_USER_COMPLETION_RESULTS)[number];
+
+export interface DeskActionUserCompletion {
+  surface: DeskActionUserCompletionSurface;
+  actionLabel: string;
+  result: DeskActionUserCompletionResult;
+  featureGate?: string;
+}
 
 export interface DeskActionSafetyBoundary {
   liveSubmissionEnabled: false;
@@ -51,6 +78,16 @@ export interface DeskActionManifest {
   mcpToolHints?: string[];
   cliCommandHints?: string[];
   resultCardKinds: DeskActionCardKind[];
+  /**
+   * Describes the separate, user-authorized completion surface. The agent safety
+   * boundary above remains authoritative: agents never sign or submit.
+   */
+  userCompletion?: DeskActionUserCompletion;
+  /**
+   * Describes the complete user transaction path. This is deliberately
+   * separate from the agent boundary: the agent prepares, the user approves.
+   */
+  transaction?: DeskActionTransactionContract;
 }
 
 export const DEFAULT_DESK_ACTION_SAFETY_BOUNDARY: DeskActionSafetyBoundary = {
@@ -143,57 +180,100 @@ export const BITTENSOR_PREPARE_STAKE_ACTION: DeskActionManifest = {
   version: "matterhorn.desk.action.manifest.v1",
   id: "bittensor_prepare_stake",
   deskId: "bittensor",
-  title: "Prepare stake handoff",
-  description: "Build an external-signer handoff to stake TAO with a validator. Matterhorn never holds the key.",
+  title: "Review TAO stake",
+  description: "Prepare the exact stake, then review, sign, and broadcast it with a connected Bittensor wallet.",
   requiredContextFields: ["ss58Address", "amount", "validatorHotkey"],
   optionalContextFields: ["subnetId"],
-  safetyBoundary: {
-    ...DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
-    requiresExternalSigner: true,
-  },
-  executionState: "external_signer_required",
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "user_authorized_submit",
   promptTemplate: "Prepare staking {amount} TAO with {validatorHotkey}",
   mcpToolHints: ["bittensor_prepare_stake_handoff"],
   cliCommandHints: ["matterhorn-work bittensor stake-handoff --amount {amount} --validator {validatorHotkey}"],
-  resultCardKinds: ["preview_card", "handoff_card"],
+  resultCardKinds: ["preview_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Review and submit in wallet",
+    result: "submitted_transaction",
+    featureGate: "bittensor_wallet",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "bittensor",
+    family: "bittensor_stake",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "connected_wallet",
+    simulationPolicy: "required",
+    walletKinds: ["polkadot_extension"],
+    networks: ["finney"],
+    limitations: ["Requires a compatible injected Bittensor wallet and final wallet approval."],
+  }),
 };
 
 export const BITTENSOR_PREPARE_UNSTAKE_ACTION: DeskActionManifest = {
   version: "matterhorn.desk.action.manifest.v1",
   id: "bittensor_prepare_unstake",
   deskId: "bittensor",
-  title: "Prepare unstake handoff",
-  description: "Build an external-signer handoff to unstake TAO. Matterhorn never holds the key.",
+  title: "Review TAO unstake",
+  description: "Prepare the exact unstake, then review, sign, and broadcast it with a connected Bittensor wallet.",
   requiredContextFields: ["ss58Address", "amount", "validatorHotkey"],
   optionalContextFields: ["subnetId"],
-  safetyBoundary: {
-    ...DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
-    requiresExternalSigner: true,
-  },
-  executionState: "external_signer_required",
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "user_authorized_submit",
   promptTemplate: "Prepare unstaking {amount} TAO from {validatorHotkey}",
   mcpToolHints: ["bittensor_prepare_unstake_handoff"],
   cliCommandHints: ["matterhorn-work bittensor unstake-handoff --amount {amount} --validator {validatorHotkey}"],
-  resultCardKinds: ["preview_card", "handoff_card"],
+  resultCardKinds: ["preview_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Review and submit in wallet",
+    result: "submitted_transaction",
+    featureGate: "bittensor_wallet",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "bittensor",
+    family: "bittensor_unstake",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "connected_wallet",
+    simulationPolicy: "required",
+    walletKinds: ["polkadot_extension"],
+    networks: ["finney"],
+    limitations: ["Requires a compatible injected Bittensor wallet and final wallet approval."],
+  }),
 };
 
 export const BITTENSOR_PREPARE_TRANSFER_ACTION: DeskActionManifest = {
   version: "matterhorn.desk.action.manifest.v1",
   id: "bittensor_prepare_transfer",
   deskId: "bittensor",
-  title: "Prepare transfer handoff",
-  description: "Build an external-signer handoff to transfer TAO. Matterhorn never holds the key.",
+  title: "Review TAO transfer",
+  description:
+    "Prepare the exact Finney transfer, then review, sign, and broadcast it with a connected Bittensor wallet. Matterhorn never holds the key.",
   requiredContextFields: ["fromSs58Address", "toSs58Address", "amount"],
   optionalContextFields: ["memo"],
   safetyBoundary: {
     ...DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
-    requiresExternalSigner: true,
+    requiresExternalSigner: false,
   },
-  executionState: "external_signer_required",
+  executionState: "user_authorized_submit",
   promptTemplate: "Prepare transferring {amount} TAO to {toSs58Address}",
   mcpToolHints: ["bittensor_prepare_transfer_handoff"],
   cliCommandHints: ["matterhorn-work bittensor transfer-handoff --to {toSs58Address} --amount {amount}"],
-  resultCardKinds: ["preview_card", "handoff_card"],
+  resultCardKinds: ["preview_card", "handoff_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Review and submit in wallet",
+    result: "submitted_transaction",
+    featureGate: "bittensor_wallet",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "bittensor",
+    family: "bittensor_transfer",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "connected_wallet",
+    simulationPolicy: "required",
+    walletKinds: ["polkadot_extension"],
+    networks: ["finney"],
+    limitations: ["Requires a compatible injected Bittensor wallet and final wallet approval."],
+  }),
 };
 
 export const BITTENSOR_CREATE_WATCH_ACTION: DeskActionManifest = {
@@ -330,17 +410,126 @@ export const HYPERLIQUID_PREVIEW_ORDER_ACTION: DeskActionManifest = {
   version: "matterhorn.desk.action.manifest.v1",
   id: "hyperliquid_preview_order",
   deskId: "hyperliquid",
-  title: "Preview order",
+  title: "Prepare order",
   description:
-    "Preview a Hyperliquid order without submitting it. To place it, review the exact order in the separate trade ticket and approve its short-lived intent with your connected wallet.",
+    "Prepare the exact Hyperliquid order, then review it in the trade ticket and approve its short-lived intent with your connected wallet.",
   requiredContextFields: ["symbol", "side", "size"],
   optionalContextFields: ["price", "orderType"],
   safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
-  executionState: "preview_only",
-  promptTemplate: "Preview a {side} {size} {symbol} order on Hyperliquid",
+  executionState: "user_authorized_submit",
+  promptTemplate: "Prepare a {side} {size} {symbol} order on Hyperliquid",
   mcpToolHints: ["hyperliquid_preview_order"],
   cliCommandHints: ["matterhorn-work hyperliquid preview-order --symbol {symbol} --side {side} --size {size}"],
-  resultCardKinds: ["preview_card"],
+  resultCardKinds: ["preview_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Review, sign, and submit",
+    result: "submitted_transaction",
+    featureGate: "hyperliquid_execution",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "hyperliquid",
+    family: "hyperliquid_order",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "matterhorn_after_signature",
+    simulationPolicy: "required",
+    walletKinds: ["evm_wallet"],
+    networks: ["hyperliquid-testnet", "hyperliquid-mainnet"],
+    limitations: ["Current ticket supports market and limit orders with bounded slippage and notional."],
+  }),
+};
+
+export const HYPERLIQUID_CANCEL_ORDER_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "hyperliquid_cancel_order",
+  deskId: "hyperliquid",
+  title: "Cancel order",
+  description: "Review one open order by ID, then authorize its cancellation with the connected wallet.",
+  requiredContextFields: ["symbol", "orderId"],
+  optionalContextFields: ["network"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "user_authorized_submit",
+  promptTemplate: "Cancel Hyperliquid order {orderId} for {symbol}",
+  mcpToolHints: ["hyperliquid_cancel_order"],
+  resultCardKinds: ["preview_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Review, sign, and cancel",
+    result: "submitted_transaction",
+    featureGate: "hyperliquid_execution",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "hyperliquid",
+    family: "hyperliquid_cancel_order",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "matterhorn_after_signature",
+    simulationPolicy: "required",
+    walletKinds: ["evm_wallet"],
+    networks: ["hyperliquid-testnet", "hyperliquid-mainnet"],
+    limitations: ["The cancellation is bound to the exact reviewed order ID."],
+  }),
+};
+
+export const HYPERLIQUID_MODIFY_ORDER_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "hyperliquid_modify_order",
+  deskId: "hyperliquid",
+  title: "Modify order",
+  description: "Review replacement terms for an open order, then authorize the exact modification.",
+  requiredContextFields: ["symbol", "orderId", "side", "size", "orderType"],
+  optionalContextFields: ["price", "network", "reduceOnly"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "user_authorized_submit",
+  promptTemplate: "Modify Hyperliquid order {orderId} for {symbol}",
+  mcpToolHints: ["hyperliquid_modify_order"],
+  resultCardKinds: ["preview_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Review, sign, and modify",
+    result: "submitted_transaction",
+    featureGate: "hyperliquid_execution",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "hyperliquid",
+    family: "hyperliquid_modify_order",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "matterhorn_after_signature",
+    simulationPolicy: "required",
+    walletKinds: ["evm_wallet"],
+    networks: ["hyperliquid-testnet", "hyperliquid-mainnet"],
+    limitations: ["The reviewed modification replaces one exact open order."],
+  }),
+};
+
+export const HYPERLIQUID_CLOSE_POSITION_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "hyperliquid_close_position",
+  deskId: "hyperliquid",
+  title: "Close position",
+  description: "Review a reduce-only close for the selected position size, then authorize it with the connected wallet.",
+  requiredContextFields: ["symbol", "side", "size"],
+  optionalContextFields: ["network", "slippageBps"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "user_authorized_submit",
+  promptTemplate: "Close {size} {symbol} on Hyperliquid",
+  mcpToolHints: ["hyperliquid_close_position"],
+  resultCardKinds: ["preview_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Review, sign, and close",
+    result: "submitted_transaction",
+    featureGate: "hyperliquid_execution",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "hyperliquid",
+    family: "hyperliquid_close_position",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "matterhorn_after_signature",
+    simulationPolicy: "required",
+    walletKinds: ["evm_wallet"],
+    networks: ["hyperliquid-testnet", "hyperliquid-mainnet"],
+    limitations: ["Position closing uses a reduce-only IOC order within the reviewed slippage bound."],
+  }),
 };
 
 export const HYPERLIQUID_EXTERNAL_SIGNER_HANDOFF_ACTION: DeskActionManifest = {
@@ -360,7 +549,23 @@ export const HYPERLIQUID_EXTERNAL_SIGNER_HANDOFF_ACTION: DeskActionManifest = {
   promptTemplate: "Prepare a {side} {size} {symbol} handoff on Hyperliquid",
   mcpToolHints: ["hyperliquid_prepare_handoff"],
   cliCommandHints: ["matterhorn-work hyperliquid handoff --symbol {symbol} --side {side} --size {size}"],
-  resultCardKinds: ["preview_card", "handoff_card"],
+  resultCardKinds: ["preview_card", "handoff_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Review, sign, and submit",
+    result: "submitted_transaction",
+    featureGate: "hyperliquid_execution",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "hyperliquid",
+    family: "hyperliquid_order",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "matterhorn_after_signature",
+    simulationPolicy: "required",
+    walletKinds: ["evm_wallet"],
+    networks: ["hyperliquid-testnet", "hyperliquid-mainnet"],
+    limitations: ["The user must approve the exact short-lived order intent in the connected wallet."],
+  }),
 };
 
 export const HYPERLIQUID_CREATE_WATCH_ACTION: DeskActionManifest = {
@@ -465,16 +670,95 @@ export const POLYMARKET_PREVIEW_TRADE_ACTION: DeskActionManifest = {
   version: "matterhorn.desk.action.manifest.v1",
   id: "polymarket_preview_trade",
   deskId: "polymarket",
-  title: "Preview trade",
-  description: "Preview a Polymarket trade without placing it.",
+  title: "Prepare trade",
+  description:
+    "Prepare an eligible buy order and compliance check. Review the maximum loss, then authorize the exact order in a connected Polygon wallet.",
   requiredContextFields: ["marketId", "outcomeId", "amount"],
   optionalContextFields: ["side"],
   safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
-  executionState: "preview_only",
-  promptTemplate: "Preview buying ${amount} of {outcomeId} in {marketId}",
+  executionState: "user_authorized_submit",
+  promptTemplate: "Prepare buying ${amount} of {outcomeId} in {marketId}",
   mcpToolHints: ["polymarket_preview_trade"],
   cliCommandHints: ["matterhorn-work polymarket preview-trade --market {marketId} --outcome {outcomeId} --amount {amount}"],
-  resultCardKinds: ["preview_card"],
+  resultCardKinds: ["preview_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Authorize and submit",
+    result: "submitted_transaction",
+    featureGate: "polymarket_execution",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "polymarket",
+    family: "polymarket_buy",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "matterhorn_after_signature",
+    simulationPolicy: "required",
+    walletKinds: ["evm_wallet"],
+    networks: ["polygon"],
+    limitations: ["Direct submission requires an eligible browser-wallet EOA after compliance checks."],
+  }),
+};
+
+export const POLYMARKET_SELL_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "polymarket_sell",
+  deskId: "polymarket",
+  title: "Sell shares",
+  description: "Review the selected outcome, share quantity, and estimated proceeds before authorizing the sale.",
+  requiredContextFields: ["marketId", "outcomeId", "shares"],
+  optionalContextFields: ["slippageTolerance"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "user_authorized_submit",
+  promptTemplate: "Sell {shares} shares of {outcomeId} in {marketId}",
+  mcpToolHints: ["polymarket_sell_preview"],
+  resultCardKinds: ["preview_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Authorize and sell",
+    result: "submitted_transaction",
+    featureGate: "polymarket_execution",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "polymarket",
+    family: "polymarket_sell",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "matterhorn_after_signature",
+    simulationPolicy: "required",
+    walletKinds: ["evm_wallet"],
+    networks: ["polygon"],
+    limitations: ["Requires an eligible browser-wallet EOA that owns the selected outcome shares."],
+  }),
+};
+
+export const POLYMARKET_CANCEL_ORDER_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "polymarket_cancel_order",
+  deskId: "polymarket",
+  title: "Cancel orders",
+  description: "Review exact order IDs or all open orders before authorizing cancellation.",
+  requiredContextFields: ["orderIdsOrAll"],
+  optionalContextFields: [],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "user_authorized_submit",
+  promptTemplate: "Cancel Polymarket orders {orderIdsOrAll}",
+  mcpToolHints: ["polymarket_cancel_orders"],
+  resultCardKinds: ["preview_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Authorize cancellation",
+    result: "submitted_transaction",
+    featureGate: "polymarket_execution",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "polymarket",
+    family: "polymarket_cancel_order",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "matterhorn_after_signature",
+    simulationPolicy: "required",
+    walletKinds: ["evm_wallet"],
+    networks: ["polygon"],
+    limitations: ["Cancellation applies only to the exact reviewed order IDs, unless the user explicitly chooses all orders."],
+  }),
 };
 
 export const POLYMARKET_EXTERNAL_SIGNER_HANDOFF_ACTION: DeskActionManifest = {
@@ -482,7 +766,8 @@ export const POLYMARKET_EXTERNAL_SIGNER_HANDOFF_ACTION: DeskActionManifest = {
   id: "polymarket_external_signer_handoff",
   deskId: "polymarket",
   title: "Prepare handoff",
-  description: "Build an external-signer handoff for a Polymarket trade. Matterhorn never signs or submits.",
+  description:
+    "Build an external-client handoff for proxy accounts or advanced order types that the connected-wallet ticket does not support.",
   requiredContextFields: ["evmAddress", "marketId", "outcomeId", "amount"],
   optionalContextFields: ["side"],
   safetyBoundary: {
@@ -490,10 +775,25 @@ export const POLYMARKET_EXTERNAL_SIGNER_HANDOFF_ACTION: DeskActionManifest = {
     requiresExternalSigner: true,
   },
   executionState: "external_signer_required",
-  promptTemplate: "Prepare a handoff to buy ${amount} of {outcomeId} in {marketId}",
+  promptTemplate: "Prepare an advanced {side} handoff for ${amount} of {outcomeId} in {marketId}",
   mcpToolHints: ["polymarket_prepare_handoff"],
   cliCommandHints: ["matterhorn-work polymarket handoff --market {marketId} --outcome {outcomeId} --amount {amount}"],
   resultCardKinds: ["preview_card", "handoff_card"],
+  userCompletion: {
+    surface: "external_signer",
+    actionLabel: "Finish in Polymarket client",
+    result: "public_receipt",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "polymarket",
+    family: "polymarket_external_client_order",
+    supportLevel: "external_client",
+    submissionAuthority: "external_client",
+    simulationPolicy: "when_available",
+    walletKinds: ["external_client"],
+    networks: ["polygon"],
+    limitations: ["Proxy accounts and advanced order types finish in an eligible Polymarket client."],
+  }),
 };
 
 export const POLYMARKET_CREATE_WATCH_ACTION: DeskActionManifest = {
@@ -550,16 +850,126 @@ export const SUI_TRANSFER_PREVIEW_ACTION: DeskActionManifest = {
   version: "matterhorn.desk.action.manifest.v1",
   id: "sui_transfer_preview",
   deskId: "sui",
-  title: "Preview transfer",
-  description: "Prepare a Sui transfer preview and save the non-custodial handoff as project evidence.",
+  title: "Review Sui transfer",
+  description:
+    "Prepare the exact transfer, then review, sign, and submit it in a connected Sui wallet on web. Desktop provides an external-wallet handoff.",
   requiredContextFields: ["sender", "recipient", "amountSui"],
   optionalContextFields: ["network", "memo"],
   safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
-  executionState: "preview_only",
-  promptTemplate: "Prepare a Sui transfer preview from {sender} to {recipient} for {amountSui} SUI",
+  executionState: "user_authorized_submit",
+  promptTemplate: "Prepare a Sui transfer from {sender} to {recipient} for {amountSui} SUI",
   mcpToolHints: ["sui_preview_transfer"],
   cliCommandHints: ["matterhorn-work sui preview-transfer --from {sender} --to {recipient} --amount {amountSui}"],
-  resultCardKinds: ["preview_card", "handoff_card"],
+  resultCardKinds: ["preview_card", "handoff_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Sign in Sui wallet",
+    result: "submitted_transaction",
+    featureGate: "sui_wallet_standard",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "sui",
+    family: "sui_transfer",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "connected_wallet",
+    simulationPolicy: "required",
+    walletKinds: ["sui_wallet"],
+    networks: ["sui-testnet", "sui-mainnet"],
+    limitations: ["Requires a Wallet Standard compatible Sui wallet; desktop uses a wallet handoff."],
+  }),
+};
+
+export const SUI_COIN_TRANSFER_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "sui_coin_transfer",
+  deskId: "sui",
+  title: "Transfer a Sui coin",
+  description: "Review the coin type, recipient, and amount before signing the transfer in a connected Sui wallet.",
+  requiredContextFields: ["sender", "recipient", "coinType", "amount"],
+  optionalContextFields: ["network"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "user_authorized_submit",
+  promptTemplate: "Transfer {amount} of {coinType} from {sender} to {recipient}",
+  mcpToolHints: ["sui_preview_coin_transfer"],
+  resultCardKinds: ["preview_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Review and sign in Sui wallet",
+    result: "submitted_transaction",
+    featureGate: "sui_wallet_standard",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "sui",
+    family: "sui_coin_transfer",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "connected_wallet",
+    simulationPolicy: "required",
+    walletKinds: ["sui_wallet"],
+    networks: ["sui-testnet", "sui-mainnet"],
+    limitations: ["The connected wallet must own sufficient coins of the exact reviewed type."],
+  }),
+};
+
+export const SUI_OBJECT_TRANSFER_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "sui_object_transfer",
+  deskId: "sui",
+  title: "Transfer an object",
+  description: "Review one Sui object or NFT and its recipient before signing in the connected wallet.",
+  requiredContextFields: ["sender", "recipient", "objectId"],
+  optionalContextFields: ["network"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "user_authorized_submit",
+  promptTemplate: "Transfer Sui object {objectId} from {sender} to {recipient}",
+  mcpToolHints: ["sui_preview_object_transfer"],
+  resultCardKinds: ["preview_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Review and sign in Sui wallet",
+    result: "submitted_transaction",
+    featureGate: "sui_wallet_standard",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "sui",
+    family: "sui_object_transfer",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "connected_wallet",
+    simulationPolicy: "required",
+    walletKinds: ["sui_wallet"],
+    networks: ["sui-testnet", "sui-mainnet"],
+    limitations: ["The object must be transferable and owned by the connected wallet."],
+  }),
+};
+
+export const SUI_BATCH_TRANSFER_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "sui_batch_transfer",
+  deskId: "sui",
+  title: "Send a batch",
+  description: "Review every SUI recipient and amount together before signing one batch transaction.",
+  requiredContextFields: ["sender", "transfers"],
+  optionalContextFields: ["network"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "user_authorized_submit",
+  promptTemplate: "Prepare a Sui batch transfer from {sender}: {transfers}",
+  mcpToolHints: ["sui_preview_batch_transfer"],
+  resultCardKinds: ["preview_card", "receipt_card"],
+  userCompletion: {
+    surface: "connected_wallet",
+    actionLabel: "Review batch and sign",
+    result: "submitted_transaction",
+    featureGate: "sui_wallet_standard",
+  },
+  transaction: defineDeskTransactionContract({
+    protocol: "sui",
+    family: "sui_batch_transaction",
+    supportLevel: "connected_wallet",
+    submissionAuthority: "connected_wallet",
+    simulationPolicy: "required",
+    walletKinds: ["sui_wallet"],
+    networks: ["sui-testnet", "sui-mainnet"],
+    limitations: ["Current batch execution supports native SUI transfers reviewed as one transaction."],
+  }),
 };
 
 export const SUI_IMPORT_RECEIPT_ACTION: DeskActionManifest = {
@@ -594,6 +1004,11 @@ export const WELLNESS_BUILD_PROGRAM_ACTION: DeskActionManifest = {
   mcpToolHints: ["wellness_build_program"],
   cliCommandHints: ["matterhorn-work wellness build --goal {goal} --audience {audience}"],
   resultCardKinds: ["education_card"],
+  userCompletion: {
+    surface: "workspace",
+    actionLabel: "Save program",
+    result: "workspace_output",
+  },
 };
 
 export const WELLNESS_GENERATE_ARTIFACTS_ACTION: DeskActionManifest = {
@@ -610,6 +1025,11 @@ export const WELLNESS_GENERATE_ARTIFACTS_ACTION: DeskActionManifest = {
   mcpToolHints: ["wellness_generate_artifacts"],
   cliCommandHints: ["matterhorn-work wellness artifacts {programId}"],
   resultCardKinds: ["education_card"],
+  userCompletion: {
+    surface: "workspace",
+    actionLabel: "Save artifacts",
+    result: "workspace_output",
+  },
 };
 
 export const WELLNESS_PACKAGE_SERVICE_ACTION: DeskActionManifest = {
@@ -626,6 +1046,11 @@ export const WELLNESS_PACKAGE_SERVICE_ACTION: DeskActionManifest = {
   mcpToolHints: ["wellness_package_service"],
   cliCommandHints: ["matterhorn-work wellness package {programId}"],
   resultCardKinds: ["summary_card", "education_card"],
+  userCompletion: {
+    surface: "workspace",
+    actionLabel: "Save service package",
+    result: "workspace_output",
+  },
 };
 
 export const WELLNESS_PLAN_LIVE_SERVICE_ACTION: DeskActionManifest = {
@@ -692,6 +1117,11 @@ export const MEMORY_FORGET_RECORD_ACTION: DeskActionManifest = {
   mcpToolHints: ["memory_forget_record"],
   cliCommandHints: ["matterhorn-work memory forget {recordId}"],
   resultCardKinds: ["settings_card"],
+  userCompletion: {
+    surface: "workspace",
+    actionLabel: "Confirm deletion",
+    result: "workspace_output",
+  },
 };
 
 export const MEMORY_EXPORT_ACTION: DeskActionManifest = {
@@ -708,6 +1138,11 @@ export const MEMORY_EXPORT_ACTION: DeskActionManifest = {
   mcpToolHints: ["memory_export"],
   cliCommandHints: ["matterhorn-work memory export"],
   resultCardKinds: ["summary_card"],
+  userCompletion: {
+    surface: "workspace",
+    actionLabel: "Export memory",
+    result: "workspace_output",
+  },
 };
 
 // --- MCPs actions ---
@@ -798,7 +1233,9 @@ export const HYPERLIQUID_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest
   hyperliquid_funding_read: HYPERLIQUID_FUNDING_READ_ACTION,
   hyperliquid_open_orders: HYPERLIQUID_OPEN_ORDERS_ACTION,
   hyperliquid_preview_order: HYPERLIQUID_PREVIEW_ORDER_ACTION,
-  hyperliquid_external_signer_handoff: HYPERLIQUID_EXTERNAL_SIGNER_HANDOFF_ACTION,
+  hyperliquid_cancel_order: HYPERLIQUID_CANCEL_ORDER_ACTION,
+  hyperliquid_modify_order: HYPERLIQUID_MODIFY_ORDER_ACTION,
+  hyperliquid_close_position: HYPERLIQUID_CLOSE_POSITION_ACTION,
   hyperliquid_create_watch: HYPERLIQUID_CREATE_WATCH_ACTION,
   hyperliquid_import_receipt: HYPERLIQUID_IMPORT_RECEIPT_ACTION,
 };
@@ -809,7 +1246,8 @@ export const POLYMARKET_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest>
   polymarket_liquidity_orderbook: POLYMARKET_LIQUIDITY_ORDERBOOK_ACTION,
   polymarket_compliance_check: POLYMARKET_COMPLIANCE_CHECK_ACTION,
   polymarket_preview_trade: POLYMARKET_PREVIEW_TRADE_ACTION,
-  polymarket_external_signer_handoff: POLYMARKET_EXTERNAL_SIGNER_HANDOFF_ACTION,
+  polymarket_sell: POLYMARKET_SELL_ACTION,
+  polymarket_cancel_order: POLYMARKET_CANCEL_ORDER_ACTION,
   polymarket_create_watch: POLYMARKET_CREATE_WATCH_ACTION,
   polymarket_import_receipt: POLYMARKET_IMPORT_RECEIPT_ACTION,
 };
@@ -817,6 +1255,9 @@ export const POLYMARKET_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest>
 export const SUI_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest> = {
   sui_account_read: SUI_ACCOUNT_READ_ACTION,
   sui_transfer_preview: SUI_TRANSFER_PREVIEW_ACTION,
+  sui_coin_transfer: SUI_COIN_TRANSFER_ACTION,
+  sui_object_transfer: SUI_OBJECT_TRANSFER_ACTION,
+  sui_batch_transfer: SUI_BATCH_TRANSFER_ACTION,
   sui_import_receipt: SUI_IMPORT_RECEIPT_ACTION,
 };
 
@@ -863,4 +1304,16 @@ export function listDeskActions(deskId: string): DeskActionManifest[] {
 
 export function listAllDeskActionIds(): string[] {
   return Object.values(DESK_ACTION_REGISTRY).flatMap((registry) => Object.keys(registry));
+}
+
+export function listTransactionDeskActions(deskId?: string): DeskActionManifest[] {
+  const registries = deskId ? [DESK_ACTION_REGISTRY[deskId]] : Object.values(DESK_ACTION_REGISTRY);
+  return registries
+    .filter((registry): registry is Record<string, DeskActionManifest> => Boolean(registry))
+    .flatMap((registry) => Object.values(registry))
+    .filter((action) => Boolean(action.transaction));
+}
+
+export function listLiveTransactionDeskActions(deskId?: string): DeskActionManifest[] {
+  return listTransactionDeskActions(deskId).filter((action) => action.transaction?.availableInsideMatterhorn === true);
 }

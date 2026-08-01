@@ -873,7 +873,7 @@ describe("workspace session read APIs", () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
       code: "opencode_unconfigured",
-      message: "OpenCode base URL is missing for this workspace",
+      message: "Agent runtime is not connected for this workspace",
     });
   });
 

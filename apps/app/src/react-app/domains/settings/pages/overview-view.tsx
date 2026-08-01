@@ -3031,9 +3031,9 @@ export function SettingsOverviewView(props: {
             <ul className="flex list-none flex-col gap-1 text-sm leading-6 text-dls-secondary">
               <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
                 <span className="font-medium text-dls-text">Bittensor:</span>{" "}
-                reviewed TAO transfers can be signed and submitted by your
-                connected Bittensor wallet. Staking and advanced calls remain
-                unsigned handoffs for an external signer.
+                reviewed transfer, stake, and unstake calls can be signed and
+                submitted by your connected Bittensor wallet. Unsupported
+                advanced calls stay unavailable.
               </li>
               <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
                 <span className="font-medium text-dls-text">Hyperliquid:</span>{" "}
@@ -3044,8 +3044,8 @@ export function SettingsOverviewView(props: {
               </li>
               <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
                 <span className="font-medium text-dls-text">Polymarket:</span>{" "}
-                eligible EOA BUY orders use a separate compliance-gated ticket.
-                You review the exact terms and authorize submission in your
+                eligible buy, sell, and cancel actions use a separate compliance-gated ticket.
+                You review the exact terms and authorize the action in your
                 connected Polygon wallet; agents and watches cannot submit.
               </li>
               <li className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
@@ -3068,8 +3068,8 @@ export function SettingsOverviewView(props: {
               label="Bittensor"
               hint={
                 bittensorUsesFallbackData
-                  ? "Public reads use clearly labeled fallback data. Reviewed TAO transfers use a connected wallet; staking remains an external-signer handoff."
-                  : "Live public reads for TAO, subnets, and validators. Reviewed TAO transfers use a connected wallet; staking remains an external-signer handoff."
+                  ? "Public reads use clearly labeled fallback data. Reviewed transfer, stake, and unstake calls use a connected wallet."
+                  : "Live public reads for TAO, subnets, and validators. Reviewed transfer, stake, and unstake calls use a connected wallet."
               }
               value={
                 bittensorCapability ? (
@@ -3077,8 +3077,8 @@ export function SettingsOverviewView(props: {
                     tone={bittensorUsesLiveProvider ? "ready" : "preview"}
                   >
                     {bittensorUsesLiveProvider
-                      ? "Live reads · TAO transfers"
-                      : "Fallback reads · TAO transfers"}
+                      ? "Live reads · Wallet actions"
+                      : "Fallback reads · Wallet actions"}
                   </StatusBadge>
                 ) : (
                   <UnavailableStatus label="Status unavailable" />
@@ -3114,7 +3114,7 @@ export function SettingsOverviewView(props: {
               label="Polymarket"
               hint={
                 polymarketExecution
-                  ? "Agent drafts never submit. Eligible EOA BUY orders can use a separate compliance-gated connected-wallet ticket."
+                  ? "Agent drafts never submit. Eligible EOA buy, sell, and cancel actions use a separate compliance-gated connected-wallet ticket."
                   : "Execution readiness is unavailable."
               }
               value={
@@ -3124,7 +3124,7 @@ export function SettingsOverviewView(props: {
                   <StatusBadge
                     tone="ready"
                   >
-                    Eligible BUY execution
+                    Eligible buy/sell/cancel
                   </StatusBadge>
                 ) : (
                   <UnavailableStatus label="Status unavailable" />

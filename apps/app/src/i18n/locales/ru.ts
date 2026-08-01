@@ -46,7 +46,7 @@ export default {
   "blueprint.starter_command_title": "Создать reusable command",
   "blueprint.starter_connect_openai_desc": "Проверьте статус моделей и провайдеров в Settings.",
   "blueprint.starter_connect_openai_title": "Проверить модели",
-  "blueprint.starter_csv_desc": "Исследуйте subnets, публичные TAO wallet reads, validator comparisons и unsigned staking previews.",
+  "blueprint.starter_csv_desc": "Исследуйте subnets, публичные TAO wallet reads, validator comparisons и reviewed staking actions.",
   "blueprint.starter_csv_prompt": "Откройте Bittensor desk и помогите выбрать безопасную первую задачу. Используйте только public SS58 and subnet context.",
   "blueprint.starter_csv_title": "Открыть Bittensor desk",
   "blueprint.starter_explore_desc": "Сведите содержимое файлов и предложите лучшую первую задачу.",

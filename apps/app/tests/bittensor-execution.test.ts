@@ -1,10 +1,14 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  BITTENSOR_STAKE_CONFIRMATION,
   BITTENSOR_TRANSFER_CONFIRMATION,
+  BITTENSOR_UNSTAKE_CONFIRMATION,
+  createBittensorStakePreview,
   createBittensorTransferPreview,
   listBittensorExtensionAccounts,
   submitBittensorTransfer,
+  submitBittensorWalletAction,
   taoToRao,
   type BittensorExecutionDependencies,
 } from "../src/react-app/domains/wallet/bittensor-execution";
@@ -12,7 +16,7 @@ import {
 const sender = "5SenderPublicSs58Address";
 const destination = "5DestinationPublicSs58Address";
 
-function fakeDependencies(options: { reject?: boolean } = {}): BittensorExecutionDependencies {
+function fakeDependencies(options: { reject?: boolean; onPreview?: (preview: unknown) => void } = {}): BittensorExecutionDependencies {
   return {
     now: () => new Date("2026-07-26T10:00:00.000Z"),
     timeoutMs: 100,
@@ -22,7 +26,8 @@ function fakeDependencies(options: { reject?: boolean } = {}): BittensorExecutio
       injectorFor: async () => ({ signer: { signPayload: () => undefined } }),
     },
     createApi: async () => ({
-      submitTransfer: async (_destination, _amountRao, _sender, _signer, onResult) => {
+      submitAction: async (preview, _sender, _signer, onResult) => {
+        options.onPreview?.(preview);
         queueMicrotask(() => {
           if (options.reject) {
             onResult({
@@ -91,6 +96,8 @@ describe("Bittensor connected-wallet execution", () => {
       action: "transfer",
       signerAddress: sender,
       destination,
+      hotkey: null,
+      netuid: null,
       amountTao: "0.25",
       txHash: "0xtx",
       blockHash: "0xblock",
@@ -110,5 +117,65 @@ describe("Bittensor connected-wallet execution", () => {
       confirmation: BITTENSOR_TRANSFER_CONFIRMATION,
       dependencies: fakeDependencies({ reject: true }),
     })).rejects.toThrow("InsufficientBalance");
+  });
+
+  it("submits exact reviewed stake and unstake calls through the connected wallet", async () => {
+    const submitted: unknown[] = [];
+    const dependencies = fakeDependencies({ onPreview: (preview) => submitted.push(preview) });
+    const stake = createBittensorStakePreview({
+      action: "stake",
+      sender,
+      hotkey: destination,
+      netuid: 14,
+      amountTao: "1.5",
+    });
+    const stakeReceipt = await submitBittensorWalletAction({
+      preview: stake,
+      confirmation: BITTENSOR_STAKE_CONFIRMATION,
+      dependencies,
+    });
+    expect(stakeReceipt).toMatchObject({
+      action: "stake",
+      signerAddress: sender,
+      hotkey: destination,
+      netuid: 14,
+      destination: null,
+      amountTao: "1.5",
+    });
+
+    const unstake = createBittensorStakePreview({
+      action: "unstake",
+      sender,
+      hotkey: destination,
+      netuid: 14,
+      amountTao: "0.5",
+    });
+    await expect(submitBittensorWalletAction({
+      preview: unstake,
+      confirmation: BITTENSOR_UNSTAKE_CONFIRMATION,
+      dependencies,
+    })).resolves.toMatchObject({ action: "unstake", netuid: 14 });
+    expect(submitted).toEqual([stake, unstake]);
+  });
+
+  it("rejects changed staking terms and the wrong operation confirmation", async () => {
+    const preview = createBittensorStakePreview({
+      action: "stake",
+      sender,
+      hotkey: destination,
+      netuid: 14,
+      amountTao: "1",
+    });
+    await expect(submitBittensorWalletAction({
+      preview,
+      confirmation: BITTENSOR_TRANSFER_CONFIRMATION,
+      dependencies: fakeDependencies(),
+    })).rejects.toThrow(BITTENSOR_STAKE_CONFIRMATION);
+
+    await expect(submitBittensorWalletAction({
+      preview: { ...preview, amountRao: "2000000000" },
+      confirmation: BITTENSOR_STAKE_CONFIRMATION,
+      dependencies: fakeDependencies(),
+    })).rejects.toThrow("terms changed");
   });
 });

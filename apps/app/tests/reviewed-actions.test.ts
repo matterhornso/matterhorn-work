@@ -66,10 +66,12 @@ describe("reviewed action lifecycle", () => {
     expect(isReviewedActionDraftHandoff({
       version: "matterhorn.reviewed-action-handoff.v1",
       protocol: "hyperliquid",
-      source: "agent-card",
+      source: "composer-command",
       draft: {
+        operation: "place_order",
         network: "testnet",
         asset: "BTC",
+        orderId: null,
         side: "buy",
         size: 0.001,
         orderType: "market",
@@ -99,6 +101,42 @@ describe("reviewed action lifecycle", () => {
         sender: null,
         destination: "",
         amountTao: "0.1",
+      },
+    })).toBe(false)
+
+    const recipientA = `0x${"a".repeat(64)}`
+    const recipientB = `0x${"b".repeat(64)}`
+    expect(isReviewedActionDraftHandoff({
+      version: "matterhorn.reviewed-action-handoff.v1",
+      protocol: "sui",
+      source: "composer-command",
+      draft: {
+        operation: "batch_transfer_sui",
+        network: "testnet",
+        sender: null,
+        recipient: null,
+        amount: null,
+        coinType: null,
+        objectId: null,
+        transfers: [
+          { recipient: recipientA, amount: "0.1" },
+          { recipient: recipientB, amount: "0.2" },
+        ],
+      },
+    })).toBe(true)
+    expect(isReviewedActionDraftHandoff({
+      version: "matterhorn.reviewed-action-handoff.v1",
+      protocol: "sui",
+      source: "agent-card",
+      draft: {
+        operation: "transfer_object",
+        network: "mainnet",
+        sender: null,
+        recipient: "not-an-address",
+        amount: null,
+        coinType: null,
+        objectId: recipientA,
+        transfers: [],
       },
     })).toBe(false)
   })

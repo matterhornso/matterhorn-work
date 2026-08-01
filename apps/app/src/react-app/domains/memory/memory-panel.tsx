@@ -776,6 +776,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             <label className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-dls-secondary" />
               <Input
+                aria-label="Search saved memories"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 className={cn("h-10 pl-9", MEMORY_FIELD_CLASS)}
@@ -975,18 +976,21 @@ export function MemoryPanel(props: MemoryPanelProps) {
                       <div className="mt-3 grid gap-2 rounded-md bg-dls-background/25 p-3">
                         <div className="text-xs font-semibold text-dls-text">Edit before saving</div>
                         <Input
+                          aria-label="Memory title"
                           value={suggestionEditDraft.title}
                           onChange={(event) => setSuggestionEditDraft((current) => current ? { ...current, title: event.target.value } : current)}
                           className={cn("h-10", MEMORY_FIELD_CLASS)}
                           placeholder="Memory title"
                         />
                         <Input
+                          aria-label="Memory summary"
                           value={suggestionEditDraft.summary}
                           onChange={(event) => setSuggestionEditDraft((current) => current ? { ...current, summary: event.target.value } : current)}
                           className={cn("h-10", MEMORY_FIELD_CLASS)}
                           placeholder="Short summary"
                         />
                         <Textarea
+                          aria-label="Memory details"
                           value={suggestionEditDraft.note}
                           onChange={(event) => setSuggestionEditDraft((current) => current ? { ...current, note: event.target.value } : current)}
                           className={cn("min-h-24 resize-y", MEMORY_FIELD_CLASS)}
@@ -1172,18 +1176,21 @@ export function MemoryPanel(props: MemoryPanelProps) {
               Tags set desk defaults. Use <span className="font-medium text-dls-text">bittensor</span>, <span className="font-medium text-dls-text">hyperliquid</span>, <span className="font-medium text-dls-text">polymarket</span>, or <span className="font-medium text-dls-text">longevity</span>.
             </div>
             <Input
+              aria-label="Memory title"
               value={draft.title}
               onChange={(event) => updateDraft("title", event.target.value)}
               className={cn("h-10", MEMORY_FIELD_CLASS)}
               placeholder="Memory title"
             />
             <Input
+              aria-label="Memory summary"
               value={draft.summary}
               onChange={(event) => updateDraft("summary", event.target.value)}
               className={cn("h-10", MEMORY_FIELD_CLASS)}
               placeholder="Short summary"
             />
             <Textarea
+              aria-label="Memory details"
               value={draft.body}
               onChange={(event) => updateDraft("body", event.target.value)}
               className={cn("min-h-24 resize-y", MEMORY_FIELD_CLASS)}
@@ -1191,6 +1198,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             />
             <div className="grid gap-2 sm:grid-cols-2">
               <select
+                aria-label="Memory kind"
                 value={draft.kind}
                 onChange={(event) => updateDraft("kind", event.target.value as MatterhornMemoryKind)}
                 className={MEMORY_SELECT_CLASS}
@@ -1198,6 +1206,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 {MATTERHORN_MEMORY_KINDS.map((kind) => <option key={kind} value={kind}>{formatKind(kind)}</option>)}
               </select>
               <select
+                aria-label="Memory scope"
                 value={draft.scope}
                 onChange={(event) => updateDraft("scope", event.target.value as MatterhornMemoryScope)}
                 className={MEMORY_SELECT_CLASS}
@@ -1205,6 +1214,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 {MATTERHORN_MEMORY_SCOPES.map((scope) => <option key={scope} value={scope}>{scope}</option>)}
               </select>
               <select
+                aria-label="Memory sensitivity"
                 value={draft.sensitivity}
                 onChange={(event) => updateDraft("sensitivity", event.target.value as CaptureDraft["sensitivity"])}
                 className={MEMORY_SELECT_CLASS}
@@ -1212,6 +1222,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 {SELECTABLE_SENSITIVITIES.map((sensitivity) => <option key={sensitivity} value={sensitivity}>{sensitivity}</option>)}
               </select>
               <Input
+                aria-label="Memory tags"
                 value={draft.tags}
                 onChange={(event) => updateDraft("tags", event.target.value)}
                 className={cn("h-10", MEMORY_FIELD_CLASS)}

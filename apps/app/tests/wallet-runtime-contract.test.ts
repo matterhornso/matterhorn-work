@@ -30,8 +30,8 @@ describe("wallet runtime contract", () => {
       connectionMode: "wallet_standard",
       canRead: true,
       canPreview: true,
-      canSubmit: false,
-      liveSubmissionEnabled: false,
+      canSubmit: true,
+      liveSubmissionEnabled: true,
       signerRequirement: "client_signer",
     });
 

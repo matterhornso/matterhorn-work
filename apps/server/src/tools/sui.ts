@@ -1,5 +1,10 @@
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { isValidSuiAddress, normalizeSuiAddress } from "@mysten/sui/utils";
+import {
+  isValidStructTag,
+  isValidSuiAddress,
+  normalizeStructTag,
+  normalizeSuiAddress,
+} from "@mysten/sui/utils";
 import { createHash } from "node:crypto";
 
 export const SUI_NETWORKS = ["testnet", "mainnet"] as const;
@@ -82,7 +87,20 @@ export interface SuiAccountSnapshot {
   warnings: string[];
 }
 
-export interface SuiTransferPreviewInput {
+export type SuiTransactionKind =
+  | "transfer_sui"
+  | "transfer_coin"
+  | "transfer_object"
+  | "batch_transfer_sui";
+
+export interface SuiBatchTransferInput {
+  recipient?: string | null;
+  to?: string | null;
+  amountMist?: string | number | bigint | null;
+  amountSui?: string | number | null;
+}
+
+export interface SuiTransactionPreviewInput {
   network?: string | null;
   kind?: string | null;
   action?: string | null;
@@ -91,7 +109,18 @@ export interface SuiTransferPreviewInput {
   to?: string | null;
   amountMist?: string | number | bigint | null;
   amountSui?: string | number | null;
+  coinType?: string | null;
+  objectId?: string | null;
+  transfers?: SuiBatchTransferInput[] | null;
   memo?: string | null;
+}
+
+export type SuiTransferPreviewInput = SuiTransactionPreviewInput;
+
+export interface SuiNormalizedBatchTransfer {
+  recipient: string;
+  amountMist: string;
+  amountSui: string;
 }
 
 export interface SuiTransactionPreview {
@@ -99,15 +128,18 @@ export interface SuiTransactionPreview {
   id: string;
   family: "sui";
   network: SuiNetwork;
-  kind: "transfer_sui";
+  kind: SuiTransactionKind;
   sender: string;
-  recipient: string;
-  amountMist: string;
-  amountSui: string;
+  recipient?: string;
+  amountMist?: string;
+  amountSui?: string;
+  coinType?: string;
+  objectId?: string;
+  transfers?: SuiNormalizedBatchTransfer[];
   memo?: string;
   custody: false;
-  canSubmit: false;
-  liveSubmissionEnabled: false;
+  canSubmit: true;
+  liveSubmissionEnabled: true;
   signerPolicy: "client_wallet_required";
   requiresWalletStandard: true;
   previewSha256: string;
@@ -119,10 +151,13 @@ export interface SuiTransactionPreview {
     network: SuiNetwork;
     chain: `sui:${SuiNetwork}`;
     unsignedIntent: {
-      kind: "transfer_sui";
+      kind: SuiTransactionKind;
       sender: string;
-      recipient: string;
-      amountMist: string;
+      recipient?: string;
+      amountMist?: string;
+      coinType?: string;
+      objectId?: string;
+      transfers?: SuiNormalizedBatchTransfer[];
     };
   };
   warnings: string[];
@@ -322,8 +357,54 @@ function parseSuiToMist(value: string | number | null | undefined): bigint | nul
   return mist > 0n ? mist : null;
 }
 
-export function buildSuiTransferPreview(
-  input: SuiTransferPreviewInput,
+function normalizeSuiTransactionKind(value: string | null | undefined): SuiTransactionKind {
+  const normalized = (value ?? "transfer_sui").trim().toLowerCase();
+  if (["transfer_sui", "sui_transfer", "transfer"].includes(normalized)) return "transfer_sui";
+  if (["transfer_coin", "coin_transfer", "token_transfer"].includes(normalized)) return "transfer_coin";
+  if (["transfer_object", "object_transfer", "nft_transfer"].includes(normalized)) return "transfer_object";
+  if (["batch_transfer_sui", "batch_transfer", "batch"].includes(normalized)) return "batch_transfer_sui";
+  throw new SuiInputError(
+    "invalid_sui_preview",
+    "kind must be transfer_sui, transfer_coin, transfer_object, or batch_transfer_sui",
+  );
+}
+
+function normalizeSuiCoinType(value: string | null | undefined): string {
+  const coinType = value?.trim() ?? "";
+  if (!coinType || !isValidStructTag(coinType)) {
+    throw new SuiInputError("invalid_sui_preview", "coinType must be a valid public Sui struct type");
+  }
+  return normalizeStructTag(coinType);
+}
+
+function normalizeSuiAmount(input: {
+  amountMist?: string | number | bigint | null;
+  amountSui?: string | number | null;
+}): bigint {
+  const amountMist = parsePositiveMist(input.amountMist) ?? parseSuiToMist(input.amountSui);
+  if (!amountMist) {
+    throw new SuiInputError("invalid_sui_amount", "amountMist or amountSui must be a positive amount");
+  }
+  return amountMist;
+}
+
+function normalizeBatchTransfers(value: SuiBatchTransferInput[] | null | undefined): SuiNormalizedBatchTransfer[] {
+  if (!Array.isArray(value) || value.length < 2 || value.length > 16) {
+    throw new SuiInputError("invalid_sui_preview", "batch transfers require between 2 and 16 recipients");
+  }
+  return value.map((entry) => {
+    const recipient = normalizeMatterhornSuiAddress(entry.recipient ?? entry.to ?? "");
+    const amountMist = normalizeSuiAmount(entry);
+    return {
+      recipient,
+      amountMist: amountMist.toString(),
+      amountSui: formatMistToSui(amountMist),
+    };
+  });
+}
+
+export function buildSuiTransactionPreview(
+  input: SuiTransactionPreviewInput,
   options: { now?: () => Date; ttlMs?: number } = {},
 ): SuiTransactionPreview {
   const forbidden = findForbiddenSuiCredentialInput(input);
@@ -334,18 +415,20 @@ export function buildSuiTransferPreview(
     );
   }
 
-  const action = (input.kind ?? input.action ?? "transfer_sui").trim();
-  if (action !== "transfer_sui") {
-    throw new SuiInputError("invalid_sui_preview", "Sui preview kind must be transfer_sui");
-  }
-
+  const kind = normalizeSuiTransactionKind(input.kind ?? input.action);
   const network = normalizeMatterhornSuiNetwork(input.network);
   const sender = normalizeMatterhornSuiAddress(input.sender ?? "");
-  const recipient = normalizeMatterhornSuiAddress(input.recipient ?? input.to ?? "");
-  const amountMist = parsePositiveMist(input.amountMist) ?? parseSuiToMist(input.amountSui);
-  if (!amountMist) {
-    throw new SuiInputError("invalid_sui_amount", "amountMist or amountSui must be a positive Sui amount");
-  }
+  const recipient = kind === "batch_transfer_sui"
+    ? undefined
+    : normalizeMatterhornSuiAddress(input.recipient ?? input.to ?? "");
+  const amountMist = kind === "transfer_sui" || kind === "transfer_coin"
+    ? normalizeSuiAmount(input)
+    : undefined;
+  const coinType = kind === "transfer_coin" ? normalizeSuiCoinType(input.coinType) : undefined;
+  const objectId = kind === "transfer_object"
+    ? normalizeMatterhornSuiAddress(input.objectId ?? "")
+    : undefined;
+  const transfers = kind === "batch_transfer_sui" ? normalizeBatchTransfers(input.transfers) : undefined;
 
   const memo = input.memo?.trim();
   if (memo && memo.length > 140) {
@@ -356,24 +439,30 @@ export function buildSuiTransferPreview(
   const createdAt = now.toISOString();
   const expiresAt = new Date(now.getTime() + (options.ttlMs ?? 10 * 60_000)).toISOString();
   const unsignedIntent = {
-    kind: "transfer_sui" as const,
+    kind,
     sender,
     recipient,
-    amountMist: amountMist.toString(),
+    amountMist: amountMist?.toString(),
+    coinType,
+    objectId,
+    transfers,
   };
   const previewCore = {
     version: "matterhorn.sui.transaction-preview.v1" as const,
     family: "sui" as const,
     network,
-    kind: "transfer_sui" as const,
+    kind,
     sender,
     recipient,
-    amountMist: amountMist.toString(),
-    amountSui: formatMistToSui(amountMist),
+    amountMist: amountMist?.toString(),
+    amountSui: amountMist ? formatMistToSui(amountMist) : undefined,
+    coinType,
+    objectId,
+    transfers,
     memo: memo || undefined,
     custody: false as const,
-    canSubmit: false as const,
-    liveSubmissionEnabled: false as const,
+    canSubmit: true as const,
+    liveSubmissionEnabled: true as const,
     signerPolicy: "client_wallet_required" as const,
     requiresWalletStandard: true as const,
     createdAt,
@@ -386,8 +475,8 @@ export function buildSuiTransferPreview(
       unsignedIntent,
     },
     warnings: [
-      "Preview only. Matterhorn does not sign or submit Sui transactions.",
-      "Review and sign in your own Sui wallet.",
+      "Matterhorn prepares the exact transaction. On web, the user reviews, signs, and submits it in a connected Sui wallet; desktop uses an external-wallet handoff.",
+      "Nothing is submitted until you approve the exact transaction in your own Sui wallet.",
     ],
   };
   const previewSha256 = sha256(previewCore);
@@ -396,6 +485,13 @@ export function buildSuiTransferPreview(
     id: `sui_preview_${previewSha256.slice(0, 16)}`,
     previewSha256,
   };
+}
+
+export function buildSuiTransferPreview(
+  input: SuiTransferPreviewInput,
+  options: { now?: () => Date; ttlMs?: number } = {},
+): SuiTransactionPreview {
+  return buildSuiTransactionPreview(input, options);
 }
 
 function normalizeSuiReceiptStatus(value: string | null | undefined): SuiTransactionReceipt["status"] {
@@ -583,18 +679,33 @@ export function buildSuiAccountCard(account: SuiAccountSnapshot): SuiChatCard {
 }
 
 export function buildSuiTransactionPreviewCard(preview: SuiTransactionPreview): SuiTransactionPreviewCard {
+  const kindLabel = preview.kind === "transfer_sui"
+    ? "SUI transfer"
+    : preview.kind === "transfer_coin"
+      ? "Coin transfer"
+      : preview.kind === "transfer_object"
+        ? "Object transfer"
+        : "Batch SUI transfer";
+  const amountLabel = preview.kind === "transfer_object"
+    ? preview.objectId ?? "Sui object"
+    : preview.kind === "batch_transfer_sui"
+      ? `${preview.transfers?.length ?? 0} recipients`
+      : `${preview.amountSui ?? "--"} ${preview.kind === "transfer_coin" ? preview.coinType ?? "coin" : "SUI"}`;
   return {
     kind: "sui_transaction_preview",
-    title: "Sui transfer preview",
-    subtitle: `${preview.network} · ${preview.amountSui} SUI`,
-    summary: "Unsigned transfer intent for review in your Sui wallet.",
+    title: `${kindLabel} review`,
+    subtitle: `${preview.network} · ${amountLabel}`,
+    summary: "Exact transaction terms for review and submission in your Sui wallet.",
     tone: "default",
     items: [
-      cardItem("Amount", `${preview.amountSui} SUI`, "good"),
+      cardItem("Action", kindLabel, "good"),
+      cardItem("Details", amountLabel),
       cardItem("Network", preview.network),
       cardItem("Sender", `${preview.sender.slice(0, 10)}...${preview.sender.slice(-6)}`, "muted"),
-      cardItem("Recipient", `${preview.recipient.slice(0, 10)}...${preview.recipient.slice(-6)}`, "muted"),
-      cardItem("Submit", "Disabled", "muted"),
+      ...(preview.recipient
+        ? [cardItem("Recipient", `${preview.recipient.slice(0, 10)}...${preview.recipient.slice(-6)}`, "muted")]
+        : []),
+      cardItem("Submit", "Connected wallet approval", "good"),
     ],
     warnings: preview.warnings,
     data: { preview },

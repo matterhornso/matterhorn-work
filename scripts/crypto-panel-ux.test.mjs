@@ -31,9 +31,9 @@ for (const phrase of [
   "Allowed intents",
   "Start with your TAO, then choose what to do next.",
   "Research and execute Hyperliquid perpetual orders with wallet review.",
-  "Analyze prediction markets and preview safely.",
+  "Analyze prediction markets and trade with wallet approval.",
   "Actions",
-  "Matterhorn prepares Bittensor action previews for review.",
+  "Matterhorn can prepare exact TAO transfer, stake, and unstake calls for review and submission by your connected Bittensor wallet.",
   "Standard Bittensor actions",
   "Standard Hyperliquid actions",
   "Standard Polymarket actions",
@@ -43,19 +43,19 @@ for (const phrase of [
   "Compare validators",
   "Prepare stake preview",
   "Prepare unstake preview",
-  "Prepare transfer preview",
+  "Send TAO",
   "Create watch or alert",
   "Import receipt",
   "Explain coldkey/hotkey",
-  "Prepare an unsigned preview",
-  "Unsigned action flow",
+  "Prepare unsigned preview",
+  "Prepare staking",
   "Public fields only",
   "ProtocolBrandLogo",
   "formatBittensorProviderError",
   "editable Bittensor Agent task",
   'outcome: "Wallet snapshot"',
   'outcome: "Stake position summary"',
-  'outcome: "Unsigned stake preview"',
+  'outcome: "Reviewed stake transaction"',
   'outcome: "Receipt status"',
   "This button creates an unsigned preview only.",
   "Matterhorn server did not answer",
@@ -79,9 +79,27 @@ assert.ok(
   panel.includes('BITTENSOR_BETA_MODE && venue === "bittensor" && tab === "demo"'),
   "Stable builds should keep beta operator content behind the explicit beta flag",
 );
-for (const phrase of ["Read and preview", '"Preview only"', "Matterhorn uses public reads and external signer/client handoffs"]) {
+for (const phrase of [
+  "Read and preview",
+  '"Preview only"',
+  "Wallet execution",
+  "Connect wallet to submit",
+  "Review, sign, and submit",
+  "Authorize and submit",
+  "Open order ticket",
+  "Submission disabled",
+]) {
   assert.ok(panel.includes(phrase), `Stable protocol UI should use release-accurate copy: ${phrase}`);
 }
+assert.equal(
+  panel.includes('const value = venue === "bittensor"') && panel.includes(': "Preview only"'),
+  false,
+  "The wallet execution summary must not collapse market venues into a generic preview-only state",
+);
+assert.ok(
+  panel.includes('document.getElementById(`${venue}-trade-ticket`)?.scrollIntoView'),
+  "Market wallet actions should open the active venue's reviewed trade ticket",
+);
 
 // 4. The six Ask Agent task button labels exist.
 for (const label of [
@@ -106,12 +124,16 @@ assert.ok(panel.includes("askAgentForStandardBittensorAction"), "Standard Bitten
 assert.ok(panel.includes('source: "bittensor-standard-action"'), "Standard Bittensor actions should use a dedicated handoff source");
 assert.ok(panel.includes("they do not auto-send, sign, broadcast, stake, unstake, transfer, or ask for wallet secrets."), "Standard Bittensor action copy should state no auto-send and no signing");
 assert.ok(panel.includes('source: `${venue}-standard-action`'), "Standard market actions should use a dedicated handoff source");
-assert.ok(panel.includes("Agent prompts never auto-execute; Hyperliquid orders still require a separate review and wallet signature in the trade ticket."), "Standard market action copy should separate agent prompts from wallet-approved execution");
-assert.ok(panel.includes("One-click tasks stay short and the full instruction stays editable before you send."), "Market action cards should show short summaries instead of full task walls");
-assert.ok(panel.includes("Read-only market context"), "Market desks should show a read-only context primer");
-assert.ok(panel.includes("Preview boundary: show the user what can be read"), "Market desks should explain the preview-only boundary");
+assert.ok(
+  panel.includes("Agent prompts never auto-execute.") &&
+    panel.includes("Orders require a separate review and wallet signature in the trade ticket."),
+  "Standard market action copy should separate agent prompts from wallet-approved execution",
+);
+assert.ok(panel.includes("The full instruction stays editable before you send."), "Market action cards should keep the full task editable");
+assert.ok(panel.includes("Agent prompts prepare context only."), "Market desks should explain the agent-only preparation boundary");
+assert.ok(panel.includes("Agents prepare drafts only."), "Market desks should explain the non-submitting agent boundary");
 assert.ok(panel.includes("Review an order before wallet signing and submission."), "Hyperliquid cards should use concise wallet-execution summaries");
-assert.ok(panel.includes("Prepare a preview-only YES/NO plan with no executable submit path."), "Polymarket cards should use concise preview summaries");
+assert.ok(panel.includes("Prepare exact YES/NO terms for compliance and wallet review."), "Polymarket cards should use concise wallet-review summaries");
 
 // 5b. Monday beta customer scenarios are sourced from the shared registry and
 //     support task staging plus evidence command copy.
@@ -152,8 +174,8 @@ for (const phrase of [
   "pnpm test:wellness-creator-workflow && node scripts/wellness-creator-workflow.mjs --check",
   "Copy launch check",
   "Release boundary",
-  "Bittensor supports public reads and unsigned previews.",
-  "Longevity is a standalone workflow surface, not Web3 and not medical care.",
+  "Agents prepare drafts only. Connected-wallet tickets can submit reviewed Bittensor transfer/stake/unstake calls, Hyperliquid actions, and eligible Polymarket buy/sell/cancel actions.",
+  "Longevity remains a separate, non-medical workflow.",
   "Longevity workflow: Standalone",
   "Not Web3, not medical advice, and no live payments or email.",
 ]) {
@@ -162,13 +184,13 @@ for (const phrase of [
 
 // 6. Safety status: the three venue lines + the wallet-approved boundary.
 for (const phrase of [
-  "Public reads and unsigned previews.",
-  "External signer required for actions",
+  "Public reads and reviewed TAO transfer, stake, and unstake calls.",
+  "The connected wallet signs; Matterhorn never holds keys.",
   "Manual execution is available in the trade ticket after exact-order review and connected-wallet approval.",
   "Agent prompts and watches never auto-submit.",
-  "Preview only, compliance checks required.",
+  "Eligible EOA buy, sell, and cancel actions require compliance checks, exact review, and connected Polygon wallet authorization.",
   "Matterhorn never custodies keys or signs silently.",
-  "Polymarket does not submit orders.",
+  "each supported action requires a separate, short-lived wallet approval.",
   "Public reads work without connecting an EVM wallet.",
   "Local Matterhorn API unavailable for /api/crypto/readiness",
   "This blocks live customer evidence collection until the local server/auth token is healthy",
@@ -191,28 +213,31 @@ for (const phrase of [
   assert.ok(panel.includes(phrase), `Panel evidence card should include: ${phrase}`);
 }
 
-// 8. Market desk copy must distinguish Hyperliquid execution from Polymarket preview-only behavior.
+// 8. Market desk copy must distinguish the supported wallet-authorized venue behavior.
 for (const phrase of [
-  "Preview Only",
-  "Safety strip",
   "Wallet-authorized execution",
   "Execution boundary",
   "external-signer request",
   "Can submit",
   "Live submission",
-  "External signer/client required",
+  "Compliance gated",
+  "Eligible EOA buy, sell, and cancel actions",
   "Copy signer examples",
   "Signer request",
 ]) {
-  assert.ok(panel.includes(phrase), `Panel should include market preview-only copy: ${phrase}`);
+  assert.ok(panel.includes(phrase), `Panel should include reviewed market execution copy: ${phrase}`);
 }
 
-assert.ok(panel.includes('/api/hyperliquid/orders/execution-intent'), "Hyperliquid ticket must request a server-issued intent");
+assert.ok(panel.includes('/api/hyperliquid/actions/execution-intent'), "Hyperliquid ticket must request a server-issued exact-action intent");
 assert.ok(panel.includes('/api/hyperliquid/orders/submit'), "Hyperliquid ticket must expose the wallet-approved submit route");
+assert.ok(panel.includes('/api/polymarket/orders/handoff'), "Polymarket ticket must request a compliance-gated handoff");
+assert.ok(
+  panel.includes("submitPolymarketOrder({ walletClient, order: prepared })"),
+  "Polymarket ticket must submit the exact prepared order through the connected wallet client",
+);
 
-// 9. No copy or route enables Polymarket submission or unattended execution.
+// 9. No copy or route enables unattended execution or hidden signing.
 for (const forbidden of [
-  "/api/polymarket/orders/submit",
   'title="Try in chat"',
   'title="Try prompts"',
   "Copy sign-request examples",

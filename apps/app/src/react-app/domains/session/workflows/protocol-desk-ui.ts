@@ -86,8 +86,11 @@ const STATUS_LABELS: Record<ProtocolDeskVisualStatus, string> = {
   planned_not_live: "Planned, not live",
 };
 
-const MARKET_STATUS_LABELS: Partial<Record<CustomerProtocolDeskId, string>> = {
-  polymarket: "Compliance-gated handoff",
+const DESK_STATUS_LABELS: Partial<Record<CustomerProtocolDeskId, string>> = {
+  bittensor: "Transfer, stake & unstake",
+  hyperliquid: "Review & submit",
+  polymarket: "Buy, sell & cancel",
+  sui: "Transfer in wallet",
 };
 
 const WORKSPACE_TO_DESK_ID: Record<string, CustomerProtocolDeskId | undefined> = {
@@ -99,7 +102,7 @@ const WORKSPACE_TO_DESK_ID: Record<string, CustomerProtocolDeskId | undefined> =
 };
 
 export function protocolDeskStatusLabel(status: ProtocolDeskVisualStatus, id?: CustomerProtocolDeskId | string): string {
-  return MARKET_STATUS_LABELS[id as CustomerProtocolDeskId] ?? STATUS_LABELS[status];
+  return DESK_STATUS_LABELS[id as CustomerProtocolDeskId] ?? STATUS_LABELS[status];
 }
 
 export function protocolDeskIdForWorkspace(workspaceId: string | null | undefined): CustomerProtocolDeskId | null {
@@ -139,13 +142,13 @@ function capabilityBullets(manifest: ProtocolDeskManifest): string[] {
 
 function safetySummary(manifest: ProtocolDeskManifest): string {
   if (manifest.id === "bittensor") {
-    return "Agents prepare drafts only. TAO transfers require exact review and connected Bittensor-wallet approval; staking and advanced calls remain external handoffs.";
+    return "Agents prepare drafts only. TAO transfers, stake, and unstake calls require exact review and connected Bittensor-wallet approval. Other runtime calls remain unavailable until separately audited.";
   }
   if (manifest.id === "hyperliquid") {
     return "Agents prepare drafts only. Exact orders require separate review and connected-wallet authorization before one-time submission.";
   }
   if (manifest.id === "polymarket") {
-    return "Agents prepare drafts only. Eligible EOA BUY orders require compliance approval, exact review, and connected Polygon-wallet authorization.";
+    return "Agents prepare drafts only. Eligible buy, sell, and cancel actions require compliance approval, exact review, and connected Polygon-wallet authorization.";
   }
   if (manifest.id === "sui") {
     return "Use your Sui wallet on web. On desktop, Matterhorn prepares the action for you to finish in your own wallet. Matterhorn stores previews and public receipts only.";
@@ -164,16 +167,16 @@ function safetySummary(manifest: ProtocolDeskManifest): string {
 
 function railTitle(manifest: ProtocolDeskManifest): string {
   if (manifest.id === "bittensor") {
-    return "Bittensor: TAO reads, subnets, validators, reviewed transfers, staking previews, watches, and receipts";
+    return "Bittensor: TAO reads, subnets, validators, wallet-reviewed transfers, stake, unstake, watches, and receipts";
   }
   if (manifest.id === "hyperliquid") {
-    return "Hyperliquid: orderbooks, exposure, funding, watches, and order previews";
+    return "Hyperliquid: orderbooks, exposure, funding, watches, and wallet-reviewed place, cancel, modify, and close actions";
   }
   if (manifest.id === "polymarket") {
-    return "Polymarket: markets, liquidity, compliance, watches, and wallet-approved BUY orders";
+    return "Polymarket: markets, liquidity, compliance, watches, and wallet-reviewed buy, sell, and cancel actions";
   }
   if (manifest.id === "sui") {
-    return "Sui: account reads, transfer previews, wallet handoffs, and receipt evidence";
+    return "Sui: account reads, native and custom coin transfers, object transfers, batch transfers, and receipt evidence";
   }
   if (manifest.id === "wellness") {
     return "Longevity: standalone service workflows, program packets, progress check-ins, and client handoffs";
@@ -188,16 +191,16 @@ function sessionTitle(manifest: ProtocolDeskManifest): string {
 
 function sessionBoundary(manifest: ProtocolDeskManifest): string {
   if (manifest.id === "bittensor") {
-    return "Public wallet details and transfer drafts. You approve TAO transfers in your wallet; staking and advanced actions finish in an external signer.";
+    return "Public wallet details and transaction drafts. You approve TAO transfers, stake, and unstake calls in your connected wallet; unsupported advanced calls are not presented as executable.";
   }
   if (manifest.id === "hyperliquid") {
-    return "Runs market and account checks, then prepares exact orders for separate review and connected-wallet approval. Agents cannot submit.";
+    return "Runs market and account checks, then prepares exact place, cancel, modify, and close actions for separate review and connected-wallet approval. Agents cannot submit autonomously.";
   }
   if (manifest.id === "polymarket") {
-    return "Runs market research and compliance checks. Eligible EOA BUY orders continue through a separate connected-wallet ticket; blocked regions get no executable terms.";
+    return "Runs market research and compliance checks. Eligible buy, sell, and cancel actions continue through a separate connected-wallet ticket; blocked regions get no executable terms.";
   }
   if (manifest.id === "sui") {
-    return "Runs public Sui account reads and transfer previews. Web signing happens in the connected wallet; desktop signing stays external.";
+    return "Runs public Sui account reads and prepares native coin, custom coin, object, and batch transfers. Web signing happens in the connected wallet; desktop signing stays external.";
   }
   if (manifest.id === "wellness") {
     return "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.";

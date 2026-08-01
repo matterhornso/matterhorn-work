@@ -313,7 +313,7 @@ function sharedSummaryFor(kind: UnifiedCryptoSharedCardKind, venue: RoutedCrypto
       return "More context is needed before Matterhorn can continue safely.";
     case "readiness_report":
       if (originalKind === "market_execution_chain") {
-        return "Safe Hyperliquid and Polymarket execution-chain guide: preview, external sign request, redacted artifact validation, artifact reconciliation, and public receipt import. This is not execution permission.";
+        return "Optional legacy evidence chain for unsupported or advanced actions completed outside Matterhorn. Supported actions use the separate reviewed wallet ticket.";
       }
       return "Cross-venue execution readiness for Hyperliquid and Polymarket. This is a readiness contract, not execution permission.";
     case "discovery":
@@ -546,7 +546,7 @@ function marketExecutionReadinessResult(input: UnifiedCryptoChatInput, message: 
     requestedVenue: normalizeVenue(input.venue),
     intent: "market_execution_readiness",
     execution: "read_only",
-    responseText: "Can submit: No. Live submission: Off. Agent drafts never submit. Hyperliquid orders and eligible Polymarket EOA BUY orders can continue in a separate reviewed wallet ticket, where exact terms, expiry, compliance, and connected-wallet authorization are enforced. Watches and agents cannot sign or submit.",
+    responseText: "Agent submission: Off. Hyperliquid orders and eligible Polymarket buy, sell, and cancel actions continue in a separate reviewed wallet ticket, where exact terms, expiry, compliance, and connected-wallet authorization are enforced. Watches and agents cannot sign or submit.",
     cards,
     sharedCards: buildUnifiedCryptoSharedCards("auto", "read_only", cards, warnings),
     data: { report },
@@ -583,8 +583,8 @@ function marketExecutionChainResult(input: UnifiedCryptoChatInput, message: stri
     intent: highlightedStep ? "market_execution_step_guidance" : "market_execution_chain",
     execution: "read_only",
     responseText: highlightedStep
-      ? `Can submit: No. Live submission: Off. ${highlightedStep.label}: ${highlightedStep.purpose} Use only public/redacted inputs. Agent artifacts remain non-submitting and hash mismatches fail closed. Supported actions continue only in a separate exact-term wallet ticket. Matterhorn never takes private keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.`
-      : "Can submit: No. Live submission: Off. The safe Hyperliquid/Polymarket chain is: agent draft, exact-term wallet ticket, connected-wallet authorization, submission, then public receipt evidence. Agent artifacts remain non-submitting, reviewed terms are immutable, and watches cannot execute. Matterhorn never takes private keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.",
+      ? `This evidence artifact cannot submit. ${highlightedStep.label}: ${highlightedStep.purpose} Use only public/redacted inputs and fail closed on hash mismatches. Supported actions use the separate exact-term connected-wallet ticket. Matterhorn never takes private keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.`
+      : "The agent prepares exact terms, the user reviews them, and a connected wallet authorizes each supported submission. The legacy evidence chain remains available for unsupported or advanced actions completed outside Matterhorn. Reviewed terms are immutable, watches cannot execute, and Matterhorn never takes private keys, API secrets, raw signatures, arbitrary signed payloads, or wallet exports.",
     cards,
     sharedCards: buildUnifiedCryptoSharedCards("auto", "read_only", cards, warnings),
     data: { guide, highlightedStep },

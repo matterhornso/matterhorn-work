@@ -77,13 +77,13 @@ for (const phrase of [
   "Polymarket compliance",
   "Signer preview",
   "Review the current Hyperliquid and Polymarket execution contract.",
-  "Agent drafts remain available for review.",
+  "Agents prepare drafts only.",
   "Can submit: No",
   "Live submission: Off",
   "Execution readiness",
   "Ready for live submission",
   "Hyperliquid orders can submit only after you review the network, asset, side, size, price or slippage boundary, and reduce-only state, then sign the exact short-lived intent in your connected wallet.",
-  "Eligible Polymarket EOA BUY orders can submit only after compliance passes and you authorize the exact order in a connected Polygon wallet.",
+  "Eligible Polymarket EOA buy, sell, and cancel actions can submit only after compliance passes and you authorize the exact action in a connected Polygon wallet.",
   "Execution CLI",
   "Execution API",
   "Every order is hash-bound to the reviewed terms, expires quickly, can submit once, and must be signed by the connected wallet.",
@@ -163,8 +163,8 @@ for (const phrase of [
   "review-only alert actions",
   "no orders are signed, submitted, or auto-executed",
   "Every supported transfer or trade uses a separate reviewed ticket and connected-wallet approval.",
-  "Hyperliquid and eligible Polymarket BUY orders require exact review and a fresh wallet approval.",
-  "External signer required",
+  "Hyperliquid and eligible Polymarket buy, sell, and cancel actions require exact review and a fresh wallet approval.",
+  "Bittensor actions require connected-wallet approval",
   "Automatic execution off",
   "Polymarket compliance gate",
   "Wallet approval per action",
@@ -185,7 +185,7 @@ for (const forbidden of [
   assert.equal(panel.includes(forbidden), false, `customer UI must not include forbidden execution/secret surface ${forbidden}`);
 }
 
-assert.ok(panel.includes("/api/hyperliquid/orders/execution-intent"), "customer UI must prepare an exact Hyperliquid intent");
+assert.ok(panel.includes("/api/hyperliquid/actions/execution-intent"), "customer UI must prepare an exact Hyperliquid action intent");
 assert.ok(panel.includes("/api/hyperliquid/orders/submit"), "customer UI must expose the wallet-approved Hyperliquid submit route");
 
 assert.ok(panel.includes("matterhorn:crypto-chat-handoff"), "demo tasks should use the generic crypto handoff event");

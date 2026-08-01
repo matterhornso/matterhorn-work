@@ -1,6 +1,6 @@
 # Market Execution-Readiness Security Gate
 
-This document defines the security boundary for market execution. Matterhorn Desks supports connected-wallet Hyperliquid execution in the web app. Polymarket remains read/preview only. Agent, MCP, CLI, watch, and chat surfaces do not submit orders.
+This document defines the security boundary for market execution. Matterhorn Desks supports connected-wallet Hyperliquid execution and a separate, compliance-gated Polymarket EOA BUY ticket in the web app. Agent, MCP, CLI, watch, and chat surfaces do not submit orders.
 
 ## Current Enforcement
 
@@ -9,7 +9,10 @@ This document defines the security boundary for market execution. Matterhorn Des
 - the user reviews an exact, expiring intent and signs it in the connected wallet; Matterhorn verifies the recovered signer and relays that one intent once
 - mainnet additionally requires the typed confirmation `SUBMIT LIVE ORDER`
 - the default maximum order notional is 1,000 USDC and can be lowered or explicitly changed with `MATTERHORN_HYPERLIQUID_MAX_ORDER_USDC`
-- Polymarket has no submit route and remains compliance-gated read/preview and external handoff only
+- Polymarket has no server submit route; agent and server tools remain compliance-gated read/preview and external handoff only
+- the separate browser-wallet ticket supports eligible EOA BUY market orders only after an exact, unexpired review, allowed compliance result, connected Polygon wallet, and typed confirmation `SUBMIT POLYMARKET ORDER`
+- Polymarket sell orders, proxy accounts, blocked or unknown compliance, watches, agents, MCP, CLI, and unattended execution cannot submit
+- temporary Polymarket CLOB credentials are created inside the browser ticket, never sent to Matterhorn's server, and cleared immediately after the attempt
 - no private key, seed phrase, API secret, unbound signature, arbitrary signed payload, or wallet export is accepted; the dedicated submit route accepts only the signature for a server-held intent
 - Polymarket compliance-blocked previews carry no executable price, size, estimated shares, or typed-data handoff
 - public receipt import verifies preview/handoff hashes and rejects credential-shaped fields
@@ -25,6 +28,17 @@ This document defines the security boundary for market execution. Matterhorn Des
 7. The receipt stores public result data and explicitly does not persist the signature.
 
 Market orders are implemented as IOC limit orders at the reviewed slippage boundary. Limit orders use GTC. Every order requires a fresh wallet approval; no watch, prompt, agent, MCP, or CLI action can auto-submit.
+
+## Connected-Wallet Polymarket BUY Ticket
+
+1. The agent or desk resolves public market context and prepares a non-submittable draft.
+2. The separate wallet ticket requests a fresh server preview and compliance result, including the exact market, outcome, CLOB token, USDC spend, maximum loss, public hash, and expiry.
+3. The ticket rejects missing or changed terms, invalid or expired reviews, non-finite values, maximum-loss mismatches, and any compliance result other than `allowed`.
+4. The connected EVM wallet must be on Polygon and the user must type `SUBMIT POLYMARKET ORDER`.
+5. The official Polymarket CLOB client creates temporary credentials and submits one BUY FAK market order from the connected EOA wallet.
+6. Temporary credentials are cleared in a `finally` block. Matterhorn's server receives only a public receipt bound to the original handoff.
+
+This ticket does not make agent drafts executable and does not provide a server, MCP, CLI, watch, or chat submit route. Sell orders, proxy-account execution, automatic retries, and unattended trading remain out of scope.
 
 ## Legacy Preview And Evidence Chain
 
@@ -74,9 +88,10 @@ The readiness gate must continue to prove:
 - stale preview or hash mismatch fails closed;
 - Polymarket compliance blocks cannot be bypassed into executable price/size/share fields;
 - fake signed-payload or raw-signature receipt imports are rejected;
-- no command, MCP schema, chat helper, or watch exposes live market submission or exchange credential handling;
+- no command, MCP schema, chat helper, watch, or server route exposes Polymarket live submission or exchange credential handling;
 - kill-switch-off, expired intent, changed wallet, changed intent, replay, oversized notional, excess slippage, and wrong mainnet confirmation all fail closed.
+- Polymarket missing-wallet, wrong-chain, blocked-compliance, invalid expiry, changed maximum loss, and missing explicit confirmation all fail closed.
 
 ## Current Status
 
-Hyperliquid connected-wallet execution is enabled only when the deployment kill switch is on. Polymarket remains read/preview only. Passing this gate means the code preserves those separate boundaries; it does not replace a small-value testnet wallet acceptance test or production incident-response review.
+Hyperliquid connected-wallet execution is enabled only when the deployment kill switch is on. Polymarket agent and server tools remain read/preview only; eligible EOA BUY orders use the separate reviewed browser-wallet ticket. Passing this gate means the code preserves those separate boundaries; it does not replace controlled wallet acceptance or production incident-response review.

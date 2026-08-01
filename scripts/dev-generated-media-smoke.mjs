@@ -14,7 +14,7 @@ const rootDir = path.resolve(__dirname, "..");
 const clientToken = process.env.MATTERHORN_MEDIA_SMOKE_CLIENT_TOKEN?.trim() || "matterhorn-media-smoke-client-token";
 const hostToken = process.env.MATTERHORN_MEDIA_SMOKE_HOST_TOKEN?.trim() || "matterhorn-media-smoke-host-token";
 const preferredServerPort = Number(process.env.MATTERHORN_MEDIA_SMOKE_SERVER_PORT?.trim() || "4125");
-const preferredAppPort = Number(process.env.MATTERHORN_MEDIA_SMOKE_APP_PORT?.trim() || "5182");
+const preferredAppPort = Number(process.env.MATTERHORN_MEDIA_SMOKE_APP_PORT?.trim() || "5282");
 const workspaceRoot = path.resolve(process.env.MATTERHORN_MEDIA_SMOKE_WORKSPACE?.trim() || rootDir);
 const storageEpochs = process.env.MATTERHORN_MEDIA_SMOKE_WALRUS_EPOCHS?.trim() || "3";
 const requestRateLimitMax = process.env.MATTERHORN_MEDIA_SMOKE_REQUEST_RATE_LIMIT_MAX?.trim() || "5000";
@@ -50,7 +50,7 @@ function help() {
     "Useful env vars:",
     "  MATTERHORN_MEDIA_SMOKE_WORKSPACE=/path/to/workspace",
     "  MATTERHORN_MEDIA_SMOKE_SERVER_PORT=4125",
-    "  MATTERHORN_MEDIA_SMOKE_APP_PORT=5182",
+    "  MATTERHORN_MEDIA_SMOKE_APP_PORT=5282",
     "  MATTERHORN_MEDIA_SMOKE_REQUEST_RATE_LIMIT_MAX=5000",
     "",
     "The request budget applies only to this synthetic loopback QA stack.",
@@ -318,7 +318,7 @@ function startFakeOpencode() {
     appendAssistantMessage(
       sessionId,
       "",
-      "This isolated acceptance workspace is ready. I can help you verify a workflow without touching a real wallet, provider key, or workspace.",
+      "QA-only simulator. Live models, markets, wallets, and submissions are unavailable in this workspace.",
       now,
     );
   };
@@ -577,7 +577,7 @@ function startFakeOpencode() {
         appendAssistantMessage(
           sessionId,
           userMessageId,
-          "I received your request in the isolated acceptance workspace. The simulated response is complete and no external action was taken.",
+          "QA-only simulator: this request was recorded for interface testing. No live model, market, wallet, or submission was called.",
           now,
         );
         session.time.updated = now;

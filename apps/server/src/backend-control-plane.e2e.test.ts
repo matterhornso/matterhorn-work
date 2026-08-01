@@ -1581,7 +1581,7 @@ describe("backend control plane routes", () => {
     expect(rejectedSecret.payload.code).toBe("sui_secret_rejected");
   });
 
-  test("Sui transaction preview route returns a non-submittable wallet handoff", async () => {
+  test("Sui transaction preview route returns a connected-wallet transaction review", async () => {
     const { base } = await boot();
 
     const preview = await jsonFetch(base, "/api/sui/transactions/preview", {
@@ -1601,9 +1601,9 @@ describe("backend control plane routes", () => {
       family: "sui",
       kind: "transfer_sui",
       amountMist: "1000000000",
-      canSubmit: false,
+      canSubmit: true,
       custody: false,
-      liveSubmissionEnabled: false,
+      liveSubmissionEnabled: true,
       signerPolicy: "client_wallet_required",
     });
     expect(preview.payload.preview.previewSha256).toMatch(/^[a-f0-9]{64}$/);
@@ -1677,7 +1677,11 @@ describe("backend control plane routes", () => {
       sessionSlug: "sui_wallet_evidence",
       source: "task_events",
     });
-    expect(preview.payload.preview.canSubmit).toBe(false);
+    expect(preview.payload.preview).toMatchObject({
+      canSubmit: true,
+      liveSubmissionEnabled: true,
+      signerPolicy: "client_wallet_required",
+    });
     expect(existsSync(join(dir, preview.payload.evidence.outputPath))).toBe(true);
 
     const receipt = await jsonFetch(base, "/workspace/ws_backend/sui/transactions/receipt", {

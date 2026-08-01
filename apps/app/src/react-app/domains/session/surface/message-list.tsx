@@ -1003,7 +1003,9 @@ function sharedCardWalletTicket(
   if (venue === "polymarket") {
     const preview = isRecordValue(data?.preview) ? data.preview : null;
     const compliance = isRecordValue(preview?.compliance) ? preview.compliance : null;
-    return status !== "danger" && compliance?.status === "allowed" ? "Eligible EOA BUY" : null;
+    const action = typeof preview?.operation === "string" ? preview.operation.toLowerCase() : "order";
+    const label = action === "sell" ? "Sell review" : action.startsWith("cancel") ? "Cancel review" : "Buy review";
+    return status !== "danger" && compliance?.status === "allowed" ? label : null;
   }
   if (venue === "bittensor" && originalKind && /transfer/i.test(originalKind)) return "TAO transfer";
   return null;

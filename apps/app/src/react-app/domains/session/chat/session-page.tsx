@@ -145,13 +145,16 @@ import {
   validateDeskTaskInput,
   type DeskTaskInputRequirement,
 } from "../workflows/desk-task-inputs";
-import { MATTERHORN_DESK_TASK_STARTERS } from "../workflows/desk-task-starters";
+import {
+  MATTERHORN_DESK_TASK_STARTERS,
+  type MatterhornDeskTaskStarter,
+} from "../workflows/desk-task-starters";
 import {
   stageWorkflowRun,
   startWorkflowRun,
 } from "../workflows/workflow-run-client";
 import { getArtifactNoteContext } from "../artifacts/artifact-note-context";
-import { getChatDraftConfig } from "@matterhorn-work/types";
+import { getChatDraftConfig, type ReviewedActionOperation } from "@matterhorn-work/types";
 import { matterhornDeskAgentIdForDesk } from "@matterhorn-work/types/desk-agents";
 import type { MatterhornWorkflowRun } from "@matterhorn-work/types/workflow-runs";
 
@@ -183,10 +186,6 @@ const MemoryPanel = lazy(() => import("../../memory/memory-panel").then((module)
 const NotesPanel = lazy(() => import("../../notes/notes-page").then((module) => ({
   default: module.NotesPage,
 })));
-const CommandPalette = lazy(() => import("../../wallet/components/CommandPalette").then((module) => ({
-  default: module.CommandPalette,
-})));
-
 const STARTUP_SKELETON_ROWS = [
   { id: "intro", titleWidth: "42%", bodyWidth: "88%" },
   { id: "middle", titleWidth: "56%", bodyWidth: "88%" },
@@ -568,14 +567,18 @@ function WorkflowDeskHomeSurface({
   launchState,
   matterhornServerClient,
   runtimeWorkspaceId,
+  modelUnavailable,
   onBackHome,
+  onOpenModelSettings,
   onStartStage,
 }: {
   deskId: WorkflowDeskId;
   launchState: WorkflowDeskLaunchState | null;
   matterhornServerClient: MatterhornServerClient | null;
   runtimeWorkspaceId: string | null;
+  modelUnavailable: boolean;
   onBackHome: () => void;
+  onOpenModelSettings: () => void;
   onStartStage: (stageId: string, prompt: string) => void;
 }) {
   const visual = getCustomerProtocolDeskVisual(deskId);
@@ -593,6 +596,7 @@ function WorkflowDeskHomeSurface({
   const startTaskBlocked = Boolean(
     !matterhornServerClient ||
     !readinessWorkspaceId ||
+    modelUnavailable ||
     (startTaskFeature && !startTaskFeature.ready),
   );
   const startTaskBlocker = !matterhornServerClient
@@ -603,12 +607,16 @@ function WorkflowDeskHomeSurface({
         ? `Start task needs ${startTaskFeature.blockingCheckIds
           .map((checkId) => readinessQuery.data?.checks[checkId]?.label ?? checkId)
           .join(", ")}.`
-        : null;
+        : modelUnavailable
+          ? "Connect a model before starting a desk task."
+          : null;
   const startTaskActionLabel = !matterhornServerClient
     ? "Engine offline"
     : !readinessWorkspaceId
       ? "Open workspace"
-      : "Platform setup";
+      : modelUnavailable
+        ? "Model required"
+        : "Unavailable";
   const taskStatus = launchState?.status === "launching" ? "running" : (
     launchState?.status === "staging"
       ? "staged"
@@ -647,6 +655,8 @@ function WorkflowDeskHomeSurface({
                 </h2>
                 {launchState?.status === "failed" ? (
                   <span className="text-[11px] font-semibold text-rose-300">Needs attention</span>
+                ) : launchState?.status === "setup_required" ? (
+                  <span className="text-[11px] font-semibold text-amber-300">Model needed</span>
                 ) : launchState?.status === "ready" ? (
                   <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">Ready</span>
                 ) : launchState?.status === "launching" ? (
@@ -671,9 +681,21 @@ function WorkflowDeskHomeSurface({
         </section>
 
         {startTaskBlocker ? (
-          <div className="flex items-start gap-2 rounded-lg bg-dls-surface/50 px-3 py-2 text-xs leading-5 text-dls-secondary">
-            <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" />
-            <span>{startTaskBlocker}</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-dls-surface/50 px-3 py-2 text-xs leading-5 text-dls-secondary">
+            <span className="flex min-w-0 items-start gap-2">
+              <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" />
+              <span>{startTaskBlocker}</span>
+            </span>
+            {modelUnavailable && matterhornServerClient && readinessWorkspaceId ? (
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-dls-surface-muted/[0.38] px-2.5 py-1.5 font-semibold text-dls-text transition-colors hover:bg-dls-surface-muted/[0.52] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                onClick={onOpenModelSettings}
+              >
+                <Settings2 className="size-3.5" aria-hidden="true" />
+                Set up model
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -725,16 +747,18 @@ function ProtocolDeskEmptyState({
   matterhornServerClient,
   runtimeWorkspaceId,
   onUsePrompt,
+  onOpenReviewedAction,
   onBackHome,
 }: {
   panel: VenueSidePanel;
   matterhornServerClient: MatterhornServerClient | null;
   runtimeWorkspaceId: string | null;
   onUsePrompt: (prompt: string, title?: string) => boolean | void | Promise<boolean | void>;
+  onOpenReviewedAction: (protocol: VenueSidePanel, operation?: ReviewedActionOperation) => void;
   onBackHome: () => void;
 }) {
   const visual = getCustomerProtocolDeskVisual(panel);
-  const prompts = MATTERHORN_DESK_TASK_STARTERS[panel];
+  const prompts: readonly MatterhornDeskTaskStarter[] = MATTERHORN_DESK_TASK_STARTERS[panel];
   const draftConfig = getChatDraftConfig(panel);
   const [launchingTaskTitle, setLaunchingTaskTitle] = useState<string | null>(null);
   const [pendingInput, setPendingInput] = useState<{
@@ -786,7 +810,7 @@ function ProtocolDeskEmptyState({
       ? "Open workspace"
       : "Platform setup";
   const deskSafetyInfo = panel === "bittensor"
-    ? "Uses public wallet details and prepares transfer drafts. You approve TAO transfers in your wallet; staking and advanced actions finish in an external signer."
+    ? "Uses public wallet details and prepares exact transaction drafts. You approve transfer, stake, and unstake calls in your connected Bittensor wallet; unsupported advanced calls stay unavailable."
     : panel === "polymarket"
       ? "Runs market research, compliance checks, and external-wallet handoffs. Matterhorn never places bets inside the app."
       : panel === "sui"
@@ -813,7 +837,11 @@ function ProtocolDeskEmptyState({
       });
   }, [onUsePrompt]);
 
-  const handleTaskAction = useCallback((item: { title: string; prompt: string }) => {
+  const handleTaskAction = useCallback((item: MatterhornDeskTaskStarter) => {
+    if (item.reviewedAction) {
+      onOpenReviewedAction(item.reviewedAction, item.reviewedActionOperation);
+      return;
+    }
     const requirement = getDeskTaskInputRequirement(item.prompt);
     if (!requirement) {
       startTask(item.prompt, item.title);
@@ -827,7 +855,7 @@ function ProtocolDeskEmptyState({
     });
     setTaskInputValue("");
     setTaskInputError(null);
-  }, [panel, startTask]);
+  }, [onOpenReviewedAction, panel, startTask]);
 
   const handleTaskInputSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -935,6 +963,7 @@ function ProtocolDeskEmptyState({
         {prompts.map((item) => {
           const isLaunching = launchingTaskTitle === item.title;
           const inputRequirement = getDeskTaskInputRequirement(item.prompt);
+          const opensReviewedAction = Boolean(item.reviewedAction);
           const pendingInputKey = `${panel}:${item.title}`;
           const inputOpen = pendingInput?.key === pendingInputKey;
           const inputId = `desk-task-input-${panel}-${item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
@@ -954,9 +983,21 @@ function ProtocolDeskEmptyState({
                 objective={item.detail}
                 status="idle"
                 evidenceHints={[evidenceHint]}
-                actionLabel={isLaunching ? "Starting..." : startTaskBlocked ? startTaskActionLabel : inputRequirement?.actionLabel ?? draftConfig?.confirmCtaLabel ?? "Start task"}
-                actionDisabled={startTaskBlocked || Boolean(launchingTaskTitle)}
-                actionTitle={startTaskBlocker ?? inputRequirement?.helpText ?? undefined}
+                actionLabel={opensReviewedAction
+                  ? item.reviewedActionLabel ?? (item.reviewedAction === "bittensor"
+                    ? "Open transfer ticket"
+                    : item.reviewedAction === "sui"
+                      ? "Open transfer ticket"
+                    : "Open trade ticket")
+                  : isLaunching
+                    ? "Starting..."
+                    : startTaskBlocked
+                      ? startTaskActionLabel
+                      : inputRequirement?.actionLabel ?? draftConfig?.confirmCtaLabel ?? "Start task"}
+                actionDisabled={Boolean(launchingTaskTitle) || (!opensReviewedAction && startTaskBlocked)}
+                actionTitle={opensReviewedAction
+                  ? "Open the exact review, wallet approval, and submission flow."
+                  : startTaskBlocker ?? inputRequirement?.helpText ?? undefined}
                 onAction={() => handleTaskAction(item)}
               />
               {inputOpen ? (
@@ -1026,7 +1067,7 @@ type StatusBarOverrides = Pick<
 
 type WorkflowDeskLaunchState = {
   deskId: WorkflowDeskId;
-  status: "idle" | "staging" | "ready" | "launching" | "failed";
+  status: "idle" | "setup_required" | "staging" | "ready" | "launching" | "failed";
   run: MatterhornWorkflowRun | null;
   message: string | null;
   intent: string | null;
@@ -1120,6 +1161,7 @@ export type SessionPageProps = {
   startupPhase: BootPhase;
   providerConnectedIds: string[];
   providers?: ProviderListItem[];
+  modelUnavailable?: boolean;
   mcpConnectedCount: number;
   onSendFeedback: () => void;
   onOpenSettings: () => void;
@@ -1225,20 +1267,7 @@ export function SessionPage(props: SessionPageProps) {
   const sessionWallet = useSessionWallet(wallet.store);
   useJobCron(wallet.store);
   const currentWalletRuntime = useMemo(() => homeWalletRuntime(), []);
-  const [commandOpen, setCommandOpen] = useState(false);
   const { showToast } = useStatusToasts();
-
-  // Cmd+K / Ctrl+K command palette
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setCommandOpen((o) => !o);
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   const { openQuickJot } = useQuickJot();
   const workspaceNotesId = (props.runtimeWorkspaceId ?? "").trim();
@@ -1382,6 +1411,8 @@ export function SessionPage(props: SessionPageProps) {
     [location.search, workspaceNotesAvailable],
   );
   const activeSidePanel = routeSidePanel;
+  const [reviewedActionEntryProtocol, setReviewedActionEntryProtocol] = useState<VenueSidePanel | null>(null);
+  const [reviewedActionEntryOperation, setReviewedActionEntryOperation] = useState<ReviewedActionOperation | null>(null);
   const browserRailActive = activeSidePanel === "browser";
   const artifactRailActive = activeSidePanel === "artifacts";
   const showArtifactRailItem = hasArtifactTargets || artifactRailActive;
@@ -1391,7 +1422,11 @@ export function SessionPage(props: SessionPageProps) {
   const memoryRailActive = activeSidePanel === "memory";
   const notesRailActive = activeSidePanel === "notes";
   const walletRailActive = activeSidePanel === "wallet";
-  const focusedProtocolPanel = !props.selectedSessionId && isVenueSidePanel(activeSidePanel) ? activeSidePanel : null;
+  const focusedProtocolPanel = !props.selectedSessionId
+    && isVenueSidePanel(activeSidePanel)
+    && reviewedActionEntryProtocol !== activeSidePanel
+    ? activeSidePanel
+    : null;
   const visibleSidePanel = focusedProtocolPanel ? null : activeSidePanel;
   const sidePanelOpen = visibleSidePanel !== null;
   const isMobileViewport = useIsMobile();
@@ -1576,7 +1611,11 @@ export function SessionPage(props: SessionPageProps) {
   }, [navigate, setSidePanelState, sidePanelScopeId]);
 
   useEffect(
-    () => subscribeReviewedActionHandoff((handoff) => setCurrentSidePanel(handoff.protocol)),
+    () => subscribeReviewedActionHandoff((handoff) => {
+      setReviewedActionEntryProtocol(handoff.protocol);
+      setReviewedActionEntryOperation(handoff.draft.operation);
+      setCurrentSidePanel(handoff.protocol);
+    }),
     [setCurrentSidePanel],
   );
 
@@ -1688,15 +1727,22 @@ export function SessionPage(props: SessionPageProps) {
     setActiveWorkflowDeskId(deskId);
 
     if (!options?.launchAgent) {
+      const modelUnavailable = Boolean(props.modelUnavailable);
       setWorkflowLaunchState({
         deskId,
-        status: props.matterhornServerClient ? "ready" : "failed",
+        status: !props.matterhornServerClient
+          ? "failed"
+          : modelUnavailable
+            ? "setup_required"
+            : "ready",
         run: null,
-        message: props.matterhornServerClient
-          ? options?.recovery
-            ? "Choose a stage to start this task. Nothing has been sent yet."
-            : `Choose a stage to begin. Outputs will save under outputs/${getCustomerProtocolDeskVisual(deskId)?.outputDeskId ?? deskId}/<session-slug>/`
-          : "Matterhorn Desks engine is unavailable for this project. Retry the connection or restart Matterhorn Desks if it stays offline.",
+        message: !props.matterhornServerClient
+          ? "Matterhorn Desks engine is unavailable for this project. Retry the connection or restart Matterhorn Desks if it stays offline."
+          : modelUnavailable
+            ? "Connect a model before starting a stage. Nothing has been sent."
+            : options?.recovery
+              ? "Choose a stage to start this task. Nothing has been sent yet."
+              : `Choose a stage to begin. Outputs will save under outputs/${getCustomerProtocolDeskVisual(deskId)?.outputDeskId ?? deskId}/<session-slug>/`,
         intent: visibleUserIntent,
       });
       return;
@@ -1768,6 +1814,7 @@ export function SessionPage(props: SessionPageProps) {
     props.matterhornServerClient,
     props.selectedWorkspaceId,
     props.sidebar,
+    props.modelUnavailable,
     setCurrentSidePanel,
   ]);
 
@@ -1908,6 +1955,8 @@ export function SessionPage(props: SessionPageProps) {
     });
   }, []);
   const closeRightPane = useCallback(() => {
+    setReviewedActionEntryProtocol(null);
+    setReviewedActionEntryOperation(null);
     setCurrentSidePanel(null);
   }, [setCurrentSidePanel]);
   const openBrowserRailPane = useCallback(() => {
@@ -2018,6 +2067,8 @@ export function SessionPage(props: SessionPageProps) {
     if (options?.primePrompt && !(props.selectedSessionId && props.surface)) {
       pendingProtocolRailPanelRef.current = panel;
     }
+    setReviewedActionEntryProtocol(null);
+    setReviewedActionEntryOperation(null);
     setCurrentSidePanel(panel);
     if (options?.primePrompt) primeProtocolRailPrompt(panel, options);
   }, [primeProtocolRailPrompt, props.selectedSessionId, props.surface, setCurrentSidePanel]);
@@ -2081,6 +2132,7 @@ export function SessionPage(props: SessionPageProps) {
         matterhornServerClient={props.matterhornServerClient}
         workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
         sessionId={props.selectedSessionId}
+        initialOperation={reviewedActionEntryProtocol === "sui" ? reviewedActionEntryOperation : null}
         compact
         onEvidenceSaved={() => void outputReceiptsQuery.refetch()}
       />
@@ -2095,6 +2147,8 @@ export function SessionPage(props: SessionPageProps) {
         gasPriceGwei={sessionWallet.gasPriceGwei}
         blockExplorerUrl={sessionWallet.blockExplorerUrl}
         initialVenue={visibleSidePanel}
+        openReviewedAction={reviewedActionEntryProtocol === visibleSidePanel}
+        initialReviewedActionOperation={reviewedActionEntryOperation}
       />
     </div>
   ) : (
@@ -2600,7 +2654,9 @@ export function SessionPage(props: SessionPageProps) {
                       launchState={workflowLaunchState}
                       matterhornServerClient={props.matterhornServerClient}
                       runtimeWorkspaceId={props.runtimeWorkspaceId}
+                      modelUnavailable={Boolean(props.modelUnavailable)}
                       onBackHome={closeWorkflowDesk}
+                      onOpenModelSettings={props.onOpenSettings}
                       onStartStage={(stageId, prompt) => {
                         openWorkflowDesk(activeWorkflowDeskId, prompt, {
                           stageId,
@@ -2624,6 +2680,11 @@ export function SessionPage(props: SessionPageProps) {
                         matterhornServerClient={props.matterhornServerClient}
                         runtimeWorkspaceId={props.runtimeWorkspaceId}
                         onBackHome={returnToProjectHome}
+                        onOpenReviewedAction={(protocol, operation) => {
+                          setReviewedActionEntryProtocol(protocol);
+                          setReviewedActionEntryOperation(operation ?? null);
+                          setCurrentSidePanel(protocol);
+                        }}
                         onUsePrompt={(prompt, title) => {
                           const clearFocusedDesk = () => {
                             if (typeof window !== "undefined") {
@@ -3000,7 +3061,11 @@ export function SessionPage(props: SessionPageProps) {
             </ResizablePanel>
               {dockedSidePanelOpen ? (
               <>
-                <ResizableHandle withHandle className="hidden lg:flex" />
+                <ResizableHandle
+                  withHandle
+                  aria-label="Resize side panel"
+                  className="hidden lg:flex"
+                />
                 <ResizablePanel
                   panelRef={browserPanelRef}
                   defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "memory" || visibleSidePanel === "notes" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
@@ -3319,22 +3384,6 @@ export function SessionPage(props: SessionPageProps) {
         onSimulateTransaction={props.matterhornServerClient && outputReceiptWorkspaceId ? simulateWalletTransaction : undefined}
         onExecuteBatchStep={sessionWallet.executeBatchStep}
       />
-
-      {commandOpen ? (
-        <LazyModalBoundary>
-          <CommandPalette
-            open={commandOpen}
-            onClose={() => setCommandOpen(false)}
-            commands={[
-              { id: "send", label: "Send tokens", shortcut: "→ Send", action: () => {/* open send panel */} },
-              { id: "swap", label: "Swap tokens (CoW)", shortcut: "→ Swap", action: () => {/* open swap panel */} },
-              { id: "aave", label: "Aave deposits", shortcut: "→ Aave", action: () => {/* open aave panel */} },
-              { id: "bridge", label: "Bridge assets", shortcut: "→ Bridge", action: () => {/* open bridge panel */} },
-              { id: "agent", label: "Agent workspace", shortcut: "→ Agent", action: () => {/* open agent panel */} },
-            ]}
-          />
-        </LazyModalBoundary>
-      ) : null}
 
       {/* Cloud provider notifications are now handled globally by CloudProvidersToast in app-root.tsx */}
     </div>

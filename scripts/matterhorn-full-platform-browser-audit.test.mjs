@@ -46,6 +46,7 @@ for (const signal of [
   "waitForVisualSettle",
   "waitForChatComposer",
   "chatSurfaceMarkers",
+  '"Cautious"',
   "Start with a Matterhorn workflow",
   "document.getAnimations()",
   "Number.isFinite(endTime)",

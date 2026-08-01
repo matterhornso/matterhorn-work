@@ -217,14 +217,14 @@ function protocolLabelAndDetail(
       return {
         label: "Bittensor",
         status: cap.canSubmit
-          ? "TAO transfer: review & submit"
+          ? "Transfer, stake, unstake: review & submit"
           : cap.canPreview
             ? "Prepare only"
             : cap.canRead
               ? "Read only"
               : "Unavailable",
         detail: cap.canSubmit
-          ? "Read public SS58 data and prepare TAO transfers. Review and submit the exact transfer with your connected Bittensor wallet. Staking and advanced calls remain external-signer handoffs."
+          ? "Read public SS58 data and prepare TAO transfer, stake, or unstake calls. Review and submit the exact call with your connected Bittensor wallet. Unsupported advanced calls stay unavailable."
           : cap.canPreview
             ? "Read public SS58 data and prepare unsigned actions. Review, sign, and submit them with your own Bittensor signer."
           : "Read public SS58 and coldkey data.",
@@ -255,14 +255,14 @@ function protocolLabelAndDetail(
       return {
         label: "Polymarket",
         status: cap.canSubmit
-          ? "Eligible buy: review & submit"
+          ? "Buy, sell, cancel: review & submit"
           : cap.canPreview
             ? "Prepare only"
             : cap.canRead
               ? "Read only"
               : "Unavailable",
         detail: cap.canSubmit
-          ? "Read markets, check compliance, and prepare exact terms. Eligible EOA BUY orders can be reviewed and submitted after authorization from your connected Polygon wallet. Other order and account types remain external handoffs."
+          ? "Read markets, check compliance, and prepare exact terms. Eligible EOA buy, sell, and cancel actions can be reviewed and submitted after authorization from your connected Polygon wallet. Unsupported account types stay unavailable."
           : cap.canPreview
             ? "Read markets, compliance, and liquidity, then prepare an order draft. Review and submit it in your Polymarket client."
           : "Read markets, compliance, and liquidity.",

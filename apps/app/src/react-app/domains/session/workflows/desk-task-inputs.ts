@@ -138,5 +138,5 @@ export function buildDeskTaskPromptWithInput(
 
   return `${promptWithInput}
 
-Treat the request above as either a natural-language market or trade description, or an optional exact Polymarket URL or slug. Search the current public Polymarket catalog to resolve the exact market. If multiple markets plausibly match, show at most three concise choices and ask me to choose before continuing. Check compliance before preparing exact order terms. The Agent draft must remain non-submittable. If the request is an eligible EOA BUY order, direct me to the separate connected-wallet trade ticket for final review and authorization. Never auto-sign, auto-submit, or place a bet from chat or a watch.`;
+Treat the request above as either a natural-language market or trade description, or an optional exact Polymarket URL or slug. Search the current public Polymarket catalog to resolve the exact market. If multiple markets plausibly match, show at most three concise choices and ask me to choose before continuing. Check compliance before preparing exact order terms. The Agent draft must remain non-submittable. If the request is an eligible buy, sell, or cancel action, direct me to the separate connected-wallet trade ticket for final review and authorization. Never auto-sign, auto-submit, or place a bet from chat or a watch.`;
 }

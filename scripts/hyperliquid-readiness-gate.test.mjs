@@ -113,7 +113,7 @@ mustNotContain("apps/server/src/server.ts", [
 mustContain("apps/server/src/tools/hyperliquid-live-execution.ts", [
   "recoverTypedDataAddress",
   "Execution intent expired",
-  "Wallet signature does not authorize this exact order intent",
+  "Wallet signature does not authorize this exact action intent",
   "SUBMIT LIVE ORDER",
   "signatureStored: false",
 ]);

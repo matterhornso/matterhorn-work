@@ -10,6 +10,10 @@ import {
 } from "@mysten/dapp-kit-react";
 import { Transaction } from "@mysten/sui/transactions";
 import { useQuery } from "@tanstack/react-query";
+import type {
+  ReviewedActionDraftHandoff,
+  ReviewedActionOperation,
+} from "@matterhorn-work/types";
 import {
   CheckCircle2,
   Copy,
@@ -25,6 +29,7 @@ import {
 import type {
   MatterhornServerClient,
   MatterhornSuiNetwork,
+  MatterhornSuiTransactionKind,
   MatterhornSuiTransactionPreviewResponse,
   MatterhornSuiTransactionReceiptResponse,
 } from "../../../app/lib/matterhorn-server";
@@ -36,6 +41,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { SUI_NETWORKS, suiDAppKit, type SuiMatterhornNetwork } from "../../infra/sui-dapp-kit";
 import { getSuiWorkflowAvailability } from "./sui-workflow-state";
 import { usePhantomSui } from "./phantom-sui-provider";
+import {
+  subscribeReviewedActionHandoff,
+  takePendingReviewedActionHandoff,
+} from "./reviewed-action-handoff";
+
+type SuiDraftHandoff = Extract<ReviewedActionDraftHandoff, { protocol: "sui" }>[
+  "draft"
+];
 
 function truncateAddress(address: string): string {
   return `${address.slice(0, 8)}...${address.slice(-6)}`;
@@ -52,6 +65,34 @@ function formatSuiBalance(totalBalance: string | number | bigint | null | undefi
   } catch {
     return "--";
   }
+}
+
+const SUI_TRANSACTION_LABELS: Record<MatterhornSuiTransactionKind, string> = {
+  transfer_sui: "Send SUI",
+  transfer_coin: "Send coin",
+  transfer_object: "Send object / NFT",
+  batch_transfer_sui: "Send SUI to many",
+};
+
+const SUI_CONFIRMATION_PHRASES: Record<MatterhornSuiTransactionKind, string> = {
+  transfer_sui: "CONFIRM SUI TRANSFER",
+  transfer_coin: "CONFIRM COIN TRANSFER",
+  transfer_object: "CONFIRM OBJECT TRANSFER",
+  batch_transfer_sui: "CONFIRM BATCH TRANSFER",
+};
+
+function parseBatchTransfers(value: string): Array<{ recipient: string; amountSui: string }> {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [recipient = "", amountSui = "", ...extra] = line.split(",").map((part) => part.trim());
+      if (!recipient || !amountSui || extra.length > 0) {
+        throw new Error("Use one recipient per line in the format 0xADDRESS, AMOUNT.");
+      }
+      return { recipient, amountSui };
+    });
 }
 
 function isSuiMatterhornNetwork(value: unknown): value is SuiMatterhornNetwork {
@@ -109,6 +150,7 @@ export function SuiWorkflowPanel(props: {
   matterhornServerClient: MatterhornServerClient | null | undefined;
   workspaceId?: string | null;
   sessionId?: string | null;
+  initialOperation?: ReviewedActionOperation | null;
   runtime?: SuiWorkflowRuntime;
   compact?: boolean;
   embedded?: boolean;
@@ -124,9 +166,14 @@ export function SuiWorkflowPanel(props: {
     isSuiMatterhornNetwork(reportedNetwork) ? reportedNetwork : "testnet",
   );
   const [sender, setSender] = useState("");
+  const [transactionKind, setTransactionKind] = useState<MatterhornSuiTransactionKind>("transfer_sui");
   const [recipient, setRecipient] = useState("");
   const [amountSui, setAmountSui] = useState("");
+  const [coinType, setCoinType] = useState("");
+  const [objectId, setObjectId] = useState("");
+  const [batchTransfers, setBatchTransfers] = useState("");
   const [memo, setMemo] = useState("");
+  const [confirmation, setConfirmation] = useState("");
   const [digest, setDigest] = useState("");
   const [receiptStatus, setReceiptStatus] = useState<"success" | "failure" | "unknown">("success");
   const [explorerUrl, setExplorerUrl] = useState("");
@@ -137,8 +184,57 @@ export function SuiWorkflowPanel(props: {
   const [copyLabel, setCopyLabel] = useState<string | null>(null);
 
   useEffect(() => {
+    const operation = props.initialOperation;
+    if (
+      operation !== "transfer_sui"
+      && operation !== "transfer_coin"
+      && operation !== "transfer_object"
+      && operation !== "batch_transfer_sui"
+    ) return;
+    setTransactionKind(operation);
+    setPreviewResponse(null);
+    setReceiptResponse(null);
+    setConfirmation("");
+    setDigest("");
+    setError(null);
+  }, [props.initialOperation]);
+
+  useEffect(() => {
     if (isSuiMatterhornNetwork(reportedNetwork)) setNetwork(reportedNetwork);
   }, [reportedNetwork]);
+
+  useEffect(() => {
+    const applyDraft = (draft: SuiDraftHandoff) => {
+      setNetwork(draft.network);
+      setSender(draft.sender ?? "");
+      setTransactionKind(draft.operation);
+      setRecipient(draft.recipient ?? "");
+      setAmountSui(draft.amount ?? "");
+      setCoinType(draft.coinType ?? "");
+      setObjectId(draft.objectId ?? "");
+      setBatchTransfers(
+        draft.transfers.map((transfer) => `${transfer.recipient}, ${transfer.amount}`).join("\n"),
+      );
+      setPreviewResponse(null);
+      setReceiptResponse(null);
+      setConfirmation("");
+      setDigest("");
+      setError(null);
+    };
+
+    const applyHandoff = (handoff: ReviewedActionDraftHandoff) => {
+      if (handoff.protocol === "sui") applyDraft(handoff.draft);
+    };
+
+    const pending = takePendingReviewedActionHandoff();
+    if (pending?.protocol === "sui") applyDraft(pending.draft);
+
+    return subscribeReviewedActionHandoff((handoff) => {
+      if (handoff.protocol !== "sui") return;
+      takePendingReviewedActionHandoff();
+      applyHandoff(handoff);
+    });
+  }, []);
 
   const workspaceId = props.workspaceId?.trim() ?? "";
   const client = props.matterhornServerClient ?? null;
@@ -225,26 +321,48 @@ export function SuiWorkflowPanel(props: {
     setError(null);
     setBusyAction("preview");
     try {
+      const transactionInput = transactionKind === "batch_transfer_sui"
+        ? { transfers: parseBatchTransfers(batchTransfers) }
+        : transactionKind === "transfer_object"
+          ? { recipient: recipient.trim(), objectId: objectId.trim() }
+          : transactionKind === "transfer_coin"
+            ? { recipient: recipient.trim(), amountSui: amountSui.trim(), coinType: coinType.trim() }
+            : { recipient: recipient.trim(), amountSui: amountSui.trim() };
       const response = await client.workspaceSuiTransactionPreview(
         workspaceId,
         {
           network: network as MatterhornSuiNetwork,
+          kind: transactionKind,
           sender: effectiveSender,
-          recipient: recipient.trim(),
-          amountSui: amountSui.trim(),
+          ...transactionInput,
           memo: memo.trim() || undefined,
         },
         { sessionId: props.sessionId ?? null },
       );
       setPreviewResponse(response);
       setReceiptResponse(null);
+      setConfirmation("");
       emitEvidenceSaved(response.evidence?.outputPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not prepare Sui handoff.");
     } finally {
       setBusyAction(null);
     }
-  }, [amountSui, client, effectiveSender, emitEvidenceSaved, memo, network, props.sessionId, recipient, workspaceId]);
+  }, [
+    amountSui,
+    batchTransfers,
+    client,
+    coinType,
+    effectiveSender,
+    emitEvidenceSaved,
+    memo,
+    network,
+    objectId,
+    props.sessionId,
+    recipient,
+    transactionKind,
+    workspaceId,
+  ]);
 
   const importReceipt = useCallback(async () => {
     if (!client) {
@@ -315,14 +433,41 @@ export function SuiWorkflowPanel(props: {
       setError("The connected Sui wallet does not match the handoff sender.");
       return;
     }
+    const requiredConfirmation = SUI_CONFIRMATION_PHRASES[preview.kind];
+    if (confirmation.trim() !== requiredConfirmation) {
+      setError(`Type ${requiredConfirmation} to confirm the exact transaction before opening your wallet.`);
+      return;
+    }
 
     setError(null);
     setBusyAction("sign");
     try {
       const transaction = new Transaction();
       transaction.setSender(preview.sender);
-      const [coin] = transaction.splitCoins(transaction.gas, [BigInt(preview.amountMist)]);
-      transaction.transferObjects([coin], preview.recipient);
+      if (preview.kind === "transfer_sui") {
+        if (!preview.recipient || !preview.amountMist) throw new Error("The SUI transfer preview is incomplete.");
+        const coin = transaction.coin({ balance: BigInt(preview.amountMist) });
+        transaction.transferObjects([coin], preview.recipient);
+      } else if (preview.kind === "transfer_coin") {
+        if (!preview.recipient || !preview.amountMist || !preview.coinType) {
+          throw new Error("The coin transfer preview is incomplete.");
+        }
+        const coin = transaction.coin({
+          balance: BigInt(preview.amountMist),
+          type: preview.coinType,
+          useGasCoin: false,
+        });
+        transaction.transferObjects([coin], preview.recipient);
+      } else if (preview.kind === "transfer_object") {
+        if (!preview.recipient || !preview.objectId) throw new Error("The object transfer preview is incomplete.");
+        transaction.transferObjects([transaction.object(preview.objectId)], preview.recipient);
+      } else {
+        if (!preview.transfers?.length) throw new Error("The batch transfer preview is incomplete.");
+        for (const transfer of preview.transfers) {
+          const coin = transaction.coin({ balance: BigInt(transfer.amountMist) });
+          transaction.transferObjects([coin], transfer.recipient);
+        }
+      }
       const result = await suiDAppKit.signAndExecuteTransaction({
         transaction,
         account,
@@ -360,10 +505,42 @@ export function SuiWorkflowPanel(props: {
     } finally {
       setBusyAction(null);
     }
-  }, [account, client, emitEvidenceSaved, network, previewResponse, props.sessionId, workspaceId]);
+  }, [account, client, confirmation, emitEvidenceSaved, network, previewResponse, props.sessionId, workspaceId]);
 
   const preview = previewResponse?.preview ?? null;
   const receipt = receiptResponse?.receipt ?? null;
+  const batchTransferState = useMemo(() => {
+    if (transactionKind !== "batch_transfer_sui") return { ready: true, reason: null as string | null };
+    try {
+      const transfers = parseBatchTransfers(batchTransfers);
+      if (transfers.length < 2 || transfers.length > 16) {
+        return { ready: false, reason: "Add between 2 and 16 recipient rows." };
+      }
+      return { ready: true, reason: null as string | null };
+    } catch (batchError) {
+      return {
+        ready: false,
+        reason: batchError instanceof Error ? batchError.message : "Check the batch transfer rows.",
+      };
+    }
+  }, [batchTransfers, transactionKind]);
+  const transactionDetails = useMemo(() => {
+    if (transactionKind === "transfer_object") {
+      if (!recipient.trim()) return { ready: false, reason: "Enter the public recipient address." };
+      if (!objectId.trim()) return { ready: false, reason: "Enter the public Sui object ID." };
+      return { ready: true, reason: null as string | null };
+    }
+    if (transactionKind === "transfer_coin") {
+      if (!recipient.trim()) return { ready: false, reason: "Enter the public recipient address." };
+      if (!amountSui.trim()) return { ready: false, reason: "Enter the coin amount." };
+      if (!coinType.trim()) return { ready: false, reason: "Enter the full Sui coin type." };
+      return { ready: true, reason: null as string | null };
+    }
+    if (transactionKind === "batch_transfer_sui") return batchTransferState;
+    if (!recipient.trim()) return { ready: false, reason: "Enter the public recipient address." };
+    if (!amountSui.trim()) return { ready: false, reason: "Enter the SUI amount." };
+    return { ready: true, reason: null as string | null };
+  }, [amountSui, batchTransferState, coinType, objectId, recipient, transactionKind]);
   const senderMatchesConnectedWallet = Boolean(
     connectedAddress && effectiveSender && connectedAddress.toLowerCase() === effectiveSender.toLowerCase(),
   );
@@ -376,6 +553,8 @@ export function SuiWorkflowPanel(props: {
     sender: effectiveSender,
     recipient: recipient.trim(),
     amountSui: amountSui.trim(),
+    transactionDetailsReady: transactionDetails.ready,
+    transactionDetailsReason: transactionDetails.reason,
     previewReady: Boolean(preview),
     previewSender: preview?.sender,
     connectedAddress,
@@ -383,7 +562,13 @@ export function SuiWorkflowPanel(props: {
     digest: digest.trim(),
   });
   const canPreview = availability.canPreparePreview;
-  const canSignPreview = Boolean(account?.address) && directWalletAvailable && availability.canSignPreview;
+  const confirmationMatches = Boolean(
+    preview && confirmation.trim() === SUI_CONFIRMATION_PHRASES[preview.kind],
+  );
+  const canSignPreview = Boolean(account?.address)
+    && directWalletAvailable
+    && availability.canSignPreview
+    && confirmationMatches;
   const canImportReceipt = availability.canImportReceipt;
   const accountBalance = accountQuery.data?.account.balance.balanceMist;
   const connectedWalletLabel = !directWalletAvailable
@@ -397,6 +582,17 @@ export function SuiWorkflowPanel(props: {
   const handoffText = useMemo(() => (
     preview ? JSON.stringify(preview.handoff, null, 2) : ""
   ), [preview]);
+  const previewSummary = useMemo(() => {
+    if (!preview) return "";
+    if (preview.kind === "transfer_object") {
+      return `Object ${truncateAddress(preview.objectId ?? "")} to ${truncateAddress(preview.recipient ?? "")}`;
+    }
+    if (preview.kind === "batch_transfer_sui") {
+      return `${preview.transfers?.length ?? 0} SUI recipients`;
+    }
+    const asset = preview.kind === "transfer_coin" ? preview.coinType ?? "coin" : "SUI";
+    return `${preview.amountSui ?? "--"} ${asset} to ${truncateAddress(preview.recipient ?? "")}`;
+  }, [preview]);
   const networkSenderGridClass = props.compact
     ? "grid gap-3"
     : "grid gap-3 md:grid-cols-[8rem_minmax(0,1fr)]";
@@ -474,7 +670,7 @@ export function SuiWorkflowPanel(props: {
             <span className="font-medium text-dls-text">Desktop handoff:</span>{" "}
             copy the handoff, sign in your Sui wallet or protocol client, then paste the public digest below.
           </div>
-        ) : !connectedAddress && (wallets.length > 0 || phantomSui.detected) ? (
+        ) : !connectedAddress ? (
           <div className="grid gap-2">
             {phantomSui.detected && !hasWalletStandardPhantom ? (
               <Button
@@ -503,6 +699,23 @@ export function SuiWorkflowPanel(props: {
                 <span className="min-w-0 truncate">{availableWallet.name}</span>
               </Button>
             ))}
+            {!phantomSui.detected && wallets.length === 0 ? (
+              <a
+                href="https://phantom.com/download"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-9 items-center justify-between gap-3 rounded-lg bg-dls-surface-muted/[0.10] px-3 py-2 text-xs font-medium text-dls-text transition-colors hover:bg-dls-surface-muted/[0.16]"
+              >
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <Wallet className="size-3.5 shrink-0 text-[#ab9ff2]" />
+                  <span>Install or enable Phantom for Sui</span>
+                </span>
+                <ExternalLink className="size-3.5 shrink-0 text-dls-secondary" />
+              </a>
+            ) : null}
+            <p className="text-[11px] leading-4 text-dls-secondary">
+              You can prepare exact transfer terms now. Connect the sender wallet only when you are ready to sign and submit.
+            </p>
           </div>
         ) : null}
         {phantomSui.address && !account?.address ? (
@@ -512,8 +725,26 @@ export function SuiWorkflowPanel(props: {
         ) : null}
       </div> : null}
 
-      {!directWalletAvailable || connectedAddress ? <>
+      <>
       <div className={SUI_PANEL_SECTION_CLASS}>
+        <WorkflowField label="Action" htmlFor={fieldId("kind")}>
+          <select
+            id={fieldId("kind")}
+            className={SUI_PANEL_INPUT_CLASS}
+            value={transactionKind}
+            onChange={(event) => {
+              setTransactionKind(event.target.value as MatterhornSuiTransactionKind);
+              setPreviewResponse(null);
+              setReceiptResponse(null);
+              setConfirmation("");
+            }}
+          >
+            {Object.entries(SUI_TRANSACTION_LABELS).map(([kind, label]) => (
+              <option key={kind} value={kind}>{label}</option>
+            ))}
+          </select>
+        </WorkflowField>
+
         <div className={networkSenderGridClass}>
           <WorkflowField label="Network" htmlFor={fieldId("network")}>
             <select
@@ -550,27 +781,74 @@ export function SuiWorkflowPanel(props: {
           </WorkflowField>
         </div>
 
-        <div className={recipientAmountGridClass}>
-          <WorkflowField label="Recipient" htmlFor={fieldId("recipient")}>
+        {transactionKind === "batch_transfer_sui" ? (
+          <WorkflowField
+            label="Recipients"
+            htmlFor={fieldId("batch")}
+            help="One row per recipient: 0xADDRESS, AMOUNT. Minimum 2, maximum 16."
+          >
+            <Textarea
+              id={fieldId("batch")}
+              className={SUI_PANEL_TEXTAREA_CLASS}
+              rows={4}
+              value={batchTransfers}
+              placeholder={"0x123..., 0.25\n0x456..., 0.10"}
+              onChange={(event) => setBatchTransfers(event.target.value)}
+            />
+          </WorkflowField>
+        ) : (
+          <div className={recipientAmountGridClass}>
+            <WorkflowField label="Recipient" htmlFor={fieldId("recipient")}>
+              <Input
+                id={fieldId("recipient")}
+                className={SUI_PANEL_INPUT_CLASS}
+                value={recipient}
+                placeholder="0x..."
+                onChange={(event) => setRecipient(event.target.value)}
+              />
+            </WorkflowField>
+            {transactionKind !== "transfer_object" ? (
+              <WorkflowField
+                label="Amount"
+                htmlFor={fieldId("amount")}
+                help={transactionKind === "transfer_coin" ? "Coin units" : "SUI"}
+              >
+                <Input
+                  id={fieldId("amount")}
+                  className={SUI_PANEL_INPUT_CLASS}
+                  inputMode="decimal"
+                  value={amountSui}
+                  placeholder="0.1"
+                  onChange={(event) => setAmountSui(event.target.value)}
+                />
+              </WorkflowField>
+            ) : null}
+          </div>
+        )}
+
+        {transactionKind === "transfer_coin" ? (
+          <WorkflowField label="Coin type" htmlFor={fieldId("coin-type")} help="Full Sui type, for example 0x2::sui::SUI.">
             <Input
-              id={fieldId("recipient")}
+              id={fieldId("coin-type")}
               className={SUI_PANEL_INPUT_CLASS}
-              value={recipient}
+              value={coinType}
+              placeholder="0x...::module::COIN"
+              onChange={(event) => setCoinType(event.target.value)}
+            />
+          </WorkflowField>
+        ) : null}
+
+        {transactionKind === "transfer_object" ? (
+          <WorkflowField label="Object ID" htmlFor={fieldId("object-id")} help="Public Sui object or NFT ID.">
+            <Input
+              id={fieldId("object-id")}
+              className={SUI_PANEL_INPUT_CLASS}
+              value={objectId}
               placeholder="0x..."
-              onChange={(event) => setRecipient(event.target.value)}
+              onChange={(event) => setObjectId(event.target.value)}
             />
           </WorkflowField>
-          <WorkflowField label="Amount" htmlFor={fieldId("amount")} help="SUI">
-            <Input
-              id={fieldId("amount")}
-              className={SUI_PANEL_INPUT_CLASS}
-              inputMode="decimal"
-              value={amountSui}
-              placeholder="0.1"
-              onChange={(event) => setAmountSui(event.target.value)}
-            />
-          </WorkflowField>
-        </div>
+        ) : null}
 
         <WorkflowField label="Memo" htmlFor={fieldId("memo")} help="Optional. Saved with the handoff evidence, not signed by Matterhorn.">
           <Textarea
@@ -588,10 +866,10 @@ export function SuiWorkflowPanel(props: {
           className="w-fit rounded-lg"
           disabled={!canPreview || busyAction === "preview"}
           onClick={preparePreview}
-          title={availability.preparePreviewReason ?? "Prepare a non-custodial Sui handoff"}
+          title={availability.preparePreviewReason ?? "Review the exact Sui transaction"}
         >
           {busyAction === "preview" ? <RefreshCw className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-          Prepare handoff
+          Review transaction
         </Button>
       </div>
 
@@ -601,7 +879,7 @@ export function SuiWorkflowPanel(props: {
             <div>
               <p className="text-sm font-semibold text-dls-text">Handoff ready</p>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                {preview.amountSui} SUI to {truncateAddress(preview.recipient)}
+                {previewSummary}
               </p>
             </div>
             <ShieldCheck className="size-4 text-emerald-300" aria-hidden="true" />
@@ -611,6 +889,23 @@ export function SuiWorkflowPanel(props: {
             <p><span className="font-medium text-dls-text">Execution:</span> wallet-only. Matterhorn does not hold keys or submit directly.</p>
           </div>
           <EvidencePath path={previewResponse?.evidence?.outputPath} />
+          {directWalletAvailable ? (
+            <WorkflowField
+              label="Confirm exact transaction"
+              htmlFor={fieldId("confirmation")}
+              help={`Type ${SUI_CONFIRMATION_PHRASES[preview.kind]} to open your wallet.`}
+            >
+              <Input
+                id={fieldId("confirmation")}
+                className={SUI_PANEL_INPUT_CLASS}
+                value={confirmation}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={SUI_CONFIRMATION_PHRASES[preview.kind]}
+                onChange={(event) => setConfirmation(event.target.value)}
+              />
+            </WorkflowField>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             {directWalletAvailable ? (
               <Button
@@ -618,10 +913,15 @@ export function SuiWorkflowPanel(props: {
                 size="sm"
                 disabled={!canSignPreview || busyAction === "sign"}
                 onClick={signPreviewInWallet}
-                title={availability.signPreviewReason ?? "Sign and submit with the connected Sui wallet"}
+                title={
+                  availability.signPreviewReason
+                    ?? (!confirmationMatches
+                      ? `Type ${SUI_CONFIRMATION_PHRASES[preview.kind]} before opening your wallet.`
+                      : "Sign and submit with the connected Sui wallet")
+                }
               >
                 {busyAction === "sign" ? <RefreshCw className="size-3 animate-spin" /> : <Send className="size-3" />}
-                Sign in wallet
+                Review in wallet
               </Button>
             ) : (
               <Button type="button" size="sm" onClick={() => copyText("handoff", handoffText)}>
@@ -722,7 +1022,7 @@ export function SuiWorkflowPanel(props: {
           <EvidencePath path={receiptResponse?.evidence?.outputPath} />
         </div>
       ) : null}
-      </> : null}
+      </>
 
       {error || phantomSui.error ? (
         <div className="rounded-lg bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-300">

@@ -301,9 +301,9 @@ const checks = [
   check(
     "ui.release_boundary",
     "Customer-facing release boundary",
-    panelText.includes("Public reads, unsigned staking previews, and reviewed TAO transfers.")
+    panelText.includes("Public reads and reviewed TAO transfer, stake, and unstake calls.")
       && panelText.includes("Manual execution is available in the trade ticket after exact-order review and connected-wallet approval.")
-      && panelText.includes("Eligible EOA BUY orders require compliance checks, exact review, and connected Polygon wallet authorization.")
+      && panelText.includes("Eligible EOA buy, sell, and cancel actions require compliance checks, exact review, and connected Polygon wallet authorization.")
       && panelText.includes("Matterhorn never custodies keys or signs silently.")
       ? "pass"
       : "fail",
@@ -315,7 +315,7 @@ const checks = [
     FORBIDDEN_RE.test(panelText)
       && panelText.includes("Automatic execution off")
       && panelText.includes("Wallet approval per action")
-      && panelText.includes("Bittensor staking uses external signer")
+      && panelText.includes("Bittensor actions require connected-wallet approval")
       && panelText.includes("Polymarket compliance gate")
       ? "pass"
       : "fail",
