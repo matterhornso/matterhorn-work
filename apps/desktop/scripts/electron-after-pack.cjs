@@ -210,19 +210,6 @@ function signComputerUseHelper(context) {
     throw new Error(`Missing Matterhorn Desks automation helper app at ${helperPath}`);
   }
 
-  const cleanup = spawnSync("xattr", ["-cr", helperPath], { encoding: "utf8", stdio: "pipe" });
-  if (cleanup.error) {
-    if (cleanup.error.code === "ENOENT") {
-      throw new Error("xattr is required to package the Matterhorn Desks automation helper app");
-    }
-    throw cleanup.error;
-  }
-  if (cleanup.status !== 0) {
-    throw new Error(
-      `Failed to clear extended attributes from Matterhorn Desks automation helper app: ${cleanup.stderr?.trim() || "unknown error"}`,
-    );
-  }
-
   const identity = process.env.OPENWORK_COMPUTER_USE_CODESIGN_IDENTITY
     || process.env.CSC_NAME
     || process.env.APPLE_CODESIGN_IDENTITY
@@ -231,11 +218,35 @@ function signComputerUseHelper(context) {
   if (identity !== "-") args.push("--timestamp");
   args.push(helperPath);
 
-  const result = spawnSync("codesign", args, { stdio: "inherit" });
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(`codesign failed for Matterhorn Desks automation helper app with status ${result.status}`);
+  // File Provider can reattach Finder metadata between copy and codesign when a
+  // checkout lives under Documents. Clear it immediately before each bounded
+  // signing attempt so local tester builds remain reproducible.
+  const codesignAttempts = 3;
+  let lastFailure = "unknown error";
+  for (let attempt = 1; attempt <= codesignAttempts; attempt += 1) {
+    const cleanup = spawnSync("xattr", ["-cr", helperPath], { encoding: "utf8", stdio: "pipe" });
+    if (cleanup.error) {
+      if (cleanup.error.code === "ENOENT") {
+        throw new Error("xattr is required to package the Matterhorn Desks automation helper app");
+      }
+      throw cleanup.error;
+    }
+    if (cleanup.status !== 0) {
+      throw new Error(
+        `Failed to clear extended attributes from Matterhorn Desks automation helper app: ${cleanup.stderr?.trim() || "unknown error"}`,
+      );
+    }
+
+    const result = spawnSync("codesign", args, { encoding: "utf8", stdio: "pipe" });
+    if (result.error) throw result.error;
+    if (result.status === 0) return;
+
+    lastFailure = result.stderr?.trim() || `status ${result.status}`;
+    const retryableMetadataRace = /resource fork|finder information|similar detritus/i.test(lastFailure);
+    if (!retryableMetadataRace) break;
   }
+
+  throw new Error(`codesign failed for Matterhorn Desks automation helper app: ${lastFailure}`);
 }
 
 function copyComputerUseHelper(context) {
