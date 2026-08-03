@@ -6,6 +6,10 @@ const script = readFileSync(
   "scripts/matterhorn-product-browser-smoke.mjs",
   "utf8",
 );
+const sessionRoute = readFileSync(
+  "apps/app/src/react-app/shell/session-route.tsx",
+  "utf8",
+);
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 
 assert.ok(
@@ -245,8 +249,30 @@ assert.ok(
     script.includes("storageState,") &&
     script.includes("viewport: { width: 390, height: 844 }") &&
     script.includes('getByTestId("session-composer-shell")') &&
-    script.includes("directSessionReloadUrl"),
-  "product browser smoke should prove persisted chat URLs and authentication survive a fresh mobile browser context",
+    script.includes("directSessionReloadUrl") &&
+    script.includes("persisted-chat-fresh-context-failed.png") &&
+    script.includes("directSessionReloadFailure") &&
+    script.includes("window.__matterhorn?.snapshot?.()"),
+  "product browser smoke should prove persisted chat URLs and authentication survive a fresh mobile browser context with actionable failure evidence",
+);
+assert.ok(
+  sessionRoute.includes("const selectedSessionIdRef = useRef<string | null>(selectedSessionId)") &&
+    sessionRoute.includes("const routeSessionId = selectedSessionIdRef.current") &&
+    sessionRoute.includes(
+      "[loadWorkspaceSessionsInBackground, markBootRouteReady, routeWorkspaceId]",
+    ),
+  "chat navigation should not restart the workspace bootstrap effect",
+);
+assert.ok(
+  sessionRoute.includes(
+    "const effectiveLoading = loading && (!client || !selectedWorkspace)",
+  ),
+  "an already-connected workspace should not hide the chat composer behind stale route loading",
+);
+assert.ok(
+  sessionRoute.includes("if (!selectedSessionKnown && !selectedSessionPending)") &&
+    !sessionRoute.includes("sessionOwnedByOtherWorkspace"),
+  "a chat confirmed in the selected workspace should render even when an authorized workspace alias exposes the same session id",
 );
 assert.ok(
   script.includes("async function assertNoVisible") &&

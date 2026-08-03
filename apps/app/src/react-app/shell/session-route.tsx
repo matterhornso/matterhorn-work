@@ -625,6 +625,12 @@ export function SessionRoute() {
   const params = useParams<{ workspaceId?: string; sessionId?: string }>();
   const routeWorkspaceId = params.workspaceId?.trim() || "";
   const selectedSessionId = params.sessionId?.trim() || null;
+  // Changing chats must not recreate the workspace bootstrap callback. Keep
+  // the latest session id in a ref so refreshRouteState can use it when it
+  // reconciles legacy routes without making every chat navigation reboot the
+  // full workspace route.
+  const selectedSessionIdRef = useRef<string | null>(selectedSessionId);
+  selectedSessionIdRef.current = selectedSessionId;
   const isWorkspaceHistoryRoute = Boolean(routeWorkspaceId && /\/history\/?$/.test(location.pathname));
   // A stored hint is for the settings screen to survive a refresh. It is
   // consumed here only after the person explicitly returns from setup; the
@@ -1155,9 +1161,10 @@ export function SessionRoute() {
         list.activeId?.trim() ||
         nextWorkspaces[0]?.id ||
         "";
-      if (selectedSessionId) {
+      const routeSessionId = selectedSessionIdRef.current;
+      if (routeSessionId) {
         const match = cachedEntries.find((entry) =>
-          entry.sessions.some((session: any) => session?.id === selectedSessionId),
+          entry.sessions.some((session: any) => session?.id === routeSessionId),
         );
         if (match?.workspaceId) nextWorkspaceId = match.workspaceId;
       }
@@ -1265,7 +1272,7 @@ export function SessionRoute() {
         markBootRouteReady();
       }
     }
-  }, [loadWorkspaceSessionsInBackground, markBootRouteReady, routeWorkspaceId, selectedSessionId]);
+  }, [loadWorkspaceSessionsInBackground, markBootRouteReady, routeWorkspaceId]);
 
   const remoteAccessRestart = useRemoteAccessRestart({
     isEnabled: () => matterhornServerSettings.remoteAccessEnabled === true,
@@ -1783,9 +1790,10 @@ export function SessionRoute() {
     }
   }, [loading, routeWorkspaceId, selectedWorkspace]);
 
-  // Boot-level loading blocks the whole UI. Session-list retries only fill the
-  // sidebar; they must not gate the composer/New task.
-  const effectiveLoading = loading;
+  // Boot-level loading blocks the whole UI only until the selected workspace
+  // is usable. Session navigation and background list refreshes must not hide
+  // an already-connected chat composer behind a stale route-loading flag.
+  const effectiveLoading = loading && (!client || !selectedWorkspace);
 
   const opencodeClient = useMemo(
     () =>
@@ -2502,24 +2510,6 @@ export function SessionRoute() {
       return null;
     }
 
-    // Transient-safety: when the user switches workspaces the URL-driven
-    // selectedSessionId may still point at a session from the old workspace
-    // for one render tick. Only block rendering when we KNOW the session
-    // belongs to a different workspace (i.e., it exists in another
-    // workspace's list). A brand-new session that hasn't been refreshed
-    // into any list yet must still render so "New task" feels instant.
-    let sessionOwnedByOtherWorkspace = false;
-    for (const [workspaceId, sessions] of Object.entries(sessionsByWorkspaceId)) {
-      if (workspaceId === selectedWorkspaceId) continue;
-      if ((sessions ?? []).some((session: any) => session?.id === selectedSessionId)) {
-        sessionOwnedByOtherWorkspace = true;
-        break;
-      }
-    }
-    if (sessionOwnedByOtherWorkspace) {
-      return null;
-    }
-
     // Note: do NOT include `client`, `workspaceId`, `sessionId`,
     // `opencodeBaseUrl`, or `matterhornToken` here. SessionPage forwards those
     // explicitly to SessionSurface from the per-workspace endpoint resolved
@@ -2768,7 +2758,6 @@ export function SessionRoute() {
     selectedWorkspaceEndpoint,
     selectedWorkspaceId,
     selectedWorkspaceRoot,
-    sessionsByWorkspaceId,
     showToast,
     token,
   ]);

@@ -963,9 +963,31 @@ async function runSmoke(config) {
             waitUntil: "load",
             timeout: 30_000,
           });
-          await refreshPage
-            .getByTestId("session-composer-shell")
-            .waitFor({ state: "visible", timeout: 20_000 });
+          try {
+            await refreshPage
+              .getByTestId("session-composer-shell")
+              .waitFor({ state: "visible", timeout: 20_000 });
+          } catch (error) {
+            const screenshotPath = resolve(
+              config.outputDir,
+              "persisted-chat-fresh-context-failed.png",
+            );
+            await refreshPage.screenshot({ path: screenshotPath, fullPage: true });
+            const diagnostics = await refreshPage.evaluate(() => ({
+              url: window.location.href,
+              bodyText: document.body.innerText.slice(0, 4_000),
+              inspector: window.__matterhorn?.snapshot?.() ?? null,
+              events: window.__matterhorn?.events?.(50) ?? [],
+            }));
+            report.artifacts.directSessionReloadFailure = {
+              screenshot: screenshotPath,
+              diagnostics,
+            };
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(
+              `${message}\nFresh-context diagnostics: ${JSON.stringify(diagnostics)}`,
+            );
+          }
           await refreshPage
             .getByRole("radiogroup", { name: "Response perspective" })
             .waitFor({ state: "visible", timeout: 20_000 });

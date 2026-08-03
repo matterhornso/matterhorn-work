@@ -35,6 +35,8 @@ const parsed = parseArgs([
   "--output-dir",
   "/tmp/candidate",
   "--app-url=https://desks.example/workspace/ws/session",
+  "--server-url",
+  "https://engine.example",
   "--timeout-ms",
   "5000",
   "--strict",
@@ -42,11 +44,13 @@ const parsed = parseArgs([
 ]);
 assert.equal(parsed.outputDir, "/tmp/candidate");
 assert.equal(parsed.appUrl, "https://desks.example/workspace/ws/session");
+assert.equal(parsed.serverUrl, "https://engine.example");
 assert.equal(parsed.timeoutMs, 5000);
 assert.equal(parsed.strict, true);
 assert.equal(parsed.json, true);
 assert.throws(() => parseArgs(["--timeout-ms", "10"]), /at least 100/);
 assert.throws(() => parseArgs(["--app-url", "file:///tmp/app"]), /http or https/);
+assert.throws(() => parseArgs(["--server-url", "file:///tmp/engine"]), /http or https/);
 assert.throws(
   () => parseArgs(["--app-url", "https://user:password@desks.example/"]),
   /must not include credentials/,
@@ -60,6 +64,7 @@ assert.throws(() => parseArgs(["--unknown"]), /Unknown argument/);
 const stages = buildStages({
   outputDir: "/tmp/candidate",
   appUrl: "https://desks.example/workspace/ws/session",
+  serverUrl: "https://engine.example",
   skipBrowser: false,
   timeoutMs: 1000,
 });
@@ -82,6 +87,18 @@ assert.ok(stages.some((item) => item.id === "server_tests"));
 assert.ok(stages.some((item) => item.id === "production_build"));
 assert.ok(stages.some((item) => item.id === "platform_safety"));
 assert.ok(stages.some((item) => item.id === "browser_acceptance"));
+assert.deepEqual(
+  stages.find((item) => item.id === "browser_acceptance").command.slice(0, 7),
+  [
+    "node",
+    "scripts/matterhorn-product-browser-smoke.mjs",
+    "--url",
+    "https://desks.example/workspace/ws/session",
+    "--server-url",
+    "https://engine.example",
+    "--output-dir",
+  ],
+);
 assert.deepEqual(
   stages.find((item) => item.id === "electron_typecheck").command,
   [
