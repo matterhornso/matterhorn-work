@@ -11,6 +11,11 @@ const devPort = Number.isFinite(portValue) && portValue > 0 ? portValue : 5173;
 const devApiTarget =
   process.env.VITE_MATTERHORN_DEV_API_TARGET?.trim() ||
   "http://127.0.0.1:3222";
+const sameOriginMatterhornProxy = {
+  target: devApiTarget,
+  changeOrigin: true,
+  ws: true,
+};
 const allowedHosts = new Set<string>();
 const envAllowedHosts = process.env.VITE_ALLOWED_HOSTS ?? "";
 
@@ -114,10 +119,10 @@ export default defineConfig({
     strictPort: true,
     ...(allowedHosts.size > 0 ? { allowedHosts: Array.from(allowedHosts) } : {}),
     proxy: {
-      "/api": {
-        target: devApiTarget,
-        changeOrigin: true,
-      },
+      "/api": sameOriginMatterhornProxy,
+      "/workspaces": sameOriginMatterhornProxy,
+      "/workspace": sameOriginMatterhornProxy,
+      "/opencode": sameOriginMatterhornProxy,
     },
   },
   build: {
