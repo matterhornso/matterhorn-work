@@ -246,6 +246,8 @@ const viteEnv = {
   ...process.env,
   HOST: viteHost,
   PORT: String(webPort),
+  VITE_MATTERHORN_DEV_API_TARGET:
+    process.env.VITE_MATTERHORN_DEV_API_TARGET ?? openworkUrl,
   VITE_MATTERHORN_WORK_URL: process.env.VITE_MATTERHORN_WORK_URL ?? process.env.VITE_OPENWORK_URL ?? openworkUrl,
   VITE_MATTERHORN_WORK_PORT: process.env.VITE_MATTERHORN_WORK_PORT ?? process.env.VITE_OPENWORK_PORT ?? String(openworkPort),
   VITE_MATTERHORN_WORK_TOKEN: process.env.VITE_MATTERHORN_WORK_TOKEN ?? process.env.VITE_OPENWORK_TOKEN ?? openworkToken,

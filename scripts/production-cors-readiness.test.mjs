@@ -63,6 +63,11 @@ assert.ok(!/"--cors",\s*"\*"/.test(localDev), "dev:matterhorn-local must not pas
 const headlessWebDev = readFileSync("scripts/dev-headless-web.ts", "utf8");
 assert.match(headlessWebDev, /"--cors",\s*"loopback"/, "dev:headless-web should pass --cors loopback");
 assert.ok(!/"--cors",\s*"\*"/.test(headlessWebDev), "dev:headless-web must not pass wildcard CORS");
+assert.ok(
+  headlessWebDev.includes("VITE_MATTERHORN_DEV_API_TARGET") &&
+    headlessWebDev.includes("openworkUrl"),
+  "dev:headless-web should proxy same-origin API requests to the server instance it starts",
+);
 
 const generatedMediaDev = readFileSync("scripts/dev-generated-media-smoke.mjs", "utf8");
 assert.match(generatedMediaDev, /"--cors",\s*"loopback"/, "generated media smoke should pass --cors loopback");
