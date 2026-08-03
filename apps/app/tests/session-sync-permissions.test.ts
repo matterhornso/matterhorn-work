@@ -191,6 +191,51 @@ describe("session question sync", () => {
 });
 
 describe("session transcript sync", () => {
+  test("reports the first visible assistant output but ignores synthetic text", () => {
+    const outputs: Array<{ sessionId: string; messageId: string }> = [];
+    const syncInput = {
+      workspaceId: "workspace-a",
+      baseUrl: "http://127.0.0.1:1234",
+      matterhornToken: "token",
+      onAssistantOutput: (output: { sessionId: string; messageId: string }) => outputs.push(output),
+    };
+    const cleanup = __createWorkspaceSessionSyncForTest(syncInput);
+    const releaseSession = trackWorkspaceSessionSync(syncInput, "session-a");
+
+    try {
+      __applySessionSyncEventForTest(syncInput, {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "part-synthetic",
+            type: "text",
+            text: "internal placeholder",
+            synthetic: true,
+            sessionID: "session-a",
+            messageID: "msg-assistant",
+          },
+        },
+      } as any);
+      __applySessionSyncEventForTest(syncInput, {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "part-visible",
+            type: "text",
+            text: "visible answer",
+            sessionID: "session-a",
+            messageID: "msg-assistant",
+          },
+        },
+      } as any);
+
+      expect(outputs).toEqual([{ sessionId: "session-a", messageId: "msg-assistant" }]);
+    } finally {
+      releaseSession();
+      cleanup();
+    }
+  });
+
   test("coalesces token-sized deltas by transcript part", () => {
     const deltas = coalescePendingDeltas([
       { sessionId: "session-a", messageId: "msg-a", partId: "part-a", reasoning: false, delta: "hel" },

@@ -156,6 +156,7 @@ import { useWallet } from "../domains/wallet/WalletProvider";
 import {
   buildDirectResponseSystemPrompt,
   buildMatterhornOrientationSystemPrompt,
+  buildProtocolDeskCryptoSafetySystemPrompt,
   buildCryptoSystemPrompt,
   shouldInjectMatterhornOrientationPrompt,
   shouldInjectCryptoPrompt,
@@ -168,6 +169,8 @@ import { getCustomerProtocolDeskVisual } from "../domains/session/workflows/prot
 import {
   buildMatterhornPublicWalletContext,
   compileMatterhornSessionSystemContext,
+  resolveOptionalMatterhornContext,
+  sanitizeMatterhornSystemContextValue,
 } from "../domains/session/context/session-system-context";
 
 import { readDenSettings } from "../../app/lib/den";
@@ -625,6 +628,21 @@ export function SessionRoute() {
   const params = useParams<{ workspaceId?: string; sessionId?: string }>();
   const routeWorkspaceId = params.workspaceId?.trim() || "";
   const selectedSessionId = params.sessionId?.trim() || null;
+  const promptTimingRef = useRef(new Map<string, {
+    startedAt: number;
+    executionMode: MatterhornExecutionMode;
+    agentId: string;
+  }>());
+  const handleAssistantOutputTiming = useCallback((update: { sessionId: string; messageId: string }) => {
+    const timing = promptTimingRef.current.get(update.sessionId);
+    if (!timing) return;
+    promptTimingRef.current.delete(update.sessionId);
+    recordInspectorEvent("session.prompt.first_output", {
+      timeToFirstOutputMs: Math.round(performance.now() - timing.startedAt),
+      executionMode: timing.executionMode,
+      agentId: timing.agentId,
+    });
+  }, []);
   // Changing chats must not recreate the workspace bootstrap callback. Keep
   // the latest session id in a ref so refreshRouteState can use it when it
   // reconciles legacy routes without making every chat navigation reboot the
@@ -2391,6 +2409,7 @@ export function SessionRoute() {
     agentId?: string | null,
     requestedExecutionMode: MatterhornExecutionMode = executionMode,
   ) => {
+    const contextBuildStartedAt = performance.now();
     const deskAgent = getMatterhornDeskAgentById(agentId);
     const isGeneralMatterhornAgent = !agentId || agentId === "matterhorn";
     const contextPolicy = deskAgent?.contextPolicy;
@@ -2399,10 +2418,13 @@ export function SessionRoute() {
       pid: matterhornServerHostInfoState?.pid ?? null,
       port: matterhornServerHostInfoState?.port ?? null,
     });
-    const envSystemContext = await buildOpenworkEnvSystemContext(client, {
-      cacheKey: sessionId,
-      runtimeKey: envRuntimeKey,
-    });
+    const envSystemContextPromise = resolveOptionalMatterhornContext(
+      buildOpenworkEnvSystemContext(client, {
+        cacheKey: sessionId,
+        runtimeKey: envRuntimeKey,
+      }),
+      400,
+    );
 
     const includeWalletPublicContext = isGeneralMatterhornAgent || contextPolicy?.includeWalletPublicContext === true;
     const walletContext = wallet.snapshot.isConnected && includeWalletPublicContext
@@ -2422,40 +2444,48 @@ export function SessionRoute() {
 
     const cryptoPrompt =
       includeCryptoSafetyPolicy && shouldInjectCryptoPrompt(text)
-        ? buildCryptoSystemPrompt(
-            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.address : null,
-            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.chainId : null,
-            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.ethBalance : null,
-            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.usdcBalance : null,
-          )
+        ? isGeneralMatterhornAgent
+          ? buildCryptoSystemPrompt(
+              wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.address : null,
+              wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.chainId : null,
+              wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.ethBalance : null,
+              wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.usdcBalance : null,
+            )
+          : buildProtocolDeskCryptoSafetySystemPrompt()
         : "";
 
     const responsePerspectivePrompt = buildResponsePerspectiveSystemPrompt(responsePerspective);
     const executionModePrompt = buildMatterhornExecutionModeSystemPrompt(requestedExecutionMode);
     const directResponsePrompt = buildDirectResponseSystemPrompt();
     const deskAgentInstructions = deskAgent ? buildMatterhornDeskAgentSystemPrompt(deskAgent) : "";
-    let workflowRunPrompt = "";
-    if (client && selectedWorkspaceId && agentId) {
-      try {
-        const linkedRun = (await client.listWorkflowRuns({
-          workspaceId: selectedWorkspaceId,
-          sessionId,
-          limit: 1,
-        })).items[0];
-        if (linkedRun) {
-          workflowRunPrompt = [
-            "## Active Matterhorn Workflow Run",
-            `Workflow run: ${linkedRun.workflowRunId}`,
-            `Canonical output directory: ${linkedRun.outputBasePath}`,
-            "Save every artifact for this workflow under exactly that directory. Do not create a parallel descriptive or custom session folder.",
-          ].join("\n");
-        }
-      } catch {
-        // Prompting still works when the optional workflow lookup is unavailable.
-      }
-    }
+    const workflowRunPromptPromise = client && selectedWorkspaceId && agentId
+      ? resolveOptionalMatterhornContext(
+          client.listWorkflowRuns({
+            workspaceId: selectedWorkspaceId,
+            sessionId,
+            limit: 1,
+          }).then(({ items }) => {
+            const linkedRun = items[0];
+            if (!linkedRun) return "";
+            const workflowRunId = sanitizeMatterhornSystemContextValue(linkedRun.workflowRunId, { maxChars: 128 });
+            const outputBasePath = sanitizeMatterhornSystemContextValue(linkedRun.outputBasePath, { maxChars: 512 });
+            return [
+              "## Active Matterhorn Workflow Run",
+              `Workflow run: ${workflowRunId}`,
+              `Canonical output directory: ${outputBasePath}`,
+              "Save every artifact for this workflow under exactly that directory. Do not create a parallel descriptive or custom session folder.",
+            ].join("\n");
+          }),
+          400,
+        )
+      : Promise.resolve(undefined);
 
-    return compileMatterhornSessionSystemContext([
+    const [envSystemContext, workflowRunPrompt] = await Promise.all([
+      envSystemContextPromise,
+      workflowRunPromptPromise,
+    ]);
+
+    const compiled = compileMatterhornSessionSystemContext([
       { id: "execution_mode", content: executionModePrompt },
       { id: "desk_contract", content: deskAgentInstructions },
       { id: "direct_response", content: directResponsePrompt },
@@ -2470,6 +2500,14 @@ export function SessionRoute() {
       { id: "workflow_run", content: workflowRunPrompt },
       { id: "response_perspective", content: responsePerspectivePrompt },
     ]);
+    recordInspectorEvent("session.prompt.context_built", {
+      durationMs: Math.round(performance.now() - contextBuildStartedAt),
+      contextChars: compiled?.length ?? 0,
+      executionMode: requestedExecutionMode,
+      agentId: agentId ?? "matterhorn",
+      specializedDesk: Boolean(deskAgent),
+    });
+    return compiled;
   }, [client, executionMode, matterhornServerHostInfoState?.pid, matterhornServerHostInfoState?.port, responsePerspective, selectedWorkspaceId, wallet.snapshot]);
 
   const selectedAgentRef = useRef<string | null>(selectedAgent);
@@ -2578,22 +2616,51 @@ export function SessionRoute() {
           return;
         }
 
-        const parts = await draftToParts(draft, selectedWorkspaceRoot);
-        const systemContext = await buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode);
+        const prepareStartedAt = performance.now();
+        const [parts, systemContext] = await Promise.all([
+          draftToParts(draft, selectedWorkspaceRoot),
+          buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode),
+        ]);
         const executionModeTools = buildMatterhornExecutionModeTools(executionMode, selectedAgent);
 
-        const result = await opencodeClient.session.promptAsync({
-          sessionID: selectedSessionId,
-          parts,
-          model: selectedPromptModel ?? undefined,
-          agent: selectedAgent ?? undefined,
-          ...(executionModeTools ? { tools: executionModeTools } : {}),
-          ...(modelVariantValue ? { variant: modelVariantValue } : {}),
-          ...(systemContext ? { system: systemContext } : {}),
+        const dispatchStartedAt = performance.now();
+        promptTimingRef.current.set(selectedSessionId, {
+          startedAt: dispatchStartedAt,
+          executionMode,
+          agentId: selectedAgent ?? "matterhorn",
         });
+        recordInspectorEvent("session.prompt.dispatch_started", {
+          prepareDurationMs: Math.round(dispatchStartedAt - prepareStartedAt),
+          promptChars: text.length,
+          attachmentCount: draft.attachments.length,
+          contextChars: systemContext?.length ?? 0,
+          executionMode,
+          agentId: selectedAgent ?? "matterhorn",
+        });
+        let result;
+        try {
+          result = await opencodeClient.session.promptAsync({
+            sessionID: selectedSessionId,
+            parts,
+            model: selectedPromptModel ?? undefined,
+            agent: selectedAgent ?? undefined,
+            ...(executionModeTools ? { tools: executionModeTools } : {}),
+            ...(modelVariantValue ? { variant: modelVariantValue } : {}),
+            ...(systemContext ? { system: systemContext } : {}),
+          });
+        } catch (error) {
+          promptTimingRef.current.delete(selectedSessionId);
+          throw error;
+        }
         if (result.error) {
+          promptTimingRef.current.delete(selectedSessionId);
           throw new Error(serializeSDKError(result.error));
         }
+        recordInspectorEvent("session.prompt.dispatch_accepted", {
+          dispatchDurationMs: Math.round(performance.now() - dispatchStartedAt),
+          executionMode,
+          agentId: selectedAgent ?? "matterhorn",
+        });
       },
       onDraftChange: (draft: ComposerDraft) => {
         saveSessionDraft(selectedWorkspaceId, selectedSessionId, {
@@ -3306,6 +3373,7 @@ export function SessionRoute() {
         opencodeBaseUrl={opencodeBaseUrl}
         matterhornToken={selectedWorkspaceServerToken || ""}
         onSessionUpdated={handleRuntimeSessionUpdated}
+        onAssistantOutput={handleAssistantOutputTiming}
       />
     ) : null}
     <SessionPage

@@ -12,6 +12,7 @@ type ReactSessionRuntimeProps = {
   matterhornToken: string;
   onSessionUpdated?: (update: { sessionId: string; info: Record<string, unknown> }) => void;
   onSessionStatus?: (update: { sessionId: string; status: SessionStatus }) => void;
+  onAssistantOutput?: (update: { sessionId: string; messageId: string }) => void;
 };
 
 export function ReactSessionRuntime(props: ReactSessionRuntimeProps) {
@@ -22,6 +23,7 @@ export function ReactSessionRuntime(props: ReactSessionRuntimeProps) {
       matterhornToken: props.matterhornToken,
       onSessionUpdated: props.onSessionUpdated,
       onSessionStatus: props.onSessionStatus,
+      onAssistantOutput: props.onAssistantOutput,
     };
     const releaseWorkspace = ensureWorkspaceSessionSync(input);
     const releaseSessions = trackWorkspaceSessionsSync(input, [props.sessionId, ...(props.activeSessionIds ?? [])]);
@@ -29,7 +31,7 @@ export function ReactSessionRuntime(props: ReactSessionRuntimeProps) {
       releaseSessions();
       releaseWorkspace();
     };
-  }, [props.workspaceId, props.sessionId, props.activeSessionIds, props.opencodeBaseUrl, props.matterhornToken, props.onSessionUpdated, props.onSessionStatus]);
+  }, [props.workspaceId, props.sessionId, props.activeSessionIds, props.opencodeBaseUrl, props.matterhornToken, props.onSessionUpdated, props.onSessionStatus, props.onAssistantOutput]);
 
   return null;
 }

@@ -97,11 +97,11 @@ const url = `http://${config.host}:${server.port}`;
   logger.log("info", `Matterhorn Desks server listening on ${url}`);
 
 if (config.tokenSource === "generated") {
-  logger.log("info", `Client token: ${config.token}`);
+  logger.log("info", "Client access token generated and kept in process memory");
 }
 
 if (config.hostTokenSource === "generated") {
-  logger.log("info", `Host token: ${config.hostToken}`);
+  logger.log("info", "Host access token generated and kept in process memory");
 }
 
 if (config.workspaces.length === 0) {

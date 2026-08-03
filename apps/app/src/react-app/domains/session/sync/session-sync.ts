@@ -16,6 +16,7 @@ type SyncOptions = {
   matterhornToken: string;
   onSessionUpdated?: (update: { sessionId: string; info: Record<string, unknown> }) => void;
   onSessionStatus?: (update: { sessionId: string; status: SessionStatus }) => void;
+  onAssistantOutput?: (update: { sessionId: string; messageId: string }) => void;
 };
 
 export type PendingDelta = {
@@ -35,6 +36,7 @@ type SyncEntry = {
   retainedSessionTimers: Map<string, ReturnType<typeof setTimeout>>;
   sessionUpdatedListeners: Set<NonNullable<SyncOptions["onSessionUpdated"]>>;
   sessionStatusListeners: Set<NonNullable<SyncOptions["onSessionStatus"]>>;
+  assistantOutputListeners: Set<NonNullable<SyncOptions["onAssistantOutput"]>>;
   pendingDeltas: Map<string, { messageId: string; reasoning: boolean; text: string }>;
   // Coalesce rapid-fire delta events from the SSE stream into one cache
   // commit per animation frame. Without this, a long response produces a
@@ -700,6 +702,11 @@ function applyEvent(entry: SyncEntry, workspaceId: string, event: OpencodeEvent)
       useSessionActivityStore.getState().markAssistantOutput(workspaceId, part.sessionID, part.messageID);
     }
     if (!isTrackedSession(entry, part.sessionID)) return;
+    if (partHasVisibleAssistantOutput(part)) {
+      for (const listener of entry.assistantOutputListeners) {
+        listener({ sessionId: part.sessionID, messageId: part.messageID });
+      }
+    }
     const [mapped, ...attachments] = toUIParts(part);
     if (!mapped) return;
     const pending = entry.pendingDeltas.get(part.id);
@@ -965,6 +972,7 @@ export function ensureWorkspaceSessionSync(input: SyncOptions) {
     }
     if (input.onSessionUpdated) existing.sessionUpdatedListeners.add(input.onSessionUpdated);
     if (input.onSessionStatus) existing.sessionStatusListeners.add(input.onSessionStatus);
+    if (input.onAssistantOutput) existing.assistantOutputListeners.add(input.onAssistantOutput);
     existing.refs += 1;
     return () => releaseWorkspaceSessionSync(input);
   }
@@ -978,6 +986,7 @@ export function ensureWorkspaceSessionSync(input: SyncOptions) {
     retainedSessionTimers: new Map(),
     sessionUpdatedListeners: new Set(input.onSessionUpdated ? [input.onSessionUpdated] : []),
     sessionStatusListeners: new Set(input.onSessionStatus ? [input.onSessionStatus] : []),
+    assistantOutputListeners: new Set(input.onAssistantOutput ? [input.onAssistantOutput] : []),
     pendingDeltas: new Map(),
     deltaFlushBuffer: [],
     deltaFlushScheduled: false,
@@ -995,6 +1004,7 @@ function releaseWorkspaceSessionSync(input: SyncOptions) {
   if (!existing) return;
   if (input.onSessionUpdated) existing.sessionUpdatedListeners.delete(input.onSessionUpdated);
   if (input.onSessionStatus) existing.sessionStatusListeners.delete(input.onSessionStatus);
+  if (input.onAssistantOutput) existing.assistantOutputListeners.delete(input.onAssistantOutput);
   existing.refs -= 1;
   if (existing.refs > 0) return;
   if (existing.retainedSessionTimers.size === 0) {
@@ -1078,6 +1088,7 @@ export function __createWorkspaceSessionSyncForTest(input: SyncOptions) {
     retainedSessionTimers: new Map(),
     sessionUpdatedListeners: new Set(),
     sessionStatusListeners: new Set(),
+    assistantOutputListeners: new Set(input.onAssistantOutput ? [input.onAssistantOutput] : []),
     pendingDeltas: new Map(),
     deltaFlushBuffer: [],
     deltaFlushScheduled: false,

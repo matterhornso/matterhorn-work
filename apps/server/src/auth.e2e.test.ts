@@ -233,6 +233,64 @@ describe("public account authentication", () => {
     expect(authenticated.payload.customerTemplates.length).toBeGreaterThan(0);
   });
 
+  test("does not let hosted account sessions configure or enable custom MCP execution", async () => {
+    const app = await boot();
+    const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: {
+        email: "hosted-mcp@example.com",
+        password: PASSWORD,
+        name: "Hosted MCP",
+      },
+    });
+    const cookie = sessionCookie(signup.response);
+    const workspaces = await jsonRequest(app.base, "/workspaces", { cookie });
+    expect(workspaces.response.status).toBe(200);
+    expect(workspaces.payload.items).toHaveLength(1);
+    const workspaceId = workspaces.payload.items[0].id as string;
+
+    for (const config of [
+      { type: "local", command: ["node", "server.js"] },
+      { type: "remote", url: "https://example.com/mcp" },
+    ]) {
+      const added = await jsonRequest(
+        app.base,
+        `/workspace/${workspaceId}/mcp`,
+        {
+          cookie,
+          body: { name: "untrusted", config },
+        },
+      );
+      expect(added.response.status).toBe(403);
+      expect(added.payload.code).toBe("custom_mcp_desktop_only");
+    }
+
+    const enabled = await jsonRequest(
+      app.base,
+      `/workspace/${workspaceId}/mcp/untrusted/enabled`,
+      { cookie, body: { enabled: true } },
+    );
+    expect(enabled.response.status).toBe(403);
+    expect(enabled.payload.code).toBe("custom_mcp_desktop_only");
+
+    const localEngineAdd = await jsonRequest(
+      app.base,
+      "/workspace/ws_auth/mcp",
+      {
+        bearer: TOKEN,
+        body: {
+          name: "trusted-desktop-local",
+          config: { type: "local", command: ["node", "server.js"] },
+        },
+      },
+    );
+    expect(localEngineAdd.response.status).toBe(200);
+    expect(localEngineAdd.payload.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "trusted-desktop-local" }),
+      ]),
+    );
+  });
+
   test("rejects invalid, duplicate, and incorrect credentials safely", async () => {
     const app = await boot();
     const invalidEmail = await jsonRequest(
@@ -639,6 +697,9 @@ describe("public account authentication", () => {
     expect(allowed.response.headers.get("access-control-allow-origin")).toBe(
       "http://127.0.0.1:5173",
     );
+    expect(allowed.response.headers.get("access-control-allow-credentials")).toBe(
+      "true",
+    );
 
     const disallowed = await jsonRequest(app.base, "/api/den/v1/me", {
       cookie: sessionCookie(signup.response),
@@ -647,5 +708,44 @@ describe("public account authentication", () => {
     expect(
       disallowed.response.headers.get("access-control-allow-origin"),
     ).toBeNull();
+  });
+
+  test("blocks cross-origin browser mutations without blocking allowed origins", async () => {
+    const app = await boot();
+    const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "origin-guard@example.com", password: PASSWORD },
+      origin: "http://127.0.0.1:5173",
+    });
+    expect(signup.response.status).toBe(200);
+    const cookie = sessionCookie(signup.response);
+
+    const blocked = await jsonRequest(app.base, "/api/auth/organization/create", {
+      cookie,
+      origin: "https://attacker.example",
+      body: { name: "Attacker workspace", slug: "attacker-workspace" },
+    });
+    expect(blocked.response.status).toBe(403);
+    expect(blocked.payload.code).toBe("untrusted_origin");
+
+    const allowed = await jsonRequest(app.base, "/api/auth/organization/create", {
+      cookie,
+      origin: "http://127.0.0.1:5173",
+      body: { name: "Allowed workspace", slug: "allowed-workspace" },
+    });
+    expect(allowed.response.status).toBe(200);
+    expect(allowed.payload.organization.slug).toBe("allowed-workspace");
+  });
+
+  test("emits HSTS only for HTTPS requests", async () => {
+    const app = await boot();
+    const plain = await jsonRequest(app.base, "/health");
+    expect(plain.response.headers.get("strict-transport-security")).toBeNull();
+
+    const proxiedHttps = await jsonRequest(app.base, "/health", {
+      forwardedProto: "https",
+    });
+    expect(proxiedHttps.response.headers.get("strict-transport-security")).toBe(
+      "max-age=31536000; includeSubDomains",
+    );
   });
 });

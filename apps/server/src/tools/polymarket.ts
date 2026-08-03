@@ -27,9 +27,9 @@ const LARGE_GAP_PCT = 10;
 const FORBIDDEN_CREDENTIAL_KEY_RE =
   /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedExtrinsic|signed_extrinsic)/i;
 const FORBIDDEN_CREDENTIAL_VALUE_RE =
-  /\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b\s*(?:is|=|:|=>|to sign|for signing)?\s*["'`<]?[A-Za-z0-9_+=/@:.-]{8,}/i;
+  /\b(seed phrase|mnemonic|private key|api[ _-]?key|api[ _-]?secret|access[ _-]?token|bearer[ _-]?token|raw signature|signed payload|wallet export)\b\s*(?:is|=|:|=>|to sign|for signing)?\s*["'`<]?[A-Za-z0-9_+=/@:.-]{8,}/i;
 const FORBIDDEN_CREDENTIAL_COMMAND_RE =
-  /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b/i;
+  /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api key|api secret|access token|bearer token|raw signature|signed payload|wallet export)\b/i;
 
 export type PolymarketIntent = "learn" | "discover" | "events" | "market" | "odds" | "orderbook" | "compliance" | "monitor" | "order_preview";
 export type PolymarketExecution =
@@ -667,6 +667,44 @@ function formatProbability(value: number | null): string {
   return (value * 100).toFixed(1) + "%";
 }
 
+const POLYMARKET_QUERY_STOP_WORDS = new Set([
+  "a", "about", "active", "an", "and", "at", "bet", "buy", "cancel", "check", "discover", "dollars", "find", "for", "from",
+  "in", "list", "market", "markets", "me", "no", "of", "on", "order", "place", "please", "polymarket", "prepare",
+  "prediction", "predictions", "preview", "search", "sell", "share", "shares", "show", "the", "to", "trade", "usdc", "wager", "with", "yes",
+]);
+
+/** Turn a full user request or Polymarket URL into a compact public-catalog query. */
+export function sanitizePolymarketSearchQuery(value: string): string {
+  const urlSlug = value.match(/polymarket\.com\/(?:event|market)\/([a-z0-9-]+)/i)?.[1];
+  const source = (urlSlug ?? value).replace(/https?:\/\/\S+/gi, " ").replace(/[_-]+/g, " ").toLowerCase();
+  return source
+    .replace(/\$\s*\d+(?:\.\d+)?/g, " ")
+    .replace(/\b\d+(?:\.\d+)?\s*(?:usdc|dollars?)\b/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((term) => term.length > 1 && !POLYMARKET_QUERY_STOP_WORDS.has(term))
+    .join(" ")
+    .trim();
+}
+
+function marketSearchText(market: PolymarketMarketSummary): string {
+  return [market.question, market.description, market.eventTitle, market.slug].filter(Boolean).join(" ").toLowerCase();
+}
+
+function rankMarketMatches(markets: PolymarketMarketSummary[], query: string): PolymarketMarketSummary[] {
+  const terms = sanitizePolymarketSearchQuery(query).split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return markets;
+  return markets
+    .map((market) => {
+      const text = marketSearchText(market);
+      const hits = terms.filter((term) => text.includes(term)).length;
+      return { market, hits };
+    })
+    .filter(({ hits }) => hits > 0)
+    .sort((a, b) => b.hits - a.hits || (b.market.volume ?? 0) - (a.market.volume ?? 0))
+    .map(({ market }) => market);
+}
+
 // ---------------------------------------------------------------------------
 // Secret rejection.
 // ---------------------------------------------------------------------------
@@ -731,18 +769,36 @@ export class PolymarketInfoProvider implements PolymarketProvider {
 
   async searchMarkets(query: string, limit: number | null = 10): Promise<PolymarketMarketSummary[]> {
     const capped = Number.isFinite(limit) && limit !== null ? Math.max(1, Math.min(100, Math.trunc(limit))) : 10;
-    const url = `${this.gammaBaseUrl}/markets?active=true&closed=false&order=volume&ascending=false&limit=${capped * 3}`;
-    const data = await this.getJsonCached("search", url);
+    const cleanQuery = sanitizePolymarketSearchQuery(query);
+    if (cleanQuery) {
+      const url = `${this.gammaBaseUrl}/public-search?q=${encodeURIComponent(cleanQuery)}&limit_per_type=${Math.min(25, capped * 2)}`;
+      const data = await this.getJsonCached("public-search:" + cleanQuery, url);
+      const source = nowSource(this.gammaBaseUrl + "/public-search");
+      const records: Record<string, unknown>[] = [];
+      if (isRecord(data) && Array.isArray(data.markets)) records.push(...data.markets.filter(isRecord));
+      if (isRecord(data) && Array.isArray(data.events)) {
+        for (const event of data.events.filter(isRecord)) {
+          if (!Array.isArray(event.markets)) continue;
+          records.push(...event.markets.filter(isRecord));
+        }
+      }
+      const unique = new Map<string, PolymarketMarketSummary>();
+      for (const record of records) {
+        const market = mapMarketRecord(record, source);
+        if (market.id && market.active && !market.closed) unique.set(market.id, market);
+      }
+      return rankMarketMatches([...unique.values()], cleanQuery).slice(0, capped);
+    }
+
+    const url = `${this.gammaBaseUrl}/markets?active=true&closed=false&order=volume&ascending=false&limit=${capped}`;
+    const data = await this.getJsonCached("search:active", url);
     const list = Array.isArray(data) ? data : isRecord(data) && Array.isArray(data.markets) ? data.markets : [];
     const source = nowSource(this.gammaBaseUrl + "/markets");
-    const markets = list.filter(isRecord).map((record) => mapMarketRecord(record, source)).filter((market) => market.id !== "");
-    const terms = query.toLowerCase().split(/\s+/).filter((term) => term.length > 1);
-    const matched = markets.filter((market) => {
-      if (terms.length === 0) return true;
-      const haystack = (market.question + " " + (market.description ?? "") + " " + (market.eventTitle ?? "")).toLowerCase();
-      return terms.every((term) => haystack.includes(term));
-    });
-    return (terms.length === 0 ? markets : matched).slice(0, capped);
+    return list
+      .filter(isRecord)
+      .map((record) => mapMarketRecord(record, source))
+      .filter((market) => market.id !== "" && market.active && !market.closed)
+      .slice(0, capped);
   }
 
   async searchEvents(query: string, limit: number | null = 8): Promise<PolymarketEventSummary[]> {
@@ -906,7 +962,7 @@ export function extractPolymarketOrderInput(input: PolymarketChatExecutionInput)
 // ---------------------------------------------------------------------------
 
 const PREVIEW_CONSEQUENCE_SUFFIX =
-  "External signing/execution is not enabled. Matterhorn never holds keys, signs, or submits Polymarket orders.";
+  "The agent does not submit. Continue in the Polymarket ticket to review the exact terms and authorize with a connected eligible Polygon wallet.";
 
 export function buildBlockedPolymarketPreview(args: {
   market: PolymarketMarketSummary | null;
@@ -940,7 +996,7 @@ export function buildBlockedPolymarketPreview(args: {
     liquidity: null,
     expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
     fees: [],
-    consequence: (args.compliance.reason ?? "Blocked by compliance.") + " " + PREVIEW_CONSEQUENCE_SUFFIX,
+    consequence: (args.compliance.reason ?? "Blocked by compliance.") + " No order can be prepared for submission in this jurisdiction.",
     confirmationText: "This region is geoblocked. No order can be previewed or placed through Matterhorn.",
     previewSha256: sha256({ blocked: true, marketId: args.market?.id ?? null, outcome: args.outcome }),
     source: nowSource(args.compliance.source),
@@ -1892,6 +1948,49 @@ function polymarketProviderUnavailable(intent: PolymarketIntent, err: unknown): 
   };
 }
 
+async function resolvePolymarketMarketFromChat(
+  input: PolymarketChatExecutionInput,
+  provider: PolymarketProvider,
+): Promise<{ market: PolymarketMarketSummary | null; matches: PolymarketMarketSummary[] }> {
+  if (input.marketId) {
+    return { market: await provider.getMarket(input.marketId), matches: [] };
+  }
+  const matches = await provider.searchMarkets(input.message, 6);
+  if (matches.length === 1) return { market: matches[0], matches };
+  const query = sanitizePolymarketSearchQuery(input.message);
+  const exact = matches.filter((market) => {
+    const slug = sanitizePolymarketSearchQuery(market.slug ?? "");
+    const question = sanitizePolymarketSearchQuery(market.question);
+    return query.length > 0 && (query === slug || query === question);
+  });
+  return { market: exact.length === 1 ? exact[0] : null, matches };
+}
+
+function polymarketMarketChoice(
+  matches: PolymarketMarketSummary[],
+  intent: PolymarketIntent,
+): PolymarketChatExecutionResult {
+  if (matches.length === 0) {
+    return clarification(
+      "I couldn't find an active Polymarket market matching that description. Try the market title or paste its public Polymarket URL.",
+      [],
+      "clarification_required",
+      intent,
+    );
+  }
+  const result = clarification(
+    "I found several possible markets. Choose one of these matches before I continue.",
+    [],
+    "clarification_required",
+    intent,
+  );
+  return {
+    ...result,
+    cards: [{ kind: "polymarket_market_list", title: "Choose a Polymarket market", markets: matches.slice(0, 3), warnings: [] }],
+    data: { markets: matches.slice(0, 3) },
+  };
+}
+
 export async function executePolymarketChatWorkflow(
   input: PolymarketChatExecutionInput,
   options: { provider?: PolymarketProvider } = {},
@@ -1958,10 +2057,9 @@ export async function executePolymarketChatWorkflow(
   }
 
   if (intent === "market" || intent === "odds") {
-    if (!input.marketId) {
-      return clarification("Which Polymarket market should I explain? Share a market id, or search first.", [], "clarification_required", intent);
-    }
-    const market = await provider.getMarket(input.marketId);
+    const resolved = await resolvePolymarketMarketFromChat(input, provider);
+    if (!resolved.market) return polymarketMarketChoice(resolved.matches, intent);
+    const market = resolved.market;
     const compliance = await provider.checkCompliance();
     const context = buildPolymarketMarketContextSnapshot(market, compliance);
     const lines = market.outcomes.map((outcome) => "- " + outcome + ": " + formatProbability(market.outcomePrices[outcome] ?? null));
@@ -1985,10 +2083,9 @@ export async function executePolymarketChatWorkflow(
   }
 
   if (intent === "orderbook") {
-    if (!input.marketId) {
-      return clarification("Which Polymarket market's orderbook? Share a market id.", [], "clarification_required", intent);
-    }
-    const market = await provider.getMarket(input.marketId);
+    const resolved = await resolvePolymarketMarketFromChat(input, provider);
+    if (!resolved.market) return polymarketMarketChoice(resolved.matches, intent);
+    const market = resolved.market;
     const outcome = chooseOutcome(market, input.outcome, input.side);
     const tokenId = outcome ? market.tokenIds[outcome] : undefined;
     if (!outcome || !tokenId) {
@@ -2028,10 +2125,9 @@ export async function executePolymarketChatWorkflow(
 
   if (intent === "monitor") {
     // Watchlist is read-only research and works regardless of compliance.
-    if (!input.marketId) {
-      return clarification("Which Polymarket market should I set up a read-only watch for? Share a market id, or search first.", [], "clarification_required", "monitor");
-    }
-    const market = await provider.getMarket(input.marketId);
+    const resolved = await resolvePolymarketMarketFromChat(input, provider);
+    if (!resolved.market) return polymarketMarketChoice(resolved.matches, "monitor");
+    const market = resolved.market;
     const watch = buildPolymarketWatchDescriptor(market);
     const check = await checkPolymarketWatchDescriptor(watch, provider);
     return {
@@ -2051,15 +2147,14 @@ export async function executePolymarketChatWorkflow(
 
   // order_preview
   const orderInput = extractPolymarketOrderInput(input);
-  if (!orderInput.marketId) {
-    return clarification("Which Polymarket market? Share a market id, then I can prepare a non-submittable preview.", [], "clarification_required", "order_preview");
-  }
   const amountUsdc = numberOrNull(orderInput.amountUsdc);
   if (amountUsdc === null || !(amountUsdc > 0)) {
     return clarification("How much USDC should the preview use? For example, $10.", [], "clarification_required", "order_preview");
   }
 
-  const market = await provider.getMarket(orderInput.marketId);
+  const resolved = await resolvePolymarketMarketFromChat({ ...input, marketId: orderInput.marketId }, provider);
+  if (!resolved.market) return polymarketMarketChoice(resolved.matches, "order_preview");
+  const market = resolved.market;
   const side: PolymarketSide = orderInput.side ?? "yes";
   const outcome = chooseOutcome(market, orderInput.outcome, side);
 

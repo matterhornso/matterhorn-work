@@ -1066,6 +1066,54 @@ describe("workspace session read APIs", () => {
     expect(mock.requests).toHaveLength(0);
   });
 
+  test("normalizes reasoning effort and rejects invalid or conflicting declarations", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    const stable = `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/messages`;
+
+    const invalid = await fetch(stable, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Hello", reasoningEffort: "turbo" }),
+    });
+    expect(invalid.status).toBe(400);
+    await expect(invalid.json()).resolves.toMatchObject({ code: "invalid_reasoning_effort" });
+
+    const mismatch = await fetch(stable, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Hello", reasoningEffort: "low", reasoning_effort: "high" }),
+    });
+    expect(mismatch.status).toBe(400);
+    await expect(mismatch.json()).resolves.toMatchObject({ code: "reasoning_effort_mismatch" });
+
+    const accepted = await fetch(stable, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Hello", reasoningEffort: " HIGH " }),
+    });
+    expect(accepted.status).toBe(202);
+    const stablePrompt = mock.requests.find((request) => request.pathname === "/session/ses_1/prompt_async");
+    expect(stablePrompt?.body).toMatchObject({ reasoning_effort: "high" });
+
+    const proxy = await fetch(
+      `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/prompt_async`,
+      {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({ parts: [{ type: "text", text: "Hello" }], reasoning_effort: " MINIMAL " }),
+      },
+    );
+    expect(proxy.status).toBe(200);
+    const proxyPrompt = mock.requests.filter((request) => request.pathname === "/session/ses_1/prompt_async").at(-1);
+    expect(proxyPrompt?.body).toMatchObject({ reasoning_effort: "minimal" });
+  });
+
   test("enforces execution mode on the stable prompt route and audits changes", async () => {
     const workspaceRoot = await createWorkspaceRoot();
     const mock = startMockOpencode();
