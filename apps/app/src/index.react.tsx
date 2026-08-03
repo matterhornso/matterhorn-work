@@ -20,11 +20,10 @@ bootstrapTheme();
 initLocale();
 const publicBetaWeb = isPublicBetaWebDeployment();
 const publicCloudConfig = readPublicCloudConfig();
+const denModule = await import("./app/lib/den");
 const bootstrapConfig = publicBetaWeb
-  ? publicCloudConfig
-  : await import("./app/lib/den").then((module) =>
-      module.initializeDenBootstrapConfig(),
-    );
+  ? await denModule.setDenBootstrapConfig(publicCloudConfig)
+  : await denModule.initializeDenBootstrapConfig();
 
 const AuthenticatedApp = React.lazy(
   () => import("./react-app/shell/authenticated-app"),
