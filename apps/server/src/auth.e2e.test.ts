@@ -206,6 +206,32 @@ describe("public account authentication", () => {
     expect(signedBackIn.payload.user.email).toBe("new.user@example.com");
   });
 
+  test("serves the default desktop policy only to signed-in accounts", async () => {
+    const app = await boot();
+    const anonymous = await jsonRequest(
+      app.base,
+      "/api/den/v1/me/desktop-config",
+    );
+    expect(anonymous.response.status).toBe(401);
+
+    const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: {
+        email: "desktop-policy@example.com",
+        password: PASSWORD,
+        name: "Desktop Policy",
+      },
+    });
+    expect(signup.response.status).toBe(200);
+
+    const desktopConfig = await jsonRequest(
+      app.base,
+      "/api/den/v1/me/desktop-config",
+      { cookie: sessionCookie(signup.response) },
+    );
+    expect(desktopConfig.response.status).toBe(200);
+    expect(desktopConfig.payload).toEqual({});
+  });
+
   test("authorizes protected browser routes with the first-party session cookie", async () => {
     const app = await boot();
     const anonymous = await jsonRequest(

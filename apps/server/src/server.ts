@@ -6253,6 +6253,11 @@ function createRoutes(
     });
   });
 
+  addRoute(routes, "GET", "/api/den/v1/me/desktop-config", "none", async ({ request }) => {
+    requireMatterhornAuthSession(request, authStore);
+    return jsonResponse({});
+  });
+
   addRoute(routes, "GET", "/api/den/v1/me/orgs", "none", async ({ request }) => {
     const session = requireMatterhornAuthSession(request, authStore);
     return jsonResponse({
