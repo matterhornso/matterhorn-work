@@ -21,8 +21,8 @@ const sameOriginWorkspaceProxy = {
   ...sameOriginMatterhornProxy,
   bypass: (req: IncomingMessage) => {
     const isDocumentRequest =
-      (req.method === "GET" || req.method === "HEAD") &&
-      req.headers.accept?.includes("text/html");
+      req.method === "HEAD" ||
+      (req.method === "GET" && req.headers.accept?.includes("text/html"));
 
     return isDocumentRequest ? (req.url ?? "/") : undefined;
   },

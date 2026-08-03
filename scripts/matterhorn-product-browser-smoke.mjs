@@ -754,7 +754,8 @@ async function runSmoke(config) {
         });
         return;
       }
-      consoleErrors.push(text);
+      const location = message.location();
+      consoleErrors.push(location.url ? `${text} (${location.url})` : text);
     });
     page.on("pageerror", (error) => {
       pageErrors.push(error.message);
@@ -1458,9 +1459,10 @@ async function runSmoke(config) {
         const connectedSummary = page.getByText(/\d+ MCP servers? active/, {
           exact: true,
         });
-        const emptySummary = page.getByText("No external MCPs connected.", {
-          exact: true,
-        });
+        const emptySummary = page.getByText(
+          /No (?:external MCPs connected\.|apps connected yet)/,
+          { exact: true },
+        );
         await waitForAnyVisible(
           page,
           [connectedSummary, emptySummary],
@@ -1480,9 +1482,7 @@ async function runSmoke(config) {
             .map((name) => name.trim())
             .filter(Boolean);
         } else {
-          await page
-            .getByText("No apps connected yet", { exact: true })
-            .waitFor({ state: "visible", timeout: 20_000 });
+          await emptySummary.waitFor({ state: "visible", timeout: 20_000 });
           await page
             .getByText("Bittensor MCP", { exact: true })
             .waitFor({ state: "visible", timeout: 20_000 });

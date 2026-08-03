@@ -84,6 +84,7 @@ for (const route of ['"/api"', '"/workspaces"', '"/opencode"']) {
 }
 assert.ok(
   appViteConfig.includes('"/workspace": sameOriginWorkspaceProxy') &&
+    appViteConfig.includes('req.method === "HEAD"') &&
     appViteConfig.includes('req.headers.accept?.includes("text/html")'),
   "Vite should proxy workspace APIs without intercepting workspace page navigation",
 );
