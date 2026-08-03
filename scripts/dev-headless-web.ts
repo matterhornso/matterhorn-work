@@ -246,6 +246,10 @@ const viteEnv = {
   ...process.env,
   HOST: viteHost,
   PORT: String(webPort),
+  VITE_MATTERHORN_DEPLOYMENT:
+    process.env.VITE_MATTERHORN_DEPLOYMENT ?? "web",
+  VITE_MATTERHORN_PUBLIC_BETA:
+    process.env.VITE_MATTERHORN_PUBLIC_BETA ?? "1",
   VITE_MATTERHORN_DEV_API_TARGET:
     process.env.VITE_MATTERHORN_DEV_API_TARGET ?? openworkUrl,
   VITE_MATTERHORN_WORK_URL: process.env.VITE_MATTERHORN_WORK_URL ?? process.env.VITE_OPENWORK_URL ?? openworkUrl,
