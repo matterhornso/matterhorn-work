@@ -88,12 +88,13 @@ assert.ok(stages.some((item) => item.id === "production_build"));
 assert.ok(stages.some((item) => item.id === "platform_safety"));
 assert.ok(stages.some((item) => item.id === "browser_acceptance"));
 assert.deepEqual(
-  stages.find((item) => item.id === "browser_acceptance").command.slice(0, 7),
+  stages.find((item) => item.id === "browser_acceptance").command.slice(0, 8),
   [
     "node",
     "scripts/matterhorn-product-browser-smoke.mjs",
     "--url",
     "https://desks.example/workspace/ws/session",
+    "--hosted-account",
     "--server-url",
     "https://engine.example",
     "--output-dir",

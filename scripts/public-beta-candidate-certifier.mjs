@@ -402,6 +402,7 @@ export function buildStages(config) {
       "scripts/matterhorn-product-browser-smoke.mjs",
       "--url",
       config.appUrl,
+      "--hosted-account",
     ];
     if (config.serverUrl) {
       browserCommand.push("--server-url", config.serverUrl);
