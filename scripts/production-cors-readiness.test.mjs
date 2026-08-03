@@ -76,12 +76,17 @@ assert.ok(
     headlessWebDev.includes('process.env.VITE_MATTERHORN_PUBLIC_BETA ?? "1"'),
   "dev:headless-web should compile the app with public web deployment boundaries",
 );
-for (const route of ['"/api"', '"/workspaces"', '"/workspace"', '"/opencode"']) {
+for (const route of ['"/api"', '"/workspaces"', '"/opencode"']) {
   assert.ok(
     appViteConfig.includes(`${route}: sameOriginMatterhornProxy`),
     `Vite should proxy the authenticated public-web route ${route}`,
   );
 }
+assert.ok(
+  appViteConfig.includes('"/workspace": sameOriginWorkspaceProxy') &&
+    appViteConfig.includes('req.headers.accept?.includes("text/html")'),
+  "Vite should proxy workspace APIs without intercepting workspace page navigation",
+);
 
 const generatedMediaDev = readFileSync("scripts/dev-generated-media-smoke.mjs", "utf8");
 assert.match(generatedMediaDev, /"--cors",\s*"loopback"/, "generated media smoke should pass --cors loopback");

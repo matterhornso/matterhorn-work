@@ -1,5 +1,6 @@
 import os from "node:os";
 import { existsSync, readFileSync } from "node:fs";
+import type { IncomingMessage } from "node:http";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
@@ -15,6 +16,16 @@ const sameOriginMatterhornProxy = {
   target: devApiTarget,
   changeOrigin: true,
   ws: true,
+};
+const sameOriginWorkspaceProxy = {
+  ...sameOriginMatterhornProxy,
+  bypass: (req: IncomingMessage) => {
+    const isDocumentRequest =
+      (req.method === "GET" || req.method === "HEAD") &&
+      req.headers.accept?.includes("text/html");
+
+    return isDocumentRequest ? (req.url ?? "/") : undefined;
+  },
 };
 const allowedHosts = new Set<string>();
 const envAllowedHosts = process.env.VITE_ALLOWED_HOSTS ?? "";
@@ -121,7 +132,7 @@ export default defineConfig({
     proxy: {
       "/api": sameOriginMatterhornProxy,
       "/workspaces": sameOriginMatterhornProxy,
-      "/workspace": sameOriginMatterhornProxy,
+      "/workspace": sameOriginWorkspaceProxy,
       "/opencode": sameOriginMatterhornProxy,
     },
   },
