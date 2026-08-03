@@ -228,6 +228,11 @@ assert.ok(
   "product browser smoke should recover to workspace Home when a focused desk remains mounted",
 );
 assert.ok(
+  sessionRoute.includes("!publicBetaWeb &&\n        nextWorkspaceId") &&
+    sessionRoute.includes("if (!publicBetaWeb && workspaceId && client)"),
+  "public web must not call the desktop host-only workspace activation route",
+);
+assert.ok(
   script.includes("function isWorkspaceSessionDetailUrl") &&
     script.includes("function isWorkspaceSettingsAiUrl") &&
     script.includes("async function waitForDeskPromptSentEvent") &&
