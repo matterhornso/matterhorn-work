@@ -4425,7 +4425,8 @@ describe("signer and watch helpers", () => {
   });
 
   test("builds bounded watch alert digests with notification intents", async () => {
-    const watch = createBittensorWatch({ kind: "slippage", netuid: 77, threshold: 0.1, label: "Watch slippage" });
+    // Digest behavior must stay deterministic even when no live subnet provider is available.
+    const watch = createBittensorWatch({ kind: "slippage", threshold: 0.1, label: "Watch slippage" });
     const evaluation = await evaluateBittensorWatch(watch);
     const digest = buildBittensorWatchDigest([evaluation], { maxAlerts: 1, includeOk: true });
     expect(digest.total).toBe(1);

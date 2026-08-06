@@ -68,6 +68,45 @@ const stages = buildStages({
   skipBrowser: false,
   timeoutMs: 1000,
 });
+const aggregateBuild = readFileSync(
+  new URL("./build.mjs", import.meta.url),
+  "utf8",
+);
+assert.ok(
+  aggregateBuild.includes("@matterhorn-work/desktop build") &&
+    aggregateBuild.includes("@matterhorn-work/app build:web") &&
+    aggregateBuild.indexOf("@matterhorn-work/desktop build") <
+      aggregateBuild.indexOf("@matterhorn-work/app build:web"),
+  "aggregate release builds should certify desktop first and leave a deep-link-safe web bundle in apps/app/dist",
+);
+const appPackage = JSON.parse(
+  readFileSync(new URL("../apps/app/package.json", import.meta.url), "utf8"),
+);
+const hostedWebBuild = readFileSync(
+  new URL("../apps/app/scripts/build-web.mjs", import.meta.url),
+  "utf8",
+);
+const viteConfig = readFileSync(
+  new URL("../apps/app/vite.config.ts", import.meta.url),
+  "utf8",
+);
+assert.equal(appPackage.scripts["build:web"], "node scripts/build-web.mjs");
+for (const [name, value] of [
+  ["VITE_MATTERHORN_DEPLOYMENT", "web"],
+  ["VITE_MATTERHORN_PUBLIC_BETA", "1"],
+  ["VITE_MATTERHORN_REQUIRE_SIGNIN", "true"],
+  ["VITE_MATTERHORN_CLOUD_ENABLED", "true"],
+]) {
+  assert.ok(
+    hostedWebBuild.includes(name) && hostedWebBuild.includes(`|| "${value}"`),
+    `web builds should default ${name} to ${value}`,
+  );
+}
+assert.match(
+  viteConfig,
+  /preview:\s*\{\s*proxy:\s*sameOriginProxy/s,
+  "production preview should proxy hosted same-origin backend routes",
+);
 assert.ok(stages.some((item) => item.id === "scope_inventory"));
 assert.ok(stages.some((item) => item.id === "candidate_manifest"));
 assert.ok(stages.some((item) => item.id === "secret_scan"));

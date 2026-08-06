@@ -28,6 +28,7 @@ for (const required of [
   "page.on(\"console\"",
   "page.on(\"pageerror\"",
   "page.on(\"response\"",
+  "noteButton.waitFor({ state: \"visible\"",
 ]) {
   assert.ok(source.includes(required), `Outputs browser smoke missing ${required}`);
 }

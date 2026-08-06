@@ -48,6 +48,8 @@ const feedback = read("apps/app/src/app/lib/feedback.ts");
 const den = read("apps/app/src/app/lib/den.ts");
 const denSigninSurface = read("apps/app/src/react-app/domains/cloud/den-signin-surface.tsx");
 const forcedSigninPage = read("apps/app/src/react-app/domains/cloud/forced-signin-page.tsx");
+const publicTrustContent = read("apps/app/src/react-app/domains/public/public-trust-content.ts");
+const reactEntry = read("apps/app/src/index.react.tsx");
 const normalizeWhitespace = (value) => value.replace(/\s+/g, " ").trim();
 const normalizedMcpView = normalizeWhitespace(settingsRoute);
 
@@ -59,6 +61,25 @@ const walletSettings = read("apps/app/src/react-app/domains/settings/pages/walle
 const serverProvider = read("apps/app/src/react-app/kernel/server-provider.tsx");
 const globalSdkProvider = read("apps/app/src/react-app/kernel/global-sdk-provider.tsx");
 const betaGoLiveChecklist = read("docs/handoffs/beta-go-live-first-10-user-checklist.md");
+
+assert.ok(
+  sessionRoute.includes("allowCookieAuth={publicBetaWeb}") &&
+    sessionPage.includes("(reactSessionToken || props.allowCookieAuth)"),
+  "hosted web chats should render through cookie authentication without a desktop bearer token",
+);
+assert.ok(
+  publicTrustContent.includes(
+    "return input.publicBetaWeb && !isPublicTrustPath(input.pathname)",
+  ) &&
+    reactEntry.includes("if (!publicSessionVerified)") &&
+    reactEntry.includes("<PublicSigninBootstrap"),
+  "hosted web workspace routes should verify their cookie session before loading the authenticated shell",
+);
+assert.equal(
+  publicTrustContent.includes("input.publicBetaWeb &&\n    input.requireSignin"),
+  false,
+  "hosted web authentication must not become optional when a build flag is omitted",
+);
 
 for (const phrase of [
   "Use Bittensor, Hyperliquid, Polymarket, and real-world workflows through one safe chat workspace.",
@@ -288,7 +309,8 @@ assert.ok(
     sessionRoute.includes("const title = options?.title?.trim()") &&
     sessionRoute.includes("const agent = options?.agent?.trim()") &&
     sessionRoute.includes("options?.onSessionCreated?.(session.id)") &&
-    sessionRoute.includes("setSelectedAgent(agent || null)") &&
+    sessionRoute.includes("useSessionAgentState(") &&
+    sessionRoute.includes("saveSessionAgent(workspaceId, session.id, agent || null)") &&
     sessionRoute.includes("workspaceClient.session.update({") &&
     sessionRoute.includes("[displaySession as any, ...(current[workspaceId] ?? [])]"),
   "launcher-created chats should start with human launcher titles and the matching desk agent",

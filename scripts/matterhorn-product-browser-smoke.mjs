@@ -171,9 +171,10 @@ function assertCurrentWorkspaceRoute(page, expectedWorkspaceId, label) {
 
 async function createQaAccount(context, appUrl, serverUrl = "") {
   const origin = new URL(appUrl).origin;
+  const apiBase = serverUrl || origin;
   const email = `product-smoke-${Date.now()}-${process.pid}@example.test`;
   const response = await context.request.post(
-    new URL("/api/auth/sign-up/email", origin).toString(),
+    new URL("/api/auth/sign-up/email", apiBase).toString(),
     {
       data: {
         email,
@@ -206,7 +207,7 @@ async function createQaAccount(context, appUrl, serverUrl = "") {
   }
 
   const sessionResponse = await context.request.get(
-    new URL("/api/den/v1/me", origin).toString(),
+    new URL("/api/den/v1/me", apiBase).toString(),
   );
   if (!sessionResponse.ok()) {
     throw new Error(
@@ -215,7 +216,7 @@ async function createQaAccount(context, appUrl, serverUrl = "") {
   }
 
   const workspacesResponse = await context.request.get(
-    new URL("/workspaces", serverUrl || origin).toString(),
+    new URL("/workspaces", apiBase).toString(),
   );
   const workspacesPayload = await workspacesResponse.json().catch(() => null);
   if (!workspacesResponse.ok()) {
@@ -706,6 +707,122 @@ async function startPrimaryDeskTask(page, config, desk) {
   };
 }
 
+async function verifyReviewedActionChatHandoff(page, config) {
+  const draft =
+    "Buy <size> BTC on Hyperliquid testnet as a market order with 100 bps max slippage.";
+  const exactRequest =
+    "Buy 0.001 BTC on Hyperliquid testnet as a market order with 100 bps max slippage.";
+  const workspaceId = workspaceIdFromUrl(config.url);
+  if (!workspaceId) throw new Error(`Could not parse workspace id from ${config.url}`);
+
+  await page.goto(workspaceUrl(config.url, "session"), {
+    waitUntil: "load",
+    timeout: 30_000,
+  });
+  await ensureWorkspaceHomeVisible(page);
+  await clickFirstVisible(
+    page.getByTestId("open-hyperliquid-desk"),
+    "Open Hyperliquid desk card",
+  );
+  const taskGroup = page
+    .getByLabel("Agent tasks")
+    .locator("[data-workflow-stage]")
+    .filter({ has: page.getByText("Place an order", { exact: true }) })
+    .first();
+  await taskGroup.waitFor({ state: "visible", timeout: 15_000 });
+  await taskGroup
+    .getByRole("button", { name: "Prepare in chat", exact: true })
+    .click();
+  await page.waitForURL(
+    (url) => isWorkspaceSessionDetailUrl(url.toString()),
+    { timeout: 30_000, waitUntil: "commit" },
+  );
+
+  const sessionId = new URL(page.url()).pathname.split("/").at(-1);
+  if (!sessionId) throw new Error("Reviewed action did not create a concrete chat id.");
+  const composer = page.getByTestId("session-composer-shell");
+  await composer.waitFor({ state: "visible", timeout: 20_000 });
+  const editor = composer.getByRole("textbox", {
+    name: /Ask Matterhorn about Bittensor, markets, longevity, files, or workflows/,
+  });
+  await editor.waitFor({ state: "visible", timeout: 15_000 });
+  const savedDraft = (await editor.innerText()).trim();
+  if (savedDraft !== draft) {
+    throw new Error(
+      `Reviewed action chat did not preserve its editable draft. Received: ${savedDraft || "empty"}`,
+    );
+  }
+
+  const creationEvidence = await page.evaluate(
+    ({ expectedWorkspaceId, expectedSessionId }) => {
+      let agents = {};
+      try {
+        agents = JSON.parse(
+          window.localStorage.getItem("matterhorn.session-agents.v1") || "{}",
+        );
+      } catch {
+        agents = {};
+      }
+      const events = window.__matterhorn?.events?.(160) ?? [];
+      return {
+        agent: agents[`${expectedWorkspaceId}:${expectedSessionId}`] ?? null,
+        draftSaved: events.some(
+          (entry) =>
+            entry?.name === "desk.task_launch.draft_saved" &&
+            entry?.data?.sessionId === expectedSessionId,
+        ),
+        promptSent: events.some(
+          (entry) =>
+            entry?.name === "desk.task_launch.prompt_sent" &&
+            entry?.data?.sessionId === expectedSessionId,
+        ),
+      };
+    },
+    { expectedWorkspaceId: workspaceId, expectedSessionId: sessionId },
+  );
+  if (creationEvidence.agent !== "matterhorn-hyperliquid") {
+    throw new Error(
+      `Reviewed action chat lost its session-scoped agent. Received: ${creationEvidence.agent || "none"}`,
+    );
+  }
+  if (!creationEvidence.draftSaved || creationEvidence.promptSent) {
+    throw new Error(
+      "Reviewed action starter must save an editable draft without sending it to the model.",
+    );
+  }
+
+  await editor.fill(exactRequest);
+  await composer.getByRole("button", { name: "Ask", exact: true }).click();
+  await page
+    .getByText("Hyperliquid order prepared", { exact: true })
+    .waitFor({ state: "visible", timeout: 15_000 });
+  await page.waitForFunction(
+    (expectedSessionId) =>
+      (window.__matterhorn?.events?.(160) ?? []).some(
+        (entry) =>
+          entry?.name === "session.reviewed_action.staged_from_composer" &&
+          entry?.data?.sessionId === expectedSessionId &&
+          entry?.data?.protocol === "hyperliquid",
+      ),
+    sessionId,
+    { timeout: 15_000 },
+  );
+  const finalUrl = new URL(page.url());
+  if (finalUrl.searchParams.get("panel") !== "hyperliquid") {
+    throw new Error("Exact reviewed action did not open the Hyperliquid wallet review panel.");
+  }
+
+  return {
+    sessionId,
+    sessionUrl: page.url(),
+    agent: creationEvidence.agent,
+    editableDraft: draft,
+    exactRequest,
+    modelPromptSent: false,
+    walletReviewPanel: finalUrl.searchParams.get("panel"),
+  };
+}
+
 async function runSmoke(config) {
   const report = makeReport(config);
   let browser;
@@ -790,16 +907,14 @@ async function runSmoke(config) {
             `Fixture smoke URL must contain a workspace id: ${config.url}`,
           );
         }
-        const account = await createQaAccount(
-          context,
-          config.url,
-          config.serverUrl,
-        );
+        // Fixture coverage uses the launcher's preconfigured bearer-scoped
+        // workspace. Creating a hosted account in this browser context would
+        // install an account cookie whose isolated workspace intentionally
+        // cannot access the fixture route. Hosted identity and tenant
+        // isolation are exercised separately by --hosted-account.
         report.artifacts.auth = {
           mode: "fixture-workspace",
-          freshAccount: true,
-          email: account.email,
-          organizationId: account.organizationId,
+          freshAccount: false,
           workspaceId,
         };
       },
@@ -939,6 +1054,16 @@ async function runSmoke(config) {
         },
       );
     }
+
+    await stage(
+      report,
+      "desk_reviewed_action_chat_handoff",
+      "Prepare a reviewed action in chat, then hand it to Wallet",
+      async () => {
+        report.artifacts.reviewedActionChatHandoff =
+          await verifyReviewedActionChatHandoff(page, config);
+      },
+    );
 
     await stage(
       report,
@@ -1456,31 +1581,28 @@ async function runSmoke(config) {
         await page
           .getByRole("heading", { name: "MCPs & Tools", exact: true })
           .waitFor({ state: "visible", timeout: 20_000 });
-        const connectedSummary = page.getByText(/\d+ MCP servers? active/, {
+        await page.getByText("Your apps", { exact: true }).waitFor({
+          state: "visible",
+          timeout: 20_000,
+        });
+        const configuredServer = page.getByText("Matterhorn Desks MCP", {
           exact: true,
         });
-        const emptySummary = page.getByText(
-          /No (?:external MCPs connected\.|apps connected yet)/,
-          { exact: true },
-        );
+        const emptySummary = page.getByText("No apps connected yet", {
+          exact: true,
+        });
         await waitForAnyVisible(
           page,
-          [connectedSummary, emptySummary],
-          "connected MCP summary or explicit empty state",
+          [configuredServer, emptySummary],
+          "configured MCP server or explicit empty state",
           20_000,
         );
-        if (await connectedSummary.isVisible().catch(() => false)) {
-          const connectedNames = page.getByLabel(/Connected MCP servers:/, {
-            exact: false,
+        if (await configuredServer.isVisible().catch(() => false)) {
+          await page.getByText("Ready", { exact: true }).waitFor({
+            state: "visible",
+            timeout: 20_000,
           });
-          await connectedNames.waitFor({ state: "visible", timeout: 20_000 });
-          const connectedLabel =
-            (await connectedNames.getAttribute("aria-label")) ?? "";
-          report.artifacts.connectedMcpServers = connectedLabel
-            .replace(/^Connected MCP servers:\s*/, "")
-            .split(",")
-            .map((name) => name.trim())
-            .filter(Boolean);
+          report.artifacts.connectedMcpServers = ["Matterhorn Desks MCP"];
         } else {
           await emptySummary.waitFor({ state: "visible", timeout: 20_000 });
           await page

@@ -306,6 +306,7 @@ try {
     const notesPanel = page.getByRole("region", { name: "Notes panel", exact: true });
     await notesPanel.waitFor({ state: "visible", timeout: 15_000 });
     const noteButton = notesPanel.getByRole("button").filter({ hasText: expectedTitle });
+    await noteButton.waitFor({ state: "visible", timeout: 15_000 });
     if (await noteButton.count() !== 1) throw new Error("Linked output note was not visible in Notes.");
     await noteButton.click();
     const noteBody = await page.getByPlaceholder("Write your note…", { exact: true }).inputValue();

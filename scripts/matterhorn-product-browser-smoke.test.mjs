@@ -54,6 +54,7 @@ for (const stageId of [
   "desk_hyperliquid_task_start",
   "desk_polymarket_task_start",
   "desk_sui_task_start",
+  "desk_reviewed_action_chat_handoff",
   "session_direct_link_reload",
   "desk_longevity_workflow_start",
   "activity_summary",
@@ -161,13 +162,18 @@ for (const visibleText of [
 assert.ok(
   script.includes("/api/auth/sign-up/email") &&
     script.includes("/api/den/v1/me") &&
-    script.includes('new URL("/workspaces", serverUrl || origin)') &&
+    script.includes("const apiBase = serverUrl || origin") &&
+    script.includes('new URL("/api/auth/sign-up/email", apiBase)') &&
+    script.includes('new URL("/api/den/v1/me", apiBase)') &&
+    script.includes('new URL("/workspaces", apiBase)') &&
     script.includes("--server-url") &&
     script.includes(
       "Fresh-user workspace provisioning did not return one isolated active workspace.",
     ) &&
     script.includes("--hosted-account") &&
-    script.includes('mode: "fixture-workspace"'),
+    script.includes('mode: "fixture-workspace"') &&
+    script.includes("Hosted identity and tenant") &&
+    script.includes("freshAccount: false"),
   "product browser smoke should explicitly separate fresh hosted-account certification from local fixture coverage",
 );
 assert.ok(
@@ -248,6 +254,16 @@ assert.ok(
     script.includes("startedDeskTaskEvents") &&
     script.includes("startedDeskTaskSessions"),
   "product browser smoke should prove a desk task either sends a real prompt into a concrete chat session or pauses safely at provider setup without sending work",
+);
+assert.ok(
+  script.includes("verifyReviewedActionChatHandoff") &&
+    script.includes('name: "Prepare in chat"') &&
+    script.includes("matterhorn.session-agents.v1") &&
+    script.includes('entry?.name === "desk.task_launch.draft_saved"') &&
+    script.includes('entry?.name === "session.reviewed_action.staged_from_composer"') &&
+    script.includes("Hyperliquid order prepared") &&
+    script.includes("modelPromptSent: false"),
+  "product browser smoke should prove reviewed actions start as editable session-scoped chat drafts and move to Wallet without model submission",
 );
 assert.ok(
   script.includes("const storageState = await context.storageState()") &&
