@@ -415,3 +415,77 @@ export function reviewedActionHandoffFromComposer(
   if (protocol === "sui") return suiCommand(text);
   return null;
 }
+
+function compactNumber(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return String(value);
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 8 }).format(parsed);
+}
+
+function shortenedIdentifier(value: string | null | undefined): string {
+  if (!value) return "";
+  if (value.length <= 18) return value;
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
+}
+
+export function reviewedActionPreparedChatText(handoff: ReviewedActionDraftHandoff): string {
+  let title = "Action prepared";
+  let terms = "Exact terms are ready for review.";
+
+  if (handoff.protocol === "hyperliquid") {
+    const draft = handoff.draft;
+    const network = draft.network === "mainnet" ? "Mainnet" : "Testnet";
+    if (draft.operation === "cancel_order") {
+      title = "Hyperliquid cancellation prepared";
+      terms = `${draft.asset} order #${draft.orderId} · ${network}`;
+    } else if (draft.operation === "modify_order") {
+      title = "Hyperliquid order change prepared";
+      terms = `${draft.side === "buy" ? "Buy" : "Sell"} ${compactNumber(draft.size)} ${draft.asset} · ${draft.orderType === "limit" ? `Limit @ ${compactNumber(draft.limitPrice)}` : "Market"} · ${network}`;
+    } else if (draft.operation === "close_position") {
+      title = "Hyperliquid position close prepared";
+      terms = `${draft.side === "buy" ? "Buy" : "Sell"} ${compactNumber(draft.size)} ${draft.asset} · Reduce only · ${network}`;
+    } else {
+      title = "Hyperliquid order prepared";
+      terms = `${draft.side === "buy" ? "Buy" : "Sell"} ${compactNumber(draft.size)} ${draft.asset} · ${draft.orderType === "limit" ? `Limit @ ${compactNumber(draft.limitPrice)}` : "Market"} · ${network} · Max slippage ${draft.slippageBps} bps`;
+    }
+  } else if (handoff.protocol === "polymarket") {
+    const draft = handoff.draft;
+    if (draft.operation === "cancel") {
+      title = "Polymarket cancellation prepared";
+      terms = draft.cancelAll
+        ? "Cancel all eligible open orders"
+        : `Cancel ${draft.orderIds.length} order${draft.orderIds.length === 1 ? "" : "s"}`;
+    } else {
+      title = `Polymarket ${draft.operation} prepared`;
+      const quantity = draft.operation === "buy"
+        ? `$${compactNumber(draft.amountUsdc)} USDC`
+        : `${compactNumber(draft.amountShares)} shares`;
+      terms = `${draft.operation === "buy" ? "Buy" : "Sell"} ${draft.outcome} · ${quantity} · Market ${shortenedIdentifier(draft.marketId)}`;
+    }
+  } else if (handoff.protocol === "bittensor") {
+    const draft = handoff.draft;
+    if (draft.operation === "transfer") {
+      title = "Bittensor transfer prepared";
+      terms = `Transfer ${compactNumber(draft.amountTao)} TAO · To ${shortenedIdentifier(draft.destination)}`;
+    } else {
+      title = `Bittensor ${draft.operation} prepared`;
+      terms = `${draft.operation === "stake" ? "Stake" : "Unstake"} ${compactNumber(draft.amountTao)} TAO · Subnet ${draft.netuid} · ${shortenedIdentifier(draft.hotkey)}`;
+    }
+  } else {
+    const draft = handoff.draft;
+    const network = draft.network === "mainnet" ? "Mainnet" : "Testnet";
+    if (draft.operation === "batch_transfer_sui") {
+      title = "Sui batch transfer prepared";
+      terms = `${draft.transfers.length} transfers · ${network}`;
+    } else if (draft.operation === "transfer_object") {
+      title = "Sui object transfer prepared";
+      terms = `${shortenedIdentifier(draft.objectId)} · To ${shortenedIdentifier(draft.recipient)} · ${network}`;
+    } else {
+      title = "Sui transfer prepared";
+      terms = `${compactNumber(draft.amount)} ${draft.operation === "transfer_sui" ? "SUI" : shortenedIdentifier(draft.coinType)} · To ${shortenedIdentifier(draft.recipient)} · ${network}`;
+    }
+  }
+
+  return `**${title}**\n\n${terms}\n\nReview the exact action in the open Wallet panel, then connect and sign. Nothing is submitted until you approve it in your wallet.`;
+}

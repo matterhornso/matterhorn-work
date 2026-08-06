@@ -119,6 +119,45 @@ describe("WorkflowStageCard — render contract", () => {
     expect(pageSrc).toContain("onCreateDeskTask={(prompt, options)");
     expect(pageSrc).toContain("props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, options)");
   });
+
+  test("desk-panel handoffs open a dedicated chat instead of replacing active desk context", () => {
+    const surfaceSrc = readAppSource("domains/session/surface/session-surface.tsx");
+
+    expect(surfaceSrc).toContain("if (agent && props.onCreateDeskTask)");
+    expect(surfaceSrc).not.toContain('source !== "bittensor-card-action"');
+    expect(surfaceSrc).toContain("sendImmediately: false");
+    expect(surfaceSrc).toContain("onSessionCreated: (sessionId) =>");
+    expect(surfaceSrc).toContain('recordInspectorEvent("desk.chat_handoff.session_created"');
+    expect(surfaceSrc).toContain('recordInspectorEvent("desk.chat_handoff.session_requested"');
+  });
+
+  test("a created desk chat remains visible when an optional setup hook fails", () => {
+    const routeSrc = readShellSource("session-route.tsx");
+    const launcherBlock = routeSrc.slice(
+      routeSrc.indexOf("onCreateTaskWithPrompt:"),
+      routeSrc.indexOf("onOpenRenameWorkspace:"),
+    );
+    const selectedSessionIndex = launcherBlock.indexOf(
+      "selectedSessionIdRef.current = session.id;",
+    );
+    const sessionListIndex = launcherBlock.indexOf(
+      "sessionsByWorkspaceIdRef.current = next;",
+    );
+    const navigateIndex = routeSrc.indexOf("navigateToWorkspaceSession(workspaceId, session.id);");
+    const callbackIndex = routeSrc.indexOf("await options?.onSessionCreated?.(session.id);");
+
+    expect(selectedSessionIndex).toBeGreaterThan(-1);
+    expect(sessionListIndex).toBeGreaterThan(selectedSessionIndex);
+    expect(launcherBlock.indexOf("navigateToWorkspaceSession(workspaceId, session.id);")).toBeGreaterThan(
+      sessionListIndex,
+    );
+    expect(navigateIndex).toBeGreaterThan(-1);
+    expect(callbackIndex).toBeGreaterThan(navigateIndex);
+    expect(routeSrc).toContain('recordInspectorEvent("desk.task_launch.navigation_requested"');
+    expect(routeSrc).toContain('recordInspectorEvent("desk.task_launch.setup_failed"');
+    expect(routeSrc).toContain("Chat created; task setup needs review");
+    expect(routeSrc).toContain("The prompt is saved in the new chat.");
+  });
 });
 
 describe("DeskWorkflowStagePanel — uses WorkflowStageCard", () => {
@@ -221,11 +260,12 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
 
     expect(src).toContain("deskSafetyInfo");
     expect(src).toContain("desk safety info");
-    expect(src).toContain("Agent tasks run market and account checks and prepare order context, but cannot submit.");
-    expect(src).toContain("Manual execution is available only in the Hyperliquid panel after exact review and connected-wallet approval.");
+    expect(src).toContain("Chat prepares exact Hyperliquid orders and changes.");
+    expect(src).toContain("connected-wallet approval; agents and watches cannot submit unattended.");
+    expect(src).toContain("Chat prepares research or exact buy, sell, and cancel terms.");
+    expect(src).toContain("Uses public wallet details and prepares exact transaction drafts.");
     expect(surfaceSrc).toContain("Agent tasks run market and account checks and prepare order context, but cannot submit.");
     expect(surfaceSrc).toContain("Manual execution is available only in the Hyperliquid panel after exact review and connected-wallet approval.");
-    expect(src).toContain("Matterhorn never places bets inside the app");
     expect(src).toContain("<PopoverTrigger");
     expect(src).toContain("<PopoverContent");
     expect(src).not.toContain("Boundary:");
@@ -242,26 +282,20 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(polymarketTitles).toContain("Cancel orders");
   });
 
-  test("focused desk task cards launch the agent instead of hiding a draft", () => {
+  test("focused desk transaction cards prepare an editable chat request before wallet review", () => {
     const src = readAppSource("domains/session/chat/session-page.tsx");
     const surfaceSrc = readAppSource("domains/session/surface/session-surface.tsx");
 
-    expect(src).toContain("sendImmediately: true");
-    expect(src).toContain("setCurrentSidePanel(null)");
-    expect(src).toContain("onSessionCreated: () =>");
-    expect(src).toContain("if (started === false && !taskSessionCreated) setCurrentSidePanel(focusedProtocolPanel)");
+    expect(src).toContain("reviewedActionChatDraft");
+    expect(src).toContain("if (item.reviewedAction)");
+    expect(src).toContain("startTask(draft, item.title, { sendImmediately: false })");
+    expect(src).toContain("sendImmediately: options?.sendImmediately ?? true");
     expect(src).toContain("launchingTaskTitle");
     expect(src).toContain("Starting {launchingTaskTitle} in a new chat.");
-    expect(src).toContain('item.reviewedAction === "bittensor"');
-    expect(src).toContain('"Open transfer ticket"');
-    expect(src).toContain('"Open trade ticket"');
-    expect(src).toContain(': isLaunching');
-    expect(src).toContain('? "Starting..."');
-    expect(src).toContain(
-      "onOpenReviewedAction(item.reviewedAction, item.reviewedActionOperation)",
-    );
+    expect(src).toContain('? "Prepare in chat"');
+    expect(src).toContain("Start an editable chat request. Exact terms move to Wallet for review and signature.");
+    expect(src).not.toContain("onOpenReviewedAction(item.reviewedAction");
     expect(src).not.toContain("draftedPromptTitle");
-    expect(src).toContain("Nothing has been sent yet.");
     expect(src).not.toContain("Draft ready");
     expect(surfaceSrc).toContain("Choose a starter below to run");
     expect(surfaceSrc).toContain("DeskSafetyInfoButton");
@@ -330,9 +364,8 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain('? "Engine offline"');
     expect(src).toContain('? "Open workspace"');
     expect(src).toContain(': "Platform setup"');
-    expect(src).toContain("actionDisabled={Boolean(launchingTaskTitle) || (!opensReviewedAction && startTaskBlocked)}");
-    expect(src).toContain('opensReviewedAction');
-    expect(src).toContain('"Open the exact review, wallet approval, and submission flow."');
+    expect(src).toContain("actionDisabled={Boolean(launchingTaskTitle) || startTaskBlocked}");
+    expect(src).toContain("Start an editable chat request. Exact terms move to Wallet for review and signature.");
     expect(src).toContain("startTaskBlocker ?? inputRequirement?.helpText ?? undefined");
     expect(src).toContain("getDeskTaskInputRequirement(item.prompt)");
     expect(src).toContain("buildDeskTaskPromptWithInput(pendingInput.prompt, pendingInput.requirement, taskInputValue)");
@@ -474,12 +507,14 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(surfaceSrc).not.toContain("Starting ${optimisticRunTitle}");
   });
 
-  test("session route defers selected agent updates from child surfaces", () => {
+  test("session route scopes selected agent updates to the active chat", () => {
     const src = readAppSource("shell/session-route.tsx");
 
-    expect(src).toContain("pendingSelectedAgentRef");
-    expect(src).toContain("window.setTimeout(commit, 0)");
+    expect(src).toContain("useSessionAgentState(");
+    expect(src).toContain("selectedAgentRef.current = agent");
     expect(src).toContain("onSelectAgent: handleSelectAgent");
+    expect(src).not.toContain("pendingSelectedAgentRef");
+    expect(src).not.toContain("window.setTimeout(commit, 0)");
     expect(src).not.toContain("onSelectAgent: (agent: string | null) => setSelectedAgent(agent)");
   });
 

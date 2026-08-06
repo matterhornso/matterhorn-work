@@ -62,9 +62,15 @@ describe("desk task starters", () => {
       new URL("../src/react-app/domains/session/chat/session-page.tsx", import.meta.url),
       "utf8",
     );
-    expect(focusedDeskSource).toContain("onOpenReviewedAction(item.reviewedAction, item.reviewedActionOperation)");
+    expect(focusedDeskSource).toContain("const draft = reviewedActionChatDraft(item)");
+    expect(focusedDeskSource).toContain("startTask(draft, item.title, { sendImmediately: false })");
     expect(focusedDeskSource).toContain("openReviewedAction={reviewedActionEntryProtocol === visibleSidePanel}");
-    expect(focusedDeskSource).toContain("!opensReviewedAction && startTaskBlocked");
+    expect(focusedDeskSource).toContain("actionDisabled={Boolean(launchingTaskTitle) || startTaskBlocked}");
+    expect(focusedDeskSource).toContain(`const startTaskBlocked = Boolean(
+    !matterhornServerClient ||
+    !readinessWorkspaceId ||
+    (startTaskFeature && !startTaskFeature.ready),
+  );`);
   });
 
   test("keeps market and wallet starter tasks within their declared safety boundaries", () => {
