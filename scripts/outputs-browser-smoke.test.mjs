@@ -16,15 +16,19 @@ for (const required of [
   "add_linked_note",
   "delete_linked_note",
   "delete_output",
-  "preview-only Sui output",
+  "wallet-reviewed Sui output",
   "Selected output actions",
   "Browse outputs",
   "File details",
-  "never signs or submits",
+  "never holds keys or submits without wallet approval",
+  "client_wallet_required",
+  "sui_wallet_standard",
+  "sign_and_execute_in_wallet",
   "Never written to the report",
   "page.on(\"console\"",
   "page.on(\"pageerror\"",
   "page.on(\"response\"",
+  "noteButton.waitFor({ state: \"visible\"",
 ]) {
   assert.ok(source.includes(required), `Outputs browser smoke missing ${required}`);
 }

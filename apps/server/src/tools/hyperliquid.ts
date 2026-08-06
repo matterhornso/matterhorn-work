@@ -14,9 +14,9 @@ const ETH_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const FORBIDDEN_CREDENTIAL_KEY_RE =
   /(seed|mnemonic|private|secret|password|passphrase|keyfile|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedAction|signed_action)/i;
 const FORBIDDEN_CREDENTIAL_VALUE_RE =
-  /\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b\s*(?:is|=|:|=>|to sign|for signing)?\s*["'`<]?[A-Za-z0-9_+=/@:.-]{8,}/i;
+  /\b(seed phrase|mnemonic|private key|api[ _-]?key|api[ _-]?secret|access[ _-]?token|bearer[ _-]?token|raw signature|signed payload|wallet export)\b\s*(?:is|=|:|=>|to sign|for signing)?\s*["'`<]?[A-Za-z0-9_+=/@:.-]{8,}/i;
 const FORBIDDEN_CREDENTIAL_COMMAND_RE =
-  /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b/i;
+  /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api key|api secret|access token|bearer token|raw signature|signed payload|wallet export)\b/i;
 
 export type HyperliquidIntent = "learn" | "discover" | "account" | "positions" | "funding" | "orderbook" | "monitor" | "order_preview";
 export type HyperliquidExecution = "answered" | "clarification_required" | "read_only" | "unsigned_preview" | "unsupported";
@@ -714,8 +714,8 @@ export function extractHyperliquidOrderInput(input: HyperliquidChatExecutionInpu
     orderType,
     network: input.network ?? "testnet",
     price,
-    reduceOnly: input.reduceOnly ?? (Boolean(closeIntent?.isClose) || /\breduce[\s-]?only\b/i.test(message)),
-    slippageTolerance: input.slippageTolerance,
+    reduceOnly: input.reduceOnly ?? extractReduceOnly(message, Boolean(closeIntent?.isClose)),
+    slippageTolerance: input.slippageTolerance ?? extractSlippageTolerance(message),
     address: input.address,
     message,
     closeIntent,
@@ -1955,7 +1955,7 @@ export async function executeHyperliquidChatWorkflow(
   if (!orderInput.asset || !orderInput.side || !numberOrNull(orderInput.size)) {
     return clarification(
       "To prepare a Hyperliquid order preview, send asset, side, and size. Example: preview buying 0.1 BTC at 65000 USDC.",
-      ["Matterhorn will still not submit the order; it only creates a non-submittable preview."],
+      ["The agent prepares the draft. Review the exact terms in the Hyperliquid ticket, then authorize submission with your connected wallet."],
       "clarification_required",
       "order_preview",
     );
@@ -2044,10 +2044,25 @@ function extractSide(message: string): HyperliquidSide | null {
 }
 
 function extractAsset(message: string): string | null {
-  const explicit = message.match(/\b(?:asset|coin|market)\s+([a-zA-Z][a-zA-Z0-9/_:-]{1,31})\b/i)?.[1];
-  if (explicit) return normalizeAsset(explicit);
   const common = message.match(/\b(BTC|ETH|SOL|HYPE|PURR|DOGE|XRP|AVAX|ARB|OP|BNB|ENA|WIF|FET|TAO)\b/i)?.[1];
-  return normalizeAsset(common);
+  if (common) return normalizeAsset(common);
+  const explicit = message.match(/\b(?:asset|coin|symbol)\s*(?:is|=|:)?\s*([a-zA-Z][a-zA-Z0-9/_:-]{1,31})\b/i)?.[1];
+  const candidate = normalizeAsset(explicit);
+  return candidate === "ORDER" || candidate === "MARKET" || candidate === "LIMIT" ? null : candidate;
+}
+
+function extractReduceOnly(message: string, closeIntent: boolean): boolean {
+  if (closeIntent) return true;
+  if (/\b(?:do\s+not|don't|not|without)\s+(?:use\s+)?reduce[\s-]?only\b/i.test(message)) return false;
+  if (/\breduce[\s-]?only\s*(?:is|=|:)?\s*(?:false|no|off)\b/i.test(message)) return false;
+  return /\breduce[\s-]?only\b/i.test(message);
+}
+
+function extractSlippageTolerance(message: string): number | null {
+  const before = message.match(/\b([0-9]+(?:\.[0-9]+)?)\s*%\s*(?:max(?:imum)?\s+)?slippage\b/i)?.[1];
+  const after = message.match(/\bslippage\s*(?:tolerance)?\s*(?:is|=|:|of|at|under|below|up to)?\s*([0-9]+(?:\.[0-9]+)?)\s*%/i)?.[1];
+  const percent = numberOrNull(before ?? after);
+  return percent === null ? null : percent / 100;
 }
 
 function extractNumberAfter(message: string, label: RegExp): number | null {

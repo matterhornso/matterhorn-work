@@ -51,6 +51,7 @@ describe("public Cloud session bootstrap", () => {
       request = { input: String(input), init };
       return new Response(
         JSON.stringify({
+          authenticated: true,
           user: {
             id: "usr_public_beta",
             email: "beta@example.test",
@@ -65,15 +66,15 @@ describe("public Cloud session bootstrap", () => {
     }) as typeof fetch;
 
     await expect(checkPublicCloudSession(config)).resolves.toBe(true);
-    expect(request?.input).toBe("https://api.matterhorn.test/v1/me");
+    expect(request?.input).toBe("https://api.matterhorn.test/v1/session");
     expect(request?.init?.credentials).toBe("include");
     expect(request?.init?.headers).toEqual({ Accept: "application/json" });
   });
 
-  test("treats unauthorized sessions as signed out", async () => {
+  test("treats anonymous session probes as signed out", async () => {
     globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ error: "unauthorized" }), {
-        status: 401,
+      new Response(JSON.stringify({ authenticated: false }), {
+        status: 200,
         headers: { "content-type": "application/json" },
       })) as typeof fetch;
 
@@ -82,10 +83,16 @@ describe("public Cloud session bootstrap", () => {
 
   test("rejects malformed success responses", async () => {
     globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ user: { id: 42, email: null } }), {
+      new Response(
+        JSON.stringify({
+          authenticated: true,
+          user: { id: 42, email: null },
+        }),
+        {
         status: 200,
         headers: { "content-type": "application/json" },
-      })) as typeof fetch;
+        },
+      )) as typeof fetch;
 
     await expect(checkPublicCloudSession(config)).resolves.toBe(false);
   });

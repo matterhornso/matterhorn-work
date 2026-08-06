@@ -157,9 +157,9 @@ export interface UnifiedCryptoChatOptions {
 const FORBIDDEN_CREDENTIAL_KEY_RE =
   /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedExtrinsic|signed_extrinsic)/i;
 const FORBIDDEN_CREDENTIAL_VALUE_RE =
-  /\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b\s*(?:is|=|:|=>|to sign|for signing)?\s*["'`<]?[A-Za-z0-9_+=/@:.-]{8,}/i;
+  /\b(seed phrase|mnemonic|private key|api[ _-]?key|api[ _-]?secret|access[ _-]?token|bearer[ _-]?token|raw signature|signed payload|wallet export)\b\s*(?:is|=|:|=>|to sign|for signing)?\s*["'`<]?[A-Za-z0-9_+=/@:.-]{8,}/i;
 const FORBIDDEN_CREDENTIAL_COMMAND_RE =
-  /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b/i;
+  /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api key|api secret|access token|bearer token|raw signature|signed payload|wallet export)\b/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -403,7 +403,7 @@ function routeScores(input: UnifiedCryptoChatInput): Record<RoutedCryptoVenue, n
   let polymarket = 0;
 
   if (textIncludes(text, /\b(bittensor|tao|subnet|netuid|coldkey|hotkey|validator|validators|miner|miners|alpha|dtao|dynamic tao|stake|staking|unstake)\b/i)) bittensor += 3;
-  if (input.ss58Address || input.netuid !== undefined || input.validatorHotkey || input.coldkey || input.amountTao !== undefined) bittensor += 3;
+  if (input.ss58Address || input.netuid != null || input.validatorHotkey || input.coldkey || input.amountTao != null) bittensor += 3;
 
   if (textIncludes(text, /\b(hyperliquid|perp|perps|perpetual|funding|liquidation|leverage|margin|position|positions)\b/i)) hyperliquid += 3;
   if (textIncludes(text, /\b(orderbook|order book)\b/i)) hyperliquid += 1;
@@ -411,7 +411,7 @@ function routeScores(input: UnifiedCryptoChatInput): Record<RoutedCryptoVenue, n
 
   if (textIncludes(text, /\b(polymarket|prediction market|prediction markets|bet|betting|odds|outcome|outcomes|geoblock|geoblocked|compliance|event|events)\b/i)) polymarket += 3;
   if (textIncludes(text, /\b(yes|no)\b/i) && textIncludes(text, /\b(order|market|shares|outcome)\b/i)) polymarket += 2;
-  if (input.marketId || input.outcome || input.amountUsdc !== undefined) polymarket += 3;
+  if (input.marketId || input.outcome || input.amountUsdc != null) polymarket += 3;
 
   return { bittensor, hyperliquid, polymarket };
 }

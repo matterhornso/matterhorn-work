@@ -65,20 +65,25 @@ export async function checkPublicCloudSession(
   config: PublicCloudConfig,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  const response = await fetch(`${config.apiBaseUrl}/v1/me`, {
+  const response = await fetch(`${config.apiBaseUrl}/v1/session`, {
     method: "GET",
     credentials: "include",
     headers: { Accept: "application/json" },
     signal,
   });
 
-  if (response.status === 401 || response.status === 403) return false;
   if (!response.ok) {
     throw new Error(`Matterhorn Cloud session check failed (${response.status})`);
   }
 
   const payload = (await response.json()) as unknown;
-  if (!payload || typeof payload !== "object" || !("user" in payload)) {
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    !("authenticated" in payload) ||
+    (payload as { authenticated?: unknown }).authenticated !== true ||
+    !("user" in payload)
+  ) {
     return false;
   }
   const user = (payload as { user?: unknown }).user;

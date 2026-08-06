@@ -156,7 +156,10 @@ import {
   MATTERHORN_DESK_TASK_STARTERS,
   type MatterhornDeskTaskStarterDesk,
 } from "../workflows/desk-task-starters";
-import { reviewedActionHandoffFromComposer } from "../workflows/reviewed-action-command";
+import {
+  reviewedActionHandoffFromComposer,
+  reviewedActionPreparedChatText,
+} from "../workflows/reviewed-action-command";
 import { stageReviewedActionHandoff } from "../../wallet/reviewed-action-handoff";
 import {
   getMatterhornDeskAgent,
@@ -219,9 +222,9 @@ function deriveMatterhornDeskMode(chunks: string[]): MatterhornDeskMode | null {
   const text = chunks.join("\n").toLowerCase();
   const candidates: Array<[MatterhornDeskMode, RegExp[]]> = [
     ["wellness", [/use the longevity desk/i, /start longevity workflow/i, /\blongevity workflow\b/i, /\blongevity desk\b/i, /offline optimization/i, /use the wellness workflow desk/, /start wellness workflow/, /\bwellness workflow\b/]],
-    ["bittensor", [/bittensor task/i, /bittensor agent/i, /use the bittensor desk/i, /\bshow my tao\b/i, /\bsubnet\b/i, /\bss58\b/i]],
-    ["hyperliquid", [/hyperliquid task/i, /hyperliquid agent/i, /use the hyperliquid desk/i, /\bbtc-perp\b/i, /\borderbook\b/i]],
-    ["polymarket", [/polymarket task/i, /polymarket agent/i, /use the polymarket desk/i, /\bpolymarket market\b/i, /\bcompliance\b/i]],
+    ["bittensor", [/bittensor task/i, /bittensor agent/i, /use the bittensor desk/i, /\bbittensor\b/i, /\bshow my tao\b/i, /\bsubnet\b/i, /\bss58\b/i]],
+    ["hyperliquid", [/hyperliquid task/i, /hyperliquid agent/i, /use the hyperliquid desk/i, /\bhyperliquid\b/i, /\bbtc-perp\b/i, /\borderbook\b/i]],
+    ["polymarket", [/polymarket task/i, /polymarket agent/i, /use the polymarket desk/i, /\bpolymarket\b/i, /\bpolymarket market\b/i, /\bcompliance\b/i]],
     ["sui", [/sui task/i, /sui agent/i, /use the sui desk/i, /\bsui wallet\b/i, /\bsui transfer\b/i, /\btransaction digest\b/i]],
   ];
   return candidates.find(([, patterns]) => patterns.some((pattern) => pattern.test(text)))?.[0] ?? null;
@@ -617,7 +620,15 @@ export type SessionSurfaceProps = {
   onForkAtMessage?: (messageId: string) => void;
   onOpenTarget?: (target: OpenTarget, options?: { auto?: boolean }) => void;
   onOpenTargetsChange?: (targets: OpenTarget[]) => void;
-  onCreateDeskTask?: (prompt: string, options?: { title?: string; agent?: string; sendImmediately?: boolean }) => void;
+  onCreateDeskTask?: (
+    prompt: string,
+    options?: {
+      title?: string;
+      agent?: string;
+      sendImmediately?: boolean;
+      onSessionCreated?: (sessionId: string) => void | Promise<void>;
+    },
+  ) => boolean | void | Promise<boolean | void>;
   onSessionMissing?: () => void;
 };
 
@@ -1158,6 +1169,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const [showDelayedLoading, setShowDelayedLoading] = useState(false);
   const [awaitingAssistantBaseline, setAwaitingAssistantBaseline] = useState<number | null>(null);
   const [noVisibleAssistantOutputBaseline, setNoVisibleAssistantOutputBaseline] = useState<number | null>(null);
+  const [localReviewedActionMessages, setLocalReviewedActionMessages] = useState<UIMessage[]>([]);
   const [rendered, setRendered] = useState<{ sessionId: string; snapshot: MatterhornSessionSnapshot } | null>(null);
   const [toolSkills, setToolSkills] = useState<SkillCard[]>([]);
   const [toolMcpServers, setToolMcpServers] = useState<McpServerEntry[]>([]);
@@ -1231,6 +1243,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     setShowDelayedLoading(false);
     setAwaitingAssistantBaseline(null);
     setNoVisibleAssistantOutputBaseline(null);
+    setLocalReviewedActionMessages([]);
     // Composer draft state lives in the shared store keyed by session id, so
     // switching sessions preserves each session's own in-progress composer.
     setNotice(null);
@@ -1339,8 +1352,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
     return () => window.clearInterval(id);
   }, [chatStreaming, snapshotQuery.refetch]);
   const renderedMessages = useMemo(
-    () => deriveRenderedSessionMessages({ transcriptState, snapshot }),
-    [snapshot, transcriptState],
+    () => [
+      ...deriveRenderedSessionMessages({ transcriptState, snapshot }),
+      ...localReviewedActionMessages,
+    ],
+    [localReviewedActionMessages, snapshot, transcriptState],
   );
   const linkedWorkflowRunQuery = useQuery({
     queryKey: ["session-workflow-run", props.workspaceId, props.sessionId],
@@ -1711,6 +1727,20 @@ export function SessionSurface(props: SessionSurfaceProps) {
       : null;
     if (reviewedActionHandoff && stageReviewedActionHandoff(reviewedActionHandoff)) {
       setError(null);
+      const localTurnId = `${props.sessionId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      setLocalReviewedActionMessages((current) => [
+        ...current,
+        {
+          id: `${localTurnId}-user`,
+          role: "user",
+          parts: [{ type: "text", text }],
+        },
+        {
+          id: `${localTurnId}-assistant`,
+          role: "assistant",
+          parts: [{ type: "text", text: reviewedActionPreparedChatText(reviewedActionHandoff) }],
+        },
+      ]);
       recordInspectorEvent("session.reviewed_action.staged_from_composer", {
         workspaceId: props.workspaceId,
         sessionId: props.sessionId,
@@ -2047,7 +2077,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       if (!(event instanceof CustomEvent)) return;
       const detail: unknown = event.detail;
       if (!detail || typeof detail !== "object" || Array.isArray(detail)) return;
-      const record = detail as { prompt?: unknown; text?: unknown; message?: unknown };
+      const record = detail as { prompt?: unknown; text?: unknown; message?: unknown; source?: unknown };
       const isGenericCryptoHandoff = event.type === "matterhorn:crypto-chat-handoff";
       const incomingContext = readBittensorContextFromEventDetail(detail);
       const mergedContext = mergeBittensorSessionContexts(bittensorContext, incomingContext);
@@ -2057,6 +2087,57 @@ export function SessionSurface(props: SessionSurfaceProps) {
         typeof record.message === "string" ? record.message :
         "";
       if (!text.trim()) return;
+      const venue = isGenericCryptoHandoff
+        ? (typeof (detail as { venue?: unknown; panel?: unknown }).venue === "string"
+            ? (detail as { venue: string }).venue
+            : typeof (detail as { panel?: unknown }).panel === "string"
+              ? (detail as { panel: string }).panel
+              : null)
+        : "bittensor";
+      const agent = getMatterhornDeskAgent(venue);
+      const source = typeof record.source === "string" ? record.source : "";
+
+      // A task launched from any desk belongs to a dedicated chat. The project
+      // remains shared, while protocol context and agent state stay isolated.
+      if (agent && props.onCreateDeskTask) {
+        const visual = getCustomerProtocolDeskVisual(agent.deskId);
+        void props.onCreateDeskTask(text, {
+          title: visual?.agentName ?? `${agent.displayName} task`,
+          agent: agent.agentId,
+          sendImmediately: false,
+          onSessionCreated: (sessionId) => {
+            if (incomingContext) {
+              setBittensorContext(sessionId, incomingContext);
+            }
+            dispatchMatterhornMemorySuggestions({
+              desk: venue ?? "generic_workspace",
+              prompt: text,
+              source: "chat_capture",
+              sourceId: source || "desk-panel",
+              workspaceId: props.workspaceId,
+              sessionId,
+              ss58Address: incomingContext?.ss58Address,
+              netuid: incomingContext?.netuid,
+              validatorHotkey: incomingContext?.validatorHotkey,
+            });
+            recordInspectorEvent("desk.chat_handoff.session_created", {
+              workspaceId: props.workspaceId,
+              sessionId,
+              deskId: agent.deskId,
+              source: source || null,
+              promptLength: text.length,
+            });
+          },
+        });
+        recordInspectorEvent("desk.chat_handoff.session_requested", {
+          workspaceId: props.workspaceId,
+          sourceSessionId: props.sessionId,
+          deskId: agent.deskId,
+          source: source || null,
+          promptLength: text.length,
+        });
+        return;
+      }
       if (incomingContext) {
         setBittensorContext(props.sessionId, incomingContext);
       }
@@ -2080,14 +2161,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
       const resolvedText = isGenericCryptoHandoff ? text : addBittensorContextToResolvedText(text, mergedContext);
       void typeComposerText(text);
       props.onDraftChange(buildDraft(text, attachments, { resolvedText }));
-      const venue = isGenericCryptoHandoff
-        ? (typeof (detail as { venue?: unknown; panel?: unknown }).venue === "string"
-            ? (detail as { venue: string }).venue
-            : typeof (detail as { panel?: unknown }).panel === "string"
-              ? (detail as { panel: string }).panel
-              : null)
-        : "bittensor";
-      const agent = getMatterhornDeskAgent(venue);
       if (agent && props.selectedAgent !== agent.agentId) {
         props.onSelectAgent(agent.agentId);
       }
@@ -2116,6 +2189,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     bittensorContext,
     buildDraft,
     props.onDraftChange,
+    props.onCreateDeskTask,
     props.onSelectAgent,
     props.selectedAgent,
     props.sessionId,

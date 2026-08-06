@@ -27,6 +27,13 @@ export type ManagedOpencodeEvent =
   | { type: "restarted"; reason: string; restartCount: number; pid: number | null }
   | { type: "restart_failed"; reason: string; message: string };
 
+const MANAGED_OPENCODE_OUTPUT_LIMIT = 64 * 1024;
+
+function safeManagedOpencodeFailure(error: unknown): string {
+  if (error instanceof Error) return error.name || "Error";
+  return typeof error;
+}
+
 function randomSecret(): string {
   return randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
 }
@@ -103,6 +110,9 @@ export async function createManagedOpencodeServer(options: {
           options.timeoutMs ?? 15_000,
         );
         let output = "";
+        const appendOutput = (chunk: unknown) => {
+          output = `${output}${String(chunk)}`.slice(-MANAGED_OPENCODE_OUTPUT_LIMIT);
+        };
         let settled = false;
         const done = () => {
           if (settled) return;
@@ -117,7 +127,7 @@ export async function createManagedOpencodeServer(options: {
           reject(error);
         };
         nextChild.stdout?.on("data", (chunk) => {
-          output += chunk.toString();
+          appendOutput(chunk);
           for (const line of output.split("\n")) {
             if (!line.startsWith("opencode server listening")) continue;
             const match = line.match(/on\s+(https?:\/\/[^\s]+)/);
@@ -129,11 +139,11 @@ export async function createManagedOpencodeServer(options: {
           }
         });
         nextChild.stderr?.on("data", (chunk) => {
-          output += chunk.toString();
+          appendOutput(chunk);
         });
         nextChild.once("error", (error) => fail(error));
         nextChild.once("exit", (code) => {
-          fail(new Error(`OpenCode server exited with code ${code}${output.trim() ? `\n${output}` : ""}`));
+          fail(new Error(`OpenCode server exited before becoming ready (code ${code ?? "unknown"})`));
         });
       });
     } catch (error) {
@@ -182,7 +192,7 @@ export async function createManagedOpencodeServer(options: {
         options.onEvent?.({
           type: "restart_failed",
           reason,
-          message: error instanceof Error ? error.message : String(error),
+          message: safeManagedOpencodeFailure(error),
         });
         restartFailureCount += 1;
         restarting = false;

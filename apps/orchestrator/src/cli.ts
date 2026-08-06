@@ -2039,7 +2039,14 @@ function resolveAssetName(asset?: string, url?: string): string | null {
 async function downloadToPath(url: string, dest: string): Promise<void> {
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Failed to download ${url} (HTTP ${response.status})`);
+    let downloadLabel = "remote asset";
+    try {
+      const parsed = new URL(url);
+      downloadLabel = `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+    } catch {
+      // Keep malformed URLs out of error logs because they may contain credentials.
+    }
+    throw new Error(`Failed to download ${downloadLabel} (HTTP ${response.status})`);
   }
   const buffer = Buffer.from(await response.arrayBuffer());
   await mkdir(dirname(dest), { recursive: true });
@@ -2072,6 +2079,12 @@ async function downloadSidecarBinary(options: {
   }
   const targetInfo = entry.targets[options.sidecar.target];
   if (!targetInfo) return null;
+  const expectedSha256 = targetInfo.sha256?.trim().toLowerCase();
+  if (!expectedSha256 || !/^[a-f0-9]{64}$/.test(expectedSha256)) {
+    throw new Error(
+      `Refusing checksum-less ${options.name} sidecar for ${options.sidecar.target}`,
+    );
+  }
 
   const assetName = resolveAssetName(targetInfo.asset, targetInfo.url);
   const assetUrl = resolveAssetUrl(
@@ -2088,37 +2101,31 @@ async function downloadSidecarBinary(options: {
   );
   const targetPath = join(targetDir, assetName);
   if (await fileExists(targetPath)) {
-    if (targetInfo.sha256) {
-      try {
-        await verifyBinary(targetPath, {
-          version: entry.version,
-          sha256: targetInfo.sha256,
-        });
-        await ensureExecutable(targetPath);
-        return {
-          bin: targetPath,
-          source: "downloaded",
-          expectedVersion: entry.version,
-        };
-      } catch {
-        await rm(targetPath, { force: true });
-      }
-    } else {
+    try {
+      await verifyBinary(targetPath, {
+        version: entry.version,
+        sha256: expectedSha256,
+      });
       await ensureExecutable(targetPath);
       return {
         bin: targetPath,
         source: "downloaded",
         expectedVersion: entry.version,
       };
+    } catch {
+      await rm(targetPath, { force: true });
     }
   }
 
   await downloadToPath(assetUrl, targetPath);
-  if (targetInfo.sha256) {
+  try {
     await verifyBinary(targetPath, {
       version: entry.version,
-      sha256: targetInfo.sha256,
+      sha256: expectedSha256,
     });
+  } catch (error) {
+    await rm(targetPath, { force: true });
+    throw error;
   }
   await ensureExecutable(targetPath);
   return {
@@ -2160,6 +2167,94 @@ async function runCommand(
   }
 }
 
+async function captureCommand(
+  command: string,
+  args: string[],
+  cwd?: string,
+): Promise<string> {
+  const child = spawnProcess(command, args, {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  let outputExceeded = false;
+  const collectOutput = (chunk: Buffer | string, retain: boolean) => {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > 8 * 1024 * 1024) {
+      outputExceeded = true;
+      child.kill("SIGKILL");
+      return;
+    }
+    if (retain) chunks.push(buffer);
+  };
+  child.stdout?.on("data", (chunk: Buffer | string) => {
+    collectOutput(chunk, true);
+  });
+  child.stderr?.on("data", (chunk: Buffer | string) => {
+    collectOutput(chunk, false);
+  });
+  const result = await Promise.race([
+    once(child, "exit").then(([code]) => ({ type: "exit" as const, code })),
+    once(child, "error").then(([error]) => ({ type: "error" as const, error })),
+  ]);
+  if (result.type === "error" || result.code !== 0 || outputExceeded) {
+    throw new Error(`Command failed: ${command}`);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+function assertSafeArchiveEntries(entries: string[]): void {
+  for (const rawEntry of entries) {
+    const entry = rawEntry.trim().replace(/\\/g, "/");
+    if (!entry) continue;
+    const segments = entry.split("/").filter(Boolean);
+    if (
+      entry.startsWith("/") ||
+      /^[a-zA-Z]:\//.test(entry) ||
+      segments.includes("..")
+    ) {
+      throw new Error("Refusing OpenCode archive with an unsafe entry path");
+    }
+  }
+}
+
+async function resolveVerifiedOpencodeReleaseAsset(
+  version: string,
+  assetName: string,
+): Promise<{ url: string; sha256: string }> {
+  const releaseUrl = `https://api.github.com/repos/anomalyco/opencode/releases/tags/v${encodeURIComponent(version)}`;
+  const response = await fetch(releaseUrl, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "Matterhorn-Desks",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new Error(`Unable to verify the OpenCode release asset (HTTP ${response.status})`);
+  }
+  const release = await response.json() as {
+    assets?: Array<{
+      name?: unknown;
+      browser_download_url?: unknown;
+      digest?: unknown;
+    }>;
+  };
+  const asset = release.assets?.find((candidate) => candidate.name === assetName);
+  const url = typeof asset?.browser_download_url === "string"
+    ? asset.browser_download_url
+    : "";
+  const digest = typeof asset?.digest === "string" ? asset.digest.trim() : "";
+  const match = /^sha256:([a-f0-9]{64})$/i.exec(digest);
+  if (!url || !match) {
+    throw new Error(`Refusing unverified OpenCode release asset: ${assetName}`);
+  }
+  return { url, sha256: match[1].toLowerCase() };
+}
+
 async function resolveOpencodeDownload(
   sidecar: SidecarConfig,
   expectedVersion?: string,
@@ -2175,7 +2270,6 @@ async function resolveOpencodeDownload(
   const version = expectedVersion.startsWith("v")
     ? expectedVersion.slice(1)
     : expectedVersion;
-  const url = `https://github.com/anomalyco/opencode/releases/download/v${version}/${asset}`;
   const targetDir = join(sidecar.dir, "opencode", version, sidecar.target);
   const targetPath = join(
     targetDir,
@@ -2197,6 +2291,8 @@ async function resolveOpencodeDownload(
     }
   }
 
+  const releaseAsset = await resolveVerifiedOpencodeReleaseAsset(version, asset);
+
   await mkdir(targetDir, { recursive: true });
   const stamp = Date.now();
   const archivePath = join(
@@ -2208,8 +2304,18 @@ async function resolveOpencodeDownload(
   );
 
   try {
-    await downloadToPath(url, archivePath);
+    await downloadToPath(releaseAsset.url, archivePath);
+    await verifyBinary(archivePath, {
+      version,
+      sha256: releaseAsset.sha256,
+    });
     if (process.platform === "win32") {
+      const listing = await captureCommand("powershell", [
+        "-NoProfile",
+        "-Command",
+        `(Get-ChildItem -LiteralPath '${archivePath.replace(/'/g, "''")}' -Stream * -ErrorAction SilentlyContinue) | Out-Null; Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::OpenRead('${archivePath.replace(/'/g, "''")}').Entries.FullName`,
+      ]);
+      assertSafeArchiveEntries(listing.split(/\r?\n/));
       const psQuote = (value: string) => `'${value.replace(/'/g, "''")}'`;
       const psScript = [
         "$ErrorActionPreference = 'Stop'",
@@ -2217,8 +2323,12 @@ async function resolveOpencodeDownload(
       ].join("; ");
       await runCommand("powershell", ["-NoProfile", "-Command", psScript]);
     } else if (asset.endsWith(".zip")) {
+      const listing = await captureCommand("unzip", ["-Z1", archivePath]);
+      assertSafeArchiveEntries(listing.split(/\r?\n/));
       await runCommand("unzip", ["-q", archivePath, "-d", extractDir]);
     } else if (asset.endsWith(".tar.gz")) {
+      const listing = await captureCommand("tar", ["-tzf", archivePath]);
+      assertSafeArchiveEntries(listing.split(/\r?\n/));
       await runCommand("tar", ["-xzf", archivePath, "-C", extractDir]);
     } else {
       throw new Error(`Unsupported opencode asset type: ${asset}`);
@@ -2247,7 +2357,14 @@ async function resolveOpencodeDownload(
       throw new Error("OpenCode binary not found after extraction.");
     }
 
-    await copyFile(candidate, targetPath);
+    const resolvedCandidate = await realpath(candidate);
+    const resolvedExtractDir = await realpath(extractDir);
+    const candidateRelativePath = relative(resolvedExtractDir, resolvedCandidate);
+    if (candidateRelativePath === ".." || candidateRelativePath.startsWith(`..${sep}`)) {
+      throw new Error("Refusing OpenCode binary outside the extraction directory");
+    }
+
+    await copyFile(resolvedCandidate, targetPath);
     await ensureExecutable(targetPath);
     return targetPath;
   } finally {

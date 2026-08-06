@@ -150,12 +150,17 @@ import {
   recordInspectorEvent,
 } from "./app-inspector";
 import { saveSessionDraft } from "../domains/session/sync/draft-store";
+import {
+  saveSessionAgent,
+  useSessionAgentState,
+} from "../domains/session/sync/agent-store";
 import { useControlAction, type MatterhornControlAction } from "./control/control-provider";
 import { useReactRenderWatchdog } from "./react-render-watchdog";
 import { useWallet } from "../domains/wallet/WalletProvider";
 import {
   buildDirectResponseSystemPrompt,
   buildMatterhornOrientationSystemPrompt,
+  buildProtocolDeskCryptoSafetySystemPrompt,
   buildCryptoSystemPrompt,
   shouldInjectMatterhornOrientationPrompt,
   shouldInjectCryptoPrompt,
@@ -168,6 +173,8 @@ import { getCustomerProtocolDeskVisual } from "../domains/session/workflows/prot
 import {
   buildMatterhornPublicWalletContext,
   compileMatterhornSessionSystemContext,
+  resolveOptionalMatterhornContext,
+  sanitizeMatterhornSystemContextValue,
 } from "../domains/session/context/session-system-context";
 
 import { readDenSettings } from "../../app/lib/den";
@@ -625,6 +632,27 @@ export function SessionRoute() {
   const params = useParams<{ workspaceId?: string; sessionId?: string }>();
   const routeWorkspaceId = params.workspaceId?.trim() || "";
   const selectedSessionId = params.sessionId?.trim() || null;
+  const promptTimingRef = useRef(new Map<string, {
+    startedAt: number;
+    executionMode: MatterhornExecutionMode;
+    agentId: string;
+  }>());
+  const handleAssistantOutputTiming = useCallback((update: { sessionId: string; messageId: string }) => {
+    const timing = promptTimingRef.current.get(update.sessionId);
+    if (!timing) return;
+    promptTimingRef.current.delete(update.sessionId);
+    recordInspectorEvent("session.prompt.first_output", {
+      timeToFirstOutputMs: Math.round(performance.now() - timing.startedAt),
+      executionMode: timing.executionMode,
+      agentId: timing.agentId,
+    });
+  }, []);
+  // Changing chats must not recreate the workspace bootstrap callback. Keep
+  // the latest session id in a ref so refreshRouteState can use it when it
+  // reconciles legacy routes without making every chat navigation reboot the
+  // full workspace route.
+  const selectedSessionIdRef = useRef<string | null>(selectedSessionId);
+  selectedSessionIdRef.current = selectedSessionId;
   const isWorkspaceHistoryRoute = Boolean(routeWorkspaceId && /\/history\/?$/.test(location.pathname));
   // A stored hint is for the settings screen to survive a refresh. It is
   // consumed here only after the person explicitly returns from setup; the
@@ -696,7 +724,10 @@ export function SessionRoute() {
       resolveWorkspaceEndpoint(workspace, localServerRef.current),
     [],
   );
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [selectedAgent, setSelectedAgent] = useSessionAgentState(
+    selectedWorkspaceId,
+    selectedSessionId,
+  );
   const [responsePerspective, setResponsePerspective] = useState<ResponsePerspective>("balanced");
   const [executionMode, setExecutionMode] = useState<MatterhornExecutionMode>("work");
   // One-way latch for "a refreshRouteState is currently running"; prevents
@@ -1155,9 +1186,10 @@ export function SessionRoute() {
         list.activeId?.trim() ||
         nextWorkspaces[0]?.id ||
         "";
-      if (selectedSessionId) {
+      const routeSessionId = selectedSessionIdRef.current;
+      if (routeSessionId) {
         const match = cachedEntries.find((entry) =>
-          entry.sessions.some((session: any) => session?.id === selectedSessionId),
+          entry.sessions.some((session: any) => session?.id === routeSessionId),
         );
         if (match?.workspaceId) nextWorkspaceId = match.workspaceId;
       }
@@ -1191,7 +1223,12 @@ export function SessionRoute() {
       // OpenCode engine bound to it re-reads opencode.jsonc and applies
       // permissions. Fire-and-forget; the route is idempotent and any
       // transport failure is non-fatal. See issue #870.
-      if (nextWorkspaceId && list.activeId !== nextWorkspaceId && !launchActivatedWorkspaceIdsRef.current.has(nextWorkspaceId)) {
+      if (
+        !publicBetaWeb &&
+        nextWorkspaceId &&
+        list.activeId !== nextWorkspaceId &&
+        !launchActivatedWorkspaceIdsRef.current.has(nextWorkspaceId)
+      ) {
         launchActivatedWorkspaceIdsRef.current.add(nextWorkspaceId);
         const nextWorkspace = nextWorkspaces.find((workspace) => workspace.id === nextWorkspaceId) ?? null;
         const nextEndpoint = endpointForWorkspace(nextWorkspace);
@@ -1265,7 +1302,7 @@ export function SessionRoute() {
         markBootRouteReady();
       }
     }
-  }, [loadWorkspaceSessionsInBackground, markBootRouteReady, routeWorkspaceId, selectedSessionId]);
+  }, [loadWorkspaceSessionsInBackground, markBootRouteReady, routeWorkspaceId]);
 
   const remoteAccessRestart = useRemoteAccessRestart({
     isEnabled: () => matterhornServerSettings.remoteAccessEnabled === true,
@@ -1783,9 +1820,10 @@ export function SessionRoute() {
     }
   }, [loading, routeWorkspaceId, selectedWorkspace]);
 
-  // Boot-level loading blocks the whole UI. Session-list retries only fill the
-  // sidebar; they must not gate the composer/New task.
-  const effectiveLoading = loading;
+  // Boot-level loading blocks the whole UI only until the selected workspace
+  // is usable. Session navigation and background list refreshes must not hide
+  // an already-connected chat composer behind a stale route-loading flag.
+  const effectiveLoading = loading && (!client || !selectedWorkspace);
 
   const opencodeClient = useMemo(
     () =>
@@ -2383,6 +2421,7 @@ export function SessionRoute() {
     agentId?: string | null,
     requestedExecutionMode: MatterhornExecutionMode = executionMode,
   ) => {
+    const contextBuildStartedAt = performance.now();
     const deskAgent = getMatterhornDeskAgentById(agentId);
     const isGeneralMatterhornAgent = !agentId || agentId === "matterhorn";
     const contextPolicy = deskAgent?.contextPolicy;
@@ -2391,10 +2430,13 @@ export function SessionRoute() {
       pid: matterhornServerHostInfoState?.pid ?? null,
       port: matterhornServerHostInfoState?.port ?? null,
     });
-    const envSystemContext = await buildOpenworkEnvSystemContext(client, {
-      cacheKey: sessionId,
-      runtimeKey: envRuntimeKey,
-    });
+    const envSystemContextPromise = resolveOptionalMatterhornContext(
+      buildOpenworkEnvSystemContext(client, {
+        cacheKey: sessionId,
+        runtimeKey: envRuntimeKey,
+      }),
+      400,
+    );
 
     const includeWalletPublicContext = isGeneralMatterhornAgent || contextPolicy?.includeWalletPublicContext === true;
     const walletContext = wallet.snapshot.isConnected && includeWalletPublicContext
@@ -2414,40 +2456,48 @@ export function SessionRoute() {
 
     const cryptoPrompt =
       includeCryptoSafetyPolicy && shouldInjectCryptoPrompt(text)
-        ? buildCryptoSystemPrompt(
-            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.address : null,
-            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.chainId : null,
-            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.ethBalance : null,
-            wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.usdcBalance : null,
-          )
+        ? isGeneralMatterhornAgent
+          ? buildCryptoSystemPrompt(
+              wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.address : null,
+              wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.chainId : null,
+              wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.ethBalance : null,
+              wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.usdcBalance : null,
+            )
+          : buildProtocolDeskCryptoSafetySystemPrompt()
         : "";
 
     const responsePerspectivePrompt = buildResponsePerspectiveSystemPrompt(responsePerspective);
     const executionModePrompt = buildMatterhornExecutionModeSystemPrompt(requestedExecutionMode);
     const directResponsePrompt = buildDirectResponseSystemPrompt();
     const deskAgentInstructions = deskAgent ? buildMatterhornDeskAgentSystemPrompt(deskAgent) : "";
-    let workflowRunPrompt = "";
-    if (client && selectedWorkspaceId && agentId) {
-      try {
-        const linkedRun = (await client.listWorkflowRuns({
-          workspaceId: selectedWorkspaceId,
-          sessionId,
-          limit: 1,
-        })).items[0];
-        if (linkedRun) {
-          workflowRunPrompt = [
-            "## Active Matterhorn Workflow Run",
-            `Workflow run: ${linkedRun.workflowRunId}`,
-            `Canonical output directory: ${linkedRun.outputBasePath}`,
-            "Save every artifact for this workflow under exactly that directory. Do not create a parallel descriptive or custom session folder.",
-          ].join("\n");
-        }
-      } catch {
-        // Prompting still works when the optional workflow lookup is unavailable.
-      }
-    }
+    const workflowRunPromptPromise = client && selectedWorkspaceId && agentId
+      ? resolveOptionalMatterhornContext(
+          client.listWorkflowRuns({
+            workspaceId: selectedWorkspaceId,
+            sessionId,
+            limit: 1,
+          }).then(({ items }) => {
+            const linkedRun = items[0];
+            if (!linkedRun) return "";
+            const workflowRunId = sanitizeMatterhornSystemContextValue(linkedRun.workflowRunId, { maxChars: 128 });
+            const outputBasePath = sanitizeMatterhornSystemContextValue(linkedRun.outputBasePath, { maxChars: 512 });
+            return [
+              "## Active Matterhorn Workflow Run",
+              `Workflow run: ${workflowRunId}`,
+              `Canonical output directory: ${outputBasePath}`,
+              "Save every artifact for this workflow under exactly that directory. Do not create a parallel descriptive or custom session folder.",
+            ].join("\n");
+          }),
+          400,
+        )
+      : Promise.resolve(undefined);
 
-    return compileMatterhornSessionSystemContext([
+    const [envSystemContext, workflowRunPrompt] = await Promise.all([
+      envSystemContextPromise,
+      workflowRunPromptPromise,
+    ]);
+
+    const compiled = compileMatterhornSessionSystemContext([
       { id: "execution_mode", content: executionModePrompt },
       { id: "desk_contract", content: deskAgentInstructions },
       { id: "direct_response", content: directResponsePrompt },
@@ -2462,30 +2512,27 @@ export function SessionRoute() {
       { id: "workflow_run", content: workflowRunPrompt },
       { id: "response_perspective", content: responsePerspectivePrompt },
     ]);
+    recordInspectorEvent("session.prompt.context_built", {
+      durationMs: Math.round(performance.now() - contextBuildStartedAt),
+      contextChars: compiled?.length ?? 0,
+      executionMode: requestedExecutionMode,
+      agentId: agentId ?? "matterhorn",
+      specializedDesk: Boolean(deskAgent),
+    });
+    return compiled;
   }, [client, executionMode, matterhornServerHostInfoState?.pid, matterhornServerHostInfoState?.port, responsePerspective, selectedWorkspaceId, wallet.snapshot]);
 
   const selectedAgentRef = useRef<string | null>(selectedAgent);
-  const pendingSelectedAgentRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
     selectedAgentRef.current = selectedAgent;
   }, [selectedAgent]);
 
   const handleSelectAgent = useCallback((agent: string | null) => {
-    if (selectedAgentRef.current === agent || pendingSelectedAgentRef.current === agent) return;
-    pendingSelectedAgentRef.current = agent;
-    const commit = () => {
-      pendingSelectedAgentRef.current = undefined;
-      if (selectedAgentRef.current === agent) return;
-      selectedAgentRef.current = agent;
-      setSelectedAgent(agent);
-    };
-    if (typeof window === "undefined") {
-      commit();
-      return;
-    }
-    window.setTimeout(commit, 0);
-  }, []);
+    if (selectedAgentRef.current === agent) return;
+    selectedAgentRef.current = agent;
+    setSelectedAgent(agent);
+  }, [setSelectedAgent]);
 
   const surfaceProps = useMemo(() => {
     if (
@@ -2499,24 +2546,6 @@ export function SessionRoute() {
       return null;
     }
     if (!selectedSessionKnown && !selectedSessionPending) {
-      return null;
-    }
-
-    // Transient-safety: when the user switches workspaces the URL-driven
-    // selectedSessionId may still point at a session from the old workspace
-    // for one render tick. Only block rendering when we KNOW the session
-    // belongs to a different workspace (i.e., it exists in another
-    // workspace's list). A brand-new session that hasn't been refreshed
-    // into any list yet must still render so "New task" feels instant.
-    let sessionOwnedByOtherWorkspace = false;
-    for (const [workspaceId, sessions] of Object.entries(sessionsByWorkspaceId)) {
-      if (workspaceId === selectedWorkspaceId) continue;
-      if ((sessions ?? []).some((session: any) => session?.id === selectedSessionId)) {
-        sessionOwnedByOtherWorkspace = true;
-        break;
-      }
-    }
-    if (sessionOwnedByOtherWorkspace) {
       return null;
     }
 
@@ -2588,22 +2617,51 @@ export function SessionRoute() {
           return;
         }
 
-        const parts = await draftToParts(draft, selectedWorkspaceRoot);
-        const systemContext = await buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode);
+        const prepareStartedAt = performance.now();
+        const [parts, systemContext] = await Promise.all([
+          draftToParts(draft, selectedWorkspaceRoot),
+          buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode),
+        ]);
         const executionModeTools = buildMatterhornExecutionModeTools(executionMode, selectedAgent);
 
-        const result = await opencodeClient.session.promptAsync({
-          sessionID: selectedSessionId,
-          parts,
-          model: selectedPromptModel ?? undefined,
-          agent: selectedAgent ?? undefined,
-          ...(executionModeTools ? { tools: executionModeTools } : {}),
-          ...(modelVariantValue ? { variant: modelVariantValue } : {}),
-          ...(systemContext ? { system: systemContext } : {}),
+        const dispatchStartedAt = performance.now();
+        promptTimingRef.current.set(selectedSessionId, {
+          startedAt: dispatchStartedAt,
+          executionMode,
+          agentId: selectedAgent ?? "matterhorn",
         });
+        recordInspectorEvent("session.prompt.dispatch_started", {
+          prepareDurationMs: Math.round(dispatchStartedAt - prepareStartedAt),
+          promptChars: text.length,
+          attachmentCount: draft.attachments.length,
+          contextChars: systemContext?.length ?? 0,
+          executionMode,
+          agentId: selectedAgent ?? "matterhorn",
+        });
+        let result;
+        try {
+          result = await opencodeClient.session.promptAsync({
+            sessionID: selectedSessionId,
+            parts,
+            model: selectedPromptModel ?? undefined,
+            agent: selectedAgent ?? undefined,
+            ...(executionModeTools ? { tools: executionModeTools } : {}),
+            ...(modelVariantValue ? { variant: modelVariantValue } : {}),
+            ...(systemContext ? { system: systemContext } : {}),
+          });
+        } catch (error) {
+          promptTimingRef.current.delete(selectedSessionId);
+          throw error;
+        }
         if (result.error) {
+          promptTimingRef.current.delete(selectedSessionId);
           throw new Error(serializeSDKError(result.error));
         }
+        recordInspectorEvent("session.prompt.dispatch_accepted", {
+          dispatchDurationMs: Math.round(performance.now() - dispatchStartedAt),
+          executionMode,
+          agentId: selectedAgent ?? "matterhorn",
+        });
       },
       onDraftChange: (draft: ComposerDraft) => {
         saveSessionDraft(selectedWorkspaceId, selectedSessionId, {
@@ -2768,7 +2826,6 @@ export function SessionRoute() {
     selectedWorkspaceEndpoint,
     selectedWorkspaceId,
     selectedWorkspaceRoot,
-    sessionsByWorkspaceId,
     showToast,
     token,
   ]);
@@ -2993,6 +3050,10 @@ export function SessionRoute() {
       writeActiveWorkspaceId(workspaceId || null);
       writeLastSessionFor(workspaceId, session.id);
       rememberPendingCreatedSession(workspaceId, session.id);
+      // Route reconciliation can run before React has committed the new URL.
+      // Claim the just-created chat synchronously so it cannot be mistaken for
+      // project Home while the session list refreshes in the background.
+      selectedSessionIdRef.current = session.id;
       setSessionsByWorkspaceId((current) => {
         const next = {
           ...current,
@@ -3317,6 +3378,7 @@ export function SessionRoute() {
         opencodeBaseUrl={opencodeBaseUrl}
         matterhornToken={selectedWorkspaceServerToken || ""}
         onSessionUpdated={handleRuntimeSessionUpdated}
+        onAssistantOutput={handleAssistantOutputTiming}
       />
     ) : null}
     <SessionPage
@@ -3338,6 +3400,7 @@ export function SessionRoute() {
       matterhornServerStatus={client ? "connected" : "disconnected"}
       matterhornServerClient={selectedWorkspaceEndpoint?.client ?? client}
       matterhornServerToken={selectedWorkspaceServerToken}
+      allowCookieAuth={publicBetaWeb}
       developerMode={typeof window !== "undefined" && window.localStorage.getItem("openwork.developerMode") === "1"}
       headerStatus={canCreateTask ? t("status.connected") : t("session.loading_detail")}
       busyHint={effectiveLoading ? t("session.loading_detail") : null}
@@ -3407,7 +3470,7 @@ export function SessionRoute() {
           // Without this, the permissions from opencode.jsonc are never
           // applied on the workspace the user is already on at launch. See
           // issue #870.
-          if (workspaceId && client) {
+          if (!publicBetaWeb && workspaceId && client) {
             const workspace = workspaces.find((item) => item.id === workspaceId) ?? null;
             const endpoint = endpointForWorkspace(workspace);
             if (endpoint) {
@@ -3430,17 +3493,14 @@ export function SessionRoute() {
           return true;
         },
         onOpenWorkspaceHome: (workspaceId) => {
-          setSelectedAgent(null);
           writeActiveWorkspaceId(workspaceId || null);
           navigateToWorkspaceSession(workspaceId, null);
         },
         onOpenWorkspaceHistory: (workspaceId) => {
-          setSelectedAgent(null);
           writeActiveWorkspaceId(workspaceId || null);
           navigate(workspaceRunHistoryRoute(workspaceId));
         },
         onOpenSession: (workspaceId, sessionId) => {
-          setSelectedAgent(null);
           setLegacySelectedWorkspaceId(workspaceId);
           writeActiveWorkspaceId(workspaceId || null);
           writeLastSessionFor(workspaceId, sessionId);
@@ -3448,7 +3508,6 @@ export function SessionRoute() {
         },
         onPrefetchSession: () => {},
         onCreateTaskInWorkspace: (workspaceId) => {
-          setSelectedAgent(null);
           void handleCreateTaskInWorkspace(workspaceId);
         },
         onCreateTaskWithPrompt: (workspaceId, prompt, options) => {
@@ -3543,19 +3602,48 @@ export function SessionRoute() {
                 sessionId: session.id,
               });
               writeMatterhornExecutionMode(workspaceId, session.id, "work");
-              await options?.onSessionCreated?.(session.id);
               if (!sendImmediately) {
                 saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
               }
-              setSelectedAgent(agent || null);
+              saveSessionAgent(workspaceId, session.id, agent || null);
+              setLegacySelectedWorkspaceId(workspaceId);
               writeActiveWorkspaceId(workspaceId || null);
               writeLastSessionFor(workspaceId, session.id);
               rememberPendingCreatedSession(workspaceId, session.id);
-              setSessionsByWorkspaceId((current) => ({
-                ...current,
-                [workspaceId]: [displaySession as any, ...(current[workspaceId] ?? [])],
-              }));
+              selectedSessionIdRef.current = session.id;
+              setSessionsByWorkspaceId((current) => {
+                const next = {
+                  ...current,
+                  [workspaceId]: [displaySession as any, ...(current[workspaceId] ?? [])],
+                };
+                sessionsByWorkspaceIdRef.current = next;
+                return next;
+              });
               navigateToWorkspaceSession(workspaceId, session.id);
+              recordInspectorEvent("desk.task_launch.navigation_requested", {
+                ...taskLaunchEvent,
+                sessionId: session.id,
+                route: workspaceSessionRoute(workspaceId, session.id),
+              });
+              try {
+                await options?.onSessionCreated?.(session.id);
+              } catch (error) {
+                const message = describeTaskCreateError(error);
+                saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
+                focusPromptSoon();
+                recordInspectorEvent("desk.task_launch.setup_failed", {
+                  ...taskLaunchEvent,
+                  sessionId: session.id,
+                  reason: message,
+                });
+                showToast({
+                  title: "Chat created; task setup needs review",
+                  description: `${message} The prompt is saved in the new chat.`,
+                  tone: "warning",
+                  durationMs: 5200,
+                });
+                return false;
+              }
               if (sendImmediately) {
                 useSessionActivityStore.getState().startOptimisticRun(workspaceId, session.id, {
                   title: title || "desk task",

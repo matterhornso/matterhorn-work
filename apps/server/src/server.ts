@@ -330,7 +330,9 @@ import {
   buildMatterhornExecutionModeSystemPrompt,
   buildMatterhornExecutionModeTools,
   isMatterhornExecutionMode,
+  normalizeMatterhornReasoningEffort,
   type MatterhornExecutionMode,
+  type MatterhornReasoningEffort,
 } from "@matterhorn-work/types/execution-mode";
 import { existsSync, realpathSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
@@ -685,6 +687,28 @@ export function createServerLogger(config: ServerConfig): ServerLogger {
   return { log: emit };
 }
 
+function safeLogUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return "[invalid-url]";
+  }
+}
+
+function unhandledErrorAttributes(error: unknown): LogAttributes {
+  if (error instanceof Error) {
+    const code = "code" in error && typeof error.code === "string"
+      ? error.code.slice(0, 120)
+      : undefined;
+    return {
+      "error.type": error.name.slice(0, 120) || "Error",
+      ...(code ? { "error.code": code } : {}),
+    };
+  }
+  return { "error.type": typeof error };
+}
+
 function logRequest(input: {
   logger: ServerLogger;
   request: Request;
@@ -710,7 +734,7 @@ function logRequest(input: {
     auth: authMode,
   };
   if (proxyBaseUrl) {
-    attributes["proxy.base_url"] = proxyBaseUrl;
+    attributes["proxy.base_url"] = safeLogUrl(proxyBaseUrl);
     if (proxyService) attributes["proxy.service"] = proxyService;
   }
   if (error) {
@@ -886,6 +910,27 @@ function requestExecutionMode(request: Request): MatterhornExecutionMode {
   return parseExecutionMode(request.headers.get(MATTERHORN_EXECUTION_MODE_HEADER), MATTERHORN_EXECUTION_MODE_HEADER);
 }
 
+function parsePromptReasoningEffort(body: Record<string, unknown>): MatterhornReasoningEffort | undefined {
+  const snake = body.reasoning_effort;
+  const camel = body.reasoningEffort;
+  const hasSnake = typeof snake === "string" && Boolean(snake.trim());
+  const hasCamel = typeof camel === "string" && Boolean(camel.trim());
+  const normalizedSnake = hasSnake ? normalizeMatterhornReasoningEffort(snake) : undefined;
+  const normalizedCamel = hasCamel ? normalizeMatterhornReasoningEffort(camel) : undefined;
+
+  if ((hasSnake && !normalizedSnake) || (hasCamel && !normalizedCamel)) {
+    throw new ApiError(
+      400,
+      "invalid_reasoning_effort",
+      "reasoning effort must be none, minimal, low, medium, high, xhigh, or max",
+    );
+  }
+  if (normalizedSnake && normalizedCamel && normalizedSnake !== normalizedCamel) {
+    throw new ApiError(400, "reasoning_effort_mismatch", "reasoning effort declarations do not match");
+  }
+  return normalizedSnake ?? normalizedCamel;
+}
+
 interface Route {
   method: string;
   path: string;
@@ -965,7 +1010,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       let rateLimited = false;
 
       const finalize = (response: Response) => {
-        const wrapped = withCors(withSecurityHeaders(response), request, config);
+        const wrapped = withCors(withSecurityHeaders(response, request), request, config);
         operationalMetrics.record({
           method: request.method,
           route: routeTemplate,
@@ -1093,6 +1138,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       authMode = route.auth;
       routeTemplate = route.path;
       try {
+        assertTrustedBrowserMutationOrigin(request, config);
         const clientAccess =
           route.auth === "client"
             ? await requireClientAccess(request, config, tokens, authStore)
@@ -1126,12 +1172,12 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
         return finalize(response);
       } catch (error) {
         if (!(error instanceof ApiError)) {
-          console.error("[matterhorn-work-server] Unhandled error:", error);
+          logger.log("error", "Unhandled server error", unhandledErrorAttributes(error));
         }
         const apiError = error instanceof ApiError
           ? error
           : new ApiError(500, "internal_error", "Unexpected server error");
-        errorMessage = apiError.message;
+        errorMessage = apiError.code;
         return finalize(jsonResponse(formatError(apiError), apiError.status));
       }
     },
@@ -1270,6 +1316,39 @@ function createWorkspaceOpencodeClient(config: ServerConfig, workspace: Workspac
   });
 }
 
+async function postWorkspaceOpencodePromptWithReasoning(input: {
+  config: ServerConfig;
+  workspace: WorkspaceInfo;
+  sessionId: string;
+  body: Record<string, unknown>;
+}): Promise<void> {
+  const connection = resolveWorkspaceOpencodeConnection(input.config, input.workspace);
+  const baseUrl = connection.baseUrl?.trim();
+  if (!baseUrl) {
+    throw new ApiError(400, "opencode_unconfigured", "Agent runtime is not connected for this workspace");
+  }
+
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (connection.authHeader) headers.set("Authorization", connection.authHeader);
+  const directory = resolveOpencodeDirectory(input.workspace);
+  if (directory) headers.set("x-opencode-directory", buildOpencodeDirectoryHeader(directory));
+
+  const target = `${baseUrl.replace(/\/+$/, "")}/session/${encodeURIComponent(input.sessionId)}/prompt_async`;
+  const response = await fetch(target, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(input.body),
+  });
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new ApiError(502, "opencode_request_failed", "OpenCode request failed", {
+      status: response.status,
+      path: `/session/${encodeURIComponent(input.sessionId)}/prompt_async`,
+    });
+  }
+  await response.body?.cancel().catch(() => undefined);
+}
+
 function unwrapOpencodeResult<T, E>(result: OpencodeClientResult<T, E>, path: string): NonNullable<T> {
   if (result.data != null) {
     return result.data;
@@ -1280,7 +1359,6 @@ function unwrapOpencodeResult<T, E>(result: OpencodeClientResult<T, E>, path: st
   const response = result.response;
   throw new ApiError(502, "opencode_request_failed", "OpenCode request failed", {
     status: response?.status ?? 502,
-    body: result.error,
     path,
   });
 }
@@ -1502,6 +1580,7 @@ async function proxyOpencodeRequest(input: {
     }
 
     const agent = typeof payload.agent === "string" && payload.agent.trim() ? payload.agent.trim() : undefined;
+    const reasoningEffort = parsePromptReasoningEffort(payload);
     const tools = buildMatterhornExecutionModeTools(bodyExecutionMode, agent);
     if (tools) payload.tools = tools;
     const enforcedSystemPrompt = buildMatterhornExecutionModeSystemPrompt(bodyExecutionMode);
@@ -1509,6 +1588,9 @@ async function proxyOpencodeRequest(input: {
       ? `${payload.system.trim()}\n\n${enforcedSystemPrompt}`
       : enforcedSystemPrompt;
     delete payload.executionMode;
+    delete payload.reasoningEffort;
+    if (reasoningEffort) payload.reasoning_effort = reasoningEffort;
+    else delete payload.reasoning_effort;
     body = JSON.stringify(payload);
     headers.delete("content-length");
 
@@ -2756,7 +2838,16 @@ function isLoopbackCorsOrigin(origin: string | null) {
   }
 }
 
-function withSecurityHeaders(response: Response) {
+function requestUsesHttps(request: Request): boolean {
+  const forwardedProtocol = request.headers
+    .get("x-forwarded-proto")
+    ?.split(",")[0]
+    ?.trim()
+    .toLowerCase();
+  return new URL(request.url).protocol === "https:" || forwardedProtocol === "https";
+}
+
+function withSecurityHeaders(response: Response, request: Request) {
   const headers = new Headers(response.headers);
   const buildCommit = process.env.MATTERHORN_BUILD_COMMIT?.trim() ?? "";
   if (/^[a-f0-9]{40}$/i.test(buildCommit)) {
@@ -2771,11 +2862,32 @@ function withSecurityHeaders(response: Response) {
   if (!headers.has("Referrer-Policy")) headers.set("Referrer-Policy", "no-referrer");
   if (!headers.has("X-Content-Type-Options")) headers.set("X-Content-Type-Options", "nosniff");
   if (!headers.has("X-Frame-Options")) headers.set("X-Frame-Options", "DENY");
+  if (requestUsesHttps(request) && !headers.has("Strict-Transport-Security")) {
+    headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
     headers,
   });
+}
+
+function isAllowedCorsOrigin(origin: string, request: Request, config: ServerConfig): boolean {
+  if (origin === new URL(request.url).origin) return true;
+  if (config.corsOrigins.includes("*")) return true;
+  if (config.corsOrigins.includes("loopback") && isLoopbackCorsOrigin(origin)) return true;
+  return config.corsOrigins.includes(origin);
+}
+
+function assertTrustedBrowserMutationOrigin(request: Request, config: ServerConfig): void {
+  if (["GET", "HEAD", "OPTIONS"].includes(request.method.toUpperCase())) return;
+  const origin = request.headers.get("origin");
+  if (!origin || isAllowedCorsOrigin(origin, request, config)) return;
+  throw new ApiError(
+    403,
+    "untrusted_origin",
+    "This browser origin is not allowed to change Matterhorn data.",
+  );
 }
 
 function withCors(response: Response, request: Request, config: ServerConfig) {
@@ -2799,6 +2911,9 @@ function withCors(response: Response, request: Request, config: ServerConfig) {
   );
   headers.set("Access-Control-Expose-Headers", "X-Matterhorn-Build-Commit");
   headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  if (allowOrigin !== "*") {
+    headers.set("Access-Control-Allow-Credentials", "true");
+  }
   headers.set("Vary", "Origin");
   return new Response(response.body, {
     status: response.status,
@@ -6129,6 +6244,21 @@ function createRoutes(
     return response;
   });
 
+  addRoute(routes, "GET", "/api/den/v1/session", "none", async ({ request }) => {
+    const token = matterhornSessionToken(request);
+    const session = token ? authStore.getSession(token) : null;
+    const response = jsonResponse(
+      session
+        ? {
+            authenticated: true,
+            user: session.user,
+          }
+        : { authenticated: false },
+    );
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
   addRoute(routes, "GET", "/api/den/v1/me", "none", async ({ request }) => {
     const session = requireMatterhornAuthSession(request, authStore);
     return jsonResponse({
@@ -6136,6 +6266,11 @@ function createRoutes(
       activeOrgId: session.activeOrgId,
       activeOrgSlug: session.activeOrgSlug,
     });
+  });
+
+  addRoute(routes, "GET", "/api/den/v1/me/desktop-config", "none", async ({ request }) => {
+    requireMatterhornAuthSession(request, authStore);
+    return jsonResponse({});
   });
 
   addRoute(routes, "GET", "/api/den/v1/me/orgs", "none", async ({ request }) => {
@@ -7613,8 +7748,13 @@ function createRoutes(
       ? body.variant.trim()
       : undefined;
     const effectiveVariant = requestVariant ?? modelResolution.variant;
+    const reasoningEffort = parsePromptReasoningEffort(body);
     const auditMetadata = sessionPromptAuditMetadata(
-      effectiveVariant ? { ...body, variant: effectiveVariant } : body,
+      {
+        ...body,
+        ...(effectiveVariant ? { variant: effectiveVariant } : {}),
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+      },
       modelResolution,
     );
     auditMetadata.executionMode = executionMode;
@@ -7636,23 +7776,33 @@ function createRoutes(
     const modeSystemPrompt = buildMatterhornExecutionModeSystemPrompt(executionMode);
     const requestedSystemPrompt = typeof body.system === "string" && body.system.trim() ? body.system.trim() : "";
 
-    unwrapOpencodeResult(
-      await sessionApi.promptAsync({
-        sessionID: sessionId,
-        ...(directory ? { directory } : {}),
-        ...(typeof body.messageID === "string" && body.messageID.trim() ? { messageID: body.messageID.trim() } : {}),
-        ...(modelResolution.model ? { model: modelResolution.model } : {}),
-        ...(agent ? { agent } : {}),
-        ...(effectiveVariant ? { variant: effectiveVariant } : {}),
-        ...(typeof body.noReply === "boolean" ? { noReply: body.noReply } : {}),
-        ...(modeTools ? { tools: modeTools } : isBooleanRecord(body.tools) ? { tools: body.tools } : {}),
-        system: requestedSystemPrompt ? `${requestedSystemPrompt}\n\n${modeSystemPrompt}` : modeSystemPrompt,
-        ...(typeof body.reasoning_effort === "string" && body.reasoning_effort.trim() ? { reasoning_effort: body.reasoning_effort.trim() } : {}),
-        ...(typeof body.reasoningEffort === "string" && body.reasoningEffort.trim() ? { reasoning_effort: body.reasoningEffort.trim() } : {}),
-        parts,
-      }),
-      `/session/${encodeURIComponent(sessionId)}/prompt_async`,
-    );
+    const promptBody = {
+      sessionID: sessionId,
+      ...(directory ? { directory } : {}),
+      ...(typeof body.messageID === "string" && body.messageID.trim() ? { messageID: body.messageID.trim() } : {}),
+      ...(modelResolution.model ? { model: modelResolution.model } : {}),
+      ...(agent ? { agent } : {}),
+      ...(effectiveVariant ? { variant: effectiveVariant } : {}),
+      ...(typeof body.noReply === "boolean" ? { noReply: body.noReply } : {}),
+      ...(modeTools ? { tools: modeTools } : isBooleanRecord(body.tools) ? { tools: body.tools } : {}),
+      system: requestedSystemPrompt ? `${requestedSystemPrompt}\n\n${modeSystemPrompt}` : modeSystemPrompt,
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+      parts,
+    };
+    if (reasoningEffort) {
+      const { sessionID: _sessionID, directory: _directory, ...upstreamBody } = promptBody;
+      await postWorkspaceOpencodePromptWithReasoning({
+        config,
+        workspace,
+        sessionId,
+        body: upstreamBody,
+      });
+    } else {
+      unwrapOpencodeResult(
+        await sessionApi.promptAsync(promptBody),
+        `/session/${encodeURIComponent(sessionId)}/prompt_async`,
+      );
+    }
 
     await recordAudit(workspace.path, {
       id: shortId(),
@@ -8810,6 +8960,17 @@ function createRoutes(
     if (!configPayload) {
       throw new ApiError(400, "invalid_payload", "MCP config is required");
     }
+    // Custom MCPs execute commands or connect the agent runtime to arbitrary
+    // network services. Keep that trust boundary on the local desktop engine;
+    // a hosted account session must never turn the web host into an RCE/SSRF
+    // surface. Managed MCPs are provisioned by the server, not this route.
+    if (ctx.matterhornSession) {
+      throw new ApiError(
+        403,
+        "custom_mcp_desktop_only",
+        "Custom MCP servers can only be configured from the local desktop engine",
+      );
+    }
     await requireApproval(ctx, {
       workspaceId: workspace.id,
       action: "mcp.add",
@@ -8879,6 +9040,13 @@ function createRoutes(
       throw new ApiError(400, "invalid_payload", "enabled must be a boolean");
     }
     const enabled = body.enabled;
+    if (ctx.matterhornSession && enabled) {
+      throw new ApiError(
+        403,
+        "custom_mcp_desktop_only",
+        "Custom MCP servers can only be enabled from the local desktop engine",
+      );
+    }
     const action = enabled ? "mcp.enable" : "mcp.disable";
     const summary = `${enabled ? "Enable" : "Disable"} MCP ${name}`;
     await requireApproval(ctx, {

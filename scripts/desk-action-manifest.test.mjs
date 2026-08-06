@@ -22,9 +22,9 @@ const {
 } = await import("../packages/types/dist/index.js");
 
 // 1. Root package exposes the test script.
-assert.equal(
+assert.match(
   rootPackage.scripts["test:desk-action-manifest"],
-  "node scripts/desk-action-manifest.test.mjs",
+  /(?:^|&&\s*)node scripts\/desk-action-manifest\.test\.mjs$/,
   "package.json should expose the desk action manifest test script",
 );
 

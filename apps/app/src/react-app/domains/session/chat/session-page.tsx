@@ -147,6 +147,7 @@ import {
 } from "../workflows/desk-task-inputs";
 import {
   MATTERHORN_DESK_TASK_STARTERS,
+  reviewedActionChatDraft,
   type MatterhornDeskTaskStarter,
 } from "../workflows/desk-task-starters";
 import {
@@ -747,14 +748,16 @@ function ProtocolDeskEmptyState({
   matterhornServerClient,
   runtimeWorkspaceId,
   onUsePrompt,
-  onOpenReviewedAction,
   onBackHome,
 }: {
   panel: VenueSidePanel;
   matterhornServerClient: MatterhornServerClient | null;
   runtimeWorkspaceId: string | null;
-  onUsePrompt: (prompt: string, title?: string) => boolean | void | Promise<boolean | void>;
-  onOpenReviewedAction: (protocol: VenueSidePanel, operation?: ReviewedActionOperation) => void;
+  onUsePrompt: (
+    prompt: string,
+    title?: string,
+    options?: { sendImmediately?: boolean },
+  ) => boolean | void | Promise<boolean | void>;
   onBackHome: () => void;
 }) {
   const visual = getCustomerProtocolDeskVisual(panel);
@@ -812,20 +815,24 @@ function ProtocolDeskEmptyState({
   const deskSafetyInfo = panel === "bittensor"
     ? "Uses public wallet details and prepares exact transaction drafts. You approve transfer, stake, and unstake calls in your connected Bittensor wallet; unsupported advanced calls stay unavailable."
     : panel === "polymarket"
-      ? "Runs market research, compliance checks, and external-wallet handoffs. Matterhorn never places bets inside the app."
+      ? "Chat prepares research or exact buy, sell, and cancel terms. Executable actions move to Wallet for compliance checks, exact review, and connected-wallet approval."
       : panel === "sui"
-        ? "Runs public Sui account reads and transfer previews. Web signing happens in your connected Sui wallet; desktop signing stays external."
-        : "Agent tasks run market and account checks and prepare order context, but cannot submit. Manual execution is available only in the Hyperliquid panel after exact review and connected-wallet approval.";
+        ? "Chat prepares exact Sui transfer terms. The separate Wallet review shows the final transaction before your connected Sui wallet signs it."
+        : "Chat prepares exact Hyperliquid orders and changes. Executable actions move to Wallet for final review and one-time connected-wallet approval; agents and watches cannot submit unattended.";
   const providerNotice = panel === "bittensor"
     ? bittensorSidecarNotice(bittensorSidecarQuery.data?.health, bittensorSidecarQuery.isError)
     : null;
 
-  const startTask = useCallback((prompt: string, title: string) => {
+  const startTask = useCallback((
+    prompt: string,
+    title: string,
+    options?: { sendImmediately?: boolean },
+  ) => {
     setLaunchingTaskTitle(title);
     setPendingInput(null);
     setTaskInputValue("");
     setTaskInputError(null);
-    const result = onUsePrompt(prompt, title);
+    const result = onUsePrompt(prompt, title, options);
     void Promise.resolve(result)
       .then((started) => {
         if (started === false) {
@@ -839,7 +846,8 @@ function ProtocolDeskEmptyState({
 
   const handleTaskAction = useCallback((item: MatterhornDeskTaskStarter) => {
     if (item.reviewedAction) {
-      onOpenReviewedAction(item.reviewedAction, item.reviewedActionOperation);
+      const draft = reviewedActionChatDraft(item);
+      if (draft) startTask(draft, item.title, { sendImmediately: false });
       return;
     }
     const requirement = getDeskTaskInputRequirement(item.prompt);
@@ -855,7 +863,7 @@ function ProtocolDeskEmptyState({
     });
     setTaskInputValue("");
     setTaskInputError(null);
-  }, [onOpenReviewedAction, panel, startTask]);
+  }, [panel, startTask]);
 
   const handleTaskInputSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -984,19 +992,15 @@ function ProtocolDeskEmptyState({
                 status="idle"
                 evidenceHints={[evidenceHint]}
                 actionLabel={opensReviewedAction
-                  ? item.reviewedActionLabel ?? (item.reviewedAction === "bittensor"
-                    ? "Open transfer ticket"
-                    : item.reviewedAction === "sui"
-                      ? "Open transfer ticket"
-                    : "Open trade ticket")
+                  ? "Prepare in chat"
                   : isLaunching
                     ? "Starting..."
                     : startTaskBlocked
                       ? startTaskActionLabel
                       : inputRequirement?.actionLabel ?? draftConfig?.confirmCtaLabel ?? "Start task"}
-                actionDisabled={Boolean(launchingTaskTitle) || (!opensReviewedAction && startTaskBlocked)}
+                actionDisabled={Boolean(launchingTaskTitle) || startTaskBlocked}
                 actionTitle={opensReviewedAction
-                  ? "Open the exact review, wallet approval, and submission flow."
+                  ? "Start an editable chat request. Exact terms move to Wallet for review and signature."
                   : startTaskBlocker ?? inputRequirement?.helpText ?? undefined}
                 onAction={() => handleTaskAction(item)}
               />
@@ -1155,6 +1159,8 @@ export type SessionPageProps = {
   matterhornServerStatus: MatterhornServerStatus;
   matterhornServerClient: MatterhornServerClient | null;
   matterhornServerToken?: string | null;
+  /** Hosted web sessions authenticate through their same-origin session cookie. */
+  allowCookieAuth?: boolean;
   developerMode: boolean;
   headerStatus: string;
   busyHint: string | null;
@@ -2289,7 +2295,7 @@ export function SessionPage(props: SessionPageProps) {
       props.runtimeWorkspaceId &&
       props.matterhornServerClient &&
       reactSessionBaseUrl &&
-      reactSessionToken &&
+      (reactSessionToken || props.allowCookieAuth) &&
       props.surface,
   );
 
@@ -2563,7 +2569,7 @@ export function SessionPage(props: SessionPageProps) {
                   onOpenTarget={openTarget}
                   onOpenTargetsChange={handleOpenTargetsChange}
                   onCreateDeskTask={(prompt, options) => {
-                    props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, options);
+                    return props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, options);
                   }}
                 />
               ) : null}
@@ -2680,12 +2686,7 @@ export function SessionPage(props: SessionPageProps) {
                         matterhornServerClient={props.matterhornServerClient}
                         runtimeWorkspaceId={props.runtimeWorkspaceId}
                         onBackHome={returnToProjectHome}
-                        onOpenReviewedAction={(protocol, operation) => {
-                          setReviewedActionEntryProtocol(protocol);
-                          setReviewedActionEntryOperation(operation ?? null);
-                          setCurrentSidePanel(protocol);
-                        }}
-                        onUsePrompt={(prompt, title) => {
+                        onUsePrompt={(prompt, title, options) => {
                           const clearFocusedDesk = () => {
                             if (typeof window !== "undefined") {
                               const state = window.history.state && typeof window.history.state === "object"
@@ -2698,14 +2699,17 @@ export function SessionPage(props: SessionPageProps) {
                               }
                             }
                             focusedDeskHistoryRef.current = null;
-                            setCurrentSidePanel(null);
+                            // SessionRoute has already navigated to the newly created
+                            // chat before this callback runs. Do not issue a second
+                            // navigation from the desk's stale home-route render: it
+                            // would replace the new session URL with Project home.
                           };
                           let taskSessionCreated = false;
                           const startResult = props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, {
                             title,
                             agent: agentIdForDesk(focusedProtocolPanel),
                             deskId: focusedProtocolPanel,
-                            sendImmediately: true,
+                            sendImmediately: options?.sendImmediately ?? true,
                             onSessionCreated: () => {
                               taskSessionCreated = true;
                               clearFocusedDesk();

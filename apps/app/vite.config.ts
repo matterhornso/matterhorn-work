@@ -1,5 +1,6 @@
 import os from "node:os";
 import { existsSync, readFileSync } from "node:fs";
+import type { IncomingMessage } from "node:http";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
@@ -11,6 +12,27 @@ const devPort = Number.isFinite(portValue) && portValue > 0 ? portValue : 5173;
 const devApiTarget =
   process.env.VITE_MATTERHORN_DEV_API_TARGET?.trim() ||
   "http://127.0.0.1:3222";
+const sameOriginMatterhornProxy = {
+  target: devApiTarget,
+  changeOrigin: true,
+  ws: true,
+};
+const sameOriginWorkspaceProxy = {
+  ...sameOriginMatterhornProxy,
+  bypass: (req: IncomingMessage) => {
+    const isDocumentRequest =
+      req.method === "HEAD" ||
+      (req.method === "GET" && req.headers.accept?.includes("text/html"));
+
+    return isDocumentRequest ? (req.url ?? "/") : undefined;
+  },
+};
+const sameOriginProxy = {
+  "/api": sameOriginMatterhornProxy,
+  "/workspaces": sameOriginMatterhornProxy,
+  "/workspace": sameOriginWorkspaceProxy,
+  "/opencode": sameOriginMatterhornProxy,
+};
 const allowedHosts = new Set<string>();
 const envAllowedHosts = process.env.VITE_ALLOWED_HOSTS ?? "";
 
@@ -113,12 +135,10 @@ export default defineConfig({
     port: devPort,
     strictPort: true,
     ...(allowedHosts.size > 0 ? { allowedHosts: Array.from(allowedHosts) } : {}),
-    proxy: {
-      "/api": {
-        target: devApiTarget,
-        changeOrigin: true,
-      },
-    },
+    proxy: sameOriginProxy,
+  },
+  preview: {
+    proxy: sameOriginProxy,
   },
   build: {
     target: "esnext",

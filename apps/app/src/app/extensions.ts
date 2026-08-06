@@ -291,7 +291,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     icon: { src: "/assets/desks/polymarket/logo-dark.svg" },
     composer: { prompt: "Use Matterhorn protocol chat. For Polymarket, " },
     setup: {
-      instructions: "Polymarket support is compliance-gated handoff only. Blocked markets must not expose executable price, size, or share terms.",
+      instructions: "Polymarket actions require compliance approval and connected-wallet review. Blocked markets must not expose executable price, size, or share terms.",
       primaryCta: "Open Polymarket desk",
     },
     resources: [

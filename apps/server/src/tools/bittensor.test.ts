@@ -257,7 +257,7 @@ describe("buildBittensorQuote", () => {
     expect(quote.requiresExternalSignature).toBe(true);
     expect(quote.expectedAlpha).toBe(4);
     expect(quote.feeTao).toBeGreaterThan(0);
-    expect(quote.warnings.join(" ")).toContain("cannot sign or broadcast");
+    expect(quote.warnings.join(" ")).toContain("connected Bittensor wallet");
   });
 
   test("warns when staking cannot estimate alpha", () => {
@@ -3939,24 +3939,40 @@ describe("capabilityFromSubnet", () => {
   });
 
   test("builds subnet invocation preview cards without calling adapters", async () => {
-    const preview = await previewBittensorSubnetInvocation(14, {
-      intent: "service_call",
-      task: "Use this subnet for a compute task.",
-      ss58Address: VALID_SS58,
-    });
-    expect(preview.netuid).toBe(14);
-    expect(preview.requiresConfirmation).toBe(true);
-    expect(preview.request.ss58Address).toBe(VALID_SS58);
-    expect(preview.requestJson).toContain("service_call");
-    expect(preview.requestSha256).toHaveLength(64);
-    expect(preview.confirmationPrompt).toContain(preview.requestSha256);
-    expect(preview.contractValidation.ok).toBe(true);
-    expect(preview.adapterContract.endpointConfigured).toBe(false);
-    expect(preview.warnings.join(" ")).toContain("Matterhorn can still explain");
-    const card = buildBittensorInvocationPreviewCard(preview);
-    expect(["subnet_result", "unsupported_adapter"]).toContain(card.kind);
-    expect(card.items.some((item) => item.label === "Cost model")).toBe(true);
-    expect(card.items.some((item) => item.label === "Contract")).toBe(true);
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousLocal = process.env.BITTENSOR_ENABLE_LOCAL_SUBNET_ADAPTERS;
+    const previousReal = process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+    delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    delete process.env.BITTENSOR_ENABLE_LOCAL_SUBNET_ADAPTERS;
+    delete process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+
+    try {
+      const preview = await previewBittensorSubnetInvocation(14, {
+        intent: "service_call",
+        task: "Use this subnet for a compute task.",
+        ss58Address: VALID_SS58,
+      });
+      expect(preview.netuid).toBe(14);
+      expect(preview.requiresConfirmation).toBe(true);
+      expect(preview.request.ss58Address).toBe(VALID_SS58);
+      expect(preview.requestJson).toContain("service_call");
+      expect(preview.requestSha256).toHaveLength(64);
+      expect(preview.confirmationPrompt).toContain(preview.requestSha256);
+      expect(preview.contractValidation.ok).toBe(true);
+      expect(preview.adapterContract.endpointConfigured).toBe(false);
+      expect(preview.warnings.join(" ")).toContain("Matterhorn can still explain");
+      const card = buildBittensorInvocationPreviewCard(preview);
+      expect(["subnet_result", "unsupported_adapter"]).toContain(card.kind);
+      expect(card.items.some((item) => item.label === "Cost model")).toBe(true);
+      expect(card.items.some((item) => item.label === "Contract")).toBe(true);
+    } finally {
+      if (previousAdapters === undefined) delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      else process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      if (previousLocal === undefined) delete process.env.BITTENSOR_ENABLE_LOCAL_SUBNET_ADAPTERS;
+      else process.env.BITTENSOR_ENABLE_LOCAL_SUBNET_ADAPTERS = previousLocal;
+      if (previousReal === undefined) delete process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+      else process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = previousReal;
+    }
   });
 
   test("marks configured service adapter previews as supported only after contract validation", async () => {
@@ -4409,7 +4425,8 @@ describe("signer and watch helpers", () => {
   });
 
   test("builds bounded watch alert digests with notification intents", async () => {
-    const watch = createBittensorWatch({ kind: "slippage", netuid: 77, threshold: 0.1, label: "Watch slippage" });
+    // Digest behavior must stay deterministic even when no live subnet provider is available.
+    const watch = createBittensorWatch({ kind: "slippage", threshold: 0.1, label: "Watch slippage" });
     const evaluation = await evaluateBittensorWatch(watch);
     const digest = buildBittensorWatchDigest([evaluation], { maxAlerts: 1, includeOk: true });
     expect(digest.total).toBe(1);

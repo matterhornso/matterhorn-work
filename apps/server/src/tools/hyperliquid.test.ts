@@ -132,6 +132,24 @@ describe("Hyperliquid read/preview safety", () => {
     expect(input.price).toBe(65000);
   });
 
+  test("extracts a complete market order without mistaking order for the asset", () => {
+    const input = extractHyperliquidOrderInput({
+      message: "Prepare a testnet market order to buy 0.001 BTC with 0.5% slippage and do not reduce only",
+    });
+    expect(input.asset).toBe("BTC");
+    expect(input.side).toBe("buy");
+    expect(input.size).toBe(0.001);
+    expect(input.orderType).toBe("market");
+    expect(input.network).toBe("testnet");
+    expect(input.reduceOnly).toBe(false);
+    expect(input.slippageTolerance).toBeCloseTo(0.005);
+  });
+
+  test("preserves affirmative reduce-only intent", () => {
+    const input = extractHyperliquidOrderInput({ message: "Sell 0.1 ETH market, reduce-only" });
+    expect(input.reduceOnly).toBe(true);
+  });
+
   test("lists markets with live-shaped source labels", async () => {
     const markets = await provider().listMarkets(1);
     expect(markets).toHaveLength(1);

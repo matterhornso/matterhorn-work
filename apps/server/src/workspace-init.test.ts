@@ -66,7 +66,7 @@ describe("ensureWorkspaceFiles", () => {
       expect(hyperliquidAgent).toContain("single most specific Hyperliquid desk tool");
       expect(hyperliquidAgent).toContain("The user opens the separate trade ticket");
       expect(polymarketAgent).toContain("Polymarket Agent");
-      expect(polymarketAgent).toContain("compliance-gated handoff");
+      expect(polymarketAgent).toContain("wallet-approved action agent");
       expect(polymarketAgent).toContain("websearch: deny");
       expect(polymarketAgent).toContain('"matterhorn-work_matterhorn_polymarket_search_markets": true');
       expect(polymarketAgent).toContain('"matterhorn-work_matterhorn_crypto_chat": true');

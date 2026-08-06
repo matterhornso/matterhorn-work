@@ -111,6 +111,24 @@ async function visibleMarker(page, markers, timeoutMs = 20_000) {
   throw new Error(`None of these markers became visible: ${markers.join(", ")}`);
 }
 
+function isTransientBrowserNetworkError(value) {
+  return /ERR_NETWORK_CHANGED/i.test(String(value));
+}
+
+async function gotoWithTransientRetry(page, url, options = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await page.goto(url, options);
+    } catch (error) {
+      lastError = error;
+      if (!isTransientBrowserNetworkError(error) || attempt === 3) throw error;
+      await page.waitForTimeout(500 * attempt);
+    }
+  }
+  throw lastError;
+}
+
 async function openOverviewSecondaryControls(page) {
   const quickJot = page.getByRole("button", { name: "Quick Jot", exact: true });
   if (await quickJot.isVisible().catch(() => false)) return;
@@ -150,7 +168,7 @@ async function waitForVisualSettle(page, timeoutMs = 2_000) {
 async function inspectSurface(page, report, id, url, markers, viewportName) {
   const startedAt = Date.now();
   try {
-    await page.goto(url, { waitUntil: "load", timeout: 30_000 });
+    await gotoWithTransientRetry(page, url, { waitUntil: "load", timeout: 30_000 });
     await page.locator("#root").waitFor({ state: "visible", timeout: 20_000 });
     await page.waitForFunction(
       () => (document.querySelector("#root")?.childElementCount ?? 0) > 0,
@@ -355,6 +373,59 @@ async function discoverProductSmokeReports() {
   }
 }
 
+async function productSmokeReportCandidates() {
+  const explicitReport = process.env.MATTERHORN_FULL_AUDIT_PRODUCT_REPORT;
+  const discoveredReports = await discoverProductSmokeReports();
+  return [...new Set([
+    explicitReport,
+    ...discoveredReports,
+    "qa-reports/matterhorn-product-browser-smoke-perspectives/summary.json",
+    "qa-reports/matterhorn-product-browser-smoke/summary.json",
+  ].filter(Boolean))];
+}
+
+async function latestSmokeAuth() {
+  const explicitEmail = process.env.MATTERHORN_FULL_AUDIT_AUTH_EMAIL?.trim();
+  const explicitPassword = process.env.MATTERHORN_FULL_AUDIT_AUTH_PASSWORD;
+  if (explicitEmail && explicitPassword) return { email: explicitEmail, password: explicitPassword };
+
+  for (const candidate of await productSmokeReportCandidates()) {
+    try {
+      const report = JSON.parse(await readFile(resolve(repoRoot, candidate), "utf8"));
+      const auth = report?.artifacts?.auth;
+      if (report?.ready === true && auth?.freshAccount === true && typeof auth.email === "string") {
+        return {
+          email: auth.email,
+          password: "matterhorn-product-smoke-password",
+        };
+      }
+    } catch {
+      // Try the next local smoke report.
+    }
+  }
+  return null;
+}
+
+async function authenticateAuditContext(context) {
+  const credentials = await latestSmokeAuth();
+  if (!credentials) return false;
+
+  const origin = new URL(baseUrl).origin;
+  const response = await context.request.post(
+    new URL("/api/auth/sign-in/email", origin).toString(),
+    { data: credentials },
+  );
+  if (!response.ok()) {
+    throw new Error(`Full-platform audit sign-in failed (${response.status()}).`);
+  }
+
+  const session = await context.request.get(new URL("/api/den/v1/me", origin).toString());
+  if (!session.ok()) {
+    throw new Error(`Full-platform audit session verification failed (${session.status()}).`);
+  }
+  return true;
+}
+
 function reportSessionUrl(report) {
   if (report?.ready !== true) return null;
   const sessions = report?.artifacts?.startedDeskTaskSessions;
@@ -384,15 +455,7 @@ async function latestSmokeSessionUrl() {
     return candidate.toString();
   }
 
-  const explicitReport = process.env.MATTERHORN_FULL_AUDIT_PRODUCT_REPORT;
-  const discoveredReports = await discoverProductSmokeReports();
-  const candidates = [...new Set([
-    explicitReport,
-    ...discoveredReports,
-    "qa-reports/matterhorn-product-browser-smoke-perspectives/summary.json",
-    "qa-reports/matterhorn-product-browser-smoke/summary.json",
-  ].filter(Boolean))];
-  for (const candidate of candidates) {
+  for (const candidate of await productSmokeReportCandidates()) {
     try {
       const report = JSON.parse(await readFile(resolve(repoRoot, candidate), "utf8"));
       const value = reportSessionUrl(report);
@@ -418,7 +481,7 @@ function isAuditedSessionUrl(value) {
 async function ensureAuditChat(page, report, existingChatUrl) {
   if (existingChatUrl) return existingChatUrl;
 
-  await page.goto(workspaceUrl("session"), { waitUntil: "load", timeout: 30_000 });
+  await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load", timeout: 30_000 });
   await visibleMarker(page, ["Open a desk", "Wallet readiness"]);
   const home = page.getByLabel("Workspace home");
   const newChat = home.getByRole("button", { name: "New chat", exact: true });
@@ -440,7 +503,7 @@ async function generatedMediaChatControlAvailable(page, report) {
 
   const requestedUrl = workspaceUrl("settings/generated-media");
   const fallbackUrl = launchPolicyFallbackForSurface("settings-generated-media");
-  await page.goto(requestedUrl, { waitUntil: "load", timeout: 30_000 });
+  await gotoWithTransientRetry(page, requestedUrl, { waitUntil: "load", timeout: 30_000 });
   const marker = await visibleMarker(page, ["Production readiness", "Overview"]);
   if (marker !== "Overview" || page.url() !== fallbackUrl) {
     throw new Error("Generate image is absent even though Generated Media remains available in Settings.");
@@ -516,11 +579,16 @@ async function run() {
   const browser = await chromium.launch({ headless: true });
   activeBrowser = browser;
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 960 }, acceptDownloads: true });
+  await authenticateAuditContext(desktop);
   const page = await desktop.newPage();
 
   const attachDiagnostics = (target) => {
     target.on("console", (message) => {
-      if (message.type() === "error" && !/Failed to load resource.*404/i.test(message.text())) {
+      if (
+        message.type() === "error"
+        && !/Failed to load resource.*404/i.test(message.text())
+        && !isTransientBrowserNetworkError(message.text())
+      ) {
         report.consoleErrors.push({ url: target.url(), message: message.text() });
       }
     });
@@ -541,7 +609,7 @@ async function run() {
 
   await inspectSurface(page, report, "workspace-home", workspaceUrl("session"), ["Open a desk", "Wallet readiness"], "desktop");
   await recordInteraction(report, "home-new-project-dialog", async () => {
-    await page.goto(workspaceUrl("session"), { waitUntil: "load" });
+    await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
     await visibleMarker(page, ["Open a desk"]);
     const home = page.getByLabel("Workspace home");
     await clickUnique(home.getByRole("button", { name: "New project", exact: true }), "Workspace home New project");
@@ -550,20 +618,20 @@ async function run() {
     if (await close.count() === 1) await close.click(); else await page.keyboard.press("Escape");
   });
   await recordInteraction(report, "home-jot-note-dialog", async () => {
-    await page.goto(workspaceUrl("session"), { waitUntil: "load" });
+    await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
     await visibleMarker(page, ["Open a desk"]);
     await clickUnique(page.getByRole("button", { name: "Jot a note", exact: true }), "Jot a note");
     await visibleMarker(page, ["Quick note", "Jot a note", "Save note"]);
     await page.keyboard.press("Escape");
   });
   await recordInteraction(report, "command-palette", async () => {
-    await page.goto(workspaceUrl("session"), { waitUntil: "load" });
+    await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
     await page.keyboard.press("Meta+KeyK");
     await visibleMarker(page, ["Go home", "New chat"]);
     await page.keyboard.press("Escape");
   });
   await recordInteraction(report, "sidebar-collapse-expand", async () => {
-    await page.goto(workspaceUrl("session"), { waitUntil: "load" });
+    await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
     await visibleMarker(page, ["Open a desk"]);
     const toggle = page.getByRole("button", { name: "Toggle Sidebar", exact: true });
     await clickUnique(toggle, "Toggle Sidebar");
@@ -577,7 +645,7 @@ async function run() {
   }
   await recordInteraction(report, "customization-visibility-controls", async () => {
     const openCustomization = async () => {
-      await page.goto(workspaceUrl("settings/shell"), { waitUntil: "load" });
+      await gotoWithTransientRetry(page, workspaceUrl("settings/shell"), { waitUntil: "load" });
       await visibleMarker(page, ["Customization", "Layout"]);
       const modelPicker = page.getByRole("switch", { name: "Display model picker", exact: true });
       const newWorkspace = page.getByRole("switch", { name: "Display new workspace button", exact: true });
@@ -594,13 +662,13 @@ async function run() {
       await initial.modelPicker.setChecked(false);
       await initial.newWorkspace.setChecked(false);
 
-      await page.goto(workspaceUrl("session"), { waitUntil: "load" });
+      await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
       await visibleMarker(page, ["Open a desk", "Wallet readiness"]);
       const hiddenWorkspaceAction = page.locator('[data-sidebar="footer"]').getByRole("button", { name: "New project", exact: true });
       if (await hiddenWorkspaceAction.count() !== 0) throw new Error("New project sidebar action stayed visible after being hidden.");
 
       if (!chatUrl) throw new Error("A smoke-created chat is required to verify model picker visibility.");
-      await page.goto(chatUrl, { waitUntil: "load" });
+      await gotoWithTransientRetry(page, chatUrl, { waitUntil: "load" });
       await waitForChatComposer(page);
       const hiddenModelPicker = page.getByRole("button", { name: /^Change model/ });
       if (await hiddenModelPicker.isVisible().catch(() => false)) {
@@ -626,7 +694,7 @@ async function run() {
       await restore.newWorkspace.setChecked(initiallyShowingNewWorkspace);
     }
 
-    await page.goto(workspaceUrl("session"), { waitUntil: "load" });
+    await gotoWithTransientRetry(page, workspaceUrl("session"), { waitUntil: "load" });
     await visibleMarker(page, ["Open a desk", "Wallet readiness"]);
     const restoredWorkspaceAction = page.locator('[data-sidebar="footer"]').getByRole("button", { name: "New project", exact: true });
     const restoredWorkspaceVisible = await restoredWorkspaceAction.isVisible().catch(() => false);
@@ -634,7 +702,7 @@ async function run() {
       throw new Error("New project sidebar action did not return to its original visibility setting.");
     }
 
-    await page.goto(chatUrl, { waitUntil: "load" });
+    await gotoWithTransientRetry(page, chatUrl, { waitUntil: "load" });
     await waitForChatComposer(page);
     const restoredModelPickerVisible = await page.getByRole("button", { name: /^Change model/ }).isVisible().catch(() => false);
     const restoredRecoveryVisible = await page.getByRole("button", { name: "Connect a model", exact: true }).isVisible().catch(() => false);
@@ -646,7 +714,7 @@ async function run() {
     }
   });
   await recordInteraction(report, "settings-overview-quick-jot", async () => {
-    await page.goto(workspaceUrl("settings/overview"), { waitUntil: "load" });
+    await gotoWithTransientRetry(page, workspaceUrl("settings/overview"), { waitUntil: "load" });
     await visibleMarker(page, ["Workspace health", "Data & privacy"]);
     await openOverviewSecondaryControls(page);
     const quickJot = page.getByRole("button", { name: "Quick Jot", exact: true });
@@ -663,7 +731,7 @@ async function run() {
     await page.keyboard.press("Escape");
   });
   await recordInteraction(report, "settings-overview-evidence-navigation", async () => {
-    await page.goto(workspaceUrl("settings/overview"), { waitUntil: "load" });
+    await gotoWithTransientRetry(page, workspaceUrl("settings/overview"), { waitUntil: "load" });
     await visibleMarker(page, ["Workspace health", "Data & privacy"]);
     await openOverviewSecondaryControls(page);
     const openNotes = page.getByRole("button", { name: "Open notes", exact: true });
@@ -679,7 +747,7 @@ async function run() {
     await page.waitForURL(workspaceUrl("session", "?panel=notes"), { timeout: 10_000 });
     await visibleMarker(page, ["Notes"]);
 
-    await page.goto(workspaceUrl("settings/overview"), { waitUntil: "load" });
+    await gotoWithTransientRetry(page, workspaceUrl("settings/overview"), { waitUntil: "load" });
     await visibleMarker(page, ["Workspace health", "Data & privacy"]);
     await openOverviewSecondaryControls(page);
     await page.waitForFunction(
@@ -697,16 +765,18 @@ async function run() {
     await visibleMarker(page, ["Memory review"]);
   });
   await recordInteraction(report, "mcp-rail-availability-and-disclosure", async () => {
-    await page.goto(workspaceUrl("session", "?panel=extensions"), { waitUntil: "load" });
+    await gotoWithTransientRetry(page, workspaceUrl("session", "?panel=extensions"), { waitUntil: "load" });
     await visibleMarker(page, ["Matterhorn MCPs"]);
-    const connectedSummary = page.getByText(/\d+ MCP servers? active/, { exact: true });
-    const emptySummary = page.getByText("No external MCPs connected.", { exact: true });
+    await page.getByText("Your apps", { exact: true })
+      .waitFor({ state: "visible", timeout: 20_000 });
+    const configuredServer = page.getByText("Matterhorn Desks MCP", { exact: true });
+    const emptySummary = page.getByText("No apps connected yet", { exact: true });
     await Promise.race([
-      connectedSummary.waitFor({ state: "visible", timeout: 20_000 }),
+      configuredServer.waitFor({ state: "visible", timeout: 20_000 }),
       emptySummary.waitFor({ state: "visible", timeout: 20_000 }),
     ]);
-    if (await connectedSummary.isVisible().catch(() => false)) {
-      await page.getByLabel(/Connected MCP servers:/, { exact: false })
+    if (await configuredServer.isVisible().catch(() => false)) {
+      await page.getByText("Ready", { exact: true })
         .waitFor({ state: "visible", timeout: 20_000 });
     } else {
       await page.getByText("No apps connected yet", { exact: true })
@@ -724,7 +794,7 @@ async function run() {
     await inspectSurface(page, report, id, workspaceUrl("session", `?panel=${panel}`), markers, "desktop");
   }
   await recordInteraction(report, "stale-session-recovery", async () => {
-    await page.goto(workspaceUrl("session/ses_missing_browser_audit"), { waitUntil: "load" });
+    await gotoWithTransientRetry(page, workspaceUrl("session/ses_missing_browser_audit"), { waitUntil: "load" });
     await visibleMarker(page, ["Chat no longer available"]);
     await page.waitForURL(workspaceUrl("session"), { timeout: 10_000 });
     await visibleMarker(page, ["Open a desk", "Wallet readiness"]);
@@ -737,7 +807,7 @@ async function run() {
   if (chatUrl) {
     await inspectSurface(page, report, "desk-chat", chatUrl, chatSurfaceMarkers, "desktop");
     await recordInteraction(report, "session-model-provider-recovery", async () => {
-      await page.goto(chatUrl, { waitUntil: "load" });
+      await gotoWithTransientRetry(page, chatUrl, { waitUntil: "load" });
       await waitForChatComposer(page);
 
       const recovery = page.getByRole("button", { name: "Connect a model", exact: true });
@@ -748,7 +818,7 @@ async function run() {
       await visibleMarker(page, ["Models", "Model provider setup"]);
     });
     await recordInteraction(report, "response-perspective-controls", async () => {
-      await page.goto(chatUrl, { waitUntil: "load" });
+      await gotoWithTransientRetry(page, chatUrl, { waitUntil: "load" });
       const group = await waitForChatComposer(page);
       for (const label of ["Cautious", "Balanced", "Optimistic"]) {
         const radio = group.getByRole("radio", { name: label, exact: true });
@@ -757,7 +827,7 @@ async function run() {
       }
     });
     await recordInteraction(report, "generate-image-panel", async () => {
-      await page.goto(chatUrl, { waitUntil: "load" });
+      await gotoWithTransientRetry(page, chatUrl, { waitUntil: "load" });
       if (!await generatedMediaChatControlAvailable(page, report)) return;
       await clickUnique(page.getByRole("button", { name: "Generate image", exact: true }), "Generate image");
       await visibleMarker(page, [
@@ -774,7 +844,7 @@ async function run() {
 
   const cloudAccountUrl = workspaceUrl("settings/cloud-account");
   const cloudAccountFallback = launchPolicyFallbackForSurface("settings-cloud-account");
-  await page.goto(cloudAccountUrl, { waitUntil: "load" });
+  await gotoWithTransientRetry(page, cloudAccountUrl, { waitUntil: "load" });
   const cloudAccountMarker = await visibleMarker(page, ["Account", "Matterhorn Cloud", "Overview"]);
   const cloudAccountHidden = cloudAccountMarker === "Overview";
   if (cloudAccountHidden && page.url() !== cloudAccountFallback) {
@@ -805,6 +875,7 @@ async function run() {
       viewport: { width: viewport.width, height: viewport.height },
       acceptDownloads: true,
     });
+    await authenticateAuditContext(context);
     const responsivePage = await context.newPage();
     attachDiagnostics(responsivePage);
     await inspectResponsiveSurfaceCatalog(

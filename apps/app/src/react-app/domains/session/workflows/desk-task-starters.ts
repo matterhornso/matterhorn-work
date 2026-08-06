@@ -17,10 +17,47 @@ export type MatterhornDeskTaskStarter = {
   reviewedActionLabel?: string;
 };
 
+export function reviewedActionChatDraft(item: MatterhornDeskTaskStarter): string | null {
+  if (!item.reviewedAction || !item.reviewedActionOperation) return null;
+
+  switch (`${item.reviewedAction}:${item.reviewedActionOperation}`) {
+    case "hyperliquid:place_order":
+      return "Buy <size> BTC on Hyperliquid testnet as a market order with 100 bps max slippage.";
+    case "hyperliquid:cancel_order":
+      return "Cancel Hyperliquid order <order ID> for BTC on testnet.";
+    case "hyperliquid:modify_order":
+      return "Modify Hyperliquid order <order ID> to buy <size> BTC as a limit order at <price> on testnet.";
+    case "hyperliquid:close_position":
+      return "Close <size> BTC long on Hyperliquid testnet with 100 bps max slippage.";
+    case "polymarket:buy":
+      return "Buy Yes for $<amount> on Polymarket market <market URL or ID>.";
+    case "polymarket:sell":
+      return "Sell <shares> Yes shares on Polymarket market <market URL or ID>.";
+    case "polymarket:cancel":
+      return "Cancel all orders on Polymarket.";
+    case "bittensor:stake":
+      return "Stake <amount> TAO to validator <hotkey SS58 address> on subnet <netuid>.";
+    case "bittensor:unstake":
+      return "Unstake <amount> TAO from validator <hotkey SS58 address> on subnet <netuid>.";
+    case "bittensor:transfer":
+      return "Send <amount> TAO to <recipient SS58 address>.";
+    case "sui:transfer_sui":
+      return "Send <amount> SUI to <recipient address> on testnet.";
+    case "sui:transfer_coin":
+      return "Send <amount> <coin type> to <recipient address> on Sui testnet.";
+    case "sui:transfer_object":
+      return "Transfer object <object ID> to <recipient address> on Sui testnet.";
+    case "sui:batch_transfer_sui":
+      return "Batch send SUI to <recipient address> <amount>, <recipient address> <amount> on testnet.";
+    default:
+      return null;
+  }
+}
+
 /**
  * Desk-specific starter tasks. Research tasks remain editable prompts. Transaction
- * starters open an explicit reviewed-action ticket so model availability can never
- * be mistaken for wallet or execution availability.
+ * starters begin as editable chat requests. Once the Agent has exact public terms,
+ * the resulting draft moves to the separate reviewed-action wallet ticket.
  */
 export const MATTERHORN_DESK_TASK_STARTERS = {
   bittensor: [

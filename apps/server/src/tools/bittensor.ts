@@ -13,13 +13,14 @@ import { dirname, join } from "node:path";
 
 const TAO_APP_BASE_URL = "https://api.tao.app";
 const CACHE_MS = 60_000;
+const INTERACTIVE_PREVIEW_PROVIDER_DEADLINE_MS = 750;
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
 const FORBIDDEN_CHAT_CREDENTIAL_KEY_RE =
   /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedExtrinsic|signed_extrinsic)/i;
 const FORBIDDEN_CHAT_CREDENTIAL_VALUE_RE =
-  /\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b\s*(?:is|=|:|=>|to sign|for signing)?\s*["'`<]?[A-Za-z0-9_+=/@:.-]{8,}/i;
+  /\b(seed phrase|mnemonic|private key|api[ _-]?key|api[ _-]?secret|access[ _-]?token|bearer[ _-]?token|raw signature|signed payload|wallet export)\b\s*(?:is|=|:|=>|to sign|for signing)?\s*["'`<]?[A-Za-z0-9_+=/@:.-]{8,}/i;
 const FORBIDDEN_CHAT_CREDENTIAL_COMMAND_RE =
-  /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b/i;
+  /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api key|api secret|access token|bearer token|raw signature|signed payload|wallet export)\b/i;
 
 export type BittensorProviderStatus = "ok" | "provider_unavailable";
 
@@ -1797,6 +1798,7 @@ export interface BittensorSubnetDiscoveryResult {
 type CacheEntry<T> = { at: number; data: T };
 
 const cache = new Map<string, CacheEntry<unknown>>();
+const inFlightCache = new Map<string, Promise<unknown>>();
 const watchlist = new Map<string, BittensorWatch>();
 const chatContexts = new Map<string, BittensorChatContext>();
 const walletSnapshotBaselines = new Map<string, { wallet: BittensorWalletSnapshot; updatedAt: string }>();
@@ -5625,9 +5627,19 @@ async function runBittensorSubnetAdapter(
 async function cached<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
   const hit = cache.get(key) as CacheEntry<T> | undefined;
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.data;
-  const data = await fetcher();
-  cache.set(key, { at: Date.now(), data });
-  return data;
+  const inFlight = inFlightCache.get(key) as Promise<T> | undefined;
+  if (inFlight) return inFlight;
+
+  const request = fetcher()
+    .then((data) => {
+      cache.set(key, { at: Date.now(), data });
+      return data;
+    })
+    .finally(() => {
+      if (inFlightCache.get(key) === request) inFlightCache.delete(key);
+    });
+  inFlightCache.set(key, request);
+  return request;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -5781,7 +5793,7 @@ function risksFor(summary: BittensorSubnetSummary): string[] {
   const risks = [
     "Subnet utility and participants can change quickly; verify live metadata.",
     "Staking and unstaking are subnet-local and can involve alpha-token slippage.",
-    "Matterhorn v1 cannot sign or broadcast Bittensor transactions.",
+    "The agent prepares unsigned transactions; a connected Bittensor wallet or external signer must review, sign, and submit.",
   ];
   if (summary.source === "curated-fallback") {
     risks.unshift("Live provider data is unavailable; this summary may be incomplete.");
@@ -5834,8 +5846,8 @@ export function buildBittensorQuote(input: BittensorActionQuoteInput, subnet?: B
   const amountTao = parseAmountTao(input.amountTao);
   const netuid = typeof input.netuid === "number" && Number.isFinite(input.netuid) ? input.netuid : null;
   const warnings: string[] = [
-    "Quote only. Matterhorn v1 cannot sign or broadcast Bittensor transactions.",
-    "Use an external Bittensor-compatible wallet to review and sign.",
+    "Quote only. The agent does not sign or submit transactions automatically.",
+    "Continue in a connected Bittensor wallet or external signer to review, sign, and submit.",
   ];
 
   if (input.action === "stake" || input.action === "unstake") {
@@ -8372,7 +8384,7 @@ export function getBittensorSignerStatus(address?: string | null): BittensorSign
     canSubmit: false,
     network: bittensorNetwork(),
     address: address && isValidSs58Address(address) ? address : null,
-    message: "Matterhorn can prepare the action and hand it to an external Bittensor-compatible signer. It cannot sign or broadcast by itself.",
+    message: "Matterhorn prepares the unsigned action. Continue in a connected Bittensor wallet or external signer to review, sign, and submit.",
   };
 }
 
@@ -8418,7 +8430,7 @@ export async function prepareBittensorExtrinsic(input: BittensorExtrinsicPrepare
   const signer = getBittensorSignerStatus(coldkey);
   const warnings = [
     ...quote.warnings,
-    "Unsigned preview only. Review the payload in an external Bittensor-compatible signer.",
+    "Unsigned preview. Review, sign, and submit it in a connected Bittensor wallet or external signer.",
   ];
   if (input.coldkey && !coldkey) warnings.push("Coldkey does not look like a valid SS58 address.");
   if (input.hotkey && !hotkey) warnings.push("Hotkey does not look like a valid SS58 address.");
@@ -8529,13 +8541,13 @@ export function createBittensorSigningHandoff(preview: BittensorExtrinsicPreview
     expiresAt,
     instructions: [
       "Review the action, network, netuid, amount, destination, fee, and slippage in Matterhorn.",
-      "Open the payload in a Bittensor-compatible external signer or CLI flow.",
+      "Open the payload in the connected Bittensor wallet, another compatible signer, or a CLI flow.",
       "Confirm the signer shows the same payload SHA-256 before signing.",
       "Return only the signed payload or signature to Matterhorn for optional sidecar submission.",
     ],
     warnings: [
       ...preview.warnings,
-      "Matterhorn cannot sign this payload. The external signer is the final authority.",
+      "Matterhorn does not sign this payload automatically. Your connected wallet or external signer is the final authority.",
       "If the signer displays different action details, cancel and rebuild the preview.",
     ],
     consequenceSummary: preview.consequenceSummary,
@@ -8689,14 +8701,14 @@ export function buildBittensorSigningSafetyChecklist(preview: BittensorExtrinsic
     warnings: uniqueWarnings(
       preview.warnings,
       checks.filter((check) => check.status !== "pass").map((check) => `${check.label}: ${check.summary}`),
-      ["Final signing must happen in an external Bittensor-compatible signer."],
+      ["Final signing must happen in your connected Bittensor wallet or another compatible signer."],
     ),
     nextActions: status === "fail"
       ? ["Do not sign. Rebuild the preview after removing blocker fields."]
       : [
-        "Compare the action, amount, subnet, validator/destination, and payload hash in the external signer.",
+        "Compare the action, amount, subnet, validator/destination, and payload hash in your wallet or signer.",
         "Refresh the quote if fee, Dynamic TAO price, slippage, or provider freshness is stale.",
-        "Sign externally only after the signer shows the same consequence you expect.",
+        "Sign only after the wallet or signer shows the consequence you expect.",
       ],
     consequenceSummary: preview.consequenceSummary,
   };
@@ -8774,11 +8786,24 @@ function buildSubnetInvocationReviewRequest(
   return { request, requestJson, requestSha256 };
 }
 
+async function subnetDetailForInteractivePreview(netuid: number): Promise<BittensorSubnetDetail> {
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  const fallback = subnetDetailFromSummary(fallbackSubnet(netuid));
+  try {
+    return await Promise.race([
+      bittensorProvider.getSubnet(netuid).catch(() => fallback),
+      new Promise<BittensorSubnetDetail>((resolve) => {
+        deadline = setTimeout(() => resolve(fallback), INTERACTIVE_PREVIEW_PROVIDER_DEADLINE_MS);
+      }),
+    ]);
+  } finally {
+    if (deadline) clearTimeout(deadline);
+  }
+}
+
 export async function previewBittensorSubnetInvocation(netuid: number, input: BittensorSubnetInvokeInput): Promise<BittensorSubnetInvocationPreview> {
-  const [detail, capability] = await Promise.all([
-    bittensorProvider.getSubnet(netuid),
-    getBittensorCapability(netuid),
-  ]);
+  const detail = await subnetDetailForInteractivePreview(netuid);
+  const capability = capabilityFromSubnet(detail);
   const configuredAdapter = getConfiguredSubnetAdapter(netuid);
   const intent = input.intent ?? "service_call";
   const adapterGate = evaluateSubnetServiceAdapterGate(capability, configuredAdapter, intent);
@@ -11809,7 +11834,7 @@ export function buildBittensorSignerCard(signer: BittensorSignerStatus): Bittens
       cardItem("Can submit", signer.canSubmit ? "Yes" : "No", signer.canSubmit ? "good" : "warning"),
       cardItem("Address", shortSs58(signer.address)),
     ],
-    warnings: signer.canSign ? [] : ["Matterhorn does not hold signing authority. Use an external Bittensor-compatible signer."],
+    warnings: signer.canSign ? [] : ["Matterhorn does not hold signing authority. Use a connected Bittensor wallet or another compatible signer."],
     data: { signer },
   };
 }

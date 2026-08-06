@@ -57,9 +57,9 @@ Options:
   --help               Show this message.
 
 Boundaries:
-  This smoke seeds one preview-only Sui output, verifies its customer-facing
+  This smoke seeds one wallet-reviewed Sui output, verifies its customer-facing
   preview/actions/note handoff, and deletes only that uniquely named QA output
-  and its linked QA note. It never signs or submits a transaction.
+  and its linked QA note. It never holds keys or submits without wallet approval.
 `);
 }
 
@@ -199,7 +199,7 @@ let page;
 try {
   await mkdir(config.outputDir, { recursive: true });
 
-  await stage(report, "seed_preview_output", "Create one preview-only QA output", async () => {
+  await stage(report, "seed_preview_output", "Create one wallet-reviewed QA output", async () => {
     const { response, payload } = await backendJson(
       config,
       `/workspace/${encodeURIComponent(workspace.workspaceId)}/sui/transactions/preview`,
@@ -223,8 +223,21 @@ try {
     if (!outputPath?.startsWith(`outputs/sui/${qaSessionId}/`) || !outputFileName) {
       throw new Error("QA output seed returned an unexpected workspace path.");
     }
-    if (payload.preview?.canSubmit !== false || payload.preview?.liveSubmissionEnabled !== false || payload.preview?.custody !== false) {
-      throw new Error("QA output seed did not preserve preview-only safety boundaries.");
+    const preview = payload.preview;
+    const handoff = preview?.handoff;
+    if (
+      preview?.custody !== false
+      || preview?.canSubmit !== true
+      || preview?.liveSubmissionEnabled !== true
+      || preview?.signerPolicy !== "client_wallet_required"
+      || preview?.requiresWalletStandard !== true
+      || handoff?.kind !== "sui_wallet_standard"
+      || handoff?.action !== "sign_and_execute_in_wallet"
+      || handoff?.unsignedIntent?.sender !== preview.sender
+      || handoff?.unsignedIntent?.recipient !== preview.recipient
+      || handoff?.unsignedIntent?.amountMist !== preview.amountMist
+    ) {
+      throw new Error("QA output seed did not preserve connected-wallet approval boundaries.");
     }
   });
 
@@ -293,6 +306,7 @@ try {
     const notesPanel = page.getByRole("region", { name: "Notes panel", exact: true });
     await notesPanel.waitFor({ state: "visible", timeout: 15_000 });
     const noteButton = notesPanel.getByRole("button").filter({ hasText: expectedTitle });
+    await noteButton.waitFor({ state: "visible", timeout: 15_000 });
     if (await noteButton.count() !== 1) throw new Error("Linked output note was not visible in Notes.");
     await noteButton.click();
     const noteBody = await page.getByPlaceholder("Write your note…", { exact: true }).inputValue();

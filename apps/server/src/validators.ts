@@ -49,9 +49,16 @@ export function validateMcpConfig(config: Record<string, unknown>): void {
     if (
       !Array.isArray(command) ||
       command.length === 0 ||
-      command.some((part) => typeof part !== "string" || part.trim().length === 0)
+      command.length > 64 ||
+      command.some(
+        (part) =>
+          typeof part !== "string" ||
+          part.trim().length === 0 ||
+          part.length > 4096 ||
+          part.includes("\0"),
+      )
     ) {
-      throw new ApiError(400, "invalid_mcp_config", "Local MCP requires command array");
+      throw new ApiError(400, "invalid_mcp_config", "Local MCP requires a bounded command array");
     }
   }
   if (type === "remote") {
@@ -66,10 +73,19 @@ export function validateMcpConfig(config: Record<string, unknown>): void {
     if (!/^https?:\/\//i.test(normalizedUrl)) {
       throw new ApiError(400, "invalid_mcp_config", "Remote MCP url must start with http(s)://");
     }
+    if (normalizedUrl.length > 2048 || normalizedUrl.includes("\0")) {
+      throw new ApiError(400, "invalid_mcp_config", "Remote MCP url is too long or contains invalid characters");
+    }
     try {
       const parsed = new URL(normalizedUrl);
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
         throw new ApiError(400, "invalid_mcp_config", "Remote MCP url must use http(s)");
+      }
+      if (parsed.username || parsed.password) {
+        throw new ApiError(400, "invalid_mcp_config", "Remote MCP url must not contain credentials");
+      }
+      if (parsed.hash) {
+        throw new ApiError(400, "invalid_mcp_config", "Remote MCP url must not contain a fragment");
       }
     } catch (error) {
       if (error instanceof ApiError) throw error;

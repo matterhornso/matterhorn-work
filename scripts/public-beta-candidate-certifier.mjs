@@ -120,6 +120,7 @@ export function parseArgs(argv) {
   const args = {
     outputDir: "",
     appUrl: "",
+    serverUrl: "",
     timeoutMs: DEFAULT_TIMEOUT_MS,
     resume: true,
     skipBrowser: false,
@@ -149,6 +150,11 @@ export function parseArgs(argv) {
       index += 1;
     } else if (arg.startsWith("--app-url=")) {
       args.appUrl = arg.slice("--app-url=".length);
+    } else if (arg === "--server-url") {
+      args.serverUrl = argv[index + 1] || "";
+      index += 1;
+    } else if (arg.startsWith("--server-url=")) {
+      args.serverUrl = arg.slice("--server-url=".length);
     } else if (arg === "--timeout-ms") {
       args.timeoutMs = Number(argv[index + 1]);
       index += 1;
@@ -162,17 +168,21 @@ export function parseArgs(argv) {
   if (!Number.isFinite(args.timeoutMs) || args.timeoutMs < 100) {
     throw new Error("--timeout-ms must be at least 100.");
   }
-  if (args.appUrl) {
-    const url = new URL(args.appUrl);
+  for (const [name, value] of [
+    ["--app-url", args.appUrl],
+    ["--server-url", args.serverUrl],
+  ]) {
+    if (!value) continue;
+    const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol)) {
-      throw new Error("--app-url must use http or https.");
+      throw new Error(`${name} must use http or https.`);
     }
     if (url.username || url.password) {
-      throw new Error("--app-url must not include credentials.");
+      throw new Error(`${name} must not include credentials.`);
     }
     for (const key of url.searchParams.keys()) {
       if (/(?:token|secret|password|key|signature)/i.test(key)) {
-        throw new Error("--app-url must not include secret-like query parameters.");
+        throw new Error(`${name} must not include secret-like query parameters.`);
       }
     }
   }
@@ -185,11 +195,12 @@ export function helpText() {
     "Matterhorn Desks public-beta candidate certifier",
     "",
     "Usage:",
-    "  pnpm certify:public-beta -- --output-dir qa-reports/public-beta/current --app-url http://127.0.0.1:5207/workspace/ws/session --json",
+    "  pnpm certify:public-beta -- --output-dir qa-reports/public-beta/current --app-url http://127.0.0.1:5207/workspace/ws/session --server-url http://127.0.0.1:4145 --json",
     "  pnpm certify:public-beta -- --output-dir qa-reports/public-beta/current --skip-browser --strict --json",
     "  pnpm certify:public-beta -- --dry-run --json",
     "",
     "The certifier runs local engineering gates and records redacted evidence.",
+    "Use --server-url only when the app and local engine are served on different origins.",
     "It never signs, deploys, submits transactions, or converts missing owner evidence into GO.",
     "",
   ].join("\n");
@@ -386,17 +397,28 @@ export function buildStages(config) {
   ];
 
   if (!config.skipBrowser && config.appUrl) {
+    const browserCommand = [
+      "node",
+      "scripts/matterhorn-product-browser-smoke.mjs",
+      "--url",
+      config.appUrl,
+      "--hosted-account",
+    ];
+    if (config.serverUrl) {
+      browserCommand.push("--server-url", config.serverUrl);
+    }
+    browserCommand.push(
+      "--output-dir",
+      join(outputDir, "browser-acceptance"),
+      "--strict",
+      "--json",
+    );
     stages.push(
-      stage("browser_acceptance", "Live customer-flow browser acceptance", [
-        "node",
-        "scripts/matterhorn-product-browser-smoke.mjs",
-        "--url",
-        config.appUrl,
-        "--output-dir",
-        join(outputDir, "browser-acceptance"),
-        "--strict",
-        "--json",
-      ]),
+      stage(
+        "browser_acceptance",
+        "Live customer-flow browser acceptance",
+        browserCommand,
+      ),
     );
   }
 

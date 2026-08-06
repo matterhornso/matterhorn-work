@@ -938,19 +938,19 @@ export const POLYMARKET_PREVIEW_WORKFLOW: MatterhornWorkflowManifest = {
     },
     {
       id: "external_handoff",
-      name: "External Wallet Handoff",
+      name: "Wallet Review Handoff",
       mimeType: "application/json",
       public: true,
       generatedByStep: "stage_5_external_handoff",
-      description: "Handoff packet for signing and submission outside Matterhorn.",
+      description: "Exact order packet for Wallet review and connected-wallet authorization.",
     },
     {
       id: "handoff_confirmation",
-      name: "Handoff Confirmation",
+      name: "Authorization Confirmation",
       mimeType: "text/markdown",
       public: true,
       generatedByStep: "stage_6_handoff_confirmation",
-      description: "Summary of what was handed off and compliance reminders.",
+      description: "Summary of prepared terms and wallet-approval requirements.",
     },
   ],
   steps: [
@@ -987,7 +987,7 @@ export const POLYMARKET_PREVIEW_WORKFLOW: MatterhornWorkflowManifest = {
     {
       id: "stage_4_unsigned_preview",
       name: "Unsigned preview",
-      description: "Prepare an unsigned position preview. Matterhorn never signs orders or submits bets.",
+      description: "Prepare exact order terms for the separate Wallet review. Chat never signs or submits.",
       inputPromptIds: ["market_id", "outcome", "size", "wallet_address"],
       outputArtifactIds: ["unsigned_preview"],
       status: "preview_only",
@@ -996,8 +996,8 @@ export const POLYMARKET_PREVIEW_WORKFLOW: MatterhornWorkflowManifest = {
     },
     {
       id: "stage_5_external_handoff",
-      name: "External wallet handoff",
-      description: "Build a handoff packet for the user to sign and submit with an external Polymarket-compatible wallet/client.",
+      name: "Wallet review handoff",
+      description: "Open the exact buy, sell, or cancel action in Wallet for compliance review and connected-wallet authorization.",
       inputPromptIds: ["market_id", "outcome", "size", "wallet_address"],
       outputArtifactIds: ["external_handoff"],
       status: "external_handoff_required",
@@ -1006,8 +1006,8 @@ export const POLYMARKET_PREVIEW_WORKFLOW: MatterhornWorkflowManifest = {
     },
     {
       id: "stage_6_handoff_confirmation",
-      name: "Handoff confirmation",
-      description: "Confirm what was handed off and remind the user that live betting happens outside Matterhorn, subject to compliance.",
+      name: "Authorization confirmation",
+      description: "Confirm the prepared terms and explain that nothing is submitted until the user authorizes the action in the connected wallet.",
       inputPromptIds: ["market_id"],
       outputArtifactIds: ["handoff_confirmation"],
       status: "external_handoff_required",
@@ -1498,7 +1498,7 @@ export const POLYMARKET_PREVIEW_WORKFLOW_EVIDENCE_BUNDLE: MatterhornWorkflowEvid
   version: "matterhorn.workflow.evidence-bundle.v1",
   workflowId: "market_read_preview",
   domain: "polymarket",
-  requestedOutcome: "Generate a Polymarket market preview and compliance-gated handoff without submission or signing.",
+  requestedOutcome: "Prepare exact Polymarket order terms for Wallet review without agent signing or submission.",
   inputPrompt: "Prepare a Polymarket trade handoff",
   generatedArtifactType: "market_preview",
   safetyStatus: "preview_only",
@@ -1878,13 +1878,13 @@ export const HYPERLIQUID_PREVIEW_WORKFLOW_TEMPLATE: MatterhornWorkflowTemplate =
 export const POLYMARKET_PREVIEW_WORKFLOW_TEMPLATE: MatterhornWorkflowTemplate = {
   version: "matterhorn.workflow.template.v1",
   templateId: "polymarket_preview_workflow",
-  title: "Polymarket Handoff Workflow",
+  title: "Polymarket Review Workflow",
   category: "markets",
-  intendedUser: "trader who wants Polymarket research and compliance-gated handoffs",
+  intendedUser: "trader who wants Polymarket research and wallet-approved actions",
   promptStarters: [
-    "Prepare a Polymarket trade handoff",
+    "Prepare a Polymarket order for Wallet review",
     "Show my Polymarket positions",
-    "Generate a Polymarket signing handoff",
+    "Prepare a Polymarket buy for Wallet approval",
   ],
   requiredPublicInputs: [
     {
@@ -2447,7 +2447,7 @@ export const POLYMARKET_RESEARCHER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflow
   chatMode: "crypto chat",
   launch: {
     primaryCta: "Open Polymarket panel",
-    secondaryCta: "Prepare handoff",
+    secondaryCta: "Prepare action",
     defaultPrompt: "Summarize this Polymarket market",
     handoffContextLabel: "Public wallet address",
     recommendedSurface: "protocol_desk",
@@ -2456,7 +2456,7 @@ export const POLYMARKET_RESEARCHER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflow
     iconHint: "polymarket",
     accent: "matterhorn_blue",
     shortDescription:
-      "Research Polymarket markets and prepare compliance-gated handoffs.",
+      "Research Polymarket markets and prepare wallet-approved actions.",
   },
   routing: {
     chatMode: "polymarket",
@@ -5318,7 +5318,7 @@ export const POLYMARKET_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
   displayName: "Matterhorn Polymarket",
   deskId: "polymarket",
   description:
-    "Search Polymarket markets, read probabilities, and prepare compliance-gated handoffs. Verify receipts without Matterhorn submission.",
+    "Search Polymarket markets, read probabilities, and prepare buy, sell, and cancel actions for connected-wallet review. Verify resulting receipts.",
   installCommand: "matterhorn-work mcp install matterhorn-polymarket",
   supportedTools: [
     { name: "polymarket_search_markets", description: "Search prediction markets.", isReadOnly: true },

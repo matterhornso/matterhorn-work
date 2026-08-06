@@ -28,6 +28,41 @@ const CONTEXT_ORDER: MatterhornSessionContextBlockId[] = [
 ];
 
 const DEFAULT_MAX_CONTEXT_CHARS = 64_000;
+const DEFAULT_CONTEXT_VALUE_MAX_CHARS = 256;
+
+export function sanitizeMatterhornSystemContextValue(
+  value: unknown,
+  options: { maxChars?: number; fallback?: string } = {},
+): string {
+  const maxChars = Math.max(1, options.maxChars ?? DEFAULT_CONTEXT_VALUE_MAX_CHARS);
+  const fallback = options.fallback ?? "unknown";
+  if (value == null) return fallback;
+
+  const normalized = String(value)
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return fallback;
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, Math.max(1, maxChars - 1)).trimEnd()}…`;
+}
+
+export async function resolveOptionalMatterhornContext<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T | undefined> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise.catch(() => undefined),
+      new Promise<undefined>((resolve) => {
+        timeout = setTimeout(() => resolve(undefined), Math.max(0, timeoutMs));
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
 
 /**
  * Produces one deterministic, bounded system context. A block id can appear
@@ -70,12 +105,16 @@ export function buildMatterhornPublicWalletContext(input: {
   ethBalance: string | null | undefined;
   usdcBalance: string | null | undefined;
 }): string {
+  const address = sanitizeMatterhornSystemContextValue(input.address, { maxChars: 128 });
+  const chainId = sanitizeMatterhornSystemContextValue(input.chainId, { maxChars: 32 });
+  const ethBalance = sanitizeMatterhornSystemContextValue(input.ethBalance, { maxChars: 64 });
+  const usdcBalance = sanitizeMatterhornSystemContextValue(input.usdcBalance, { maxChars: 64 });
   return [
     "## Connected Wallet Public Context",
-    `Public address: ${input.address ?? "unknown"}`,
-    `Chain ID: ${input.chainId ?? "unknown"}`,
-    `ETH balance: ${input.ethBalance ?? "unknown"}`,
-    `USDC balance: ${input.usdcBalance ?? "unknown"}`,
+    `Public address: ${address}`,
+    `Chain ID: ${chainId}`,
+    `ETH balance: ${ethBalance}`,
+    `USDC balance: ${usdcBalance}`,
     "This is public account metadata only.",
     "Never request signing material. Never sign or submit on the user's behalf.",
     "Any supported action still requires the user's explicit review and wallet approval.",

@@ -35,6 +35,8 @@ const parsed = parseArgs([
   "--output-dir",
   "/tmp/candidate",
   "--app-url=https://desks.example/workspace/ws/session",
+  "--server-url",
+  "https://engine.example",
   "--timeout-ms",
   "5000",
   "--strict",
@@ -42,11 +44,13 @@ const parsed = parseArgs([
 ]);
 assert.equal(parsed.outputDir, "/tmp/candidate");
 assert.equal(parsed.appUrl, "https://desks.example/workspace/ws/session");
+assert.equal(parsed.serverUrl, "https://engine.example");
 assert.equal(parsed.timeoutMs, 5000);
 assert.equal(parsed.strict, true);
 assert.equal(parsed.json, true);
 assert.throws(() => parseArgs(["--timeout-ms", "10"]), /at least 100/);
 assert.throws(() => parseArgs(["--app-url", "file:///tmp/app"]), /http or https/);
+assert.throws(() => parseArgs(["--server-url", "file:///tmp/engine"]), /http or https/);
 assert.throws(
   () => parseArgs(["--app-url", "https://user:password@desks.example/"]),
   /must not include credentials/,
@@ -60,9 +64,49 @@ assert.throws(() => parseArgs(["--unknown"]), /Unknown argument/);
 const stages = buildStages({
   outputDir: "/tmp/candidate",
   appUrl: "https://desks.example/workspace/ws/session",
+  serverUrl: "https://engine.example",
   skipBrowser: false,
   timeoutMs: 1000,
 });
+const aggregateBuild = readFileSync(
+  new URL("./build.mjs", import.meta.url),
+  "utf8",
+);
+assert.ok(
+  aggregateBuild.includes("@matterhorn-work/desktop build") &&
+    aggregateBuild.includes("@matterhorn-work/app build:web") &&
+    aggregateBuild.indexOf("@matterhorn-work/desktop build") <
+      aggregateBuild.indexOf("@matterhorn-work/app build:web"),
+  "aggregate release builds should certify desktop first and leave a deep-link-safe web bundle in apps/app/dist",
+);
+const appPackage = JSON.parse(
+  readFileSync(new URL("../apps/app/package.json", import.meta.url), "utf8"),
+);
+const hostedWebBuild = readFileSync(
+  new URL("../apps/app/scripts/build-web.mjs", import.meta.url),
+  "utf8",
+);
+const viteConfig = readFileSync(
+  new URL("../apps/app/vite.config.ts", import.meta.url),
+  "utf8",
+);
+assert.equal(appPackage.scripts["build:web"], "node scripts/build-web.mjs");
+for (const [name, value] of [
+  ["VITE_MATTERHORN_DEPLOYMENT", "web"],
+  ["VITE_MATTERHORN_PUBLIC_BETA", "1"],
+  ["VITE_MATTERHORN_REQUIRE_SIGNIN", "true"],
+  ["VITE_MATTERHORN_CLOUD_ENABLED", "true"],
+]) {
+  assert.ok(
+    hostedWebBuild.includes(name) && hostedWebBuild.includes(`|| "${value}"`),
+    `web builds should default ${name} to ${value}`,
+  );
+}
+assert.match(
+  viteConfig,
+  /preview:\s*\{\s*proxy:\s*sameOriginProxy/s,
+  "production preview should proxy hosted same-origin backend routes",
+);
 assert.ok(stages.some((item) => item.id === "scope_inventory"));
 assert.ok(stages.some((item) => item.id === "candidate_manifest"));
 assert.ok(stages.some((item) => item.id === "secret_scan"));
@@ -82,6 +126,19 @@ assert.ok(stages.some((item) => item.id === "server_tests"));
 assert.ok(stages.some((item) => item.id === "production_build"));
 assert.ok(stages.some((item) => item.id === "platform_safety"));
 assert.ok(stages.some((item) => item.id === "browser_acceptance"));
+assert.deepEqual(
+  stages.find((item) => item.id === "browser_acceptance").command.slice(0, 8),
+  [
+    "node",
+    "scripts/matterhorn-product-browser-smoke.mjs",
+    "--url",
+    "https://desks.example/workspace/ws/session",
+    "--hosted-account",
+    "--server-url",
+    "https://engine.example",
+    "--output-dir",
+  ],
+);
 assert.deepEqual(
   stages.find((item) => item.id === "electron_typecheck").command,
   [

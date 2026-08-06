@@ -128,6 +128,10 @@ describe("validateMcpConfig", () => {
     expect(() => validateMcpConfig({ type: "remote", url: "https://example.com " })).toThrow();
     expect(() => validateMcpConfig({ type: "remote", url: "file:///tmp/mcp" })).toThrow();
     expect(() => validateMcpConfig({ type: "remote", url: "javascript:alert(1)" })).toThrow();
+    expect(() => validateMcpConfig({ type: "remote", url: "https://user:secret@example.com/mcp" })).toThrow();
+    expect(() => validateMcpConfig({ type: "remote", url: "https://example.com/mcp#token" })).toThrow();
+    expect(() => validateMcpConfig({ type: "remote", url: `https://example.com/${"x".repeat(2048)}` })).toThrow();
+    expect(() => validateMcpConfig({ type: "remote", url: "https://example.com/\0mcp" })).toThrow();
   });
 
   test("rejects local without command", () => {
@@ -135,5 +139,8 @@ describe("validateMcpConfig", () => {
     expect(() => validateMcpConfig({ type: "local", command: [] })).toThrow();
     expect(() => validateMcpConfig({ type: "local", command: ["", "foo"] })).toThrow();
     expect(() => validateMcpConfig({ type: "local", command: ["npx", 12] })).toThrow();
+    expect(() => validateMcpConfig({ type: "local", command: ["node", "bad\0arg"] })).toThrow();
+    expect(() => validateMcpConfig({ type: "local", command: ["x".repeat(4097)] })).toThrow();
+    expect(() => validateMcpConfig({ type: "local", command: Array.from({ length: 65 }, () => "arg") })).toThrow();
   });
 });

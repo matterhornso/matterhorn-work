@@ -5,6 +5,7 @@ import {
   MATTERHORN_EXECUTION_MODE_OPTIONS,
   buildMatterhornExecutionModeSystemPrompt,
   buildMatterhornExecutionModeTools,
+  normalizeMatterhornReasoningEffort,
 } from "@matterhorn-work/types/execution-mode";
 import {
   readMatterhornExecutionMode,
@@ -35,11 +36,21 @@ describe("Matterhorn execution modes", () => {
     expect(buildMatterhornExecutionModeSystemPrompt("discuss")).toContain("Do not edit files");
     expect(buildMatterhornExecutionModeSystemPrompt("plan")).toContain("produce a concrete, ordered implementation plan");
     expect(buildMatterhornExecutionModeSystemPrompt("work")).toContain("tools and approvals available to this agent");
+    expect(buildMatterhornExecutionModeSystemPrompt("discuss")).toContain("Lead with the answer");
+    expect(buildMatterhornExecutionModeSystemPrompt("plan")).toContain("decision-ready");
+    expect(buildMatterhornExecutionModeSystemPrompt("work")).toContain("Act before narrating");
     for (const option of MATTERHORN_EXECUTION_MODE_OPTIONS) {
       expect(buildMatterhornExecutionModeSystemPrompt(option.value)).toContain("never weakens desk allowlists");
       expect(buildMatterhornExecutionModeSystemPrompt(option.value)).toContain("wallet review");
       expect(buildMatterhornExecutionModeSystemPrompt(option.value)).toContain("transaction safety");
     }
+  });
+
+  test("normalizes supported reasoning hints without inventing provider capabilities", () => {
+    expect(normalizeMatterhornReasoningEffort(" HIGH ")).toBe("high");
+    expect(normalizeMatterhornReasoningEffort("minimal")).toBe("minimal");
+    expect(normalizeMatterhornReasoningEffort("turbo")).toBeUndefined();
+    expect(normalizeMatterhornReasoningEffort(null)).toBeUndefined();
   });
 
   test("uses deny-by-default tools and never broadens desk or custom agents", () => {

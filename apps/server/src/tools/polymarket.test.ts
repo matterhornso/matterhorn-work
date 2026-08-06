@@ -22,6 +22,7 @@ import {
   preparePolymarketOrderFromRequest,
   preparePolymarketOrderPreview,
   preparePolymarketSellPreviewFromRequest,
+  sanitizePolymarketSearchQuery,
   validatePolymarketRedactedArtifactEnvelope,
   verifyPolymarketReceipt,
   type PolymarketBookLevel,
@@ -78,6 +79,12 @@ function jsonResponse(payload: unknown, ok = true, status = 200) {
 function mockFetcher(options: { blocked?: boolean } = {}) {
   return async (url: string) => {
     if (url.includes("/api/geoblock")) return jsonResponse({ blocked: options.blocked ?? false, country: "US" });
+    if (url.includes("/public-search")) {
+      const query = new URL(url).searchParams.get("q") ?? "";
+      return jsonResponse(query.includes("definitely not present") ? { events: [] } : {
+        events: [{ id: "evt-ai", title: "AI milestones", description: "AI prediction markets", markets: [AI_MARKET] }],
+      });
+    }
     if (url.includes("/events")) return jsonResponse([{ id: "evt-ai", title: "AI milestones", description: "AI prediction markets", volume: 250000, liquidity: 80000, endDate: "2027-12-31T00:00:00Z", markets: [AI_MARKET] }]);
     if (url.includes("/markets/0xmarket-ai")) return jsonResponse(AI_MARKET);
     if (url.includes("/markets/0xmarket-sports")) return jsonResponse(SPORTS_MARKET);
@@ -128,6 +135,12 @@ describe("Polymarket read/preview safety", () => {
     expect(input.side).toBe("yes");
     expect(input.amountUsdc).toBe(10);
     expect(input.marketId).toBe("0xmarket-ai");
+  });
+
+  test("turns a full order request or public URL into a catalog query", () => {
+    expect(sanitizePolymarketSearchQuery("Prepare a $10 Yes order on the AI bar exam market")).toBe("ai bar exam");
+    expect(sanitizePolymarketSearchQuery("Find active Bitcoin prediction markets")).toBe("bitcoin");
+    expect(sanitizePolymarketSearchQuery("https://polymarket.com/event/ai-bar-exam-2027")).toBe("ai bar exam 2027");
   });
 });
 
@@ -240,6 +253,16 @@ describe("Polymarket chat workflow", () => {
     expect(result.preview?.estimatedShares).toBeGreaterThan(0);
     expect(result.preview?.marketability?.depthSufficient).toBe(true);
     expect(result.preview?.previewSha256).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  test("resolves a named market and prepares its order without an internal market id", async () => {
+    const result = await executePolymarketChatWorkflow(
+      { message: "Prepare a $10 Yes order on the AI bar exam market" },
+      { provider: provider({ blocked: false }) },
+    );
+    expect(result.execution).toBe("unsigned_preview");
+    expect(result.preview?.marketId).toBe("0xmarket-ai");
+    expect(result.preview?.size).toBe(10);
   });
 
   test("geoblock blocked -> blocked_by_compliance with no executable preview", async () => {

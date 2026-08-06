@@ -6,6 +6,10 @@ const script = readFileSync(
   "scripts/matterhorn-product-browser-smoke.mjs",
   "utf8",
 );
+const sessionRoute = readFileSync(
+  "apps/app/src/react-app/shell/session-route.tsx",
+  "utf8",
+);
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 
 assert.ok(
@@ -50,6 +54,7 @@ for (const stageId of [
   "desk_hyperliquid_task_start",
   "desk_polymarket_task_start",
   "desk_sui_task_start",
+  "desk_reviewed_action_chat_handoff",
   "session_direct_link_reload",
   "desk_longevity_workflow_start",
   "activity_summary",
@@ -157,13 +162,18 @@ for (const visibleText of [
 assert.ok(
   script.includes("/api/auth/sign-up/email") &&
     script.includes("/api/den/v1/me") &&
-    script.includes('new URL("/workspaces", serverUrl || origin)') &&
+    script.includes("const apiBase = serverUrl || origin") &&
+    script.includes('new URL("/api/auth/sign-up/email", apiBase)') &&
+    script.includes('new URL("/api/den/v1/me", apiBase)') &&
+    script.includes('new URL("/workspaces", apiBase)') &&
     script.includes("--server-url") &&
     script.includes(
       "Fresh-user workspace provisioning did not return one isolated active workspace.",
     ) &&
     script.includes("--hosted-account") &&
-    script.includes('mode: "fixture-workspace"'),
+    script.includes('mode: "fixture-workspace"') &&
+    script.includes("Hosted identity and tenant") &&
+    script.includes("freshAccount: false"),
   "product browser smoke should explicitly separate fresh hosted-account certification from local fixture coverage",
 );
 assert.ok(
@@ -224,6 +234,11 @@ assert.ok(
   "product browser smoke should recover to workspace Home when a focused desk remains mounted",
 );
 assert.ok(
+  sessionRoute.includes("!publicBetaWeb &&\n        nextWorkspaceId") &&
+    sessionRoute.includes("if (!publicBetaWeb && workspaceId && client)"),
+  "public web must not call the desktop host-only workspace activation route",
+);
+assert.ok(
   script.includes("function isWorkspaceSessionDetailUrl") &&
     script.includes("function isWorkspaceSettingsAiUrl") &&
     script.includes("async function waitForDeskPromptSentEvent") &&
@@ -241,12 +256,44 @@ assert.ok(
   "product browser smoke should prove a desk task either sends a real prompt into a concrete chat session or pauses safely at provider setup without sending work",
 );
 assert.ok(
+  script.includes("verifyReviewedActionChatHandoff") &&
+    script.includes('name: "Prepare in chat"') &&
+    script.includes("matterhorn.session-agents.v1") &&
+    script.includes('entry?.name === "desk.task_launch.draft_saved"') &&
+    script.includes('entry?.name === "session.reviewed_action.staged_from_composer"') &&
+    script.includes("Hyperliquid order prepared") &&
+    script.includes("modelPromptSent: false"),
+  "product browser smoke should prove reviewed actions start as editable session-scoped chat drafts and move to Wallet without model submission",
+);
+assert.ok(
   script.includes("const storageState = await context.storageState()") &&
     script.includes("storageState,") &&
     script.includes("viewport: { width: 390, height: 844 }") &&
     script.includes('getByTestId("session-composer-shell")') &&
-    script.includes("directSessionReloadUrl"),
-  "product browser smoke should prove persisted chat URLs and authentication survive a fresh mobile browser context",
+    script.includes("directSessionReloadUrl") &&
+    script.includes("persisted-chat-fresh-context-failed.png") &&
+    script.includes("directSessionReloadFailure") &&
+    script.includes("window.__matterhorn?.snapshot?.()"),
+  "product browser smoke should prove persisted chat URLs and authentication survive a fresh mobile browser context with actionable failure evidence",
+);
+assert.ok(
+  sessionRoute.includes("const selectedSessionIdRef = useRef<string | null>(selectedSessionId)") &&
+    sessionRoute.includes("const routeSessionId = selectedSessionIdRef.current") &&
+    sessionRoute.includes(
+      "[loadWorkspaceSessionsInBackground, markBootRouteReady, routeWorkspaceId]",
+    ),
+  "chat navigation should not restart the workspace bootstrap effect",
+);
+assert.ok(
+  sessionRoute.includes(
+    "const effectiveLoading = loading && (!client || !selectedWorkspace)",
+  ),
+  "an already-connected workspace should not hide the chat composer behind stale route loading",
+);
+assert.ok(
+  sessionRoute.includes("if (!selectedSessionKnown && !selectedSessionPending)") &&
+    !sessionRoute.includes("sessionOwnedByOtherWorkspace"),
+  "a chat confirmed in the selected workspace should render even when an authorized workspace alias exposes the same session id",
 );
 assert.ok(
   script.includes("async function assertNoVisible") &&

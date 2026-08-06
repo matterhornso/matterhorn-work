@@ -46,6 +46,10 @@ describe("public Beta web deployment", () => {
   });
 
   test("uses cookie-backed Cloud sign-in without accepting desktop handoff links", () => {
+    const appEntry = readFileSync(
+      new URL("../src/index.react.tsx", import.meta.url),
+      "utf8",
+    );
     const den = readFileSync(
       new URL("../src/app/lib/den.ts", import.meta.url),
       "utf8",
@@ -66,6 +70,10 @@ describe("public Beta web deployment", () => {
     expect(den).toContain('target.searchParams.set("returnTo", `${window.location.origin}/onboarding`)');
     expect(den).toContain('credentials: "include"');
     expect(den).toContain("Browser Cloud auth is cookie-backed");
+    expect(appEntry).toContain('const denModule = await import("./app/lib/den")');
+    expect(appEntry).toContain(
+      "await denModule.setDenBootstrapConfig(publicCloudConfig)",
+    );
     expect(remoteLinks).toContain("stripRemoteConnectQuery");
     expect(remoteLinks).toContain("if (isPublicBetaWebDeployment())");
     expect(sessionRoute).toContain("onConfirmRemote={publicBetaWeb ? undefined : handleCreateRemoteWorkspace}");

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import { reviewedActionHandoffFromComposer } from "../src/react-app/domains/session/workflows/reviewed-action-command";
+import {
+  reviewedActionHandoffFromComposer,
+  reviewedActionPreparedChatText,
+} from "../src/react-app/domains/session/workflows/reviewed-action-command";
 
 describe("reviewed action composer commands", () => {
   it("stages a bounded Hyperliquid market order on testnet by default", () => {
@@ -227,5 +230,15 @@ describe("reviewed action composer commands", () => {
 
   it("does not infer a financial protocol outside a matching desk", () => {
     expect(reviewedActionHandoffFromComposer("buy 1 BTC", "blank")).toBeNull();
+  });
+
+  it("describes the prepared action and makes wallet approval explicit in chat", () => {
+    const handoff = reviewedActionHandoffFromComposer("buy 0.001 BTC", "hyperliquid");
+    expect(handoff).not.toBeNull();
+    const text = reviewedActionPreparedChatText(handoff!);
+    expect(text).toContain("Hyperliquid order prepared");
+    expect(text).toContain("Buy 0.001 BTC");
+    expect(text).toContain("open Wallet panel");
+    expect(text).toContain("Nothing is submitted until you approve it in your wallet");
   });
 });

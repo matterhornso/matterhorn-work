@@ -103,7 +103,8 @@ assert.ok(
   "generated-media smoke launcher should keep the no-secret/no-custody boundary visible",
 );
 assert.ok(
-  script.includes("VITE_MATTERHORN_WORK_URL") &&
+  script.includes("VITE_MATTERHORN_DEV_API_TARGET") &&
+    script.includes("VITE_MATTERHORN_WORK_URL") &&
     script.includes("VITE_MATTERHORN_WORK_TOKEN") &&
     script.includes("VITE_MATTERHORN_WORK_FORCE_SETTINGS"),
   "generated-media smoke launcher should wire the app to the local Matterhorn server",

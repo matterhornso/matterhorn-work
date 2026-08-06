@@ -61,8 +61,33 @@ assert.match(localDev, /"--cors",\s*"loopback"/, "dev:matterhorn-local should pa
 assert.ok(!/"--cors",\s*"\*"/.test(localDev), "dev:matterhorn-local must not pass wildcard CORS");
 
 const headlessWebDev = readFileSync("scripts/dev-headless-web.ts", "utf8");
+const appViteConfig = readFileSync("apps/app/vite.config.ts", "utf8");
 assert.match(headlessWebDev, /"--cors",\s*"loopback"/, "dev:headless-web should pass --cors loopback");
 assert.ok(!/"--cors",\s*"\*"/.test(headlessWebDev), "dev:headless-web must not pass wildcard CORS");
+assert.ok(
+  headlessWebDev.includes("VITE_MATTERHORN_DEV_API_TARGET") &&
+    headlessWebDev.includes("openworkUrl"),
+  "dev:headless-web should proxy same-origin API requests to the server instance it starts",
+);
+assert.ok(
+  headlessWebDev.includes("VITE_MATTERHORN_DEPLOYMENT") &&
+    headlessWebDev.includes('process.env.VITE_MATTERHORN_DEPLOYMENT ?? "web"') &&
+    headlessWebDev.includes("VITE_MATTERHORN_PUBLIC_BETA") &&
+    headlessWebDev.includes('process.env.VITE_MATTERHORN_PUBLIC_BETA ?? "1"'),
+  "dev:headless-web should compile the app with public web deployment boundaries",
+);
+for (const route of ['"/api"', '"/workspaces"', '"/opencode"']) {
+  assert.ok(
+    appViteConfig.includes(`${route}: sameOriginMatterhornProxy`),
+    `Vite should proxy the authenticated public-web route ${route}`,
+  );
+}
+assert.ok(
+  appViteConfig.includes('"/workspace": sameOriginWorkspaceProxy') &&
+    appViteConfig.includes('req.method === "HEAD"') &&
+    appViteConfig.includes('req.headers.accept?.includes("text/html")'),
+  "Vite should proxy workspace APIs without intercepting workspace page navigation",
+);
 
 const generatedMediaDev = readFileSync("scripts/dev-generated-media-smoke.mjs", "utf8");
 assert.match(generatedMediaDev, /"--cors",\s*"loopback"/, "generated media smoke should pass --cors loopback");
