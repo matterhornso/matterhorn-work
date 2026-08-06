@@ -18,11 +18,12 @@ export function shouldGatePublicWebEntry(input: {
   requireSignin: boolean;
   pathname: string;
 }): boolean {
-  return (
-    input.publicBetaWeb &&
-    input.requireSignin &&
-    !isPublicTrustPath(input.pathname)
-  );
+  // Hosted workspaces are always account-scoped. Do not make the client-side
+  // auth boundary depend on an optional build flag: a missing flag must never
+  // expose the workspace shell or start authenticated API requests. The flag
+  // remains part of the input because desktop/public trust status surfaces use
+  // the same configuration object.
+  return input.publicBetaWeb && !isPublicTrustPath(input.pathname);
 }
 
 export const MATTERHORN_SUPPORT_EMAIL = "updates@matterhorn.so";

@@ -20,7 +20,10 @@ import { ArchitectureMismatchGate } from "./architecture-mismatch-gate";
 import { BootStateProvider } from "./boot-state";
 import { DesktopRuntimeBoot } from "./desktop-runtime-boot";
 import { startDebugLogger, stopDebugLogger } from "./debug-logger";
-import { resolveMatterhornConnection } from "./matterhorn-connection";
+import {
+  resolveForcedWebConnectionFromEnv,
+  resolveMatterhornConnection,
+} from "./matterhorn-connection";
 import { ReloadCoordinatorProvider } from "./reload-coordinator";
 import { LazyWalletRuntimeProvider } from "./LazyWalletRuntimeProvider";
 
@@ -31,6 +34,21 @@ function resolveDefaultServerUrl(): string {
   // its own origin. It must never inherit a local API URL or browser token.
   if (isPublicBetaWebDeployment() && typeof window !== "undefined") {
     return `${window.location.origin}/opencode`;
+  }
+
+  const forcedLocalConnection = resolveForcedWebConnectionFromEnv(
+    import.meta.env as Record<string, unknown>,
+    {
+      desktop: false,
+      publicBetaWeb: false,
+      browserOrigin:
+        typeof window !== "undefined" && /^https?:$/.test(window.location.protocol)
+          ? window.location.origin
+          : undefined,
+    },
+  );
+  if (forcedLocalConnection) {
+    return `${forcedLocalConnection.normalizedBaseUrl}/opencode`;
   }
 
   const matterhornUrl =

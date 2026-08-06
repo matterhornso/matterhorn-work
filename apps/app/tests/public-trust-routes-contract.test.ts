@@ -68,7 +68,7 @@ describe("public trust routes", () => {
       publicBetaWeb: true,
       requireSignin: false,
       pathname: "/session",
-    })).toBe(false);
+    })).toBe(true);
   });
 
   test("keeps trust pages outside the forced sign-in block", () => {

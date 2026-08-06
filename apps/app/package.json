@@ -10,7 +10,7 @@
     "build": "vite build",
     "dev:web": "OPENWORK_DEV_MODE=1 vite",
     "prebuild:web": "pnpm --dir ../../packages/ui build",
-    "build:web": "vite build",
+    "build:web": "node scripts/build-web.mjs",
     "preview": "vite preview",
     "pretypecheck": "pnpm --dir ../../packages/ui build",
     "typecheck": "tsc -p tsconfig.json --noEmit",

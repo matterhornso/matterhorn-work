@@ -27,6 +27,12 @@ const sameOriginWorkspaceProxy = {
     return isDocumentRequest ? (req.url ?? "/") : undefined;
   },
 };
+const sameOriginProxy = {
+  "/api": sameOriginMatterhornProxy,
+  "/workspaces": sameOriginMatterhornProxy,
+  "/workspace": sameOriginWorkspaceProxy,
+  "/opencode": sameOriginMatterhornProxy,
+};
 const allowedHosts = new Set<string>();
 const envAllowedHosts = process.env.VITE_ALLOWED_HOSTS ?? "";
 
@@ -129,12 +135,10 @@ export default defineConfig({
     port: devPort,
     strictPort: true,
     ...(allowedHosts.size > 0 ? { allowedHosts: Array.from(allowedHosts) } : {}),
-    proxy: {
-      "/api": sameOriginMatterhornProxy,
-      "/workspaces": sameOriginMatterhornProxy,
-      "/workspace": sameOriginWorkspaceProxy,
-      "/opencode": sameOriginMatterhornProxy,
-    },
+    proxy: sameOriginProxy,
+  },
+  preview: {
+    proxy: sameOriginProxy,
   },
   build: {
     target: "esnext",

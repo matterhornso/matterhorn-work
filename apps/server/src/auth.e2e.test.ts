@@ -166,6 +166,27 @@ describe("public account authentication", () => {
     expect(setCookie).toContain("Secure");
     const cookie = sessionCookie(signup.response);
 
+    const anonymousSession = await jsonRequest(
+      first.base,
+      "/api/den/v1/session",
+    );
+    expect(anonymousSession.response.status).toBe(200);
+    expect(anonymousSession.payload).toEqual({ authenticated: false });
+
+    const authenticatedSession = await jsonRequest(
+      first.base,
+      "/api/den/v1/session",
+      { cookie },
+    );
+    expect(authenticatedSession.response.status).toBe(200);
+    expect(authenticatedSession.payload.authenticated).toBe(true);
+    expect(authenticatedSession.payload.user.email).toBe(
+      "new.user@example.com",
+    );
+    expect(authenticatedSession.response.headers.get("cache-control")).toBe(
+      "no-store",
+    );
+
     const me = await jsonRequest(first.base, "/api/den/v1/me", { cookie });
     expect(me.response.status).toBe(200);
     expect(me.payload.user.email).toBe("new.user@example.com");

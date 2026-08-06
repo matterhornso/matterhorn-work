@@ -6244,6 +6244,21 @@ function createRoutes(
     return response;
   });
 
+  addRoute(routes, "GET", "/api/den/v1/session", "none", async ({ request }) => {
+    const token = matterhornSessionToken(request);
+    const session = token ? authStore.getSession(token) : null;
+    const response = jsonResponse(
+      session
+        ? {
+            authenticated: true,
+            user: session.user,
+          }
+        : { authenticated: false },
+    );
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
   addRoute(routes, "GET", "/api/den/v1/me", "none", async ({ request }) => {
     const session = requireMatterhornAuthSession(request, authStore);
     return jsonResponse({
