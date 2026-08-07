@@ -4,6 +4,8 @@ Date: 2026-08-07
 
 Branch: `codex/task-first-redesign`
 
+Candidate commit: `74eeea49e33e03c81559614ce7b3c7e6c3a75e0c`
+
 Candidate mode: `VITE_MATTERHORN_DEPLOYMENT=web`, `VITE_MATTERHORN_PUBLIC_BETA=1`
 
 ## Decision
@@ -32,7 +34,7 @@ No local P0 or P1 product blocker remains. The exact hosted account, production 
 | Responsive and accessibility contracts | PASS | Live 320×568, 375×812, 768×1024, 1024×768, and 1440×900 checks show no horizontal overflow. Mobile controls, safe areas, reduced motion, virtual-keyboard resizing, landmarks, focus, and active-page semantics are covered. Physical iOS/Android keyboard, notch-inset, VoiceOver, and TalkBack checks remain release-device evidence rather than source blockers. |
 | Public Beta safety | PASS | Reviewed actions fail closed across Home cards, rail labels, blank-session launchers, focused desks, existing-chat protocol rails, and in-chat workflow stages/inputs/outputs. Protocol queries render a compact read-only rail instead of mounting wallet execution. Ten-stage platform safety gate passes. |
 | Production build and budgets | PASS | Minified public-Beta build and the executable bundle gate pass. Session is 150,842B and Settings 255,811B; signed-out JS is 431,194B; EVM/Sui/Bittensor wallet families are 480,855B/411,655B/896,388B. Initial Session and Settings graphs contain no wallet runtime, Shiki, translations, editor, or spreadsheet chunks. |
-| Hosted release | PENDING | Requires exact deployed URL/account, strict hosted task completion, production HTTPS/CORS/security headers, two-account isolation, mobile/tablet visual capture, and rollback/monitoring evidence. |
+| Hosted release | PUBLIC BOUNDARY PASS; AUTH PENDING | Exact deployment, HTTPS/security headers, public entry at 375/768/desktop, and production Lighthouse pass. Authenticated task completion, backend exact-origin CORS/health, two-account isolation, and rollback/monitoring still require Cloud configuration and acceptance accounts. |
 
 ## Automated evidence
 
@@ -89,7 +91,7 @@ Run these against the exact deployment before GO:
 2. Two-account session/workspace isolation on the managed engine.
 3. Production HTTPS, exact-origin CORS, CSP/security headers, monitoring, backup/restore, and rollback checks.
 4. Exact hosted authenticated captures of Home, every desk, active/completed agent states, MCP rail, Settings, and public entry, plus physical iOS/Android keyboard and screen-reader checks.
-5. A production Lighthouse run on the deployed minified artifact. Do not use the Vite development fixture as performance evidence.
+5. Rerun production Lighthouse when final Cloud/sign-in configuration changes the public artifact. The unchanged signed-out boundary measured mobile 0.98 and desktop 0.99 performance, 1.00 accessibility, LCP 1.8s/0.6s, TBT 0ms, and CLS 0.003/0.009 on `b8d4a024`; the corrective `74eeea49` candidate changes authenticated desk typing and CI contracts only.
 6. Real supported wallet-provider acceptance only if reviewed actions are enabled for that release; they remain hidden in the current public-Beta candidate.
 
 ## Non-blocking follow-up
