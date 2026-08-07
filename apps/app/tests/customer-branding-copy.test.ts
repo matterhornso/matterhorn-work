@@ -97,6 +97,16 @@ describe("customer-facing Matterhorn Desks branding", () => {
     expect(desktopMain).toContain('".config", "matterhorn-work", "desktop-bootstrap.json"');
   });
 
+  test("publishes a useful llms.txt discovery document", () => {
+    const llms = readRepoFile("apps/app/public/llms.txt");
+
+    expect(llms).toStartWith("# Matterhorn Desks\n");
+    expect(llms).toContain("## Public resources");
+    expect(llms).toContain("https://github.com/matterhornso/matterhorn-work/tree/dev/docs");
+    expect(llms).toContain("Reviewed financial actions are fail-closed");
+    expect(llms).toContain("does not hold private keys");
+  });
+
   test("uses the Matterhorn UI MCP package in customer setup and desktop launch commands", () => {
     const constants = readRepoFile("apps/app/src/app/constants.ts");
     const extensionDetails = readRepoFile(
