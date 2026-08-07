@@ -113,9 +113,9 @@ function routeNeedsWalletRuntime(
   }
 
   if (/(?:^|\/)settings\/wallet(?:\/|$)/.test(path)) return true;
-  return WALLET_RUNTIME_PANELS.has(
-    new URLSearchParams(search).get("panel")?.toLowerCase() ?? "",
-  );
+  const panel = new URLSearchParams(search).get("panel")?.toLowerCase() ?? "";
+  if (publicBetaWeb && panel !== "wallet") return false;
+  return WALLET_RUNTIME_PANELS.has(panel);
 }
 
 export function AppProviders({ children }: AppProvidersProps) {

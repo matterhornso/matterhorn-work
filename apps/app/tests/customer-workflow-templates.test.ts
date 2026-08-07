@@ -116,7 +116,7 @@ describe("customer workflow template launch cards", () => {
       ].join(" ");
       expect(card.title).toMatch(/^Open .+ desk$/);
       expect(card.statusLabel).toBe("Read-only Beta");
-      expect(card.safetySummary).toContain("reviewed actions hidden");
+      expect(card.safetySummary).toContain("Public Beta");
       expect(card.prompt).toContain("Keep the task read-only");
       expect(visibleAndAccessibleCopy).not.toMatch(
         /transfer|stake|unstake|place order|buy, sell|cancel action|signing|wallet-approved|review & submit/i,

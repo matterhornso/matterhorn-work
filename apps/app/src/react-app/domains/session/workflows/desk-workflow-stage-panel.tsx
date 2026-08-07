@@ -1,9 +1,10 @@
 import { Check, ChevronRight, FileOutput, FileText, Info, PencilLine } from "lucide-react";
 import { t } from "@/i18n";
+import { MATTERHORN_LAUNCH_FEATURES } from "@/app/lib/launch-features";
 import type { MatterhornWorkflowArtifact, MatterhornWorkflowManifest, MatterhornWorkflowStep } from "@matterhorn-work/types/matterhorn-workflows";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { deskToneStyle, getCustomerProtocolDeskVisual, getDeskWorkflowManifest, type CustomerProtocolDeskId } from "./protocol-desk-ui";
+import { deskToneStyle, getCustomerProtocolDeskVisualForLaunch, getDeskWorkflowManifest, type CustomerProtocolDeskId } from "./protocol-desk-ui";
 import { ProtocolDeskMark } from "./protocol-brand-logo";
 import { WorkflowStageCard, type WorkflowStageStatus } from "./workflow-stage-card";
 
@@ -39,6 +40,39 @@ const STATUS_TONE: Record<string, string> = {
   failed: "text-rose-300",
   cancelled: "text-dls-secondary",
 };
+
+const PUBLIC_BETA_VISIBLE_STAGE_IDS: Partial<Record<CustomerProtocolDeskId, ReadonlySet<string>>> = {
+  bittensor: new Set([
+    "stage_1_ss58_context",
+    "stage_2_balance_readiness",
+    "stage_3_subnet_discovery",
+    "stage_4_validator_comparison",
+    "stage_7_receipt_evidence",
+  ]),
+  hyperliquid: new Set([
+    "stage_1_market_read",
+    "stage_2_account_exposure",
+    "stage_3_opportunity_research",
+  ]),
+  polymarket: new Set([
+    "stage_1_market_summary",
+    "stage_2_compliance_check",
+    "stage_3_outcome_research",
+  ]),
+  sui: new Set(["stage_1_account_context", "stage_4_receipt_evidence"]),
+};
+
+export function filterDeskWorkflowStepsForLaunch(
+  deskId: CustomerProtocolDeskId | string,
+  steps: MatterhornWorkflowStep[],
+  reviewedActions: boolean,
+): MatterhornWorkflowStep[] {
+  if (reviewedActions) return steps;
+  const publicBetaStageIds = PUBLIC_BETA_VISIBLE_STAGE_IDS[deskId as CustomerProtocolDeskId];
+  return publicBetaStageIds
+    ? steps.filter((step) => publicBetaStageIds.has(step.id))
+    : steps;
+}
 
 function cardStatus(
   index: number,
@@ -115,17 +149,29 @@ export function DeskWorkflowStagePanel({
   onStartStage,
   onJotNote,
 }: DeskWorkflowStagePanelProps) {
-  const visual = getCustomerProtocolDeskVisual(deskId);
+  const visual = getCustomerProtocolDeskVisualForLaunch(
+    deskId,
+    MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+  );
   const manifest = getDeskWorkflowManifest(deskId);
 
   if (!visual || !manifest) {
     return null;
   }
 
-  const requiredInputs = manifest.inputPrompts.filter((input) => input.required);
-  const optionalInputs = manifest.inputPrompts.filter((input) => !input.required);
+  const visibleSteps = filterDeskWorkflowStepsForLaunch(
+    deskId,
+    manifest.steps,
+    MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+  );
+  const visibleInputIds = new Set(visibleSteps.flatMap((step) => step.inputPromptIds));
+  const visibleArtifactIds = new Set(visibleSteps.flatMap((step) => step.outputArtifactIds));
+  const visibleInputs = manifest.inputPrompts.filter((input) => visibleInputIds.has(input.id));
+  const visibleArtifacts = manifest.generatedArtifacts.filter((artifact) => visibleArtifactIds.has(artifact.id));
+  const requiredInputs = visibleInputs.filter((input) => input.required);
+  const optionalInputs = visibleInputs.filter((input) => !input.required);
   const currentStageIndex = currentStageId
-    ? manifest.steps.findIndex((step) => step.id === currentStageId)
+    ? visibleSteps.findIndex((step) => step.id === currentStageId)
     : -1;
   const activeStageIndex = currentStageIndex >= 0 ? currentStageIndex : 0;
   const guidedSequence = presentation === "guided";
@@ -169,7 +215,7 @@ export function DeskWorkflowStagePanel({
           </div>
           <p className="mt-1 text-[12px] leading-5 text-dls-secondary">{visual.agentDescription}</p>
           <p className="mt-1 text-[11px] leading-4 text-dls-muted">
-            {manifest.steps.length} stages
+            {visibleSteps.length} stages
           </p>
         </div>
       </div>
@@ -187,13 +233,13 @@ export function DeskWorkflowStagePanel({
             </div>
             <span className="shrink-0 text-[11px] font-medium text-dls-secondary">
               {taskStatus === "completed"
-                ? `${manifest.steps.length} of ${manifest.steps.length}`
-                : `${activeStageIndex + 1} of ${manifest.steps.length}`}
+                ? `${visibleSteps.length} of ${visibleSteps.length}`
+                : `${activeStageIndex + 1} of ${visibleSteps.length}`}
             </span>
           </div>
         ) : null}
         <div className={guidedSequence ? "space-y-1.5" : "space-y-2"}>
-          {manifest.steps.map((step, index) => {
+          {visibleSteps.map((step, index) => {
             const isCurrent = taskStatus !== "completed" && index === activeStageIndex;
             const rawPrompt = buildStagePrompt(deskId, step, manifest);
             const stepStatus = cardStatus(index, currentStageIndex, taskStatus);
@@ -299,7 +345,7 @@ export function DeskWorkflowStagePanel({
           <span className="text-dls-secondary transition-transform group-open:rotate-90" aria-hidden="true">{">"}</span>
         </summary>
         <ul className="mt-2 grid gap-1 sm:grid-cols-2">
-          {manifest.generatedArtifacts.map((artifact) => (
+          {visibleArtifacts.map((artifact) => (
             <li key={artifact.id} className="flex items-start gap-1.5 text-[11px] leading-4 text-dls-secondary">
               <FileText className="mt-0.5 size-3 shrink-0 text-dls-muted" />
               <span>
@@ -340,7 +386,7 @@ export function DeskWorkflowStagePanel({
             <Button
               type="button"
               onClick={() => {
-                const stage = manifest.steps.find((s) => s.id === currentStageId);
+                const stage = visibleSteps.find((s) => s.id === currentStageId);
                 if (stage) onStartStage(stage.id, buildStagePrompt(deskId, stage, manifest));
               }}
               variant="secondary"

@@ -156,6 +156,7 @@ import {
 import {
   deskToneStyle,
   getCustomerProtocolDeskVisual,
+  getCustomerProtocolDeskVisualForLaunch,
 } from "../workflows/protocol-desk-ui";
 import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
@@ -240,7 +241,10 @@ function deriveMatterhornDeskMode(chunks: string[]): MatterhornDeskMode | null {
 }
 
 function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
-  const copy = getCustomerProtocolDeskVisual(mode);
+  const copy = getCustomerProtocolDeskVisualForLaunch(
+    mode,
+    MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+  );
   if (!copy) return null;
   const iconHint = copy.id as CustomerWorkflowIconHint;
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint];
@@ -300,7 +304,10 @@ function MatterhornDeskFocusedEmptyState({
   mode: MatterhornDeskMode;
   onUsePrompt: (prompt: string) => void | Promise<void>;
 }) {
-  const visual = getCustomerProtocolDeskVisual(mode);
+  const visual = getCustomerProtocolDeskVisualForLaunch(
+    mode,
+    MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+  );
   const agent = getMatterhornDeskAgent(mode);
   const iconHint = (visual?.id ?? mode) as CustomerWorkflowIconHint;
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint] ?? FileText;

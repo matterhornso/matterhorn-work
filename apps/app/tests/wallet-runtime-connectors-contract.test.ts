@@ -55,6 +55,7 @@ describe("wallet runtime connector contract", () => {
     expect(providersSource).toContain("WALLET_RUNTIME_PANELS");
     expect(providersSource).toContain('settings\\/wallet');
     expect(providersSource).toContain('new URLSearchParams(search).get("panel")');
+    expect(providersSource).toContain('if (publicBetaWeb && panel !== "wallet") return false');
     expect(providersSource).toContain("<WalletProvider>");
     expect(providersSource).toContain("<LazyWalletRuntimeProvider");
     expect(appEntrySource).toContain(

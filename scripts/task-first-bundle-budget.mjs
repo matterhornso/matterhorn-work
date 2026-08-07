@@ -109,7 +109,7 @@ export function auditTaskFirstBundle(distDirectory) {
   }
 
   const routeMetrics = {};
-  for (const prefix of ["session-route", "settings-route"]) {
+  for (const prefix of ["session-route", "session-page", "settings-route"]) {
     const chunk = findChunk(assetNames, prefix);
     if (!chunk) {
       failures.push(`Expected exactly one ${prefix} production chunk.`);
@@ -134,7 +134,7 @@ export function auditTaskFirstBundle(distDirectory) {
   }
 
   const workspaceImports = {};
-  for (const prefix of ["session-route", "settings-route"]) {
+  for (const prefix of ["session-route", "session-page", "settings-route"]) {
     const chunk = routeMetrics[prefix]?.name;
     if (!chunk) continue;
     const graph = staticChunkGraph(assetsDir, [chunk]);

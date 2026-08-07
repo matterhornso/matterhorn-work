@@ -17,6 +17,7 @@ function createFixture() {
   writeFileSync(resolve(assets, "vendor-react-fixture.js"), "export{};");
   writeFileSync(resolve(assets, "authenticated-app-fixture.js"), "export{};");
   writeFileSync(resolve(assets, "session-route-fixture.js"), 'import "./session-shared-fixture.js";');
+  writeFileSync(resolve(assets, "session-page-fixture.js"), 'import "./session-shared-fixture.js";');
   writeFileSync(resolve(assets, "session-shared-fixture.js"), 'import "./authenticated-app-fixture.js";');
   writeFileSync(resolve(assets, "settings-route-fixture.js"), 'import "./authenticated-app-fixture.js";');
   writeFileSync(resolve(assets, "vendor-wallet-evm-fixture.js"), "export{};");

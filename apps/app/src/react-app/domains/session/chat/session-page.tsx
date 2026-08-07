@@ -135,6 +135,7 @@ import {
 import {
   CUSTOMER_LAUNCHER_DESK_VISUALS,
   getCustomerProtocolDeskVisual,
+  getCustomerProtocolDeskVisualForLaunch,
   getDeskWorkflowManifest,
   type CustomerProtocolDeskId,
 } from "../workflows/protocol-desk-ui";
@@ -327,13 +328,18 @@ type HomeCapabilityStatusItem = {
 };
 
 function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
-  return CUSTOMER_LAUNCHER_DESK_VISUALS.map((visual) => ({
-    id: visual.id as CustomerWorkflowIconHint,
-    title: visual.displayName,
-    statusLabel: visual.statusLabel,
-    summary: visual.shortDescription,
-    proof: visual.safetySummary,
-  }));
+  return CUSTOMER_LAUNCHER_DESK_VISUALS.map((visual) =>
+    getCustomerProtocolDeskVisualForLaunch(
+      visual.id,
+      MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+    ) ?? visual
+  ).map((visual) => ({
+      id: visual.id as CustomerWorkflowIconHint,
+      title: visual.displayName,
+      statusLabel: visual.statusLabel,
+      summary: visual.shortDescription,
+      proof: visual.safetySummary,
+    }));
 }
 
 function homeWalletRuntime(): MatterhornWalletRuntime {
@@ -826,7 +832,10 @@ function ProtocolDeskEmptyState({
   ) => boolean | void | Promise<boolean | void>;
   onBackHome: () => void;
 }) {
-  const visual = getCustomerProtocolDeskVisual(panel);
+  const visual = getCustomerProtocolDeskVisualForLaunch(
+    panel,
+    MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+  );
   const prompts: readonly MatterhornDeskTaskStarter[] = MATTERHORN_DESK_TASK_STARTERS[panel];
   const taskGroups = groupMatterhornDeskTaskStarters(prompts, {
     reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
@@ -1180,6 +1189,71 @@ function ProtocolDeskEmptyState({
             </Button>
           </div>
         ) : null}
+      </div>
+    </section>
+  );
+}
+
+function PublicBetaProtocolRail({
+  panel,
+  onStartTask,
+}: {
+  panel: VenueSidePanel;
+  onStartTask: (prompt: string, title: string) => void;
+}) {
+  const visual = getCustomerProtocolDeskVisualForLaunch(panel, false);
+  const taskGroups = recommendedMatterhornDeskTaskStarterGroups(
+    panel,
+    groupMatterhornDeskTaskStarters(MATTERHORN_DESK_TASK_STARTERS[panel], {
+      reviewedActions: false,
+    }),
+  );
+  const recommendedTasks = taskGroups.flatMap((group) => group.starters).slice(0, 3);
+
+  return (
+    <section
+      className="flex h-full min-h-0 flex-col overflow-y-auto px-4 py-5"
+      style={deskToneStyle(panel)}
+      aria-label={`${visual?.displayName ?? panel} read-only Beta desk`}
+    >
+      <div className="flex items-start gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
+          <ProtocolLogo venue={panel} size={34} />
+        </span>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-semibold text-dls-text">
+              {visual?.displayName ?? panel} desk
+            </h2>
+            <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+              Read-only Beta
+            </span>
+          </div>
+          <p className="mt-1.5 text-xs leading-5 text-dls-secondary">
+            {visual?.shortDescription}
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] px-3 py-2.5 text-xs leading-5 text-dls-secondary">
+        Research, monitoring, and public evidence are available. Transaction preparation and wallet actions stay hidden in Public Beta.
+      </div>
+      <div className="mt-5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-dls-muted">
+          Start here
+        </p>
+        <div className="mt-2 space-y-2">
+          {recommendedTasks.map((task) => (
+            <button
+              key={task.id}
+              type="button"
+              className="w-full rounded-lg bg-dls-surface-muted/[0.16] px-3 py-3 text-left transition-colors hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+              onClick={() => onStartTask(task.prompt, task.title)}
+            >
+              <span className="block text-xs font-semibold text-dls-text">{task.title}</span>
+              <span className="mt-1 block text-[11px] leading-4 text-dls-secondary">{task.detail}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -2291,6 +2365,16 @@ export function SessionPage(props: SessionPageProps) {
         onClose={closeRightPane}
       />
     )
+  ) : isVenueSidePanel(visibleSidePanel) && !MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions ? (
+    <PublicBetaProtocolRail
+      panel={visibleSidePanel}
+      onStartTask={(prompt, title) =>
+        primeProtocolRailPrompt(visibleSidePanel, {
+          prompt,
+          title,
+          source: "public-beta-protocol-rail",
+        })}
+    />
   ) : visibleSidePanel === "sui" ? (
     <div
       data-testid="protocol-side-panel-scroll-root"
@@ -3467,7 +3551,10 @@ export function SessionPage(props: SessionPageProps) {
               Desks
             </div>
             {VENUE_SIDE_PANELS.map((panel) => {
-              const visual = getCustomerProtocolDeskVisual(panel);
+              const visual = getCustomerProtocolDeskVisualForLaunch(
+                panel,
+                MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+              );
               const item = {
                 panel,
                 label: visual?.displayName ?? panel,

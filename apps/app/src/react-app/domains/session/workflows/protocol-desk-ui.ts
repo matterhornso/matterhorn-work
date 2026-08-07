@@ -248,6 +248,80 @@ export function getCustomerProtocolDeskVisual(id: CustomerProtocolDeskId | strin
   };
 }
 
+type PublicBetaProtocolDeskCopy = Pick<
+  CustomerProtocolDeskVisual,
+  | "shortDescription"
+  | "capabilityBullets"
+  | "primaryActions"
+  | "secondaryActions"
+  | "safetyBoundaries"
+  | "safetySummary"
+  | "railTitle"
+  | "sessionBoundary"
+  | "agentDescription"
+>;
+
+const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
+  Record<CustomerProtocolDeskId, PublicBetaProtocolDeskCopy>
+> = {
+  bittensor: {
+    shortDescription: "Read TAO context, compare subnets and validators, and collect public evidence.",
+    capabilityBullets: ["TAO context", "Subnet and validator research", "Watches and evidence"],
+    primaryActions: ["Read public TAO context", "Compare subnets", "Compare validators"],
+    secondaryActions: ["Create a watch", "Save public evidence"],
+    safetyBoundaries: ["Read-only research", "No transaction preparation", "No wallet actions"],
+    safetySummary: "Public Beta is limited to Bittensor research, monitoring, and public evidence.",
+    railTitle: "Bittensor: TAO reads, subnet and validator research, watches, and public evidence",
+    sessionBoundary: "Public Beta keeps this desk read-only. Transaction preparation, staking, transfers, and wallet actions stay hidden.",
+    agentDescription: "Researches public TAO, subnet, and validator context without preparing wallet actions.",
+  },
+  hyperliquid: {
+    shortDescription: "Research markets, exposure, funding, and watch evidence.",
+    capabilityBullets: ["Markets and orderbooks", "Exposure and funding", "Watches and evidence"],
+    primaryActions: ["Read market structure", "Review exposure", "Compare funding"],
+    secondaryActions: ["Create a watch", "Save public evidence"],
+    safetyBoundaries: ["Read-only research", "No order preparation", "No wallet actions"],
+    safetySummary: "Public Beta is limited to Hyperliquid research, monitoring, and public evidence.",
+    railTitle: "Hyperliquid: orderbooks, exposure, funding, watches, and public evidence",
+    sessionBoundary: "Public Beta keeps this desk read-only. Order preparation, trade tickets, and wallet actions stay hidden.",
+    agentDescription: "Researches public market, exposure, and funding context without preparing orders.",
+  },
+  polymarket: {
+    shortDescription: "Research markets, liquidity, compliance context, and watch evidence.",
+    capabilityBullets: ["Market research", "Liquidity and compliance", "Watches and evidence"],
+    primaryActions: ["Research markets", "Review liquidity", "Check compliance context"],
+    secondaryActions: ["Create a watch", "Save public evidence"],
+    safetyBoundaries: ["Read-only research", "No trade preparation", "No wallet actions"],
+    safetySummary: "Public Beta is limited to Polymarket research, monitoring, and public evidence.",
+    railTitle: "Polymarket: markets, liquidity, compliance, watches, and public evidence",
+    sessionBoundary: "Public Beta keeps this desk read-only. Trade preparation, handoffs, and wallet actions stay hidden.",
+    agentDescription: "Researches public markets, liquidity, and compliance context without preparing trades.",
+  },
+  sui: {
+    shortDescription: "Read public Sui account, object, network, and receipt evidence.",
+    capabilityBullets: ["Account and object reads", "Network and fee research", "Receipt evidence"],
+    primaryActions: ["Read account context", "Inspect objects", "Review network context"],
+    secondaryActions: ["Import public receipts", "Save public evidence"],
+    safetyBoundaries: ["Public data only", "No transfer preparation", "No wallet actions"],
+    safetySummary: "Public Beta is limited to public Sui reads, monitoring, and receipt evidence.",
+    railTitle: "Sui: account and object reads, network research, watches, and receipt evidence",
+    sessionBoundary: "Public Beta keeps this desk read-only. Transfer preparation, signing handoffs, and wallet actions stay hidden.",
+    agentDescription: "Researches public Sui account, object, network, and receipt context without preparing transfers.",
+  },
+};
+
+export function getCustomerProtocolDeskVisualForLaunch(
+  id: CustomerProtocolDeskId | string | null | undefined,
+  reviewedActions: boolean,
+): CustomerProtocolDeskVisual | null {
+  const visual = getCustomerProtocolDeskVisual(id);
+  if (!visual || reviewedActions) return visual;
+  const publicBetaCopy = PUBLIC_BETA_PROTOCOL_DESK_COPY[visual.id];
+  return publicBetaCopy
+    ? { ...visual, ...publicBetaCopy, statusLabel: "Read-only Beta" }
+    : visual;
+}
+
 export const CUSTOMER_PROTOCOL_DESK_VISUALS: CustomerProtocolDeskVisual[] = CUSTOMER_PROTOCOL_DESK_IDS
   .map((id) => getCustomerProtocolDeskVisual(id))
   .filter((visual): visual is CustomerProtocolDeskVisual => Boolean(visual));

@@ -30,17 +30,17 @@ No local P0 or P1 product blocker remains. The exact hosted account, production 
 | Settings hierarchy | PASS | Overview is the single page `h1`; Profile and Workspace health are subordinate sections; active navigation exposes `aria-current`. |
 | Agent progress lifecycle | PASS | A desk task immediately renders `Working on <task>` with an activity orb, retains partial output, exposes success/error/correction/revert/feedback/saved-output states, and clears active motion on terminal output. |
 | Responsive and accessibility contracts | PASS | Live 320×568, 375×812, 768×1024, 1024×768, and 1440×900 checks show no horizontal overflow. Mobile controls, safe areas, reduced motion, virtual-keyboard resizing, landmarks, focus, and active-page semantics are covered. Physical iOS/Android keyboard, notch-inset, VoiceOver, and TalkBack checks remain release-device evidence rather than source blockers. |
-| Public Beta safety | PASS | Reviewed actions fail closed in both focused desk catalogs and blank-session workflow cards. Public Beta renders read-only research/evidence copy and prompts, with no wallet-action group or preparation CTA. Ten-stage platform safety gate passes. |
+| Public Beta safety | PASS | Reviewed actions fail closed across Home cards, rail labels, blank-session launchers, focused desks, existing-chat protocol rails, and in-chat workflow stages/inputs/outputs. Protocol queries render a compact read-only rail instead of mounting wallet execution. Ten-stage platform safety gate passes. |
 | Production build and budgets | PASS | Minified public-Beta build and the executable bundle gate pass. Session is 150,842B and Settings 255,811B; signed-out JS is 431,194B; EVM/Sui/Bittensor wallet families are 480,855B/411,655B/896,388B. Initial Session and Settings graphs contain no wallet runtime, Shiki, translations, editor, or spreadsheet chunks. |
 | Hosted release | PENDING | Requires exact deployed URL/account, strict hosted task completion, production HTTPS/CORS/security headers, two-account isolation, mobile/tablet visual capture, and rollback/monitoring evidence. |
 
 ## Automated evidence
 
-- App suite: **822 passed, 0 failed**, 111 files, 5,314 expectations.
+- App suite: **824 passed, 0 failed**, 112 files, 5,347 expectations.
 - App typecheck: **PASS**.
 - Matterhorn platform safety gate: **10/10 stages PASS**.
 - Bundle-budget contract and production graph gate: **PASS**.
-- Focused public-Beta launch-policy and starter suite: **28 passed, 0 failed**.
+- Focused public-Beta launch-policy, surface, starter, and wallet-runtime suite: **43 passed, 0 failed**.
 - Focused responsive/accessibility suite: **60 passed, 0 failed**.
 - Public-Beta production web build: **PASS**.
 - Live delayed-response fixture:
@@ -56,6 +56,7 @@ No local P0 or P1 product blocker remains. The exact hosted account, production 
 |---|---:|---:|---:|
 | Signed-out JS graph | 431,194B | 431,194B | <650,000B |
 | Session route | 784,121B | 150,842B | <600,000B |
+| Immediately loaded Session page | not separately enforced | 568,635B | <600,000B |
 | Settings route | 814,160B | 255,811B | <600,000B |
 | Wallet — EVM | part of 1,795,984B monolith | 480,855B | <900,000B |
 | Wallet — Sui | part of 1,795,984B monolith | 411,655B | <900,000B |
@@ -73,6 +74,7 @@ The heavy wallet runtime now activates only for wallet/protocol destinations or 
 - [Settings Overview](screenshots/06-settings-overview-desktop.png)
 - [Completed agent task](screenshots/07-agent-task-desktop.png)
 - [Active Matterhorn thinking state](screenshots/08-agent-thinking-desktop.png)
+- [Public-Beta read-only protocol rail](screenshots/09-public-beta-read-only-rail.png)
 - [320px mobile starter acceptance](../../ui-ux-audit-2026-08-07/responsive-a11y/starter-cards-mobile-320-m5-fixed.png)
 
 ## Third-party design primitive
