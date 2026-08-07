@@ -56,9 +56,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+      - name: Prove the lock-only RSA advisory is unreachable
+        run: |
+          if cargo tree --locked --target all --manifest-path examples/microsandbox-openwork-rust/Cargo.toml -i rsa --prefix none 2>/dev/null | grep -q '^rsa v'; then
+            echo "RUSTSEC-2023-0071 is reachable and may not be ignored."
+            exit 1
+          fi
       - name: Audit Rust dependencies
         uses: rustsec/audit-check@v2.0.0
         with:
+          # SQLx records its inactive MySQL/RSA option in Cargo.lock. The step
+          # above fails if that unpatched crate ever enters a resolved graph.
+          ignore: RUSTSEC-2023-0071
           token: ${{ secrets.GITHUB_TOKEN }}
           working-directory: examples/microsandbox-openwork-rust
       - name: Compile the locked Rust example
