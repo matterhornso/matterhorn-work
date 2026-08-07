@@ -58,6 +58,7 @@ const remoteWorkspaceDiagnostics = read("apps/app/src/react-app/domains/workspac
 const advancedSettings = read("apps/app/src/react-app/domains/settings/pages/advanced-view-sections.tsx");
 const marketplaceSettings = read("apps/app/src/react-app/domains/settings/pages/marketplace-view.tsx");
 const walletSettings = read("apps/app/src/react-app/domains/settings/pages/wallet-view.tsx");
+const walletSettingsRoute = read("apps/app/src/react-app/domains/settings/pages/wallet-settings-route-view.tsx");
 const serverProvider = read("apps/app/src/react-app/kernel/server-provider.tsx");
 const globalSdkProvider = read("apps/app/src/react-app/kernel/global-sdk-provider.tsx");
 const betaGoLiveChecklist = read("docs/handoffs/beta-go-live-first-10-user-checklist.md");
@@ -511,7 +512,7 @@ for (const token of [
   assert.ok(sessionPage.includes(token), `customer desks should use semantic desk tone styling: ${token}`);
 }
 assert.ok(sessionPage.includes("Desks"), "right rail should group protocol and workflow entry points as Desks");
-assert.ok(sessionPage.includes("getCustomerProtocolDeskVisual(panel)"), "right rail should read desk labels from the shared visual manifest");
+assert.ok(sessionPage.includes("getCustomerProtocolDeskVisualForLaunch(panel, false)"), "public-Beta right rail should read fail-closed desk labels from the shared visual manifest");
 assert.ok(sessionPage.includes("visual?.displayName ?? panel"), "right rail should spell out protocol desk names from the manifest");
 assert.ok(sessionPage.includes('getCustomerProtocolDeskVisual("wellness")?.displayName'), "Wellness rail label should come from the shared visual manifest");
 assert.ok(sessionPage.includes("primeProtocolRailPrompt"), "protocol rail prompt helper should remain available for explicit demo handoffs");
@@ -689,7 +690,7 @@ for (const phrase of [
   'activeSidePanel === "wallet"',
   'renderCompactSettingsRail("wallet")',
   'renderCompactSettingsRail("extensions")',
-  '<WalletPanel',
+  '<SessionWalletPanel',
 ]) {
   assert.ok(sessionPage.includes(phrase), `right rail should expose real profile/wallet panels: ${phrase}`);
 }
@@ -713,7 +714,8 @@ assert.equal(extensionsView.includes("post-go-live"), false, "Marketplace tabs s
 assert.ok(extensionsView.includes('<span className="min-w-0 max-w-full truncate">Marketplace</span>'), "embedded Marketplace label should be constrained inside its compact tab");
 assert.ok(settingsSurfaceRoute.includes("compact={props.embedded}"), "embedded settings should tell extensions and MCP views to use compact right-rail layout");
 assert.ok(settingsSurfaceRoute.includes("<CloudAccountView\n            compact={props.embedded}"), "embedded Profile rail should render the compact account surface");
-assert.ok(settingsSurfaceRoute.includes("<WalletSettingsView\n            compact={props.embedded}"), "embedded Wallet rail should render the compact wallet surface");
+assert.ok(settingsSurfaceRoute.includes("<WalletSettingsRouteView\n            compact={props.embedded}"), "embedded Wallet rail should render the lazy wallet route boundary");
+assert.ok(walletSettingsRoute.includes("<WalletSettingsView") && walletSettingsRoute.includes("compact={props.compact}"), "lazy wallet route boundary should render the compact wallet surface");
 for (const phrase of [
   "matterhorn-profile-rail max-w-none gap-6",
   "Matterhorn Cloud",

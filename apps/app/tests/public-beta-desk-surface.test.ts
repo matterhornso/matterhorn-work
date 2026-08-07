@@ -26,8 +26,8 @@ describe("public Beta desk surfaces", () => {
         visual?.sessionBoundary,
         visual?.agentDescription,
         ...(visual?.capabilityBullets ?? []),
-        ...(visual?.primaryActions ?? []),
-        ...(visual?.secondaryActions ?? []),
+        ...(visual?.primaryActions.flatMap((action) => [action.label, action.intent]) ?? []),
+        ...(visual?.secondaryActions.flatMap((action) => [action.label, action.intent]) ?? []),
       ].join(" ");
       expect(visual?.statusLabel).toBe("Read-only Beta");
       expect(copy).not.toMatch(

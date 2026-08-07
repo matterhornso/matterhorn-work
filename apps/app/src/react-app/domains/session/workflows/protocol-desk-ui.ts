@@ -254,12 +254,21 @@ type PublicBetaProtocolDeskCopy = Pick<
   | "capabilityBullets"
   | "primaryActions"
   | "secondaryActions"
-  | "safetyBoundaries"
   | "safetySummary"
   | "railTitle"
   | "sessionBoundary"
   | "agentDescription"
 >;
+
+function publicBetaAction(actionId: string, label: string, intent: string): ProtocolDeskManifest["primaryActions"][number] {
+  return {
+    actionId,
+    label,
+    intent,
+    requiresConfirmation: false,
+    surface: "desk_panel",
+  };
+}
 
 const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
   Record<CustomerProtocolDeskId, PublicBetaProtocolDeskCopy>
@@ -267,9 +276,15 @@ const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
   bittensor: {
     shortDescription: "Read TAO context, compare subnets and validators, and collect public evidence.",
     capabilityBullets: ["TAO context", "Subnet and validator research", "Watches and evidence"],
-    primaryActions: ["Read public TAO context", "Compare subnets", "Compare validators"],
-    secondaryActions: ["Create a watch", "Save public evidence"],
-    safetyBoundaries: ["Read-only research", "No transaction preparation", "No wallet actions"],
+    primaryActions: [
+      publicBetaAction("read_tao_context", "Read public TAO context", "Read public TAO context"),
+      publicBetaAction("compare_subnets", "Compare subnets", "Compare public subnet data"),
+      publicBetaAction("compare_validators", "Compare validators", "Compare public validator data"),
+    ],
+    secondaryActions: [
+      publicBetaAction("create_watch", "Create a watch", "Monitor public Bittensor data"),
+      publicBetaAction("save_public_evidence", "Save public evidence", "Save public Bittensor evidence"),
+    ],
     safetySummary: "Public Beta is limited to Bittensor research, monitoring, and public evidence.",
     railTitle: "Bittensor: TAO reads, subnet and validator research, watches, and public evidence",
     sessionBoundary: "Public Beta keeps this desk read-only. Transaction preparation, staking, transfers, and wallet actions stay hidden.",
@@ -278,9 +293,15 @@ const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
   hyperliquid: {
     shortDescription: "Research markets, exposure, funding, and watch evidence.",
     capabilityBullets: ["Markets and orderbooks", "Exposure and funding", "Watches and evidence"],
-    primaryActions: ["Read market structure", "Review exposure", "Compare funding"],
-    secondaryActions: ["Create a watch", "Save public evidence"],
-    safetyBoundaries: ["Read-only research", "No order preparation", "No wallet actions"],
+    primaryActions: [
+      publicBetaAction("read_market_structure", "Read market structure", "Read public market structure"),
+      publicBetaAction("review_exposure", "Review exposure", "Review public exposure data"),
+      publicBetaAction("compare_funding", "Compare funding", "Compare public funding data"),
+    ],
+    secondaryActions: [
+      publicBetaAction("create_watch", "Create a watch", "Monitor public Hyperliquid data"),
+      publicBetaAction("save_public_evidence", "Save public evidence", "Save public Hyperliquid evidence"),
+    ],
     safetySummary: "Public Beta is limited to Hyperliquid research, monitoring, and public evidence.",
     railTitle: "Hyperliquid: orderbooks, exposure, funding, watches, and public evidence",
     sessionBoundary: "Public Beta keeps this desk read-only. Order preparation, trade tickets, and wallet actions stay hidden.",
@@ -289,9 +310,15 @@ const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
   polymarket: {
     shortDescription: "Research markets, liquidity, compliance context, and watch evidence.",
     capabilityBullets: ["Market research", "Liquidity and compliance", "Watches and evidence"],
-    primaryActions: ["Research markets", "Review liquidity", "Check compliance context"],
-    secondaryActions: ["Create a watch", "Save public evidence"],
-    safetyBoundaries: ["Read-only research", "No trade preparation", "No wallet actions"],
+    primaryActions: [
+      publicBetaAction("research_markets", "Research markets", "Research public prediction-market data"),
+      publicBetaAction("review_liquidity", "Review liquidity", "Review public liquidity data"),
+      publicBetaAction("check_compliance_context", "Check compliance context", "Read public compliance context"),
+    ],
+    secondaryActions: [
+      publicBetaAction("create_watch", "Create a watch", "Monitor public Polymarket data"),
+      publicBetaAction("save_public_evidence", "Save public evidence", "Save public Polymarket evidence"),
+    ],
     safetySummary: "Public Beta is limited to Polymarket research, monitoring, and public evidence.",
     railTitle: "Polymarket: markets, liquidity, compliance, watches, and public evidence",
     sessionBoundary: "Public Beta keeps this desk read-only. Trade preparation, handoffs, and wallet actions stay hidden.",
@@ -300,9 +327,15 @@ const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
   sui: {
     shortDescription: "Read public Sui account, object, network, and receipt evidence.",
     capabilityBullets: ["Account and object reads", "Network and fee research", "Receipt evidence"],
-    primaryActions: ["Read account context", "Inspect objects", "Review network context"],
-    secondaryActions: ["Import public receipts", "Save public evidence"],
-    safetyBoundaries: ["Public data only", "No transfer preparation", "No wallet actions"],
+    primaryActions: [
+      publicBetaAction("read_account_context", "Read account context", "Read public Sui account context"),
+      publicBetaAction("inspect_objects", "Inspect objects", "Inspect public Sui objects"),
+      publicBetaAction("review_network_context", "Review network context", "Review public Sui network context"),
+    ],
+    secondaryActions: [
+      publicBetaAction("import_public_receipts", "Import public receipts", "Import public Sui receipt evidence"),
+      publicBetaAction("save_public_evidence", "Save public evidence", "Save public Sui evidence"),
+    ],
     safetySummary: "Public Beta is limited to public Sui reads, monitoring, and receipt evidence.",
     railTitle: "Sui: account and object reads, network research, watches, and receipt evidence",
     sessionBoundary: "Public Beta keeps this desk read-only. Transfer preparation, signing handoffs, and wallet actions stay hidden.",
