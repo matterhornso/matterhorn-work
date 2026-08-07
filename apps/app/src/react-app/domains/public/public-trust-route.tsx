@@ -470,12 +470,12 @@ function StatusPage() {
         {[
           {
             label: "Backend process",
-            description: "The API process is running and can answer requests.",
+            description: "Checks whether the API process can answer requests.",
             result: liveness,
           },
           {
             label: "Workspace service",
-            description: "Storage, workspace routing, and authorization are ready.",
+            description: "Checks storage, workspace routing, and authorization readiness.",
             result: readiness,
           },
         ].map((item) => (

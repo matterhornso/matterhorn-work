@@ -89,6 +89,10 @@ describe("public trust routes", () => {
     expect(trustRouteSource).toContain('probeHealth("/health/ready")');
     expect(trustRouteSource).toContain('credentials: "same-origin"');
     expect(trustRouteSource).toContain('cache: "no-store"');
+    expect(trustRouteSource).toContain("Checks whether the API process can answer requests.");
+    expect(trustRouteSource).toContain("Checks storage, workspace routing, and authorization readiness.");
+    expect(trustRouteSource).not.toContain("The API process is running and can answer requests.");
+    expect(trustRouteSource).not.toContain("Storage, workspace routing, and authorization are ready.");
     expect(trustRouteSource).not.toContain("dangerouslySetInnerHTML");
   });
 });
