@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 import {
+  readSessionDeskFromSearch,
   readSessionPanelFromSearch,
+  resolveSessionDeskNavigation,
   resolveSessionPanelNavigation,
 } from "../src/react-app/shell/session-panel-route";
 import {
@@ -67,17 +69,78 @@ describe("session panel route state", () => {
     });
   });
 
+  test("round-trips the Longevity desk and preserves unrelated query state", () => {
+    const opened = resolveSessionDeskNavigation("?qa=acceptance", "wellness");
+
+    expect(opened).toEqual({
+      search: "?qa=acceptance&desk=wellness",
+      replace: false,
+    });
+    expect(readSessionDeskFromSearch(opened!.search)).toBe("wellness");
+    expect(readSessionDeskFromSearch("?desk=unknown")).toBeNull();
+  });
+
+  test("keeps panel and workflow desk destinations mutually exclusive", () => {
+    expect(resolveSessionDeskNavigation("?panel=wallet", "wellness")).toEqual({
+      search: "?desk=wellness",
+      replace: false,
+    });
+    expect(resolveSessionPanelNavigation("?desk=wellness", "wallet")).toEqual({
+      search: "?panel=wallet",
+      replace: false,
+    });
+  });
+
+  test("makes Longevity reload, Back, Forward, close, and stale recovery deterministic", () => {
+    const opened = resolveSessionDeskNavigation("", "wellness");
+    expect(opened).toEqual({ search: "?desk=wellness", replace: false });
+
+    expect(readSessionDeskFromSearch("")).toBeNull();
+    expect(readSessionDeskFromSearch(opened!.search)).toBe("wellness");
+
+    expect(resolveSessionDeskNavigation(opened!.search, null)).toEqual({
+      search: "",
+      replace: true,
+    });
+    expect(resolveSessionDeskNavigation("?qa=acceptance&desk=unknown", null)).toEqual({
+      search: "?qa=acceptance",
+      replace: true,
+    });
+    expect(resolveSessionDeskNavigation("", null)).toBeNull();
+  });
+
   test("the URL synchronization effect cannot navigate recursively", () => {
     const source = readAppSource("domains/session/chat/session-page.tsx");
     const syncBlock = source.slice(
       source.indexOf("// The URL is the shareable source of truth"),
-      source.indexOf("setActiveWorkflowDeskId(null)"),
+      source.indexOf("// A settings return may briefly change"),
     );
 
     expect(syncBlock).toContain("setSidePanelState(");
     expect(syncBlock).toContain("routeSidePanel");
     expect(syncBlock).not.toContain("setCurrentSidePanel(");
     expect(syncBlock).not.toContain("navigate(");
+  });
+
+  test("the header names a focused desk instead of Project home", () => {
+    const source = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(source).toContain("const activeWorkflowDeskId: WorkflowDeskId | null = routeWorkflowDesk");
+    expect(source).toContain("const homeSurfaceTitle = activeWorkflowDeskId");
+    expect(source).toContain("getCustomerProtocolDeskVisual(activeWorkflowDeskId)?.displayName");
+    expect(source).toContain("getCustomerProtocolDeskVisual(focusedProtocolPanel)?.displayName");
+    expect(source).toContain("? homeSurfaceTitle");
+  });
+
+  test("the shell exposes one canonical workspace and surface location", () => {
+    const source = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(source).toContain('aria-label="Current location"');
+    expect(source).toContain("{homeProjectName}");
+    expect(source).toContain("<ChevronRight");
+    expect(source).toContain('title={`Go to ${homeProjectName} Home`}');
+    expect(source).not.toContain('"Project home"');
+    expect(source).not.toContain('"Project history"');
   });
 });
 

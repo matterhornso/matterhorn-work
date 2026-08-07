@@ -28,6 +28,52 @@ describe("session activity timing", () => {
     expect(secondStartedAt).toBeGreaterThan(firstStartedAt ?? 0);
   });
 
+  test("does not let an initial idle snapshot erase a newly dispatched desk task", () => {
+    const workspaceId = "ws_optimistic_dispatch";
+    const sessionId = "ses_optimistic_dispatch";
+    const activity = useSessionActivityStore.getState();
+
+    activity.startOptimisticRun(workspaceId, sessionId, { title: "Explore subnets" });
+    activity.setRunStatus(workspaceId, sessionId, { type: "idle" });
+
+    expect(activity.getStatus(workspaceId, sessionId)).toBe("thinking");
+    expect(useSessionActivityStore.getState().recordsByWorkspaceId[workspaceId]?.[sessionId]?.optimisticRunTitle).toBe(
+      "Explore subnets",
+    );
+
+    activity.setRunStatus(workspaceId, sessionId, { type: "busy" });
+    activity.setRunStatus(workspaceId, sessionId, { type: "idle" });
+
+    expect(activity.getStatus(workspaceId, sessionId)).toBe("idle");
+  });
+
+  test("clears an optimistic run after assistant output completes without a busy event", () => {
+    const workspaceId = "ws_optimistic_output";
+    const sessionId = "ses_optimistic_output";
+    const activity = useSessionActivityStore.getState();
+
+    activity.startOptimisticRun(workspaceId, sessionId, { title: "Check market structure" });
+    activity.markAssistantOutput(workspaceId, sessionId, undefined, { allowUnknownMessageRole: true });
+    expect(activity.getStatus(workspaceId, sessionId)).toBe("responding");
+
+    activity.setRunStatus(workspaceId, sessionId, { type: "idle" });
+
+    expect(activity.getStatus(workspaceId, sessionId)).toBe("idle");
+  });
+
+  test("reconciles a polled idle snapshot once it contains assistant output", () => {
+    const workspaceId = "ws_optimistic_snapshot";
+    const sessionId = "ses_optimistic_snapshot";
+    const activity = useSessionActivityStore.getState();
+
+    activity.startOptimisticRun(workspaceId, sessionId, { title: "Review emissions" });
+    activity.seedSessionRun(workspaceId, sessionId, { type: "idle" }, false);
+    expect(activity.getStatus(workspaceId, sessionId)).toBe("thinking");
+
+    activity.seedSessionRun(workspaceId, sessionId, { type: "idle" }, true);
+    expect(activity.getStatus(workspaceId, sessionId)).toBe("idle");
+  });
+
   test("treats an empty model abort as a neutral cancellation with the prompt available", () => {
     const snapshot = {
       messages: [

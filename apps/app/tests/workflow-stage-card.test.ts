@@ -174,6 +174,19 @@ describe("DeskWorkflowStagePanel — uses WorkflowStageCard", () => {
     expect(panelSrc).toContain("objective={step.description}");
   });
 
+  test("Longevity uses a guided current, completed, and next sequence", () => {
+    const panelSrc = readAppSource("domains/session/workflows/desk-workflow-stage-panel.tsx");
+    const pageSrc = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(panelSrc).toContain('presentation?: "default" | "guided"');
+    expect(panelSrc).toContain("const guidedSequence = presentation === \"guided\"");
+    expect(panelSrc).toContain("Current stage");
+    expect(panelSrc).toContain('{completed ? "Completed" : "Next"}');
+    expect(panelSrc).toContain("Complete the current stage, review its output, then continue.");
+    expect(pageSrc).toContain('presentation={deskId === "wellness" ? "guided" : "default"}');
+    expect(pageSrc).toContain("showAgentHeader={false}");
+  });
+
   test("derives outputs from step.outputArtifactIds and manifest.generatedArtifacts", () => {
     const panelSrc = readAppSource("domains/session/workflows/desk-workflow-stage-panel.tsx");
     expect(panelSrc).toContain("outputArtifactIds");
@@ -479,8 +492,8 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain('buildSessionSystemContext(prompt, session.id, agent, "work")');
     expect(src).toContain("getMatterhornDeskAgentById(agentId)");
     expect(src).toContain("buildMatterhornDeskAgentSystemPrompt(deskAgent)");
-    expect(src).toContain("startOptimisticRun(workspaceId, session.id");
-    expect(src).toContain("setRunStatus(workspaceId, session.id, { type: \"idle\" })");
+    expect(src).toContain("startOptimisticRun(activityWorkspaceId, session.id");
+    expect(src).toContain("setRunStatus(activityWorkspaceId, session.id, { type: \"idle\" })");
   });
 
   test("task launcher exposes an immediate in-session activity state", () => {
@@ -491,8 +504,10 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(storeSrc).toContain("startOptimisticRun:");
     expect(storeSrc).toContain("optimisticRunTitle");
     expect(storeSrc).toContain("runStartedAt");
-    expect(routeSrc).toContain("startOptimisticRun(workspaceId, session.id");
+    expect(routeSrc).toContain("startOptimisticRun(activityWorkspaceId, session.id");
     expect(surfaceSrc).toContain("assistantActivityLabel");
+    expect(surfaceSrc).toContain('sessionActivityStatus === "thinking"');
+    expect(surfaceSrc).toContain('sessionActivityStatus === "responding"');
     expect(surfaceSrc).toContain("Working on ${optimisticRunTitle}");
     expect(surfaceSrc).toContain("formatAssistantRunElapsed");
     expect(surfaceSrc).toContain("elapsedSeconds >= 10");
@@ -537,9 +552,12 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
 
   test("completed responses cannot leave a stale responding footer", () => {
     const src = readAppSource("domains/session/surface/session-surface.tsx");
+    const storeSrc = readAppSource("domains/session/status/session-activity-store.ts");
 
     expect(src).toContain('if (sessionActivityStatus !== "thinking" && sessionActivityStatus !== "responding") return;');
     expect(src).toContain('setRunStatus(props.workspaceId, props.sessionId, { type: "idle" })');
+    expect(storeSrc).toContain("pendingOptimisticRun");
+    expect(storeSrc).toContain("!record.runConfirmed && !record.assistantOutput");
   });
 });
 

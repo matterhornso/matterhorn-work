@@ -489,6 +489,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                 <SidebarMenuButton
                   type="button"
                   isActive={props.activeTab === "general"}
+                  aria-current={props.activeTab === "general" ? "page" : undefined}
                   className={SETTINGS_SIDEBAR_ITEM_CLASS}
                   onClick={() => props.onSelectTab("general")}
                 >
@@ -511,6 +512,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                     <SidebarMenuButton
                       type="button"
                       isActive={props.activeTab === tab}
+                      aria-current={props.activeTab === tab ? "page" : undefined}
                       className={SETTINGS_SIDEBAR_ITEM_CLASS}
                       onClick={() => props.onSelectTab(tab)}
                     >
@@ -536,6 +538,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                     <SidebarMenuButton
                       type="button"
                       isActive={props.activeTab === tab}
+                      aria-current={props.activeTab === tab ? "page" : undefined}
                       className={SETTINGS_SIDEBAR_ITEM_CLASS}
                       onClick={() => props.onSelectTab(tab)}
                     >
@@ -562,6 +565,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                       <SidebarMenuButton
                         type="button"
                         isActive={props.activeTab === tab}
+                        aria-current={props.activeTab === tab ? "page" : undefined}
                         className={SETTINGS_SIDEBAR_ITEM_CLASS}
                         onClick={() => props.onSelectTab(tab)}
                       >

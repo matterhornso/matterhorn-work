@@ -126,7 +126,7 @@ describe("Shared primitives UI contract", () => {
     const source = readAppSource("domains/settings/shell/settings-shell.tsx");
     expect(source).not.toContain("rounded-2xl");
     expect(source).toContain(
-      'className="flex h-9 shrink-0 items-center justify-between px-4 md:hidden mac:titlebar-drag"',
+      'className="flex h-11 shrink-0 items-center justify-between px-4 md:hidden mac:titlebar-drag"',
     );
     expect(source).not.toContain("<ChevronRight");
     expect(source).not.toContain(
@@ -1013,6 +1013,12 @@ describe("Shared primitives UI contract", () => {
     expect(settingsRoute).not.toContain(
       "connectionsSnapshot.mcpServers.length",
     );
+    expect(source).toContain('aria-label="MCP connection summary"');
+    expect(source).toContain('aria-label="Configured MCP servers"');
+    expect(source).toContain("No external MCPs connected.");
+    expect(source).toContain("Manage MCPs");
+    expect(source).toContain("if (props.compact)");
+    expect(settingsRoute).toContain("onManageMcp={props.embedded");
     expect(english).toContain('"mcp.app_connected": "MCP server active"');
     expect(english).toContain('"mcp.apps_connected": "MCP servers active"');
     expect(english).not.toContain('"mcp.apps_connected": "apps connected"');
@@ -1180,6 +1186,12 @@ describe("Shared primitives UI contract", () => {
     );
     expect(source).toContain(
       '<div className="flex min-w-0 flex-1 flex-col overflow-hidden">',
+    );
+    expect(source).not.toContain(
+      '<main className="flex min-h-0 flex-1 flex-col overflow-hidden">',
+    );
+    expect(source).toContain(
+      '<div className="flex min-h-0 flex-1 flex-col overflow-hidden">',
     );
   });
 

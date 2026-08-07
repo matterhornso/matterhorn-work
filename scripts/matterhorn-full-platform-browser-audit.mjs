@@ -38,7 +38,7 @@ const panelSurfaces = [
   ["panel-profile", "profile", ["Profile"]],
   ["panel-wallet", "wallet", ["Wallets", "Save policy"]],
   ["panel-outputs", "artifacts", ["Outputs"]],
-  ["panel-extensions", "extensions", ["Matterhorn MCPs"]],
+  ["panel-extensions", "extensions", ["MCP connections"]],
   ["panel-memory", "memory", ["Memory", "Review suggestions before saving."]],
   ["panel-notes", "notes", ["Notes", "New note"]],
   ["desk-bittensor", "bittensor", ["Bittensor desk"]],
@@ -766,11 +766,9 @@ async function run() {
   });
   await recordInteraction(report, "mcp-rail-availability-and-disclosure", async () => {
     await gotoWithTransientRetry(page, workspaceUrl("session", "?panel=extensions"), { waitUntil: "load" });
-    await visibleMarker(page, ["Matterhorn MCPs"]);
-    await page.getByText("Your apps", { exact: true })
-      .waitFor({ state: "visible", timeout: 20_000 });
+    await visibleMarker(page, ["MCP connections"]);
     const configuredServer = page.getByText("Matterhorn Desks MCP", { exact: true });
-    const emptySummary = page.getByText("No apps connected yet", { exact: true });
+    const emptySummary = page.getByText("No external MCPs connected.", { exact: true });
     await Promise.race([
       configuredServer.waitFor({ state: "visible", timeout: 20_000 }),
       emptySummary.waitFor({ state: "visible", timeout: 20_000 }),
@@ -779,16 +777,15 @@ async function run() {
       await page.getByText("Ready", { exact: true })
         .waitFor({ state: "visible", timeout: 20_000 });
     } else {
-      await page.getByText("No apps connected yet", { exact: true })
+      await page.getByText("No external MCPs connected.", { exact: true })
         .waitFor({ state: "visible", timeout: 20_000 });
     }
-    if (await page.getByRole("button", { name: "Marketplace", exact: true }).count() !== 0) {
-      throw new Error("Local-only build exposed an unavailable Marketplace tab.");
+    if (await page.getByText("Available MCPs & connectors", { exact: true }).count() !== 0) {
+      throw new Error("Embedded MCP rail exposed the full connector catalog.");
     }
-    const bittensorCard = page.locator("article").filter({ hasText: "Bittensor MCP" });
-    if (await bittensorCard.count() !== 1) throw new Error("Bittensor MCP row is missing or duplicated.");
-    await clickUnique(bittensorCard.getByRole("button"), "Bittensor MCP disclosure");
-    await visibleMarker(page, ["19 tools for chat, wallet reads, readiness, subnets, watches, and receipts."]);
+    await clickUnique(page.getByRole("button", { name: "Manage MCPs", exact: true }), "Manage MCPs");
+    await page.waitForURL(workspaceUrl("settings/extensions"), { timeout: 10_000 });
+    await visibleMarker(page, ["Matterhorn MCPs"]);
   });
   for (const [id, panel, markers] of panelSurfaces) {
     await inspectSurface(page, report, id, workspaceUrl("session", `?panel=${panel}`), markers, "desktop");

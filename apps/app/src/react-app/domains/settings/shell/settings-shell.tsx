@@ -90,7 +90,7 @@ export function SettingsShell(props: SettingsShellProps) {
           </div>
         </header>
 
-        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col">
             <SettingsPage {...props} showPanelHeading={false}>{props.children}</SettingsPage>
 
@@ -107,7 +107,7 @@ export function SettingsShell(props: SettingsShellProps) {
           </div>
 
           {props.footer}
-        </main>
+        </div>
       </div>
     );
   }
@@ -130,9 +130,9 @@ export function SettingsShell(props: SettingsShellProps) {
         />
         <SidebarInset className="min-h-0 overflow-hidden bg-background mac:bg-background/80 mac:[&_header]:transition-[padding-left] mac:[&_header]:duration-200 mac:[&_header]:ease-linear mac:peer-data-[state=collapsed]:[&_header]:pl-16 [&_header]:pl-16 md:[&_header]:pl-6">
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            <header className="flex h-9 shrink-0 items-center justify-between px-4 md:hidden mac:titlebar-drag">
+            <header className="flex h-11 shrink-0 items-center justify-between px-4 md:hidden mac:titlebar-drag">
               <div className="flex min-w-0 items-center gap-2">
-                <SidebarTrigger className="mac:titlebar-no-drag md:hidden" />
+                <SidebarTrigger className="size-11 mac:titlebar-no-drag md:hidden" />
                 {props.headerLeadingSlot}
                 <span className="truncate text-xs font-medium text-dls-secondary">{title}</span>
                 {props.developerMode && props.headerStatus ? (
@@ -150,7 +150,7 @@ export function SettingsShell(props: SettingsShellProps) {
                 <Button
                   variant="ghost"
                   type="button"
-                  className="flex size-9 items-center justify-center rounded-md text-gray-10 transition-colors hover:bg-gray-2/70 hover:text-dls-text"
+                  className="flex size-11 items-center justify-center rounded-md text-gray-10 transition-colors hover:bg-gray-2/70 hover:text-dls-text"
                   onClick={props.onClose}
                   title={t("dashboard.close_settings")}
                   aria-label={t("dashboard.close_settings")}

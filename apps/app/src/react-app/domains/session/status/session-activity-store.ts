@@ -10,6 +10,7 @@ type SessionMessageRole = "assistant" | "system" | "user";
 type SessionActivityRecord = {
   status: SessionActivityStatus;
   runActive: boolean;
+  runConfirmed: boolean;
   runStartedAt?: number;
   assistantOutput: boolean;
   errorActive: boolean;
@@ -50,6 +51,7 @@ type SessionActivityStore = {
 const createRecord = (): SessionActivityRecord => ({
   status: "idle",
   runActive: false,
+  runConfirmed: false,
   assistantOutput: false,
   errorActive: false,
   compacting: false,
@@ -164,6 +166,7 @@ export const useSessionActivityStore = create<SessionActivityStore>((set, get) =
             return {
               ...record,
               runActive,
+              runConfirmed: runActive,
               assistantOutput: runActive && record.runActive ? record.assistantOutput : false,
               errorActive: runActive ? false : record.errorActive,
               compacting: runActive ? record.compacting : false,
@@ -183,10 +186,11 @@ export const useSessionActivityStore = create<SessionActivityStore>((set, get) =
     set((state) => updateRecord(state, workspace, session, (record) => {
       const normalized = normalizeRunStatus(status);
       const runActive = normalized === "running" || normalized === "retry";
-      if (!runActive && record.status !== "idle") return record;
+      if (!runActive && record.status !== "idle" && !assistantOutput) return record;
       return {
         ...record,
         runActive,
+        runConfirmed: runActive,
         assistantOutput: runActive && assistantOutput,
         errorActive: runActive ? false : record.errorActive,
         compacting: runActive ? record.compacting : false,
@@ -206,6 +210,7 @@ export const useSessionActivityStore = create<SessionActivityStore>((set, get) =
     set((state) => updateRecord(state, workspace, session, (record) => ({
       ...record,
       runActive: true,
+      runConfirmed: false,
       assistantOutput: false,
       errorActive: false,
       compacting: false,
@@ -222,9 +227,12 @@ export const useSessionActivityStore = create<SessionActivityStore>((set, get) =
     set((state) => updateRecord(state, workspace, session, (record) => {
       const normalized = normalizeRunStatus(status);
       const runActive = normalized === "running" || normalized === "retry";
+      const pendingOptimisticRun = Boolean(record.optimisticRunTitle) && !record.runConfirmed && !record.assistantOutput;
+      if (!runActive && pendingOptimisticRun) return record;
       return {
         ...record,
         runActive,
+        runConfirmed: runActive ? true : false,
         assistantOutput: runActive && record.runActive ? record.assistantOutput : false,
         errorActive: runActive ? false : record.errorActive,
         compacting: runActive ? record.compacting : false,
@@ -291,6 +299,7 @@ export const useSessionActivityStore = create<SessionActivityStore>((set, get) =
       ...record,
       errorActive: true,
       runActive: false,
+      runConfirmed: false,
       assistantOutput: false,
       compacting: false,
       optimisticRunTitle: undefined,

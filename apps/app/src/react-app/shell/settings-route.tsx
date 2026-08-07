@@ -3050,6 +3050,14 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                   restriction: "allowBuiltInExtensions",
                 })}
                 compact={props.embedded}
+                onManageMcp={props.embedded ? () => {
+                  navigate(
+                    selectedWorkspaceId
+                      ? workspaceSettingsRoute(selectedWorkspaceId, "extensions")
+                      : "/settings/extensions",
+                    { state: location.state },
+                  );
+                } : undefined}
                 connectMcp={(entry) => connectionsStore.connectMcp(entry)}
                 configSlotForEntry={(entry) =>
                   getExtensionConfigSlot(entry, {

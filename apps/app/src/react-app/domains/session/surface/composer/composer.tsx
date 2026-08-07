@@ -1161,7 +1161,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                   </div>
                   <button
                     type="button"
-                    className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12"
+                    className="relative ml-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-gray-10 transition-colors after:absolute after:-inset-0.5 after:content-[''] hover:bg-gray-3 hover:text-gray-12 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-9/50"
                     onClick={() => props.onRemoveAttachment(attachment.id)}
                     aria-label={t("action.remove")}
                     title={t("action.remove")}

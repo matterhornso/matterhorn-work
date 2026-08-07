@@ -187,6 +187,14 @@ assert.ok(
   "product browser smoke should reject raw provider-key controls in the web build",
 );
 assert.ok(
+  script.includes('[aria-label^="Connected MCP servers:"]') &&
+    script.includes('getByText(/^Synced /)') &&
+    script.includes("Connected MCP summary did not name any servers.") &&
+    script.includes("Not every connected MCP server is visibly ready.") &&
+    script.includes("report.artifacts.connectedMcpServers = connectedNames"),
+  "product browser smoke should accept named ready MCP rows while rejecting empty or unready connected summaries",
+);
+assert.ok(
   script.includes('getByLabel("Copy project path").count()'),
   "product browser smoke should reject exposed local project path controls on the web",
 );

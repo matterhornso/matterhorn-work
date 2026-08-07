@@ -26,6 +26,7 @@ import {
 } from "./matterhorn-connection";
 import { ReloadCoordinatorProvider } from "./reload-coordinator";
 import { LazyWalletRuntimeProvider } from "./LazyWalletRuntimeProvider";
+import { isPublicTrustPath } from "../domains/public/public-trust-content";
 
 function resolveDefaultServerUrl(): string {
   if (isDesktopRuntime()) return "http://127.0.0.1:4096";
@@ -89,9 +90,12 @@ function routeNeedsWalletRuntime(
   if (requireSignin && !hasCachedAuth && !publicBetaWeb) return false;
 
   const path = pathname.toLowerCase();
+  if (isPublicTrustPath(path)) return false;
   return !(
     path === "/signin" ||
     path.startsWith("/signin/") ||
+    path === "/welcome" ||
+    path.startsWith("/welcome/") ||
     path === "/onboarding" ||
     path.startsWith("/onboarding/")
   );

@@ -46,6 +46,8 @@ describe("wallet runtime connector contract", () => {
       "Boolean(readDenSettings().authToken?.trim())",
     );
     expect(providersSource).toContain('path === "/signin"');
+    expect(providersSource).toContain("isPublicTrustPath(path)");
+    expect(providersSource).toContain('path === "/welcome"');
     expect(providersSource).toContain('path === "/onboarding"');
     expect(providersSource).toContain("<LazyWalletRuntimeProvider");
     expect(appEntrySource).toContain(

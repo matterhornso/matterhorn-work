@@ -3580,6 +3580,9 @@ export function SessionRoute() {
             }
             const workspacePath = workspace.path?.trim() || undefined;
             const sendImmediately = Boolean(options?.sendImmediately);
+            const activityWorkspaceIds = Array.from(new Set(
+              [workspaceId, endpoint.workspaceId].map((id) => id?.trim()).filter(Boolean),
+            ));
             const workspaceClient = createClient(
               endpoint.opencodeBaseUrl,
               workspacePath,
@@ -3645,10 +3648,12 @@ export function SessionRoute() {
                 return false;
               }
               if (sendImmediately) {
-                useSessionActivityStore.getState().startOptimisticRun(workspaceId, session.id, {
-                  title: title || "desk task",
-                  agent: agent || undefined,
-                });
+                for (const activityWorkspaceId of activityWorkspaceIds) {
+                  useSessionActivityStore.getState().startOptimisticRun(activityWorkspaceId, session.id, {
+                    title: title || "desk task",
+                    agent: agent || undefined,
+                  });
+                }
                 showToast({
                   title: `Starting ${title || "desk task"}`,
                   description: "Sending the task to the agent.",
@@ -3707,7 +3712,9 @@ export function SessionRoute() {
                 const operation = pendingModelOperation(session.id);
                 if (operation) recordModelOperationProviderError(operation, error);
                 const message = describeTaskCreateError(error);
-                useSessionActivityStore.getState().setRunStatus(workspaceId, session.id, { type: "idle" });
+                for (const activityWorkspaceId of activityWorkspaceIds) {
+                  useSessionActivityStore.getState().setRunStatus(activityWorkspaceId, session.id, { type: "idle" });
+                }
                 saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
                 focusPromptSoon();
                 recordInspectorEvent("desk.task_launch.fallback_saved", {

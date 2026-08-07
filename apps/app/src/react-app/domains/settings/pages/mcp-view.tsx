@@ -10,6 +10,7 @@ import {
   BookOpen,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   CircleAlert,
   Cloud,
   Code2,
@@ -159,6 +160,8 @@ export type McpViewProps = {
   onAddMcpRequestHandled?: (requestId: number) => void;
   /** Rendered inside the session right rail instead of the full Settings page. */
   compact?: boolean;
+  /** Opens the full MCP management route from the contextual rail summary. */
+  onManageMcp?: () => void;
 };
 
 const builtInExtensionDisabledReason = "Disabled by organization";
@@ -1348,6 +1351,97 @@ export function McpView(props: McpViewProps) {
       setLogoutTarget(null);
     }
   };
+
+  if (props.compact) {
+    const syncing = props.busy || Boolean(props.mcpConnectingName);
+    const syncLabel = syncing
+      ? props.mcpConnectingName
+        ? `Connecting ${displayName(props.mcpConnectingName)}…`
+        : "Syncing MCP connections…"
+      : props.mcpLastUpdatedAt
+        ? `${t("mcp.last_synced")} ${formatRelativeTime(props.mcpLastUpdatedAt)}`
+        : "Connection status for this workspace";
+
+    return (
+      <section className="space-y-4" aria-label="MCP connection summary">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-dls-text">MCP connections</h2>
+            <p className="mt-1 text-xs leading-5 text-dls-secondary">
+              Tools available to the current project and agent session.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-md bg-dls-surface-muted/25 px-2 py-1 text-[10px] font-semibold text-dls-secondary">
+            {connectedServers.length} connected
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 text-[11px] text-dls-secondary" role={syncing ? "status" : undefined}>
+          {syncing ? (
+            <Loader2 className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          ) : (
+            <CheckCircle2 className="size-3.5 shrink-0 text-green-10" aria-hidden="true" />
+          )}
+          <span>{syncLabel}</span>
+        </div>
+
+        {props.mcpServers.length > 0 ? (
+          <ul className="space-y-1.5" aria-label="Configured MCP servers">
+            {props.mcpServers.map((server) => {
+              const status = resolveStatus(server);
+              const statusLabel = status === "connected"
+                ? "Ready"
+                : status === "needs_auth"
+                  ? "Sign in required"
+                  : status === "needs_client_registration"
+                    ? "Setup required"
+                    : status === "disabled"
+                      ? "Disabled"
+                      : status === "disconnected"
+                        ? "Offline"
+                        : "Error";
+              return (
+                <li
+                  key={server.name}
+                  className="flex min-h-11 items-center justify-between gap-3 rounded-md bg-dls-surface-muted/[0.16] px-3 py-2"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className={cn("size-2 shrink-0 rounded-full", statusDot(status))} aria-hidden="true" />
+                    <span className="truncate text-xs font-medium text-dls-text">{displayName(server.name)}</span>
+                  </span>
+                  <span className="shrink-0 text-[11px] text-dls-secondary">{statusLabel}</span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="rounded-md bg-dls-surface-muted/[0.16] px-3 py-3 text-xs leading-5 text-dls-secondary">
+            <p className="font-medium text-dls-text">No external MCPs connected.</p>
+            <p className="mt-1">Open full settings to connect an approved server or review built-in tools.</p>
+          </div>
+        )}
+
+        {props.mcpStatus && !mcpStatusIsEmpty ? (
+          <div className="flex items-start gap-2 text-xs leading-5 text-dls-secondary" role="status">
+            <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-10" aria-hidden="true" />
+            <span>{props.mcpStatus}</span>
+          </div>
+        ) : null}
+
+        {props.onManageMcp ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-11 w-full justify-center"
+            onClick={props.onManageMcp}
+          >
+            Manage MCPs
+            <ChevronRight className="ml-1 size-3.5" aria-hidden="true" />
+          </Button>
+        ) : null}
+      </section>
+    );
+  }
 
   const revealConfig = async () => {
     if (!isDesktopRuntime() || revealBusy) return;

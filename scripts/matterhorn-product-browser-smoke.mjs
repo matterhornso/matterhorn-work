@@ -1585,19 +1585,46 @@ async function runSmoke(config) {
           state: "visible",
           timeout: 20_000,
         });
+        await page.getByText(/^Synced /).waitFor({
+          state: "visible",
+          timeout: 20_000,
+        });
         const configuredServer = page.getByText("Matterhorn Desks MCP", {
           exact: true,
         });
+        const connectedServerSummary = page.locator(
+          '[aria-label^="Connected MCP servers:"]',
+        );
         const emptySummary = page.getByText("No apps connected yet", {
           exact: true,
         });
-        await waitForAnyVisible(
+        const visibleMcpState = await waitForAnyVisible(
           page,
-          [configuredServer, emptySummary],
+          [connectedServerSummary, configuredServer, emptySummary],
           "configured MCP server or explicit empty state",
           20_000,
         );
-        if (await configuredServer.isVisible().catch(() => false)) {
+        const connectedSummaryLabel = await visibleMcpState.getAttribute(
+          "aria-label",
+        );
+        const visibleConfiguredServer = await firstVisible(configuredServer);
+        if (connectedSummaryLabel?.startsWith("Connected MCP servers:")) {
+          const connectedNames = connectedSummaryLabel
+            .replace(/^Connected MCP servers:\s*/, "")
+            .split(",")
+            .map((name) => name.trim())
+            .filter(Boolean);
+          if (connectedNames.length === 0) {
+            throw new Error("Connected MCP summary did not name any servers.");
+          }
+          const readyCount = await page
+            .getByText("Ready", { exact: true })
+            .count();
+          if (readyCount < connectedNames.length) {
+            throw new Error("Not every connected MCP server is visibly ready.");
+          }
+          report.artifacts.connectedMcpServers = connectedNames;
+        } else if (visibleConfiguredServer) {
           await page.getByText("Ready", { exact: true }).waitFor({
             state: "visible",
             timeout: 20_000,

@@ -73,6 +73,12 @@ assert.ok(
   "generated-media smoke launcher should provide a repeatable browser-audit request budget without changing production defaults",
 );
 assert.ok(
+  script.includes("MATTERHORN_MEDIA_SMOKE_RESPONSE_DELAY_MS") &&
+    script.includes("Math.min(10_000, Math.max(0") &&
+    script.includes("await new Promise((resolve) => setTimeout(resolve, promptResponseDelayMs))"),
+  "generated-media smoke launcher should support a bounded opt-in delay for inspecting active agent states",
+);
+assert.ok(
   script.includes('waitForJson(`${serverUrl}/workspaces`, {\n    timeoutMs: 45_000') &&
     script.includes('`${serverUrl}/workspace/${encodeURIComponent(activeWorkspaceId)}/billing/status`,\n    {\n      timeoutMs: 45_000'),
   "generated-media smoke launcher should allow authenticated workspace bootstrap routes the full startup window",

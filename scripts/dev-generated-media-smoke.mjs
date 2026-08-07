@@ -18,6 +18,10 @@ const preferredAppPort = Number(process.env.MATTERHORN_MEDIA_SMOKE_APP_PORT?.tri
 const workspaceRoot = path.resolve(process.env.MATTERHORN_MEDIA_SMOKE_WORKSPACE?.trim() || rootDir);
 const storageEpochs = process.env.MATTERHORN_MEDIA_SMOKE_WALRUS_EPOCHS?.trim() || "3";
 const requestRateLimitMax = process.env.MATTERHORN_MEDIA_SMOKE_REQUEST_RATE_LIMIT_MAX?.trim() || "5000";
+const parsedPromptResponseDelayMs = Number(process.env.MATTERHORN_MEDIA_SMOKE_RESPONSE_DELAY_MS?.trim() || "0");
+const promptResponseDelayMs = Number.isFinite(parsedPromptResponseDelayMs)
+  ? Math.min(10_000, Math.max(0, Math.floor(parsedPromptResponseDelayMs)))
+  : 0;
 
 const fakeSuiIds = {
   nftPackage: "0x1111111111111111111111111111111111111111111111111111111111111111",
@@ -52,6 +56,7 @@ function help() {
     "  MATTERHORN_MEDIA_SMOKE_SERVER_PORT=4125",
     "  MATTERHORN_MEDIA_SMOKE_APP_PORT=5282",
     "  MATTERHORN_MEDIA_SMOKE_REQUEST_RATE_LIMIT_MAX=5000",
+    "  MATTERHORN_MEDIA_SMOKE_RESPONSE_DELAY_MS=2500  # inspect active agent states",
     "",
     "The request budget applies only to this synthetic loopback QA stack.",
     "No OpenAI key, wallet secret, seed phrase, or server-side signing is used.",
@@ -574,6 +579,9 @@ function startFakeOpencode() {
           ],
         });
         messages.set(sessionId, nextMessages);
+        if (promptResponseDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, promptResponseDelayMs));
+        }
         appendAssistantMessage(
           sessionId,
           userMessageId,

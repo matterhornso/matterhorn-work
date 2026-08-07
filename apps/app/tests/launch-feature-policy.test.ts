@@ -17,6 +17,7 @@ describe("stable launch feature policy", () => {
       cloud: false,
       generatedMedia: false,
       publicOauthConnectors: [],
+      reviewedDeskActions: true,
     });
   });
 
@@ -29,7 +30,21 @@ describe("stable launch feature policy", () => {
       cloud: true,
       generatedMedia: true,
       publicOauthConnectors: [],
+      reviewedDeskActions: true,
     });
+  });
+
+  test("hides reviewed desk actions in the public Beta web policy", () => {
+    const publicBetaPolicy = resolveMatterhornLaunchFeaturePolicy({
+      VITE_MATTERHORN_DEPLOYMENT: "web",
+      VITE_MATTERHORN_PUBLIC_BETA: "1",
+    });
+    const ordinaryWebPolicy = resolveMatterhornLaunchFeaturePolicy({
+      VITE_MATTERHORN_DEPLOYMENT: "web",
+    });
+
+    expect(publicBetaPolicy.reviewedDeskActions).toBe(false);
+    expect(ordinaryWebPolicy.reviewedDeskActions).toBe(true);
   });
 
   test("keeps launch navigation limited to approved surfaces", () => {

@@ -9,6 +9,7 @@ import {
   BarChart3,
   Brain,
   BrainCircuit,
+  ChevronRight,
   Copy,
   Dumbbell,
   FileText,
@@ -28,6 +29,7 @@ import {
 
 import { t } from "../../../../i18n";
 import { OPENWORK_EXTENSION_CATALOG } from "../../../../app/constants";
+import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import {
   type MatterhornServerClient,
   type MatterhornServerStatus,
@@ -96,7 +98,9 @@ import {
   useUiStateStore,
 } from "../../../shell/ui-state-store";
 import {
+  readSessionDeskFromSearch,
   readSessionPanelFromSearch,
+  resolveSessionDeskNavigation,
   resolveSessionPanelNavigation,
 } from "../../../shell/session-panel-route";
 
@@ -146,7 +150,9 @@ import {
   type DeskTaskInputRequirement,
 } from "../workflows/desk-task-inputs";
 import {
+  groupMatterhornDeskTaskStarters,
   MATTERHORN_DESK_TASK_STARTERS,
+  recommendedMatterhornDeskTaskStarterGroups,
   reviewedActionChatDraft,
   type MatterhornDeskTaskStarter,
 } from "../workflows/desk-task-starters";
@@ -412,7 +418,7 @@ function HomeWalletRuntimeStatus({
               <button
                 type="button"
                 aria-label="Wallet readiness details"
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
               >
                 <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
               </button>
@@ -479,7 +485,7 @@ function HomeCapabilityOverview({
 }) {
   return (
     <section
-      className="matterhorn-capability-overview space-y-3"
+      className="matterhorn-capability-overview space-y-2"
       style={{ contentVisibility: "auto", containIntrinsicSize: "360px" } as CSSProperties}
       aria-label="Desk capability overview"
     >
@@ -491,7 +497,7 @@ function HomeCapabilityOverview({
               <button
                 type="button"
                 aria-label="Open a desk details"
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
               >
                 <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
               </button>
@@ -508,31 +514,31 @@ function HomeCapabilityOverview({
           </PopoverContent>
         </Popover>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="overflow-hidden rounded-lg bg-dls-canvas/35 ring-1 ring-inset ring-dls-border/45">
         {homeCapabilityStatusItems().map((item) => {
           return (
             <article
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="matterhorn-capability-card group grid min-w-0 gap-3 relative rounded-lg bg-[rgb(var(--matterhorn-desk-rgb)/0.085)] shadow-[var(--dls-card-shadow)] transition-[background-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-px hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.14)] motion-reduce:transform-none motion-reduce:transition-none"
+              className="matterhorn-capability-card group relative min-w-0 border-b border-dls-border/40 last:border-b-0"
             >
               <button
                 type="button"
                 data-testid={`open-${item.id}-desk`}
-                className="grid w-full min-w-0 grid-cols-[34px_minmax(0,1fr)] gap-3 rounded-lg p-3.5 pr-10 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--matterhorn-desk-color)]"
+                className="grid min-h-16 w-full min-w-0 grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-l-2 border-l-[rgb(var(--matterhorn-desk-rgb)/0.72)] bg-transparent px-3 py-2.5 pr-10 text-left transition-colors hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.08)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--matterhorn-desk-color)]"
                 onClick={() => onOpenCapability?.(item.id)}
               >
-                  <span className="flex size-8 items-center justify-center rounded-md bg-dls-canvas/70 text-[var(--matterhorn-desk-color)]">
+                <span className="flex size-8 items-center justify-center rounded-md bg-[rgb(var(--matterhorn-desk-rgb)/0.10)] text-[var(--matterhorn-desk-color)]">
                   <DeskBrandMark id={item.id} size={24} />
                 </span>
                 <div className="min-w-0">
                   <span className="text-[13px] font-semibold text-dls-text">{item.title}</span>
-                  <p className="mt-1 text-[12px] leading-5 text-dls-secondary">{item.summary}</p>
-                  <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
-                    {item.id === "wellness" ? "Start workflow" : "Open desk"}
-                    <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
-                  </span>
+                  <p className="mt-0.5 line-clamp-1 text-[12px] leading-5 text-dls-secondary sm:line-clamp-none">{item.summary}</p>
                 </div>
+                <span className="hidden items-center gap-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] sm:inline-flex">
+                  {item.id === "wellness" ? "Start workflow" : "Open desk"}
+                  <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                </span>
               </button>
               <Popover>
                 <PopoverTrigger
@@ -561,6 +567,63 @@ function HomeCapabilityOverview({
       </div>
     </section>
   );
+}
+
+function WorkspaceHomePrimaryAction({
+  eyebrow,
+  title,
+  description,
+  meta,
+  actionLabel,
+  disabled,
+  onAction,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  meta: string;
+  actionLabel: string;
+  disabled?: boolean;
+  onAction: () => void;
+}) {
+  return (
+    <section
+      className="grid gap-4 rounded-lg bg-[rgb(var(--matterhorn-blue-rgb)/0.075)] px-4 py-4 ring-1 ring-inset ring-[rgb(var(--matterhorn-blue-rgb)/0.14)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"
+      aria-label="Recommended next action"
+    >
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium text-[var(--dls-accent)]">
+          {eyebrow}
+        </p>
+        <h3 className="mt-1 truncate text-[15px] font-semibold text-dls-text">{title}</h3>
+        <p className="mt-1 max-w-2xl text-[12px] leading-5 text-dls-secondary">{description}</p>
+        <p className="mt-2 text-[11px] font-medium text-dls-secondary/80">{meta}</p>
+      </div>
+      <Button
+        type="button"
+        className="h-11 w-full shrink-0 justify-center px-4 sm:h-9 sm:w-auto"
+        disabled={disabled}
+        onClick={onAction}
+      >
+        {actionLabel}
+        <ChevronRight className="ml-1 size-4" aria-hidden="true" />
+      </Button>
+    </section>
+  );
+}
+
+function formatHomeSessionRecency(updatedAt: number | null | undefined) {
+  if (!updatedAt) return "Saved in this project";
+  const timestampMilliseconds = updatedAt < 1_000_000_000_000
+    ? updatedAt * 1_000
+    : updatedAt;
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - timestampMilliseconds) / 60_000));
+  if (elapsedMinutes < 1) return "Updated just now";
+  if (elapsedMinutes < 60) return `Updated ${elapsedMinutes}m ago`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `Updated ${elapsedHours}h ago`;
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return `Updated ${elapsedDays}d ago`;
 }
 
 function WorkflowDeskHomeSurface({
@@ -702,6 +765,8 @@ function WorkflowDeskHomeSurface({
 
         <DeskWorkflowStagePanel
           deskId={deskId}
+          presentation={deskId === "wellness" ? "guided" : "default"}
+          showAgentHeader={false}
           currentStageId={launchState?.run?.stageId}
           taskStatus={taskStatus}
           stageActionDisabled={startTaskBlocked}
@@ -762,7 +827,15 @@ function ProtocolDeskEmptyState({
 }) {
   const visual = getCustomerProtocolDeskVisual(panel);
   const prompts: readonly MatterhornDeskTaskStarter[] = MATTERHORN_DESK_TASK_STARTERS[panel];
+  const taskGroups = groupMatterhornDeskTaskStarters(prompts, {
+    reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+  });
+  const recommendedTaskGroups = recommendedMatterhornDeskTaskStarterGroups(panel, taskGroups);
+  const fullTaskCount = taskGroups.reduce((total, group) => total + group.starters.length, 0);
+  const recommendedTaskCount = recommendedTaskGroups.reduce((total, group) => total + group.starters.length, 0);
+  const hiddenTaskCount = Math.max(0, fullTaskCount - recommendedTaskCount);
   const draftConfig = getChatDraftConfig(panel);
+  const [showAllTasks, setShowAllTasks] = useState(false);
   const [launchingTaskTitle, setLaunchingTaskTitle] = useState<string | null>(null);
   const [pendingInput, setPendingInput] = useState<{
     key: string;
@@ -772,6 +845,12 @@ function ProtocolDeskEmptyState({
   } | null>(null);
   const [taskInputValue, setTaskInputValue] = useState("");
   const [taskInputError, setTaskInputError] = useState<string | null>(null);
+  useEffect(() => {
+    setShowAllTasks(false);
+    setPendingInput(null);
+    setTaskInputValue("");
+    setTaskInputError(null);
+  }, [panel]);
   const readinessWorkspaceId = runtimeWorkspaceId?.trim() ?? "";
   const readinessQuery = useQuery({
     queryKey: ["protocol-desk-readiness", readinessWorkspaceId],
@@ -812,13 +891,15 @@ function ProtocolDeskEmptyState({
     : !readinessWorkspaceId
       ? "Open workspace"
       : "Platform setup";
-  const deskSafetyInfo = panel === "bittensor"
-    ? "Uses public wallet details and prepares exact transaction drafts. You approve transfer, stake, and unstake calls in your connected Bittensor wallet; unsupported advanced calls stay unavailable."
-    : panel === "polymarket"
-      ? "Chat prepares research or exact buy, sell, and cancel terms. Executable actions move to Wallet for compliance checks, exact review, and connected-wallet approval."
-      : panel === "sui"
-        ? "Chat prepares exact Sui transfer terms. The separate Wallet review shows the final transaction before your connected Sui wallet signs it."
-        : "Chat prepares exact Hyperliquid orders and changes. Executable actions move to Wallet for final review and one-time connected-wallet approval; agents and watches cannot submit unattended.";
+  const deskSafetyInfo = !MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions
+    ? "Public Beta keeps this desk read-only. Research, monitoring, and public evidence remain available; transaction preparation and wallet actions stay hidden."
+    : panel === "bittensor"
+      ? "Uses public wallet details and prepares exact transaction drafts. You approve transfer, stake, and unstake calls in your connected Bittensor wallet; unsupported advanced calls stay unavailable."
+      : panel === "polymarket"
+        ? "Chat prepares research or exact buy, sell, and cancel terms. Executable actions move to Wallet for compliance checks, exact review, and connected-wallet approval."
+        : panel === "sui"
+          ? "Chat prepares exact Sui transfer terms. The separate Wallet review shows the final transaction before your connected Sui wallet signs it."
+          : "Chat prepares exact Hyperliquid orders and changes. Executable actions move to Wallet for final review and one-time connected-wallet approval; agents and watches cannot submit unattended.";
   const providerNotice = panel === "bittensor"
     ? bittensorSidecarNotice(bittensorSidecarQuery.data?.health, bittensorSidecarQuery.isError)
     : null;
@@ -913,7 +994,7 @@ function ProtocolDeskEmptyState({
                       <button
                         type="button"
                         aria-label={`${visual?.displayName ?? panel} desk safety info`}
-                        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
+                        className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
                       >
                         <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
                       </button>
@@ -967,96 +1048,137 @@ function ProtocolDeskEmptyState({
         </div>
       ) : null}
 
-      <div className="matterhorn-focused-desk-prompt-list grid grid-cols-1 gap-2 lg:grid-cols-2" aria-label="Agent tasks">
-        {prompts.map((item) => {
-          const isLaunching = launchingTaskTitle === item.title;
-          const inputRequirement = getDeskTaskInputRequirement(item.prompt);
-          const opensReviewedAction = Boolean(item.reviewedAction);
-          const pendingInputKey = `${panel}:${item.title}`;
-          const inputOpen = pendingInput?.key === pendingInputKey;
-          const inputId = `desk-task-input-${panel}-${item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-          const evidenceHint = panel === "bittensor"
-            ? "reads: public SS58 and subnet context"
-            : panel === "hyperliquid"
-              ? "reads: public market and account context"
-              : panel === "polymarket"
-                ? "reads: public market and compliance context"
-                : panel === "sui"
-                  ? "reads: public Sui account and receipt context"
-                  : "reads: public context";
-          return (
-            <div key={item.id} className="space-y-2">
-              <WorkflowStageCard
-                title={item.title}
-                objective={item.detail}
-                status="idle"
-                evidenceHints={[evidenceHint]}
-                actionLabel={opensReviewedAction
-                  ? "Prepare in chat"
-                  : isLaunching
-                    ? "Starting..."
-                    : startTaskBlocked
-                      ? startTaskActionLabel
-                      : inputRequirement?.actionLabel ?? draftConfig?.confirmCtaLabel ?? "Start task"}
-                actionDisabled={Boolean(launchingTaskTitle) || startTaskBlocked}
-                actionTitle={opensReviewedAction
-                  ? "Start an editable chat request. Exact terms move to Wallet for review and signature."
-                  : startTaskBlocker ?? inputRequirement?.helpText ?? undefined}
-                onAction={() => handleTaskAction(item)}
-              />
-              {inputOpen ? (
-                <form
-                  className="ml-0 rounded-lg bg-dls-surface-muted/35 px-3 py-3 sm:ml-8"
-                  onSubmit={handleTaskInputSubmit}
-                >
-                  <label htmlFor={inputId} className="text-[12px] font-semibold leading-5 text-dls-text">
-                    {pendingInput.requirement.label}
-                  </label>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
-                    <Input
-                      id={inputId}
-                      value={taskInputValue}
-                      onChange={(event) => {
-                        setTaskInputValue(event.currentTarget.value);
-                        if (taskInputError) setTaskInputError(null);
-                      }}
-                      aria-invalid={Boolean(taskInputError)}
-                      aria-describedby={`${inputId}-hint`}
-                      placeholder={pendingInput.requirement.inputPlaceholder}
-                      className="h-8 border-dls-border/70 bg-background/35 text-[13px]"
-                    />
-                    <Button type="submit" size="sm" className="h-8">
-                      Start task
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 text-dls-secondary"
-                      onClick={() => {
-                        setPendingInput(null);
-                        setTaskInputValue("");
-                        setTaskInputError(null);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                  <p
-                    id={`${inputId}-hint`}
-                    className={cn(
-                      "mt-2 text-xs leading-[18px]",
-                      taskInputError ? "text-red-11" : "text-dls-secondary",
-                    )}
-                    role={taskInputError ? "alert" : undefined}
-                  >
-                    {taskInputError ?? pendingInput.requirement.helpText}
-                  </p>
-                </form>
-              ) : null}
+      {!MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions ? (
+        <div className="mx-1 flex items-start gap-2 rounded-md bg-dls-surface-muted/35 px-3 py-2 text-xs leading-5 text-dls-secondary" role="status">
+          <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" aria-hidden="true" />
+          <span><strong className="font-semibold text-dls-text">Public Beta is read-only.</strong> Research, watches, and public evidence are available; wallet actions stay hidden.</span>
+        </div>
+      ) : null}
+
+      <div
+        id={`desk-task-list-${panel}`}
+        className="matterhorn-focused-desk-prompt-list space-y-5"
+        aria-label="Agent tasks"
+      >
+        {(showAllTasks ? taskGroups : recommendedTaskGroups).map((group) => (
+          <section key={group.id} aria-labelledby={`desk-task-group-${panel}-${group.id}`}>
+            <div className="mb-2 px-1">
+              <h3 id={`desk-task-group-${panel}-${group.id}`} className="text-[13px] font-semibold text-dls-text">
+                {group.label}
+              </h3>
+              <p className="mt-0.5 text-[11px] leading-5 text-dls-secondary">{group.description}</p>
             </div>
-          );
-        })}
+            <div className={cn(
+              "grid grid-cols-1 gap-2",
+              showAllTasks ? "lg:grid-cols-2" : "lg:grid-cols-3",
+            )}>
+              {group.starters.map((item) => {
+                const isLaunching = launchingTaskTitle === item.title;
+                const inputRequirement = getDeskTaskInputRequirement(item.prompt);
+                const opensReviewedAction = Boolean(item.reviewedAction);
+                const pendingInputKey = `${panel}:${item.title}`;
+                const inputOpen = pendingInput?.key === pendingInputKey;
+                const inputId = `desk-task-input-${panel}-${item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+                const evidenceHint = panel === "bittensor"
+                  ? "reads: public SS58 and subnet context"
+                  : panel === "hyperliquid"
+                    ? "reads: public market and account context"
+                    : panel === "polymarket"
+                      ? "reads: public market and compliance context"
+                      : panel === "sui"
+                        ? "reads: public Sui account and receipt context"
+                        : "reads: public context";
+                return (
+                  <div key={item.id} className="space-y-2">
+                    <WorkflowStageCard
+                      title={item.title}
+                      objective={item.detail}
+                      status="idle"
+                      evidenceHints={[evidenceHint]}
+                      actionLabel={opensReviewedAction
+                        ? "Prepare in chat"
+                        : isLaunching
+                          ? "Starting..."
+                          : startTaskBlocked
+                            ? startTaskActionLabel
+                            : inputRequirement?.actionLabel ?? draftConfig?.confirmCtaLabel ?? "Start task"}
+                      actionDisabled={Boolean(launchingTaskTitle) || startTaskBlocked}
+                      actionTitle={opensReviewedAction
+                        ? "Start an editable chat request. Exact terms move to Wallet for review and signature."
+                        : startTaskBlocker ?? inputRequirement?.helpText ?? undefined}
+                      onAction={() => handleTaskAction(item)}
+                    />
+                    {inputOpen ? (
+                      <form
+                        className="ml-0 rounded-lg bg-dls-surface-muted/35 px-3 py-3 sm:ml-8"
+                        onSubmit={handleTaskInputSubmit}
+                      >
+                        <label htmlFor={inputId} className="text-[12px] font-semibold leading-5 text-dls-text">
+                          {pendingInput.requirement.label}
+                        </label>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+                          <Input
+                            id={inputId}
+                            value={taskInputValue}
+                            onChange={(event) => {
+                              setTaskInputValue(event.currentTarget.value);
+                              if (taskInputError) setTaskInputError(null);
+                            }}
+                            aria-invalid={Boolean(taskInputError)}
+                            aria-describedby={`${inputId}-hint`}
+                            placeholder={pendingInput.requirement.inputPlaceholder}
+                            className="h-8 border-dls-border/70 bg-background/35 text-[13px]"
+                          />
+                          <Button type="submit" size="sm" className="h-8">
+                            Start task
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-dls-secondary"
+                            onClick={() => {
+                              setPendingInput(null);
+                              setTaskInputValue("");
+                              setTaskInputError(null);
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                        <p
+                          id={`${inputId}-hint`}
+                          className={cn(
+                            "mt-2 text-xs leading-[18px]",
+                            taskInputError ? "text-red-11" : "text-dls-secondary",
+                          )}
+                          role={taskInputError ? "alert" : undefined}
+                        >
+                          {taskInputError ?? pendingInput.requirement.helpText}
+                        </p>
+                      </form>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+        {hiddenTaskCount > 0 ? (
+          <div className="flex justify-start px-1 pt-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-11 px-3 text-dls-secondary sm:h-8"
+              aria-expanded={showAllTasks}
+              aria-controls={`desk-task-list-${panel}`}
+              onClick={() => setShowAllTasks((current) => !current)}
+            >
+              {showAllTasks ? "Show recommended tasks" : `More tasks (${hiddenTaskCount})`}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -1416,6 +1538,10 @@ export function SessionPage(props: SessionPageProps) {
     () => readSessionPanelFromSearch(location.search, { notesAvailable: workspaceNotesAvailable }),
     [location.search, workspaceNotesAvailable],
   );
+  const routeWorkflowDesk = useMemo(
+    () => readSessionDeskFromSearch(location.search),
+    [location.search],
+  );
   const activeSidePanel = routeSidePanel;
   const [reviewedActionEntryProtocol, setReviewedActionEntryProtocol] = useState<VenueSidePanel | null>(null);
   const [reviewedActionEntryOperation, setReviewedActionEntryOperation] = useState<ReviewedActionOperation | null>(null);
@@ -1552,8 +1678,15 @@ export function SessionPage(props: SessionPageProps) {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [sessionActionId, setSessionActionId] = useState<string | null>(null);
   const [homePathCopyLabel, setHomePathCopyLabel] = useState<string | null>(null);
-  const [activeWorkflowDeskId, setActiveWorkflowDeskId] = useState<WorkflowDeskId | null>(null);
+  const activeWorkflowDeskId: WorkflowDeskId | null = routeWorkflowDesk;
   const [workflowLaunchState, setWorkflowLaunchState] = useState<WorkflowDeskLaunchState | null>(null);
+  const homeSurfaceTitle = activeWorkflowDeskId
+    ? `${getCustomerProtocolDeskVisual(activeWorkflowDeskId)?.displayName ?? "Workflow"} desk`
+      : focusedProtocolPanel
+      ? `${getCustomerProtocolDeskVisual(focusedProtocolPanel)?.displayName ?? "Protocol"} desk`
+      : props.workspaceHomeView === "history"
+        ? "History"
+        : "Home";
   const restoredPendingDeskWorkspaceRef = useRef<string | null>(null);
   const browserPanelRef = usePanelRef();
   const preserveSidePanelOnPanelOpenRef = useRef(false);
@@ -1616,6 +1749,23 @@ export function SessionPage(props: SessionPageProps) {
     );
   }, [navigate, setSidePanelState, sidePanelScopeId]);
 
+  const setCurrentWorkflowDesk = useCallback((desk: WorkflowDeskId | null) => {
+    setSidePanelState(GLOBAL_VOICE_SIDE_PANEL_KEY, null);
+    setSidePanelState(sidePanelScopeId, null);
+
+    const currentLocation = liveLocationRef.current;
+    const transition = resolveSessionDeskNavigation(currentLocation.search, desk);
+    if (!transition) return;
+    navigate(
+      {
+        pathname: currentLocation.pathname,
+        search: transition.search,
+        hash: currentLocation.hash,
+      },
+      { replace: transition.replace },
+    );
+  }, [navigate, setSidePanelState, sidePanelScopeId]);
+
   useEffect(
     () => subscribeReviewedActionHandoff((handoff) => {
       setReviewedActionEntryProtocol(handoff.protocol);
@@ -1647,9 +1797,19 @@ export function SessionPage(props: SessionPageProps) {
       restoredPendingDeskWorkspaceRef.current = null;
       return;
     }
-    setActiveWorkflowDeskId(null);
     setWorkflowLaunchState(null);
   }, [props.pendingDeskTask?.deskId, props.selectedWorkspaceId]);
+
+  useEffect(() => {
+    const hasDeskParam = new URLSearchParams(location.search).has("desk");
+    if (!hasDeskParam || routeWorkflowDesk) return;
+    const transition = resolveSessionDeskNavigation(location.search, null);
+    if (!transition) return;
+    navigate(
+      { pathname: location.pathname, search: transition.search, hash: location.hash },
+      { replace: true },
+    );
+  }, [location.hash, location.pathname, location.search, navigate, routeWorkflowDesk]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1701,15 +1861,16 @@ export function SessionPage(props: SessionPageProps) {
   }, [setCurrentSidePanel]);
 
   const goHome = useCallback(() => {
+    setCurrentWorkflowDesk(null);
     returnToProjectHome();
     props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
-  }, [props.selectedWorkspaceId, props.sidebar, returnToProjectHome]);
+  }, [props.selectedWorkspaceId, props.sidebar, returnToProjectHome, setCurrentWorkflowDesk]);
 
   const closeWorkflowDesk = useCallback(() => {
-    setActiveWorkflowDeskId(null);
     setWorkflowLaunchState(null);
-    returnToProjectHome();
-  }, [returnToProjectHome]);
+    setCurrentWorkflowDesk(null);
+    props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
+  }, [props.selectedWorkspaceId, props.sidebar, setCurrentWorkflowDesk]);
 
   const openWorkflowDesk = useCallback((
     deskId: WorkflowDeskId,
@@ -1729,8 +1890,7 @@ export function SessionPage(props: SessionPageProps) {
     if (!options?.recovery) {
       props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
     }
-    setCurrentSidePanel(null);
-    setActiveWorkflowDeskId(deskId);
+    setCurrentWorkflowDesk(deskId);
 
     if (!options?.launchAgent) {
       const modelUnavailable = Boolean(props.modelUnavailable);
@@ -1821,7 +1981,7 @@ export function SessionPage(props: SessionPageProps) {
     props.selectedWorkspaceId,
     props.sidebar,
     props.modelUnavailable,
-    setCurrentSidePanel,
+    setCurrentWorkflowDesk,
   ]);
 
   const pendingDeskRecoveryKeyRef = useRef<string | null>(null);
@@ -2350,6 +2510,63 @@ export function SessionPage(props: SessionPageProps) {
     }
   };
 
+  const selectedHomeSessionGroup = props.sidebar.workspaceSessionGroups.find(
+    (group) => group.workspace.id === props.selectedWorkspaceId,
+  );
+  const homeRootSessions = selectedHomeSessionGroup?.sessions.filter(
+    (session) => !session.parentID,
+  ) ?? [];
+  const activeHomeSession = homeRootSessions.find((session) => {
+    const status = props.sidebar.sessionStatusById[session.id];
+    return status === "thinking" || status === "responding" || status === "waiting" || status === "compacting";
+  });
+  const homeResumeSession = activeHomeSession ?? homeRootSessions[0] ?? null;
+  const homeResumeStatus = homeResumeSession
+    ? props.sidebar.sessionStatusById[homeResumeSession.id]
+    : null;
+  const recommendedHomeStarter = MATTERHORN_DESK_TASK_STARTERS.bittensor.find(
+    (starter) => starter.id === "discover-subnets",
+  ) ?? MATTERHORN_DESK_TASK_STARTERS.bittensor[0];
+  const homePrimaryAction = props.modelUnavailable
+    ? {
+        eyebrow: "Setup required",
+        title: "Connect a model to start agent work",
+        description: "Choose a model provider once, then return here with your project and draft intact.",
+        meta: "Required before chats and desk tasks can run",
+        actionLabel: "Set up model",
+        disabled: false,
+        onAction: () => {
+          if (props.surface?.onOpenAiProviders) {
+            props.surface.onOpenAiProviders();
+            return;
+          }
+          props.onOpenSettings();
+        },
+      }
+    : homeResumeSession
+      ? {
+          eyebrow: activeHomeSession ? "Active task" : "Continue where you left off",
+          title: getDisplaySessionTitle(homeResumeSession.title),
+          description: activeHomeSession
+            ? homeResumeStatus === "waiting"
+              ? "Matterhorn needs your review or input before this task can continue."
+              : "Matterhorn is still working. Open the task to follow progress and evidence."
+            : "Resume the latest task with its conversation, context, and saved outputs in place.",
+          meta: formatHomeSessionRecency(homeResumeSession.time?.updated ?? homeResumeSession.time?.created),
+          actionLabel: activeHomeSession ? "Open task" : "Continue",
+          disabled: false,
+          onAction: () => props.sidebar.onOpenSession(props.selectedWorkspaceId, homeResumeSession.id),
+        }
+      : {
+          eyebrow: "Recommended safe start",
+          title: recommendedHomeStarter.title,
+          description: recommendedHomeStarter.detail,
+          meta: "Read-only research · public evidence · no wallet action",
+          actionLabel: "Open Bittensor desk",
+          disabled: props.sidebar.newTaskDisabled,
+          onAction: () => openVenueRailPane("bittensor"),
+        };
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-dls-background text-dls-text mac:bg-transparent">
       <SidebarProvider
@@ -2403,44 +2620,49 @@ export function SessionPage(props: SessionPageProps) {
           >
             <ResizablePanel minSize="360px" className="min-w-0">
               <div className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">
-          <header className="z-10 flex h-10 shrink-0 items-center justify-between bg-dls-surface/95 px-4 shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)] md:px-6 mac:titlebar-drag @container/titlebar">
+          <header className="z-10 flex h-11 shrink-0 items-center justify-between bg-dls-surface/95 px-4 shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)] md:h-10 md:px-6 mac:titlebar-drag @container/titlebar">
             <div className="flex min-w-0 items-center gap-3">
-              {shellConfig.sidebar ? <SidebarTrigger className="mac:hidden" /> : null}
+              {shellConfig.sidebar ? <SidebarTrigger className="size-11 md:size-8 mac:hidden" /> : null}
               {!showWorkspaceSetupEmptyState ? (
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="h-7 shrink-0 gap-1.5 rounded-md px-2 text-xs font-semibold text-dls-secondary hover:bg-dls-hover hover:text-dls-text mac:titlebar-no-drag"
+                  size="icon-sm"
+                  className="size-11 shrink-0 rounded-md text-dls-secondary hover:bg-dls-hover hover:text-dls-text md:size-7 mac:titlebar-no-drag"
                   onClick={goHome}
-                  title="Go to project Home"
-                  aria-label="Go to project Home"
+                  title={`Go to ${homeProjectName} Home`}
+                  aria-label={`Go to ${homeProjectName} Home`}
                 >
                   <Home className="size-3.5" />
-                  <span>Home</span>
                 </Button>
               ) : null}
-              {!showWorkspaceSetupEmptyState ? (
-                <span
-                  className="hidden max-w-[18rem] truncate text-[12px] font-medium text-dls-secondary lg:inline"
-                  title={homeProjectName}
+              {showWorkspaceSetupEmptyState ? (
+                <h1 className="min-w-0 truncate text-[15px] font-semibold text-dls-text">
+                  {t("session.create_or_connect_workspace")}
+                </h1>
+              ) : (
+                <div
+                  className="flex min-w-0 items-center gap-1.5"
+                  aria-label="Current location"
                 >
-                  {homeProjectName}
-                </span>
-              ) : null}
-              <h1 className="min-w-0 truncate text-[15px] font-semibold text-dls-text">
-                {showWorkspaceSetupEmptyState
-                  ? t("session.create_or_connect_workspace")
-                  : props.workspaceHomeView === "history" && !props.selectedSessionId
-                    ? "Project history"
-                    : !props.selectedSessionId
-                      ? "Project home"
+                  <span
+                    className="max-w-[7rem] shrink truncate text-[12px] font-medium text-dls-secondary sm:max-w-[12rem] lg:max-w-[18rem]"
+                    title={homeProjectName}
+                  >
+                    {homeProjectName}
+                  </span>
+                  <ChevronRight className="size-3 shrink-0 text-dls-secondary/60" aria-hidden="true" />
+                  <h1 className="min-w-0 truncate text-[15px] font-semibold text-dls-text">
+                    {!props.selectedSessionId
+                      ? homeSurfaceTitle
                       : selectedSessionTitle || t("session.default_title")}
-              </h1>
+                  </h1>
+                </div>
+              )}
               {props.selectedSessionId && props.onRenameSession && !showWorkspaceSetupEmptyState ? (
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="size-7 shrink-0 text-dls-secondary hover:text-dls-text mac:titlebar-no-drag"
+                  className="size-11 shrink-0 text-dls-secondary hover:text-dls-text md:size-7 mac:titlebar-no-drag"
                   onClick={() => openRenameModal(props.selectedSessionId!)}
                   title={t("session.rename_title")}
                   aria-label={t("session.rename_title")}
@@ -2465,7 +2687,7 @@ export function SessionPage(props: SessionPageProps) {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="size-7 text-dls-secondary hover:text-dls-text"
+                  className="size-11 text-dls-secondary hover:text-dls-text md:size-7"
                   onClick={() =>
                     openWorkspaceQuickJot(
                       props.selectedSessionId
@@ -2729,62 +2951,70 @@ export function SessionPage(props: SessionPageProps) {
                       style={{ scrollbarGutter: "stable" } as CSSProperties}
                     >
                       <div className="relative w-full max-w-5xl space-y-6">
-                        <section className="space-y-3 rounded-lg bg-dls-canvas/35 px-4 py-4" aria-label="Workspace home">
-                          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                            <div className="min-w-0">
-                              <h2 className="truncate text-lg font-semibold leading-7 text-dls-text">
-                                {homeProjectName}
-                              </h2>
-                              <p className="max-w-2xl text-sm leading-6 text-dls-secondary">
-                                Chats, desks, notes, and saved outputs for this project.
-                              </p>
-                            </div>
-                            <div className="flex flex-wrap gap-2 md:justify-end">
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="h-8 px-3"
-                                disabled={props.sidebar.newTaskDisabled}
-                                onClick={() => props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId)}
-                              >
-                                New chat
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                className="h-8 px-3"
-                                onClick={props.sidebar.onOpenCreateWorkspace}
-                              >
-                                New project
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 bg-transparent px-3"
-                                onClick={() => openWorkspaceQuickJot()}
-                              >
-                                New note
-                              </Button>
-                            </div>
+                        <section className="space-y-4" aria-label="Workspace home">
+                          <div className="min-w-0">
+                            <h2 className="truncate text-xl font-semibold leading-7 text-dls-text">
+                              {homeProjectName}
+                            </h2>
+                            <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
+                              Continue active work, start a focused desk task, or create something new.
+                            </p>
                           </div>
-                          <div className="grid min-w-0 gap-2 text-xs text-dls-secondary lg:grid-cols-2">
-                            <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2">
-                              <span className="font-medium text-dls-text">Project folder</span>
-                              <span
-                                className="min-w-0 truncate font-mono text-[11px] leading-4 text-dls-secondary"
-                                title={
-                                  canExposeLocalPaths
-                                    ? homeProjectPath || "No local project folder selected"
-                                    : "Stored by your local Matterhorn engine"
-                                }
-                              >
-                                {homeFolderLabel}
-                              </span>
-                              <span className="flex shrink-0 items-center gap-0.5">
-                                {canExposeLocalPaths ? (
-                                  <>
+
+                          <WorkspaceHomePrimaryAction {...homePrimaryAction} />
+
+                          <div
+                            className="flex flex-wrap items-center gap-1.5 border-t border-dls-border/40 pt-3"
+                            aria-label="Secondary creation actions"
+                          >
+                            <span className="mr-1 text-[11px] font-medium text-dls-secondary">Create</span>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              className="h-11 px-3 sm:h-8"
+                              disabled={props.sidebar.newTaskDisabled}
+                              onClick={() => props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId)}
+                            >
+                              New chat
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-11 bg-transparent px-3 sm:h-8"
+                              onClick={props.sidebar.onOpenCreateWorkspace}
+                            >
+                              New project
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-11 bg-transparent px-3 sm:h-8"
+                              onClick={() => openWorkspaceQuickJot()}
+                            >
+                              New note
+                            </Button>
+                          </div>
+
+                          <details className="group rounded-md bg-dls-canvas/28 px-3 py-2 text-xs text-dls-secondary">
+                            <summary className="cursor-pointer list-none font-medium text-dls-text marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-border">
+                              Project storage
+                              <span className="ml-1 text-dls-secondary" aria-hidden="true">·</span>
+                              <span className="ml-1 font-normal text-dls-secondary">Files and saved outputs</span>
+                            </summary>
+                            <div className="mt-2 grid min-w-0 gap-2 border-t border-dls-border/40 pt-2 lg:grid-cols-2">
+                              {canExposeLocalPaths ? (
+                                <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2">
+                                  <span className="font-medium text-dls-text">Project folder</span>
+                                  <span
+                                    className="min-w-0 truncate font-mono text-[11px] leading-4 text-dls-secondary"
+                                    title={homeProjectPath || "No local project folder selected"}
+                                  >
+                                    {homeFolderLabel}
+                                  </span>
+                                  <span className="flex shrink-0 items-center gap-0.5">
                                     <WorkspaceHomeIconAction
                                       label={homePathCopyLabel === "Project path" ? "Project path copied" : "Copy project path"}
                                       tooltip={homePathCopyLabel === "Project path" ? "Copied" : "Copy project path"}
@@ -2801,66 +3031,58 @@ export function SessionPage(props: SessionPageProps) {
                                     >
                                       <FolderOpen className="size-3.5" />
                                     </WorkspaceHomeIconAction>
-                                  </>
-                                ) : null}
-                              </span>
+                                  </span>
+                                </div>
+                              ) : (
+                                <p className="leading-5">Project files are stored by this workspace&apos;s Matterhorn engine.</p>
+                              )}
+                              <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2">
+                                <span className="font-medium text-dls-text">Saved outputs</span>
+                                <span className="min-w-0 truncate font-mono text-[11px] leading-4 text-dls-secondary">
+                                  outputs/
+                                </span>
+                                <span className="flex shrink-0 items-center gap-0.5">
+                                  {canExposeLocalPaths ? (
+                                    <>
+                                      <WorkspaceHomeIconAction
+                                        label={homePathCopyLabel === "Outputs path" ? "Outputs path copied" : "Copy outputs path"}
+                                        tooltip={homePathCopyLabel === "Outputs path" ? "Copied" : "Copy outputs path"}
+                                        onClick={() => void copyHomePath(homeOutputsPath, "Outputs path")}
+                                      >
+                                        <Copy className="size-3.5" />
+                                      </WorkspaceHomeIconAction>
+                                      <WorkspaceHomeIconAction
+                                        label="Open outputs folder"
+                                        tooltip="Open outputs folder"
+                                        disabled={!homeProjectPath || !props.onRevealPath}
+                                        onClick={() => {
+                                          if (!props.onRevealPath) return;
+                                          void props.onRevealPath(homeOutputsPath, "Outputs folder");
+                                        }}
+                                      >
+                                        <FolderOpen className="size-3.5" />
+                                      </WorkspaceHomeIconAction>
+                                    </>
+                                  ) : null}
+                                  <WorkspaceHomeIconAction
+                                    label="Jot a note about outputs"
+                                    tooltip="Jot a note about outputs"
+                                    disabled={!workspaceNotesAvailable}
+                                    onClick={() =>
+                                      openWorkspaceQuickJot({
+                                        type: "output",
+                                        id: homeOutputsPath,
+                                        label: "Outputs",
+                                      })
+                                    }
+                                  >
+                                    <NotebookPen className="size-3.5" />
+                                  </WorkspaceHomeIconAction>
+                                </span>
+                              </div>
                             </div>
-                            <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2">
-                              <span className="font-medium text-dls-text">Saved outputs</span>
-                              <span
-                                className="min-w-0 truncate font-mono text-[11px] leading-4 text-dls-secondary"
-                                title={canExposeLocalPaths ? homeOutputsPath : "Stored with this project"}
-                              >
-                                outputs/
-                              </span>
-                              <span className="flex shrink-0 items-center gap-0.5">
-                                {canExposeLocalPaths ? (
-                                  <>
-                                    <WorkspaceHomeIconAction
-                                      label={homePathCopyLabel === "Outputs path" ? "Outputs path copied" : "Copy outputs path"}
-                                      tooltip={homePathCopyLabel === "Outputs path" ? "Copied" : "Copy outputs path"}
-                                      onClick={() => void copyHomePath(homeOutputsPath, "Outputs path")}
-                                    >
-                                      <Copy className="size-3.5" />
-                                    </WorkspaceHomeIconAction>
-                                    <WorkspaceHomeIconAction
-                                      label="Open outputs folder"
-                                      tooltip="Open outputs folder"
-                                      disabled={!homeProjectPath || !props.onRevealPath}
-                                      onClick={() => {
-                                        if (!props.onRevealPath) return;
-                                        void props.onRevealPath(homeOutputsPath, "Outputs folder");
-                                      }}
-                                    >
-                                      <FolderOpen className="size-3.5" />
-                                    </WorkspaceHomeIconAction>
-                                  </>
-                                ) : null}
-                                <WorkspaceHomeIconAction
-                                  label="Jot a note about outputs"
-                                  tooltip="Jot a note about outputs"
-                                  disabled={!workspaceNotesAvailable}
-                                  onClick={() =>
-                                    openWorkspaceQuickJot({
-                                      type: "output",
-                                      id: homeOutputsPath,
-                                      label: "Outputs",
-                                    })
-                                  }
-                                >
-                                  <NotebookPen className="size-3.5" />
-                                </WorkspaceHomeIconAction>
-                              </span>
-                            </div>
-                          </div>
+                          </details>
                         </section>
-                        <HomeWalletRuntimeStatus
-                          capabilities={homeWalletCapabilitiesQuery.data ?? null}
-                          loading={homeWalletCapabilitiesQuery.isLoading}
-                          error={homeWalletCapabilitiesQuery.isError}
-                          runtime={currentWalletRuntime}
-                          onOpenWallet={() => setCurrentSidePanel("wallet")}
-                        />
                         {props.matterhornServerClient && props.runtimeWorkspaceId ? (
                           <RecentActivitySection
                             matterhornServerClient={props.matterhornServerClient}
@@ -2886,6 +3108,13 @@ export function SessionPage(props: SessionPageProps) {
                               });
                             }
                           }}
+                        />
+                        <HomeWalletRuntimeStatus
+                          capabilities={homeWalletCapabilitiesQuery.data ?? null}
+                          loading={homeWalletCapabilitiesQuery.isLoading}
+                          error={homeWalletCapabilitiesQuery.isError}
+                          runtime={currentWalletRuntime}
+                          onOpenWallet={() => setCurrentSidePanel("wallet")}
                         />
                         {props.developerMode ? (
                           <>
