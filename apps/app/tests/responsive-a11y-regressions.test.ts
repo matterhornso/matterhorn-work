@@ -108,4 +108,18 @@ describe("responsive accessibility regressions", () => {
     expect(signinStyles).toContain("safe-area-inset-bottom");
     expect(signinStyles).toContain(".public-auth-trust a:focus-visible");
   });
+
+  test("MCP Settings preserves sequential section and item heading levels", () => {
+    const mcp = readAppSource("domains/settings/pages/mcp-view.tsx");
+    const extensionCard = readAppSource("design-system/extension-card.tsx");
+    const settingsSection = readAppSource("domains/settings/settings-section.tsx");
+    const settingsLayout = readAppSource("domains/settings/settings-layout.tsx");
+
+    expect(mcp).toContain("headingLevel={props.compact ? 3 : 2}");
+    expect(mcp).toContain("headingLevel={props.headingLevel === 2 ? 3 : 4}");
+    expect(extensionCard).toContain("headingLevel?: 3 | 4");
+    expect(extensionCard).toContain("headingLevel = 4");
+    expect(settingsSection).toMatch(/SettingsSectionHeaderTitle[\s\S]*?<h2[\s\S]*?flex items-center gap-2/);
+    expect(settingsLayout).toMatch(/LayoutSectionTitle[\s\S]*?<h2[\s\S]*?flex items-center gap-2/);
+  });
 });

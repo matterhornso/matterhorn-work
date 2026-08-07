@@ -1549,6 +1549,7 @@ export function McpView(props: McpViewProps) {
 
       <McpConfiguredServersSection
         compact={props.compact}
+        headingLevel={props.compact ? 3 : 2}
         servers={props.mcpServers}
         statuses={props.mcpStatuses}
         lastUpdatedAt={props.mcpLastUpdatedAt}
@@ -1575,6 +1576,7 @@ export function McpView(props: McpViewProps) {
         cards={MATTERHORN_MCP_PRODUCT_CARDS}
         onCopyCommand={copyMatterhornMcpCommand}
         compact
+        headingLevel={props.compact ? 3 : 2}
       />
 
       <McpCustomAppCard
@@ -1623,6 +1625,7 @@ export function McpView(props: McpViewProps) {
       </div>
 
       <McpQuickConnectSection
+        headingLevel={props.compact ? 3 : 2}
         entries={customerQuickConnectList.filter((entry) => {
           if (
             !showHidden &&
@@ -2125,6 +2128,7 @@ function MatterhornMcpProductSection(props: {
   cards: MatterhornMcpProductCard[];
   onCopyCommand: (command: string) => void;
   compact?: boolean;
+  headingLevel?: 2 | 3;
 }) {
   const visibleToolCount = props.compact ? 3 : Number.POSITIVE_INFINITY;
   const [selectedClientId, setSelectedClientId] =
@@ -2140,9 +2144,11 @@ function MatterhornMcpProductSection(props: {
     return (
       <section className="@container/matterhorn-mcps grid gap-3">
         <div className="grid gap-1">
-          <h3 className="text-base font-semibold text-dls-text">
-            Matterhorn MCPs
-          </h3>
+          {props.headingLevel === 2 ? (
+            <h2 className="text-base font-semibold text-dls-text">Matterhorn MCPs</h2>
+          ) : (
+            <h3 className="text-base font-semibold text-dls-text">Matterhorn MCPs</h3>
+          )}
           <p className="text-xs leading-5 text-dls-secondary">
             Generate config for your coding agent.
           </p>
@@ -2764,13 +2770,16 @@ function McpQuickConnectSection(props: {
   onDetail: (entry: McpDirectoryInfo) => void;
   onSkillDetail?: (skill: SkillItem) => void;
   onPluginDetail?: (plugin: CloudImportedPlugin) => void;
+  headingLevel?: 2 | 3;
 }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <h3 className="text-sm font-semibold text-dls-text">
-          {t("mcp.available_apps")}
-        </h3>
+        {props.headingLevel === 2 ? (
+          <h2 className="text-sm font-semibold text-dls-text">{t("mcp.available_apps")}</h2>
+        ) : (
+          <h3 className="text-sm font-semibold text-dls-text">{t("mcp.available_apps")}</h3>
+        )}
         <span className="text-xs text-dls-secondary">
           {t("mcp.one_click_connect")}
         </span>
@@ -2827,6 +2836,7 @@ function McpQuickConnectSection(props: {
                   ? undefined
                   : actionLabelForEntry(entry, configured, disabledReason)
               }
+              headingLevel={props.headingLevel === 2 ? 3 : 4}
               onClick={() => props.onDetail(entry)}
             />
           );
@@ -2846,6 +2856,7 @@ function McpQuickConnectSection(props: {
               hidden={hidden}
               statusHint="Installed"
               actionLabel="View details"
+              headingLevel={props.headingLevel === 2 ? 3 : 4}
               onClick={() => props.onSkillDetail?.(skill)}
             />
           );
@@ -2868,6 +2879,7 @@ function McpQuickConnectSection(props: {
               hidden={hidden}
               statusHint="Installed"
               actionLabel="View details"
+              headingLevel={props.headingLevel === 2 ? 3 : 4}
               onClick={() => props.onPluginDetail?.(plugin)}
             />
           );
@@ -2893,6 +2905,7 @@ function McpQuickConnectSection(props: {
 
 function McpConfiguredServersSection(props: {
   compact?: boolean;
+  headingLevel?: 2 | 3;
   servers: McpServerEntry[];
   statuses: McpStatusMap;
   lastUpdatedAt: number | null;
@@ -2914,9 +2927,11 @@ function McpConfiguredServersSection(props: {
   return (
     <div className={props.compact ? "space-y-2.5" : "space-y-4"}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-xs font-medium text-dls-secondary">
-          {t("mcp.your_apps")}
-        </h3>
+        {props.headingLevel === 2 ? (
+          <h2 className="text-xs font-medium text-dls-secondary">{t("mcp.your_apps")}</h2>
+        ) : (
+          <h3 className="text-xs font-medium text-dls-secondary">{t("mcp.your_apps")}</h3>
+        )}
         {props.lastUpdatedAt ? (
           <span className="tabular-nums text-[11px] text-dls-secondary">
             {t("mcp.last_synced")} {formatRelativeTime(props.lastUpdatedAt)}

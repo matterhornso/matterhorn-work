@@ -41,9 +41,9 @@ interface LayoutSectionTitleProps {
 
 export function LayoutSectionTitle({ children, className }: LayoutSectionTitleProps) {
   return (
-    <h3 className={cn("flex items-center gap-2 text-base font-medium text-foreground", className)}>
+    <h2 className={cn("flex items-center gap-2 text-base font-medium text-foreground", className)}>
       {children}
-    </h3>
+    </h2>
   );
 }
 

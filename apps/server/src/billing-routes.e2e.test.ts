@@ -14,6 +14,13 @@ import type { ServerConfig } from "./types.js";
 const TOKEN = "test-token";
 const HOST_TOKEN = "test-host-token";
 const WORKSPACE_ID = "ws_billing";
+const STRIPE_PERIOD_START_SECONDS = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+const STRIPE_PERIOD_END_SECONDS = STRIPE_PERIOD_START_SECONDS + 30 * 24 * 60 * 60;
+const STRIPE_NEWER_EVENT_SECONDS = STRIPE_PERIOD_START_SECONDS + 1000;
+
+function stripePeriodIso(seconds: number): string {
+  return new Date(seconds * 1000).toISOString();
+}
 
 let priorEnv: Record<string, string | undefined> = {};
 const stops: Array<() => Promise<void> | void> = [];
@@ -796,7 +803,7 @@ describe("Billing routes", () => {
       id: "evt_checkout_unpaid",
       type: "checkout.session.completed",
       livemode: false,
-      created: 1783517000,
+      created: STRIPE_PERIOD_START_SECONDS,
       data: {
         object: {
           id: "cs_test_unpaid",
@@ -828,7 +835,7 @@ describe("Billing routes", () => {
       handled: false,
       workspaceSynced: false,
       eventId: "evt_checkout_unpaid",
-      eventCreatedAt: "2026-07-08T13:23:20.000Z",
+      eventCreatedAt: stripePeriodIso(STRIPE_PERIOD_START_SECONDS),
     });
 
     const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
@@ -914,15 +921,15 @@ describe("Billing routes", () => {
       id: "evt_subscription_unlinked",
       type: "customer.subscription.updated",
       livemode: false,
-      created: 1783517000,
+      created: STRIPE_PERIOD_START_SECONDS,
       data: {
         object: {
           id: "sub_test_unlinked",
           object: "subscription",
           customer: "cus_test_unlinked",
           status: "active",
-          current_period_start: 1783517000,
-          current_period_end: 1786109000,
+          current_period_start: STRIPE_PERIOD_START_SECONDS,
+          current_period_end: STRIPE_PERIOD_END_SECONDS,
           metadata: {
             workspace_id: WORKSPACE_ID,
             plan_id: "max",
@@ -986,8 +993,8 @@ describe("Billing routes", () => {
           object: "subscription",
           customer: "cus_test_workspace",
           status: "active",
-          current_period_start: 1783517000,
-          current_period_end: 1786109000,
+          current_period_start: STRIPE_PERIOD_START_SECONDS,
+          current_period_end: STRIPE_PERIOD_END_SECONDS,
           cancel_at_period_end: true,
           metadata: {
             workspace_id: WORKSPACE_ID,
@@ -1023,8 +1030,8 @@ describe("Billing routes", () => {
       providerCustomerId: "cus_test_workspace",
       providerSubscriptionId: "sub_test_workspace",
       cancelAtPeriodEnd: true,
-      currentPeriodStart: "2026-07-08T13:23:20.000Z",
-      currentPeriodEnd: "2026-08-07T13:23:20.000Z",
+      currentPeriodStart: stripePeriodIso(STRIPE_PERIOD_START_SECONDS),
+      currentPeriodEnd: stripePeriodIso(STRIPE_PERIOD_END_SECONDS),
     });
 
     const deletedBody = JSON.stringify({
@@ -1095,15 +1102,15 @@ describe("Billing routes", () => {
       id: "evt_subscription_newer",
       type: "customer.subscription.updated",
       livemode: false,
-      created: 1783518000,
+      created: STRIPE_NEWER_EVENT_SECONDS,
       data: {
         object: {
           id: "sub_test_stale",
           object: "subscription",
           customer: "cus_test_stale",
           status: "active",
-          current_period_start: 1783517000,
-          current_period_end: 1786109000,
+          current_period_start: STRIPE_PERIOD_START_SECONDS,
+          current_period_end: STRIPE_PERIOD_END_SECONDS,
           metadata: {
             workspace_id: WORKSPACE_ID,
             plan_id: "max",
@@ -1126,14 +1133,14 @@ describe("Billing routes", () => {
       handled: true,
       workspaceSynced: true,
       planId: "max",
-      eventCreatedAt: "2026-07-08T13:40:00.000Z",
+      eventCreatedAt: stripePeriodIso(STRIPE_NEWER_EVENT_SECONDS),
     });
 
     const olderBody = JSON.stringify({
       id: "evt_subscription_older_deleted",
       type: "customer.subscription.deleted",
       livemode: false,
-      created: 1783517000,
+      created: STRIPE_PERIOD_START_SECONDS,
       data: {
         object: {
           id: "sub_test_stale",
@@ -1164,7 +1171,7 @@ describe("Billing routes", () => {
       webhookMutation: "stale_event",
       planId: "free",
       subscriptionStatus: "canceled",
-      eventCreatedAt: "2026-07-08T13:23:20.000Z",
+      eventCreatedAt: stripePeriodIso(STRIPE_PERIOD_START_SECONDS),
     });
 
     const status = await jsonFetch(base, `/workspace/${WORKSPACE_ID}/billing/status`);
@@ -1245,8 +1252,8 @@ describe("Billing routes", () => {
           object: "subscription",
           customer: "cus_test_fallback",
           status: "active",
-          current_period_start: 1783517000,
-          current_period_end: 1786109000,
+          current_period_start: STRIPE_PERIOD_START_SECONDS,
+          current_period_end: STRIPE_PERIOD_END_SECONDS,
           metadata: {
             workspace_id: WORKSPACE_ID,
           },
