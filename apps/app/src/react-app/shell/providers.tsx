@@ -27,6 +27,15 @@ import {
 import { ReloadCoordinatorProvider } from "./reload-coordinator";
 import { LazyWalletRuntimeProvider } from "./LazyWalletRuntimeProvider";
 import { isPublicTrustPath } from "../domains/public/public-trust-content";
+import { WalletProvider } from "../domains/wallet/WalletProvider";
+
+const WALLET_RUNTIME_PANELS = new Set([
+  "wallet",
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
+  "sui",
+]);
 
 function resolveDefaultServerUrl(): string {
   if (isDesktopRuntime()) return "http://127.0.0.1:4096";
@@ -80,6 +89,7 @@ type AppProvidersProps = {
 
 function routeNeedsWalletRuntime(
   pathname: string,
+  search: string,
   requireSignin: boolean,
   hasCachedAuth: boolean,
   publicBetaWeb: boolean,
@@ -91,13 +101,20 @@ function routeNeedsWalletRuntime(
 
   const path = pathname.toLowerCase();
   if (isPublicTrustPath(path)) return false;
-  return !(
+  if (
     path === "/signin" ||
     path.startsWith("/signin/") ||
     path === "/welcome" ||
     path.startsWith("/welcome/") ||
     path === "/onboarding" ||
     path.startsWith("/onboarding/")
+  ) {
+    return false;
+  }
+
+  if (/(?:^|\/)settings\/wallet(?:\/|$)/.test(path)) return true;
+  return WALLET_RUNTIME_PANELS.has(
+    new URLSearchParams(search).get("panel")?.toLowerCase() ?? "",
   );
 }
 
@@ -122,15 +139,17 @@ export function AppProviders({ children }: AppProvidersProps) {
 
   const defaultUrl = resolveDefaultServerUrl();
   return (
-    <LazyWalletRuntimeProvider
-      enabled={routeNeedsWalletRuntime(
-        location.pathname,
-        requireSignin,
-        hasCachedAuth,
-        publicBetaWeb,
-      )}
-    >
-      <BootStateProvider>
+    <WalletProvider>
+      <LazyWalletRuntimeProvider
+        enabled={routeNeedsWalletRuntime(
+          location.pathname,
+          location.search,
+          requireSignin,
+          hasCachedAuth,
+          publicBetaWeb,
+        )}
+      >
+        <BootStateProvider>
         <ServerProvider defaultUrl={defaultUrl}>
           <ArchitectureMismatchGate>
             <DesktopRuntimeBoot />
@@ -151,7 +170,8 @@ export function AppProviders({ children }: AppProvidersProps) {
             </DenAuthProvider>
           </ArchitectureMismatchGate>
         </ServerProvider>
-      </BootStateProvider>
-    </LazyWalletRuntimeProvider>
+        </BootStateProvider>
+      </LazyWalletRuntimeProvider>
+    </WalletProvider>
   );
 }

@@ -31,8 +31,8 @@ describe("Wallet approval security contract", () => {
 
   test("approval modal does not clear or confirm before async wallet send succeeds", () => {
     const source = readAppSource("domains/wallet/TransactionApproval.tsx");
-    const sessionSource = readAppSource(
-      "domains/session/chat/session-page.tsx",
+    const sessionRuntimeSource = readAppSource(
+      "domains/wallet/session-wallet-runtime.tsx",
     );
 
     expect(source).toContain("const [approvalBusy, setApprovalBusy]");
@@ -42,7 +42,7 @@ describe("Wallet approval security contract", () => {
     expect(source).not.toContain(
       "dispatchTxApprovalResponse(true);\n              onApprove(pending);\n              store.clearApproval();",
     );
-    expect(sessionSource).toContain(
+    expect(sessionRuntimeSource).toContain(
       "onApprove={() => sessionWallet.approveTx()}",
     );
   });

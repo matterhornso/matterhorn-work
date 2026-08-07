@@ -1613,7 +1613,10 @@ export function ReactSessionComposer(props: ComposerProps) {
 
         {/* Below-panel control strip: agent + model + behavior variant */}
         <div className="mt-1.5 flex items-center justify-between px-1">
-          <div className="flex flex-wrap items-center gap-1.5 text-gray-10 sm:gap-2.5">
+          <div
+            className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-gray-10 sm:gap-2.5 [@media(max-height:640px)]:flex-nowrap [@media(max-height:640px)]:overflow-x-auto [@media(max-height:640px)]:overscroll-x-contain [@media(max-height:640px)]:pb-1 [@media(max-height:640px)]:[&>*]:shrink-0"
+            aria-label="Composer controls"
+          >
             {props.executionModesEnabled ? <div ref={modeMenuRef} className="relative">
               <button
                 type="button"

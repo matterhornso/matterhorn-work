@@ -95,6 +95,35 @@ describe("customer workflow template launch cards", () => {
     expect(sui?.safetySummary).toContain("public receipts only");
   });
 
+  test("public Beta starter cards fail closed to read-only research copy and prompts", () => {
+    const cards = buildCustomerWorkflowStarterCards(
+      FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES,
+      { reviewedActions: false },
+    );
+    const protocolCards = cards.filter((card) =>
+      ["bittensor", "hyperliquid", "polymarket", "sui"].includes(card.protocolDesk?.id ?? ""),
+    );
+
+    expect(protocolCards).toHaveLength(4);
+    for (const card of protocolCards) {
+      const visibleAndAccessibleCopy = [
+        card.title,
+        card.description,
+        card.statusLabel,
+        card.safetySummary,
+        card.prompt,
+        ...(card.protocolDesk?.capabilityBullets ?? []),
+      ].join(" ");
+      expect(card.title).toMatch(/^Open .+ desk$/);
+      expect(card.statusLabel).toBe("Read-only Beta");
+      expect(card.safetySummary).toContain("reviewed actions hidden");
+      expect(card.prompt).toContain("Keep the task read-only");
+      expect(visibleAndAccessibleCopy).not.toMatch(
+        /transfer|stake|unstake|place order|buy, sell|cancel action|signing|wallet-approved|review & submit/i,
+      );
+    }
+  });
+
   test("wellness prompts stay educational and services stay hidden from customer launchers", () => {
     const cards = buildCustomerWorkflowStarterCards(FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES);
     const wellness = cards.find((card) => card.id === "wellness_creator_workflow");

@@ -77,6 +77,8 @@
     "dev:headless-web": "OPENWORK_DEV_MODE=1 bun scripts/dev-headless-web.ts",
     "test:lighthouse-playwright": "node scripts/lighthouse-playwright-harness.mjs",
     "test:lighthouse-playwright-harness": "node scripts/lighthouse-playwright-harness.test.mjs",
+    "test:task-first-bundle-budget": "node scripts/task-first-bundle-budget.test.mjs",
+    "gate:task-first-bundle-budget": "node scripts/task-first-bundle-budget.mjs",
     "build": "node scripts/build.mjs",
     "build:ui": "pnpm --filter @matterhorn-work/app build",
     "electron:tester-artifact": "node scripts/electron-local-tester-artifact.mjs",

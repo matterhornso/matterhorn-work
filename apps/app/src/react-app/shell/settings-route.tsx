@@ -1,5 +1,13 @@
 /** @jsxImportSource react */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Navigate,
   useLocation,
@@ -65,8 +73,6 @@ import {
 } from "../domains/connections/provider-auth/store";
 import ProviderAuthModal from "../domains/connections/provider-auth/provider-auth-modal";
 import ConnectionsModals from "../domains/connections/modals";
-import { AiSettingsView } from "../domains/settings/pages/ai-view";
-import { SettingsOverviewView } from "../domains/settings/pages/overview-view";
 import {
   PENDING_DESK_TASK_RETURN_PARAM,
   readPendingDeskTaskNavigation,
@@ -85,30 +91,7 @@ import {
   type ExtensionConfigContext,
 } from "../domains/settings/extension-registry";
 import { isMatterhornExtensionEnabled } from "../domains/settings/extension-state";
-import { PreferencesView } from "../domains/settings/pages/preferences-view";
-import { ShellCustomizationView } from "../domains/settings/pages/shell-view";
-import { GeneralSettingsView } from "../domains/settings/pages/general-view";
-import { AuthorizedFoldersPanel } from "../domains/settings/panels/authorized-folders-panel";
 import { SettingsStack } from "../domains/settings/settings-section";
-import { AdvancedView } from "../domains/settings/pages/advanced-view";
-import { AppearanceView } from "../domains/settings/pages/appearance-view";
-import { CloudAccountView } from "../domains/settings/pages/cloud-account-view";
-import { CloudMarketplacesView } from "../domains/settings/pages/cloud-marketplaces-view";
-import MarketplaceView from "../domains/settings/pages/marketplace-view";
-import { CloudProvidersView } from "../domains/settings/pages/cloud-providers-view";
-import { CloudWorkersView } from "../domains/settings/pages/cloud-workers-view";
-import { DebugView } from "../domains/settings/pages/debug-view";
-import { EnvironmentView } from "../domains/settings/pages/environment-view";
-import { ExtensionsView } from "../domains/settings/pages/extensions-view";
-import { McpView } from "../domains/settings/pages/mcp-view";
-import { RecoveryView } from "../domains/settings/pages/recovery-view";
-import { MessagingView } from "../domains/settings/pages/messaging-view";
-import { SkillsView } from "../domains/settings/pages/skills-view";
-import { WalletSettingsView } from "../domains/settings/pages/wallet-view";
-import { GeneratedMediaSettingsView } from "../domains/settings/pages/generated-media-view";
-import { BillingSettingsView } from "../domains/settings/pages/billing-view";
-import { useWallet } from "../domains/wallet/WalletProvider";
-import { UpdatesView } from "../domains/settings/pages/updates-view";
 import { useDebugViewModel } from "../domains/settings/state/debug-view-model";
 import { useMessagingViewProps } from "../domains/settings/state/messaging-view-state";
 import { useElectronUpdaterState } from "../domains/settings/state/electron-updater-state";
@@ -217,6 +200,125 @@ import {
   openAiImageResponseToArrayBuffer,
   slugifyImageArtifactName,
 } from "../domains/settings/openai-image-extension";
+
+const AiSettingsView = lazy(() =>
+  import("../domains/settings/pages/ai-view").then((module) => ({
+    default: module.AiSettingsView,
+  })),
+);
+const SettingsOverviewView = lazy(() =>
+  import("../domains/settings/pages/overview-view").then((module) => ({
+    default: module.SettingsOverviewView,
+  })),
+);
+const PreferencesView = lazy(() =>
+  import("../domains/settings/pages/preferences-view").then((module) => ({
+    default: module.PreferencesView,
+  })),
+);
+const ShellCustomizationView = lazy(() =>
+  import("../domains/settings/pages/shell-view").then((module) => ({
+    default: module.ShellCustomizationView,
+  })),
+);
+const GeneralSettingsView = lazy(() =>
+  import("../domains/settings/pages/general-view").then((module) => ({
+    default: module.GeneralSettingsView,
+  })),
+);
+const AuthorizedFoldersPanel = lazy(() =>
+  import("../domains/settings/panels/authorized-folders-panel").then(
+    (module) => ({ default: module.AuthorizedFoldersPanel }),
+  ),
+);
+const AdvancedView = lazy(() =>
+  import("../domains/settings/pages/advanced-view").then((module) => ({
+    default: module.AdvancedView,
+  })),
+);
+const AppearanceView = lazy(() =>
+  import("../domains/settings/pages/appearance-view").then((module) => ({
+    default: module.AppearanceView,
+  })),
+);
+const CloudAccountView = lazy(() =>
+  import("../domains/settings/pages/cloud-account-view").then((module) => ({
+    default: module.CloudAccountView,
+  })),
+);
+const CloudMarketplacesView = lazy(() =>
+  import("../domains/settings/pages/cloud-marketplaces-view").then(
+    (module) => ({ default: module.CloudMarketplacesView }),
+  ),
+);
+const MarketplaceView = lazy(
+  () => import("../domains/settings/pages/marketplace-view"),
+);
+const CloudProvidersView = lazy(() =>
+  import("../domains/settings/pages/cloud-providers-view").then((module) => ({
+    default: module.CloudProvidersView,
+  })),
+);
+const CloudWorkersView = lazy(() =>
+  import("../domains/settings/pages/cloud-workers-view").then((module) => ({
+    default: module.CloudWorkersView,
+  })),
+);
+const DebugView = lazy(() =>
+  import("../domains/settings/pages/debug-view").then((module) => ({
+    default: module.DebugView,
+  })),
+);
+const EnvironmentView = lazy(() =>
+  import("../domains/settings/pages/environment-view").then((module) => ({
+    default: module.EnvironmentView,
+  })),
+);
+const ExtensionsView = lazy(() =>
+  import("../domains/settings/pages/extensions-view").then((module) => ({
+    default: module.ExtensionsView,
+  })),
+);
+const McpView = lazy(() =>
+  import("../domains/settings/pages/mcp-view").then((module) => ({
+    default: module.McpView,
+  })),
+);
+const RecoveryView = lazy(() =>
+  import("../domains/settings/pages/recovery-view").then((module) => ({
+    default: module.RecoveryView,
+  })),
+);
+const MessagingView = lazy(() =>
+  import("../domains/settings/pages/messaging-view").then((module) => ({
+    default: module.MessagingView,
+  })),
+);
+const SkillsView = lazy(() =>
+  import("../domains/settings/pages/skills-view").then((module) => ({
+    default: module.SkillsView,
+  })),
+);
+const WalletSettingsRouteView = lazy(() =>
+  import("../domains/settings/pages/wallet-settings-route-view").then(
+    (module) => ({ default: module.WalletSettingsRouteView }),
+  ),
+);
+const GeneratedMediaSettingsView = lazy(() =>
+  import("../domains/settings/pages/generated-media-view").then((module) => ({
+    default: module.GeneratedMediaSettingsView,
+  })),
+);
+const BillingSettingsView = lazy(() =>
+  import("../domains/settings/pages/billing-view").then((module) => ({
+    default: module.BillingSettingsView,
+  })),
+);
+const UpdatesView = lazy(() =>
+  import("../domains/settings/pages/updates-view").then((module) => ({
+    default: module.UpdatesView,
+  })),
+);
 import {
   OLLAMA_PROVIDER_CONFIG,
   type LocalProviderInstallInput,
@@ -614,7 +716,6 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const restrictionNotice = useRestrictionNotice();
   const desktopConfig = useDesktopConfig();
   const reloadCoordinator = useReloadCoordinator();
-  const walletProvider = useWallet();
   const [embeddedPath, setEmbeddedPath] = useState(
     props.initialPath ?? "general",
   );
@@ -3376,13 +3477,10 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         return <DebugView {...debugViewProps} />;
       case "wallet":
         return (
-          <WalletSettingsView
+          <WalletSettingsRouteView
             compact={props.embedded}
-            store={walletProvider.store}
             matterhornServerClient={settingsCapabilityClient}
             runtimeWorkspaceId={runtimeWorkspaceId}
-            onTxApprove={() => {}}
-            onTxReject={() => {}}
           />
         );
       case "generated-media":
@@ -3445,7 +3543,18 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           detail="Your workspace is still running. Choose another settings page, then try this one again."
           source={`SettingsRoute:${route.tab}`}
         >
-          {settingsView}
+          <Suspense
+            fallback={
+              <div
+                className="px-6 py-10 text-sm text-dls-secondary"
+                role="status"
+              >
+                Loading settings…
+              </div>
+            }
+          >
+            {settingsView}
+          </Suspense>
         </SurfaceErrorBoundary>
       </SettingsShell>
 

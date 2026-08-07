@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import { lazy, Suspense, type ReactNode } from "react";
+import { useWallet } from "../domains/wallet/WalletProvider";
 
 const LazyWalletRuntimeShell = lazy(() => import("./LazyWalletRuntimeShell"));
 
@@ -12,7 +13,9 @@ export function LazyWalletRuntimeProvider({
   children,
   enabled,
 }: LazyWalletRuntimeProviderProps) {
-  if (!enabled) return <>{children}</>;
+  const wallet = useWallet();
+  const runtimeEnabled = enabled || wallet.snapshot.pendingApproval !== null;
+  if (!runtimeEnabled) return <>{children}</>;
 
   return (
     <Suspense

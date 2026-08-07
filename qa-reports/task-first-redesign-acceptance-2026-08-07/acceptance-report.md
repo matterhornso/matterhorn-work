@@ -16,7 +16,7 @@ The approved A+B+C product system is implemented and locally accepted:
 - **B — agent activity language:** `thinking-orbs` supplies the visual thinking primitive, mapped to Matterhorn planning, composing, and synthesizing states with specific task labels, elapsed time, reduced-motion support, and live-region ownership.
 - **C — restrained Matterhorn palette and hierarchy:** the confirmed dark, ice-blue, and desk-accent system is preserved; desk color is an identity cue rather than a full-page treatment.
 
-No local P0 or P1 product blocker remains. The exact hosted account, production headers/origin, real engine completion, and deployed responsive visual gates still require the release URL and credentials.
+No local P0 or P1 product blocker remains. The exact hosted account, production headers/origin, real engine completion, and deployed authenticated visual gates still require production Cloud configuration and acceptance credentials.
 
 ## Acceptance matrix
 
@@ -26,26 +26,42 @@ No local P0 or P1 product blocker remains. The exact hosted account, production 
 | Home activation | PASS | Exactly one context-aware primary action; recent task timestamps accept engine seconds or milliseconds; recommendations open a desk without sending. |
 | Protocol desks | PASS | Bittensor, Hyperliquid, Polymarket, and Sui show three recommended safe starts, with the remaining catalog behind `More tasks`. Public Beta hides all reviewed wallet-action starters. |
 | Longevity workflow | PASS | Route-backed `desk=wellness`, deterministic reload/Back/Forward, current stage plus next-stage sequence, and non-medical boundaries. |
-| MCP information architecture | PASS | Compact rail contains status, count, explanation, and `Manage MCPs`; the full catalog and configuration remain in Settings. |
+| MCP information architecture | PASS | Compact rail deliberately covers skeleton, empty, syncing, offline, partial, error, and success states; it contains connected names/readiness, current client, sync recency, recovery, and `Manage MCPs`. The full catalog and configuration remain in Settings. |
 | Settings hierarchy | PASS | Overview is the single page `h1`; Profile and Workspace health are subordinate sections; active navigation exposes `aria-current`. |
-| Agent progress lifecycle | PASS | A desk task immediately renders `Working on <task>` with an activity orb, polls through an initially idle engine snapshot, then clears the activity state when assistant output arrives. |
-| Responsive and accessibility contracts | PASS WITH VISUAL GAP | Focused responsive/a11y tests pass: first-render scroll position, two-line mobile task descriptions, 44px primary mobile controls, 24px compact target minimums, landmarks, and active-page semantics. Exact-candidate mobile screenshots were unavailable because the selected in-app Browser does not expose viewport resizing. |
-| Public Beta safety | PASS | Reviewed desk actions fail closed; no wallet-action group or preparation CTA appears in the web public-Beta fixture. Ten-stage platform safety gate passes. |
-| Production build | PASS WITH WARNINGS | Minified public-Beta web build succeeds. Existing large chunks remain: wallet 1.80MB, Shiki 1.85MB, translations 946KB, Settings 814KB, Session 784KB. These are a post-canary performance track, not a new regression in this redesign. |
+| Agent progress lifecycle | PASS | A desk task immediately renders `Working on <task>` with an activity orb, retains partial output, exposes success/error/correction/revert/feedback/saved-output states, and clears active motion on terminal output. |
+| Responsive and accessibility contracts | PASS | Live 320×568, 375×812, 768×1024, 1024×768, and 1440×900 checks show no horizontal overflow. Mobile controls, safe areas, reduced motion, virtual-keyboard resizing, landmarks, focus, and active-page semantics are covered. Physical iOS/Android keyboard, notch-inset, VoiceOver, and TalkBack checks remain release-device evidence rather than source blockers. |
+| Public Beta safety | PASS | Reviewed actions fail closed in both focused desk catalogs and blank-session workflow cards. Public Beta renders read-only research/evidence copy and prompts, with no wallet-action group or preparation CTA. Ten-stage platform safety gate passes. |
+| Production build and budgets | PASS | Minified public-Beta build and the executable bundle gate pass. Session is 150,842B and Settings 255,811B; signed-out JS is 431,194B; EVM/Sui/Bittensor wallet families are 480,855B/411,655B/896,388B. Initial Session and Settings graphs contain no wallet runtime, Shiki, translations, editor, or spreadsheet chunks. |
 | Hosted release | PENDING | Requires exact deployed URL/account, strict hosted task completion, production HTTPS/CORS/security headers, two-account isolation, mobile/tablet visual capture, and rollback/monitoring evidence. |
 
 ## Automated evidence
 
-- App suite: **805 passed, 0 failed**, 109 files, 5,204 expectations.
+- App suite: **822 passed, 0 failed**, 111 files, 5,314 expectations.
 - App typecheck: **PASS**.
 - Matterhorn platform safety gate: **10/10 stages PASS**.
-- Focused activity lifecycle suite: **56 passed, 0 failed**.
+- Bundle-budget contract and production graph gate: **PASS**.
+- Focused public-Beta launch-policy and starter suite: **28 passed, 0 failed**.
+- Focused responsive/accessibility suite: **60 passed, 0 failed**.
 - Public-Beta production web build: **PASS**.
 - Live delayed-response fixture:
   - active: `Working on Review subnet emissions` and `Thinking Review subnet emissions` present;
   - completed: synthetic assistant response present and activity label absent.
 - Live compact MCP landmark check: one `main`, zero nested `main` elements.
 - Live Settings hierarchy check: one `h1` (`Overview`), expected `h2` sections, one `main`.
+- Live mobile checks: zero document overflow at 320×568, 375×812, and 768×1024; first 320px workflow card is fully visible; focused composer and public-auth fields remain visible after simulated viewport collapse.
+
+## Performance budget evidence
+
+| Artifact | Baseline | Accepted candidate | Budget |
+|---|---:|---:|---:|
+| Signed-out JS graph | 431,194B | 431,194B | <650,000B |
+| Session route | 784,121B | 150,842B | <600,000B |
+| Settings route | 814,160B | 255,811B | <600,000B |
+| Wallet — EVM | part of 1,795,984B monolith | 480,855B | <900,000B |
+| Wallet — Sui | part of 1,795,984B monolith | 411,655B | <900,000B |
+| Wallet — Bittensor | part of 1,795,984B monolith | 896,388B | <900,000B |
+
+The heavy wallet runtime now activates only for wallet/protocol destinations or a pending approval. Shiki remains an on-demand deferred vendor chunk and loads only when fenced code is rendered. Experimental translations, artifact editing, and spreadsheet code remain behind their owning feature boundary.
 
 ## Visual evidence
 
@@ -57,6 +73,7 @@ No local P0 or P1 product blocker remains. The exact hosted account, production 
 - [Settings Overview](screenshots/06-settings-overview-desktop.png)
 - [Completed agent task](screenshots/07-agent-task-desktop.png)
 - [Active Matterhorn thinking state](screenshots/08-agent-thinking-desktop.png)
+- [320px mobile starter acceptance](../../ui-ux-audit-2026-08-07/responsive-a11y/starter-cards-mobile-320-m5-fixed.png)
 
 ## Third-party design primitive
 
@@ -69,12 +86,12 @@ Run these against the exact deployment before GO:
 1. Strict authenticated product smoke with real desk results and explicit production workspace/chat URLs.
 2. Two-account session/workspace isolation on the managed engine.
 3. Production HTTPS, exact-origin CORS, CSP/security headers, monitoring, backup/restore, and rollback checks.
-4. Mobile (375px), tablet (768px), and desktop visual captures of Home, every desk, active/completed agent states, MCP rail, Settings, and public entry.
+4. Exact hosted authenticated captures of Home, every desk, active/completed agent states, MCP rail, Settings, and public entry, plus physical iOS/Android keyboard and screen-reader checks.
 5. A production Lighthouse run on the deployed minified artifact. Do not use the Vite development fixture as performance evidence.
 6. Real supported wallet-provider acceptance only if reviewed actions are enabled for that release; they remain hidden in the current public-Beta candidate.
 
 ## Non-blocking follow-up
 
-- Split wallet families, Shiki languages/themes, experimental translations, Settings, Session, and editor/spreadsheet code at their actual feature boundaries.
+- Add a dedicated one-click `Retry response` action in addition to restored-composer correction/resend.
+- Make generic Save to Outputs and response-specific feedback universal rather than specialized/chat-scoped.
 - Replace remaining persistent destination buttons with links where browser-native open/copy/bookmark behavior is valuable.
-- Continue the public-entry trust redesign and exact mobile visual acceptance on the hosted candidate.

@@ -79,6 +79,34 @@ export function PublicWebSigninPage({
     return () => controller.abort();
   }, [refreshSession]);
 
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    let frame: number | undefined;
+    const keepActiveFieldVisible = () => {
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        frame = undefined;
+        const active = document.activeElement;
+        if (!(active instanceof HTMLElement) || !active.closest(".public-auth-form")) return;
+
+        const rect = active.getBoundingClientRect();
+        const visibleTop = viewport.offsetTop + 12;
+        const visibleBottom = viewport.offsetTop + viewport.height - 12;
+        if (rect.top < visibleTop || rect.bottom > visibleBottom) {
+          active.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
+        }
+      });
+    };
+
+    viewport.addEventListener("resize", keepActiveFieldVisible);
+    return () => {
+      viewport.removeEventListener("resize", keepActiveFieldVisible);
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
   const selectMode = (nextMode: AuthMode) => {
     setMode(nextMode);
     setAuthError(null);
@@ -205,6 +233,11 @@ export function PublicWebSigninPage({
           >
             {authError ?? "Your workspace stays private to your account."}
           </p>
+
+          <nav className="public-auth-trust" aria-label="Security and privacy">
+            <a href="/security">Security</a>
+            <a href="/privacy">Privacy</a>
+          </nav>
         </section>
 
         <aside className="public-auth-context" aria-labelledby="public-auth-context-title">

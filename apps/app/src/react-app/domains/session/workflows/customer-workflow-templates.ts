@@ -20,6 +20,7 @@ import {
   getCustomerProtocolDeskVisual,
   protocolDeskIdForChatMode,
   protocolDeskIdForWorkspace,
+  type CustomerProtocolDeskId,
   type CustomerProtocolDeskVisual,
 } from "./protocol-desk-ui";
 
@@ -96,6 +97,35 @@ export type CustomerWorkflowStarterCard = {
   workspaceDisplayName?: string;
   launchBehavior?: MatterhornProtocolWorkspaceLaunchBehavior;
   protocolDesk?: CustomerProtocolDeskVisual;
+};
+
+type PublicBetaStarterCopy = {
+  description: string;
+  prompt: string;
+  capabilityBullets: string[];
+};
+
+const PUBLIC_BETA_STARTER_COPY: Partial<Record<CustomerProtocolDeskId, PublicBetaStarterCopy>> = {
+  bittensor: {
+    description: "Read TAO context, compare subnets and validators, and collect public evidence.",
+    prompt: "Use the Bittensor desk to compare active subnets and validators using public evidence. Keep the task read-only.",
+    capabilityBullets: ["TAO context", "Subnet and validator research", "Watches and evidence"],
+  },
+  hyperliquid: {
+    description: "Research markets, exposure, funding, and watch evidence without preparing an action.",
+    prompt: "Use the Hyperliquid desk to review BTC-PERP market structure, exposure, funding, and public evidence. Keep the task read-only.",
+    capabilityBullets: ["Markets and orderbooks", "Exposure and funding", "Watches and evidence"],
+  },
+  polymarket: {
+    description: "Research markets, liquidity, compliance context, and watch evidence.",
+    prompt: "Use the Polymarket desk to research active markets, liquidity, and compliance context using public evidence. Keep the task read-only.",
+    capabilityBullets: ["Market research", "Liquidity and compliance", "Watches and evidence"],
+  },
+  sui: {
+    description: "Read public Sui account, object, network, and receipt evidence.",
+    prompt: "Use the Sui desk to review public account, object, network, fee, and receipt evidence. Keep the task read-only.",
+    capabilityBullets: ["Account and object reads", "Network and fee research", "Receipt evidence"],
+  },
 };
 
 export type CustomerBetaDemoStarterCard = {
@@ -637,25 +667,38 @@ export function buildCustomerWorkflowPrompt(template: CustomerWorkflowTemplate):
 
 export function buildCustomerWorkflowStarterCards(
   templates: CustomerWorkflowTemplate[] = FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES,
+  options: { reviewedActions?: boolean } = {},
 ): CustomerWorkflowStarterCard[] {
   return templates.filter((template) => CUSTOMER_VISIBLE_TEMPLATE_IDS.has(template.id)).map((template) => {
     const protocolDesk =
       template.protocolDesk ??
       getCustomerProtocolDeskVisual(protocolDeskIdForChatMode(template.routing.chatMode));
+    const publicBetaCopy = options.reviewedActions === false && protocolDesk
+      ? PUBLIC_BETA_STARTER_COPY[protocolDesk.id]
+      : undefined;
+    const starterProtocolDesk = publicBetaCopy
+      ? {
+          ...protocolDesk,
+          shortDescription: publicBetaCopy.description,
+          statusLabel: "Read-only Beta",
+          safetySummary: "Public Beta keeps reviewed actions hidden. This desk is limited to research, monitoring, and public evidence.",
+          capabilityBullets: publicBetaCopy.capabilityBullets,
+        }
+      : protocolDesk;
     return {
       id: template.id,
-      title: template.launch.primaryCta || template.name,
-      description: protocolDesk?.shortDescription ?? template.ui.shortDescription ?? template.summary,
-      prompt: buildCustomerWorkflowPrompt(template),
+      title: publicBetaCopy ? `Open ${protocolDesk!.displayName} desk` : template.launch.primaryCta || template.name,
+      description: publicBetaCopy?.description ?? protocolDesk?.shortDescription ?? template.ui.shortDescription ?? template.summary,
+      prompt: publicBetaCopy?.prompt ?? buildCustomerWorkflowPrompt(template),
       agentId: matterhornDeskAgentIdForDesk(protocolDesk?.id ?? protocolDeskIdForChatMode(template.routing.chatMode)),
       iconHint: template.ui.iconHint,
       panel: template.routing.opensPanel,
       recommendedSurface: template.launch.recommendedSurface,
-      statusLabel: starterCardStatusLabel(template, protocolDesk),
-      safetySummary: protocolDesk?.safetySummary ?? safetySummary(template),
+      statusLabel: publicBetaCopy ? "Read-only Beta" : starterCardStatusLabel(template, protocolDesk),
+      safetySummary: starterProtocolDesk?.safetySummary ?? safetySummary(template),
       workspaceDisplayName: protocolDesk?.displayName ?? template.protocolWorkspace?.displayName,
       launchBehavior: template.protocolWorkspace?.launchBehavior,
-      protocolDesk: protocolDesk ?? undefined,
+      protocolDesk: starterProtocolDesk ?? undefined,
     };
   });
 }

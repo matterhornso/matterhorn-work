@@ -41,6 +41,10 @@
 .public-auth-context {
   box-sizing: border-box;
   padding: 72px 64px;
+  padding-top: max(72px, env(safe-area-inset-top));
+  padding-right: max(64px, env(safe-area-inset-right));
+  padding-bottom: max(72px, env(safe-area-inset-bottom));
+  padding-left: max(64px, env(safe-area-inset-left));
 }
 
 .public-auth-primary {
@@ -120,7 +124,8 @@
 
 .public-auth-mode button:focus-visible,
 .public-auth-form input:focus-visible,
-.public-auth-submit:focus-visible {
+.public-auth-submit:focus-visible,
+.public-auth-trust a:focus-visible {
   outline: 2px solid #38bdf8;
   outline-offset: 2px;
 }
@@ -203,6 +208,34 @@
   color: var(--auth-error);
 }
 
+.public-auth-description,
+.public-auth-status,
+.public-auth-context-lead,
+.public-auth-principles li {
+  overflow-wrap: anywhere;
+}
+
+.public-auth-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.public-auth-trust a {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--auth-secondary);
+  text-underline-offset: 3px;
+}
+
+.public-auth-trust a:hover {
+  color: var(--auth-text);
+  text-decoration: underline;
+}
+
 .public-auth-context {
   max-width: 620px;
 }
@@ -260,6 +293,10 @@
   .public-auth-primary,
   .public-auth-context {
     padding: 48px 24px;
+    padding-top: max(48px, env(safe-area-inset-top));
+    padding-right: max(24px, env(safe-area-inset-right));
+    padding-bottom: max(48px, env(safe-area-inset-bottom));
+    padding-left: max(24px, env(safe-area-inset-left));
   }
 
   .public-auth-primary {
@@ -286,8 +323,8 @@
 
   .public-auth-primary,
   .public-auth-context {
-    padding-right: 22px;
-    padding-left: 22px;
+    padding-right: max(22px, env(safe-area-inset-right));
+    padding-left: max(22px, env(safe-area-inset-left));
   }
 
   .public-auth-title {

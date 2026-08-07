@@ -188,17 +188,28 @@ export default defineConfig({
           if (id.includes("node_modules/@tanstack/react-query")) {
             return "vendor-query";
           }
-          // Wallet + Web3 stack
+          // Wallet + Web3 stacks are split by chain family. A single wallet
+          // vendor chunk made every wallet-capable route download runtimes for
+          // chains it never opened and exceeded the route budget by itself.
           if (
             id.includes("node_modules/wagmi") ||
             id.includes("node_modules/viem") ||
-            id.includes("node_modules/@mysten") ||
-            id.includes("node_modules/@polkadot") ||
-            id.includes("node_modules/@wallet-standard") ||
             id.includes("node_modules/@walletconnect") ||
             id.includes("node_modules/@coinbase")
           ) {
-            return "vendor-wallet";
+            return "vendor-wallet-evm";
+          }
+          if (
+            id.includes("node_modules/@mysten") ||
+            id.includes("node_modules/@wallet-standard")
+          ) {
+            return "vendor-wallet-sui";
+          }
+          if (id.includes("node_modules/@polkadot/extension-")) {
+            return "vendor-wallet-bittensor-extension";
+          }
+          if (id.includes("node_modules/@polkadot")) {
+            return "vendor-wallet-bittensor";
           }
           // Editor / lexical (heavy, only needed for composer)
           if (id.includes("node_modules/@lexical")) {

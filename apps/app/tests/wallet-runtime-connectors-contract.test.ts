@@ -36,6 +36,9 @@ describe("wallet runtime connector contract", () => {
     const walletRuntimeSource = readReactAppSource(
       "shell/LazyWalletRuntimeShell.tsx",
     );
+    const walletProviderSource = readReactAppSource(
+      "domains/wallet/WalletProvider.tsx",
+    );
 
     expect(providersSource).toContain("routeNeedsWalletRuntime");
     expect(providersSource).toContain(
@@ -49,6 +52,10 @@ describe("wallet runtime connector contract", () => {
     expect(providersSource).toContain("isPublicTrustPath(path)");
     expect(providersSource).toContain('path === "/welcome"');
     expect(providersSource).toContain('path === "/onboarding"');
+    expect(providersSource).toContain("WALLET_RUNTIME_PANELS");
+    expect(providersSource).toContain('settings\\/wallet');
+    expect(providersSource).toContain('new URLSearchParams(search).get("panel")');
+    expect(providersSource).toContain("<WalletProvider>");
     expect(providersSource).toContain("<LazyWalletRuntimeProvider");
     expect(appEntrySource).toContain(
       'import("./react-app/shell/authenticated-app")',
@@ -76,7 +83,13 @@ describe("wallet runtime connector contract", () => {
     expect(walletRuntimeSource).toContain("<WagmiProvider");
     expect(walletRuntimeSource).toContain("<DAppKitProvider");
     expect(walletRuntimeSource).toContain("<PhantomSuiConnectionProvider>");
-    expect(walletRuntimeSource).toContain("<WalletProvider>");
+    expect(walletRuntimeSource).not.toContain("<WalletProvider>");
+    expect(lazyProviderSource).toContain(
+      "enabled || wallet.snapshot.pendingApproval !== null",
+    );
+    expect(walletProviderSource).toContain(
+      'window.addEventListener("matterhorn:tx-approval-request"',
+    );
   });
 
   test("wagmi config exposes explicit EVM wallet connectors without advertising unconfigured WalletConnect", () => {

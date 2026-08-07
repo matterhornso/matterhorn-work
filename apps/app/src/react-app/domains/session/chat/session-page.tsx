@@ -115,8 +115,6 @@ import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggest
 import { ProjectHistoryPage } from "../../recent-activity/project-history-page";
 import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
 import { useStatusToasts } from "../../shell-feedback/status-toasts";
-import { TransactionApproval } from "../../wallet/TransactionApproval";
-import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
 import { subscribeReviewedActionHandoff } from "../../wallet/reviewed-action-handoff";
 import { configureSecurityLogReporter } from "../../wallet/state/security-log";
@@ -181,8 +179,11 @@ const EmptyArtifactPanel = lazy(() => import("../artifacts/artifact-panel").then
 const VoicePanel = lazy(() => import("../voice/voice-panel").then((module) => ({
   default: module.VoicePanel,
 })));
-const WalletPanel = lazy(() => import("../../wallet/WalletPanel").then((module) => ({
-  default: module.WalletPanel,
+const SessionWalletPanel = lazy(() => import("../../wallet/session-wallet-runtime").then((module) => ({
+  default: module.SessionWalletPanel,
+})));
+const SessionTransactionApproval = lazy(() => import("../../wallet/session-wallet-runtime").then((module) => ({
+  default: module.SessionTransactionApproval,
 })));
 const SuiWorkflowPanel = lazy(() => import("../../wallet/sui-workflow-panel").then((module) => ({
   default: module.SuiWorkflowPanel,
@@ -1392,7 +1393,6 @@ export function SessionPage(props: SessionPageProps) {
   liveLocationRef.current = location;
   const { config: shellConfig } = useShellConfig();
   const wallet = useWallet();
-  const sessionWallet = useSessionWallet(wallet.store);
   useJobCron(wallet.store);
   const currentWalletRuntime = useMemo(() => homeWalletRuntime(), []);
   const { showToast } = useStatusToasts();
@@ -1605,7 +1605,9 @@ export function SessionPage(props: SessionPageProps) {
     staleTime: 60_000,
   });
   const customerWorkflowStarterCards = useMemo(
-    () => buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data),
+    () => buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data, {
+      reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+    }),
     [customerWorkflowTemplatesQuery.data],
   );
   const mondayBetaDemoCards = useMemo(
@@ -2308,10 +2310,8 @@ export function SessionPage(props: SessionPageProps) {
       data-testid="protocol-side-panel-scroll-root"
       className="flex h-full min-h-0 max-h-full flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain"
     >
-      <WalletPanel
+      <SessionWalletPanel
         store={wallet.store}
-        gasPriceGwei={sessionWallet.gasPriceGwei}
-        blockExplorerUrl={sessionWallet.blockExplorerUrl}
         initialVenue={visibleSidePanel}
         openReviewedAction={reviewedActionEntryProtocol === visibleSidePanel}
         initialReviewedActionOperation={reviewedActionEntryOperation}
@@ -2620,7 +2620,7 @@ export function SessionPage(props: SessionPageProps) {
           >
             <ResizablePanel minSize="360px" className="min-w-0">
               <div className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">
-          <header className="z-10 flex h-11 shrink-0 items-center justify-between bg-dls-surface/95 px-4 shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)] md:h-10 md:px-6 mac:titlebar-drag @container/titlebar">
+          <header className="z-10 flex h-[calc(2.75rem+env(safe-area-inset-top))] shrink-0 items-center justify-between bg-dls-surface/95 px-4 pt-[env(safe-area-inset-top)] shadow-[0_1px_0_rgb(var(--matterhorn-blue-rgb)/0.08)] md:h-10 md:px-6 md:pt-0 mac:titlebar-drag @container/titlebar">
             <div className="flex min-w-0 items-center gap-3">
               {shellConfig.sidebar ? <SidebarTrigger className="size-11 md:size-8 mac:hidden" /> : null}
               {!showWorkspaceSetupEmptyState ? (
@@ -3610,13 +3610,14 @@ export function SessionPage(props: SessionPageProps) {
       ) : null}
 
       {/* Feature 3: TX Pipeline — modal overlay for transaction approval */}
-      <TransactionApproval
-        store={wallet.store}
-        onApprove={() => sessionWallet.approveTx()}
-        onReject={sessionWallet.rejectTx}
-        onSimulateTransaction={props.matterhornServerClient && outputReceiptWorkspaceId ? simulateWalletTransaction : undefined}
-        onExecuteBatchStep={sessionWallet.executeBatchStep}
-      />
+      {wallet.snapshot.pendingApproval ? (
+        <LazyModalBoundary>
+          <SessionTransactionApproval
+            store={wallet.store}
+            onSimulateTransaction={props.matterhornServerClient && outputReceiptWorkspaceId ? simulateWalletTransaction : undefined}
+          />
+        </LazyModalBoundary>
+      ) : null}
 
       {/* Cloud provider notifications are now handled globally by CloudProvidersToast in app-root.tsx */}
     </div>

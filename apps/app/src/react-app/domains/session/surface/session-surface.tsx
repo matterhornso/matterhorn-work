@@ -132,13 +132,17 @@ import {
   type MatterhornSessionMemoryContext,
 } from "./memory-context-store";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
-import { SessionImageGenerationPanel } from "../media/session-image-generation-panel";
 import { useQuickJot } from "../../notes";
 import type { BittensorPublicEvidenceCard } from "./message-list";
 
 const SessionTranscript = lazy(() => import("./message-list").then((module) => ({
   default: module.SessionTranscript,
 })));
+const SessionImageGenerationPanel = lazy(() =>
+  import("../media/session-image-generation-panel").then((module) => ({
+    default: module.SessionImageGenerationPanel,
+  })),
+);
 import {
   buildCustomerWorkflowStarterCards,
   fetchCustomerWorkflowTemplates,
@@ -1230,7 +1234,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
     staleTime: 60_000,
   });
   const customerWorkflowStarterCards = useMemo(
-    () => buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data)
+    () => buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data, {
+      reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+    })
       .filter((card) => card.id !== "blank_chat_workflow"),
     [customerWorkflowTemplatesQuery.data],
   );

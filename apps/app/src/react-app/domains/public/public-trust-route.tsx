@@ -410,7 +410,7 @@ async function probeHealth(path: "/health/live" | "/health/ready"): Promise<Prob
 
 function StatusIcon({ state }: { state: ProbeState }) {
   if (state === "checking") {
-    return <LoaderCircle className="size-4 animate-spin text-muted-foreground" />;
+    return <LoaderCircle className="size-4 animate-spin text-muted-foreground motion-reduce:animate-none" />;
   }
   if (state === "available") {
     return <CheckCircle2 className="size-4 text-emerald-500" />;
@@ -521,14 +521,14 @@ function StatusPage() {
 function PublicHeader() {
   return (
     <header className="border-b border-border/70 bg-background">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-5 sm:px-8">
-        <Link to="/session" className="inline-flex items-center gap-2 font-semibold text-foreground">
+      <div className="mx-auto flex min-h-14 max-w-6xl items-center justify-between gap-4 pl-[calc(1.25rem+env(safe-area-inset-left))] pr-[calc(1.25rem+env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] sm:pl-[calc(2rem+env(safe-area-inset-left))] sm:pr-[calc(2rem+env(safe-area-inset-right))]">
+        <Link to="/session" className="inline-flex items-center gap-2 font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
           <img src="/matterhorn-logo-square.svg" alt="" className="size-6 rounded-md" />
           Matterhorn Desks
         </Link>
         <Link
           to="/session"
-          className="inline-flex items-center gap-2 rounded-md bg-dls-surface-muted px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-dls-hover"
+          className="inline-flex min-h-11 items-center gap-2 rounded-md bg-dls-surface-muted px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none sm:min-h-8"
         >
           Open app
         </Link>
@@ -539,12 +539,12 @@ function PublicHeader() {
 
 function PublicFooter() {
   return (
-    <footer className="border-t border-border/70 py-6">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 text-sm text-muted-foreground sm:px-8">
+    <footer className="border-t border-border/70 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-6">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 pl-[calc(1.25rem+env(safe-area-inset-left))] pr-[calc(1.25rem+env(safe-area-inset-right))] text-sm text-muted-foreground sm:pl-[calc(2rem+env(safe-area-inset-left))] sm:pr-[calc(2rem+env(safe-area-inset-right))]">
         <span>Matterhorn Desks</span>
         <nav className="flex flex-wrap gap-x-5 gap-y-2" aria-label="Trust and support">
           {PUBLIC_TRUST_PATHS.map((path) => (
-            <Link key={path} className="hover:text-foreground" to={path}>
+            <Link key={path} className="rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50" to={path}>
               {pageLabels[path]}
             </Link>
           ))}
@@ -574,11 +574,11 @@ export function PublicTrustRoute() {
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground">
       <PublicHeader />
-      <main className="mx-auto grid w-full max-w-6xl flex-1 gap-10 px-5 py-8 sm:px-8 sm:py-12 md:grid-cols-[180px_minmax(0,1fr)]">
+      <main className="mx-auto grid w-full max-w-6xl flex-1 gap-10 py-8 pl-[calc(1.25rem+env(safe-area-inset-left))] pr-[calc(1.25rem+env(safe-area-inset-right))] sm:py-12 sm:pl-[calc(2rem+env(safe-area-inset-left))] sm:pr-[calc(2rem+env(safe-area-inset-right))] md:grid-cols-[180px_minmax(0,1fr)]">
         <aside>
           <Link
             to="/session"
-            className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+            className="mb-6 inline-flex items-center gap-2 rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             <ArrowLeft className="size-4" />
             Back to app
@@ -590,7 +590,7 @@ export function PublicTrustRoute() {
                 to={navPath}
                 aria-current={path === navPath ? "page" : undefined}
                 className={cn(
-                  "shrink-0 rounded-md px-3 py-2 text-sm transition-colors",
+                  "shrink-0 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none",
                   path === navPath
                     ? "bg-dls-surface-muted font-medium text-foreground"
                     : "text-muted-foreground hover:bg-dls-hover hover:text-foreground",
@@ -627,7 +627,7 @@ export function PublicTrustRoute() {
               {path === "/support" ? (
                 <div className="mt-4 flex flex-wrap gap-3 border-t border-border/70 pt-6">
                   <a
-                    className="inline-flex items-center gap-2 rounded-md bg-dls-surface-muted px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-dls-hover"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-md bg-dls-surface-muted px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none sm:min-h-9"
                     href={MATTERHORN_DOCS_URL}
                     target="_blank"
                     rel="noreferrer"
@@ -635,7 +635,7 @@ export function PublicTrustRoute() {
                     Read docs <ExternalLink className="size-4" />
                   </a>
                   <Link
-                    className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-dls-hover hover:text-foreground"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-dls-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none sm:min-h-9"
                     to="/status"
                   >
                     View status <ShieldCheck className="size-4" />

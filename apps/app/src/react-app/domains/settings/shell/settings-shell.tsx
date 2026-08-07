@@ -113,7 +113,7 @@ export function SettingsShell(props: SettingsShellProps) {
   }
 
   return (
-    <div className="flex h-dvh min-h-screen w-full overflow-hidden">
+    <div className="flex h-dvh min-h-dvh w-full overflow-hidden">
       <SidebarProvider open={true} className="relative min-h-0 flex-1">
         <SettingsSidebar
           activeTab={props.activeTab}
@@ -130,7 +130,7 @@ export function SettingsShell(props: SettingsShellProps) {
         />
         <SidebarInset className="min-h-0 overflow-hidden bg-background mac:bg-background/80 mac:[&_header]:transition-[padding-left] mac:[&_header]:duration-200 mac:[&_header]:ease-linear mac:peer-data-[state=collapsed]:[&_header]:pl-16 [&_header]:pl-16 md:[&_header]:pl-6">
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            <header className="flex h-11 shrink-0 items-center justify-between px-4 md:hidden mac:titlebar-drag">
+            <header className="flex h-[calc(2.75rem+env(safe-area-inset-top))] shrink-0 items-center justify-between px-4 pt-[env(safe-area-inset-top)] md:hidden mac:titlebar-drag">
               <div className="flex min-w-0 items-center gap-2">
                 <SidebarTrigger className="size-11 mac:titlebar-no-drag md:hidden" />
                 {props.headerLeadingSlot}

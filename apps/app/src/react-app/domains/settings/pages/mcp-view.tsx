@@ -85,6 +85,10 @@ import {
   matterhornMcpDisplayName,
   mcpServerDisplayName,
 } from "./mcp-display-name";
+import {
+  deriveCompactMcpState,
+  isEmptyMcpStatusMessage,
+} from "./mcp-compact-state";
 import { ProtocolBrandLogo } from "../../session/workflows/protocol-brand-logo";
 import type { CustomerProtocolDeskId } from "../../session/workflows/protocol-desk-ui";
 
@@ -1302,9 +1306,7 @@ export function McpView(props: McpViewProps) {
       ).length
     : 0;
   const hiddenOrPolicyCount = hiddenCount + policyHiddenBuiltInCount;
-  const mcpStatusIsEmpty =
-    props.mcpStatus?.toLowerCase().includes("no mcp servers configured") ??
-    false;
+  const mcpStatusIsEmpty = isEmptyMcpStatusMessage(props.mcpStatus);
 
   const requestLogout = (name: string) => {
     if (!name.trim()) return;
@@ -1353,17 +1355,34 @@ export function McpView(props: McpViewProps) {
   };
 
   if (props.compact) {
-    const syncing = props.busy || Boolean(props.mcpConnectingName);
-    const syncLabel = syncing
-      ? props.mcpConnectingName
-        ? `Connecting ${displayName(props.mcpConnectingName)}…`
-        : "Syncing MCP connections…"
-      : props.mcpLastUpdatedAt
-        ? `${t("mcp.last_synced")} ${formatRelativeTime(props.mcpLastUpdatedAt)}`
-        : "Connection status for this workspace";
+    const compactState = deriveCompactMcpState({
+      statuses: props.mcpServers.map(resolveStatus),
+      busy: props.busy,
+      connectingName: props.mcpConnectingName
+        ? displayName(props.mcpConnectingName)
+        : null,
+      hasSynced: Boolean(props.mcpLastUpdatedAt),
+      statusMessage: props.mcpStatus && !mcpStatusIsEmpty ? props.mcpStatus : null,
+    });
+    const stateIcon = compactState.kind === "success"
+      ? <CheckCircle2 className="size-3.5 shrink-0 text-green-10" aria-hidden="true" />
+      : compactState.kind === "syncing" || compactState.kind === "skeleton"
+        ? <Loader2 className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        : compactState.kind === "empty"
+          ? <Plug2 className="size-3.5 shrink-0" aria-hidden="true" />
+          : compactState.kind === "offline"
+            ? <Unplug className="size-3.5 shrink-0" aria-hidden="true" />
+            : <CircleAlert className={cn("size-3.5 shrink-0", compactState.kind === "error" ? "text-red-10" : "text-amber-10")} aria-hidden="true" />;
+    const syncRecency = props.mcpLastUpdatedAt
+      ? `${t("mcp.last_synced")} ${formatRelativeTime(props.mcpLastUpdatedAt)}`
+      : "Not synced yet";
 
     return (
-      <section className="space-y-4" aria-label="MCP connection summary">
+      <section
+        className="space-y-4"
+        aria-label="MCP connection summary"
+        aria-busy={compactState.kind === "skeleton" || compactState.kind === "syncing"}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-dls-text">MCP connections</h2>
@@ -1372,20 +1391,32 @@ export function McpView(props: McpViewProps) {
             </p>
           </div>
           <span className="shrink-0 rounded-md bg-dls-surface-muted/25 px-2 py-1 text-[10px] font-semibold text-dls-secondary">
-            {connectedServers.length} connected
+            {compactState.kind === "skeleton" ? "Checking" : `${connectedServers.length} connected`}
           </span>
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] text-dls-secondary" role={syncing ? "status" : undefined}>
-          {syncing ? (
-            <Loader2 className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-          ) : (
-            <CheckCircle2 className="size-3.5 shrink-0 text-green-10" aria-hidden="true" />
-          )}
-          <span>{syncLabel}</span>
+        <div
+          className="flex items-start gap-2 text-xs leading-5 text-dls-secondary"
+          role={compactState.announcementRole}
+          aria-live={compactState.announcementRole === "status" ? "polite" : undefined}
+        >
+          {stateIcon}
+          <span className="min-w-0">
+            <span className="block font-medium text-dls-text">{compactState.label}</span>
+            <span className="block">{compactState.description}</span>
+          </span>
         </div>
 
-        {props.mcpServers.length > 0 ? (
+        {compactState.kind === "skeleton" ? (
+          <div className="space-y-1.5" aria-label="Loading configured MCP servers">
+            {[0, 1].map((item) => (
+              <div
+                key={item}
+                className="h-11 animate-pulse rounded-md bg-dls-surface-muted/[0.20] motion-reduce:animate-none"
+              />
+            ))}
+          </div>
+        ) : props.mcpServers.length > 0 ? (
           <ul className="space-y-1.5" aria-label="Configured MCP servers">
             {props.mcpServers.map((server) => {
               const status = resolveStatus(server);
@@ -1415,18 +1446,17 @@ export function McpView(props: McpViewProps) {
             })}
           </ul>
         ) : (
-          <div className="rounded-md bg-dls-surface-muted/[0.16] px-3 py-3 text-xs leading-5 text-dls-secondary">
-            <p className="font-medium text-dls-text">No external MCPs connected.</p>
-            <p className="mt-1">Open full settings to connect an approved server or review built-in tools.</p>
+          <div className="rounded-md bg-dls-surface-muted/[0.16] px-3 py-2.5 text-xs text-dls-secondary">
+            Built-in tools remain available when their workspace requirements are met.
           </div>
         )}
 
-        {props.mcpStatus && !mcpStatusIsEmpty ? (
-          <div className="flex items-start gap-2 text-xs leading-5 text-dls-secondary" role="status">
-            <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-10" aria-hidden="true" />
-            <span>{props.mcpStatus}</span>
-          </div>
-        ) : null}
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px] leading-4 text-dls-secondary">
+          <dt>Current client</dt>
+          <dd className="truncate text-right text-dls-text">Matterhorn Desks</dd>
+          <dt>Connection sync</dt>
+          <dd className="truncate text-right text-dls-text">{syncRecency}</dd>
+        </dl>
 
         {props.onManageMcp ? (
           <Button

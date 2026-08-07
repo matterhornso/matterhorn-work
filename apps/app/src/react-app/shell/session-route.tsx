@@ -82,7 +82,6 @@ import {
 import { t } from "../../i18n";
 import { useLocal } from "../kernel/local-provider";
 import { usePlatform } from "../kernel/platform";
-import { SessionPage } from "../domains/session/chat/session-page";
 import {
   clearPendingDeskTask,
   isPendingDeskTaskId,
@@ -176,6 +175,12 @@ import {
   resolveOptionalMatterhornContext,
   sanitizeMatterhornSystemContextValue,
 } from "../domains/session/context/session-system-context";
+
+const SessionPage = lazy(() =>
+  import("../domains/session/chat/session-page").then((module) => ({
+    default: module.SessionPage,
+  })),
+);
 
 import { readDenSettings } from "../../app/lib/den";
 import { denSessionUpdatedEvent } from "../../app/lib/den-session-events";
@@ -3381,7 +3386,17 @@ export function SessionRoute() {
         onAssistantOutput={handleAssistantOutputTiming}
       />
     ) : null}
-    <SessionPage
+    <Suspense
+      fallback={
+        <div
+          className="flex min-h-screen items-center justify-center text-sm text-dls-secondary"
+          role="status"
+        >
+          Preparing workspace…
+        </div>
+      }
+    >
+      <SessionPage
       selectedSessionId={selectedSessionId}
       workspaceHomeView={isWorkspaceHistoryRoute ? "history" : "home"}
       selectedWorkspaceId={selectedWorkspaceId}
@@ -3838,7 +3853,8 @@ export function SessionRoute() {
       notFoundMessage={routeNotFoundMessage}
       onRevealPath={revealWorkspacePath}
       onAccessibleTargetsChange={setPaletteAccessibleTargets}
-    />
+      />
+    </Suspense>
     <CreateWorkspaceModal
       open={createWorkspaceOpen}
       onClose={() => {

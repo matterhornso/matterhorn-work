@@ -229,6 +229,15 @@ jobs:
       - name: Run full backend test suite
         run: pnpm --dir apps/server test
 
+      - name: Build public-Beta web candidate
+        run: pnpm --filter @matterhorn-work/app build:web
+
+      - name: Validate task-first bundle budget gate
+        run: pnpm test:task-first-bundle-budget
+
+      - name: Enforce task-first bundle budgets
+        run: pnpm gate:task-first-bundle-budget
+
       - name: Validate platform safety gate wiring
         run: pnpm test:matterhorn-platform-safety-gate
 

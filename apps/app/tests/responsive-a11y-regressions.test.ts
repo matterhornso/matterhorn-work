@@ -5,6 +5,10 @@ function readAppSource(path: string) {
   return readFileSync(new URL(`../src/react-app/${path}`, import.meta.url), "utf8");
 }
 
+function readAppFile(path: string) {
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
 describe("responsive accessibility regressions", () => {
   test("blank sessions start at the top while populated transcripts keep sticky-bottom behavior", () => {
     const surface = readAppSource("domains/session/surface/session-surface.tsx");
@@ -54,5 +58,54 @@ describe("responsive accessibility regressions", () => {
     expect(sessionPage.match(/inline-flex size-6 shrink-0/g)?.length).toBe(3);
     expect(composer).toContain("after:-inset-0.5");
     expect(editor).toContain("after:-inset-1");
+  });
+
+  test("mobile shells resize for virtual keyboards and preserve device safe areas", () => {
+    const index = readAppFile("index.html");
+    const sidebar = readAppFile("src/components/ui/sidebar.tsx");
+    const sessionPage = readAppSource("domains/session/chat/session-page.tsx");
+    const composer = readAppSource("domains/session/surface/composer/composer.tsx");
+    const settingsShell = readAppSource("domains/settings/shell/settings-shell.tsx");
+
+    expect(index).toContain("viewport-fit=cover");
+    expect(index).toContain("interactive-widget=resizes-content");
+    expect(sidebar).toContain("min-h-dvh");
+    expect(sidebar).not.toContain("min-h-svh");
+    expect(sessionPage).toContain("env(safe-area-inset-top)");
+    expect(composer).toContain("env(safe-area-inset-bottom)");
+    expect(composer).toContain("[@media(max-height:640px)]:flex-nowrap");
+    expect(composer).toContain("[@media(max-height:640px)]:overflow-x-auto");
+    expect(composer).toContain("[@media(max-height:640px)]:[&>*]:shrink-0");
+    expect(composer).toContain('aria-label="Composer controls"');
+    expect(settingsShell).toContain("h-dvh min-h-dvh");
+    expect(settingsShell).toContain("env(safe-area-inset-top)");
+  });
+
+  test("the app has a reduced-motion fallback for animations, transitions, and scrolling", () => {
+    const styles = readAppFile("src/app/index.css");
+    const publicTrust = readAppSource("domains/public/public-trust-route.tsx");
+
+    expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(styles).toContain("animation-duration: 0.01ms !important");
+    expect(styles).toContain("transition-duration: 0.01ms !important");
+    expect(styles).toContain("scroll-behavior: auto !important");
+    expect(publicTrust).toContain("motion-reduce:animate-none");
+    expect(publicTrust).toContain("safe-area-inset-left");
+    expect(publicTrust).toContain("safe-area-inset-right");
+  });
+
+  test("public entry keeps Security and Privacy adjacent to the access form", () => {
+    const signin = readAppSource("domains/cloud/public-web-signin-page.tsx");
+    const signinStyles = readAppSource("domains/cloud/public-web-signin.css");
+
+    expect(signin).toContain('aria-label="Security and privacy"');
+    expect(signin).toContain('<a href="/security">Security</a>');
+    expect(signin).toContain('<a href="/privacy">Privacy</a>');
+    expect(signin).toContain("window.visualViewport");
+    expect(signin).toContain('active.closest(".public-auth-form")');
+    expect(signin).toContain('active.scrollIntoView({ block: "center"');
+    expect(signinStyles).toContain("overflow-wrap: anywhere");
+    expect(signinStyles).toContain("safe-area-inset-bottom");
+    expect(signinStyles).toContain(".public-auth-trust a:focus-visible");
   });
 });

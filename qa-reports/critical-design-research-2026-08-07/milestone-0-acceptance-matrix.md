@@ -2,7 +2,7 @@
 
 Date: 2026-08-07
 Baseline: `d4318e9f` plus preserved local audit/hardening changes
-Status: Baseline locked; approved A+B+C implementation underway
+Status: Local A+B+C implementation accepted; hosted authenticated release gates pending
 
 ## Invariants
 
@@ -114,8 +114,10 @@ Candidate budgets:
 
 ## Current evidence status
 
-- Focused baseline: 45 tests passed, 0 failed.
-- Application typecheck: passed.
-- Existing production artifact: measured above; performance budgets are not yet met or proven.
-- Visual direction: palette and composed A+B+C system approved; Milestone 1 is implemented and Milestone 2 is in progress.
-- Hosted release evidence: intentionally pending until the redesign candidate exists.
+- Application suite: 822 tests passed, 0 failed; typecheck passed.
+- Ten-stage platform safety gate: passed.
+- Bundle gate: passed. Signed-out graph 431,194B; Session 150,842B; Settings 255,811B; EVM/Sui/Bittensor wallet chunks 480,855B/411,655B/896,388B.
+- Static Session and Settings graphs contain no wallet runtime, Shiki, experimental translations, artifact editor, or spreadsheet chunks.
+- Responsive local evidence: no horizontal overflow at 320×568, 375×812, 768×1024, 1024×768, or 1440×900; safe-area, reduced-motion, focus, and simulated virtual-keyboard checks pass.
+- Visual direction and composed A+B+C system: approved and implemented.
+- Hosted public Lighthouse previously passed on the prior exact candidate; the new exact candidate must be rerun after deployment. Hosted authenticated, two-account, production origin/header, monitoring, backup/restore, and rollback evidence remains pending on Cloud inputs.
