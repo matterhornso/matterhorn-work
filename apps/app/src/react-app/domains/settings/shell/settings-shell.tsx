@@ -134,7 +134,7 @@ export function SettingsShell(props: SettingsShellProps) {
               <div className="flex min-w-0 items-center gap-2">
                 <SidebarTrigger className="size-11 mac:titlebar-no-drag md:hidden" />
                 {props.headerLeadingSlot}
-                <span className="truncate text-xs font-medium text-dls-secondary">{title}</span>
+                <h1 className="truncate text-xs font-medium text-dls-secondary">{title}</h1>
                 {props.developerMode && props.headerStatus ? (
                   <span className="hidden text-[12px] font-medium text-dls-text lg:inline">
                     {props.headerStatus}

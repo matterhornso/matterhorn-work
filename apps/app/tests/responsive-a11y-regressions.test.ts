@@ -79,6 +79,7 @@ describe("responsive accessibility regressions", () => {
     expect(composer).toContain('aria-label="Composer controls"');
     expect(settingsShell).toContain("h-dvh min-h-dvh");
     expect(settingsShell).toContain("env(safe-area-inset-top)");
+    expect(settingsShell).toContain('<h1 className="truncate text-xs font-medium text-dls-secondary">{title}</h1>');
   });
 
   test("the app has a reduced-motion fallback for animations, transitions, and scrolling", () => {
