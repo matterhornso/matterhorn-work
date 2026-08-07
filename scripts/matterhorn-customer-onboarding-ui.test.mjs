@@ -546,7 +546,7 @@ assert.equal(sessionPage.includes("matterhorn-focused-desk-boundary"), false, "f
 assert.ok(
   sessionPage.includes('className="matterhorn-focused-desk-prompt-list space-y-5"') &&
     sessionPage.includes('aria-labelledby={`desk-task-group-${panel}-${group.id}`}') &&
-    sessionPage.includes("grid grid-cols-1 gap-2 lg:grid-cols-2") &&
+    sessionPage.includes('showAllTasks ? "lg:grid-cols-2" : "lg:grid-cols-3"') &&
     sessionPage.includes("<WorkflowStageCard"),
   "focused desk prompts should render in labeled, compact responsive workflow groups",
 );
