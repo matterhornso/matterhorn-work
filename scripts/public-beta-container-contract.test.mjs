@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 const dockerfile = readFileSync("packaging/docker/Dockerfile.public-beta", "utf8");
 const entrypoint = readFileSync("packaging/docker/public-beta-entrypoint.sh", "utf8");
+const ciWorkflow = readFileSync(".github/workflows/ci-tests.yml", "utf8");
 
 for (const required of [
   "OPENWORK_MANAGE_OPENCODE=1",
@@ -27,6 +28,18 @@ for (const required of [
   'exec bun /app/apps/server/src/cli.ts',
 ]) {
   assert.ok(entrypoint.includes(required), `public Beta entrypoint must include ${required}`);
+}
+
+for (const required of [
+  "public-beta-container-build:",
+  "docker/build-push-action@v6",
+  "file: packaging/docker/Dockerfile.public-beta",
+  "push: false",
+  "Verify startup fails closed without production secrets",
+  "Smoke production image liveness with a persistent volume",
+  "http://127.0.0.1:18787/health/live",
+]) {
+  assert.ok(ciWorkflow.includes(required), `CI must include ${required}`);
 }
 
 console.log("public-beta-container-contract tests: PASS");
