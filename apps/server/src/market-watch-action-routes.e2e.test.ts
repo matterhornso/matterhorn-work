@@ -231,7 +231,9 @@ describe("market watch action routes", () => {
     const hyperliquidCreate = await post(base, "/api/hyperliquid/watches", {
       kind: "funding_rate",
       asset: "BTC",
-      threshold: 0.01,
+      // Keep the alert deterministic even when another parallel test imports
+      // the process-wide provider before this file installs its mock URLs.
+      threshold: -1,
       direction: "above",
     });
     expect(hyperliquidCreate.status).toBe(200);
