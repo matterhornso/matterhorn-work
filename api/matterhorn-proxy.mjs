@@ -3,20 +3,16 @@ import { isIP } from "node:net";
 const INTERNAL_PATH_PARAM = "__matterhorn_path";
 const ALLOWED_ROOTS = new Set([
   "api",
-  "approvals",
   "capabilities",
   "env",
   "experimental",
   "files",
   "health",
-  "hub",
-  "mcp",
   "opencode",
   "runtime",
   "tokens",
   "voice",
   "w",
-  "whoami",
   "workspace",
   "workspaces",
 ]);
@@ -55,6 +51,15 @@ export function resolveControlPlaneUrl(rawValue, allowHttp = false) {
   }
 }
 
+export function buildUpstreamUrl(upstreamBase, path) {
+  const upstreamUrl = new URL(upstreamBase);
+  const basePath = upstreamUrl.pathname.replace(/\/+$/, "");
+  upstreamUrl.pathname = `${basePath}${path}`;
+  upstreamUrl.search = "";
+  upstreamUrl.hash = "";
+  return upstreamUrl;
+}
+
 function jsonError(status, code, message) {
   return new Response(JSON.stringify({ code, message }), {
     status,
@@ -87,7 +92,7 @@ export default async function matterhornProxy(request) {
     return jsonError(503, "control_plane_unavailable", "Matterhorn account services are not configured.");
   }
 
-  const upstreamUrl = new URL(`${upstreamBase.pathname}${path}`, upstreamBase.origin);
+  const upstreamUrl = buildUpstreamUrl(upstreamBase, path);
   for (const [key, value] of requestUrl.searchParams) {
     if (key !== INTERNAL_PATH_PARAM) upstreamUrl.searchParams.append(key, value);
   }
