@@ -27,6 +27,9 @@ describe("wallet runtime connector contract", () => {
     const publicSigninSource = readReactAppSource(
       "shell/public-signin-bootstrap.tsx",
     );
+    const publicTrustSource = readReactAppSource(
+      "shell/public-trust-bootstrap.tsx",
+    );
     const authenticatedAppSource = readReactAppSource(
       "shell/authenticated-app.tsx",
     );
@@ -64,6 +67,10 @@ describe("wallet runtime connector contract", () => {
     expect(appEntrySource).toContain(
       'import("./react-app/shell/public-signin-bootstrap")',
     );
+    expect(appEntrySource).toContain(
+      'import("./react-app/shell/public-trust-bootstrap")',
+    );
+    expect(appEntrySource).toContain("if (publicTrustEntry)");
     expect(appEntrySource).not.toContain(
       'import { AppProviders } from "./react-app/shell/providers"',
     );
@@ -71,6 +78,11 @@ describe("wallet runtime connector contract", () => {
     expect(publicSigninSource).not.toContain("LazyWalletRuntimeProvider");
     expect(publicSigninSource).not.toContain("DenAuthProvider");
     expect(publicSigninSource).not.toContain("DesktopConfigProvider");
+    expect(publicTrustSource).toContain("<PublicTrustRoute />");
+    expect(publicTrustSource).not.toContain("AppProviders");
+    expect(publicTrustSource).not.toContain("QueryClientProvider");
+    expect(publicTrustSource).not.toContain("DenAuthProvider");
+    expect(publicTrustSource).not.toContain("LazyWalletRuntimeProvider");
     expect(authenticatedAppSource).toContain("<AppProviders>");
     expect(providersSource).not.toContain('from "wagmi"');
     expect(providersSource).not.toContain('from "@mysten/dapp-kit-react"');

@@ -22,6 +22,10 @@ const trustRouteSource = readFileSync(
   resolve(import.meta.dir, "../src/react-app/domains/public/public-trust-route.tsx"),
   "utf8",
 );
+const publicTrustBootstrapSource = readFileSync(
+  resolve(import.meta.dir, "../src/react-app/shell/public-trust-bootstrap.tsx"),
+  "utf8",
+);
 
 describe("public trust routes", () => {
   test("publishes the complete launch trust surface", () => {
@@ -75,6 +79,16 @@ describe("public trust routes", () => {
     expect(appRootSource).toContain("if (isPublicTrustPath(path)) return;");
     expect(appRootSource).toContain("!isPublicTrustPath(location.pathname)");
     expect(entrySource).toContain("shouldGatePublicWebEntry({");
+  });
+
+  test("serves direct trust routes above the authenticated application boundary", () => {
+    expect(entrySource).toContain("const publicTrustEntry = isPublicTrustPath(window.location.pathname)");
+    expect(entrySource).toContain('import("./react-app/shell/public-trust-bootstrap")');
+    expect(entrySource).toContain("if (publicTrustEntry)");
+    expect(publicTrustBootstrapSource).toContain("<BrowserRouter>");
+    expect(publicTrustBootstrapSource).toContain("<PublicTrustRoute />");
+    expect(publicTrustBootstrapSource).not.toContain("AppProviders");
+    expect(publicTrustBootstrapSource).not.toContain("QueryClientProvider");
   });
 
   test("uses Matterhorn public identity and safe support channels", () => {

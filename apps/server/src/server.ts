@@ -339,8 +339,10 @@ import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } fro
 import { createHash } from "node:crypto";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isIP } from "node:net";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
-import type { ApprovalRequest, Capabilities, ServerConfig, WorkspaceInfo, Actor, ReloadReason, ReloadTrigger, TokenScope, MatterhornTaskEventType, RequestRateLimitConfig } from "./types.js";
+import type { ApprovalRequest, Capabilities, ServerConfig, WorkspaceInfo, Actor, ReloadReason, ReloadTrigger, TokenScope, MatterhornTaskEventType, RequestRateLimitConfig, RequestRateLimitStore } from "./types.js";
+import { createInMemoryRequestRateLimitStore } from "./request-rate-limit-store.js";
 import { ApprovalService } from "./approvals.js";
 import { addPlugin, listPlugins, normalizePluginSpec, removePlugin } from "./plugins.js";
 import { sanitizePortableOpencodeConfig } from "./portable-opencode.js";
@@ -749,15 +751,18 @@ const DEFAULT_RATE_LIMIT_WRITE_MAX_REQUESTS = 1_200;
 const AUTH_ATTEMPT_WINDOW_MS = 10 * 60_000;
 const AUTH_ATTEMPT_MAX_REQUESTS = 10;
 
-type RequestRateLimiter = {
+export type RequestRateLimiter = {
   check: (
     request: Request,
     url: URL,
     peerAddress: string | null,
-  ) => { allowed: true } | { allowed: false; retryAfterSeconds: number };
+  ) => Promise<{ allowed: true } | { allowed: false; retryAfterSeconds: number }>;
 };
 
-function createRequestRateLimiter(config: RequestRateLimitConfig | undefined): RequestRateLimiter {
+export function createRequestRateLimiter(
+  config: RequestRateLimitConfig | undefined,
+  store: RequestRateLimitStore = createInMemoryRequestRateLimitStore(),
+): RequestRateLimiter {
   const enabled = config?.enabled !== false;
   const windowMs = Math.max(1_000, Math.floor(config?.windowMs ?? DEFAULT_RATE_LIMIT_WINDOW_MS));
   const readMaxRequests = Math.max(
@@ -768,19 +773,10 @@ function createRequestRateLimiter(config: RequestRateLimitConfig | undefined): R
     1,
     Math.floor(config?.writeMaxRequests ?? config?.maxRequests ?? DEFAULT_RATE_LIMIT_WRITE_MAX_REQUESTS),
   );
-  const buckets = new Map<string, { resetAt: number; count: number }>();
-  let lastSweepAt = 0;
-
   return {
-    check(request: Request, url: URL, peerAddress: string | null) {
+    async check(request: Request, url: URL, peerAddress: string | null) {
       if (!enabled || request.method === "OPTIONS") return { allowed: true };
       const now = Date.now();
-      if (now - lastSweepAt >= windowMs) {
-        for (const [bucketKey, staleBucket] of buckets.entries()) {
-          if (now >= staleBucket.resetAt) buckets.delete(bucketKey);
-        }
-        lastSweepAt = now;
-      }
       const client = peerAddress?.trim() || "unknown-peer";
       // UI polling and session hydration can be read-heavy. Keep those reads
       // from exhausting the budget used by user-triggered writes such as
@@ -789,38 +785,50 @@ function createRequestRateLimiter(config: RequestRateLimitConfig | undefined): R
       const workspaceMatch = url.pathname.match(/^\/(?:w|workspace)\/([^/]+)/);
       const workspaceScope = workspaceMatch?.[1] ? `workspace:${workspaceMatch[1]}` : "global";
       const maxRequests = requestClass === "read" ? readMaxRequests : writeMaxRequests;
-      const key = `${client}:${url.origin}:${workspaceScope}:${requestClass}`;
-      let bucket = buckets.get(key);
-      if (!bucket || now >= bucket.resetAt) {
-        bucket = { resetAt: now + windowMs, count: 0 };
-        buckets.set(key, bucket);
-      }
-      bucket.count += 1;
-      if (bucket.count <= maxRequests) return { allowed: true };
+      const key = `http:${client}:${url.origin}:${workspaceScope}:${requestClass}`;
+      const decision = await store.consume({ key, windowMs, maxRequests, now });
+      if (decision.allowed) return { allowed: true };
 
       return {
         allowed: false,
-        retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
+        retryAfterSeconds: Math.max(1, Math.ceil((decision.resetAt - now) / 1000)),
       };
     },
   };
 }
 
-function createAuthAttemptLimiter() {
-  const buckets = new Map<string, { count: number; resetAt: number }>();
+export function resolveRateLimitPeerAddress(
+  request: Request,
+  peerAddress: string | null,
+  trustedProxySecret: string | undefined,
+): string | null {
+  const expectedSecret = trustedProxySecret?.trim() ?? "";
+  const presentedSecret = request.headers.get("x-matterhorn-proxy-secret")?.trim() ?? "";
+  if (!expectedSecret || !presentedSecret || !timingSafeTokenEqual(presentedSecret, expectedSecret)) {
+    return peerAddress;
+  }
+
+  const forwarded = request.headers
+    .get("x-matterhorn-client-ip")
+    ?.split(",")[0]
+    ?.trim() ?? "";
+  return isIP(forwarded) ? forwarded : peerAddress;
+}
+
+function createAuthAttemptLimiter(store: RequestRateLimitStore) {
   return {
-    check(key: string): boolean {
+    async check(key: string): Promise<boolean> {
       const now = Date.now();
-      let bucket = buckets.get(key);
-      if (!bucket || now >= bucket.resetAt) {
-        bucket = { count: 0, resetAt: now + AUTH_ATTEMPT_WINDOW_MS };
-        buckets.set(key, bucket);
-      }
-      bucket.count += 1;
-      return bucket.count <= AUTH_ATTEMPT_MAX_REQUESTS;
+      const decision = await store.consume({
+        key: `auth:${key}`,
+        windowMs: AUTH_ATTEMPT_WINDOW_MS,
+        maxRequests: AUTH_ATTEMPT_MAX_REQUESTS,
+        now,
+      });
+      return decision.allowed;
     },
-    reset(key: string): void {
-      buckets.delete(key);
+    reset(key: string): void | Promise<void> {
+      return store.reset(`auth:${key}`);
     },
   };
 }
@@ -981,6 +989,8 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     watcherHandle = createWatcherHandle();
   };
   const operationalMetrics = new OperationalMetrics();
+  const ownsRequestRateLimitStore = !config.requestRateLimitStore;
+  const requestRateLimitStore = config.requestRateLimitStore ?? createInMemoryRequestRateLimitStore();
   const routes = createRoutes(
     config,
     approvals,
@@ -989,8 +999,9 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     env,
     restartReloadWatchers,
     operationalMetrics,
+    requestRateLimitStore,
   );
-  const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit);
+  const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
 
   const serverOptions: {
     hostname: string;
@@ -1059,7 +1070,12 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
         return finalize(new Response(null, { status: 204 }));
       }
 
-      const rateLimit = requestRateLimiter.check(request, url, context.remoteAddress);
+      const rateLimitPeerAddress = resolveRateLimitPeerAddress(
+        request,
+        context.remoteAddress,
+        config.trustedProxySecret,
+      );
+      const rateLimit = await requestRateLimiter.check(request, url, rateLimitPeerAddress);
       if (!rateLimit.allowed) {
         errorMessage = "rate_limited";
         rateLimited = true;
@@ -1194,6 +1210,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);
       authStore.close();
+      if (ownsRequestRateLimitStore) await requestRateLimitStore.close?.();
       await (server.stop as unknown as (closeActiveConnections?: boolean) => void | Promise<void>)(closeActiveConnections);
     },
   };
@@ -6129,13 +6146,14 @@ function createRoutes(
   env: EnvService,
   onWorkspacesChanged: () => void,
   operationalMetrics: OperationalMetrics,
+  requestRateLimitStore: RequestRateLimitStore,
 ): Route[] {
   const routes: Route[] = [];
   const billingRouteContext = createBillingRouteContext(config);
   const fileSessions = new FileSessionStore();
   const googleWorkspaceConnectFlows = createGoogleWorkspaceConnectFlowManager(config);
   const memoryVault = createMatterhornMemoryVault(resolveMatterhornMemoryRoot());
-  const authAttemptLimiter = createAuthAttemptLimiter();
+  const authAttemptLimiter = createAuthAttemptLimiter(requestRateLimitStore);
   const workflowRuns = new WorkflowRunEngine({
     persistenceRoot: config.workspaces[0]?.path ?? process.cwd(),
     onEvent: recordWorkflowTaskEvent,
@@ -6189,7 +6207,7 @@ function createRoutes(
     const body = await readJsonBody(request, 16 * 1024, "Sign-up");
     const email = stringBodyField(body, "email");
     const attemptKey = `sign-up:${email.trim().toLowerCase()}`;
-    if (!authAttemptLimiter.check(attemptKey)) {
+    if (!await authAttemptLimiter.check(attemptKey)) {
       throw new ApiError(
         429,
         "rate_limited",
@@ -6213,7 +6231,7 @@ function createRoutes(
     const body = await readJsonBody(request, 16 * 1024, "Sign-in");
     const email = stringBodyField(body, "email");
     const attemptKey = `sign-in:${email.trim().toLowerCase()}`;
-    if (!authAttemptLimiter.check(attemptKey)) {
+    if (!await authAttemptLimiter.check(attemptKey)) {
       throw new ApiError(
         429,
         "rate_limited",
@@ -6226,7 +6244,7 @@ function createRoutes(
         stringBodyField(body, "password"),
       ),
     );
-    authAttemptLimiter.reset(attemptKey);
+    await authAttemptLimiter.reset(attemptKey);
     return matterhornAuthResponse(request, {
       user: session.user,
       organization: matterhornActiveOrganization(authStore, session),

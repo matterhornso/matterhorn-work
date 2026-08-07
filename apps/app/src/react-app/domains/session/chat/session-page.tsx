@@ -86,8 +86,8 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { StatusBar, type StatusBarProps } from "./status-bar";
+import { useSessionSidePanelPresentation } from "./session-layout-policy";
 import { OwDotTicker } from "../../../shell/dot-ticker";
 import { useReactRenderWatchdog } from "../../../shell/react-render-watchdog";
 import { useShellConfig } from "../../../shell/shell-config";
@@ -1635,9 +1635,9 @@ export function SessionPage(props: SessionPageProps) {
     : null;
   const visibleSidePanel = focusedProtocolPanel ? null : activeSidePanel;
   const sidePanelOpen = visibleSidePanel !== null;
-  const isMobileViewport = useIsMobile();
-  const dockedSidePanelOpen = sidePanelOpen && !isMobileViewport;
-  const mobileSidePanelOpen = sidePanelOpen && isMobileViewport;
+  const sidePanelPresentation = useSessionSidePanelPresentation();
+  const dockedSidePanelOpen = sidePanelOpen && sidePanelPresentation === "docked";
+  const overlaySidePanelOpen = sidePanelOpen && sidePanelPresentation !== "docked";
   const protocolSidePanelOpen = isVenueSidePanel(visibleSidePanel);
   const embeddedSettingsPanelOpen = visibleSidePanel === "extensions" || visibleSidePanel === "profile" || visibleSidePanel === "wallet";
   const sidePanelTitle = visibleSidePanel === "profile"
@@ -3619,8 +3619,12 @@ export function SessionPage(props: SessionPageProps) {
             })}
           </aside>
           </div>
-          {mobileSidePanelOpen ? (
-            <div className="matterhorn-side-panel fixed inset-0 z-40 flex bg-dls-background lg:hidden">
+          {overlaySidePanelOpen ? (
+            <aside
+              aria-label={sidePanelTitle}
+              data-presentation={sidePanelPresentation}
+              className="matterhorn-side-panel fixed inset-0 z-[var(--matterhorn-layer-modal)] flex bg-dls-background lg:inset-y-0 lg:left-auto lg:right-[var(--nav-rail-width-compact)] lg:w-[min(26rem,calc(100vw-var(--nav-rail-width-compact)))] lg:border-l lg:border-dls-border/40 lg:shadow-[-24px_0_60px_rgb(0_0_0/0.24)] xl:hidden"
+            >
               <div className="flex h-full min-h-0 w-full flex-col bg-dls-background">
                 {!embeddedSettingsPanelOpen ? (
                   <div className="flex h-11 shrink-0 items-center justify-between bg-dls-surface-muted/[0.08] px-3">
@@ -3645,7 +3649,7 @@ export function SessionPage(props: SessionPageProps) {
                   </Suspense>
                 </div>
               </div>
-            </div>
+            </aside>
           ) : null}
         </SidebarInset>
         {shellConfig.sidebar ? <SidebarTrigger className="hidden mac:absolute mac:left-[64px] top-[3px] z-50 mac:flex titlebar-no-drag" /> : null}

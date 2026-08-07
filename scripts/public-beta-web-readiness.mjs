@@ -59,6 +59,14 @@ function isHttpsUrl(value) {
   }
 }
 
+function urlOrNull(value) {
+  try {
+    return new URL(value);
+  } catch {
+    return null;
+  }
+}
+
 function configuredVariableNames(keys) {
   return keys.filter((key) => readEnv(key)).join(", ");
 }
@@ -96,6 +104,11 @@ function evaluate() {
   const cloudUrl = readEnv("VITE_MATTERHORN_CLOUD_URL");
   const cloudApiUrl = readEnv("VITE_MATTERHORN_CLOUD_API_URL");
   const publicProxyMode = readEnv("MATTERHORN_PUBLIC_PROXY_MODE").toLowerCase();
+  const controlPlaneUrl = readEnv("MATTERHORN_CONTROL_PLANE_URL");
+  const proxySecretConfigured = readEnv("MATTERHORN_PROXY_SECRET").length >= 32;
+  const app = urlOrNull(appUrl);
+  const cloud = urlOrNull(cloudUrl);
+  const cloudApi = urlOrNull(cloudApiUrl);
 
   const checks = [
     check(
@@ -148,6 +161,20 @@ function evaluate() {
       "VITE_MATTERHORN_CLOUD_API_URL must be an HTTPS URL.",
     ),
     check(
+      "web.cloud_same_origin",
+      "The account UI stays on the public application origin",
+      "Security",
+      Boolean(app && cloud && cloud.origin === app.origin),
+      "VITE_MATTERHORN_CLOUD_URL must use the exact MATTERHORN_APP_URL origin.",
+    ),
+    check(
+      "web.cloud_api_same_origin",
+      "The browser account API uses the same-origin /api/den proxy",
+      "Security",
+      Boolean(app && cloudApi && cloudApi.origin === app.origin && cloudApi.pathname.replace(/\/+$/, "") === "/api/den"),
+      "VITE_MATTERHORN_CLOUD_API_URL must be the app origin followed by /api/den.",
+    ),
+    check(
       "web.no_browser_bearer_credentials",
       "No client or host bearer credential is exposed through a Vite build variable",
       "Security",
@@ -171,6 +198,20 @@ function evaluate() {
       "Platform",
       publicProxyMode === "same-origin",
       "MATTERHORN_PUBLIC_PROXY_MODE must be same-origin after /workspaces and /opencode routes are configured. The live deployment probe supplies the proof.",
+    ),
+    check(
+      "web.proxy_upstream",
+      "The server-only proxy upstream uses HTTPS",
+      "Platform",
+      isHttpsUrl(controlPlaneUrl),
+      "MATTERHORN_CONTROL_PLANE_URL must be an HTTPS server-only environment variable.",
+    ),
+    check(
+      "web.proxy_secret",
+      "The same-origin proxy authenticates to the backend with a server secret",
+      "Security",
+      proxySecretConfigured,
+      "MATTERHORN_PROXY_SECRET must be a high-entropy server-only value of at least 32 characters.",
     ),
   ];
   const blockers = checks.filter((entry) => !entry.passed);

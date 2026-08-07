@@ -15,6 +15,11 @@ function createFixture() {
   );
   writeFileSync(resolve(assets, "app-fixture.js"), "export{};");
   writeFileSync(resolve(assets, "vendor-react-fixture.js"), "export{};");
+  writeFileSync(
+    resolve(assets, "public-trust-bootstrap-fixture.js"),
+    'import "./public-trust-route-fixture.js";',
+  );
+  writeFileSync(resolve(assets, "public-trust-route-fixture.js"), "export{};");
   writeFileSync(resolve(assets, "authenticated-app-fixture.js"), "export{};");
   writeFileSync(resolve(assets, "session-route-fixture.js"), 'import "./session-shared-fixture.js";');
   writeFileSync(resolve(assets, "session-page-fixture.js"), 'import "./session-shared-fixture.js";');
@@ -22,6 +27,25 @@ function createFixture() {
   writeFileSync(resolve(assets, "settings-route-fixture.js"), 'import "./authenticated-app-fixture.js";');
   writeFileSync(resolve(assets, "vendor-wallet-evm-fixture.js"), "export{};");
   return root;
+}
+
+{
+  const fixture = createFixture();
+  try {
+    writeFileSync(
+      resolve(fixture, "assets", "public-trust-bootstrap-fixture.js"),
+      'import "./authenticated-app-fixture.js";',
+    );
+    const result = auditTaskFirstBundle(fixture);
+    assert.equal(result.ok, false);
+    assert(
+      result.failures.some((failure) =>
+        failure.includes("Public-trust shell statically imports forbidden authenticated-app"),
+      ),
+    );
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 }
 
 {

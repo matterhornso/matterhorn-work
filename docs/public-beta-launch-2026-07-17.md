@@ -59,11 +59,9 @@ surface for a shared Matterhorn Desks engine.
 5. Any upstream service credentials remain server-side. The browser receives
    neither a Matterhorn Desks bearer token nor a host token.
 
-The browser return target is `${MATTERHORN_APP_URL}/session` (or its deployed
-equivalent) and must be allowlisted by Matterhorn Cloud. If the Cloud API is on
-a different origin, it must allow credentialed requests from the exact app
-origin, return the exact origin in `Access-Control-Allow-Origin`, and never use
-`*` with credentials. The proxy must independently authorize every
+The browser return target is `${MATTERHORN_APP_URL}/onboarding`. Account and
+workspace API calls stay on that same public origin through `/api/den` and the
+approved same-origin proxy routes. The proxy must independently authorize every
 `user -> organization -> workspace` request; organization or workspace IDs in
 browser headers and URLs are selectors, never authorization proof.
 
@@ -76,8 +74,10 @@ VITE_MATTERHORN_REQUIRE_SIGNIN=1
 VITE_MATTERHORN_CLOUD_ENABLED=1
 MATTERHORN_PUBLIC_PROXY_MODE=same-origin
 VITE_MATTERHORN_CLOUD_URL=https://app.matterhorn.example
-VITE_MATTERHORN_CLOUD_API_URL=https://api.matterhorn.example
+VITE_MATTERHORN_CLOUD_API_URL=https://app.matterhorn.example/api/den
 MATTERHORN_APP_URL=https://app.matterhorn.example
+MATTERHORN_CONTROL_PLANE_URL=https://api-origin.matterhorn.example
+MATTERHORN_PROXY_SECRET=<server-only-high-entropy-secret>
 ```
 
 Leave these unset in the public build:

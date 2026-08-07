@@ -38,6 +38,10 @@ describe("Milestone 3 AI work-state acceptance", () => {
     expect(surface).toContain("Matterhorn could not complete this response. Your prompt is ready to retry.");
     expect(surface).toContain("Your prompt is still available to edit or send again.");
     expect(surface).toContain("setComposerDraft(props.sessionId, failure.retryMessage)");
+    expect(surface).toContain('retryable: true');
+    expect(surface).toContain('"Retry response"');
+    expect(surface).toContain("handleRetryResponse");
+    expect(surface).toContain("if (sending || !draft.trim()) return;");
     expect(surface).toContain("snapshotQuery.refetch()");
     expect(messages).toContain('role="alert"');
     expect(messages).toContain('status === "failed"');

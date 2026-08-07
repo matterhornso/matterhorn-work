@@ -42,7 +42,7 @@ The beta auth layer does not require Clerk packages, but it documents the standa
 |---|---|---|
 | `VITE_MATTERHORN_CLOUD_ENABLED` | No | Explicitly enables Matterhorn Cloud account actions. Local builds default to disabled so they never send users to an undeployed hostname. |
 | `VITE_MATTERHORN_CLOUD_URL` | Required when Cloud is enabled | Browser sign-in and account control-plane URL. |
-| `VITE_MATTERHORN_CLOUD_API_URL` | No | Optional separate API base URL for Matterhorn Cloud. |
+| `VITE_MATTERHORN_CLOUD_API_URL` | Required for public Beta | Same-origin account API base. Public Beta must use `https://<app-origin>/api/den`; never a direct backend origin. |
 | `VITE_MATTERHORN_DEPLOYMENT` | No | Use `web` only for a reviewed browser deployment; desktop is the default. |
 | `VITE_MATTERHORN_PUBLIC_BETA` | No | Requires the web deployment mode and turns on public-Beta browser safeguards. |
 | `VITE_MATTERHORN_REQUIRE_SIGNIN` | No | Holds public web at sign-in until a Matterhorn Cloud session exists. |
@@ -72,8 +72,10 @@ VITE_MATTERHORN_PUBLIC_BETA=1
 VITE_MATTERHORN_REQUIRE_SIGNIN=1
 VITE_MATTERHORN_CLOUD_ENABLED=1
 VITE_MATTERHORN_CLOUD_URL=https://app.matterhorn.example
-VITE_MATTERHORN_CLOUD_API_URL=https://api.matterhorn.example
+VITE_MATTERHORN_CLOUD_API_URL=https://app.matterhorn.example/api/den
 MATTERHORN_APP_URL=https://app.matterhorn.example
+MATTERHORN_CONTROL_PLANE_URL=https://api-origin.matterhorn.example
+MATTERHORN_PROXY_SECRET=<server-only-high-entropy-secret>
 ```
 
 Do not configure `VITE_MATTERHORN_WORK_URL`, `VITE_MATTERHORN_WORK_TOKEN`,
@@ -81,9 +83,9 @@ Do not configure `VITE_MATTERHORN_WORK_URL`, `VITE_MATTERHORN_WORK_TOKEN`,
 The deployment proxy, not browser code, owns upstream credentials and must
 authorize the signed-in user for the selected workspace.
 
-Public web uses a secure HttpOnly Matterhorn Cloud session cookie. Cloud must
-allowlist the exact `https://<app-host>/onboarding` return target, and a separate
-Cloud API must use credentialed CORS for that exact app origin. The browser
+Public web uses a secure HttpOnly Matterhorn session cookie. The exact
+`https://<app-host>/onboarding` return target and `/api/den` API both stay on the
+app origin. The browser
 must not receive, persist, or paste a Cloud bearer token or desktop handoff
 grant. A request's selected organization or workspace is only a selector; the
 proxy must authorize that user-to-project relationship server-side.

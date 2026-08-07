@@ -150,7 +150,7 @@ export function NewProvidersToast() {
   })();
 
   return (
-    <div className="fixed bottom-6 left-1/2 z-[9999] -translate-x-1/2 animate-in slide-in-from-bottom-4 fade-in duration-300">
+    <div className="fixed bottom-6 left-1/2 z-[var(--matterhorn-layer-toast)] -translate-x-1/2 animate-in slide-in-from-bottom-4 fade-in duration-300">
       <div className="flex items-center gap-4 rounded-lg border border-dls-border bg-dls-surface px-5 py-3.5 shadow-lg">
         <div className="flex items-center gap-2">
           {state.providers.slice(0, 6).map((p) => (

@@ -80,6 +80,30 @@ export interface RequestRateLimitConfig {
   writeMaxRequests?: number;
 }
 
+export type RequestRateLimitConsumeInput = {
+  key: string;
+  windowMs: number;
+  maxRequests: number;
+  now: number;
+};
+
+export type RequestRateLimitConsumeResult = {
+  allowed: boolean;
+  resetAt: number;
+};
+
+/**
+ * Atomic rate-limit storage contract. Hosted multi-instance deployments must
+ * inject a shared implementation; the default implementation is process-local.
+ */
+export interface RequestRateLimitStore {
+  consume: (
+    input: RequestRateLimitConsumeInput,
+  ) => RequestRateLimitConsumeResult | Promise<RequestRateLimitConsumeResult>;
+  reset: (key: string) => void | Promise<void>;
+  close?: () => void | Promise<void>;
+}
+
 export interface ServerConfig {
   host: string;
   port: number;
@@ -101,6 +125,9 @@ export interface ServerConfig {
   logFormat: LogFormat;
   logRequests: boolean;
   requestRateLimit?: RequestRateLimitConfig;
+  requestRateLimitStore?: RequestRateLimitStore;
+  /** Server-only secret used to trust the canonical edge proxy's client IP. */
+  trustedProxySecret?: string;
   reloadWatchers?: boolean;
   managedOpencodeMcp?: boolean;
 }

@@ -81,6 +81,12 @@
   --status-blocked-rgb: 220 38 38;
   --nav-rail-width: 120px;
   --nav-rail-width-compact: 88px;
+  --matterhorn-layer-dropdown: 40;
+  --matterhorn-layer-sticky: 50;
+  --matterhorn-layer-modal-backdrop: 60;
+  --matterhorn-layer-modal: 70;
+  --matterhorn-layer-toast: 80;
+  --matterhorn-layer-tooltip: 90;
   --dls-surface: #ffffff;
   --dls-sidebar: #f5fbff;
   --dls-app-bg: #f6f9ff;

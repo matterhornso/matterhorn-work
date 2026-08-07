@@ -244,6 +244,15 @@ jobs:
       - name: Run Matterhorn platform safety gate
         run: pnpm test:matterhorn-platform-safety
 
+      - name: Validate scheduled security scanning
+        run: pnpm test:security-workflow-contract
+
+      - name: Validate public-Beta control-plane image contract
+        run: pnpm test:public-beta-container-contract
+
+      - name: Validate same-origin Vercel proxy contract
+        run: pnpm test:matterhorn-vercel-proxy
+
       - name: Validate production CORS readiness
         run: pnpm test:production-cors-readiness
 

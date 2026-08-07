@@ -577,6 +577,7 @@ type SessionError = {
   message: string;
   detail?: string;
   kind?: "model-not-found" | "provider-unavailable" | "cancelled" | "generic";
+  retryable?: boolean;
   /** For model-not-found: the model that failed. */
   failedModel?: { providerID: string; modelID: string };
   /** For model-not-found: suggested replacements from the backend. */
@@ -950,7 +951,11 @@ function parseSessionError(thrown: unknown): SessionError {
   if (/ProviderModelNotFoundError/i.test(raw) || /model.*not found/i.test(raw)) {
     return { message: raw, kind: "model-not-found" };
   }
-  return { message: raw || "Failed to send prompt." };
+  return {
+    message: raw || "Failed to send prompt.",
+    kind: "generic",
+    retryable: true,
+  };
 }
 
 export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot | null) {
@@ -986,13 +991,19 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
         } satisfies SessionError
       : normalizedError.kind === "provider-unavailable" || normalizedError.kind === "model-not-found"
         ? normalizedError
-        : { message: detail || "Matterhorn could not complete this response. Your prompt is ready to retry." } satisfies SessionError,
+        : {
+            message: detail || "Matterhorn could not complete this response. Your prompt is ready to retry.",
+            kind: "generic",
+            retryable: true,
+          } satisfies SessionError,
   };
 }
 
-function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker, onOpenAiProviders }: {
+function SessionErrorCard({ error, onDismiss, onRetry, retrying, onChangeModel, onOpenModelPicker, onOpenAiProviders }: {
   error: SessionError;
   onDismiss: () => void;
+  onRetry?: () => void | Promise<void>;
+  retrying?: boolean;
   onChangeModel?: (model: { providerID: string; modelID: string }) => void;
   onOpenModelPicker?: () => void;
   onOpenAiProviders?: () => void;
@@ -1070,6 +1081,18 @@ function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker, 
                   }}
                 >
                   Change model
+                </button>
+              </div>
+            ) : null}
+            {error.retryable && onRetry ? (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  className="inline-flex min-h-10 items-center rounded-md bg-dls-accent px-3 text-xs font-semibold text-[var(--dls-accent-fg)] transition-colors hover:bg-[var(--dls-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.32)] disabled:cursor-wait disabled:opacity-60"
+                  onClick={() => void onRetry()}
+                  disabled={retrying}
+                >
+                  {retrying ? "Retrying…" : "Retry response"}
                 </button>
               </div>
             ) : null}
@@ -1905,6 +1928,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
     }
   }, [chatStreaming, opencodeClient, props.sessionId, props.workspaceId, snapshotQuery.refetch]);
 
+  const handleRetryResponse = useCallback(async () => {
+    if (sending || !draft.trim()) return;
+    await handleSend();
+  }, [draft, handleSend, sending]);
+
   const handleDismissError = useCallback(() => {
     setError(null);
     useSessionActivityStore.getState().clearError(props.workspaceId, props.sessionId);
@@ -2600,6 +2628,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   <SessionErrorCard
                     error={error}
                     onDismiss={handleDismissError}
+                    onRetry={handleRetryResponse}
+                    retrying={sending}
                     onChangeModel={props.onChangeModel}
                     onOpenModelPicker={props.onModelClick}
                     onOpenAiProviders={props.onOpenAiProviders}
@@ -2629,6 +2659,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
                 <SessionErrorCard
                   error={error}
                   onDismiss={handleDismissError}
+                  onRetry={handleRetryResponse}
+                  retrying={sending}
                   onChangeModel={props.onChangeModel}
                   onOpenModelPicker={props.onModelClick}
                   onOpenAiProviders={props.onOpenAiProviders}
@@ -2724,6 +2756,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     <SessionErrorCard
                       error={error}
                       onDismiss={handleDismissError}
+                      onRetry={handleRetryResponse}
+                      retrying={sending}
                       onChangeModel={props.onChangeModel}
                       onOpenModelPicker={props.onModelClick}
                       onOpenAiProviders={props.onOpenAiProviders}

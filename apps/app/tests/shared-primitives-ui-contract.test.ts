@@ -1068,19 +1068,24 @@ describe("Shared primitives UI contract", () => {
     expect(walletView).toContain('"h-auto justify-start gap-3 px-3 py-2.5"');
   });
 
-  test("tablet side panels stay visible until the docked lg layout is available", () => {
-    const mobileHook = readFileSync("apps/app/src/hooks/use-mobile.ts", "utf8");
+  test("secondary panels use a compact desktop sheet before the docked layout", () => {
+    const layoutPolicy = readFileSync(
+      "apps/app/src/react-app/domains/session/chat/session-layout-policy.ts",
+      "utf8",
+    );
     const sessionPage = readFileSync(
       "apps/app/src/react-app/domains/session/chat/session-page.tsx",
       "utf8",
     );
-    expect(mobileHook).toContain("const MOBILE_BREAKPOINT = 1024");
+    expect(layoutPolicy).toContain("SESSION_FULL_SCREEN_PANE_BREAKPOINT = 1024");
+    expect(layoutPolicy).toContain("SESSION_DOCKED_PANE_BREAKPOINT = 1280");
+    expect(layoutPolicy).toContain('return "sheet"');
     expect(sessionPage).toContain(
       'className="matterhorn-side-panel hidden h-full min-h-0 overflow-hidden bg-dls-background lg:flex lg:flex-col"',
     );
-    expect(sessionPage).toContain(
-      'className="matterhorn-side-panel fixed inset-0 z-40 flex bg-dls-background lg:hidden"',
-    );
+    expect(sessionPage).toContain("data-presentation={sidePanelPresentation}");
+    expect(sessionPage).toContain("lg:right-[var(--nav-rail-width-compact)]");
+    expect(sessionPage).toContain("xl:hidden");
   });
 
   test("Memory rail uses a cognitive icon instead of an archive-bin shape", () => {

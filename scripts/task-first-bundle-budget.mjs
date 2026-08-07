@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 export const TASK_FIRST_BUNDLE_BUDGETS = Object.freeze({
   publicEntryGraphBytes: 650_000,
   publicEntryChunkBytes: 300_000,
+  publicTrustGraphBytes: 350_000,
   routeEntryBytes: 600_000,
   walletFamilyBytes: 900_000,
 });
@@ -23,6 +24,19 @@ const FORBIDDEN_PUBLIC_ENTRY_CHUNKS = [
 ];
 
 const FORBIDDEN_AUTHENTICATED_SHELL_IMPORTS = ["session-route", "settings-route"];
+const FORBIDDEN_PUBLIC_TRUST_IMPORTS = [
+  "authenticated-app",
+  "vendor-query",
+  "den",
+  "session-route",
+  "session-page",
+  "settings-route",
+  "vendor-wallet",
+  "vendor-shiki",
+  "experimental-translations",
+  "artifact-text-editor",
+  "xlsx",
+];
 const FORBIDDEN_WORKSPACE_IMPORTS = [
   "vendor-wallet",
   "vendor-shiki",
@@ -108,6 +122,28 @@ export function auditTaskFirstBundle(distDirectory) {
     if (forbidden) failures.push(`Signed-out entry eagerly requests forbidden ${forbidden} code via ${item.name}.`);
   }
 
+  const publicTrustEntry = findChunk(assetNames, "public-trust-bootstrap");
+  let publicTrustMetrics = null;
+  if (!publicTrustEntry) {
+    failures.push("Expected exactly one public-trust-bootstrap production chunk.");
+  } else {
+    const graph = staticChunkGraph(assetsDir, [publicTrustEntry]);
+    const graphBytes = graph.reduce((total, name) => {
+      const path = resolve(assetsDir, name);
+      return total + (existsSync(path) ? statSync(path).size : 0);
+    }, 0);
+    publicTrustMetrics = { entry: publicTrustEntry, graphBytes, staticImports: graph };
+    if (graphBytes > TASK_FIRST_BUNDLE_BUDGETS.publicTrustGraphBytes) {
+      failures.push(
+        `Public-trust JavaScript graph is ${graphBytes} B; budget is ${TASK_FIRST_BUNDLE_BUDGETS.publicTrustGraphBytes} B.`,
+      );
+    }
+    for (const imported of graph) {
+      const forbidden = includesChunkPrefix(imported, FORBIDDEN_PUBLIC_TRUST_IMPORTS);
+      if (forbidden) failures.push(`Public-trust shell statically imports forbidden ${forbidden} code via ${imported}.`);
+    }
+  }
+
   const routeMetrics = {};
   for (const prefix of ["session-route", "session-page", "settings-route"]) {
     const chunk = findChunk(assetNames, prefix);
@@ -163,6 +199,7 @@ export function auditTaskFirstBundle(distDirectory) {
     metrics: {
       publicEntryGraphBytes,
       publicEntryChunks: publicJsRows,
+      publicTrust: publicTrustMetrics,
       routes: routeMetrics,
       walletChunks,
       workspaceStaticImports: workspaceImports,
