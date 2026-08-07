@@ -46,6 +46,24 @@ jobs:
         with:
           fail-on-severity: low
 
+  rust-security:
+    name: Rust dependency security
+    runs-on: ubuntu-22.04
+    permissions:
+      checks: write
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Audit Rust dependencies
+        uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: examples/microsandbox-openwork-rust
+      - name: Compile the locked Rust example
+        run: cargo check --locked --manifest-path examples/microsandbox-openwork-rust/Cargo.toml --all-targets
+
   repository-security-gates:
     name: Repository security gates
     runs-on: ubuntu-22.04
