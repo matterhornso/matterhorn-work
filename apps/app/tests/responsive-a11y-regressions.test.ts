@@ -108,6 +108,8 @@ describe("responsive accessibility regressions", () => {
     expect(signinStyles).toContain("overflow-wrap: anywhere");
     expect(signinStyles).toContain("safe-area-inset-bottom");
     expect(signinStyles).toContain(".public-auth-trust a:focus-visible");
+    expect(signinStyles).toContain(".public-auth-status button:focus-visible");
+    expect(signinStyles).toContain("grid-template-columns: minmax(96px, 0.32fr) minmax(0, 1fr)");
   });
 
   test("MCP Settings preserves sequential section and item heading levels", () => {
