@@ -80,9 +80,48 @@ function forwardedClientIp(request) {
   return isIP(candidate) ? candidate : null;
 }
 
-export default async function matterhornProxy(request) {
-  const requestUrl = new URL(request.url);
-  const path = normalizeProxyPath(requestUrl.searchParams.get(INTERNAL_PATH_PARAM));
+function requestUrl(request) {
+  const value = typeof request?.url === "string" ? request.url : "";
+  try {
+    return new URL(value);
+  } catch {
+    // Vercel's Node runtime invokes rewritten functions with a relative URL.
+    // The synthetic origin is used only to parse the path and query string;
+    // forwarded host/protocol values are resolved independently below.
+    return new URL(value, "https://matterhorn.invalid");
+  }
+}
+
+function forwardedOrigin(request, parsedRequestUrl) {
+  const rawHost = request.headers.get("x-forwarded-host")?.trim()
+    || request.headers.get("host")?.trim()
+    || parsedRequestUrl.host;
+  let host = parsedRequestUrl.host;
+  try {
+    const parsedHost = new URL(`https://${rawHost}`);
+    if (
+      !parsedHost.username
+      && !parsedHost.password
+      && parsedHost.pathname === "/"
+      && !parsedHost.search
+      && !parsedHost.hash
+    ) {
+      host = parsedHost.host;
+    }
+  } catch {
+    // Keep the already parsed request host when a forwarded header is invalid.
+  }
+
+  const rawProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  const protocol = rawProtocol === "http" || rawProtocol === "https"
+    ? rawProtocol
+    : parsedRequestUrl.protocol.replace(/:$/, "");
+  return { host, protocol };
+}
+
+export async function matterhornProxy(request) {
+  const parsedRequestUrl = requestUrl(request);
+  const path = normalizeProxyPath(parsedRequestUrl.searchParams.get(INTERNAL_PATH_PARAM));
   if (!path) return jsonError(400, "invalid_proxy_path", "The requested Matterhorn API path is not allowed.");
 
   const allowHttp = process.env.MATTERHORN_PROXY_ALLOW_HTTP === "1" && process.env.VERCEL_ENV !== "production";
@@ -93,14 +132,15 @@ export default async function matterhornProxy(request) {
   }
 
   const upstreamUrl = buildUpstreamUrl(upstreamBase, path);
-  for (const [key, value] of requestUrl.searchParams) {
+  for (const [key, value] of parsedRequestUrl.searchParams) {
     if (key !== INTERNAL_PATH_PARAM) upstreamUrl.searchParams.append(key, value);
   }
 
   const headers = new Headers(request.headers);
   for (const name of FORWARDED_REQUEST_HEADERS_TO_REMOVE) headers.delete(name);
-  headers.set("x-forwarded-host", requestUrl.host);
-  headers.set("x-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
+  const origin = forwardedOrigin(request, parsedRequestUrl);
+  headers.set("x-forwarded-host", origin.host);
+  headers.set("x-forwarded-proto", origin.protocol);
   headers.set("x-matterhorn-proxy-secret", proxySecret);
   const clientIp = forwardedClientIp(request);
   if (clientIp) headers.set("x-matterhorn-client-ip", clientIp);
@@ -132,3 +172,7 @@ export default async function matterhornProxy(request) {
     return jsonError(502, "control_plane_unreachable", "Matterhorn account services could not be reached.");
   }
 }
+
+// The fetch export selects Vercel's Web-standard Request/Response adapter.
+// A default function would select the legacy Node request/response interface.
+export default { fetch: matterhornProxy };

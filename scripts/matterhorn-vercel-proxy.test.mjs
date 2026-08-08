@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import proxy, {
+import {
   buildUpstreamUrl,
+  matterhornProxy as proxy,
   normalizeProxyPath,
   resolveControlPlaneUrl,
 } from "../api/matterhorn-proxy.mjs";
@@ -62,6 +63,29 @@ try {
   else process.env.MATTERHORN_PROXY_SECRET = priorSecret;
 }
 
+delete process.env.MATTERHORN_CONTROL_PLANE_URL;
+delete process.env.MATTERHORN_PROXY_SECRET;
+try {
+  const response = await proxy({
+    url: "/workspaces?__matterhorn_path=%2Fworkspaces",
+    method: "GET",
+    headers: new Headers({
+      host: "app.example.com",
+      "x-forwarded-proto": "https",
+    }),
+  });
+  assert.equal(response.status, 503, "Vercel relative request URLs must fail closed as JSON");
+  assert.deepEqual(await response.json(), {
+    code: "control_plane_unavailable",
+    message: "Matterhorn account services are not configured.",
+  });
+} finally {
+  if (priorUrl === undefined) delete process.env.MATTERHORN_CONTROL_PLANE_URL;
+  else process.env.MATTERHORN_CONTROL_PLANE_URL = priorUrl;
+  if (priorSecret === undefined) delete process.env.MATTERHORN_PROXY_SECRET;
+  else process.env.MATTERHORN_PROXY_SECRET = priorSecret;
+}
+
 let forwardedRequest;
 process.env.MATTERHORN_CONTROL_PLANE_URL = "https://control.example.com/";
 process.env.MATTERHORN_PROXY_SECRET = "test-proxy-secret";
@@ -73,14 +97,21 @@ globalThis.fetch = async (input, init) => {
   });
 };
 try {
-  const response = await proxy(new Request(
-    "https://app.example.com/api/matterhorn-proxy?__matterhorn_path=%2Fworkspaces&limit=5",
-    { headers: { "x-vercel-forwarded-for": "203.0.113.9" } },
-  ));
+  const response = await proxy({
+    url: "/api/matterhorn-proxy?__matterhorn_path=%2Fworkspaces&limit=5",
+    method: "GET",
+    headers: new Headers({
+      host: "app.example.com",
+      "x-forwarded-proto": "https",
+      "x-vercel-forwarded-for": "203.0.113.9",
+    }),
+  });
   assert.equal(response.status, 200);
   assert.equal(forwardedRequest.url, "https://control.example.com/workspaces?limit=5");
   assert.equal(forwardedRequest.init.headers.get("x-matterhorn-proxy-secret"), "test-proxy-secret");
   assert.equal(forwardedRequest.init.headers.get("x-matterhorn-client-ip"), "203.0.113.9");
+  assert.equal(forwardedRequest.init.headers.get("x-forwarded-host"), "app.example.com");
+  assert.equal(forwardedRequest.init.headers.get("x-forwarded-proto"), "https");
   assert.equal(response.headers.get("x-matterhorn-proxy"), "same-origin");
 } finally {
   globalThis.fetch = priorFetch;
