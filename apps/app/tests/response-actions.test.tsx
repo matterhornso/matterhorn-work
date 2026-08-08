@@ -7,6 +7,7 @@ import { SessionTranscript } from "../src/react-app/domains/session/surface/mess
 import {
   resolveAssistantResponseRetryTurn,
   responseOutputTitle,
+  runAssistantResponseRetry,
 } from "../src/react-app/domains/session/surface/response-actions";
 
 const messages: UIMessage[] = [
@@ -105,6 +106,45 @@ describe("assistant response actions", () => {
     expect(retry?.prompt).toBe("");
   });
 
+  test("failed retry dispatch restores the original conversation before surfacing the error", async () => {
+    const calls: string[] = [];
+    const dispatchError = new Error("Selected model is unavailable.");
+
+    await expect(runAssistantResponseRetry({
+      abort: async () => { calls.push("abort"); },
+      revert: async () => { calls.push("revert"); },
+      dispatch: async () => {
+        calls.push("dispatch");
+        throw dispatchError;
+      },
+      restore: async () => { calls.push("restore"); },
+    })).rejects.toBe(dispatchError);
+
+    expect(calls).toEqual(["abort", "revert", "dispatch", "restore"]);
+  });
+
+  test("retry does not restore after a successful replacement dispatch", async () => {
+    const calls: string[] = [];
+
+    await runAssistantResponseRetry({
+      abort: async () => { calls.push("abort"); },
+      revert: async () => { calls.push("revert"); },
+      dispatch: async () => { calls.push("dispatch"); },
+      restore: async () => { calls.push("restore"); },
+    });
+
+    expect(calls).toEqual(["abort", "revert", "dispatch"]);
+  });
+
+  test("retry reports when both dispatch and conversation restoration fail", async () => {
+    await expect(runAssistantResponseRetry({
+      abort: async () => undefined,
+      revert: async () => undefined,
+      dispatch: async () => { throw new Error("Dispatch unavailable"); },
+      restore: async () => { throw new Error("Restore unavailable"); },
+    })).rejects.toThrow("could not restore the original conversation");
+  });
+
   test("saved-output titles are compact, plain, and deterministic", () => {
     expect(responseOutputTitle("## Recommendation\n\nKeep the watch active.")).toBe("Recommendation");
     expect(responseOutputTitle("   ")).toBe("Matterhorn response");
@@ -136,5 +176,39 @@ describe("assistant response actions", () => {
     expect(html).toContain('href="http://127.0.0.1:3000/report"');
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain('aria-label="Files and links from this response"');
+    expect(html).toContain("Open from this response");
+    expect(html).toContain("min-h-11");
+    expect(html).toContain("rounded-md");
+    expect(html).toContain("focus-visible:ring-2");
+  });
+
+  test("saved file targets use the same touch and keyboard affordance as links", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SessionTranscript, {
+        messages: [
+          messages[0]!,
+          { id: "msg_assistant_file", role: "assistant", parts: [{ type: "text", text: "Saved outputs/research/report.md" }] },
+        ],
+        isStreaming: false,
+        developerMode: false,
+        openTargets: [{
+          id: "file:outputs/research/report.md",
+          kind: "file",
+          value: "outputs/research/report.md",
+          name: "report.md",
+          preview: "markdown",
+          confidence: 100,
+          reason: "saved response",
+          exists: true,
+        }],
+        onOpenTarget: () => undefined,
+      }),
+    );
+
+    expect(html).toContain("Open artifact");
+    expect(html).toContain('type="button"');
+    expect(html).toContain("touch-manipulation");
+    expect(html).toContain("focus-visible:ring-2");
   });
 });

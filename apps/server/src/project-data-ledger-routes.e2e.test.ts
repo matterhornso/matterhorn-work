@@ -355,6 +355,8 @@ describe("project data ledger routes", () => {
     const dataMap = await jsonFetch(base, "/workspace/ws_ledger/backend/data-map");
     expect(dataMap.response.status).toBe(200);
     expect(dataMap.payload.stores.chat.description).toContain("project ledger exports session counts");
+    expect(dataMap.payload.stores.chat.description).toContain("workspace engine store");
+    expect(dataMap.payload.stores.chat.description).not.toContain("OpenCode");
     expect(dataMap.payload.stores.chat.details).toMatchObject({
       fullTranscriptExport: false,
       metadataLedgerExport: true,
@@ -371,6 +373,7 @@ describe("project data ledger routes", () => {
     expect(dataControls.response.status).toBe(200);
     expect(dataControls.payload.version).toBe("matterhorn.backend.data-controls.v1");
     expect(dataControls.payload.stores.chat.export.summary).toContain("metadata only");
+    expect(JSON.stringify(dataControls.payload)).not.toContain("OpenCode");
     expect(dataControls.payload.stores.chat.export.actions).toContainEqual(
       expect.objectContaining({
         id: "chat.ledger-metadata",

@@ -310,6 +310,24 @@ describe("project evidence routes", () => {
     });
   });
 
+  test("workspace chat response output accepts content above the default JSON request limit", async () => {
+    const { base, dir } = await boot();
+    const content = "A".repeat(1_100_000);
+    const saved = await jsonFetch(base, "/workspace/ws_evidence/outputs/chat-response", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_large_response",
+        messageId: "msg_large_response",
+        title: "Large response",
+        content,
+      }),
+    });
+
+    expect(saved.response.status).toBe(201);
+    expect(saved.payload.output.bytes).toBeGreaterThan(content.length);
+    expect(readFileSync(join(dir, saved.payload.output.path), "utf8")).toContain(content);
+  });
+
   test("workspace chat response output rejects empty content and missing message identity", async () => {
     const { base } = await boot();
     const empty = await jsonFetch(base, "/workspace/ws_evidence/outputs/chat-response", {

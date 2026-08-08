@@ -67,6 +67,15 @@ describe("WorkflowStageCard — render contract", () => {
     expect(source).toContain("actionTitle?:");
   });
 
+  test("lets focused desk launchers give task copy the full card width", () => {
+    const cardSource = readAppSource("domains/session/workflows/workflow-stage-card.tsx");
+    const pageSource = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(cardSource).toContain('actionPlacement?: "inline" | "below";');
+    expect(cardSource).toContain('actionPlacement === "inline" ? "sm:flex" : null');
+    expect(pageSource).toContain('actionPlacement="below"');
+  });
+
   test("shows external signer lock indicator when required", () => {
     const source = readAppSource("domains/session/workflows/workflow-stage-card.tsx");
     expect(source).toContain("requiresExternalSigner?:");

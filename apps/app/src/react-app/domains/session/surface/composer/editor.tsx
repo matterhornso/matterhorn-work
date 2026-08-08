@@ -755,7 +755,7 @@ export function LexicalPromptEditor(props: EditorProps) {
             />
           }
           placeholder={
-            <div className="pointer-events-none absolute left-0 top-0 text-[15px] leading-6 text-dls-secondary/68">
+            <div className="pointer-events-none absolute left-0 top-0 text-[15px] leading-6 text-dls-secondary">
               {props.placeholder}
             </div>
           }

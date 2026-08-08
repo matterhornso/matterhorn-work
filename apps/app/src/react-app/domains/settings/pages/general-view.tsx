@@ -168,7 +168,7 @@ function SettingsCard(props: {
     props.status === "Configure cloud"
         ? "text-sky-300"
         : props.status === "Preview" || props.status === "Preview only"
-          ? "text-amber-300"
+          ? "text-amber-700 dark:text-amber-300"
           : props.status === "Developer"
             ? "text-violet-300"
           : "text-dls-secondary";
@@ -239,7 +239,7 @@ function ProjectSurfaceRow(props: {
           props.status === "Configure cloud"
             ? "text-sky-300"
             : props.status === "Preview" || props.status === "Preview only"
-              ? "text-amber-300"
+              ? "text-amber-700 dark:text-amber-300"
           : props.status === "Engine offline"
             ? "text-red-300"
           : "text-dls-secondary";

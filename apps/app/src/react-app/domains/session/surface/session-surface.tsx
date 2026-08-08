@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 
 import { createClient, unwrap } from "../../../../app/lib/opencode";
-import { abortSessionSafe, revertSession } from "../../../../app/lib/opencode-session";
+import { abortSessionSafe, revertSession, unrevertSession } from "../../../../app/lib/opencode-session";
 import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import {
   beginModelOperation,
@@ -81,7 +81,7 @@ import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from ".
 import { useLocal } from "../../../kernel/local-provider";
 import { deriveSessionRenderModel } from "../sync/transition-controller";
 import { useSessionScrollController } from "./scroll-controller";
-import { resolveAssistantResponseRetryTurn, responseOutputTitle } from "./response-actions";
+import { resolveAssistantResponseRetryTurn, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
 import { getSessionActivityStatusLabel, useSessionActivityStore, type SessionActivityStatus } from "../status/session-activity-store";
 import { PermissionApprovalPanel } from "../chat/permission-approval-modal";
 import { QuestionPanel } from "../modals/question-modal";
@@ -601,7 +601,7 @@ export type SessionSurfaceProps = {
   selectedModel: ModelRef;
   onModelPickerOpenChange: (open: boolean) => void;
   onModelChange: (model: ModelRef) => void;
-  onSendDraft: (draft: ComposerDraft) => void;
+  onSendDraft: (draft: ComposerDraft) => Promise<void> | void;
   onDraftChange: (draft: ComposerDraft) => void;
   attachmentsEnabled: boolean;
   attachmentsDisabledReason: string | null;
@@ -914,7 +914,7 @@ function TodoPanel(props: { todos: TodoItem[] }) {
   );
 }
 
-function parseSessionError(thrown: unknown): SessionError {
+export function parseSessionError(thrown: unknown): SessionError {
   const raw = thrown instanceof Error ? thrown.message : String(thrown);
   let parsed: unknown;
   // Try to detect ProviderModelNotFoundError from the SDK error shape.
@@ -952,9 +952,21 @@ function parseSessionError(thrown: unknown): SessionError {
       kind: "provider-unavailable",
     };
   }
+  if (/OpenCode|opencode_(?:request_failed|empty_response|invalid_response)/i.test(diagnostic)) {
+    return {
+      message: "Matterhorn's workspace engine could not complete this request.",
+      detail: "Your prompt is still available. Retry when the workspace engine reconnects.",
+      kind: "generic",
+      retryable: true,
+    };
+  }
   // Check if the raw string mentions model-not-found patterns
   if (/ProviderModelNotFoundError/i.test(raw) || /model.*not found/i.test(raw)) {
-    return { message: raw, kind: "model-not-found" };
+    return {
+      message: "The selected model is not available.",
+      detail: "Choose another model or reconnect its provider. Your prompt is still available.",
+      kind: "model-not-found",
+    };
   }
   return {
     message: raw || "Failed to send prompt.",
@@ -1973,11 +1985,14 @@ export function SessionSurface(props: SessionSurfaceProps) {
     });
 
     try {
-      await abortSessionSafe(opencodeClient, props.sessionId);
-      await revertSession(opencodeClient, props.sessionId, retryTurn.promptMessageId);
       let resolvedText = addBittensorContextToResolvedText(prompt, bittensorContext);
       resolvedText = addMatterhornMemoryContextToResolvedText(resolvedText, memoryContext);
-      await props.onSendDraft(buildDraft(prompt, [], { resolvedText }));
+      await runAssistantResponseRetry({
+        abort: () => abortSessionSafe(opencodeClient, props.sessionId),
+        revert: () => revertSession(opencodeClient, props.sessionId, retryTurn.promptMessageId),
+        dispatch: () => props.onSendDraft(buildDraft(prompt, [], { resolvedText })),
+        restore: () => unrevertSession(opencodeClient, props.sessionId),
+      });
       recordModelOperationAccepted(operation);
       void snapshotQuery.refetch();
       setSending(false);
@@ -1994,6 +2009,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setAwaitingAssistantBaseline(null);
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
+      void snapshotQuery.refetch();
       throw nextError;
     }
   }, [bittensorContext, buildDraft, chatStreaming, memoryContext, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, snapshotQuery]);

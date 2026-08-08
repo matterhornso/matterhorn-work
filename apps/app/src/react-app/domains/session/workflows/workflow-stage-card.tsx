@@ -47,6 +47,8 @@ export interface WorkflowStageCardProps {
   actionDisabled?: boolean;
   /** Tooltip/title copy for the action button. */
   actionTitle?: string;
+  /** Places the action on its own row when launcher copy needs the full card width. */
+  actionPlacement?: "inline" | "below";
   /** Callback when the action button is clicked. */
   onAction?: () => void;
   /** Callback when a listed output artifact is clicked. */
@@ -101,6 +103,7 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
     actionLabel,
     actionDisabled = false,
     actionTitle,
+    actionPlacement = "inline",
     onAction,
     onOutputClick,
     toneClass,
@@ -124,14 +127,23 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
       )}
     >
       {/* Header row: title + status + action */}
-      <div className="grid grid-cols-1 items-start gap-x-2 gap-y-2 sm:flex">
-        <div className="col-start-1 row-start-1 min-w-0 sm:flex-1">
+      <div className={cn(
+        "grid grid-cols-1 items-start gap-x-2 gap-y-2",
+        actionPlacement === "inline" ? "sm:flex" : null,
+      )}>
+        <div className={cn(
+          "col-start-1 row-start-1 min-w-0",
+          actionPlacement === "inline" ? "sm:flex-1" : null,
+        )}>
           <p className="text-[13px] font-semibold leading-5 text-dls-text">{title}</p>
           {objective ? (
             <p className="mt-0.5 text-xs leading-[18px] text-dls-secondary">{objective}</p>
           ) : null}
         </div>
-        <div className="col-start-1 row-start-2 flex min-w-0 flex-wrap items-center gap-1.5 sm:ml-auto sm:shrink-0">
+        <div className={cn(
+          "col-start-1 row-start-2 flex min-w-0 flex-wrap items-center gap-1.5",
+          actionPlacement === "inline" ? "sm:ml-auto sm:shrink-0" : null,
+        )}>
           <StatusBadge status={status} />
           {onAction ? (
             <Button

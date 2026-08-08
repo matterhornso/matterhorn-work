@@ -544,7 +544,7 @@ function PublicFooter() {
         <span>Matterhorn Desks</span>
         <nav className="flex flex-wrap gap-x-5 gap-y-2" aria-label="Trust and support">
           {PUBLIC_TRUST_PATHS.map((path) => (
-            <Link key={path} className="rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50" to={path}>
+            <Link key={path} className="inline-flex min-h-11 items-center rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:min-h-0" to={path}>
               {pageLabels[path]}
             </Link>
           ))}
@@ -574,23 +574,23 @@ export function PublicTrustRoute() {
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground">
       <PublicHeader />
-      <main className="mx-auto grid w-full max-w-6xl flex-1 gap-10 py-8 pl-[calc(1.25rem+env(safe-area-inset-left))] pr-[calc(1.25rem+env(safe-area-inset-right))] sm:py-12 sm:pl-[calc(2rem+env(safe-area-inset-left))] sm:pr-[calc(2rem+env(safe-area-inset-right))] md:grid-cols-[180px_minmax(0,1fr)]">
-        <aside>
+      <main className="mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] flex-1 gap-10 py-8 pl-[calc(1.25rem+env(safe-area-inset-left))] pr-[calc(1.25rem+env(safe-area-inset-right))] sm:py-12 sm:pl-[calc(2rem+env(safe-area-inset-left))] sm:pr-[calc(2rem+env(safe-area-inset-right))] md:grid-cols-[180px_minmax(0,1fr)]">
+        <aside className="min-w-0">
           <Link
             to="/session"
-            className="mb-6 inline-flex items-center gap-2 rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="-ml-2 mb-4 inline-flex min-h-11 items-center gap-2 rounded-sm px-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 md:mb-6 md:min-h-0"
           >
             <ArrowLeft className="size-4" />
             Back to app
           </Link>
-          <nav className="flex gap-1 overflow-x-auto md:flex-col" aria-label="Trust pages">
+          <nav className="flex flex-wrap gap-1 md:flex-col" aria-label="Trust pages">
             {PUBLIC_TRUST_PATHS.map((navPath) => (
               <Link
                 key={navPath}
                 to={navPath}
                 aria-current={path === navPath ? "page" : undefined}
                 className={cn(
-                  "shrink-0 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none",
+                  "inline-flex min-h-11 shrink-0 items-center rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none md:min-h-0",
                   path === navPath
                     ? "bg-dls-surface-muted font-medium text-foreground"
                     : "text-muted-foreground hover:bg-dls-hover hover:text-foreground",

@@ -655,6 +655,27 @@ describe("Protocol state mutations enforce client scope and workspace mode", () 
     expect(collaborator.payload.message).toContain("Unexpected execution-intent field");
   });
 
+  test("legacy Bittensor sidecar submission fails closed without receiving raw signatures", async () => {
+    const request = {
+      method: "POST",
+      body: JSON.stringify({
+        preview: { action: "transfer", unsignedPayload: { call: "0x00" } },
+        signature: `0x${"12".repeat(65)}`,
+        signerAddress: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXnYDuiLhUHmXg",
+      }),
+    };
+
+    const { base, ownerToken, collaboratorToken, viewerToken } = await boot();
+    for (const token of [ownerToken, collaboratorToken, viewerToken]) {
+      const result = await jsonFetch(base, "/api/bittensor/extrinsics/submit", token, request);
+      expect(result.response.status).toBe(403);
+      expect(result.payload).toMatchObject({
+        code: "reviewed_action_required",
+        message: "Bittensor submission stays in the connected wallet. Matterhorn accepts only public receipt evidence after broadcast.",
+      });
+    }
+  });
+
   test("read-only workspaces block protocol watch and wallet baseline mutations", async () => {
     const { base, ownerToken } = await boot(true);
 
@@ -906,6 +927,26 @@ describe("Audit entries for memory operations", () => {
 // ---------------------------------------------------------------------------
 
 describe("Security capability classification", () => {
+  test("legacy CoW order submission fails closed without a reviewed-wallet approval flow", async () => {
+    const { base, ownerToken, collaboratorToken, viewerToken } = await boot();
+    const body = JSON.stringify({
+      chainId: 8453,
+      order: { sellToken: "0x1111111111111111111111111111111111111111" },
+      signature: `0x${"12".repeat(65)}`,
+    });
+
+    for (const token of [ownerToken, collaboratorToken, viewerToken]) {
+      const result = await jsonFetch(base, "/api/cow/order", token, {
+        method: "POST",
+        body,
+      });
+      expect(result.response.status).toBe(403);
+      expect(result.payload).toMatchObject({
+        code: "reviewed_action_required",
+      });
+    }
+  });
+
   test("server applies a bounded local API request rate limit", async () => {
     const { base, ownerToken } = await boot(false, {
       requestRateLimit: { enabled: true, windowMs: 60_000, maxRequests: 4 },

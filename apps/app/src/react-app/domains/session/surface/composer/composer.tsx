@@ -1687,7 +1687,7 @@ export function ReactSessionComposer(props: ComposerProps) {
             <div className="flex items-center gap-2.5">
               <span
                 aria-hidden="true"
-                className="hidden h-7 select-none items-center gap-1.5 px-0.5 text-[10px] font-normal text-dls-muted lg:inline-flex"
+                className="hidden h-7 select-none items-center gap-1.5 px-0.5 text-[10px] font-normal text-dls-secondary lg:inline-flex"
               >
                 <SlidersHorizontal size={12} strokeWidth={1.7} />
                 <span>Perspective</span>
@@ -1724,7 +1724,7 @@ export function ReactSessionComposer(props: ComposerProps) {
             <div ref={agentMenuRef} className="relative">
               {props.agentSelectionLocked ? (
                 <span
-                  className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-10"
+                  className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-11"
                   title={props.agentSelectionLockedReason}
                   aria-label={`${props.agentLabel}. ${props.agentSelectionLockedReason ?? "This desk uses its specialist agent."}`}
                 >
@@ -1734,7 +1734,7 @@ export function ReactSessionComposer(props: ComposerProps) {
               ) : (
                 <button
                   type="button"
-                  className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12"
+                  className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-11 transition-colors hover:bg-gray-3 hover:text-gray-12"
                   onClick={() => setAgentMenuOpen((value) => !value)}
                   disabled={props.busy}
                   aria-expanded={agentMenuOpen}

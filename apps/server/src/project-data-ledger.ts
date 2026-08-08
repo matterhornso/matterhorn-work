@@ -474,7 +474,7 @@ function ledgerPolicy(workspace: WorkspaceInfo): MatterhornProjectDataLedgerPoli
     export: capability("working", "Export", "The project data ledger is exportable as redacted JSON. Full project export packaging remains planned."),
     deletion: capability("preview", "Deletion", "User notes, memory records, and feedback can be deleted through their owning surfaces; append-only audit and task events are retained for accountability."),
     limitations: [
-      "Full chat message bodies remain in the OpenCode runtime store; this v1 ledger exports chat session counts, timestamps, and audit metadata only.",
+      "Full chat message bodies remain in the workspace engine store; this v1 ledger exports chat session counts, timestamps, and audit metadata only.",
       "Feedback is stored for eval, routing, and product quality review only; it is not used for RL or model training by default.",
       "Team collaboration is not durable here yet; this ledger is scoped to the local workspace server.",
     ],
@@ -569,7 +569,7 @@ export async function buildProjectDataLedgerExport(
     backend: backendControlPlane ? { controlPlane: backendControlPlane } : undefined,
     warnings: [
       "Export payloads are redacted for known secret-shaped text fields.",
-      "Full chat message bodies remain in the OpenCode runtime store; this v1 ledger export includes chat counts, timestamps, and audit metadata only.",
+      "Full chat message bodies remain in the workspace engine store; this v1 ledger export includes chat counts, timestamps, and audit metadata only.",
       ...(backendControlPlane ? ["Backend context includes only a sanitized control-plane summary, not tokens, secrets, or full provider payloads."] : []),
     ],
   };

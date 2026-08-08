@@ -1988,6 +1988,8 @@ describe("backend control plane routes", () => {
     const serialized = JSON.stringify(result.payload);
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
+    expect(serialized).not.toContain("OpenCode");
+    expect(serialized).toContain("workspace engine store");
     expect(serialized).not.toMatch(/privateKey|seed phrase|mnemonic|wallet export/i);
   });
 
@@ -2011,6 +2013,7 @@ describe("backend control plane routes", () => {
       kind: "api_route",
       method: "GET",
       href: "/workspace/ws_backend/data-ledger?kind=chat",
+      description: expect.stringContaining("workspace engine store"),
     }));
     expect(result.payload.stores.notes.export.actions).toContainEqual(expect.objectContaining({
       id: "notes.open-app",

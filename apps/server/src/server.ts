@@ -1,5 +1,5 @@
 import { getPortfolio } from "./tools/portfolio-tracker.js";
-import { isCowSupported, getCowQuote, buildCowOrder, submitCowOrder } from "./tools/cow-swap.js";
+import { getCowQuote } from "./tools/cow-swap.js";
 import {
   buildAaveSupplyTx,
   buildAaveWithdrawTx,
@@ -37,7 +37,6 @@ import {
   buildBittensorSidecarHealthCard,
   buildBittensorSigningHandoffCard,
   buildBittensorSigningReceiptCard,
-  buildBittensorSignedResultCard,
   buildBittensorStakingPlanCard,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorSubnetCards,
@@ -104,7 +103,6 @@ import {
   runBittensorSubnetAdapterDryRun,
   serializeBittensorWatch,
   serializeBittensorWatchEvaluation,
-  submitSignedBittensorExtrinsic,
   validateBittensorSubnetAdapterManifest,
   validateBittensorSubnetAdapterResult,
   type BittensorActionQuoteInput,
@@ -3547,7 +3545,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       sources: ["opencode", "matterhorn_cloud", "managed_openwork_models"],
     },
     storage: {
-      ...capability("working", "Local storage map", "Matterhorn currently uses local workspace files, OpenCode runtime storage, a machine memory vault, and JSONL audit/task logs."),
+      ...capability("working", "Local storage map", "Matterhorn currently uses local workspace files, workspace engine storage, a machine memory vault, and JSONL audit/task logs."),
       stores: {
         memory: dataStore({
           id: "memory",
@@ -3681,7 +3679,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         ...capability(
           "working",
           "Chat/session history",
-          "Chat history is managed by the OpenCode runtime store. The project ledger exports session counts, timestamps, and audit metadata only.",
+          "Chat history is managed by the workspace engine store. The project ledger exports session counts, timestamps, and audit metadata only.",
           {
             fullTranscriptExport: false,
             metadataLedgerExport: true,
@@ -4033,7 +4031,7 @@ function buildDataControlStore(
         dataControlAction({
           id: "chat.ledger-metadata",
           label: "Export chat metadata",
-          description: "Returns redacted chat session counts, timestamps, and audit metadata. Message bodies remain in the OpenCode runtime store.",
+          description: "Returns redacted chat session counts, timestamps, and audit metadata. Message bodies remain in the workspace engine store.",
           kind: "api_route",
           status: "working",
           method: "GET",
@@ -4593,7 +4591,7 @@ function buildWorkspaceDataControls(
       deletion: capability("preview", "Deletion controls", "Notes, memory, outputs, and feedback support scoped deletes; append-only logs remain retained for accountability."),
       limitations: [
         "Append-only audit, task event, and workflow run rows do not have a purge endpoint in this local build.",
-        "Chat/session history remains controlled by the OpenCode runtime store.",
+        "Chat/session history remains controlled by the workspace engine store.",
         "Feedback is stored for eval, routing, and product quality only; it is not used for model training by default.",
       ],
     },
@@ -8607,7 +8605,11 @@ function createRoutes(
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
     const workspace = await resolveWorkspace(config, ctx.params.id);
-    const body = await readJsonBody(ctx.request);
+    const body = await readJsonBody(
+      ctx.request,
+      CHAT_RESPONSE_JSON_BODY_MAX_BYTES,
+      "Chat response output",
+    );
     const content = typeof body.content === "string" ? body.content.trim() : "";
     if (!content) {
       throw new ApiError(400, "invalid_payload", "content must be a non-empty string");
@@ -12648,24 +12650,12 @@ function createRoutes(
     }, 201);
   });
 
-  addRoute(routes, "POST", "/api/bittensor/extrinsics/submit", "client", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
-    if (!body.preview || typeof body.preview !== "object") {
-      throw new ApiError(400, "invalid_preview", "preview is required");
-    }
-    const preview = body.preview as BittensorExtrinsicPreview;
-    const result = await submitSignedBittensorExtrinsic({
-      preview,
-      signature: typeof body.signature === "string" ? body.signature : null,
-      signerAddress: typeof body.signerAddress === "string" ? body.signerAddress : null,
-    });
-    const receipt = createBittensorSigningReceipt({
-      preview,
-      result,
-      signature: typeof body.signature === "string" ? body.signature : null,
-      signerAddress: typeof body.signerAddress === "string" ? body.signerAddress : null,
-    });
-    return jsonResponse({ success: true, result, receipt, cards: [buildBittensorSignedResultCard(result), buildBittensorSigningReceiptCard(receipt)] });
+  addRoute(routes, "POST", "/api/bittensor/extrinsics/submit", "client", async () => {
+    throw new ApiError(
+      403,
+      "reviewed_action_required",
+      "Bittensor submission stays in the connected wallet. Matterhorn accepts only public receipt evidence after broadcast.",
+    );
   });
 
   addRoute(routes, "POST", "/api/bittensor/subnets/:netuid/invoke", "client", async (ctx) => {
@@ -12809,18 +12799,12 @@ function createRoutes(
     return jsonResponse(result);
   });
 
-  addRoute(routes, "POST", "/api/cow/order", "client", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
-    const { chainId, order, signature } = body;
-    if (!chainId || !order || !signature) {
-      throw new ApiError(400, "invalid_params", "chainId, order, signature required");
-    }
-    const result = await submitCowOrder({
-      chainId: Number(chainId),
-      order: order as Record<string, unknown>,
-      signature: signature as `0x${string}`,
-    });
-    return jsonResponse(result);
+  addRoute(routes, "POST", "/api/cow/order", "client", async () => {
+    throw new ApiError(
+      403,
+      "reviewed_action_required",
+      "CoW order submission is unavailable until it has a dedicated reviewed-wallet approval flow.",
+    );
   });
 
   // Aave V3 routes
@@ -13255,6 +13239,7 @@ function hyperliquidExecutionOwnerKey(ctx: RequestContext): string {
 const DEFAULT_JSON_BODY_MAX_BYTES = 1_048_576;
 const CONTROL_PLANE_JSON_BODY_MAX_BYTES = 65_536;
 const FEEDBACK_JSON_BODY_MAX_BYTES = 131_072;
+const CHAT_RESPONSE_JSON_BODY_MAX_BYTES = FILE_SESSION_MAX_FILE_BYTES + 65_536;
 
 async function readBodyTextLimited(
   request: Request,

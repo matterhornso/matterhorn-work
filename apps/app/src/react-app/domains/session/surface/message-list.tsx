@@ -1762,15 +1762,19 @@ function OpenTargetIcon(props: { target: OpenTarget }) {
 function OpenableTargetsStrip(props: { targets: OpenTarget[]; onOpenTarget: (target: OpenTarget) => void }) {
   if (!props.targets.length) return null;
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs leading-none">
-      <span className="mr-0.5 text-muted-foreground">Openable items</span>
+    <div
+      className="mt-3 flex flex-wrap items-center gap-1.5 text-xs leading-none"
+      role="group"
+      aria-label="Files and links from this response"
+    >
+      <span className="mr-0.5 text-muted-foreground">Open from this response</span>
       {props.targets.map((target) => target.kind === "url" && !isDesktopRuntime() ? (
           <a
             key={target.id}
             href={target.value}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-dls-border bg-dls-surface px-2 py-1.5 text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)]"
+            className="inline-flex min-h-11 max-w-[220px] touch-manipulation items-center gap-1.5 rounded-md border border-dls-border bg-dls-surface px-2.5 py-2 text-foreground transition-colors duration-150 hover:border-primary/40 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)] sm:min-h-8 sm:px-2 sm:py-1.5"
             title={target.value}
           >
             <OpenTargetIcon target={target} />
@@ -1781,7 +1785,7 @@ function OpenableTargetsStrip(props: { targets: OpenTarget[]; onOpenTarget: (tar
           <button
             key={target.id}
             type="button"
-            className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-dls-border bg-dls-surface px-2 py-1.5 text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+            className="inline-flex min-h-11 max-w-[220px] touch-manipulation items-center gap-1.5 rounded-md border border-dls-border bg-dls-surface px-2.5 py-2 text-foreground transition-colors duration-150 hover:border-primary/40 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)] sm:min-h-8 sm:px-2 sm:py-1.5"
             title={target.value}
             onClick={() => props.onOpenTarget(target)}
           >

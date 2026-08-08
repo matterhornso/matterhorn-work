@@ -1116,6 +1116,7 @@ function ProtocolDeskEmptyState({
                       actionTitle={opensReviewedAction
                         ? "Start an editable chat request. Exact terms move to Wallet for review and signature."
                         : startTaskBlocker ?? inputRequirement?.helpText ?? undefined}
+                      actionPlacement="below"
                       onAction={() => handleTaskAction(item)}
                     />
                     {inputOpen ? (

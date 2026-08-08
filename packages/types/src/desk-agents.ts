@@ -556,7 +556,7 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     },
     modelPolicy: DEFAULT_MODEL_POLICY,
     displayName: "Longevity Agent",
-    description: "Offline longevity optimization workflow agent for creators, coaches, client packets, and service packaging.",
+    description: "Guided longevity program workflow for creators, coaches, client packets, and service packaging.",
     instructions: [
       AGENT_SHARED_BOUNDARY,
       "",

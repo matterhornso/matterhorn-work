@@ -6,6 +6,33 @@ export type AssistantResponseRetryTurn = {
   prompt: string;
 };
 
+export type AssistantResponseRetryTransaction = {
+  abort: () => Promise<void>;
+  revert: () => Promise<unknown>;
+  dispatch: () => Promise<void> | void;
+  restore: () => Promise<unknown>;
+};
+
+export async function runAssistantResponseRetry(
+  transaction: AssistantResponseRetryTransaction,
+): Promise<void> {
+  await transaction.abort();
+  await transaction.revert();
+  try {
+    await transaction.dispatch();
+  } catch (dispatchError) {
+    try {
+      await transaction.restore();
+    } catch {
+      throw new Error(
+        "Retry failed and Matterhorn could not restore the original conversation. Reload the session before continuing.",
+        { cause: dispatchError },
+      );
+    }
+    throw dispatchError;
+  }
+}
+
 function retryPromptText(message: UIMessage) {
   return message.parts
     .flatMap((part) => {

@@ -61,16 +61,16 @@ export function PluginsView(props: PluginsViewProps) {
   const { extensions } = props;
   const scope = extensions.pluginScope;
   return (
-    <section className="space-y-6 max-w-3xl w-full">
+    <section className="w-full min-w-0 max-w-3xl space-y-6">
       <div className="bg-gray-2/30 border border-gray-6/50 rounded-lg p-5 space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 space-y-1">
             <div className="text-sm font-medium text-gray-12">
               {t("plugins.title")}
             </div>
             <div className="text-xs text-gray-10">{t("plugins.desc")}</div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant={scope === "project" ? "secondary" : "outline"}
               size="xs"
@@ -249,12 +249,12 @@ export function PluginsView(props: PluginsViewProps) {
             {extensions.pluginList().map((plugin) => (
               <div
                 key={plugin.name}
-                className="flex items-center justify-between rounded-lg border border-gray-6/60 bg-gray-1/40 px-4 py-2.5"
+                className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-6/60 bg-gray-1/40 px-4 py-2.5"
               >
-                <div>
-                  <div className="text-sm text-gray-12 font-mono flex items-center gap-2">
-                    <Cpu size={14} className="text-gray-10" />
-                    {plugin.name}
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2 font-mono text-sm text-gray-12">
+                    <Cpu size={14} className="shrink-0 text-gray-10" />
+                    <span className="min-w-0 break-all">{plugin.name}</span>
                   </div>
                   {!plugin.removable ? (
                     <div className="mt-1 text-xs text-gray-10">
@@ -264,7 +264,7 @@ export function PluginsView(props: PluginsViewProps) {
                     </div>
                   ) : null}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                   <div className="text-[10px] uppercase tracking-wide text-gray-10">
                     {plugin.removable ? t("plugins.enabled") : t("settings.cap_read_only")}
                   </div>

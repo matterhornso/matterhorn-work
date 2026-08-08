@@ -98,6 +98,14 @@ describe("public trust routes", () => {
     expect(trustRouteSource).not.toMatch(/\bOpenWork\b|\bOpenCode\b/);
   });
 
+  test("keeps public trust navigation usable at the 320px launch floor", () => {
+    expect(trustRouteSource).toContain("grid-cols-[minmax(0,1fr)]");
+    expect(trustRouteSource).toContain('<aside className="min-w-0">');
+    expect(trustRouteSource).toContain('className="flex flex-wrap gap-1 md:flex-col"');
+    expect(trustRouteSource).toContain("inline-flex min-h-11 shrink-0 items-center");
+    expect(trustRouteSource).toContain("-ml-2 mb-4 inline-flex min-h-11 items-center");
+  });
+
   test("status checks use same-origin redacted health endpoints", () => {
     expect(trustRouteSource).toContain('probeHealth("/health/live")');
     expect(trustRouteSource).toContain('probeHealth("/health/ready")');

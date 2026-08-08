@@ -82,7 +82,7 @@ export function ExtensionsView(props: ExtensionsViewProps) {
           {connectedAppCount > 0 ? (
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               <span className={cn(
-                "inline-flex items-center text-green-11",
+                "inline-flex items-center text-green-12",
                 props.compact
                   ? "gap-1.5 text-[11px] font-medium"
                   : "gap-2 rounded-md bg-green-3 px-3 py-1 font-medium",
