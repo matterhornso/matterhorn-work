@@ -12,6 +12,15 @@ const providerToast = readFileSync(
   resolve(appRoot, "react-app/shell/new-providers-toast.tsx"),
   "utf8",
 );
+const layeredSurfaces = [
+  ["dropdown", "react-app/design-system/select-menu.tsx"],
+  ["tooltip", "react-app/design-system/flyout-item.tsx"],
+  ["modal", "react-app/shell/loading-overlay.tsx"],
+  ["coachmark", "react-app/shell/control/control-provider.tsx"],
+  ["diagnostics", "react-app/shell/react-render-watchdog-overlay.tsx"],
+  ["diagnostics", "react-app/shell/dev-profiler.tsx"],
+  ["modal", "react-app/domains/wallet/components/CommandPalette.tsx"],
+] as const;
 
 describe("semantic overlay layering", () => {
   test("defines an ordered product layer scale", () => {
@@ -20,8 +29,10 @@ describe("semantic overlay layering", () => {
       "sticky",
       "modal-backdrop",
       "modal",
+      "coachmark",
       "toast",
       "tooltip",
+      "diagnostics",
     ].map((name) => {
       const match = appCss.match(new RegExp(`--matterhorn-layer-${name}:\\s*(\\d+);`));
       expect(match, `missing ${name} layer`).not.toBeNull();
@@ -36,6 +47,14 @@ describe("semantic overlay layering", () => {
     for (const source of [reloadToast, providerToast]) {
       expect(source).toContain("z-[var(--matterhorn-layer-toast)]");
       expect(source).not.toContain("z-[9999]");
+    }
+  });
+
+  test("product overlays use named layers instead of literal z-index values", () => {
+    for (const [layer, relativePath] of layeredSurfaces) {
+      const source = readFileSync(resolve(appRoot, relativePath), "utf8");
+      expect(source).toContain(`z-[var(--matterhorn-layer-${layer})]`);
+      expect(source).not.toMatch(/z-\[\d+\]/);
     }
   });
 });

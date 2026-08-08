@@ -25,7 +25,7 @@ export function FlyoutItem(props: FlyoutItemProps) {
 
   return (
     <div
-      className="fixed z-[100] pointer-events-none transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-12 text-gray-1 shadow-sm border border-gray-11/20"
+      className="pointer-events-none fixed z-[var(--matterhorn-layer-tooltip)] flex items-center gap-2 rounded-xl border border-gray-11/20 bg-gray-12 px-3 py-2 text-gray-1 shadow-sm transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
       style={{
         top: `${props.item.rect.top}px`,
         left: `${props.item.rect.left}px`,

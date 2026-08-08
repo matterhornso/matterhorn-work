@@ -23,9 +23,13 @@ assert.ok(
     script.includes('url.pathname === "/session"') &&
     script.includes('url.pathname === "/session/status"') &&
     script.includes('request.method === "PATCH"') &&
+    script.includes('action === "revert"') &&
+    script.includes('session.revert = { messageID }') &&
+    script.includes("currentMessages.slice(0, revertIndex + 1)") &&
+    script.includes("delete session.revert") &&
     script.includes('action === "prompt_async"') &&
     script.includes('action === "todo"'),
-  "generated-media smoke launcher should include a fake OpenCode engine for browser chat sessions and title updates",
+  "generated-media smoke launcher should include a fake OpenCode engine for browser chat sessions, response retry, and title updates",
 );
 assert.ok(
   script.includes("--opencode-base-url") && script.includes("Fake OpenCode"),
