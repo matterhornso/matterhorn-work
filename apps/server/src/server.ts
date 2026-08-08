@@ -5778,6 +5778,81 @@ type SuiWorkspaceEvidenceInput = {
   auditAction: string;
 };
 
+type ChatResponseWorkspaceOutputInput = {
+  workspace: WorkspaceInfo;
+  ctx: RequestContext;
+  taskId: string;
+  sessionSlug: string;
+  messageId: string;
+  outputPath: string;
+  title: string;
+  content: string;
+};
+
+async function recordChatResponseWorkspaceOutput(input: ChatResponseWorkspaceOutputInput): Promise<void> {
+  const timestamp = Date.now();
+  const absPath = resolveSafeChildPath(input.workspace.path, input.outputPath);
+  const savedAt = new Date(timestamp).toISOString();
+  const markdown = [
+    `# ${input.title}`,
+    "",
+    `> Saved from a Matterhorn chat response on ${savedAt}.`,
+    "",
+    input.content.trim(),
+    "",
+  ].join("\n");
+
+  await ensureDir(dirname(absPath));
+  const tmp = `${absPath}.tmp-${shortId()}`;
+  await writeFile(tmp, markdown, "utf8");
+  await rename(tmp, absPath);
+
+  const detail = `chat;${input.sessionSlug};chat_response;outputs/chat`;
+  const metadata = {
+    sourceType: "chat_response",
+    sourceMessageId: input.messageId,
+  };
+  await recordTaskEvent({
+    id: `task_evt_${shortId()}`,
+    workspaceId: input.workspace.id,
+    taskId: input.taskId,
+    type: "artifact_saved",
+    timestamp,
+    summary: `${input.title} saved to Outputs`,
+    detail,
+    artifactPath: input.outputPath,
+    stageName: "save_chat_response",
+    metadata,
+  });
+  await recordTaskEvent({
+    id: `task_evt_${shortId()}`,
+    workspaceId: input.workspace.id,
+    taskId: input.taskId,
+    type: "completed",
+    timestamp: timestamp + 1,
+    summary: `${input.title} saved to Outputs`,
+    detail,
+    stageName: "save_chat_response",
+    metadata,
+  });
+
+  await recordAudit(input.workspace.path, {
+    id: shortId(),
+    workspaceId: input.workspace.id,
+    actor: input.ctx.actor ?? { type: "remote" },
+    action: "workspace.chat_response.save",
+    target: absPath,
+    summary: `Saved ${input.title} to Outputs`,
+    timestamp,
+    metadata: {
+      outputPath: input.outputPath,
+      taskId: input.taskId,
+      sessionSlug: input.sessionSlug,
+      sourceMessageId: input.messageId,
+    },
+  });
+}
+
 async function recordSuiWorkspaceEvidence(input: SuiWorkspaceEvidenceInput): Promise<void> {
   const timestamp = Date.now();
   const absPath = resolveSafeChildPath(input.workspace.path, input.outputPath);
@@ -8526,6 +8601,69 @@ function createRoutes(
 
     const events = fileSessions.listWorkspaceEvents(workspace.id, Number.MAX_SAFE_INTEGER);
     return jsonResponse({ items, cursor: events.cursor });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/outputs/chat-response", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const content = typeof body.content === "string" ? body.content.trim() : "";
+    if (!content) {
+      throw new ApiError(400, "invalid_payload", "content must be a non-empty string");
+    }
+    const bytes = Buffer.byteLength(content, "utf8");
+    if (bytes > FILE_SESSION_MAX_FILE_BYTES) {
+      throw new ApiError(413, "file_too_large", "Response exceeds the workspace text-file size limit", {
+        maxBytes: FILE_SESSION_MAX_FILE_BYTES,
+        size: bytes,
+      });
+    }
+
+    const requestedSessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const sessionSlug = normalizeSessionSlug(requestedSessionId || "chat");
+    const messageId = typeof body.messageId === "string" ? body.messageId.trim().slice(0, 160) : "";
+    if (!/^[A-Za-z0-9._:-]{1,160}$/.test(messageId)) {
+      throw new ApiError(400, "invalid_payload", "messageId must be a valid opaque message identifier");
+    }
+    const requestedTitle = typeof body.title === "string"
+      ? body.title.replace(/[\r\n\t]+/g, " ").replace(/^#+\s*/, "").replace(/\s+/g, " ").trim()
+      : "";
+    const scrubbedTitle = scrubProjectLedgerText(requestedTitle).value?.trim() ?? "";
+    const title = (scrubbedTitle || "Matterhorn response").slice(0, 120);
+    const taskId = `chat_response_${shortId()}`;
+    const outputPath = `outputs/chat/${sessionSlug}/response-${Date.now()}-${shortId()}.md`;
+
+    await recordChatResponseWorkspaceOutput({
+      workspace,
+      ctx,
+      taskId,
+      sessionSlug,
+      messageId,
+      outputPath,
+      title,
+      content,
+    });
+    const info = await stat(resolveSafeChildPath(workspace.path, outputPath));
+    recordWorkspaceFileEvent(workspace.id, {
+      type: "write",
+      path: outputPath,
+      revision: fileRevision(info),
+    });
+
+    return jsonResponse({
+      success: true,
+      output: {
+        workspaceId: workspace.id,
+        path: outputPath,
+        taskId,
+        sessionSlug,
+        sourceMessageId: messageId,
+        title,
+        bytes: info.size,
+        updatedAt: info.mtimeMs,
+      },
+    }, 201);
   });
 
   addRoute(routes, "GET", "/workspace/:id/files/content", "client", async (ctx) => {

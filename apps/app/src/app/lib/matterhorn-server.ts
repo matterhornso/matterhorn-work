@@ -904,6 +904,22 @@ export type MatterhornBittensorReceiptEvidenceResponse = {
   evidence: MatterhornBittensorWorkspaceEvidence;
 };
 
+export type MatterhornChatResponseOutput = {
+  workspaceId: string;
+  path: string;
+  taskId: string;
+  sessionSlug: string;
+  sourceMessageId: string;
+  title: string;
+  bytes: number;
+  updatedAt: number;
+};
+
+export type MatterhornChatResponseOutputResponse = {
+  success: true;
+  output: MatterhornChatResponseOutput;
+};
+
 export type MatterhornWorkspaceOutputDeleteResponse = {
   success: true;
   deleted: {
@@ -2329,6 +2345,21 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           hostToken,
           method: "POST",
           body: { ...payload, sessionId: options?.sessionId ?? null },
+          timeoutMs: timeouts.status,
+        },
+      ),
+    saveWorkspaceChatResponse: (
+      workspaceId: string,
+      payload: { sessionId: string; messageId: string; title?: string | null; content: string },
+    ) =>
+      requestJson<MatterhornChatResponseOutputResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/outputs/chat-response`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: payload,
           timeoutMs: timeouts.status,
         },
       ),

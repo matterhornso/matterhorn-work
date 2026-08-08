@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 
 import { createClient, unwrap } from "../../../../app/lib/opencode";
-import { abortSessionSafe } from "../../../../app/lib/opencode-session";
+import { abortSessionSafe, revertSession } from "../../../../app/lib/opencode-session";
 import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import {
   beginModelOperation,
@@ -81,6 +81,7 @@ import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from ".
 import { useLocal } from "../../../kernel/local-provider";
 import { deriveSessionRenderModel } from "../sync/transition-controller";
 import { useSessionScrollController } from "./scroll-controller";
+import { resolveAssistantResponseRetryTurn, responseOutputTitle } from "./response-actions";
 import { getSessionActivityStatusLabel, useSessionActivityStore, type SessionActivityStatus } from "../status/session-activity-store";
 import { PermissionApprovalPanel } from "../chat/permission-approval-modal";
 import { QuestionPanel } from "../modals/question-modal";
@@ -677,6 +678,10 @@ function transcriptToText(messages: UIMessage[]) {
       return text ? [text] : [];
     })
     .join("\n\n---\n\n");
+}
+
+function outputTargetName(path: string) {
+  return path.split("/").filter(Boolean).at(-1) ?? "Saved response.md";
 }
 
 function statusLabel(snapshot: MatterhornSessionSnapshot | undefined, busy: boolean) {
@@ -1933,6 +1938,155 @@ export function SessionSurface(props: SessionSurfaceProps) {
     await handleSend();
   }, [draft, handleSend, sending]);
 
+  const handleRetryAssistantResponse = useCallback(async (messageId: string) => {
+    if (sending || chatStreaming) {
+      throw new Error("Wait for the active response to finish before retrying another response.");
+    }
+    const latestAssistantMessageId = [...renderedMessages].reverse().find((message) => message.role === "assistant")?.id;
+    if (latestAssistantMessageId !== messageId) {
+      throw new Error("Fork from an earlier response to preserve the turns that followed it.");
+    }
+    const retryTurn = resolveAssistantResponseRetryTurn(renderedMessages, messageId);
+    if (!retryTurn) throw new Error("Matterhorn could not find the prompt for this response.");
+    const prompt = retryTurn.prompt;
+    if (!prompt) throw new Error("This response came from an attachment-only prompt. Re-send it from the composer to include the attachment.");
+
+    suppressNextAbortFailureRef.current = false;
+    setError(null);
+    setSending(true);
+    setAwaitingAssistantBaseline(Math.max(0, retryTurn.responseIndex - 1));
+    setNoVisibleAssistantOutputBaseline(null);
+    useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "busy" });
+    const operation = beginModelOperation({
+      workspaceId: props.workspaceId,
+      sessionId: props.sessionId,
+      providerId: props.selectedModel.providerID,
+      modelId: props.selectedModel.modelID,
+      reasoningLevel: props.modelVariant,
+      source: "chat",
+    });
+    recordInspectorEvent("session.response.retry_requested", {
+      workspaceId: props.workspaceId,
+      sessionId: props.sessionId,
+      responseMessageId: messageId,
+      promptMessageId: retryTurn.promptMessageId,
+    });
+
+    try {
+      await abortSessionSafe(opencodeClient, props.sessionId);
+      await revertSession(opencodeClient, props.sessionId, retryTurn.promptMessageId);
+      let resolvedText = addBittensorContextToResolvedText(prompt, bittensorContext);
+      resolvedText = addMatterhornMemoryContextToResolvedText(resolvedText, memoryContext);
+      await props.onSendDraft(buildDraft(prompt, [], { resolvedText }));
+      recordModelOperationAccepted(operation);
+      void snapshotQuery.refetch();
+      setSending(false);
+      setNotice({
+        title: "Response retry started",
+        description: "The selected turn was replaced and Matterhorn is generating a new response.",
+        tone: "info",
+      });
+    } catch (nextError) {
+      recordModelOperationProviderError(operation, nextError);
+      const parsed = parseSessionError(nextError);
+      setError(parsed);
+      useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId);
+      setAwaitingAssistantBaseline(null);
+      setNoVisibleAssistantOutputBaseline(null);
+      setSending(false);
+      throw nextError;
+    }
+  }, [bittensorContext, buildDraft, chatStreaming, memoryContext, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, snapshotQuery]);
+
+  const handleSaveAssistantResponse = useCallback(async (messageId: string, content: string): Promise<OpenTarget> => {
+    if (!content.trim()) throw new Error("This response has no content to save.");
+    recordInspectorEvent("session.response.save_requested", {
+      workspaceId: props.workspaceId,
+      sessionId: props.sessionId,
+      responseMessageId: messageId,
+      contentLength: content.length,
+    });
+    try {
+      const response = await props.client.saveWorkspaceChatResponse(props.workspaceId, {
+        sessionId: props.sessionId,
+        messageId,
+        title: responseOutputTitle(content),
+        content,
+      });
+      const target: OpenTarget = {
+        id: `file:${response.output.path.toLowerCase()}`,
+        kind: "file",
+        value: response.output.path,
+        name: outputTargetName(response.output.path),
+        preview: "markdown",
+        confidence: 100,
+        reason: "saved chat response",
+        exists: true,
+        size: response.output.bytes,
+        updatedAt: response.output.updatedAt,
+      };
+      setVerifiedOpenTargets((current) => current.some((item) => item.id === target.id) ? current : [...current, target]);
+      window.dispatchEvent(new Event("matterhorn:project-evidence-updated"));
+      window.dispatchEvent(new Event("matterhorn:task-log-updated"));
+      setNotice({
+        title: "Response saved to Outputs",
+        description: "It is also recorded in Project Activity. Select the checkmark to open it.",
+        tone: "success",
+      });
+      recordInspectorEvent("session.response.saved", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        responseMessageId: messageId,
+        outputPath: response.output.path,
+      });
+      return target;
+    } catch (nextError) {
+      setNotice({
+        title: "Could not save response",
+        description: nextError instanceof Error ? nextError.message : "Try again when the workspace service is available.",
+        tone: "warning",
+      });
+      recordInspectorEvent("session.response.save_failed", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        responseMessageId: messageId,
+        reason: nextError instanceof Error ? nextError.message.slice(0, 160) : "unknown",
+      });
+      throw nextError;
+    }
+  }, [props.client, props.sessionId, props.workspaceId]);
+
+  const handleRateAssistantResponse = useCallback(async (messageId: string, rating: "helpful" | "not_helpful") => {
+    try {
+      await props.client.submitProjectFeedback(props.workspaceId, {
+        kind: rating === "helpful" ? "thumbs_up" : "thumbs_down",
+        target: {
+          sourceType: "chat",
+          sourceId: messageId,
+          href: typeof window === "undefined" ? undefined : `${window.location.pathname}${window.location.search}`,
+        },
+      });
+      setNotice({
+        title: rating === "helpful" ? "Marked helpful" : "Marked not helpful",
+        description: "Saved for product-quality review in this workspace. It is not used for model training.",
+        tone: "success",
+      });
+      recordInspectorEvent("session.response.feedback_saved", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        responseMessageId: messageId,
+        rating,
+      });
+    } catch (nextError) {
+      setNotice({
+        title: "Could not save feedback",
+        description: nextError instanceof Error ? nextError.message : "Try again when the workspace service is available.",
+        tone: "warning",
+      });
+      throw nextError;
+    }
+  }, [props.client, props.sessionId, props.workspaceId]);
+
   const handleDismissError = useCallback(() => {
     setError(null);
     useSessionActivityStore.getState().clearError(props.workspaceId, props.sessionId);
@@ -2750,6 +2904,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     openTargets={verifiedOpenTargets}
                     onOpenTarget={props.onOpenTarget}
                     onSaveBittensorEvidence={handleSaveBittensorEvidence}
+                    onRetryAssistantResponse={handleRetryAssistantResponse}
+                    onSaveAssistantResponse={handleSaveAssistantResponse}
+                    onRateAssistantResponse={handleRateAssistantResponse}
                     footer={assistantStatusFooter}
                   />
                   {error ? (
