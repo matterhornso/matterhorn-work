@@ -1,0 +1,66 @@
+{
+  "version": "matterhorn.launch-channel-evidence.v1",
+  "capturedAt": "2026-08-08T04:59:42.222Z",
+  "commit": "4a6bfe3a1780a96fd2f1456916753818cd3d34d8",
+  "common": {
+    "gates": {
+      "scope.freeze": {
+        "status": "pending",
+        "note": "Release owner must confirm the final public-beta scope."
+      },
+      "release.exact_commit": {
+        "status": "pass",
+        "evidence": "candidate-certification.json#source",
+        "note": "The certified source is an immutable commit."
+      },
+      "code.app_suite": {
+        "status": "pass",
+        "evidence": "candidate-certification.json#stage=app_tests",
+        "note": "Complete app suite passed."
+      },
+      "code.server_suite": {
+        "status": "pass",
+        "evidence": "candidate-certification.json#stage=server_tests",
+        "note": "Complete server suite passed."
+      },
+      "code.typechecks": {
+        "status": "pass",
+        "evidence": "candidate-certification.json#stage=electron_typecheck",
+        "note": "App, server, and Electron typechecks passed."
+      },
+      "code.production_build": {
+        "status": "pass",
+        "evidence": "candidate-certification.json#stage=production_build",
+        "note": "Production build passed."
+      },
+      "code.platform_safety": {
+        "status": "pass",
+        "evidence": "candidate-certification.json#stage=platform_safety",
+        "note": "Complete platform safety gate passed."
+      },
+      "security.dependency_audit": {
+        "status": "pass",
+        "evidence": "candidate-certification.json#stage=dependency_audit",
+        "note": "Locked dependency audit passed."
+      },
+      "security.desktop_trust_boundary": {
+        "status": "pass",
+        "evidence": "candidate-certification.json#stage=platform_safety",
+        "note": "Platform safety includes the Electron and daemon perimeter."
+      },
+      "ux.local_responsive_acceptance": {
+        "status": "pending",
+        "note": "Live browser acceptance was skipped or failed."
+      },
+      "product.deferred_features_hidden": {
+        "status": "pending",
+        "note": "Deferred-feature visibility is not certified."
+      }
+    }
+  },
+  "channels": {
+    "public-beta": {
+      "gates": {}
+    }
+  }
+}

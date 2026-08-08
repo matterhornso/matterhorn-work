@@ -1,0 +1,454 @@
+{
+  "version": "matterhorn.launch-channel-readiness.v1",
+  "channel": "public-beta",
+  "decision": "NO-GO",
+  "ready": false,
+  "commit": "4a6bfe3a1780a96fd2f1456916753818cd3d34d8",
+  "capturedAt": "2026-08-08T04:59:42.222Z",
+  "evaluatedAt": "2026-08-08T04:59:42.269Z",
+  "maxEvidenceAgeHours": 12,
+  "counts": {
+    "required": 33,
+    "passed": 10,
+    "blocked": 23
+  },
+  "blockers": [
+    {
+      "id": "scope.freeze",
+      "owner": "Release owner",
+      "status": "pending",
+      "action": "Launch scope and deferred features are frozen"
+    },
+    {
+      "id": "ux.local_responsive_acceptance",
+      "owner": "Product and QA",
+      "status": "pending",
+      "action": "Core local journeys pass desktop and mobile acceptance"
+    },
+    {
+      "id": "product.deferred_features_hidden",
+      "owner": "Product",
+      "status": "pending",
+      "action": "Deferred services are disabled and truthfully hidden"
+    },
+    {
+      "id": "release.stable_tag",
+      "owner": "Release owner",
+      "status": "missing",
+      "action": "The public candidate is built from one immutable stable tag"
+    },
+    {
+      "id": "security.credential_rotation",
+      "owner": "Security",
+      "status": "missing",
+      "action": "Every exposed or shared credential is revoked and replacements live only in approved secret stores"
+    },
+    {
+      "id": "deployment.https",
+      "owner": "Engineering",
+      "status": "missing",
+      "action": "The public web build is deployed behind production HTTPS"
+    },
+    {
+      "id": "deployment.exact_origin_cors",
+      "owner": "Security",
+      "status": "missing",
+      "action": "Production CORS allows only intended origins"
+    },
+    {
+      "id": "deployment.security_headers",
+      "owner": "Security",
+      "status": "missing",
+      "action": "CSP and production security headers pass"
+    },
+    {
+      "id": "deployment.monitoring",
+      "owner": "Operations",
+      "status": "missing",
+      "action": "Health, errors, latency, and provider failures are monitored"
+    },
+    {
+      "id": "operations.backup_restore",
+      "owner": "Operations",
+      "status": "missing",
+      "action": "Backup and restore are proven on production-shaped data"
+    },
+    {
+      "id": "operations.rollback_drill",
+      "owner": "Operations",
+      "status": "missing",
+      "action": "A production rollback drill succeeds"
+    },
+    {
+      "id": "web.authenticated_same_origin",
+      "owner": "Security",
+      "status": "missing",
+      "action": "Public web uses the authenticated same-origin proxy with no browser bearer credentials"
+    },
+    {
+      "id": "web.deployed_two_user_acceptance",
+      "owner": "Product and QA",
+      "status": "missing",
+      "action": "New-user and returning-user deployed web journeys pass"
+    },
+    {
+      "id": "wallet.metamask_coinbase",
+      "owner": "Wallet QA",
+      "status": "missing",
+      "action": "MetaMask and Coinbase Wallet acceptance passes"
+    },
+    {
+      "id": "wallet.phantom_sui",
+      "owner": "Wallet QA",
+      "status": "missing",
+      "action": "Phantom Sui connect and reject/approve handoff acceptance passes"
+    },
+    {
+      "id": "wallet.hyperliquid_testnet",
+      "owner": "Wallet QA",
+      "status": "missing",
+      "action": "Hyperliquid testnet reject, approve, receipt, replay, expiry, limit, and kill-switch acceptance passes"
+    },
+    {
+      "id": "connectors.visible_oauth",
+      "owner": "Integration QA",
+      "status": "missing",
+      "action": "Every visible OAuth connector passes connect, reload, tools, and disconnect"
+    },
+    {
+      "id": "desktop.signed_notarized",
+      "owner": "Release engineering",
+      "status": "missing",
+      "action": "Public macOS assets are signed, notarized, stapled, and checksum-verified"
+    },
+    {
+      "id": "desktop.clean_install",
+      "owner": "Release QA",
+      "status": "missing",
+      "action": "The signed desktop app passes clean-install, update, and reinstall acceptance"
+    },
+    {
+      "id": "distribution.public_download",
+      "owner": "Release engineering",
+      "status": "missing",
+      "action": "The public desktop download resolves to the exact signed candidate"
+    },
+    {
+      "id": "product.public_copy_and_legal",
+      "owner": "Product and legal",
+      "status": "missing",
+      "action": "Public copy, privacy policy, terms, and support links are approved"
+    },
+    {
+      "id": "support.public_beta_channel",
+      "owner": "Operations",
+      "status": "missing",
+      "action": "A public support channel and response owner are staffed"
+    },
+    {
+      "id": "support.launch_room",
+      "owner": "Operations",
+      "status": "missing",
+      "action": "Launch-room owners and incident escalation are staffed"
+    }
+  ],
+  "checks": [
+    {
+      "id": "evidence.commit",
+      "label": "Candidate commit is a full Git SHA",
+      "owner": "Release owner",
+      "status": "pass",
+      "evidence": "4a6bfe3a1780a96fd2f1456916753818cd3d34d8",
+      "note": null,
+      "passed": true
+    },
+    {
+      "id": "evidence.freshness",
+      "label": "Evidence is no more than 12 hours old",
+      "owner": "Release owner",
+      "status": "pass",
+      "evidence": "2026-08-08T04:59:42.222Z",
+      "note": "ageHours=0.00",
+      "passed": true
+    },
+    {
+      "id": "scope.freeze",
+      "label": "Launch scope and deferred features are frozen",
+      "owner": "Release owner",
+      "status": "pending",
+      "evidence": null,
+      "note": "Release owner must confirm the final public-beta scope.",
+      "passed": false
+    },
+    {
+      "id": "release.exact_commit",
+      "label": "Evidence identifies the exact candidate commit",
+      "owner": "Engineering",
+      "status": "pass",
+      "evidence": "candidate-certification.json#source",
+      "note": "The certified source is an immutable commit.",
+      "passed": true
+    },
+    {
+      "id": "code.app_suite",
+      "label": "Full app suite passes",
+      "owner": "Engineering",
+      "status": "pass",
+      "evidence": "candidate-certification.json#stage=app_tests",
+      "note": "Complete app suite passed.",
+      "passed": true
+    },
+    {
+      "id": "code.server_suite",
+      "label": "Full server suite passes",
+      "owner": "Engineering",
+      "status": "pass",
+      "evidence": "candidate-certification.json#stage=server_tests",
+      "note": "Complete server suite passed.",
+      "passed": true
+    },
+    {
+      "id": "code.typechecks",
+      "label": "App, server, and Electron typechecks pass",
+      "owner": "Engineering",
+      "status": "pass",
+      "evidence": "candidate-certification.json#stage=electron_typecheck",
+      "note": "App, server, and Electron typechecks passed.",
+      "passed": true
+    },
+    {
+      "id": "code.production_build",
+      "label": "Production web and desktop builds pass",
+      "owner": "Engineering",
+      "status": "pass",
+      "evidence": "candidate-certification.json#stage=production_build",
+      "note": "Production build passed.",
+      "passed": true
+    },
+    {
+      "id": "code.platform_safety",
+      "label": "Matterhorn platform safety gate passes",
+      "owner": "Engineering",
+      "status": "pass",
+      "evidence": "candidate-certification.json#stage=platform_safety",
+      "note": "Complete platform safety gate passed.",
+      "passed": true
+    },
+    {
+      "id": "security.dependency_audit",
+      "label": "Production dependency audit is clear",
+      "owner": "Security",
+      "status": "pass",
+      "evidence": "candidate-certification.json#stage=dependency_audit",
+      "note": "Locked dependency audit passed.",
+      "passed": true
+    },
+    {
+      "id": "security.desktop_trust_boundary",
+      "label": "Desktop navigation, permission, IPC, and file-open policies pass",
+      "owner": "Security",
+      "status": "pass",
+      "evidence": "candidate-certification.json#stage=platform_safety",
+      "note": "Platform safety includes the Electron and daemon perimeter.",
+      "passed": true
+    },
+    {
+      "id": "ux.local_responsive_acceptance",
+      "label": "Core local journeys pass desktop and mobile acceptance",
+      "owner": "Product and QA",
+      "status": "pending",
+      "evidence": null,
+      "note": "Live browser acceptance was skipped or failed.",
+      "passed": false
+    },
+    {
+      "id": "product.deferred_features_hidden",
+      "label": "Deferred services are disabled and truthfully hidden",
+      "owner": "Product",
+      "status": "pending",
+      "evidence": null,
+      "note": "Deferred-feature visibility is not certified.",
+      "passed": false
+    },
+    {
+      "id": "release.stable_tag",
+      "label": "The public candidate is built from one immutable stable tag",
+      "owner": "Release owner",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "security.credential_rotation",
+      "label": "Every exposed or shared credential is revoked and replacements live only in approved secret stores",
+      "owner": "Security",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "deployment.https",
+      "label": "The public web build is deployed behind production HTTPS",
+      "owner": "Engineering",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "deployment.exact_origin_cors",
+      "label": "Production CORS allows only intended origins",
+      "owner": "Security",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "deployment.security_headers",
+      "label": "CSP and production security headers pass",
+      "owner": "Security",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "deployment.monitoring",
+      "label": "Health, errors, latency, and provider failures are monitored",
+      "owner": "Operations",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "operations.backup_restore",
+      "label": "Backup and restore are proven on production-shaped data",
+      "owner": "Operations",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "operations.rollback_drill",
+      "label": "A production rollback drill succeeds",
+      "owner": "Operations",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "web.authenticated_same_origin",
+      "label": "Public web uses the authenticated same-origin proxy with no browser bearer credentials",
+      "owner": "Security",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "web.deployed_two_user_acceptance",
+      "label": "New-user and returning-user deployed web journeys pass",
+      "owner": "Product and QA",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "wallet.metamask_coinbase",
+      "label": "MetaMask and Coinbase Wallet acceptance passes",
+      "owner": "Wallet QA",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "wallet.phantom_sui",
+      "label": "Phantom Sui connect and reject/approve handoff acceptance passes",
+      "owner": "Wallet QA",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "wallet.hyperliquid_testnet",
+      "label": "Hyperliquid testnet reject, approve, receipt, replay, expiry, limit, and kill-switch acceptance passes",
+      "owner": "Wallet QA",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "connectors.visible_oauth",
+      "label": "Every visible OAuth connector passes connect, reload, tools, and disconnect",
+      "owner": "Integration QA",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "desktop.signed_notarized",
+      "label": "Public macOS assets are signed, notarized, stapled, and checksum-verified",
+      "owner": "Release engineering",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "desktop.clean_install",
+      "label": "The signed desktop app passes clean-install, update, and reinstall acceptance",
+      "owner": "Release QA",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "distribution.public_download",
+      "label": "The public desktop download resolves to the exact signed candidate",
+      "owner": "Release engineering",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "product.public_copy_and_legal",
+      "label": "Public copy, privacy policy, terms, and support links are approved",
+      "owner": "Product and legal",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "support.public_beta_channel",
+      "label": "A public support channel and response owner are staffed",
+      "owner": "Operations",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    },
+    {
+      "id": "support.launch_room",
+      "label": "Launch-room owners and incident escalation are staffed",
+      "owner": "Operations",
+      "status": "missing",
+      "evidence": null,
+      "note": null,
+      "passed": false
+    }
+  ]
+}
