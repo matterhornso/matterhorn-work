@@ -696,9 +696,14 @@ export function SessionRoute() {
   const handlePendingDeskTaskRestored = useCallback(() => {
     const workspaceId = selectedWorkspaceId || routeWorkspaceId;
     clearPendingDeskTask(workspaceId);
-    navigateToWorkspaceSession(workspaceId, selectedSessionId, { replace: true });
+    if (!workspaceId || !pendingDeskTask) return;
+    navigate(
+      `${workspaceSessionRoute(workspaceId, selectedSessionId)}?desk=${encodeURIComponent(pendingDeskTask.deskId)}`,
+      { replace: true },
+    );
   }, [
-    navigateToWorkspaceSession,
+    navigate,
+    pendingDeskTask,
     routeWorkspaceId,
     selectedSessionId,
     selectedWorkspaceId,

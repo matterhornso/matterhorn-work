@@ -1,5 +1,5 @@
 ---
-description: Offline longevity optimization workflow agent for creators, coaches, client packets, and service packaging.
+description: Guided longevity program workflow for creators, coaches, client packets, and service packaging.
 mode: primary
 temperature: 0.2
 permission:
