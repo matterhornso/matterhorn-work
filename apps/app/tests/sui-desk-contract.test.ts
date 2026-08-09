@@ -114,4 +114,20 @@ describe("Sui desk integration contract", () => {
     expect(panelSource).toContain("Review in wallet");
     expect(panelSource).not.toContain("!directWalletAvailable || connectedAddress ? <>");
   });
+
+  test("verifies transaction receipts with Sui RPC before saving evidence", () => {
+    const panelSource = readFileSync(
+      "apps/app/src/react-app/domains/wallet/sui-workflow-panel.tsx",
+      "utf8",
+    );
+    const clientSource = readFileSync("apps/app/src/app/lib/matterhorn-server.ts", "utf8");
+
+    expect(panelSource).toContain("workspaceSuiVerifyTransactionReceipt");
+    expect(panelSource).toContain("Status from Sui RPC");
+    expect(panelSource).toContain("No user-entered status is trusted.");
+    expect(panelSource).not.toContain('htmlFor={fieldId("status")}');
+    expect(clientSource).toContain("/sui/transactions/verify-receipt");
+    expect(clientSource).toContain('kind: "sui_rpc_transaction"');
+    expect(clientSource).toContain("chainVerified: true");
+  });
 });

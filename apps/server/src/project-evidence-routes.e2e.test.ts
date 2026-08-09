@@ -74,16 +74,29 @@ async function boot() {
   return { base: `http://127.0.0.1:${server.port}`, dir };
 }
 
-async function jsonFetch(base: string, path: string, init?: RequestInit): Promise<{ response: Response; payload: any }> {
+async function jsonFetch(base: string, path: string, init?: RequestInit, accessToken = TOKEN): Promise<{ response: Response; payload: any }> {
   const response = await fetch(`${base}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${TOKEN}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
       ...(init?.headers ?? {}),
     },
   });
   const payload = await response.json().catch(() => null);
+  return { response, payload };
+}
+
+async function hostJsonFetch(base: string, path: string, init: RequestInit = {}) {
+  const response = await fetch(`${base}${path}`, {
+    ...init,
+    headers: {
+      "X-OpenWork-Host-Token": HOST_TOKEN,
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      ...(init.headers ?? {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
   return { response, payload };
 }
 
@@ -248,6 +261,136 @@ describe("project evidence routes", () => {
       ]),
     );
     expect(JSON.stringify(ledger.payload.items)).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
+  });
+
+  test("workspace chat responses save a markdown output and project evidence receipt", async () => {
+    const { base, dir } = await boot();
+
+    const saved = await jsonFetch(base, "/workspace/ws_evidence/outputs/chat-response", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_response_evidence",
+        messageId: "msg_assistant_42",
+        title: "Validator comparison",
+        content: "## Recommendation\n\nKeep the current validator watch active.",
+      }),
+    });
+
+    expect(saved.response.status).toBe(201);
+    expect(saved.payload.success).toBe(true);
+    expect(saved.payload.output).toMatchObject({
+      workspaceId: "ws_evidence",
+      sessionSlug: "sess_response_evidence",
+      sourceMessageId: "msg_assistant_42",
+      title: "Validator comparison",
+    });
+    expect(saved.payload.output.path).toMatch(/^outputs\/chat\/sess_response_evidence\/response-.*\.md$/);
+
+    const savedPath = join(dir, saved.payload.output.path);
+    expect(existsSync(savedPath)).toBe(true);
+    const markdown = readFileSync(savedPath, "utf8");
+    expect(markdown).toContain("# Validator comparison");
+    expect(markdown).toContain("Keep the current validator watch active.");
+    expect(markdown).toContain("Saved from a Matterhorn chat response");
+
+    const evidence = await jsonFetch(base, "/workspace/ws_evidence/evidence?limit=20");
+    expect(evidence.response.status).toBe(200);
+    const receipt = evidence.payload.items.find((item: { type: string; outputPath?: string }) => (
+      item.type === "task.output_saved" && item.outputPath === saved.payload.output.path
+    ));
+    expect(receipt).toBeTruthy();
+    expect(receipt).toMatchObject({
+      source: "task_events",
+      desk: "chat",
+      outputPath: saved.payload.output.path,
+      metadata: {
+        sourceType: "chat_response",
+        sourceMessageId: "msg_assistant_42",
+      },
+    });
+  });
+
+  test("workspace chat response output accepts content above the default JSON request limit", async () => {
+    const { base, dir } = await boot();
+    const content = "A".repeat(1_100_000);
+    const saved = await jsonFetch(base, "/workspace/ws_evidence/outputs/chat-response", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_large_response",
+        messageId: "msg_large_response",
+        title: "Large response",
+        content,
+      }),
+    });
+
+    expect(saved.response.status).toBe(201);
+    expect(saved.payload.output.bytes).toBeGreaterThan(content.length);
+    expect(readFileSync(join(dir, saved.payload.output.path), "utf8")).toContain(content);
+  });
+
+  test("workspace chat response output rejects empty content and missing message identity", async () => {
+    const { base } = await boot();
+    const empty = await jsonFetch(base, "/workspace/ws_evidence/outputs/chat-response", {
+      method: "POST",
+      body: JSON.stringify({ sessionId: "sess_empty", messageId: "msg_empty", content: "   " }),
+    });
+    expect(empty.response.status).toBe(400);
+    expect(empty.payload.code).toBe("invalid_payload");
+
+    const missingMessage = await jsonFetch(base, "/workspace/ws_evidence/outputs/chat-response", {
+      method: "POST",
+      body: JSON.stringify({ sessionId: "sess_empty", content: "A response" }),
+    });
+    expect(missingMessage.response.status).toBe(400);
+    expect(missingMessage.payload.code).toBe("invalid_payload");
+
+    const invalidMessage = await jsonFetch(base, "/workspace/ws_evidence/outputs/chat-response", {
+      method: "POST",
+      body: JSON.stringify({ sessionId: "sess_empty", messageId: "../message", content: "A response" }),
+    });
+    expect(invalidMessage.response.status).toBe(400);
+    expect(invalidMessage.payload.code).toBe("invalid_payload");
+  });
+
+  test("workspace chat response receipts redact secret-shaped titles", async () => {
+    const { base, dir } = await boot();
+    const secret = "Bearer abcdefghijklmnopqrstuvwxyz";
+    const saved = await jsonFetch(base, "/workspace/ws_evidence/outputs/chat-response", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_redacted",
+        messageId: "msg_redacted",
+        title: `Analysis ${secret}`,
+        content: "The visible response body remains available in the saved output.",
+      }),
+    });
+    expect(saved.response.status).toBe(201);
+    expect(JSON.stringify(saved.payload)).not.toContain(secret);
+    expect(saved.payload.output.title).toBe("Analysis [redacted]");
+    expect(readFileSync(join(dir, saved.payload.output.path), "utf8")).not.toContain(secret);
+
+    const evidence = await jsonFetch(base, "/workspace/ws_evidence/evidence?limit=20");
+    expect(JSON.stringify(evidence.payload.items)).not.toContain(secret);
+  });
+
+  test("workspace chat response output requires collaborator scope", async () => {
+    const { base } = await boot();
+    const issued = await hostJsonFetch(base, "/tokens", {
+      method: "POST",
+      body: JSON.stringify({ scope: "viewer", label: "Response output viewer" }),
+    });
+    expect(issued.response.status).toBe(201);
+
+    const blocked = await jsonFetch(base, "/workspace/ws_evidence/outputs/chat-response", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_viewer",
+        messageId: "msg_viewer",
+        content: "Viewer writes must fail.",
+      }),
+    }, String(issued.payload.token));
+    expect(blocked.response.status).toBe(403);
+    expect(blocked.payload.code).toBe("forbidden");
   });
 
   test("workspace Bittensor public-read and receipt routes save output evidence", async () => {

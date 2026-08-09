@@ -387,6 +387,9 @@ function SettingsTabReadinessBadge(props: { status: SettingsReadinessStatus | nu
 const SETTINGS_SIDEBAR_ITEM_CLASS =
   "rounded-md px-3 text-[rgb(var(--matterhorn-blue-rgb)/0.78)] transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-blue-rgb)/0.07)] hover:text-[var(--matterhorn-blue)] data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)] data-active:font-semibold data-active:text-[var(--matterhorn-blue)] data-active:[&_svg]:text-[var(--matterhorn-blue)] mac:data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)] dark:mac:data-active:bg-[rgb(var(--matterhorn-blue-rgb)/0.13)]";
 
+const SETTINGS_SIDEBAR_HEADER_ITEM_CLASS =
+  "text-[rgb(244_251_255/0.78)] hover:bg-[rgb(var(--matterhorn-blue-rgb)/0.09)] hover:text-[#f4fbff]";
+
 const SETTINGS_SIDEBAR_STYLE = {
   "--sidebar": "var(--matterhorn-ink)",
   "--sidebar-foreground": "#f4fbff",
@@ -441,7 +444,11 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton type="button" onClick={props.onClose}>
+            <SidebarMenuButton
+              type="button"
+              className={SETTINGS_SIDEBAR_HEADER_ITEM_CLASS}
+              onClick={props.onClose}
+            >
               <ArrowLeft size={14} />
               <span>{t("dashboard.back_to_app")}</span>
             </SidebarMenuButton>
@@ -451,7 +458,10 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
-                    <SidebarMenuButton type="button">
+                    <SidebarMenuButton
+                      type="button"
+                      className={SETTINGS_SIDEBAR_HEADER_ITEM_CLASS}
+                    >
                       <img
                         src="/matterhorn-logo-square.svg"
                         alt=""
@@ -489,6 +499,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                 <SidebarMenuButton
                   type="button"
                   isActive={props.activeTab === "general"}
+                  aria-current={props.activeTab === "general" ? "page" : undefined}
                   className={SETTINGS_SIDEBAR_ITEM_CLASS}
                   onClick={() => props.onSelectTab("general")}
                 >
@@ -511,6 +522,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                     <SidebarMenuButton
                       type="button"
                       isActive={props.activeTab === tab}
+                      aria-current={props.activeTab === tab ? "page" : undefined}
                       className={SETTINGS_SIDEBAR_ITEM_CLASS}
                       onClick={() => props.onSelectTab(tab)}
                     >
@@ -536,6 +548,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                     <SidebarMenuButton
                       type="button"
                       isActive={props.activeTab === tab}
+                      aria-current={props.activeTab === tab ? "page" : undefined}
                       className={SETTINGS_SIDEBAR_ITEM_CLASS}
                       onClick={() => props.onSelectTab(tab)}
                     >
@@ -562,6 +575,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                       <SidebarMenuButton
                         type="button"
                         isActive={props.activeTab === tab}
+                        aria-current={props.activeTab === tab ? "page" : undefined}
                         className={SETTINGS_SIDEBAR_ITEM_CLASS}
                         onClick={() => props.onSelectTab(tab)}
                       >

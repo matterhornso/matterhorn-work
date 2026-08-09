@@ -27,6 +27,9 @@ describe("wallet runtime connector contract", () => {
     const publicSigninSource = readReactAppSource(
       "shell/public-signin-bootstrap.tsx",
     );
+    const publicTrustSource = readReactAppSource(
+      "shell/public-trust-bootstrap.tsx",
+    );
     const authenticatedAppSource = readReactAppSource(
       "shell/authenticated-app.tsx",
     );
@@ -35,6 +38,12 @@ describe("wallet runtime connector contract", () => {
     );
     const walletRuntimeSource = readReactAppSource(
       "shell/LazyWalletRuntimeShell.tsx",
+    );
+    const walletProviderSource = readReactAppSource(
+      "domains/wallet/WalletProvider.tsx",
+    );
+    const nftWalletBridgeSource = readReactAppSource(
+      "domains/session/media/nft-draft-wallet-bridge.tsx",
     );
 
     expect(providersSource).toContain("routeNeedsWalletRuntime");
@@ -46,14 +55,35 @@ describe("wallet runtime connector contract", () => {
       "Boolean(readDenSettings().authToken?.trim())",
     );
     expect(providersSource).toContain('path === "/signin"');
+    expect(providersSource).toContain("isPublicTrustPath(path)");
+    expect(providersSource).toContain('path === "/welcome"');
     expect(providersSource).toContain('path === "/onboarding"');
+    expect(providersSource).toContain("WALLET_RUNTIME_PANELS");
+    expect(providersSource).toContain("settings\\/wallet");
+    expect(providersSource).toContain(
+      'new URLSearchParams(search).get("panel")',
+    );
+    expect(providersSource).toContain(
+      'if (publicBetaWeb && panel !== "wallet") return false',
+    );
+    expect(providersSource).toContain("<WalletProvider>");
     expect(providersSource).toContain("<LazyWalletRuntimeProvider");
+    expect(nftWalletBridgeSource).toContain(
+      "<DAppKitProvider dAppKit={suiDAppKit}>",
+    );
+    expect(nftWalletBridgeSource).toContain(
+      "<NftDraftWalletBridgeContent {...props} />",
+    );
     expect(appEntrySource).toContain(
       'import("./react-app/shell/authenticated-app")',
     );
     expect(appEntrySource).toContain(
       'import("./react-app/shell/public-signin-bootstrap")',
     );
+    expect(appEntrySource).toContain(
+      'import("./react-app/shell/public-trust-bootstrap")',
+    );
+    expect(appEntrySource).toContain("if (publicTrustEntry)");
     expect(appEntrySource).not.toContain(
       'import { AppProviders } from "./react-app/shell/providers"',
     );
@@ -61,6 +91,11 @@ describe("wallet runtime connector contract", () => {
     expect(publicSigninSource).not.toContain("LazyWalletRuntimeProvider");
     expect(publicSigninSource).not.toContain("DenAuthProvider");
     expect(publicSigninSource).not.toContain("DesktopConfigProvider");
+    expect(publicTrustSource).toContain("<PublicTrustRoute />");
+    expect(publicTrustSource).not.toContain("AppProviders");
+    expect(publicTrustSource).not.toContain("QueryClientProvider");
+    expect(publicTrustSource).not.toContain("DenAuthProvider");
+    expect(publicTrustSource).not.toContain("LazyWalletRuntimeProvider");
     expect(authenticatedAppSource).toContain("<AppProviders>");
     expect(providersSource).not.toContain('from "wagmi"');
     expect(providersSource).not.toContain('from "@mysten/dapp-kit-react"');
@@ -74,7 +109,13 @@ describe("wallet runtime connector contract", () => {
     expect(walletRuntimeSource).toContain("<WagmiProvider");
     expect(walletRuntimeSource).toContain("<DAppKitProvider");
     expect(walletRuntimeSource).toContain("<PhantomSuiConnectionProvider>");
-    expect(walletRuntimeSource).toContain("<WalletProvider>");
+    expect(walletRuntimeSource).not.toContain("<WalletProvider>");
+    expect(lazyProviderSource).toContain(
+      "enabled || wallet.snapshot.pendingApproval !== null",
+    );
+    expect(walletProviderSource).toContain(
+      'window.addEventListener("matterhorn:tx-approval-request"',
+    );
   });
 
   test("wagmi config exposes explicit EVM wallet connectors without advertising unconfigured WalletConnect", () => {
@@ -123,7 +164,9 @@ describe("wallet runtime connector contract", () => {
     expect(source).toMatch(
       /const\s*\{\s*connectAsync,\s*connectors\s*\}\s*=\s*useConnect\(\)/,
     );
-    expect(source).toContain("const connectPromise = connectAsync({ connector })");
+    expect(source).toContain(
+      "const connectPromise = connectAsync({ connector })",
+    );
     expect(source).toContain("await Promise.race([");
     expect(source).not.toContain("await connect({ connector })");
     expect(source).toContain("function walletConnectionErrorMessage");

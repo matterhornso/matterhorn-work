@@ -12022,7 +12022,14 @@ async function runStart(args: ParsedArgs) {
 
       if (opencodeRouterReady && !opencodeRouterHealthInterval) {
         opencodeRouterHealthInterval = setInterval(() => {
-          fetchOpenCodeRouterHealthViaOpenwork(openworkBaseUrl, openworkToken)
+          const healthRequest =
+            sandboxMode !== "none"
+              ? fetchOpenCodeRouterHealthViaOpenwork(
+                  openworkBaseUrl,
+                  openworkToken,
+                )
+              : fetchOpenCodeRouterHealth(opencodeRouterHealthUrl);
+          healthRequest
             .then((health) => {
               tui?.setRouterHealth(health);
               if (health.ok) {

@@ -75,11 +75,11 @@ for (const stageId of [
 
 for (const visibleText of [
   "Workspace home",
-  "Chats, desks, notes, and saved outputs for this project.",
+  "Continue active work, start a focused desk task, or create something new.",
   "New chat",
   "New note",
   "Open a desk",
-  "Jot a note about outputs",
+  "Jot a note",
   "Wallet readiness",
   "Wallet readiness details",
   "review and sign every transaction in your wallet",
@@ -187,6 +187,14 @@ assert.ok(
   "product browser smoke should reject raw provider-key controls in the web build",
 );
 assert.ok(
+  script.includes('[aria-label^="Connected MCP servers:"]') &&
+    script.includes("getByText(/^Synced /)") &&
+    script.includes("Connected MCP summary did not name any servers.") &&
+    script.includes("Not every connected MCP server is visibly ready.") &&
+    script.includes("report.artifacts.connectedMcpServers = connectedNames"),
+  "product browser smoke should accept named ready MCP rows while rejecting empty or unready connected summaries",
+);
+assert.ok(
   script.includes('getByLabel("Copy project path").count()'),
   "product browser smoke should reject exposed local project path controls on the web",
 );
@@ -260,8 +268,10 @@ assert.ok(
     script.includes('name: "Prepare in chat"') &&
     script.includes("matterhorn.session-agents.v1") &&
     script.includes('entry?.name === "desk.task_launch.draft_saved"') &&
-    script.includes('entry?.name === "session.reviewed_action.staged_from_composer"') &&
-    script.includes("Hyperliquid order prepared") &&
+    script.includes(
+      'entry?.name === "session.reviewed_action.staged_from_composer"',
+    ) &&
+    script.includes('name: "Review order ticket", exact: true') &&
     script.includes("modelPromptSent: false"),
   "product browser smoke should prove reviewed actions start as editable session-scoped chat drafts and move to Wallet without model submission",
 );
@@ -277,8 +287,12 @@ assert.ok(
   "product browser smoke should prove persisted chat URLs and authentication survive a fresh mobile browser context with actionable failure evidence",
 );
 assert.ok(
-  sessionRoute.includes("const selectedSessionIdRef = useRef<string | null>(selectedSessionId)") &&
-    sessionRoute.includes("const routeSessionId = selectedSessionIdRef.current") &&
+  sessionRoute.includes(
+    "const selectedSessionIdRef = useRef<string | null>(selectedSessionId)",
+  ) &&
+    sessionRoute.includes(
+      "const routeSessionId = selectedSessionIdRef.current",
+    ) &&
     sessionRoute.includes(
       "[loadWorkspaceSessionsInBackground, markBootRouteReady, routeWorkspaceId]",
     ),
@@ -291,8 +305,9 @@ assert.ok(
   "an already-connected workspace should not hide the chat composer behind stale route loading",
 );
 assert.ok(
-  sessionRoute.includes("if (!selectedSessionKnown && !selectedSessionPending)") &&
-    !sessionRoute.includes("sessionOwnedByOtherWorkspace"),
+  sessionRoute.includes(
+    "if (!selectedSessionKnown && !selectedSessionPending)",
+  ) && !sessionRoute.includes("sessionOwnedByOtherWorkspace"),
   "a chat confirmed in the selected workspace should render even when an authorized workspace alias exposes the same session id",
 );
 assert.ok(
@@ -301,6 +316,26 @@ assert.ok(
     script.includes('"Boundary:"') &&
     script.includes("/Can submit:/"),
   "product browser smoke should reject raw prompt and policy copy in focused desk defaults",
+);
+assert.ok(
+  script.includes('getByRole("region", {') &&
+    script.includes('name: "Workspace home"') &&
+    script.includes("exact: true"),
+  "product browser smoke should target the Home region without colliding with the Home navigation button",
+);
+assert.ok(
+  script.includes(
+    'getByRole("heading", { name: desk.heading, exact: true, level: 2 })',
+  ),
+  "product browser smoke should target each desk content heading without colliding with the location heading",
+);
+assert.ok(
+  script.includes('const moreTasks = page.getByRole("button"') &&
+    script.includes("More tasks") &&
+    script.includes('page.getByText("Place an order", { exact: true })') &&
+    script.includes('name: "Prepare in chat", exact: true') &&
+    script.includes("reviewedActionHidden: true"),
+  "product browser smoke should expand the task list and prove reviewed actions are hidden in Public Beta instead of requiring an unavailable handoff",
 );
 assert.ok(
   script.includes('.locator("main")') &&

@@ -87,6 +87,29 @@ type HyperliquidDraftHandoff = Extract<ReviewedActionDraftHandoff, { protocol: "
 type PolymarketDraftHandoff = Extract<ReviewedActionDraftHandoff, { protocol: "polymarket" }>["draft"];
 type BittensorDraftHandoff = Extract<ReviewedActionDraftHandoff, { protocol: "bittensor" }>["draft"];
 
+type BittensorWalletTimelineStatus = {
+  enabled: boolean;
+  walletCount: number;
+  snapshotCount: number;
+  retentionLimit: number;
+  warnings: string[];
+  updatedAt: string;
+};
+
+type BittensorWalletTimelineSnapshot = {
+  ss58Address: string;
+  capturedAt: string;
+  contentSha256: string;
+};
+
+type BittensorWalletTimelineExport = {
+  generatedAt: string;
+  ss58Address: string | null;
+  status: BittensorWalletTimelineStatus;
+  snapshots: BittensorWalletTimelineSnapshot[];
+  warnings: string[];
+};
+
 type HyperliquidExecutionIntent = {
   intentId: string;
   operation: "place_order" | "cancel_order" | "modify_order" | "close_position";
@@ -2405,6 +2428,12 @@ export default function BittensorPanel({
   const [wallet, setWallet] = useState<BittensorWalletSnapshot | null>(null);
   const [walletLoading, setWalletLoading] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
+  const [walletTimelineStatus, setWalletTimelineStatus] = useState<BittensorWalletTimelineStatus | null>(null);
+  const [walletTimeline, setWalletTimeline] = useState<BittensorWalletTimelineExport | null>(null);
+  const [walletTimelineLoading, setWalletTimelineLoading] = useState(false);
+  const [walletTimelineAction, setWalletTimelineAction] = useState<"capture" | "export" | "clear" | null>(null);
+  const [walletTimelineMessage, setWalletTimelineMessage] = useState<string | null>(null);
+  const [confirmWalletTimelineClear, setConfirmWalletTimelineClear] = useState(false);
   const [favorites, setFavorites] = useState<number[]>(readFavorites);
   const [action, setAction] = useState<ActionType>("stake");
   const [actionNetuid, setActionNetuid] = useState("14");
@@ -2640,6 +2669,134 @@ export default function BittensorPanel({
     }
   }, [watchAddress]);
 
+  const loadWalletTimeline = useCallback(async () => {
+    const address = watchAddress.trim();
+    setWalletTimelineLoading(true);
+    try {
+      const statusRequest = fetchMatterhornApiJson<{
+        success?: boolean;
+        status?: BittensorWalletTimelineStatus;
+        error?: { message?: string };
+      }>("/api/bittensor/wallet/timeline/status");
+      const timelineRequest = isValidSs58Address(address)
+        ? fetchMatterhornApiJson<{
+            success?: boolean;
+            timeline?: BittensorWalletTimelineExport;
+            error?: { message?: string };
+          }>(`/api/bittensor/wallet/timeline/export?ss58Address=${encodeURIComponent(address)}`)
+        : null;
+      const [statusResult, timelineResult] = await Promise.all([statusRequest, timelineRequest]);
+      if (!statusResult.response.ok || !statusResult.json.success || !statusResult.json.status) {
+        throw new Error(statusResult.json.error?.message ?? "Could not read wallet history status");
+      }
+      setWalletTimelineStatus(statusResult.json.status);
+      if (timelineResult) {
+        if (!timelineResult.response.ok || !timelineResult.json.success || !timelineResult.json.timeline) {
+          throw new Error(timelineResult.json.error?.message ?? "Could not read wallet history");
+        }
+        setWalletTimeline(timelineResult.json.timeline);
+      } else {
+        setWalletTimeline(null);
+      }
+    } catch (timelineError) {
+      setWalletTimelineStatus(null);
+      setWalletTimeline(null);
+      setWalletTimelineMessage(timelineError instanceof Error ? timelineError.message : "Could not read wallet history.");
+    } finally {
+      setWalletTimelineLoading(false);
+    }
+  }, [watchAddress]);
+
+  const captureWalletTimelineSnapshot = useCallback(async () => {
+    const address = watchAddress.trim();
+    if (!isValidSs58Address(address)) return;
+    setWalletTimelineAction("capture");
+    setWalletTimelineMessage(null);
+    try {
+      const { response, json } = await fetchMatterhornApiJson<{
+        success?: boolean;
+        snapshot?: BittensorWalletTimelineSnapshot;
+        wallet?: BittensorWalletSnapshot;
+        error?: { message?: string };
+      }>("/api/bittensor/wallet/timeline/capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ss58Address: address }),
+      });
+      if (!response.ok || !json.success || !json.snapshot) {
+        throw new Error(json.error?.message ?? "Could not save wallet snapshot");
+      }
+      if (json.wallet) setWallet(json.wallet);
+      setWalletTimelineMessage(`Snapshot saved at ${new Date(json.snapshot.capturedAt).toLocaleString()}.`);
+      await loadWalletTimeline();
+    } catch (timelineError) {
+      setWalletTimelineMessage(timelineError instanceof Error ? timelineError.message : "Could not save wallet snapshot.");
+    } finally {
+      setWalletTimelineAction(null);
+    }
+  }, [loadWalletTimeline, watchAddress]);
+
+  const exportWalletTimeline = useCallback(async () => {
+    const address = watchAddress.trim();
+    if (!isValidSs58Address(address)) return;
+    setWalletTimelineAction("export");
+    setWalletTimelineMessage(null);
+    try {
+      const { response, json } = await fetchMatterhornApiJson<{
+        success?: boolean;
+        timeline?: BittensorWalletTimelineExport;
+        error?: { message?: string };
+      }>(`/api/bittensor/wallet/timeline/export?ss58Address=${encodeURIComponent(address)}`);
+      if (!response.ok || !json.success || !json.timeline) {
+        throw new Error(json.error?.message ?? "Could not export wallet history");
+      }
+      const blobUrl = URL.createObjectURL(new Blob([JSON.stringify(json.timeline, null, 2)], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `bittensor-wallet-history-${address.slice(0, 8)}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
+      setWalletTimeline(json.timeline);
+      setWalletTimelineMessage(`Exported ${json.timeline.snapshots.length} public snapshot${json.timeline.snapshots.length === 1 ? "" : "s"}.`);
+    } catch (timelineError) {
+      setWalletTimelineMessage(timelineError instanceof Error ? timelineError.message : "Could not export wallet history.");
+    } finally {
+      setWalletTimelineAction(null);
+    }
+  }, [watchAddress]);
+
+  const clearWalletTimeline = useCallback(async () => {
+    const address = watchAddress.trim();
+    if (!isValidSs58Address(address)) return;
+    if (!confirmWalletTimelineClear) {
+      setConfirmWalletTimelineClear(true);
+      setWalletTimelineMessage("Press Clear history again to remove this public wallet history.");
+      return;
+    }
+    setWalletTimelineAction("clear");
+    setWalletTimelineMessage(null);
+    try {
+      const { response, json } = await fetchMatterhornApiJson<{
+        success?: boolean;
+        report?: { persistentSnapshotsCleared?: number };
+        error?: { message?: string };
+      }>("/api/bittensor/wallet/timeline/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ss58Address: address }),
+      });
+      if (!response.ok || !json.success) throw new Error(json.error?.message ?? "Could not clear wallet history");
+      const cleared = json.report?.persistentSnapshotsCleared ?? 0;
+      setWalletTimelineMessage(`Cleared ${cleared} public snapshot${cleared === 1 ? "" : "s"}.`);
+      setConfirmWalletTimelineClear(false);
+      await loadWalletTimeline();
+    } catch (timelineError) {
+      setWalletTimelineMessage(timelineError instanceof Error ? timelineError.message : "Could not clear wallet history.");
+    } finally {
+      setWalletTimelineAction(null);
+    }
+  }, [confirmWalletTimelineClear, loadWalletTimeline, watchAddress]);
+
   useEffect(() => {
     loadSubnets();
   }, [loadSubnets]);
@@ -2662,6 +2819,16 @@ export default function BittensorPanel({
     setLoadedSavedWatchAddress(true);
     if (watchAddress.trim()) void loadWallet();
   }, [loadWallet, loadedSavedWatchAddress, watchAddress]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadWalletTimeline(), 200);
+    return () => window.clearTimeout(timer);
+  }, [loadWalletTimeline]);
+
+  useEffect(() => {
+    setConfirmWalletTimelineClear(false);
+    setWalletTimelineMessage(null);
+  }, [watchAddress]);
 
   const filteredSubnets = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -2740,6 +2907,7 @@ export default function BittensorPanel({
     void loadMarketExecutionReadiness();
     void loadMarketExecutionChain();
     void loadMarketSdkValidation();
+    void loadWalletTimeline();
   };
 
   const sendToChat = async (
@@ -3291,6 +3459,82 @@ export default function BittensorPanel({
                   {wallet?.providerStatus === "provider_unavailable" && (
                     <p className="text-xs text-amber-300">{wallet.message ?? "Portfolio provider unavailable."}</p>
                   )}
+                  <details className="group rounded-md bg-dls-surface-muted/[0.10] px-3 py-2">
+                    <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-3 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--protocol-desk-rgb)/0.30)] [&::-webkit-details-marker]:hidden">
+                      <span className="min-w-0">
+                        <span className="block text-xs font-medium text-dls-text">Public wallet history</span>
+                        <span className="mt-0.5 block text-[11px] leading-4 text-dls-secondary">
+                          {walletTimelineLoading
+                            ? "Checking history…"
+                            : walletTimelineStatus?.enabled
+                              ? `${walletTimeline?.snapshots.length ?? 0} saved for this address`
+                              : "Off until public snapshot persistence is enabled"}
+                        </span>
+                      </span>
+                      <ChevronDown className="size-3.5 shrink-0 text-dls-secondary transition-transform group-open:rotate-180" />
+                    </summary>
+                    <div className="mt-2 space-y-2 pt-2">
+                      <p className="text-[11px] leading-4 text-dls-secondary">
+                        Stores public, watch-only balance and stake snapshots. Matterhorn never stores keys, seed phrases, or signatures here.
+                      </p>
+                      {walletTimelineStatus?.enabled ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          <Metric label="Snapshots" value={String(walletTimeline?.snapshots.length ?? 0)} compact />
+                          <Metric
+                            label="Latest"
+                            value={walletTimeline?.snapshots.at(-1)?.capturedAt
+                              ? new Date(walletTimeline.snapshots.at(-1)?.capturedAt ?? "").toLocaleDateString()
+                              : "Not saved"}
+                            compact
+                          />
+                        </div>
+                      ) : (
+                        <p className="rounded-md bg-amber-500/10 px-2.5 py-2 text-[11px] leading-4 text-amber-200">
+                          Wallet history is unavailable on this deployment. Existing wallet reads remain available.
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          disabled={!walletTimelineStatus?.enabled || walletTimelineAction !== null}
+                          onClick={() => void captureWalletTimelineSnapshot()}
+                        >
+                          {walletTimelineAction === "capture" ? <Loader2 className="size-3.5 animate-spin" /> : <Database className="size-3.5" />}
+                          Save snapshot
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8"
+                          disabled={!walletTimeline?.snapshots.length || walletTimelineAction !== null}
+                          onClick={() => void exportWalletTimeline()}
+                        >
+                          {walletTimelineAction === "export" ? <Loader2 className="size-3.5 animate-spin" /> : <FileText className="size-3.5" />}
+                          Export JSON
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className={cn("h-8", confirmWalletTimelineClear && "text-red-300 hover:text-red-200")}
+                          disabled={!walletTimeline?.snapshots.length || walletTimelineAction !== null}
+                          onClick={() => void clearWalletTimeline()}
+                        >
+                          {walletTimelineAction === "clear" ? <Loader2 className="size-3.5 animate-spin" /> : <CircleX className="size-3.5" />}
+                          {confirmWalletTimelineClear ? "Confirm clear" : "Clear history"}
+                        </Button>
+                      </div>
+                      {walletTimelineMessage ? (
+                        <p className="text-[11px] leading-4 text-dls-secondary" role="status" aria-live="polite">
+                          {walletTimelineMessage}
+                        </p>
+                      ) : null}
+                    </div>
+                  </details>
                 </div>
               ) : (
                 <p className="text-sm text-dls-secondary">No Bittensor watch address saved.</p>

@@ -186,6 +186,82 @@ jobs:
             /tmp/matterhorn-crypto-smoke.sha256
           if-no-files-found: error
 
+  public-beta-container-build:
+    name: public-beta-container-build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build production control-plane image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packaging/docker/Dockerfile.public-beta
+          load: true
+          push: false
+          tags: matterhorn-public-beta:ci
+
+      - name: Verify startup fails closed without production secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(mktemp)"
+          if docker run --rm matterhorn-public-beta:ci >"$output" 2>&1; then
+            echo "Public Beta image started without required secrets." >&2
+            exit 1
+          fi
+          grep -F "Public Beta startup blocked: MATTERHORN_WORK_TOKEN" "$output"
+
+      - name: Smoke production image liveness with a persistent volume
+        shell: bash
+        env:
+          MATTERHORN_BUILD_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          container="matterhorn-public-beta-ci"
+          volume="matterhorn-public-beta-ci-data"
+          cleanup() {
+            docker logs "$container" 2>/dev/null || true
+            docker rm -f "$container" >/dev/null 2>&1 || true
+            docker volume rm "$volume" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker volume create "$volume" >/dev/null
+          docker run --detach \
+            --name "$container" \
+            --publish 127.0.0.1:18787:8787 \
+            --mount "type=volume,source=$volume,target=/data" \
+            --env PORT=8787 \
+            --env MATTERHORN_BUILD_COMMIT="$MATTERHORN_BUILD_COMMIT" \
+            --env MATTERHORN_WORK_CORS_ORIGINS=https://app.example.test \
+            --env MATTERHORN_WORK_TOKEN=ci-client-token-000000000000000000000000 \
+            --env MATTERHORN_WORK_HOST_TOKEN=ci-host-token-00000000000000000000000000 \
+            --env MATTERHORN_WORK_TRUSTED_PROXY_SECRET=ci-proxy-secret-000000000000000000000000 \
+            matterhorn-public-beta:ci >/dev/null
+
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent --show-error \
+              http://127.0.0.1:18787/health/live \
+              | grep -F '"status":"live"' >/dev/null; then
+              exit 0
+            fi
+            if ! docker inspect --format '{{.State.Running}}' "$container" | grep -qx true; then
+              echo "Public Beta container exited before becoming live." >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
+          echo "Public Beta container did not become live within 90 seconds." >&2
+          exit 1
+
   matterhorn-platform-safety:
     name: matterhorn-platform-safety
     runs-on: ubuntu-22.04
@@ -229,11 +305,29 @@ jobs:
       - name: Run full backend test suite
         run: pnpm --dir apps/server test
 
+      - name: Build public-Beta web candidate
+        run: pnpm --filter @matterhorn-work/app build:web
+
+      - name: Validate task-first bundle budget gate
+        run: pnpm test:task-first-bundle-budget
+
+      - name: Enforce task-first bundle budgets
+        run: pnpm gate:task-first-bundle-budget
+
       - name: Validate platform safety gate wiring
         run: pnpm test:matterhorn-platform-safety-gate
 
       - name: Run Matterhorn platform safety gate
         run: pnpm test:matterhorn-platform-safety
+
+      - name: Validate scheduled security scanning
+        run: pnpm test:security-workflow-contract
+
+      - name: Validate public-Beta control-plane image contract
+        run: pnpm test:public-beta-container-contract
+
+      - name: Validate same-origin Vercel proxy contract
+        run: pnpm test:matterhorn-vercel-proxy
 
       - name: Validate production CORS readiness
         run: pnpm test:production-cors-readiness

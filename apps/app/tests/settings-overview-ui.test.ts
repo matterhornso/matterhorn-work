@@ -9,6 +9,18 @@ function readAppSource(path: string) {
 }
 
 describe("Settings overview backend capability integration", () => {
+  test("uses the settings shell as the single page heading", () => {
+    const source = readAppSource("domains/settings/pages/overview-view.tsx");
+    const shellPanel = readFileSync(
+      new URL("../src/react-app/domains/settings/shell/panel.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(shellPanel).toContain('<h1 className={cn("text-xl font-semibold tracking-tight"');
+    expect(source).not.toContain('<h1 className="text-2xl font-semibold tracking-tight text-dls-text">');
+    expect(source).not.toContain("Control your workspace, tools, privacy, and support settings.");
+  });
+
   test("imports existing backend capability helpers", () => {
     const source = readAppSource("domains/settings/pages/overview-view.tsx");
 

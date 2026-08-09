@@ -231,7 +231,7 @@ function createPastedTextChipDom(label: string, lines: number) {
 
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-md text-amber-10 transition-colors hover:bg-amber-4 hover:text-amber-12";
+  button.className = "relative ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-md text-amber-10 transition-colors after:absolute after:-inset-1 after:content-[''] hover:bg-amber-4 hover:text-amber-12 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-9/50";
   button.title = "Expand pasted text";
   button.setAttribute("aria-label", "Expand pasted text");
   button.dataset.pastedExpandLabel = label;
@@ -755,7 +755,7 @@ export function LexicalPromptEditor(props: EditorProps) {
             />
           }
           placeholder={
-            <div className="pointer-events-none absolute left-0 top-0 text-[15px] leading-6 text-dls-secondary/68">
+            <div className="pointer-events-none absolute left-0 top-0 text-[15px] leading-6 text-dls-secondary">
               {props.placeholder}
             </div>
           }

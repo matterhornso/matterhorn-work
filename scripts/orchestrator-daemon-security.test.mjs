@@ -31,5 +31,10 @@ assert.ok(!source.includes('process.env.OPENWORK_CORS_ORIGINS ?? "*"'), "orchest
 assert.ok(!source.includes('corsOrigins.length ? corsOrigins : ["*"]'), "orchestrator must not fall back to wildcard CORS when the parsed list is empty");
 assert.ok(!source.includes("daemon: state.daemon ?? null"), "daemon health output must not expose raw daemon state");
 assert.ok(!source.includes("outputResult({ ok: true, daemon: state.daemon }, true)"), "daemon startup output must not expose raw daemon state");
+assert.match(
+  source,
+  /if \(opencodeRouterReady && !opencodeRouterHealthInterval\)[\s\S]*?sandboxMode !== "none"[\s\S]*?fetchOpenCodeRouterHealthViaOpenwork\([\s\S]*?fetchOpenCodeRouterHealth\(opencodeRouterHealthUrl\)/,
+  "host-mode router health polling should use the direct router endpoint while sandbox mode uses the authenticated Matterhorn proxy",
+);
 
 console.log("orchestrator-daemon-security: ok");

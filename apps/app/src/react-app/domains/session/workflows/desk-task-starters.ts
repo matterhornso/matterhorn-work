@@ -17,6 +17,81 @@ export type MatterhornDeskTaskStarter = {
   reviewedActionLabel?: string;
 };
 
+export type MatterhornDeskTaskStarterGroup = {
+  id: "start" | "evidence" | "wallet";
+  label: string;
+  description: string;
+  starters: readonly MatterhornDeskTaskStarter[];
+};
+
+export const MATTERHORN_RECOMMENDED_DESK_TASK_IDS: Record<
+  MatterhornDeskTaskStarterDesk,
+  readonly [string, string, string]
+> = {
+  bittensor: ["discover-subnets", "compare-validators", "review-subnet-emissions"],
+  hyperliquid: ["market-overview", "orderbook", "compare-funding"],
+  polymarket: ["discover-markets", "research-market", "check-compliance"],
+  sui: ["read-wallet", "validate-recipient", "review-transfer-fees"],
+  wellness: ["client-intake", "define-goals", "strength-plan"],
+};
+
+const DESK_TASK_STARTER_GROUPS = [
+  {
+    id: "start",
+    label: "Start here",
+    description: "Safe reads and research to understand the current state.",
+  },
+  {
+    id: "evidence",
+    label: "Watches & evidence",
+    description: "Track public changes or save public receipts without signing.",
+  },
+  {
+    id: "wallet",
+    label: "Wallet actions",
+    description: "Prepare exact terms before separate wallet review and approval.",
+  },
+] as const;
+
+function deskTaskStarterGroupId(
+  starter: MatterhornDeskTaskStarter,
+): MatterhornDeskTaskStarterGroup["id"] {
+  if (starter.reviewedAction) return "wallet";
+  if (starter.id.includes("watch") || starter.id.includes("receipt")) return "evidence";
+  return "start";
+}
+
+export function groupMatterhornDeskTaskStarters(
+  starters: readonly MatterhornDeskTaskStarter[],
+  options: { reviewedActions: boolean },
+): MatterhornDeskTaskStarterGroup[] {
+  const visibleStarters = options.reviewedActions
+    ? starters
+    : starters.filter((starter) => !starter.reviewedAction);
+
+  return DESK_TASK_STARTER_GROUPS.flatMap((group) => {
+    const groupStarters = visibleStarters.filter(
+      (starter) => deskTaskStarterGroupId(starter) === group.id,
+    );
+    return groupStarters.length > 0
+      ? [{ ...group, starters: groupStarters }]
+      : [];
+  });
+}
+
+export function recommendedMatterhornDeskTaskStarterGroups(
+  desk: MatterhornDeskTaskStarterDesk,
+  groups: readonly MatterhornDeskTaskStarterGroup[],
+): MatterhornDeskTaskStarterGroup[] {
+  const recommendedIds = new Set(MATTERHORN_RECOMMENDED_DESK_TASK_IDS[desk]);
+  return groups.flatMap((group) => {
+    const recommendedStarters = group.starters.filter((starter) => recommendedIds.has(starter.id));
+    return recommendedStarters.length > 0
+      ? [{ ...group, starters: recommendedStarters }]
+      : [];
+  });
+}
+
 export function reviewedActionChatDraft(item: MatterhornDeskTaskStarter): string | null {
   if (!item.reviewedAction || !item.reviewedActionOperation) return null;
 

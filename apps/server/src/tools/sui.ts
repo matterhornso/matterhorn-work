@@ -47,6 +47,13 @@ export interface SuiBalanceResponse {
 
 export interface SuiReadClient {
   getBalance(input: { owner: string; coinType?: string; signal?: AbortSignal }): Promise<SuiBalanceResponse>;
+  getTransaction(input: { digest: string; signal?: AbortSignal }): Promise<SuiTransactionLookupResponse>;
+}
+
+export interface SuiTransactionLookupResponse {
+  digest: string;
+  status: "success" | "failure";
+  errorMessage: string | null;
 }
 
 export interface SuiSource {
@@ -194,6 +201,16 @@ export interface SuiTransactionReceipt {
     digestPresent: true;
     previewLinked: boolean;
     liveSubmissionByMatterhorn: false;
+    chainVerified: false;
+  } | {
+    kind: "sui_rpc_transaction";
+    digestPresent: true;
+    previewLinked: boolean;
+    liveSubmissionByMatterhorn: false;
+    chainVerified: true;
+    source: "sui.grpc";
+    endpoint: string;
+    verifiedAt: string;
   };
   importedAt: string;
   receiptSha256: string;
@@ -573,6 +590,7 @@ export function buildSuiTransactionReceipt(
       digestPresent: true as const,
       previewLinked: Boolean(previewSha256),
       liveSubmissionByMatterhorn: false as const,
+      chainVerified: false as const,
     },
     importedAt,
     warnings: [
@@ -591,10 +609,24 @@ export class SuiPublicReadProvider {
   private readonly now: () => Date;
 
   constructor(options: SuiPublicReadProviderOptions = {}) {
-    this.clientFactory = options.clientFactory ?? ((network) => new SuiGrpcClient({
-      network,
-      baseUrl: SUI_GRPC_URLS[network],
-    }));
+    this.clientFactory = options.clientFactory ?? ((network) => {
+      const client = new SuiGrpcClient({
+        network,
+        baseUrl: SUI_GRPC_URLS[network],
+      });
+      return {
+        getBalance: (input) => client.getBalance(input),
+        async getTransaction(input) {
+          const result = await client.getTransaction(input);
+          const transaction = result.$kind === "Transaction" ? result.Transaction : result.FailedTransaction;
+          return {
+            digest: transaction.digest,
+            status: transaction.status.success ? "success" : "failure",
+            errorMessage: transaction.status.success ? null : transaction.status.error.message.slice(0, 500),
+          };
+        },
+      };
+    });
     this.now = options.now ?? (() => new Date());
   }
 
@@ -655,6 +687,65 @@ export class SuiPublicReadProvider {
         secretsAccepted: false,
       },
       warnings: balance.warnings,
+    };
+  }
+
+  async verifyTransactionReceipt(
+    input: SuiTransactionReceiptInput,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<SuiTransactionReceipt> {
+    const importedAt = this.now().toISOString();
+    const metadata = buildSuiTransactionReceipt(input, { now: () => new Date(importedAt) });
+    const lookup = await this.clientFactory(metadata.network).getTransaction({
+      digest: metadata.transactionDigest,
+      signal: options.signal,
+    });
+    if (lookup.digest !== metadata.transactionDigest) {
+      throw new SuiInputError(
+        "invalid_sui_receipt",
+        "The Sui provider returned a different transaction digest; the receipt was not saved.",
+      );
+    }
+
+    const statusMismatch = metadata.status !== "unknown" && metadata.status !== lookup.status;
+    const warnings = [
+      "Transaction status was verified against the selected Sui network.",
+      "Matterhorn did not sign or submit this Sui transaction.",
+      ...(lookup.errorMessage ? [`Sui execution error: ${lookup.errorMessage}`] : []),
+      ...(statusMismatch
+        ? [`The supplied status (${metadata.status}) did not match Sui (${lookup.status}); the chain result was used.`]
+        : []),
+    ];
+    const receiptCore = {
+      version: metadata.version,
+      family: metadata.family,
+      network: metadata.network,
+      previewSha256: metadata.previewSha256,
+      transactionDigest: metadata.transactionDigest,
+      status: lookup.status,
+      sender: metadata.sender,
+      recipient: metadata.recipient,
+      amountMist: metadata.amountMist,
+      amountSui: metadata.amountSui,
+      explorerUrl: metadata.explorerUrl,
+      custody: metadata.custody,
+      containsSignatureMaterial: metadata.containsSignatureMaterial,
+      verification: {
+        kind: "sui_rpc_transaction" as const,
+        digestPresent: true as const,
+        previewLinked: Boolean(metadata.previewSha256),
+        liveSubmissionByMatterhorn: false as const,
+        chainVerified: true as const,
+        source: "sui.grpc" as const,
+        endpoint: SUI_GRPC_URLS[metadata.network],
+        verifiedAt: importedAt,
+      },
+      importedAt,
+      warnings,
+    };
+    return {
+      ...receiptCore,
+      receiptSha256: sha256(receiptCore),
     };
   }
 }
@@ -718,15 +809,18 @@ export function buildSuiTransactionReceiptCard(receipt: SuiTransactionReceipt): 
     kind: "sui_transaction_receipt",
     title: "Sui receipt",
     subtitle: `${receipt.network} · ${receipt.transactionDigest.slice(0, 10)}...${receipt.transactionDigest.slice(-6)}`,
-    summary: receipt.previewSha256
-      ? "Public receipt metadata linked to a Matterhorn preview."
-      : "Public receipt metadata imported without a local preview link.",
+    summary: receipt.verification.chainVerified
+      ? "Transaction status verified against the selected Sui network."
+      : receipt.previewSha256
+        ? "Public receipt metadata linked to a Matterhorn preview."
+        : "Public receipt metadata imported without a local preview link.",
     tone: receipt.status === "failure" ? "warning" : "default",
     items: [
       cardItem("Status", receipt.status, statusTone),
       cardItem("Network", receipt.network),
       cardItem("Digest", `${receipt.transactionDigest.slice(0, 10)}...${receipt.transactionDigest.slice(-6)}`, "muted"),
       cardItem("Preview", receipt.previewSha256 ? "Linked" : "Not linked", receipt.previewSha256 ? "good" : "muted"),
+      cardItem("Verification", receipt.verification.chainVerified ? "Verified on Sui" : "Metadata only", receipt.verification.chainVerified ? "good" : "warning"),
       cardItem("Submitter", "External wallet", "muted"),
     ],
     warnings: receipt.warnings,

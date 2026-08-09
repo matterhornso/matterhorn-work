@@ -1,0 +1,188 @@
+{
+  "version": "matterhorn.product-hunt-deployment-probe.v1",
+  "ok": false,
+  "ready": false,
+  "metadata": {
+    "generatedAt": "2026-08-08T05:04:22.067Z",
+    "appUrl": "https://matterhorn-desks-canary.vercel.app/",
+    "serverUrl": "https://matterhorn-desks-canary.vercel.app/",
+    "healthPath": "/health",
+    "expectedCommit": "b5c1bfb8d523db06bc4237aa23ca1306111e0ff6",
+    "allowedOrigin": "https://matterhorn-desks-canary.vercel.app",
+    "untrustedOrigin": "https://untrusted.invalid",
+    "localContractRun": false
+  },
+  "checks": [
+    {
+      "id": "https",
+      "label": "HTTPS",
+      "status": "pass",
+      "summary": "The app and API use HTTPS."
+    },
+    {
+      "id": "app_response",
+      "label": "App response",
+      "status": "pass",
+      "summary": "App returned HTTP 200."
+    },
+    {
+      "id": "app_response_origin",
+      "label": "App response origin",
+      "status": "pass",
+      "summary": "The app response stays on the configured origin."
+    },
+    {
+      "id": "app_nosniff",
+      "label": "Content type protection",
+      "status": "pass",
+      "summary": "X-Content-Type-Options is nosniff."
+    },
+    {
+      "id": "app_referrer",
+      "label": "Referrer policy",
+      "status": "pass",
+      "summary": "Referrer-Policy prevents cross-origin path disclosure."
+    },
+    {
+      "id": "app_permissions",
+      "label": "Permissions policy",
+      "status": "pass",
+      "summary": "Camera and microphone access are disabled by policy."
+    },
+    {
+      "id": "app_framing",
+      "label": "Content security policy",
+      "status": "pass",
+      "summary": "CSP denies framing, base URI changes, and object embedding."
+    },
+    {
+      "id": "app_hsts",
+      "label": "Transport security",
+      "status": "pass",
+      "summary": "Strict-Transport-Security has a positive max-age."
+    },
+    {
+      "id": "app_workspace_proxy_origin",
+      "label": "Same-origin Matterhorn API proxy origin",
+      "status": "pass",
+      "summary": "Same-origin Matterhorn API proxy stays on the public application origin.",
+      "statusCode": 200
+    },
+    {
+      "id": "app_workspace_proxy",
+      "label": "Same-origin Matterhorn API proxy",
+      "status": "fail",
+      "summary": "/workspaces returned HTTP 200 with text/html; charset=utf-8; expected a routed JSON 401 or 403.",
+      "statusCode": 200
+    },
+    {
+      "id": "app_engine_proxy_origin",
+      "label": "Same-origin engine proxy origin",
+      "status": "pass",
+      "summary": "Same-origin engine proxy stays on the public application origin.",
+      "statusCode": 200
+    },
+    {
+      "id": "app_engine_proxy",
+      "label": "Same-origin engine proxy",
+      "status": "fail",
+      "summary": "/opencode/global/health returned HTTP 200 with text/html; charset=utf-8; expected a routed JSON 401 or 403.",
+      "statusCode": 200
+    },
+    {
+      "id": "api_health",
+      "label": "API health",
+      "status": "pass",
+      "summary": "API health returned HTTP 200."
+    },
+    {
+      "id": "api_response_origin",
+      "label": "API response origin",
+      "status": "pass",
+      "summary": "The API health response stays on the configured origin."
+    },
+    {
+      "id": "api_build_commit",
+      "label": "Deployed API commit",
+      "status": "fail",
+      "summary": "API did not report X-Matterhorn-Build-Commit."
+    },
+    {
+      "id": "api_nosniff",
+      "label": "Content type protection",
+      "status": "pass",
+      "summary": "X-Content-Type-Options is nosniff."
+    },
+    {
+      "id": "api_referrer",
+      "label": "Referrer policy",
+      "status": "pass",
+      "summary": "Referrer-Policy prevents cross-origin path disclosure."
+    },
+    {
+      "id": "api_permissions",
+      "label": "Permissions policy",
+      "status": "pass",
+      "summary": "Camera and microphone access are disabled by policy."
+    },
+    {
+      "id": "api_framing",
+      "label": "Content security policy",
+      "status": "pass",
+      "summary": "CSP denies framing, base URI changes, and object embedding."
+    },
+    {
+      "id": "api_hsts",
+      "label": "Transport security",
+      "status": "pass",
+      "summary": "Strict-Transport-Security has a positive max-age."
+    },
+    {
+      "id": "cors_trusted_origin",
+      "label": "Trusted origin CORS",
+      "status": "fail",
+      "summary": "The API preflight echoes only the exact app origin.",
+      "statusCode": 204
+    },
+    {
+      "id": "cors_vary_origin",
+      "label": "CORS cache isolation",
+      "status": "fail",
+      "summary": "Trusted preflight varies caches by Origin."
+    },
+    {
+      "id": "cors_untrusted_origin",
+      "label": "Untrusted origin rejection",
+      "status": "pass",
+      "summary": "The API does not grant CORS access to the untrusted challenge origin.",
+      "statusCode": 204
+    }
+  ],
+  "failures": [
+    {
+      "id": "app_workspace_proxy",
+      "label": "Same-origin Matterhorn API proxy",
+      "summary": "/workspaces returned HTTP 200 with text/html; charset=utf-8; expected a routed JSON 401 or 403."
+    },
+    {
+      "id": "app_engine_proxy",
+      "label": "Same-origin engine proxy",
+      "summary": "/opencode/global/health returned HTTP 200 with text/html; charset=utf-8; expected a routed JSON 401 or 403."
+    },
+    {
+      "id": "api_build_commit",
+      "label": "Deployed API commit",
+      "summary": "API did not report X-Matterhorn-Build-Commit."
+    },
+    {
+      "id": "cors_trusted_origin",
+      "label": "Trusted origin CORS",
+      "summary": "The API preflight echoes only the exact app origin."
+    },
+    {
+      "id": "cors_vary_origin",
+      "label": "CORS cache isolation",
+      "summary": "Trusted preflight varies caches by Origin."
+    }
+  ]
+}

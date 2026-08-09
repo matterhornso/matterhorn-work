@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 
 import { createClient, unwrap } from "../../../../app/lib/opencode";
-import { abortSessionSafe } from "../../../../app/lib/opencode-session";
+import { abortSessionSafe, revertSession, unrevertSession } from "../../../../app/lib/opencode-session";
 import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
 import {
   beginModelOperation,
@@ -66,6 +66,10 @@ import { OwDotTicker } from "../../../shell/dot-ticker";
 import { useShellConfig } from "../../../shell/shell-config";
 import { useReactRenderWatchdog } from "../../../shell/react-render-watchdog";
 import {
+  AgentActivityOrb,
+  type AgentActivityKind,
+} from "../../../design-system/agent-activity-orb";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -77,6 +81,7 @@ import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from ".
 import { useLocal } from "../../../kernel/local-provider";
 import { deriveSessionRenderModel } from "../sync/transition-controller";
 import { useSessionScrollController } from "./scroll-controller";
+import { resolveAssistantResponseRetryTurn, responseOutputTitle, runAssistantResponseRetry } from "./response-actions";
 import { getSessionActivityStatusLabel, useSessionActivityStore, type SessionActivityStatus } from "../status/session-activity-store";
 import { PermissionApprovalPanel } from "../chat/permission-approval-modal";
 import { QuestionPanel } from "../modals/question-modal";
@@ -128,13 +133,17 @@ import {
   type MatterhornSessionMemoryContext,
 } from "./memory-context-store";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
-import { SessionImageGenerationPanel } from "../media/session-image-generation-panel";
 import { useQuickJot } from "../../notes";
 import type { BittensorPublicEvidenceCard } from "./message-list";
 
 const SessionTranscript = lazy(() => import("./message-list").then((module) => ({
   default: module.SessionTranscript,
 })));
+const SessionImageGenerationPanel = lazy(() =>
+  import("../media/session-image-generation-panel").then((module) => ({
+    default: module.SessionImageGenerationPanel,
+  })),
+);
 import {
   buildCustomerWorkflowStarterCards,
   fetchCustomerWorkflowTemplates,
@@ -148,11 +157,13 @@ import {
 import {
   deskToneStyle,
   getCustomerProtocolDeskVisual,
+  getCustomerProtocolDeskVisualForLaunch,
 } from "../workflows/protocol-desk-ui";
 import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
 import { WorkflowStageCard } from "../workflows/workflow-stage-card";
 import {
+  groupMatterhornDeskTaskStarters,
   MATTERHORN_DESK_TASK_STARTERS,
   type MatterhornDeskTaskStarterDesk,
 } from "../workflows/desk-task-starters";
@@ -231,7 +242,10 @@ function deriveMatterhornDeskMode(chunks: string[]): MatterhornDeskMode | null {
 }
 
 function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
-  const copy = getCustomerProtocolDeskVisual(mode);
+  const copy = getCustomerProtocolDeskVisualForLaunch(
+    mode,
+    MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+  );
   if (!copy) return null;
   const iconHint = copy.id as CustomerWorkflowIconHint;
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint];
@@ -267,7 +281,7 @@ function DeskSafetyInfoButton({ label, detail }: { label: string; detail: string
           <button
             type="button"
             aria-label={label}
-            className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-dls-muted transition-colors hover:bg-dls-surface-muted/40 hover:text-dls-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-text/35"
           >
             <Info className="size-3.5" strokeWidth={1.55} aria-hidden="true" />
           </button>
@@ -291,20 +305,27 @@ function MatterhornDeskFocusedEmptyState({
   mode: MatterhornDeskMode;
   onUsePrompt: (prompt: string) => void | Promise<void>;
 }) {
-  const visual = getCustomerProtocolDeskVisual(mode);
+  const visual = getCustomerProtocolDeskVisualForLaunch(
+    mode,
+    MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+  );
   const agent = getMatterhornDeskAgent(mode);
   const iconHint = (visual?.id ?? mode) as CustomerWorkflowIconHint;
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint] ?? FileText;
-  const prompts = MATTERHORN_DESK_TASK_STARTERS[mode];
-  const boundary = mode === "bittensor"
-    ? "Uses public wallet details and prepares transaction drafts. You approve TAO transfers, staking, and unstaking in your wallet; unsupported advanced calls stay unavailable."
-    : mode === "wellness"
-      ? "Standalone longevity workflow. Educational only, non-medical, and no live payments/email/hosting."
-    : mode === "polymarket"
-      ? "Runs market research and compliance checks, then prepares supported buy, sell, or cancel actions for exact connected-wallet approval."
-      : mode === "sui"
-        ? "Runs public Sui account reads and transfer previews. Signing stays in your Sui wallet or external client."
-        : "Agent tasks run market and account checks and prepare order context, but cannot submit. Manual execution is available only in the Hyperliquid panel after exact review and connected-wallet approval.";
+  const prompts = groupMatterhornDeskTaskStarters(MATTERHORN_DESK_TASK_STARTERS[mode], {
+    reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+  }).flatMap((group) => group.starters);
+  const boundary = !MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions
+    ? "Public Beta keeps this desk read-only. Research, monitoring, and public evidence remain available; transaction preparation and wallet actions stay hidden."
+    : mode === "bittensor"
+      ? "Uses public wallet details and prepares transaction drafts. You approve TAO transfers, staking, and unstaking in your wallet; unsupported advanced calls stay unavailable."
+      : mode === "wellness"
+        ? "Standalone longevity workflow. Educational only, non-medical, and no live payments/email/hosting."
+        : mode === "polymarket"
+          ? "Runs market research and compliance checks, then prepares supported buy, sell, or cancel actions for exact connected-wallet approval."
+          : mode === "sui"
+            ? "Runs public Sui account reads and transfer previews. Signing stays in your Sui wallet or external client."
+            : "Agent tasks run market and account checks and prepare order context, but cannot submit. Manual execution is available only in the Hyperliquid panel after exact review and connected-wallet approval.";
 
   return (
     <div
@@ -557,6 +578,7 @@ type SessionError = {
   message: string;
   detail?: string;
   kind?: "model-not-found" | "provider-unavailable" | "cancelled" | "generic";
+  retryable?: boolean;
   /** For model-not-found: the model that failed. */
   failedModel?: { providerID: string; modelID: string };
   /** For model-not-found: suggested replacements from the backend. */
@@ -579,7 +601,7 @@ export type SessionSurfaceProps = {
   selectedModel: ModelRef;
   onModelPickerOpenChange: (open: boolean) => void;
   onModelChange: (model: ModelRef) => void;
-  onSendDraft: (draft: ComposerDraft) => void;
+  onSendDraft: (draft: ComposerDraft) => Promise<void> | void;
   onDraftChange: (draft: ComposerDraft) => void;
   attachmentsEnabled: boolean;
   attachmentsDisabledReason: string | null;
@@ -656,6 +678,10 @@ function transcriptToText(messages: UIMessage[]) {
       return text ? [text] : [];
     })
     .join("\n\n---\n\n");
+}
+
+function outputTargetName(path: string) {
+  return path.split("/").filter(Boolean).at(-1) ?? "Saved response.md";
 }
 
 function statusLabel(snapshot: MatterhornSessionSnapshot | undefined, busy: boolean) {
@@ -743,11 +769,15 @@ function formatAssistantRunElapsed(seconds: number) {
 
 function AssistantWaitingCard({
   label = t("session.assistant_thinking"),
+  activity = "planning",
+  size = 20,
   collapseLayout = false,
   startedAt,
   trackElapsed = true,
 }: {
   label?: string;
+  activity?: AgentActivityKind;
+  size?: 20 | 64;
   collapseLayout?: boolean;
   startedAt?: number;
   trackElapsed?: boolean;
@@ -766,27 +796,18 @@ function AssistantWaitingCard({
     return () => window.clearInterval(interval);
   }, [resolvedStartedAt, trackElapsed]);
 
+  const prominent = size === 64;
   const content = (
     <div
-      className="space-y-0.5"
+      className={prominent ? "flex flex-col items-center gap-3 text-center" : "space-y-0.5"}
       role="status"
       aria-live="polite"
       aria-label={`${t("composer.assistant_identity")} ${label}`}
     >
-      <div className="flex justify-start">
+      {prominent ? <AgentActivityOrb activity={activity} size={64} /> : null}
+      <div className={prominent ? "flex justify-center" : "flex justify-start"}>
         <div className="inline-flex items-center gap-1.5 px-1 py-1 text-[12px] text-dls-secondary">
-          <span
-            className="relative inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-dls-surface ring-1 ring-dls-border/60"
-            aria-hidden="true"
-          >
-            <img
-              src="/matterhorn-mark.svg"
-              alt=""
-              draggable={false}
-              className="size-4 select-none object-contain"
-            />
-            <span className="absolute bottom-0 right-0 size-1.5 rounded-full bg-[var(--dls-accent)] ring-1 ring-dls-surface animate-pulse motion-reduce:animate-none" />
-          </span>
+          {!prominent ? <AgentActivityOrb activity={activity} size={20} /> : null}
           <span className="font-medium text-dls-text">{t("composer.assistant_identity")}</span>
           <span>{label}</span>
           {elapsedSeconds >= 10 ? (
@@ -797,7 +818,7 @@ function AssistantWaitingCard({
         </div>
       </div>
       {elapsedSeconds >= 30 ? (
-        <div className="ml-[26px] text-[11px] leading-4 text-dls-secondary/80">
+        <div className={prominent ? "text-[11px] leading-4 text-dls-secondary/80" : "ml-[26px] text-[11px] leading-4 text-dls-secondary/80"}>
           Taking longer than usual. You can stop this run at any time.
         </div>
       ) : null}
@@ -826,7 +847,12 @@ function AssistantNoVisibleOutputCard(props: { text: string }) {
 function AssistantStatusSpacer() {
   return (
     <div className="invisible" aria-hidden="true">
-      <AssistantWaitingCard label={t("session.assistant_responding")} collapseLayout trackElapsed={false} />
+      <AssistantWaitingCard
+        label={t("session.assistant_responding")}
+        activity="composing"
+        collapseLayout
+        trackElapsed={false}
+      />
     </div>
   );
 }
@@ -888,7 +914,7 @@ function TodoPanel(props: { todos: TodoItem[] }) {
   );
 }
 
-function parseSessionError(thrown: unknown): SessionError {
+export function parseSessionError(thrown: unknown): SessionError {
   const raw = thrown instanceof Error ? thrown.message : String(thrown);
   let parsed: unknown;
   // Try to detect ProviderModelNotFoundError from the SDK error shape.
@@ -926,11 +952,27 @@ function parseSessionError(thrown: unknown): SessionError {
       kind: "provider-unavailable",
     };
   }
+  if (/OpenCode|opencode_(?:request_failed|empty_response|invalid_response)/i.test(diagnostic)) {
+    return {
+      message: "Matterhorn's workspace engine could not complete this request.",
+      detail: "Your prompt is still available. Retry when the workspace engine reconnects.",
+      kind: "generic",
+      retryable: true,
+    };
+  }
   // Check if the raw string mentions model-not-found patterns
   if (/ProviderModelNotFoundError/i.test(raw) || /model.*not found/i.test(raw)) {
-    return { message: raw, kind: "model-not-found" };
+    return {
+      message: "The selected model is not available.",
+      detail: "Choose another model or reconnect its provider. Your prompt is still available.",
+      kind: "model-not-found",
+    };
   }
-  return { message: raw || "Failed to send prompt." };
+  return {
+    message: raw || "Failed to send prompt.",
+    kind: "generic",
+    retryable: true,
+  };
 }
 
 export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot | null) {
@@ -966,13 +1008,19 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
         } satisfies SessionError
       : normalizedError.kind === "provider-unavailable" || normalizedError.kind === "model-not-found"
         ? normalizedError
-        : { message: detail || "Matterhorn could not complete this response. Your prompt is ready to retry." } satisfies SessionError,
+        : {
+            message: detail || "Matterhorn could not complete this response. Your prompt is ready to retry.",
+            kind: "generic",
+            retryable: true,
+          } satisfies SessionError,
   };
 }
 
-function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker, onOpenAiProviders }: {
+function SessionErrorCard({ error, onDismiss, onRetry, retrying, onChangeModel, onOpenModelPicker, onOpenAiProviders }: {
   error: SessionError;
   onDismiss: () => void;
+  onRetry?: () => void | Promise<void>;
+  retrying?: boolean;
   onChangeModel?: (model: { providerID: string; modelID: string }) => void;
   onOpenModelPicker?: () => void;
   onOpenAiProviders?: () => void;
@@ -1050,6 +1098,18 @@ function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker, 
                   }}
                 >
                   Change model
+                </button>
+              </div>
+            ) : null}
+            {error.retryable && onRetry ? (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  className="inline-flex min-h-10 items-center rounded-md bg-dls-accent px-3 text-xs font-semibold text-[var(--dls-accent-fg)] transition-colors hover:bg-[var(--dls-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.32)] disabled:cursor-wait disabled:opacity-60"
+                  onClick={() => void onRetry()}
+                  disabled={retrying}
+                >
+                  {retrying ? "Retrying…" : "Retry response"}
                 </button>
               </div>
             ) : null}
@@ -1221,7 +1281,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
     staleTime: 60_000,
   });
   const customerWorkflowStarterCards = useMemo(
-    () => buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data)
+    () => buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data, {
+      reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
+    })
       .filter((card) => card.id !== "blank_chat_workflow"),
     [customerWorkflowTemplatesQuery.data],
   );
@@ -1341,7 +1403,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const liveStatus = statusState ?? snapshot?.status ?? IDLE_STATUS;
   const waitingForUser = Boolean(props.activeQuestion || props.activePermission);
   const chatStreaming = !waitingForUser && (
-    sending || liveStatus.type === "busy" || liveStatus.type === "retry"
+    sending ||
+    liveStatus.type === "busy" ||
+    liveStatus.type === "retry" ||
+    sessionActivityStatus === "thinking" ||
+    sessionActivityStatus === "responding"
   );
 
   useEffect(() => {
@@ -1492,10 +1558,22 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const assistantActivityLabel = optimisticRunTitle && effectiveActivityStatus === "thinking"
     ? `Working on ${optimisticRunTitle}`
     : getSessionActivityStatusLabel(effectiveActivityStatus);
+  const assistantOrbActivity: AgentActivityKind | null = effectiveActivityStatus === "thinking"
+    ? "planning"
+    : effectiveActivityStatus === "responding"
+      ? "composing"
+      : effectiveActivityStatus === "compacting"
+        ? "synthesizing"
+        : null;
   const showNoVisibleAssistantOutput = noVisibleAssistantOutputBaseline !== null && !assistantOutputAfterNoVisibleFallback;
   const reserveAssistantStatusSpace = effectiveActivityStatus === "idle" && awaitingAssistantBaseline !== null && assistantOutputAfterAwaitStart && !chatStreaming;
-  const assistantStatusFooter = effectiveActivityStatus !== "idle" && effectiveActivityStatus !== "error" ? (
-    <AssistantWaitingCard label={assistantActivityLabel} collapseLayout startedAt={sessionActivityRecord?.runStartedAt} />
+  const assistantStatusFooter = assistantOrbActivity ? (
+    <AssistantWaitingCard
+      label={assistantActivityLabel}
+      activity={assistantOrbActivity}
+      collapseLayout
+      startedAt={sessionActivityRecord?.runStartedAt}
+    />
   ) : showNoVisibleAssistantOutput ? (
     <AssistantNoVisibleOutputCard text={noVisibleAssistantOutputText} />
   ) : reserveAssistantStatusSpace ? (
@@ -1866,6 +1944,164 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setError({ message: nextError instanceof Error ? nextError.message : "Failed to stop run." });
     }
   }, [chatStreaming, opencodeClient, props.sessionId, props.workspaceId, snapshotQuery.refetch]);
+
+  const handleRetryResponse = useCallback(async () => {
+    if (sending || !draft.trim()) return;
+    await handleSend();
+  }, [draft, handleSend, sending]);
+
+  const handleRetryAssistantResponse = useCallback(async (messageId: string) => {
+    if (sending || chatStreaming) {
+      throw new Error("Wait for the active response to finish before retrying another response.");
+    }
+    const latestAssistantMessageId = [...renderedMessages].reverse().find((message) => message.role === "assistant")?.id;
+    if (latestAssistantMessageId !== messageId) {
+      throw new Error("Fork from an earlier response to preserve the turns that followed it.");
+    }
+    const retryTurn = resolveAssistantResponseRetryTurn(renderedMessages, messageId);
+    if (!retryTurn) throw new Error("Matterhorn could not find the prompt for this response.");
+    const prompt = retryTurn.prompt;
+    if (!prompt) throw new Error("This response came from an attachment-only prompt. Re-send it from the composer to include the attachment.");
+
+    suppressNextAbortFailureRef.current = false;
+    setError(null);
+    setSending(true);
+    setAwaitingAssistantBaseline(Math.max(0, retryTurn.responseIndex - 1));
+    setNoVisibleAssistantOutputBaseline(null);
+    useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "busy" });
+    const operation = beginModelOperation({
+      workspaceId: props.workspaceId,
+      sessionId: props.sessionId,
+      providerId: props.selectedModel.providerID,
+      modelId: props.selectedModel.modelID,
+      reasoningLevel: props.modelVariant,
+      source: "chat",
+    });
+    recordInspectorEvent("session.response.retry_requested", {
+      workspaceId: props.workspaceId,
+      sessionId: props.sessionId,
+      responseMessageId: messageId,
+      promptMessageId: retryTurn.promptMessageId,
+    });
+
+    try {
+      let resolvedText = addBittensorContextToResolvedText(prompt, bittensorContext);
+      resolvedText = addMatterhornMemoryContextToResolvedText(resolvedText, memoryContext);
+      await runAssistantResponseRetry({
+        abort: () => abortSessionSafe(opencodeClient, props.sessionId),
+        revert: () => revertSession(opencodeClient, props.sessionId, retryTurn.promptMessageId),
+        dispatch: () => props.onSendDraft(buildDraft(prompt, [], { resolvedText })),
+        restore: () => unrevertSession(opencodeClient, props.sessionId),
+      });
+      recordModelOperationAccepted(operation);
+      void snapshotQuery.refetch();
+      setSending(false);
+      setNotice({
+        title: "Response retry started",
+        description: "The selected turn was replaced and Matterhorn is generating a new response.",
+        tone: "info",
+      });
+    } catch (nextError) {
+      recordModelOperationProviderError(operation, nextError);
+      const parsed = parseSessionError(nextError);
+      setError(parsed);
+      useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId);
+      setAwaitingAssistantBaseline(null);
+      setNoVisibleAssistantOutputBaseline(null);
+      setSending(false);
+      void snapshotQuery.refetch();
+      throw nextError;
+    }
+  }, [bittensorContext, buildDraft, chatStreaming, memoryContext, opencodeClient, props.modelVariant, props.onSendDraft, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, renderedMessages, sending, snapshotQuery]);
+
+  const handleSaveAssistantResponse = useCallback(async (messageId: string, content: string): Promise<OpenTarget> => {
+    if (!content.trim()) throw new Error("This response has no content to save.");
+    recordInspectorEvent("session.response.save_requested", {
+      workspaceId: props.workspaceId,
+      sessionId: props.sessionId,
+      responseMessageId: messageId,
+      contentLength: content.length,
+    });
+    try {
+      const response = await props.client.saveWorkspaceChatResponse(props.workspaceId, {
+        sessionId: props.sessionId,
+        messageId,
+        title: responseOutputTitle(content),
+        content,
+      });
+      const target: OpenTarget = {
+        id: `file:${response.output.path.toLowerCase()}`,
+        kind: "file",
+        value: response.output.path,
+        name: outputTargetName(response.output.path),
+        preview: "markdown",
+        confidence: 100,
+        reason: "saved chat response",
+        exists: true,
+        size: response.output.bytes,
+        updatedAt: response.output.updatedAt,
+      };
+      setVerifiedOpenTargets((current) => current.some((item) => item.id === target.id) ? current : [...current, target]);
+      window.dispatchEvent(new Event("matterhorn:project-evidence-updated"));
+      window.dispatchEvent(new Event("matterhorn:task-log-updated"));
+      setNotice({
+        title: "Response saved to Outputs",
+        description: "It is also recorded in Project Activity. Select the checkmark to open it.",
+        tone: "success",
+      });
+      recordInspectorEvent("session.response.saved", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        responseMessageId: messageId,
+        outputPath: response.output.path,
+      });
+      return target;
+    } catch (nextError) {
+      setNotice({
+        title: "Could not save response",
+        description: nextError instanceof Error ? nextError.message : "Try again when the workspace service is available.",
+        tone: "warning",
+      });
+      recordInspectorEvent("session.response.save_failed", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        responseMessageId: messageId,
+        reason: nextError instanceof Error ? nextError.message.slice(0, 160) : "unknown",
+      });
+      throw nextError;
+    }
+  }, [props.client, props.sessionId, props.workspaceId]);
+
+  const handleRateAssistantResponse = useCallback(async (messageId: string, rating: "helpful" | "not_helpful") => {
+    try {
+      await props.client.submitProjectFeedback(props.workspaceId, {
+        kind: rating === "helpful" ? "thumbs_up" : "thumbs_down",
+        target: {
+          sourceType: "chat",
+          sourceId: messageId,
+          href: typeof window === "undefined" ? undefined : `${window.location.pathname}${window.location.search}`,
+        },
+      });
+      setNotice({
+        title: rating === "helpful" ? "Marked helpful" : "Marked not helpful",
+        description: "Saved for product-quality review in this workspace. It is not used for model training.",
+        tone: "success",
+      });
+      recordInspectorEvent("session.response.feedback_saved", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        responseMessageId: messageId,
+        rating,
+      });
+    } catch (nextError) {
+      setNotice({
+        title: "Could not save feedback",
+        description: nextError instanceof Error ? nextError.message : "Try again when the workspace service is available.",
+        tone: "warning",
+      });
+      throw nextError;
+    }
+  }, [props.client, props.sessionId, props.workspaceId]);
 
   const handleDismissError = useCallback(() => {
     setError(null);
@@ -2424,6 +2660,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const sessionScroll = useSessionScrollController({
     selectedSessionId: props.sessionId,
     renderedMessages,
+    startAtTop: renderedMessages.length === 0,
     containerRef: scrollRef,
     contentRef,
   });
@@ -2561,6 +2798,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   <SessionErrorCard
                     error={error}
                     onDismiss={handleDismissError}
+                    onRetry={handleRetryResponse}
+                    retrying={sending}
                     onChangeModel={props.onChangeModel}
                     onOpenModelPicker={props.onModelClick}
                     onOpenAiProviders={props.onOpenAiProviders}
@@ -2576,15 +2815,22 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   </div>
                 )}
               </div>
-            ) : renderedMessages.length === 0 && effectiveActivityStatus !== "idle" ? (
+            ) : renderedMessages.length === 0 && assistantOrbActivity ? (
               <div className="px-6 py-12">
-                <AssistantWaitingCard label={assistantActivityLabel} startedAt={sessionActivityRecord?.runStartedAt} />
+                <AssistantWaitingCard
+                  label={assistantActivityLabel}
+                  activity={assistantOrbActivity}
+                  size={64}
+                  startedAt={sessionActivityRecord?.runStartedAt}
+                />
               </div>
             ) : renderedMessages.length === 0 && snapshot && snapshot.messages.length === 0 ? (
               error ? (
                 <SessionErrorCard
                   error={error}
                   onDismiss={handleDismissError}
+                  onRetry={handleRetryResponse}
+                  retrying={sending}
                   onChangeModel={props.onChangeModel}
                   onOpenModelPicker={props.onModelClick}
                   onOpenAiProviders={props.onOpenAiProviders}
@@ -2634,7 +2880,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                             key={item.id}
                             type="button"
                             style={deskToneStyle(item.iconHint)}
-                            className="group grid min-h-[64px] min-w-0 grid-cols-[32px_minmax(0,1fr)] gap-2.5 rounded-md bg-dls-surface-muted/42 px-2.5 py-2 text-left transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                            className="group grid min-h-[84px] min-w-0 grid-cols-[32px_minmax(0,1fr)] gap-2.5 rounded-md bg-dls-surface-muted/42 px-2.5 py-2 text-left transition-colors duration-150 hover:bg-[rgb(var(--matterhorn-desk-rgb)/0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:min-h-[64px]"
                             onClick={() => startStarterTask(item)}
                           >
                             <span className="flex size-8 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
@@ -2649,7 +2895,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                                   </span>
                                 ) : null}
                               </span>
-                              <span className="line-clamp-1 text-[12px] leading-5 text-dls-secondary">{item.description}</span>
+                              <span className="line-clamp-2 text-[12px] leading-5 text-dls-secondary sm:line-clamp-1">{item.description}</span>
                               <span className="hidden truncate text-[11px] leading-4 text-dls-muted sm:block">{capabilitySummary}</span>
                             </span>
                             <span className="sr-only">{item.safetySummary}</span>
@@ -2674,12 +2920,17 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     openTargets={verifiedOpenTargets}
                     onOpenTarget={props.onOpenTarget}
                     onSaveBittensorEvidence={handleSaveBittensorEvidence}
+                    onRetryAssistantResponse={handleRetryAssistantResponse}
+                    onSaveAssistantResponse={handleSaveAssistantResponse}
+                    onRateAssistantResponse={handleRateAssistantResponse}
                     footer={assistantStatusFooter}
                   />
                   {error ? (
                     <SessionErrorCard
                       error={error}
                       onDismiss={handleDismissError}
+                      onRetry={handleRetryResponse}
+                      retrying={sending}
                       onChangeModel={props.onChangeModel}
                       onOpenModelPicker={props.onModelClick}
                       onOpenAiProviders={props.onOpenAiProviders}

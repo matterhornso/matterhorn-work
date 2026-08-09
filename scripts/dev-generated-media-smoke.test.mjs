@@ -23,9 +23,13 @@ assert.ok(
     script.includes('url.pathname === "/session"') &&
     script.includes('url.pathname === "/session/status"') &&
     script.includes('request.method === "PATCH"') &&
+    script.includes('action === "revert"') &&
+    script.includes('session.revert = { messageID }') &&
+    script.includes("currentMessages.slice(0, revertIndex + 1)") &&
+    script.includes("delete session.revert") &&
     script.includes('action === "prompt_async"') &&
     script.includes('action === "todo"'),
-  "generated-media smoke launcher should include a fake OpenCode engine for browser chat sessions and title updates",
+  "generated-media smoke launcher should include a fake OpenCode engine for browser chat sessions, response retry, and title updates",
 );
 assert.ok(
   script.includes("--opencode-base-url") && script.includes("Fake OpenCode"),
@@ -71,6 +75,12 @@ assert.ok(
     script.includes("MATTERHORN_WORK_REQUEST_RATE_LIMIT_MAX: requestRateLimitMax") &&
     script.includes("synthetic loopback QA stack"),
   "generated-media smoke launcher should provide a repeatable browser-audit request budget without changing production defaults",
+);
+assert.ok(
+  script.includes("MATTERHORN_MEDIA_SMOKE_RESPONSE_DELAY_MS") &&
+    script.includes("Math.min(10_000, Math.max(0") &&
+    script.includes("await new Promise((resolve) => setTimeout(resolve, promptResponseDelayMs))"),
+  "generated-media smoke launcher should support a bounded opt-in delay for inspecting active agent states",
 );
 assert.ok(
   script.includes('waitForJson(`${serverUrl}/workspaces`, {\n    timeoutMs: 45_000') &&

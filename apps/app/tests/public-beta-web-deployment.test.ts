@@ -70,10 +70,10 @@ describe("public Beta web deployment", () => {
     expect(den).toContain('target.searchParams.set("returnTo", `${window.location.origin}/onboarding`)');
     expect(den).toContain('credentials: "include"');
     expect(den).toContain("Browser Cloud auth is cookie-backed");
-    expect(appEntry).toContain('const denModule = await import("./app/lib/den")');
-    expect(appEntry).toContain(
-      "await denModule.setDenBootstrapConfig(publicCloudConfig)",
-    );
+    expect(appEntry).toContain('await import("./app/lib/den").then((denModule)');
+    expect(appEntry).toContain("const publicTrustEntry = isPublicTrustPath(window.location.pathname)");
+    expect(appEntry).toContain("const bootstrapConfig = publicTrustEntry");
+    expect(appEntry).toContain("denModule.setDenBootstrapConfig(publicCloudConfig)");
     expect(remoteLinks).toContain("stripRemoteConnectQuery");
     expect(remoteLinks).toContain("if (isPublicBetaWebDeployment())");
     expect(sessionRoute).toContain("onConfirmRemote={publicBetaWeb ? undefined : handleCreateRemoteWorkspace}");

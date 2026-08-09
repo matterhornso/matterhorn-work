@@ -36,7 +36,7 @@ describe("Matterhorn response perspectives", () => {
     expect(composer).toContain("RESPONSE_PERSPECTIVE_OPTIONS.map");
     expect(composer).toContain("<SlidersHorizontal");
     expect(composer).toContain('aria-hidden="true"');
-    expect(composer).toContain("text-[10px] font-normal text-dls-muted");
+    expect(composer).toContain("text-[10px] font-normal text-dls-secondary");
     expect(route).toContain("buildResponsePerspectiveSystemPrompt(responsePerspective)");
     expect(route).toContain("writeResponsePerspective(selectedWorkspaceId, selectedSessionId, perspective)");
   });

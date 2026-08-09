@@ -2297,15 +2297,6 @@ export function SettingsOverviewView(props: {
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-dls-text">
-          Settings
-        </h1>
-        <p className="mt-1 text-sm leading-6 text-dls-secondary">
-          Control your workspace, tools, privacy, and support settings.
-        </p>
-      </header>
-
       <div className="rounded-lg bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
         <div className="space-y-1">
           {/* 1. Profile */}

@@ -33,11 +33,12 @@ test("BridgePanel wired to real endpoints", () => {
   expect(src).not.toInclude('alert(');
 });
 
-test("CoW Swap Panel has EIP-712 signing", () => {
+test("CoW Swap Panel keeps order submission fail closed", () => {
   const src = readFileSync("apps/app/src/react-app/domains/wallet/pages/CowSwapPanel.tsx", "utf-8");
-  expect(src).toInclude("useSignTypedData");
-  expect(src).toInclude("signTypedDataAsync");
-  expect(src).toInclude("/api/cow/order");
+  expect(src).not.toInclude("useSignTypedData");
+  expect(src).not.toInclude("signTypedDataAsync");
+  expect(src).not.toInclude("/api/cow/order");
+  expect(src).toInclude("dedicated reviewed-wallet approval flow");
 });
 
 test("MCP v0.6 tool list updated", () => {

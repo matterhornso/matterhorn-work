@@ -101,7 +101,7 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
       <PageTitlebarRegion />
 
       <ScrollArea className="relative z-10">
-        <div className="flex min-h-screen">
+        <main className="flex min-h-screen">
         {/* ---- Left: onboarding steps ---- */}
         <div className="flex w-full flex-col items-center justify-center px-8 py-16 lg:w-[45%] lg:px-12">
           <div className="flex w-full max-w-md flex-col gap-10">
@@ -145,7 +145,7 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
             <ShowcasePanel />
           </div>
         </div>
-        </div>
+        </main>
       </ScrollArea>
     </Page>
   );

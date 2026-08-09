@@ -8,3 +8,6 @@ dist
 **/dist
 .env
 .env.*
+qa-reports
+notes
+.matterhorn-work

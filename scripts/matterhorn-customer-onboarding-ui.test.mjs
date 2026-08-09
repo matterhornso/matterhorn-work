@@ -58,6 +58,7 @@ const remoteWorkspaceDiagnostics = read("apps/app/src/react-app/domains/workspac
 const advancedSettings = read("apps/app/src/react-app/domains/settings/pages/advanced-view-sections.tsx");
 const marketplaceSettings = read("apps/app/src/react-app/domains/settings/pages/marketplace-view.tsx");
 const walletSettings = read("apps/app/src/react-app/domains/settings/pages/wallet-view.tsx");
+const walletSettingsRoute = read("apps/app/src/react-app/domains/settings/pages/wallet-settings-route-view.tsx");
 const serverProvider = read("apps/app/src/react-app/kernel/server-provider.tsx");
 const globalSdkProvider = read("apps/app/src/react-app/kernel/global-sdk-provider.tsx");
 const betaGoLiveChecklist = read("docs/handoffs/beta-go-live-first-10-user-checklist.md");
@@ -166,7 +167,7 @@ assert.equal(
 );
 
 for (const phrase of [
-  "Chats, desks, notes, and saved outputs for this project.",
+  "Continue active work, start a focused desk task, or create something new.",
   "New project",
   "New chat",
   "Open Bittensor desk",
@@ -182,7 +183,7 @@ for (const phrase of [
   "No auto-send",
   "matterhorn-capability-overview",
   "matterhorn-capability-card",
-  "grid gap-2 sm:grid-cols-2",
+  "grid min-h-16 w-full min-w-0 grid-cols-[34px_minmax(0,1fr)_auto]",
   "Open desk",
   "Business workflows",
   "Longevity is a standalone service workflow desk for trainers, yoga instructors, and dieticians.",
@@ -511,7 +512,7 @@ for (const token of [
   assert.ok(sessionPage.includes(token), `customer desks should use semantic desk tone styling: ${token}`);
 }
 assert.ok(sessionPage.includes("Desks"), "right rail should group protocol and workflow entry points as Desks");
-assert.ok(sessionPage.includes("getCustomerProtocolDeskVisual(panel)"), "right rail should read desk labels from the shared visual manifest");
+assert.ok(sessionPage.includes("getCustomerProtocolDeskVisualForLaunch(panel, false)"), "public-Beta right rail should read fail-closed desk labels from the shared visual manifest");
 assert.ok(sessionPage.includes("visual?.displayName ?? panel"), "right rail should spell out protocol desk names from the manifest");
 assert.ok(sessionPage.includes('getCustomerProtocolDeskVisual("wellness")?.displayName'), "Wellness rail label should come from the shared visual manifest");
 assert.ok(sessionPage.includes("primeProtocolRailPrompt"), "protocol rail prompt helper should remain available for explicit demo handoffs");
@@ -544,9 +545,17 @@ assert.ok(
 );
 assert.equal(sessionPage.includes("matterhorn-focused-desk-boundary"), false, "focused desk header should not render decorative metadata labels");
 assert.ok(
-  sessionPage.includes("matterhorn-focused-desk-prompt-list grid grid-cols-1 gap-2 lg:grid-cols-2") &&
+  sessionPage.includes('className="matterhorn-focused-desk-prompt-list space-y-5"') &&
+    sessionPage.includes('aria-labelledby={`desk-task-group-${panel}-${group.id}`}') &&
+    sessionPage.includes('showAllTasks ? "lg:grid-cols-2" : "lg:grid-cols-3"') &&
     sessionPage.includes("<WorkflowStageCard"),
-  "focused desk prompts should render as compact responsive workflow cards",
+  "focused desk prompts should render in labeled, compact responsive workflow groups",
+);
+assert.ok(
+  sessionPage.includes("MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions") &&
+    sessionPage.includes("Public Beta is read-only.") &&
+    deskTaskStarters.includes("starters.filter((starter) => !starter.reviewedAction)"),
+  "public Beta desks should advertise the read-only boundary and remove reviewed wallet actions",
 );
 assert.ok(
   sessionSurface.includes("Start task") && sessionSurface.includes("Choose a starter below to run"),
@@ -569,13 +578,21 @@ assert.ok(composer.includes("inline-flex h-8 max-h-8 items-center gap-1.5 rounde
 assert.equal(composer.includes("rounded-lg bg-gray-12 px-3.5 text-[13px]"), false, "Stop generating should not dominate the composer with a large high-contrast fill");
 assert.ok(sessionSurface.includes("matterhorn-session-start-list grid grid-cols-1 gap-1.5 lg:grid-cols-2"), "starter workflow grid should use compact two-column command rows instead of a crowded card wall");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
-assert.ok(sessionSurface.includes("group grid min-h-[64px] min-w-0 grid-cols-[32px_minmax(0,1fr)]"), "starter workflow rows should use tighter logo-led command rows");
+assert.ok(
+  sessionSurface.includes("group grid min-h-[84px] min-w-0 grid-cols-[32px_minmax(0,1fr)]") &&
+    sessionSurface.includes("sm:min-h-[64px]"),
+  "starter workflow rows should reserve readable mobile copy while staying compact on wider screens",
+);
 assert.ok(sessionSurface.includes("renderedMessages.length > 0 && hasTranscriptJumpTarget"), "empty workflow launchers should not show transcript jump controls over the content");
 assert.equal(sessionSurface.includes("size-28"), false, "starter workflow cards should not render oversized ghost icons behind the content");
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "starter workflow grid should not render a large framed outer box");
 assert.equal(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]"), false, "starter workflow grid should not use the old crowded auto-fit card wall");
 assert.equal(sessionSurface.includes("rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.07)]"), false, "starter workflow rows should not use the old boxed card treatment");
-assert.ok(sessionPage.includes("matterhorn-capability-card group grid min-w-0 gap-3"), "home capability status should render clickable destination cards");
+assert.ok(
+  sessionPage.includes("matterhorn-capability-card group relative min-w-0 border-b") &&
+    sessionPage.includes("data-testid={`open-${item.id}-desk`}"),
+  "home capability status should render compact clickable destination rows",
+);
 assert.ok(sessionPage.includes("onOpenCapability?.(item.id)"), "home capability status cards should open their matching desk or workflow");
 assert.ok(sessionPage.includes("item.id === \"wellness\" ? \"Start workflow\" : \"Open desk\""), "home capability cards should label protocol desks separately from wellness workflows");
 assert.equal(sessionPage.includes("matterhorn-desk-command-list"), false, "home should not render a second duplicate desk launcher list");
@@ -673,7 +690,7 @@ for (const phrase of [
   'activeSidePanel === "wallet"',
   'renderCompactSettingsRail("wallet")',
   'renderCompactSettingsRail("extensions")',
-  '<WalletPanel',
+  '<SessionWalletPanel',
 ]) {
   assert.ok(sessionPage.includes(phrase), `right rail should expose real profile/wallet panels: ${phrase}`);
 }
@@ -697,7 +714,8 @@ assert.equal(extensionsView.includes("post-go-live"), false, "Marketplace tabs s
 assert.ok(extensionsView.includes('<span className="min-w-0 max-w-full truncate">Marketplace</span>'), "embedded Marketplace label should be constrained inside its compact tab");
 assert.ok(settingsSurfaceRoute.includes("compact={props.embedded}"), "embedded settings should tell extensions and MCP views to use compact right-rail layout");
 assert.ok(settingsSurfaceRoute.includes("<CloudAccountView\n            compact={props.embedded}"), "embedded Profile rail should render the compact account surface");
-assert.ok(settingsSurfaceRoute.includes("<WalletSettingsView\n            compact={props.embedded}"), "embedded Wallet rail should render the compact wallet surface");
+assert.ok(settingsSurfaceRoute.includes("<WalletSettingsRouteView\n            compact={props.embedded}"), "embedded Wallet rail should render the lazy wallet route boundary");
+assert.ok(walletSettingsRoute.includes("<WalletSettingsView") && walletSettingsRoute.includes("compact={props.compact}"), "lazy wallet route boundary should render the compact wallet surface");
 for (const phrase of [
   "matterhorn-profile-rail max-w-none gap-6",
   "Matterhorn Cloud",

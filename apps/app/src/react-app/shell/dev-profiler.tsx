@@ -310,7 +310,7 @@ function DevProfilerOverlayVisible({ onHide }: { onHide: () => void }) {
 
   return (
     <div
-      className="pointer-events-auto fixed bottom-3 right-3 z-[1100] w-[280px] overflow-hidden rounded-lg border border-dls-border bg-dls-canvas/95 text-[11px] text-dls-text backdrop-blur-sm"
+      className="pointer-events-auto fixed bottom-3 right-3 z-[var(--matterhorn-layer-diagnostics)] w-[280px] overflow-hidden rounded-lg border border-dls-border bg-dls-canvas/95 text-[11px] text-dls-text backdrop-blur-sm"
       role="status"
       aria-live="polite"
     >

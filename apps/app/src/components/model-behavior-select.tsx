@@ -72,7 +72,7 @@ export function ModelBehaviorSelect({
               type="button"
               disabled={disabled}
               aria-label={controlLabel}
-              className="flex h-8 max-w-48 items-center gap-1.5 rounded-md px-2.5 text-sm text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55 disabled:pointer-events-none disabled:opacity-50"
+              className="flex h-8 max-w-48 items-center gap-1.5 rounded-md px-2.5 text-sm text-gray-11 transition-colors hover:bg-gray-3 hover:text-gray-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55 disabled:pointer-events-none disabled:opacity-50"
             />
           }
         >

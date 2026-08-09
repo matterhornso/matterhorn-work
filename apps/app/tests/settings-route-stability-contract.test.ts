@@ -20,6 +20,7 @@ describe("settings route stability", () => {
     expect(source).toContain('import { SurfaceErrorBoundary } from "./surface-error-boundary"');
     expect(source).toContain("resetKey={route.tab}");
     expect(source).toContain('source={`SettingsRoute:${route.tab}`}');
-    expect(source).toContain("{settingsView}\n        </SurfaceErrorBoundary>");
+    expect(source).toContain("<Suspense");
+    expect(source).toContain("{settingsView}\n          </Suspense>\n        </SurfaceErrorBoundary>");
   });
 });

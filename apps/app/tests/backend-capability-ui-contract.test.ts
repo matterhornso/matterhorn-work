@@ -211,10 +211,14 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('"/api/sui/transactions/preview"');
     expect(source).toContain("suiTransactionReceipt");
     expect(source).toContain('"/api/sui/transactions/receipt"');
+    expect(source).toContain("suiVerifyTransactionReceipt");
+    expect(source).toContain('"/api/sui/transactions/verify-receipt"');
     expect(source).toContain("workspaceSuiTransactionPreview");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/sui/transactions/preview`');
     expect(source).toContain("workspaceSuiTransactionReceipt");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/sui/transactions/receipt`');
+    expect(source).toContain("workspaceSuiVerifyTransactionReceipt");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/sui/transactions/verify-receipt`');
     expect(source).toContain("workspaceBittensorPublicReadEvidence");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/bittensor/evidence/public-read`');
     expect(source).toContain("workspaceBittensorReceiptEvidence");
@@ -449,7 +453,8 @@ describe("backend capability UI contract", () => {
     const activitySource = readAppSource("react-app/domains/recent-activity/recent-activity-section.tsx");
 
     expect(source).toContain("workspaceSuiTransactionPreview");
-    expect(source).toContain("workspaceSuiTransactionReceipt");
+    expect(source).toContain("workspaceSuiVerifyTransactionReceipt");
+    expect(source).not.toContain("client.workspaceSuiTransactionReceipt(");
     expect(source).toContain("signAndExecuteTransaction");
     expect(source).toContain("new Transaction()");
     expect(source).toContain("directWalletAvailable");

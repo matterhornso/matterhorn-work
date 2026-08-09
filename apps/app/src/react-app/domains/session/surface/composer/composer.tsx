@@ -1161,7 +1161,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                   </div>
                   <button
                     type="button"
-                    className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12"
+                    className="relative ml-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-gray-10 transition-colors after:absolute after:-inset-0.5 after:content-[''] hover:bg-gray-3 hover:text-gray-12 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-9/50"
                     onClick={() => props.onRemoveAttachment(attachment.id)}
                     aria-label={t("action.remove")}
                     title={t("action.remove")}
@@ -1613,7 +1613,10 @@ export function ReactSessionComposer(props: ComposerProps) {
 
         {/* Below-panel control strip: agent + model + behavior variant */}
         <div className="mt-1.5 flex items-center justify-between px-1">
-          <div className="flex flex-wrap items-center gap-1.5 text-gray-10 sm:gap-2.5">
+          <div
+            className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-gray-10 sm:gap-2.5 [@media(max-height:640px)]:flex-nowrap [@media(max-height:640px)]:overflow-x-auto [@media(max-height:640px)]:overscroll-x-contain [@media(max-height:640px)]:pb-1 [@media(max-height:640px)]:[&>*]:shrink-0"
+            aria-label="Composer controls"
+          >
             {props.executionModesEnabled ? <div ref={modeMenuRef} className="relative">
               <button
                 type="button"
@@ -1684,7 +1687,7 @@ export function ReactSessionComposer(props: ComposerProps) {
             <div className="flex items-center gap-2.5">
               <span
                 aria-hidden="true"
-                className="hidden h-7 select-none items-center gap-1.5 px-0.5 text-[10px] font-normal text-dls-muted lg:inline-flex"
+                className="hidden h-7 select-none items-center gap-1.5 px-0.5 text-[10px] font-normal text-dls-secondary lg:inline-flex"
               >
                 <SlidersHorizontal size={12} strokeWidth={1.7} />
                 <span>Perspective</span>
@@ -1721,7 +1724,7 @@ export function ReactSessionComposer(props: ComposerProps) {
             <div ref={agentMenuRef} className="relative">
               {props.agentSelectionLocked ? (
                 <span
-                  className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-10"
+                  className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-11"
                   title={props.agentSelectionLockedReason}
                   aria-label={`${props.agentLabel}. ${props.agentSelectionLockedReason ?? "This desk uses its specialist agent."}`}
                 >
@@ -1731,7 +1734,7 @@ export function ReactSessionComposer(props: ComposerProps) {
               ) : (
                 <button
                   type="button"
-                  className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12"
+                  className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-medium text-gray-11 transition-colors hover:bg-gray-3 hover:text-gray-12"
                   onClick={() => setAgentMenuOpen((value) => !value)}
                   disabled={props.busy}
                   aria-expanded={agentMenuOpen}

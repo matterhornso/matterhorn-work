@@ -18,6 +18,10 @@ const preferredAppPort = Number(process.env.MATTERHORN_MEDIA_SMOKE_APP_PORT?.tri
 const workspaceRoot = path.resolve(process.env.MATTERHORN_MEDIA_SMOKE_WORKSPACE?.trim() || rootDir);
 const storageEpochs = process.env.MATTERHORN_MEDIA_SMOKE_WALRUS_EPOCHS?.trim() || "3";
 const requestRateLimitMax = process.env.MATTERHORN_MEDIA_SMOKE_REQUEST_RATE_LIMIT_MAX?.trim() || "5000";
+const parsedPromptResponseDelayMs = Number(process.env.MATTERHORN_MEDIA_SMOKE_RESPONSE_DELAY_MS?.trim() || "0");
+const promptResponseDelayMs = Number.isFinite(parsedPromptResponseDelayMs)
+  ? Math.min(10_000, Math.max(0, Math.floor(parsedPromptResponseDelayMs)))
+  : 0;
 
 const fakeSuiIds = {
   nftPackage: "0x1111111111111111111111111111111111111111111111111111111111111111",
@@ -52,6 +56,7 @@ function help() {
     "  MATTERHORN_MEDIA_SMOKE_SERVER_PORT=4125",
     "  MATTERHORN_MEDIA_SMOKE_APP_PORT=5282",
     "  MATTERHORN_MEDIA_SMOKE_REQUEST_RATE_LIMIT_MAX=5000",
+    "  MATTERHORN_MEDIA_SMOKE_RESPONSE_DELAY_MS=2500  # inspect active agent states",
     "",
     "The request budget applies only to this synthetic loopback QA stack.",
     "No OpenAI key, wallet secret, seed phrase, or server-side signing is used.",
@@ -539,9 +544,22 @@ function startFakeOpencode() {
         return;
       }
 
+      if (action === "revert" && request.method === "POST") {
+        const body = await readJsonBody(request);
+        const messageID = typeof body?.messageID === "string" ? body.messageID.trim() : "";
+        const sessionMessages = messages.get(sessionId) || [];
+        if (!messageID || !sessionMessages.some((message) => message.info?.id === messageID)) {
+          json(response, 400, { code: "invalid_message", message: "Fake OpenCode revert target was not found." });
+          return;
+        }
+        session.revert = { messageID };
+        sessions.set(sessionId, session);
+        json(response, 200, session);
+        return;
+      }
+
       if (action === "prompt_async" && request.method === "POST") {
         const body = await readJsonBody(request);
-        messageSequence += 1;
         const now = Math.floor(Date.now() / 1000);
         const textPart = Array.isArray(body?.parts)
           ? body.parts.find((part) => part && typeof part === "object" && part.type === "text")
@@ -549,31 +567,54 @@ function startFakeOpencode() {
         const text = typeof textPart?.text === "string" && textPart.text.trim()
           ? textPart.text.trim()
           : "Generated media smoke prompt";
-        const nextMessages = messages.get(sessionId) || [];
-        const userMessageId = `msg_smoke_${String(messageSequence).padStart(3, "0")}`;
-        nextMessages.push({
-          info: {
-            id: userMessageId,
-            sessionID: sessionId,
-            role: "user",
-            time: { created: now },
-            agent: "matterhorn",
-            model: {
-              providerID: "matterhorn-smoke",
-              modelID: "smoke-model",
-            },
-          },
-          parts: [
-            {
-              id: `prt_smoke_${String(messageSequence).padStart(3, "0")}`,
-              messageID: userMessageId,
+        const currentMessages = messages.get(sessionId) || [];
+        const revertMessageID = typeof session.revert?.messageID === "string"
+          ? session.revert.messageID
+          : "";
+        const revertIndex = revertMessageID
+          ? currentMessages.findIndex((message) => message.info?.id === revertMessageID)
+          : -1;
+        const nextMessages = revertIndex >= 0
+          ? currentMessages.slice(0, revertIndex + 1)
+          : currentMessages;
+        const revertTarget = revertIndex >= 0 ? nextMessages[revertIndex] : null;
+        const revertTargetText = revertTarget?.parts?.find((part) => part?.type === "text")?.text?.trim();
+        let userMessageId = "";
+
+        if (revertTarget?.info?.role === "user" && revertTargetText === text) {
+          userMessageId = revertTarget.info.id;
+        } else {
+          messageSequence += 1;
+          userMessageId = `msg_smoke_${String(messageSequence).padStart(3, "0")}`;
+          nextMessages.push({
+            info: {
+              id: userMessageId,
               sessionID: sessionId,
-              type: "text",
-              text,
+              role: "user",
+              time: { created: now },
+              agent: "matterhorn",
+              model: {
+                providerID: "matterhorn-smoke",
+                modelID: "smoke-model",
+              },
             },
-          ],
-        });
+            parts: [
+              {
+                id: `prt_smoke_${String(messageSequence).padStart(3, "0")}`,
+                messageID: userMessageId,
+                sessionID: sessionId,
+                type: "text",
+                text,
+              },
+            ],
+          });
+        }
+
+        delete session.revert;
         messages.set(sessionId, nextMessages);
+        if (promptResponseDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, promptResponseDelayMs));
+        }
         appendAssistantMessage(
           sessionId,
           userMessageId,

@@ -232,7 +232,7 @@ export function StatusBar(props: StatusBarProps) {
 
   return (
     <div className="bg-dls-surface/92 shadow-[0_-1px_0_rgb(var(--matterhorn-blue-rgb)/0.10)]">
-      <div className="flex h-8 min-w-0 items-center justify-between gap-2 px-3 md:gap-3 md:px-6">
+      <div className="flex h-11 min-w-0 items-center justify-between gap-2 px-3 md:h-8 md:gap-3 md:px-6">
         <StatusIndicator
           clientConnected={props.clientConnected}
           matterhornServerStatus={props.matterhornServerStatus}
@@ -245,7 +245,7 @@ export function StatusBar(props: StatusBarProps) {
         <div className="flex min-w-0 shrink-0 items-center gap-1">
           {props.showWalletButton !== false && props.onOpenWallet ? (
             <Button
-              className="max-w-[210px] gap-1.5 truncate text-muted-foreground"
+              className="min-h-11 min-w-11 max-w-[210px] gap-1.5 truncate text-muted-foreground sm:min-h-0 sm:min-w-0"
               variant="ghost"
               size="xs"
               onClick={props.onOpenWallet}
@@ -263,7 +263,7 @@ export function StatusBar(props: StatusBarProps) {
           {shellConfig.docsButton ? (
             <Button
               ref={docsButtonRef}
-              className="text-muted-foreground gap-2"
+              className="min-h-11 min-w-11 gap-2 text-muted-foreground sm:min-h-0 sm:min-w-0"
               variant="ghost"
               size="xs"
               onClick={() => platform.openLink(DOCS_URL)}
@@ -277,7 +277,7 @@ export function StatusBar(props: StatusBarProps) {
           {shellConfig.feedbackButton ? (
             <Button
               ref={feedbackButtonRef}
-              className="text-muted-foreground gap-2"
+              className="min-h-11 min-w-11 gap-2 text-muted-foreground sm:min-h-0 sm:min-w-0"
               variant="ghost"
               size="xs"
               onClick={props.onSendFeedback}
@@ -296,7 +296,7 @@ export function StatusBar(props: StatusBarProps) {
                 render={(
                   <Button
                     ref={settingsButtonRef}
-                    className="text-muted-foreground gap-2"
+                    className="min-h-11 min-w-11 gap-2 text-muted-foreground sm:min-h-0 sm:min-w-0"
                     variant="ghost"
                     size="xs"
                     onClick={props.onOpenSettings}

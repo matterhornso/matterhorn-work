@@ -1,8 +1,6 @@
-import { base, baseSepolia } from "wagmi/chains";
-
 export const USDC_BY_CHAIN: Record<number, `0x${string}`> = {
-  [baseSepolia.id]: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-  [base.id]: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  84532: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  8453: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
 };
 
 export const USDC_DECIMALS = 6;

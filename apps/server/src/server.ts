@@ -1,5 +1,5 @@
 import { getPortfolio } from "./tools/portfolio-tracker.js";
-import { isCowSupported, getCowQuote, buildCowOrder, submitCowOrder } from "./tools/cow-swap.js";
+import { getCowQuote } from "./tools/cow-swap.js";
 import {
   buildAaveSupplyTx,
   buildAaveWithdrawTx,
@@ -37,7 +37,6 @@ import {
   buildBittensorSidecarHealthCard,
   buildBittensorSigningHandoffCard,
   buildBittensorSigningReceiptCard,
-  buildBittensorSignedResultCard,
   buildBittensorStakingPlanCard,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorSubnetCards,
@@ -97,6 +96,7 @@ import {
   planBittensorSubnetAdapterRoadmap,
   planBittensorSubnetAdapterOnboarding,
   planBittensorChat,
+  persistBittensorWalletTimelineSnapshot,
   probeBittensorSubnetAdapterConformance,
   previewBittensorSubnetInvocation,
   prepareBittensorExtrinsic,
@@ -104,7 +104,6 @@ import {
   runBittensorSubnetAdapterDryRun,
   serializeBittensorWatch,
   serializeBittensorWatchEvaluation,
-  submitSignedBittensorExtrinsic,
   validateBittensorSubnetAdapterManifest,
   validateBittensorSubnetAdapterResult,
   type BittensorActionQuoteInput,
@@ -339,8 +338,10 @@ import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } fro
 import { createHash } from "node:crypto";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isIP } from "node:net";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
-import type { ApprovalRequest, Capabilities, ServerConfig, WorkspaceInfo, Actor, ReloadReason, ReloadTrigger, TokenScope, MatterhornTaskEventType, RequestRateLimitConfig } from "./types.js";
+import type { ApprovalRequest, Capabilities, ServerConfig, WorkspaceInfo, Actor, ReloadReason, ReloadTrigger, TokenScope, MatterhornTaskEventType, RequestRateLimitConfig, RequestRateLimitStore } from "./types.js";
+import { createInMemoryRequestRateLimitStore } from "./request-rate-limit-store.js";
 import { ApprovalService } from "./approvals.js";
 import { addPlugin, listPlugins, normalizePluginSpec, removePlugin } from "./plugins.js";
 import { sanitizePortableOpencodeConfig } from "./portable-opencode.js";
@@ -749,15 +750,18 @@ const DEFAULT_RATE_LIMIT_WRITE_MAX_REQUESTS = 1_200;
 const AUTH_ATTEMPT_WINDOW_MS = 10 * 60_000;
 const AUTH_ATTEMPT_MAX_REQUESTS = 10;
 
-type RequestRateLimiter = {
+export type RequestRateLimiter = {
   check: (
     request: Request,
     url: URL,
     peerAddress: string | null,
-  ) => { allowed: true } | { allowed: false; retryAfterSeconds: number };
+  ) => Promise<{ allowed: true } | { allowed: false; retryAfterSeconds: number }>;
 };
 
-function createRequestRateLimiter(config: RequestRateLimitConfig | undefined): RequestRateLimiter {
+export function createRequestRateLimiter(
+  config: RequestRateLimitConfig | undefined,
+  store: RequestRateLimitStore = createInMemoryRequestRateLimitStore(),
+): RequestRateLimiter {
   const enabled = config?.enabled !== false;
   const windowMs = Math.max(1_000, Math.floor(config?.windowMs ?? DEFAULT_RATE_LIMIT_WINDOW_MS));
   const readMaxRequests = Math.max(
@@ -768,19 +772,10 @@ function createRequestRateLimiter(config: RequestRateLimitConfig | undefined): R
     1,
     Math.floor(config?.writeMaxRequests ?? config?.maxRequests ?? DEFAULT_RATE_LIMIT_WRITE_MAX_REQUESTS),
   );
-  const buckets = new Map<string, { resetAt: number; count: number }>();
-  let lastSweepAt = 0;
-
   return {
-    check(request: Request, url: URL, peerAddress: string | null) {
+    async check(request: Request, url: URL, peerAddress: string | null) {
       if (!enabled || request.method === "OPTIONS") return { allowed: true };
       const now = Date.now();
-      if (now - lastSweepAt >= windowMs) {
-        for (const [bucketKey, staleBucket] of buckets.entries()) {
-          if (now >= staleBucket.resetAt) buckets.delete(bucketKey);
-        }
-        lastSweepAt = now;
-      }
       const client = peerAddress?.trim() || "unknown-peer";
       // UI polling and session hydration can be read-heavy. Keep those reads
       // from exhausting the budget used by user-triggered writes such as
@@ -789,38 +784,50 @@ function createRequestRateLimiter(config: RequestRateLimitConfig | undefined): R
       const workspaceMatch = url.pathname.match(/^\/(?:w|workspace)\/([^/]+)/);
       const workspaceScope = workspaceMatch?.[1] ? `workspace:${workspaceMatch[1]}` : "global";
       const maxRequests = requestClass === "read" ? readMaxRequests : writeMaxRequests;
-      const key = `${client}:${url.origin}:${workspaceScope}:${requestClass}`;
-      let bucket = buckets.get(key);
-      if (!bucket || now >= bucket.resetAt) {
-        bucket = { resetAt: now + windowMs, count: 0 };
-        buckets.set(key, bucket);
-      }
-      bucket.count += 1;
-      if (bucket.count <= maxRequests) return { allowed: true };
+      const key = `http:${client}:${url.origin}:${workspaceScope}:${requestClass}`;
+      const decision = await store.consume({ key, windowMs, maxRequests, now });
+      if (decision.allowed) return { allowed: true };
 
       return {
         allowed: false,
-        retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
+        retryAfterSeconds: Math.max(1, Math.ceil((decision.resetAt - now) / 1000)),
       };
     },
   };
 }
 
-function createAuthAttemptLimiter() {
-  const buckets = new Map<string, { count: number; resetAt: number }>();
+export function resolveRateLimitPeerAddress(
+  request: Request,
+  peerAddress: string | null,
+  trustedProxySecret: string | undefined,
+): string | null {
+  const expectedSecret = trustedProxySecret?.trim() ?? "";
+  const presentedSecret = request.headers.get("x-matterhorn-proxy-secret")?.trim() ?? "";
+  if (!expectedSecret || !presentedSecret || !timingSafeTokenEqual(presentedSecret, expectedSecret)) {
+    return peerAddress;
+  }
+
+  const forwarded = request.headers
+    .get("x-matterhorn-client-ip")
+    ?.split(",")[0]
+    ?.trim() ?? "";
+  return isIP(forwarded) ? forwarded : peerAddress;
+}
+
+function createAuthAttemptLimiter(store: RequestRateLimitStore) {
   return {
-    check(key: string): boolean {
+    async check(key: string): Promise<boolean> {
       const now = Date.now();
-      let bucket = buckets.get(key);
-      if (!bucket || now >= bucket.resetAt) {
-        bucket = { count: 0, resetAt: now + AUTH_ATTEMPT_WINDOW_MS };
-        buckets.set(key, bucket);
-      }
-      bucket.count += 1;
-      return bucket.count <= AUTH_ATTEMPT_MAX_REQUESTS;
+      const decision = await store.consume({
+        key: `auth:${key}`,
+        windowMs: AUTH_ATTEMPT_WINDOW_MS,
+        maxRequests: AUTH_ATTEMPT_MAX_REQUESTS,
+        now,
+      });
+      return decision.allowed;
     },
-    reset(key: string): void {
-      buckets.delete(key);
+    reset(key: string): void | Promise<void> {
+      return store.reset(`auth:${key}`);
     },
   };
 }
@@ -981,6 +988,8 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     watcherHandle = createWatcherHandle();
   };
   const operationalMetrics = new OperationalMetrics();
+  const ownsRequestRateLimitStore = !config.requestRateLimitStore;
+  const requestRateLimitStore = config.requestRateLimitStore ?? createInMemoryRequestRateLimitStore();
   const routes = createRoutes(
     config,
     approvals,
@@ -989,8 +998,9 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     env,
     restartReloadWatchers,
     operationalMetrics,
+    requestRateLimitStore,
   );
-  const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit);
+  const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
 
   const serverOptions: {
     hostname: string;
@@ -1059,7 +1069,12 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
         return finalize(new Response(null, { status: 204 }));
       }
 
-      const rateLimit = requestRateLimiter.check(request, url, context.remoteAddress);
+      const rateLimitPeerAddress = resolveRateLimitPeerAddress(
+        request,
+        context.remoteAddress,
+        config.trustedProxySecret,
+      );
+      const rateLimit = await requestRateLimiter.check(request, url, rateLimitPeerAddress);
       if (!rateLimit.allowed) {
         errorMessage = "rate_limited";
         rateLimited = true;
@@ -1194,6 +1209,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);
       authStore.close();
+      if (ownsRequestRateLimitStore) await requestRateLimitStore.close?.();
       await (server.stop as unknown as (closeActiveConnections?: boolean) => void | Promise<void>)(closeActiveConnections);
     },
   };
@@ -2585,6 +2601,19 @@ function suiApiError(error: unknown): ApiError {
   return new ApiError(502, "sui_provider_unavailable", message || "Sui public read provider is unavailable");
 }
 
+function publicBittensorWalletTimelineStatus() {
+  const status = getBittensorWalletTimelineStoreStatus();
+  return {
+    kind: status.kind,
+    enabled: status.enabled,
+    walletCount: status.walletCount,
+    snapshotCount: status.snapshotCount,
+    retentionLimit: status.retentionLimit,
+    warnings: status.warnings,
+    updatedAt: status.updatedAt,
+  };
+}
+
 function memorySurface(value: URL): "client" | "mcp" {
   return value.searchParams.get("surface") === "mcp" ? "mcp" : "client";
 }
@@ -3365,7 +3394,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
         configuredNetworks: ["sui-testnet", "sui-mainnet"],
         publicReadRoutes: ["/api/sui/account/:address", "/api/sui/balance/:address"],
         transactionPreviewRoutes: ["/api/sui/transactions/preview"],
-        receiptRoutes: ["/api/sui/transactions/receipt"],
+        receiptRoutes: ["/api/sui/transactions/receipt", "/api/sui/transactions/verify-receipt"],
         signingBoundary: "client_wallet",
         docs: ["https://sdk.mystenlabs.com/dapp-kit/getting-started/react"],
       },
@@ -3530,7 +3559,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       sources: ["opencode", "matterhorn_cloud", "managed_openwork_models"],
     },
     storage: {
-      ...capability("working", "Local storage map", "Matterhorn currently uses local workspace files, OpenCode runtime storage, a machine memory vault, and JSONL audit/task logs."),
+      ...capability("working", "Local storage map", "Matterhorn currently uses local workspace files, workspace engine storage, a machine memory vault, and JSONL audit/task logs."),
       stores: {
         memory: dataStore({
           id: "memory",
@@ -3664,7 +3693,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         ...capability(
           "working",
           "Chat/session history",
-          "Chat history is managed by the OpenCode runtime store. The project ledger exports session counts, timestamps, and audit metadata only.",
+          "Chat history is managed by the workspace engine store. The project ledger exports session counts, timestamps, and audit metadata only.",
           {
             fullTranscriptExport: false,
             metadataLedgerExport: true,
@@ -4016,7 +4045,7 @@ function buildDataControlStore(
         dataControlAction({
           id: "chat.ledger-metadata",
           label: "Export chat metadata",
-          description: "Returns redacted chat session counts, timestamps, and audit metadata. Message bodies remain in the OpenCode runtime store.",
+          description: "Returns redacted chat session counts, timestamps, and audit metadata. Message bodies remain in the workspace engine store.",
           kind: "api_route",
           status: "working",
           method: "GET",
@@ -4576,7 +4605,7 @@ function buildWorkspaceDataControls(
       deletion: capability("preview", "Deletion controls", "Notes, memory, outputs, and feedback support scoped deletes; append-only logs remain retained for accountability."),
       limitations: [
         "Append-only audit, task event, and workflow run rows do not have a purge endpoint in this local build.",
-        "Chat/session history remains controlled by the OpenCode runtime store.",
+        "Chat/session history remains controlled by the workspace engine store.",
         "Feedback is stored for eval, routing, and product quality only; it is not used for model training by default.",
       ],
     },
@@ -5761,6 +5790,81 @@ type SuiWorkspaceEvidenceInput = {
   auditAction: string;
 };
 
+type ChatResponseWorkspaceOutputInput = {
+  workspace: WorkspaceInfo;
+  ctx: RequestContext;
+  taskId: string;
+  sessionSlug: string;
+  messageId: string;
+  outputPath: string;
+  title: string;
+  content: string;
+};
+
+async function recordChatResponseWorkspaceOutput(input: ChatResponseWorkspaceOutputInput): Promise<void> {
+  const timestamp = Date.now();
+  const absPath = resolveSafeChildPath(input.workspace.path, input.outputPath);
+  const savedAt = new Date(timestamp).toISOString();
+  const markdown = [
+    `# ${input.title}`,
+    "",
+    `> Saved from a Matterhorn chat response on ${savedAt}.`,
+    "",
+    input.content.trim(),
+    "",
+  ].join("\n");
+
+  await ensureDir(dirname(absPath));
+  const tmp = `${absPath}.tmp-${shortId()}`;
+  await writeFile(tmp, markdown, "utf8");
+  await rename(tmp, absPath);
+
+  const detail = `chat;${input.sessionSlug};chat_response;outputs/chat`;
+  const metadata = {
+    sourceType: "chat_response",
+    sourceMessageId: input.messageId,
+  };
+  await recordTaskEvent({
+    id: `task_evt_${shortId()}`,
+    workspaceId: input.workspace.id,
+    taskId: input.taskId,
+    type: "artifact_saved",
+    timestamp,
+    summary: `${input.title} saved to Outputs`,
+    detail,
+    artifactPath: input.outputPath,
+    stageName: "save_chat_response",
+    metadata,
+  });
+  await recordTaskEvent({
+    id: `task_evt_${shortId()}`,
+    workspaceId: input.workspace.id,
+    taskId: input.taskId,
+    type: "completed",
+    timestamp: timestamp + 1,
+    summary: `${input.title} saved to Outputs`,
+    detail,
+    stageName: "save_chat_response",
+    metadata,
+  });
+
+  await recordAudit(input.workspace.path, {
+    id: shortId(),
+    workspaceId: input.workspace.id,
+    actor: input.ctx.actor ?? { type: "remote" },
+    action: "workspace.chat_response.save",
+    target: absPath,
+    summary: `Saved ${input.title} to Outputs`,
+    timestamp,
+    metadata: {
+      outputPath: input.outputPath,
+      taskId: input.taskId,
+      sessionSlug: input.sessionSlug,
+      sourceMessageId: input.messageId,
+    },
+  });
+}
+
 async function recordSuiWorkspaceEvidence(input: SuiWorkspaceEvidenceInput): Promise<void> {
   const timestamp = Date.now();
   const absPath = resolveSafeChildPath(input.workspace.path, input.outputPath);
@@ -6129,13 +6233,14 @@ function createRoutes(
   env: EnvService,
   onWorkspacesChanged: () => void,
   operationalMetrics: OperationalMetrics,
+  requestRateLimitStore: RequestRateLimitStore,
 ): Route[] {
   const routes: Route[] = [];
   const billingRouteContext = createBillingRouteContext(config);
   const fileSessions = new FileSessionStore();
   const googleWorkspaceConnectFlows = createGoogleWorkspaceConnectFlowManager(config);
   const memoryVault = createMatterhornMemoryVault(resolveMatterhornMemoryRoot());
-  const authAttemptLimiter = createAuthAttemptLimiter();
+  const authAttemptLimiter = createAuthAttemptLimiter(requestRateLimitStore);
   const workflowRuns = new WorkflowRunEngine({
     persistenceRoot: config.workspaces[0]?.path ?? process.cwd(),
     onEvent: recordWorkflowTaskEvent,
@@ -6189,7 +6294,7 @@ function createRoutes(
     const body = await readJsonBody(request, 16 * 1024, "Sign-up");
     const email = stringBodyField(body, "email");
     const attemptKey = `sign-up:${email.trim().toLowerCase()}`;
-    if (!authAttemptLimiter.check(attemptKey)) {
+    if (!await authAttemptLimiter.check(attemptKey)) {
       throw new ApiError(
         429,
         "rate_limited",
@@ -6213,7 +6318,7 @@ function createRoutes(
     const body = await readJsonBody(request, 16 * 1024, "Sign-in");
     const email = stringBodyField(body, "email");
     const attemptKey = `sign-in:${email.trim().toLowerCase()}`;
-    if (!authAttemptLimiter.check(attemptKey)) {
+    if (!await authAttemptLimiter.check(attemptKey)) {
       throw new ApiError(
         429,
         "rate_limited",
@@ -6226,7 +6331,7 @@ function createRoutes(
         stringBodyField(body, "password"),
       ),
     );
-    authAttemptLimiter.reset(attemptKey);
+    await authAttemptLimiter.reset(attemptKey);
     return matterhornAuthResponse(request, {
       user: session.user,
       organization: matterhornActiveOrganization(authStore, session),
@@ -8508,6 +8613,73 @@ function createRoutes(
 
     const events = fileSessions.listWorkspaceEvents(workspace.id, Number.MAX_SAFE_INTEGER);
     return jsonResponse({ items, cursor: events.cursor });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/outputs/chat-response", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(
+      ctx.request,
+      CHAT_RESPONSE_JSON_BODY_MAX_BYTES,
+      "Chat response output",
+    );
+    const content = typeof body.content === "string" ? body.content.trim() : "";
+    if (!content) {
+      throw new ApiError(400, "invalid_payload", "content must be a non-empty string");
+    }
+    const bytes = Buffer.byteLength(content, "utf8");
+    if (bytes > FILE_SESSION_MAX_FILE_BYTES) {
+      throw new ApiError(413, "file_too_large", "Response exceeds the workspace text-file size limit", {
+        maxBytes: FILE_SESSION_MAX_FILE_BYTES,
+        size: bytes,
+      });
+    }
+
+    const requestedSessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const sessionSlug = normalizeSessionSlug(requestedSessionId || "chat");
+    const messageId = typeof body.messageId === "string" ? body.messageId.trim().slice(0, 160) : "";
+    if (!/^[A-Za-z0-9._:-]{1,160}$/.test(messageId)) {
+      throw new ApiError(400, "invalid_payload", "messageId must be a valid opaque message identifier");
+    }
+    const requestedTitle = typeof body.title === "string"
+      ? body.title.replace(/[\r\n\t]+/g, " ").replace(/^#+\s*/, "").replace(/\s+/g, " ").trim()
+      : "";
+    const scrubbedTitle = scrubProjectLedgerText(requestedTitle).value?.trim() ?? "";
+    const title = (scrubbedTitle || "Matterhorn response").slice(0, 120);
+    const taskId = `chat_response_${shortId()}`;
+    const outputPath = `outputs/chat/${sessionSlug}/response-${Date.now()}-${shortId()}.md`;
+
+    await recordChatResponseWorkspaceOutput({
+      workspace,
+      ctx,
+      taskId,
+      sessionSlug,
+      messageId,
+      outputPath,
+      title,
+      content,
+    });
+    const info = await stat(resolveSafeChildPath(workspace.path, outputPath));
+    recordWorkspaceFileEvent(workspace.id, {
+      type: "write",
+      path: outputPath,
+      revision: fileRevision(info),
+    });
+
+    return jsonResponse({
+      success: true,
+      output: {
+        workspaceId: workspace.id,
+        path: outputPath,
+        taskId,
+        sessionSlug,
+        sourceMessageId: messageId,
+        title,
+        bytes: info.size,
+        updatedAt: info.mtimeMs,
+      },
+    }, 201);
   });
 
   addRoute(routes, "GET", "/workspace/:id/files/content", "client", async (ctx) => {
@@ -11349,6 +11521,18 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "POST", "/api/sui/transactions/verify-receipt", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    try {
+      const receipt = await suiProvider.verifyTransactionReceipt(body as SuiTransactionReceiptInput, {
+        signal: ctx.request.signal,
+      });
+      return jsonResponse({ success: true, receipt, cards: [buildSuiTransactionReceiptCard(receipt)] });
+    } catch (err) {
+      throw suiApiError(err);
+    }
+  });
+
   addRoute(routes, "POST", "/workspace/:id/sui/transactions/preview", "client", async (ctx) => {
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
@@ -11464,6 +11648,66 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "POST", "/workspace/:id/sui/transactions/verify-receipt", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const payload = body && typeof body === "object" && !Array.isArray(body) && "payload" in body
+      ? (body as Record<string, unknown>).payload
+      : body;
+    try {
+      const receipt = await suiProvider.verifyTransactionReceipt(payload as SuiTransactionReceiptInput, {
+        signal: ctx.request.signal,
+      });
+      const cards = [buildSuiTransactionReceiptCard(receipt)];
+      const bodyRecord = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {};
+      const requestedSessionId = typeof bodyRecord.sessionId === "string" ? bodyRecord.sessionId.trim() : "";
+      const sessionSlug = normalizeSessionSlug(requestedSessionId || `sui_${receipt.transactionDigest.slice(0, 16)}`);
+      const taskId = `sui_verified_receipt_${receipt.receiptSha256.slice(0, 16)}`;
+      const outputPath = `outputs/sui/${sessionSlug}/verified-transaction-receipt-${receipt.transactionDigest.slice(0, 16)}.json`;
+
+      await recordSuiWorkspaceEvidence({
+        workspace,
+        ctx,
+        taskId,
+        sessionSlug,
+        outputPath,
+        summary: "Verified Sui transaction receipt saved",
+        auditAction: "workspace.sui.receipt.verify",
+        outputPayload: {
+          version: "matterhorn.sui.workspace-evidence.v1",
+          kind: "verified_transaction_receipt",
+          workspaceId: workspace.id,
+          outputPath,
+          receipt,
+          cards,
+          safety: {
+            custody: false,
+            containsSignatureMaterial: false,
+            liveSubmissionByMatterhorn: false,
+            chainVerified: true,
+          },
+        },
+      });
+
+      return jsonResponse({
+        success: true,
+        receipt,
+        cards,
+        evidence: {
+          workspaceId: workspace.id,
+          outputPath,
+          taskId,
+          sessionSlug,
+          source: "task_events",
+        },
+      }, 201);
+    } catch (err) {
+      throw suiApiError(err);
+    }
+  });
+
   addRoute(routes, "GET", "/api/bittensor/subnets", "client", async () => {
     const subnets = await bittensorProvider.listSubnets();
     return jsonResponse({ success: true, subnets, cards: buildBittensorSubnetCards(subnets) });
@@ -11492,14 +11736,45 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/api/bittensor/wallet/timeline/status", "client", async () => {
-    return jsonResponse({ success: true, status: getBittensorWalletTimelineStoreStatus() });
+    return jsonResponse({ success: true, status: publicBittensorWalletTimelineStatus() });
   });
 
   addRoute(routes, "GET", "/api/bittensor/wallet/timeline/export", "client", async (ctx) => {
     const ss58Address = ctx.url.searchParams.get("ss58Address") ?? ctx.url.searchParams.get("ss58_address");
     if (ss58Address && !isValidSs58Address(ss58Address)) throw new ApiError(400, "invalid_ss58", "invalid SS58 address");
     const timeline = exportBittensorWalletTimeline({ ss58Address });
-    return jsonResponse({ success: true, timeline });
+    return jsonResponse({
+      success: true,
+      timeline: { ...timeline, status: publicBittensorWalletTimelineStatus() },
+    });
+  });
+
+  addRoute(routes, "POST", "/api/bittensor/wallet/timeline/capture", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const body = await readJsonBody(ctx.request);
+    const ss58Address = typeof body.ss58Address === "string" ? body.ss58Address.trim() : "";
+    if (!isValidSs58Address(ss58Address)) {
+      throw new ApiError(400, "invalid_ss58", "valid public SS58 address is required");
+    }
+    if (!getBittensorWalletTimelineStoreStatus().enabled) {
+      throw new ApiError(
+        409,
+        "bittensor_wallet_timeline_disabled",
+        "Wallet history is off. Enable public wallet timeline persistence on the Matterhorn server before saving snapshots.",
+      );
+    }
+    const wallet = await bittensorProvider.getWallet(ss58Address);
+    const snapshot = persistBittensorWalletTimelineSnapshot(wallet);
+    if (!snapshot) {
+      throw new ApiError(500, "bittensor_wallet_timeline_write_failed", "The public wallet snapshot could not be saved.");
+    }
+    return jsonResponse({
+      success: true,
+      wallet,
+      snapshot,
+      status: publicBittensorWalletTimelineStatus(),
+    }, 201);
   });
 
   addRoute(routes, "POST", "/api/bittensor/wallet/timeline/clear", "client", async (ctx) => {
@@ -12492,24 +12767,12 @@ function createRoutes(
     }, 201);
   });
 
-  addRoute(routes, "POST", "/api/bittensor/extrinsics/submit", "client", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
-    if (!body.preview || typeof body.preview !== "object") {
-      throw new ApiError(400, "invalid_preview", "preview is required");
-    }
-    const preview = body.preview as BittensorExtrinsicPreview;
-    const result = await submitSignedBittensorExtrinsic({
-      preview,
-      signature: typeof body.signature === "string" ? body.signature : null,
-      signerAddress: typeof body.signerAddress === "string" ? body.signerAddress : null,
-    });
-    const receipt = createBittensorSigningReceipt({
-      preview,
-      result,
-      signature: typeof body.signature === "string" ? body.signature : null,
-      signerAddress: typeof body.signerAddress === "string" ? body.signerAddress : null,
-    });
-    return jsonResponse({ success: true, result, receipt, cards: [buildBittensorSignedResultCard(result), buildBittensorSigningReceiptCard(receipt)] });
+  addRoute(routes, "POST", "/api/bittensor/extrinsics/submit", "client", async () => {
+    throw new ApiError(
+      403,
+      "reviewed_action_required",
+      "Bittensor submission stays in the connected wallet. Matterhorn accepts only public receipt evidence after broadcast.",
+    );
   });
 
   addRoute(routes, "POST", "/api/bittensor/subnets/:netuid/invoke", "client", async (ctx) => {
@@ -12653,18 +12916,12 @@ function createRoutes(
     return jsonResponse(result);
   });
 
-  addRoute(routes, "POST", "/api/cow/order", "client", async (ctx) => {
-    const body = await readJsonBody(ctx.request);
-    const { chainId, order, signature } = body;
-    if (!chainId || !order || !signature) {
-      throw new ApiError(400, "invalid_params", "chainId, order, signature required");
-    }
-    const result = await submitCowOrder({
-      chainId: Number(chainId),
-      order: order as Record<string, unknown>,
-      signature: signature as `0x${string}`,
-    });
-    return jsonResponse(result);
+  addRoute(routes, "POST", "/api/cow/order", "client", async () => {
+    throw new ApiError(
+      403,
+      "reviewed_action_required",
+      "CoW order submission is unavailable until it has a dedicated reviewed-wallet approval flow.",
+    );
   });
 
   // Aave V3 routes
@@ -13099,6 +13356,7 @@ function hyperliquidExecutionOwnerKey(ctx: RequestContext): string {
 const DEFAULT_JSON_BODY_MAX_BYTES = 1_048_576;
 const CONTROL_PLANE_JSON_BODY_MAX_BYTES = 65_536;
 const FEEDBACK_JSON_BODY_MAX_BYTES = 131_072;
+const CHAT_RESPONSE_JSON_BODY_MAX_BYTES = FILE_SESSION_MAX_FILE_BYTES + 65_536;
 
 async function readBodyTextLimited(
   request: Request,

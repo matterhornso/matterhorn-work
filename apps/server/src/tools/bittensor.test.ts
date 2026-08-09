@@ -97,6 +97,7 @@ import {
   planBittensorSubnetAdapterRoadmap,
   planBittensorSubnetAdapterOnboarding,
   planBittensorChat,
+  persistBittensorWalletTimelineSnapshot,
   probeBittensorSubnetAdapterConformance,
   previewBittensorSubnetInvocation,
   prepareBittensorExtrinsic,
@@ -819,6 +820,19 @@ describe("executeBittensorChatWorkflow", () => {
 
     try {
       await withMockedFivePromptSidecar(async () => {
+        const directSnapshot = persistBittensorWalletTimelineSnapshot({
+          ss58Address: VALID_SS58,
+          taoBalance: 2.5,
+          stakePositions: [],
+          estimatedValueTao: 2.5,
+          providerStatus: "ok",
+          updatedAt: "2026-06-15T00:00:00.000Z",
+          source: "test",
+          block: 123,
+          freshness: "fresh",
+          warnings: [],
+        });
+        expect(directSnapshot?.ss58Address).toBe(VALID_SS58);
         const baseline = await executeBittensorChatWorkflow({ message: "show my TAO", ss58Address: VALID_SS58 });
         const status = getBittensorWalletTimelineStoreStatus();
         expect(status.enabled).toBe(true);

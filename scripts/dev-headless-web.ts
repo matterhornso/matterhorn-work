@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { openSync } from "node:fs";
-import { access, mkdir } from "node:fs/promises";
+import { access, mkdir, readdir, stat } from "node:fs/promises";
 import { createServer } from "node:net";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -89,6 +89,28 @@ const runCommand = (command: string, args: string[]) =>
     });
   });
 
+const newestInputMtimeMs = async (inputPath: string): Promise<number> => {
+  const inputStat = await stat(inputPath);
+  if (!inputStat.isDirectory()) return inputStat.mtimeMs;
+
+  const entries = await readdir(inputPath, { withFileTypes: true });
+  const childMtimes = await Promise.all(
+    entries.map((entry) =>
+      newestInputMtimeMs(path.join(inputPath, entry.name)),
+    ),
+  );
+  return Math.max(inputStat.mtimeMs, ...childMtimes);
+};
+
+const outputIsOlderThanInputs = async (
+  outputPath: string,
+  inputPaths: string[],
+): Promise<boolean> => {
+  const outputStat = await stat(outputPath);
+  const inputMtimes = await Promise.all(inputPaths.map(newestInputMtimeMs));
+  return inputMtimes.some((mtimeMs) => mtimeMs > outputStat.mtimeMs);
+};
+
 const spawnLogged = (
   command: string,
   args: string[],
@@ -142,16 +164,64 @@ const opencodeRouterBin = path.join(
   cwd,
   "apps/opencode-router/dist/bin/opencode-router",
 );
+const openworkServerBuildInputs = [
+  path.join(cwd, "apps/server/src"),
+  path.join(cwd, "apps/server/script"),
+  path.join(cwd, "apps/server/package.json"),
+  path.join(cwd, "packages/types/src"),
+  path.join(cwd, "packages/matterhorn-memory-vault/src"),
+  path.join(cwd, "pnpm-lock.yaml"),
+];
+const opencodeRouterBuildInputs = [
+  path.join(cwd, "apps/opencode-router/src"),
+  path.join(cwd, "apps/opencode-router/script"),
+  path.join(cwd, "apps/opencode-router/package.json"),
+  path.join(cwd, "pnpm-lock.yaml"),
+];
 
 const ensureOpenworkServer = async () => {
+  let binaryExists = true;
   try {
     await access(openworkServerBin);
   } catch {
+    binaryExists = false;
+  }
+
+  if (binaryExists) {
+    const stale =
+      openworkServerBin === canonicalOpenworkServerBin &&
+      (await outputIsOlderThanInputs(
+        openworkServerBin,
+        openworkServerBuildInputs,
+      ));
+    if (!stale) return;
+    if (!autoBuildEnabled) {
+      logLine(
+        "[dev:headless-web] Matterhorn Desks server sources are newer than the local binary",
+      );
+      logLine(
+        "[dev:headless-web] Auto-build disabled (OPENWORK_DEV_HEADLESS_WEB_AUTOBUILD=0)",
+      );
+      process.exit(1);
+    }
+    logLine(
+      "[dev:headless-web] Matterhorn Desks server sources changed; rebuilding the local binary",
+    );
+  } else {
     if (openworkServerBin === canonicalOpenworkServerBin) {
       try {
         await access(legacyOpenworkServerBin);
-        openworkServerBin = legacyOpenworkServerBin;
-        return;
+        const legacyStale = await outputIsOlderThanInputs(
+          legacyOpenworkServerBin,
+          openworkServerBuildInputs,
+        );
+        if (!legacyStale) {
+          openworkServerBin = legacyOpenworkServerBin;
+          return;
+        }
+        logLine(
+          "[dev:headless-web] Legacy Matterhorn Desks server binary is stale; rebuilding the canonical binary",
+        );
       } catch {
         // Continue to the build path below.
       }
@@ -175,28 +245,52 @@ const ensureOpenworkServer = async () => {
     logLine(
       `[dev:headless-web] Missing Matterhorn Desks server binary at ${openworkServerBin}`,
     );
+  }
+
+  logLine(
+    "[dev:headless-web] Auto-building: pnpm --filter matterhorn-work-server build:bin",
+  );
+  try {
+    await runCommand("pnpm", ["--filter", "matterhorn-work-server", "build:bin"]);
+    await access(openworkServerBin).catch(async () => {
+      await access(legacyOpenworkServerBin);
+      openworkServerBin = legacyOpenworkServerBin;
+    });
+  } catch (error) {
     logLine(
-      "[dev:headless-web] Auto-building: pnpm --filter matterhorn-work-server build:bin",
+      `[dev:headless-web] Auto-build failed: ${error instanceof Error ? error.message : String(error)}`,
     );
-    try {
-      await runCommand("pnpm", ["--filter", "matterhorn-work-server", "build:bin"]);
-      await access(openworkServerBin).catch(async () => {
-        await access(legacyOpenworkServerBin);
-        openworkServerBin = legacyOpenworkServerBin;
-      });
-    } catch (error) {
-      logLine(
-        `[dev:headless-web] Auto-build failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      process.exit(1);
-    }
+    process.exit(1);
   }
 };
 
 const ensureOpencodeRouter = async () => {
+  let binaryExists = true;
   try {
     await access(opencodeRouterBin);
   } catch {
+    binaryExists = false;
+  }
+
+  if (binaryExists) {
+    const stale = await outputIsOlderThanInputs(
+      opencodeRouterBin,
+      opencodeRouterBuildInputs,
+    );
+    if (!stale) return;
+    if (!autoBuildEnabled) {
+      logLine(
+        "[dev:headless-web] OpenCodeRouter sources are newer than the local binary",
+      );
+      logLine(
+        "[dev:headless-web] Auto-build disabled (OPENWORK_DEV_HEADLESS_WEB_AUTOBUILD=0)",
+      );
+      process.exit(1);
+    }
+    logLine(
+      "[dev:headless-web] OpenCodeRouter sources changed; rebuilding the local binary",
+    );
+  } else {
     if (!autoBuildEnabled) {
       logLine(
         `[dev:headless-web] Missing opencode-router binary at ${opencodeRouterBin}`,
@@ -216,18 +310,19 @@ const ensureOpencodeRouter = async () => {
     logLine(
       `[dev:headless-web] Missing opencode-router binary at ${opencodeRouterBin}`,
     );
+  }
+
+  logLine(
+    "[dev:headless-web] Auto-building: pnpm --filter opencode-router build:bin",
+  );
+  try {
+    await runCommand("pnpm", ["--filter", "opencode-router", "build:bin"]);
+    await access(opencodeRouterBin);
+  } catch (error) {
     logLine(
-      "[dev:headless-web] Auto-building: pnpm --filter opencode-router build:bin",
+      `[dev:headless-web] Auto-build failed: ${error instanceof Error ? error.message : String(error)}`,
     );
-    try {
-      await runCommand("pnpm", ["--filter", "opencode-router", "build:bin"]);
-      await access(opencodeRouterBin);
-    } catch (error) {
-      logLine(
-        `[dev:headless-web] Auto-build failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      process.exit(1);
-    }
+    process.exit(1);
   }
 };
 

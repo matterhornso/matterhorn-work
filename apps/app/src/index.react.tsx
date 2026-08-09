@@ -13,23 +13,33 @@ import {
 import { readPublicCloudConfig } from "./app/lib/public-cloud-config";
 import { bootstrapTheme } from "./app/theme";
 import { initLocale } from "./i18n";
-import { shouldGatePublicWebEntry } from "./react-app/domains/public/public-trust-content";
+import {
+  isPublicTrustPath,
+  shouldGatePublicWebEntry,
+} from "./react-app/domains/public/public-trust-content";
 import "./app/bootstrap.css";
 
 bootstrapTheme();
 initLocale();
 const publicBetaWeb = isPublicBetaWebDeployment();
 const publicCloudConfig = readPublicCloudConfig();
-const denModule = await import("./app/lib/den");
-const bootstrapConfig = publicBetaWeb
-  ? await denModule.setDenBootstrapConfig(publicCloudConfig)
-  : await denModule.initializeDenBootstrapConfig();
+const publicTrustEntry = isPublicTrustPath(window.location.pathname);
+const bootstrapConfig = publicTrustEntry
+  ? null
+  : await import("./app/lib/den").then((denModule) => (
+      publicBetaWeb
+        ? denModule.setDenBootstrapConfig(publicCloudConfig)
+        : denModule.initializeDenBootstrapConfig()
+    ));
 
 const AuthenticatedApp = React.lazy(
   () => import("./react-app/shell/authenticated-app"),
 );
 const PublicSigninBootstrap = React.lazy(
   () => import("./react-app/shell/public-signin-bootstrap"),
+);
+const PublicTrustBootstrap = React.lazy(
+  () => import("./react-app/shell/public-trust-bootstrap"),
 );
 
 type MatterhornRootElement = HTMLElement & {
@@ -56,10 +66,10 @@ function AppLoadingFallback() {
   );
 }
 
-function MatterhornEntry() {
+function MatterhornWorkspaceEntry() {
   const publicSigninGate = shouldGatePublicWebEntry({
     publicBetaWeb,
-    requireSignin: bootstrapConfig.requireSignin,
+    requireSignin: bootstrapConfig?.requireSignin ?? false,
     pathname: window.location.pathname,
   });
   const [publicSessionVerified, setPublicSessionVerified] =
@@ -109,6 +119,18 @@ function MatterhornEntry() {
       <AuthenticatedApp />
     </React.Suspense>
   );
+}
+
+function MatterhornEntry() {
+  if (publicTrustEntry) {
+    return (
+      <React.Suspense fallback={<AppLoadingFallback />}>
+        <PublicTrustBootstrap />
+      </React.Suspense>
+    );
+  }
+
+  return <MatterhornWorkspaceEntry />;
 }
 
 const appRoot = root.__matterhornReactRoot ?? (root.__matterhornReactRoot = ReactDOM.createRoot(root));

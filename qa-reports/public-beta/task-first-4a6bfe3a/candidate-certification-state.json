@@ -1,0 +1,251 @@
+{
+  "version": "matterhorn.public-beta-candidate-certifier.v1",
+  "source": {
+    "head": "4a6bfe3a1780a96fd2f1456916753818cd3d34d8",
+    "branch": "detached",
+    "dirty": false,
+    "dirtyPathCount": 0,
+    "preserveOnlyPathCount": 0,
+    "stagedPathCount": 0,
+    "workingTreeFingerprint": "70a55105f49336a97cbbf40d88bf2e55b643c037f81cafe5fc10d7c8b0873309"
+  },
+  "stages": [
+    {
+      "id": "scope_inventory",
+      "label": "Protected-path and dirty-tree inventory",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "startedAt": "2026-08-08T04:57:53.026Z",
+      "finishedAt": "2026-08-08T04:57:53.119Z",
+      "durationMs": 93,
+      "fingerprint": "47f7c5976b591def7f859c2f86b919e7e2fec760d0ad4eea5bbf868a9df49368",
+      "command": [
+        "node",
+        "scripts/release-scope-inventory.mjs",
+        "--strict",
+        "--json-output",
+        "/private/tmp/matterhorn-cert-CQkzs4/qa-reports/public-beta/task-first-4a6bfe3a/release-scope-inventory.json"
+      ],
+      "logFile": "logs/scope-inventory.log",
+      "logSha256": "2fcd323b98cab2f077e96aa547f16aa4394fc8fb775b256def37aec67d5b6ea7",
+      "reused": false
+    },
+    {
+      "id": "candidate_manifest",
+      "label": "Hashed release-candidate manifest",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "startedAt": "2026-08-08T04:57:53.120Z",
+      "finishedAt": "2026-08-08T04:57:53.266Z",
+      "durationMs": 146,
+      "fingerprint": "7ac1612e3914794b6c98601ab04f06bda916b72e3095f99aafd68ecffd7b1c34",
+      "command": [
+        "node",
+        "scripts/release-candidate-manifest.mjs",
+        "--output-dir",
+        "/private/tmp/matterhorn-cert-CQkzs4/qa-reports/public-beta/task-first-4a6bfe3a/release-candidate-manifest",
+        "--strict"
+      ],
+      "logFile": "logs/candidate-manifest.log",
+      "logSha256": "c8930086642c3cfa0fe4c870eaef5bebd47cd8af0deec88ba7481f618e5b8d57",
+      "reused": false
+    },
+    {
+      "id": "secret_scan",
+      "label": "Source secret-pattern scan",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "startedAt": "2026-08-08T04:57:53.266Z",
+      "finishedAt": "2026-08-08T04:57:53.410Z",
+      "durationMs": 144,
+      "fingerprint": "26b1a8ec64ed1a945a492c1c5c1d3ddb9d773a21cb4fc5b6f33538d68296f02b",
+      "command": [
+        "node",
+        "scripts/release-secret-scan.mjs",
+        "--strict",
+        "--json-output",
+        "/private/tmp/matterhorn-cert-CQkzs4/qa-reports/public-beta/task-first-4a6bfe3a/release-secret-scan.json"
+      ],
+      "logFile": "logs/secret-scan.log",
+      "logSha256": "c9162eb27f6a02070ddec60bb988d1e2ab2f1d1e78947a7f5f54dbed480033ea",
+      "reused": false
+    },
+    {
+      "id": "dependency_audit",
+      "label": "Locked dependency vulnerability audit",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "startedAt": "2026-08-08T04:57:53.411Z",
+      "finishedAt": "2026-08-08T04:57:53.838Z",
+      "durationMs": 427,
+      "fingerprint": "bc0f0c43458541fb643093042e5c0e4286661f4be9e33129c7e09f8b86791053",
+      "command": [
+        "node",
+        "scripts/dependency-bulk-audit.mjs",
+        "--lockfile",
+        "pnpm-lock.yaml",
+        "--audit-level",
+        "low"
+      ],
+      "logFile": "logs/dependency-audit.log",
+      "logSha256": "4a727efcb0941eb4506e24cd6e00be6cf399929126d343c69a71b04b2fef7c19",
+      "reused": false
+    },
+    {
+      "id": "app_tests",
+      "label": "Complete app test suite",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "startedAt": "2026-08-08T04:57:53.838Z",
+      "finishedAt": "2026-08-08T04:57:55.061Z",
+      "durationMs": 1223,
+      "fingerprint": "df8e8760bd108d75a6333ce37c51d52652b382509d07f18c59f7e16160209218",
+      "command": [
+        "pnpm",
+        "exec",
+        "bun",
+        "test",
+        "apps/app",
+        "--timeout",
+        "30000",
+        "--reporter",
+        "dots"
+      ],
+      "logFile": "logs/app-tests.log",
+      "logSha256": "edfb97c19234d75e489aaaf5eb2734919138f9c10014968b82ea89fd7a1a49e1",
+      "reused": false
+    },
+    {
+      "id": "server_tests",
+      "label": "Complete server test suite",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "startedAt": "2026-08-08T04:57:55.062Z",
+      "finishedAt": "2026-08-08T04:58:06.249Z",
+      "durationMs": 11187,
+      "fingerprint": "d7a7475172f6bad3a557aa0a457bfe82d18ef0470c9474e4a5eabdc7be385f5d",
+      "command": [
+        "pnpm",
+        "exec",
+        "bun",
+        "test",
+        "apps/server/src",
+        "--timeout",
+        "30000",
+        "--max-concurrency",
+        "1",
+        "--reporter",
+        "dots"
+      ],
+      "logFile": "logs/server-tests.log",
+      "logSha256": "b2fc91e661fa27560cc4163aa7f8d0be53e2a075e1d55286f15b09040422fc91",
+      "reused": false
+    },
+    {
+      "id": "app_typecheck",
+      "label": "App TypeScript typecheck",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "startedAt": "2026-08-08T04:58:06.250Z",
+      "finishedAt": "2026-08-08T04:58:18.617Z",
+      "durationMs": 12367,
+      "fingerprint": "d4de3f80fa1234b941774f887df97eeee90fae6d484b2773217443af780353de",
+      "command": [
+        "pnpm",
+        "--filter",
+        "@matterhorn-work/app",
+        "typecheck"
+      ],
+      "logFile": "logs/app-typecheck.log",
+      "logSha256": "5a4ff41ee6a8d0e24604a38f0a1d642779001e66552e14d2cde88f64cee2eee9",
+      "reused": false
+    },
+    {
+      "id": "server_typecheck",
+      "label": "Server TypeScript typecheck",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "startedAt": "2026-08-08T04:58:18.618Z",
+      "finishedAt": "2026-08-08T04:58:21.441Z",
+      "durationMs": 2823,
+      "fingerprint": "f1a9aeb9f1f06f6501ef51460a0b33c658c75e59afb7ed4406a55ce536d9e90d",
+      "command": [
+        "pnpm",
+        "--filter",
+        "matterhorn-work-server",
+        "typecheck"
+      ],
+      "logFile": "logs/server-typecheck.log",
+      "logSha256": "9998d46dfa5b37285e20e525c93222e575054953a4fe16cb5875b7a55b631214",
+      "reused": false
+    },
+    {
+      "id": "electron_typecheck",
+      "label": "Electron bridge TypeScript typecheck",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "startedAt": "2026-08-08T04:58:21.441Z",
+      "finishedAt": "2026-08-08T04:58:22.162Z",
+      "durationMs": 721,
+      "fingerprint": "497e22619f2f9d0ece409a5cdc54bca7b026998eeaf5fe76bd0e956df86b80c7",
+      "command": [
+        "pnpm",
+        "--filter",
+        "@matterhorn-work/app",
+        "exec",
+        "tsc",
+        "-p",
+        "../desktop/tsconfig.electron.json",
+        "--noEmit"
+      ],
+      "logFile": "logs/electron-typecheck.log",
+      "logSha256": "a6f9c0b9683b6017aff1829bbb01b27ce281acd83c762be65df6d9bd89af45a8",
+      "reused": false
+    },
+    {
+      "id": "production_build",
+      "label": "Production web, server, and desktop build",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "startedAt": "2026-08-08T04:58:22.163Z",
+      "finishedAt": "2026-08-08T04:59:27.009Z",
+      "durationMs": 64846,
+      "fingerprint": "f473ae122fe99b5e320f12c95628148925beb64b94037ba13bed7218255f5c6e",
+      "command": [
+        "pnpm",
+        "build"
+      ],
+      "logFile": "logs/production-build.log",
+      "logSha256": "cdb1fd2e98faa754ffaf6e865da7987934c2fb9d2373113d768a014efcd8627a",
+      "reused": false
+    },
+    {
+      "id": "platform_safety",
+      "label": "Complete Matterhorn platform safety gate",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "startedAt": "2026-08-08T04:59:27.010Z",
+      "finishedAt": "2026-08-08T04:59:42.167Z",
+      "durationMs": 15157,
+      "fingerprint": "f5578be7172b851fc24ad7495b908a482519d10fc440b170b0a2aaaad93e8a93",
+      "command": [
+        "pnpm",
+        "test:matterhorn-platform-safety"
+      ],
+      "logFile": "logs/platform-safety.log",
+      "logSha256": "d923c48d49b6fe4089fe66f5358e2e2ed08d636e0315f8f4ee9955fd6734e606",
+      "reused": false
+    }
+  ]
+}

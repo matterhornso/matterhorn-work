@@ -43,6 +43,8 @@ export type ExtensionCardProps = {
   actionLabel?: string;
   /** Visual presentation. Card is the legacy catalog tile; stream is for softer desk lists. */
   presentation?: "card" | "stream";
+  /** Semantic heading level for the extension name within its containing section. */
+  headingLevel?: 3 | 4;
   /** Click handler. */
   onClick?: () => void;
 };
@@ -89,6 +91,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
     disabledReason = null,
     actionLabel,
     presentation = "card",
+    headingLevel = 4,
     onClick,
   } = props;
 
@@ -167,7 +170,11 @@ export function ExtensionCard(props: ExtensionCardProps) {
         <div className={isStream ? "min-w-0 flex-1 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-4" : "min-w-0 flex-1"}>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
-              <h4 className={`min-w-0 break-words text-sm font-semibold ${muted ? "text-dls-secondary" : "text-dls-text"}`}>{name}</h4>
+              {headingLevel === 3 ? (
+                <h3 className={`min-w-0 break-words text-sm font-semibold ${muted ? "text-dls-secondary" : "text-dls-text"}`}>{name}</h3>
+              ) : (
+                <h4 className={`min-w-0 break-words text-sm font-semibold ${muted ? "text-dls-secondary" : "text-dls-text"}`}>{name}</h4>
+              )}
               {connected ? (
                 <span className="shrink-0 rounded-md bg-green-3 px-1.5 py-0.5 text-[10px] font-medium text-green-11">
                   {connectedLabel}

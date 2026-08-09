@@ -22,6 +22,10 @@ const trustRouteSource = readFileSync(
   resolve(import.meta.dir, "../src/react-app/domains/public/public-trust-route.tsx"),
   "utf8",
 );
+const publicTrustBootstrapSource = readFileSync(
+  resolve(import.meta.dir, "../src/react-app/shell/public-trust-bootstrap.tsx"),
+  "utf8",
+);
 
 describe("public trust routes", () => {
   test("publishes the complete launch trust surface", () => {
@@ -77,6 +81,16 @@ describe("public trust routes", () => {
     expect(entrySource).toContain("shouldGatePublicWebEntry({");
   });
 
+  test("serves direct trust routes above the authenticated application boundary", () => {
+    expect(entrySource).toContain("const publicTrustEntry = isPublicTrustPath(window.location.pathname)");
+    expect(entrySource).toContain('import("./react-app/shell/public-trust-bootstrap")');
+    expect(entrySource).toContain("if (publicTrustEntry)");
+    expect(publicTrustBootstrapSource).toContain("<BrowserRouter>");
+    expect(publicTrustBootstrapSource).toContain("<PublicTrustRoute />");
+    expect(publicTrustBootstrapSource).not.toContain("AppProviders");
+    expect(publicTrustBootstrapSource).not.toContain("QueryClientProvider");
+  });
+
   test("uses Matterhorn public identity and safe support channels", () => {
     expect(MATTERHORN_SUPPORT_EMAIL).toBe("updates@matterhorn.so");
     expect(MATTERHORN_SECURITY_REPORT_URL).toContain("security/advisories/new");
@@ -84,11 +98,23 @@ describe("public trust routes", () => {
     expect(trustRouteSource).not.toMatch(/\bOpenWork\b|\bOpenCode\b/);
   });
 
+  test("keeps public trust navigation usable at the 320px launch floor", () => {
+    expect(trustRouteSource).toContain("grid-cols-[minmax(0,1fr)]");
+    expect(trustRouteSource).toContain('<aside className="min-w-0">');
+    expect(trustRouteSource).toContain('className="flex flex-wrap gap-1 md:flex-col"');
+    expect(trustRouteSource).toContain("inline-flex min-h-11 shrink-0 items-center");
+    expect(trustRouteSource).toContain("-ml-2 mb-4 inline-flex min-h-11 items-center");
+  });
+
   test("status checks use same-origin redacted health endpoints", () => {
     expect(trustRouteSource).toContain('probeHealth("/health/live")');
     expect(trustRouteSource).toContain('probeHealth("/health/ready")');
     expect(trustRouteSource).toContain('credentials: "same-origin"');
     expect(trustRouteSource).toContain('cache: "no-store"');
+    expect(trustRouteSource).toContain("Checks whether the API process can answer requests.");
+    expect(trustRouteSource).toContain("Checks storage, workspace routing, and authorization readiness.");
+    expect(trustRouteSource).not.toContain("The API process is running and can answer requests.");
+    expect(trustRouteSource).not.toContain("Storage, workspace routing, and authorization are ready.");
     expect(trustRouteSource).not.toContain("dangerouslySetInnerHTML");
   });
 });

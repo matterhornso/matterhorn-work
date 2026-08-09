@@ -153,11 +153,14 @@ describe("Project Activity contract tests", () => {
   });
 
   describe("Home wiring", () => {
-    test("workspace home header names the current location and groups project paths with their actions", () => {
+    test("workspace home names the current location and separates next steps from creation", () => {
       const source = readAppSource("domains/session/chat/session-page.tsx");
 
-      expect(source).toContain('? "Project home"');
-      expect(source).toContain("Chats, desks, notes, and saved outputs for this project.");
+      expect(source).toContain("const homeSurfaceTitle = activeWorkflowDeskId");
+      expect(source).toContain(': "Home";');
+      expect(source).toContain('aria-label="Recommended next action"');
+      expect(source).toContain('aria-label="Secondary creation actions"');
+      expect(source).toContain("Continue active work, start a focused desk task, or create something new.");
       expect(source).toContain("Project folder");
       expect(source).toContain("Saved outputs");
       expect(source).toContain("grid-cols-[auto_minmax(0,1fr)_auto]");
@@ -170,10 +173,35 @@ describe("Project Activity contract tests", () => {
       const source = readAppSource("domains/session/chat/session-page.tsx");
 
       expect(source).toContain("const canExposeLocalPaths = isDesktopRuntime();");
-      expect(source).toContain('"Stored by your local Matterhorn engine"');
-      expect(source).toContain('"Stored with this project"');
-      expect(source).toContain("canExposeLocalPaths ? homeOutputsPath");
+      expect(source).toContain("Project files are stored by this workspace&apos;s Matterhorn engine.");
+      expect(source).toContain('title={homeProjectPath || "No local project folder selected"}');
+      expect(source).not.toContain('title={canExposeLocalPaths ? homeOutputsPath');
       expect(source).toContain("{canExposeLocalPaths ? (");
+    });
+
+    test("Home chooses exactly one adaptive primary action", () => {
+      const source = readAppSource("domains/session/chat/session-page.tsx");
+
+      expect(source).toContain("const homePrimaryAction = props.modelUnavailable");
+      expect(source).toContain('eyebrow: "Setup required"');
+      expect(source).toContain('eyebrow: activeHomeSession ? "Active task" : "Continue where you left off"');
+      expect(source).toContain('eyebrow: "Recommended safe start"');
+      expect(source).toContain("<WorkspaceHomePrimaryAction {...homePrimaryAction} />");
+    });
+
+    test("Home recommendations open a desk for review without auto-sending", () => {
+      const source = readAppSource("domains/session/chat/session-page.tsx");
+
+      expect(source).toContain('onAction: () => openVenueRailPane("bittensor"),');
+      expect(source).not.toContain('source: "home-primary-action"');
+    });
+
+    test("Home recency accepts engine timestamps in seconds or milliseconds", () => {
+      const source = readAppSource("domains/session/chat/session-page.tsx");
+
+      expect(source).toContain("updatedAt < 1_000_000_000_000");
+      expect(source).toContain("updatedAt * 1_000");
+      expect(source).toContain("Date.now() - timestampMilliseconds");
     });
 
     test("session-page imports RecentActivitySection", () => {

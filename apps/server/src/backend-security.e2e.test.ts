@@ -42,6 +42,7 @@ const priorEnv = {
   devLogFile: process.env.OPENWORK_DEV_LOG_FILE,
   toyUi: process.env.OPENWORK_TOY_UI,
   hyperliquidExecution: process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED,
+  bittensorTimelinePersistence: process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE,
 };
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
@@ -230,6 +231,8 @@ afterEach(async () => {
   else process.env.OPENWORK_TOY_UI = priorEnv.toyUi;
   if (priorEnv.hyperliquidExecution === undefined) delete process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED;
   else process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED = priorEnv.hyperliquidExecution;
+  if (priorEnv.bittensorTimelinePersistence === undefined) delete process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE;
+  else process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE = priorEnv.bittensorTimelinePersistence;
 });
 
 // ---------------------------------------------------------------------------
@@ -597,6 +600,7 @@ describe("Protocol state mutations enforce client scope and workspace mode", () 
     "/api/polymarket/watches",
     "/api/polymarket/watches/act",
     "/api/bittensor/wallet/timeline/clear",
+    "/api/bittensor/wallet/timeline/capture",
     "/api/bittensor/monitoring/watchlist",
   ];
 
@@ -633,6 +637,25 @@ describe("Protocol state mutations enforce client scope and workspace mode", () 
     expect(submission.payload.code).toBe("hyperliquid_execution_disabled");
   });
 
+  test("Bittensor timeline capture fails clearly when public snapshot persistence is off", async () => {
+    delete process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE;
+    const { base, collaboratorToken } = await boot();
+    const status = await jsonFetch(base, "/api/bittensor/wallet/timeline/status", collaboratorToken);
+    expect(status.response.status).toBe(200);
+    expect(status.payload.status).not.toHaveProperty("path");
+
+    const result = await jsonFetch(base, "/api/bittensor/wallet/timeline/capture", collaboratorToken, {
+      method: "POST",
+      body: JSON.stringify({
+        ss58Address: "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1SecTest",
+      }),
+    });
+
+    expect(result.response.status).toBe(409);
+    expect(result.payload.code).toBe("bittensor_wallet_timeline_disabled");
+    expect(result.payload.message).toContain("Wallet history is off");
+  });
+
   test("Hyperliquid execution tickets require a collaborator before intent validation", async () => {
     process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED = "true";
     const { base, collaboratorToken, viewerToken } = await boot();
@@ -653,6 +676,27 @@ describe("Protocol state mutations enforce client scope and workspace mode", () 
     expect(collaborator.response.status).toBe(400);
     expect(collaborator.payload.code).toBe("invalid_hyperliquid_execution_intent");
     expect(collaborator.payload.message).toContain("Unexpected execution-intent field");
+  });
+
+  test("legacy Bittensor sidecar submission fails closed without receiving raw signatures", async () => {
+    const request = {
+      method: "POST",
+      body: JSON.stringify({
+        preview: { action: "transfer", unsignedPayload: { call: "0x00" } },
+        signature: `0x${"12".repeat(65)}`,
+        signerAddress: "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXnYDuiLhUHmXg",
+      }),
+    };
+
+    const { base, ownerToken, collaboratorToken, viewerToken } = await boot();
+    for (const token of [ownerToken, collaboratorToken, viewerToken]) {
+      const result = await jsonFetch(base, "/api/bittensor/extrinsics/submit", token, request);
+      expect(result.response.status).toBe(403);
+      expect(result.payload).toMatchObject({
+        code: "reviewed_action_required",
+        message: "Bittensor submission stays in the connected wallet. Matterhorn accepts only public receipt evidence after broadcast.",
+      });
+    }
   });
 
   test("read-only workspaces block protocol watch and wallet baseline mutations", async () => {
@@ -906,6 +950,26 @@ describe("Audit entries for memory operations", () => {
 // ---------------------------------------------------------------------------
 
 describe("Security capability classification", () => {
+  test("legacy CoW order submission fails closed without a reviewed-wallet approval flow", async () => {
+    const { base, ownerToken, collaboratorToken, viewerToken } = await boot();
+    const body = JSON.stringify({
+      chainId: 8453,
+      order: { sellToken: "0x1111111111111111111111111111111111111111" },
+      signature: `0x${"12".repeat(65)}`,
+    });
+
+    for (const token of [ownerToken, collaboratorToken, viewerToken]) {
+      const result = await jsonFetch(base, "/api/cow/order", token, {
+        method: "POST",
+        body,
+      });
+      expect(result.response.status).toBe(403);
+      expect(result.payload).toMatchObject({
+        code: "reviewed_action_required",
+      });
+    }
+  });
+
   test("server applies a bounded local API request rate limit", async () => {
     const { base, ownerToken } = await boot(false, {
       requestRateLimit: { enabled: true, windowMs: 60_000, maxRequests: 4 },

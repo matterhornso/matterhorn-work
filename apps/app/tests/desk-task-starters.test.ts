@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import {
+  groupMatterhornDeskTaskStarters,
+  MATTERHORN_RECOMMENDED_DESK_TASK_IDS,
   MATTERHORN_DESK_TASK_STARTERS,
+  recommendedMatterhornDeskTaskStarterGroups,
   type MatterhornDeskTaskStarterDesk,
 } from "../src/react-app/domains/session/workflows/desk-task-starters";
 
@@ -39,6 +42,61 @@ describe("desk task starters", () => {
     expect(sessionDeskSource).toContain("MATTERHORN_DESK_TASK_STARTERS");
     expect(focusedDeskSource).not.toContain("PROTOCOL_DESK_SUGGESTED_PROMPTS");
     expect(sessionDeskSource).not.toContain("MATTERHORN_DESK_EMPTY_PROMPTS");
+    expect(focusedDeskSource).toContain("reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions");
+    expect(sessionDeskSource).toContain("reviewedActions: MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions");
+  });
+
+  test("fails closed on reviewed actions while preserving public research in Beta", () => {
+    for (const desk of LAUNCHER_DESKS) {
+      const groups = groupMatterhornDeskTaskStarters(MATTERHORN_DESK_TASK_STARTERS[desk], {
+        reviewedActions: false,
+      });
+      const visibleStarters = groups.flatMap((group) => group.starters);
+
+      expect(visibleStarters.length).toBeGreaterThan(0);
+      expect(visibleStarters.every((starter) => !starter.reviewedAction)).toBe(true);
+      expect(groups.some((group) => group.id === "wallet")).toBe(false);
+    }
+  });
+
+  test("groups full desk catalogs by intent and risk", () => {
+    const groups = groupMatterhornDeskTaskStarters(MATTERHORN_DESK_TASK_STARTERS.hyperliquid, {
+      reviewedActions: true,
+    });
+
+    expect(groups.map((group) => group.id)).toEqual(["start", "evidence", "wallet"]);
+    expect(groups.find((group) => group.id === "evidence")?.starters.map((starter) => starter.id)).toEqual([
+      "price-watch",
+      "funding-watch",
+      "import-receipt",
+    ]);
+    expect(groups.find((group) => group.id === "wallet")?.starters.every((starter) => starter.reviewedAction)).toBe(true);
+  });
+
+  test("shows exactly three safe recommended starts before More tasks", () => {
+    for (const desk of LAUNCHER_DESKS) {
+      const groups = groupMatterhornDeskTaskStarters(MATTERHORN_DESK_TASK_STARTERS[desk], {
+        reviewedActions: false,
+      });
+      const recommended = recommendedMatterhornDeskTaskStarterGroups(desk, groups)
+        .flatMap((group) => group.starters);
+
+      expect(recommended.map((starter) => starter.id)).toEqual(
+        MATTERHORN_RECOMMENDED_DESK_TASK_IDS[desk],
+      );
+      expect(recommended).toHaveLength(3);
+      expect(recommended.every((starter) => !starter.reviewedAction)).toBe(true);
+    }
+  });
+
+  test("presents the three recommendations as one balanced desktop row", () => {
+    const focusedDeskSource = readFileSync(
+      new URL("../src/react-app/domains/session/chat/session-page.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(focusedDeskSource).toContain('showAllTasks ? "lg:grid-cols-2" : "lg:grid-cols-3"');
+    expect(focusedDeskSource).toContain('className="flex justify-start px-1 pt-1"');
   });
 
   test("routes serious desk actions to reviewed tickets without requiring a model", () => {

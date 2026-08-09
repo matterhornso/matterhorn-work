@@ -43,6 +43,7 @@ interface FileConfig {
   logFormat?: LogFormat;
   logRequests?: boolean;
   requestRateLimit?: RequestRateLimitConfig;
+  trustedProxySecret?: string;
 }
 
 const DEFAULT_PORT = 8787;
@@ -336,6 +337,8 @@ export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
       ? { writeMaxRequests: parsePositiveNumber(readMatterhornEnv("REQUEST_RATE_LIMIT_WRITE_MAX")) }
       : {}),
   };
+  const trustedProxySecret =
+    readMatterhornEnv("TRUSTED_PROXY_SECRET") ?? fileConfig.trustedProxySecret;
 
   const authorizedRoots =
     hasWorkspaceOverride
@@ -368,5 +371,6 @@ export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
     logFormat,
     logRequests,
     requestRateLimit,
+    trustedProxySecret,
   };
 }

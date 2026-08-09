@@ -47,7 +47,12 @@ export function CommandPalette({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[20vh] bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
+    <div
+      className="fixed inset-0 z-[var(--matterhorn-layer-modal)] flex items-start justify-center bg-black/50 pt-[20vh] backdrop-blur-sm animate-in fade-in duration-150"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Wallet commands"
+    >
       <div className="w-full max-w-md mx-4 rounded-lg border border-dls-border bg-dls-sidebar shadow-sm overflow-hidden animate-in zoom-in-95 duration-150">
         <input
           autoFocus

@@ -18,6 +18,7 @@ import {
 } from "../../../../app/lib/matterhorn-server";
 import {
   getCustomerProtocolDeskVisual,
+  getCustomerProtocolDeskVisualForLaunch,
   protocolDeskIdForChatMode,
   protocolDeskIdForWorkspace,
   type CustomerProtocolDeskVisual,
@@ -96,6 +97,13 @@ export type CustomerWorkflowStarterCard = {
   workspaceDisplayName?: string;
   launchBehavior?: MatterhornProtocolWorkspaceLaunchBehavior;
   protocolDesk?: CustomerProtocolDeskVisual;
+};
+
+const PUBLIC_BETA_STARTER_PROMPTS: Partial<Record<CustomerProtocolDeskVisual["id"], string>> = {
+  bittensor: "Use the Bittensor desk to compare active subnets and validators using public evidence. Keep the task read-only.",
+  hyperliquid: "Use the Hyperliquid desk to review BTC-PERP market structure, exposure, funding, and public evidence. Keep the task read-only.",
+  polymarket: "Use the Polymarket desk to research active markets, liquidity, and compliance context using public evidence. Keep the task read-only.",
+  sui: "Use the Sui desk to review public account, object, network, fee, and receipt evidence. Keep the task read-only.",
 };
 
 export type CustomerBetaDemoStarterCard = {
@@ -637,25 +645,32 @@ export function buildCustomerWorkflowPrompt(template: CustomerWorkflowTemplate):
 
 export function buildCustomerWorkflowStarterCards(
   templates: CustomerWorkflowTemplate[] = FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES,
+  options: { reviewedActions?: boolean } = {},
 ): CustomerWorkflowStarterCard[] {
   return templates.filter((template) => CUSTOMER_VISIBLE_TEMPLATE_IDS.has(template.id)).map((template) => {
     const protocolDesk =
       template.protocolDesk ??
       getCustomerProtocolDeskVisual(protocolDeskIdForChatMode(template.routing.chatMode));
+    const starterProtocolDesk = protocolDesk
+      ? getCustomerProtocolDeskVisualForLaunch(protocolDesk.id, options.reviewedActions !== false)
+      : null;
+    const publicBetaPrompt = options.reviewedActions === false && starterProtocolDesk
+      ? PUBLIC_BETA_STARTER_PROMPTS[starterProtocolDesk.id]
+      : undefined;
     return {
       id: template.id,
-      title: template.launch.primaryCta || template.name,
-      description: protocolDesk?.shortDescription ?? template.ui.shortDescription ?? template.summary,
-      prompt: buildCustomerWorkflowPrompt(template),
+      title: publicBetaPrompt ? `Open ${starterProtocolDesk!.displayName} desk` : template.launch.primaryCta || template.name,
+      description: starterProtocolDesk?.shortDescription ?? template.ui.shortDescription ?? template.summary,
+      prompt: publicBetaPrompt ?? buildCustomerWorkflowPrompt(template),
       agentId: matterhornDeskAgentIdForDesk(protocolDesk?.id ?? protocolDeskIdForChatMode(template.routing.chatMode)),
       iconHint: template.ui.iconHint,
       panel: template.routing.opensPanel,
       recommendedSurface: template.launch.recommendedSurface,
-      statusLabel: starterCardStatusLabel(template, protocolDesk),
-      safetySummary: protocolDesk?.safetySummary ?? safetySummary(template),
+      statusLabel: publicBetaPrompt ? "Read-only Beta" : starterCardStatusLabel(template, protocolDesk),
+      safetySummary: starterProtocolDesk?.safetySummary ?? safetySummary(template),
       workspaceDisplayName: protocolDesk?.displayName ?? template.protocolWorkspace?.displayName,
       launchBehavior: template.protocolWorkspace?.launchBehavior,
-      protocolDesk: protocolDesk ?? undefined,
+      protocolDesk: starterProtocolDesk ?? undefined,
     };
   });
 }

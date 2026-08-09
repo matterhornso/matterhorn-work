@@ -77,7 +77,7 @@ export function ReloadWorkspaceToast(props: ReloadWorkspaceToastProps) {
       : describeTrigger(props.description, props.trigger);
 
   return (
-    <div className="fixed bottom-6 left-1/2 z-[9999] -translate-x-1/2 animate-in slide-in-from-bottom-4 fade-in duration-300">
+    <div className="fixed bottom-6 left-1/2 z-[var(--matterhorn-layer-toast)] -translate-x-1/2 animate-in slide-in-from-bottom-4 fade-in duration-300">
       <div className="relative isolate flex max-w-[calc(100vw-1.5rem)] items-center gap-4 rounded-lg bg-dls-canvas px-5 py-3.5 shadow-[0_4px_8px_rgba(0,0,0,0.18)] ring-1 ring-dls-border/45">
         <div className={props.hasActiveRuns ? "text-amber-11" : "text-dls-text"}>
           <RefreshCcw

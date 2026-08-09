@@ -70,12 +70,33 @@ describe("customer-facing Matterhorn Desks branding", () => {
     expect(publicSignIn).toContain(
       "Open a private workspace for focused AI desks, tools, and durable",
     );
+    expect(publicSignIn).toContain("Choose a desk. Ask for the outcome.");
+    expect(publicSignIn).toContain("Bittensor");
+    expect(publicSignIn).toContain("Hyperliquid");
+    expect(publicSignIn).toContain("Polymarket");
+    expect(publicSignIn).toContain("Longevity");
+    expect(publicSignIn).toContain("Matterhorn never holds your keys.");
+    expect(publicSignIn).not.toContain("Designed for accountable work");
+    expect(publicSignIn).not.toContain("public-auth-principle-index");
     expect(welcome).toContain("Matterhorn Desks");
     expect(builder).toContain("productName: Matterhorn Desks");
     expect(desktopMain).toContain('const APP_NAME = isDevMode ? "Matterhorn Desks - Dev" : "Matterhorn Desks";');
     expect(orchestrator).not.toMatch(/\bMatterhorn Work\b/);
     expect(serverCli).not.toMatch(/\bMatterhorn Work\b/);
     expect(workflowTypes).not.toContain("Matterhorn Desksflow");
+  });
+
+  test("public entry fails closed when hosted account access is unavailable", () => {
+    const publicSignIn = readRepoFile(
+      "apps/app/src/react-app/domains/cloud/public-web-signin-page.tsx",
+    );
+
+    expect(publicSignIn).toContain(
+      "Account access is temporarily unavailable on this preview.",
+    );
+    expect(publicSignIn).toContain("accountServiceAvailable === false");
+    expect(publicSignIn).toContain("Account access unavailable");
+    expect(publicSignIn).toContain("Check again");
   });
 
   test("preserves launch-critical compatibility identifiers", () => {
@@ -95,6 +116,16 @@ describe("customer-facing Matterhorn Desks branding", () => {
       'const DESKTOP_PROTOCOL_SCHEMES = ["matterhorn-desks", "matterhorn-work", "openwork"];',
     );
     expect(desktopMain).toContain('".config", "matterhorn-work", "desktop-bootstrap.json"');
+  });
+
+  test("publishes a useful llms.txt discovery document", () => {
+    const llms = readRepoFile("apps/app/public/llms.txt");
+
+    expect(llms).toStartWith("# Matterhorn Desks\n");
+    expect(llms).toContain("## Public resources");
+    expect(llms).toContain("https://github.com/matterhornso/matterhorn-work/tree/dev/docs");
+    expect(llms).toContain("Reviewed financial actions are fail-closed");
+    expect(llms).toContain("does not hold private keys");
   });
 
   test("uses the Matterhorn UI MCP package in customer setup and desktop launch commands", () => {

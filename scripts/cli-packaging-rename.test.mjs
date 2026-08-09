@@ -27,7 +27,7 @@ assert.match(serverLegacy, /matterhorn-work-server\.mjs/);
 
 const serverSource = readText("apps/server/src/server.ts");
 assert.match(serverSource, /"service\.name": "matterhorn-work-server"/);
-assert.match(serverSource, /\[matterhorn-work-server\] Unhandled error:/);
+assert.match(serverSource, /logger\.log\("error", "Unhandled server error"/);
 
 const toyUi = readText("apps/server/src/toy-ui.ts");
 assert.match(toyUi, /Matterhorn Desks Local UI/);
@@ -86,6 +86,10 @@ assert.match(desktopRuntime, /resolveBinary\("openwork"\)/);
 const headlessWeb = readText("scripts/dev-headless-web.ts");
 assert.match(headlessWeb, /matterhorn-work-server/);
 assert.match(headlessWeb, /--matterhorn-work-server-bin/);
+assert.match(headlessWeb, /outputIsOlderThanInputs/);
+assert.match(headlessWeb, /openworkServerBuildInputs/);
+assert.match(headlessWeb, /opencodeRouterBuildInputs/);
+assert.match(headlessWeb, /server sources changed; rebuilding the local binary/);
 
 const releaseWorkflow = readText(".github/workflows/release-macos-aarch64.yml");
 assert.match(releaseWorkflow, /Release title \(defaults to Matterhorn Desks <tag>\)/);

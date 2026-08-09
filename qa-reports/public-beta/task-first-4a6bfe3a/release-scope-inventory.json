@@ -1,0 +1,18 @@
+{
+  "version": "matterhorn.release-scope-inventory.v1",
+  "capturedAt": "2026-08-08T04:57:53.095Z",
+  "repository": "/private/tmp/matterhorn-cert-CQkzs4",
+  "branch": "",
+  "head": "4a6bfe3a1780a96fd2f1456916753818cd3d34d8",
+  "readyToStage": true,
+  "totals": {
+    "dirtyPaths": 0,
+    "candidateReview": 0,
+    "preserveOnly": 0
+  },
+  "statusCounts": {},
+  "topLevelCounts": {},
+  "preserveOnly": {},
+  "stagedProtectedPaths": [],
+  "candidateReview": []
+}

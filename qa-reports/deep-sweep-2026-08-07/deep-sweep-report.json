@@ -1,0 +1,24 @@
+{
+  "date": "2026-08-07",
+  "status": "local_candidate_pass_hosted_evidence_blocked",
+  "open_p0": 0,
+  "open_confirmed_source_p1": 0,
+  "fixed": [
+    { "severity": "P1", "area": "security", "issue": "js-yaml quadratic-complexity DoS advisory", "resolution": "upgraded override and lockfile from 4.3.0 to 4.3.1" },
+    { "severity": "P1", "area": "backend", "issue": "fixed Stripe fixture period expired during release run", "resolution": "rolling ordered subscription and event timestamps" },
+    { "severity": "P2", "area": "accessibility", "issue": "Settings and MCP heading levels skipped", "resolution": "context-aware H1-H2-H3 hierarchy" }
+  ],
+  "scores": { "accessibility": 3, "performance": 3, "responsive": 4, "theming": 4, "anti_patterns": 4, "total": 18, "maximum": 20 },
+  "tests": {
+    "app": { "passed": 825, "failed": 0 },
+    "server": { "passed": 793, "failed": 0 },
+    "post_clean_ui": { "passed": 55, "failed": 0 },
+    "post_clean_billing": { "passed": 36, "failed": 0 },
+    "platform_safety_stages": { "passed": 10, "failed": 0 },
+    "locked_dependency_versions": 1406,
+    "dependency_advisories_low_or_higher": 0
+  },
+  "bundle_bytes": { "public_entry": 431194, "session_route": 150842, "session_page": 568635, "settings_route": 255811, "wallet_evm": 480855, "wallet_sui": 411655, "wallet_bittensor": 896388 },
+  "hosted_blockers": ["backend environment", "two hosted acceptance accounts", "managed engine output", "real wallet providers", "physical mobile and screen-reader checks"],
+  "accepted_screenshots": ["ui-ux/10-public-entry-current-desktop.png", "ui-ux/11-public-entry-current-mobile-375.png", "ui-ux/12-mcp-settings-heading-fixed.png"]
+}

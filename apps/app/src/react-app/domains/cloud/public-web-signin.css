@@ -41,6 +41,10 @@
 .public-auth-context {
   box-sizing: border-box;
   padding: 72px 64px;
+  padding-top: max(72px, env(safe-area-inset-top));
+  padding-right: max(64px, env(safe-area-inset-right));
+  padding-bottom: max(72px, env(safe-area-inset-bottom));
+  padding-left: max(64px, env(safe-area-inset-left));
 }
 
 .public-auth-primary {
@@ -118,9 +122,15 @@
   color: var(--auth-text);
 }
 
+.public-auth-mode button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .public-auth-mode button:focus-visible,
 .public-auth-form input:focus-visible,
-.public-auth-submit:focus-visible {
+.public-auth-submit:focus-visible,
+.public-auth-trust a:focus-visible {
   outline: 2px solid #38bdf8;
   outline-offset: 2px;
 }
@@ -157,7 +167,7 @@
 }
 
 .public-auth-form input:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.62;
 }
 
@@ -187,11 +197,15 @@
 }
 
 .public-auth-submit:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.64;
 }
 
 .public-auth-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
   min-height: 20px;
   margin: 18px 0 0;
   color: var(--auth-secondary);
@@ -199,8 +213,55 @@
   line-height: 1.6;
 }
 
+.public-auth-status button {
+  min-height: 24px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.public-auth-status button:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
 .public-auth-status-error {
   color: var(--auth-error);
+}
+
+.public-auth-description,
+.public-auth-status,
+.public-auth-context-lead,
+.public-auth-desk-list dd,
+.public-auth-control-boundary {
+  overflow-wrap: anywhere;
+}
+
+.public-auth-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.public-auth-trust a {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--auth-secondary);
+  text-underline-offset: 3px;
+}
+
+.public-auth-trust a:hover {
+  color: var(--auth-text);
+  text-decoration: underline;
 }
 
 .public-auth-context {
@@ -221,33 +282,47 @@
   line-height: 1.8;
 }
 
-.public-auth-principles {
+.public-auth-desk-list {
   display: grid;
   gap: 0;
-  margin: 42px 0 0;
+  margin: 36px 0 0;
   padding: 0;
-  list-style: none;
 }
 
-.public-auth-principles li {
+.public-auth-desk-list > div {
   display: grid;
-  grid-template-columns: 26px 1fr;
-  gap: 14px;
-  padding: 18px 0;
+  grid-template-columns: minmax(96px, 0.32fr) minmax(0, 1fr);
+  gap: 24px;
+  padding: 17px 0;
   border-top: 1px solid var(--auth-border);
+}
+
+.public-auth-desk-list dt,
+.public-auth-desk-list dd {
+  margin: 0;
+}
+
+.public-auth-desk-list dt {
+  color: var(--auth-text);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.public-auth-desk-list dd {
   color: var(--auth-secondary);
   font-size: 14px;
   line-height: 1.65;
 }
 
-.public-auth-principles strong {
-  color: var(--auth-text);
-  font-weight: 650;
+.public-auth-control-boundary {
+  margin: 30px 0 0;
+  color: var(--auth-secondary);
+  font-size: 13px;
+  line-height: 1.7;
 }
 
-.public-auth-principle-index {
+.public-auth-control-boundary strong {
   color: var(--auth-text);
-  font-size: 12px;
   font-weight: 650;
 }
 
@@ -260,6 +335,10 @@
   .public-auth-primary,
   .public-auth-context {
     padding: 48px 24px;
+    padding-top: max(48px, env(safe-area-inset-top));
+    padding-right: max(24px, env(safe-area-inset-right));
+    padding-bottom: max(48px, env(safe-area-inset-bottom));
+    padding-left: max(24px, env(safe-area-inset-left));
   }
 
   .public-auth-primary {
@@ -286,12 +365,17 @@
 
   .public-auth-primary,
   .public-auth-context {
-    padding-right: 22px;
-    padding-left: 22px;
+    padding-right: max(22px, env(safe-area-inset-right));
+    padding-left: max(22px, env(safe-area-inset-left));
   }
 
   .public-auth-title {
     font-size: 36px;
+  }
+
+  .public-auth-desk-list > div {
+    grid-template-columns: 1fr;
+    gap: 5px;
   }
 
 }

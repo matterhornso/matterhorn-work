@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import type { WalletStore } from "../state/wallet-store";
 import { useWalletStore } from "../state/wallet-store";
 import { tokensForChain } from "../../../infra/token-registry";
-import { useSignTypedData } from "wagmi";
 
 const COW_LOGO = (
   <svg viewBox="0 0 24 24" className="size-5" fill="none">
@@ -42,10 +41,8 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
   const [selectedSell, setSelectedSell] = useState("USDC");
   const [selectedBuy, setSelectedBuy] = useState("WETH");
   const [quote, setQuote] = useState<CowQuoteData>(null);
-  const [quoteId, setQuoteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { signTypedDataAsync } = useSignTypedData();
 
   const registry = state.chainId ? tokensForChain(state.chainId) : undefined;
   const tokens = registry ? Object.entries(registry).map(([symbol, meta]) => ({ symbol, address: meta.address, decimals: meta.decimals })) : [];
@@ -80,7 +77,6 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
         feeAmount: "0",
         validTo,
       });
-      setQuoteId(`limit_${Date.now()}`);
       return;
     }
     setLoading(true);
@@ -95,7 +91,6 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
       const json = await res.json();
       if (json.success) {
         setQuote(json.quote);
-        setQuoteId(json.quoteId ?? null);
       } else {
         setError(json.error ?? "Quote failed");
       }
@@ -105,66 +100,6 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
       setLoading(false);
     }
   }, [state.chainId, state.address, sellAmount, selectedSell, selectedBuy, tokens, mode, sellMeta, buyMeta, sellDecimals, computedLimitBuyAmount]);
-
-  const handleSubmit = useCallback(async () => {
-    if (!quote || !state.address || !quoteId || !state.chainId) return;
-    try {
-      const domain = {
-        name: "Gnosis Protocol",
-        version: "v2",
-        chainId: state.chainId,
-        verifyingContract: "0x9008D19f58AAbd9eD0D60971565AA8510560ab41" as `0x${string}`,
-      };
-      const types = {
-        Order: [
-          { name: "sellToken", type: "address" },
-          { name: "buyToken", type: "address" },
-          { name: "receiver", type: "address" },
-          { name: "sellAmount", type: "uint256" },
-          { name: "buyAmount", type: "uint256" },
-          { name: "validTo", type: "uint32" },
-          { name: "appData", type: "bytes32" },
-          { name: "feeAmount", type: "uint256" },
-          { name: "kind", type: "string" },
-          { name: "partiallyFillable", type: "bool" },
-          { name: "sellTokenBalance", type: "string" },
-          { name: "buyTokenBalance", type: "string" },
-        ],
-      };
-      const message = {
-        sellToken: quote.sellToken,
-        buyToken: quote.buyToken,
-        receiver: state.address,
-        sellAmount: quote.sellAmount,
-        buyAmount: quote.buyAmount,
-        validTo: quote.validTo,
-        appData: "0x0000000000000000000000000000000000000000000000000000000000000000",
-        feeAmount: quote.feeAmount,
-        kind: "sell",
-        partiallyFillable: mode === "limit",
-        sellTokenBalance: "erc20",
-        buyTokenBalance: "erc20",
-      };
-      const signature = await signTypedDataAsync({ domain, types, message, primaryType: "Order" });
-      const res = await fetch("/api/cow/order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chainId: state.chainId,
-          order: { ...quote, from: state.address, signingScheme: "eip712" },
-          signature,
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        store.setError?.(`Order submitted! ID: ${json.orderId}`);
-      } else {
-        setError(json.error ?? "Submission failed");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Signing failed");
-    }
-  }, [quote, state.address, state.chainId, quoteId, signTypedDataAsync, mode]);
 
   return (
     <div className="flex flex-col gap-4 p-4 animate-fade-in">
@@ -329,6 +264,11 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
         )}
       </div>
 
+      <p className="flex items-start gap-2 text-xs leading-5 text-dls-secondary" role="status">
+        <Shield className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        Preview only. CoW signing and submission stay unavailable until Matterhorn adds a dedicated reviewed-wallet approval flow.
+      </p>
+
       <div className="flex gap-2">
         <Button
           variant="outline"
@@ -340,14 +280,11 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
           {loading ? "Building..." : mode === "limit" ? "Build Order" : "Get Quote"}
         </Button>
         <Button
-          className={cn(
-            "flex-1 h-12 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-500/20",
-            !quote && "opacity-50 cursor-not-allowed"
-          )}
-          onClick={handleSubmit}
-          disabled={loading || !quote}
+          className="flex-1 h-12 rounded-lg"
+          disabled
+          title="CoW submission requires a reviewed-wallet approval flow"
         >
-          Submit Order
+          Submission unavailable
         </Button>
       </div>
     </div>

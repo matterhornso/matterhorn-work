@@ -21,9 +21,12 @@ import {
   Search,
   ShieldAlert,
   Terminal,
+  ThumbsDown,
+  ThumbsUp,
   Undo2,
   Wallet,
   Zap,
+  RotateCcw,
 } from "lucide-react";
 
 import { openDesktopPath, revealDesktopItemInDir } from "../../../../app/lib/desktop";
@@ -187,6 +190,9 @@ type SessionTranscriptProps = {
   openTargets?: OpenTarget[];
   onOpenTarget?: (target: OpenTarget) => void;
   onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
+  onRetryAssistantResponse?: (messageId: string) => Promise<void> | void;
+  onSaveAssistantResponse?: (messageId: string, text: string) => Promise<OpenTarget | void> | OpenTarget | void;
+  onRateAssistantResponse?: (messageId: string, rating: "helpful" | "not_helpful") => Promise<void> | void;
 };
 
 // 500 was too high for real-world Matterhorn Desks sessions: a handful of giant
@@ -492,17 +498,147 @@ function MessageActionIconButton(props: {
   "aria-label": string;
   onClick: () => void | Promise<void>;
   children: ReactNode;
+  disabled?: boolean;
+  "aria-pressed"?: boolean;
+  className?: string;
 }) {
   return (
     <button
       type="button"
       title={props.title}
       aria-label={props["aria-label"]}
+      aria-pressed={props["aria-pressed"]}
+      disabled={props.disabled}
       onClick={() => void props.onClick()}
-      className="inline-flex size-7 items-center justify-center rounded-md text-dls-secondary transition-colors duration-150 hover:bg-dls-hover/55 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)]"
+      className={cn(
+        "inline-flex size-9 shrink-0 items-center justify-center rounded-md text-dls-secondary transition-colors duration-150 hover:bg-dls-hover/55 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)] disabled:cursor-wait disabled:opacity-45 sm:size-7",
+        props["aria-pressed"] && "bg-dls-hover/70 text-dls-text",
+        props.className,
+      )}
     >
       {props.children}
     </button>
+  );
+}
+
+function AssistantResponseActions(props: {
+  messageId: string;
+  getText: () => string;
+  onRetry?: (messageId: string) => Promise<void> | void;
+  onSave?: (messageId: string, text: string) => Promise<OpenTarget | void> | OpenTarget | void;
+  onRate?: (messageId: string, rating: "helpful" | "not_helpful") => Promise<void> | void;
+  onOpenTarget?: (target: OpenTarget) => void;
+  onRevert?: (messageId: string) => void;
+  onFork?: (messageId: string) => void;
+}) {
+  const [retryState, setRetryState] = useState<"idle" | "retrying" | "failed">("idle");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [savedTarget, setSavedTarget] = useState<OpenTarget | null>(null);
+  const [ratingState, setRatingState] = useState<"idle" | "submitting" | "helpful" | "not_helpful" | "failed">("idle");
+  const busy = retryState === "retrying" || saveState === "saving" || ratingState === "submitting";
+
+  const rate = async (rating: "helpful" | "not_helpful") => {
+    if (!props.onRate || busy) return;
+    setRatingState("submitting");
+    try {
+      await props.onRate(props.messageId, rating);
+      setRatingState(rating);
+    } catch {
+      setRatingState("failed");
+    }
+  };
+
+  return (
+    <div className="mt-2 flex min-h-7 min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2" data-response-state={saveState === "saved" ? "saved" : "completed"}>
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-dls-muted" aria-live="polite">
+        <BadgeCheck size={13} aria-hidden="true" />
+        {saveState === "saved" ? "Saved to Outputs" : saveState === "failed" ? "Save failed" : retryState === "failed" ? "Retry failed" : ratingState === "failed" ? "Feedback failed" : "Completed"}
+      </span>
+      <div
+        className="relative z-10 flex max-w-full touch-pan-x items-center gap-0.5 overflow-x-auto select-none opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+        role="group"
+        aria-label="Response actions"
+      >
+        {props.onRetry ? (
+          <MessageActionIconButton
+            onClick={async () => {
+              if (busy) return;
+              setRetryState("retrying");
+              try {
+                await props.onRetry?.(props.messageId);
+                setRetryState("idle");
+              } catch {
+                setRetryState("failed");
+              }
+            }}
+            disabled={busy}
+            title={retryState === "failed" ? "Retry failed — try again" : retryState === "retrying" ? "Retrying response" : "Retry response"}
+            aria-label={retryState === "retrying" ? "Retrying response" : "Retry response"}
+          >
+            <RotateCcw size={14} className={retryState === "retrying" ? "animate-spin" : undefined} />
+          </MessageActionIconButton>
+        ) : null}
+        <CopyButton getText={props.getText} />
+        {props.onSave ? (
+          <MessageActionIconButton
+            onClick={async () => {
+              if (savedTarget) {
+                props.onOpenTarget?.(savedTarget);
+                return;
+              }
+              if (busy) return;
+              setSaveState("saving");
+              try {
+                const target = await props.onSave?.(props.messageId, props.getText());
+                setSavedTarget(target ?? null);
+                setSaveState("saved");
+              } catch {
+                setSaveState("failed");
+              }
+            }}
+            disabled={busy}
+            className={saveState === "saved" ? "text-dls-text" : undefined}
+            title={savedTarget ? "Open saved output" : saveState === "saving" ? "Saving response" : saveState === "failed" ? "Save failed — try again" : "Save to Outputs"}
+            aria-label={savedTarget ? "Open saved output" : saveState === "saving" ? "Saving response" : "Save response to Outputs"}
+          >
+            {saveState === "saved" ? <Check size={14} /> : <Save size={14} />}
+          </MessageActionIconButton>
+        ) : null}
+        {props.onRate ? (
+          <>
+            <MessageActionIconButton
+              onClick={() => rate("helpful")}
+              disabled={busy}
+              aria-pressed={ratingState === "helpful"}
+              title={ratingState === "helpful" ? "Marked helpful" : "Helpful"}
+              aria-label={ratingState === "helpful" ? "Response marked helpful" : "Mark response helpful"}
+            >
+              <ThumbsUp size={14} />
+            </MessageActionIconButton>
+            <MessageActionIconButton
+              onClick={() => rate("not_helpful")}
+              disabled={busy}
+              aria-pressed={ratingState === "not_helpful"}
+              title={ratingState === "not_helpful" ? "Marked not helpful" : "Not helpful"}
+              aria-label={ratingState === "not_helpful" ? "Response marked not helpful" : "Mark response not helpful"}
+            >
+              <ThumbsDown size={14} />
+            </MessageActionIconButton>
+          </>
+        ) : null}
+        {props.onRevert || props.onFork ? <span className="mx-0.5 h-3.5 w-px bg-dls-border" aria-hidden="true" /> : null}
+        {props.onRevert ? (
+          <MessageActionIconButton onClick={() => props.onRevert?.(props.messageId)} title="Revert to here" aria-label="Revert to this response">
+            <Undo2 size={14} />
+          </MessageActionIconButton>
+        ) : null}
+        {props.onFork ? (
+          <MessageActionIconButton onClick={() => props.onFork?.(props.messageId)} title="Fork from here" aria-label="Fork conversation from this response">
+            <GitFork size={14} />
+          </MessageActionIconButton>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -1626,13 +1762,30 @@ function OpenTargetIcon(props: { target: OpenTarget }) {
 function OpenableTargetsStrip(props: { targets: OpenTarget[]; onOpenTarget: (target: OpenTarget) => void }) {
   if (!props.targets.length) return null;
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs leading-none">
-      <span className="mr-0.5 text-muted-foreground">Openable items</span>
-      {props.targets.map((target) => (
+    <div
+      className="mt-3 flex flex-wrap items-center gap-1.5 text-xs leading-none"
+      role="group"
+      aria-label="Files and links from this response"
+    >
+      <span className="mr-0.5 text-muted-foreground">Open from this response</span>
+      {props.targets.map((target) => target.kind === "url" && !isDesktopRuntime() ? (
+          <a
+            key={target.id}
+            href={target.value}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 max-w-[220px] touch-manipulation items-center gap-1.5 rounded-md border border-dls-border bg-dls-surface px-2.5 py-2 text-foreground transition-colors duration-150 hover:border-primary/40 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)] sm:min-h-8 sm:px-2 sm:py-1.5"
+            title={target.value}
+          >
+            <OpenTargetIcon target={target} />
+            <span className="truncate">{target.name || target.value}</span>
+            <span className="text-muted-foreground">Open browser</span>
+          </a>
+        ) : (
           <button
             key={target.id}
             type="button"
-            className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-dls-border bg-dls-surface px-2 py-1.5 text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+            className="inline-flex min-h-11 max-w-[220px] touch-manipulation items-center gap-1.5 rounded-md border border-dls-border bg-dls-surface px-2.5 py-2 text-foreground transition-colors duration-150 hover:border-primary/40 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.28)] sm:min-h-8 sm:px-2 sm:py-1.5"
             title={target.value}
             onClick={() => props.onOpenTarget(target)}
           >
@@ -1663,6 +1816,9 @@ function MessageBlockRow(props: {
   openTargets?: OpenTarget[];
   onOpenTarget?: (target: OpenTarget) => void;
   onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
+  onRetryAssistantResponse?: (messageId: string) => Promise<void> | void;
+  onSaveAssistantResponse?: (messageId: string, text: string) => Promise<OpenTarget | void> | OpenTarget | void;
+  onRateAssistantResponse?: (messageId: string, rating: "helpful" | "not_helpful") => Promise<void> | void;
 }) {
   const block = props.block;
   const blockMessageIds = block.kind === "steps-cluster" ? block.messageIds : [block.messageId];
@@ -1717,6 +1873,7 @@ function MessageBlockRow(props: {
   const inlineOpenTargets = block.kind === "message" && !block.isUser && props.onOpenTarget
     ? inlineOpenTargetsForMessage(block.message, props.openTargets)
     : [];
+  const isActiveAssistantResponse = !block.isUser && props.isStreaming && block.messageId === props.latestAssistantMessageId;
 
   if (isSyntheticSessionError) {
     const messageText = block.renderableParts
@@ -1758,7 +1915,7 @@ function MessageBlockRow(props: {
           "relative text-sm text-foreground leading-relaxed",
           block.isUser && "bg-dls-surface-muted/[0.14] ring-1 ring-white/[0.08]",
           block.isUser && props.isNestedVariant && "max-w-[92%] rounded-lg px-4 py-3",
-          block.isUser && !props.isNestedVariant && "max-w-[85%] rounded-lg px-5 py-3.5 pr-24",
+          block.isUser && !props.isNestedVariant && "max-w-[85%] rounded-lg px-5 py-3.5 pr-28 sm:pr-24",
           !block.isUser && "w-full antialiased",
           !block.isUser && !props.isNestedVariant && "max-w-[760px]",
           searchOutlineClass,
@@ -1848,7 +2005,20 @@ function MessageBlockRow(props: {
 
         {props.onOpenTarget ? <OpenableTargetsStrip targets={inlineOpenTargets} onOpenTarget={props.onOpenTarget} /> : null}
 
-        {!props.isNestedVariant ? (
+        {!props.isNestedVariant && !block.isUser && !isActiveAssistantResponse ? (
+          <AssistantResponseActions
+            messageId={block.messageId}
+            getText={() => messageToText(block.message)}
+            onRetry={block.messageId === props.latestAssistantMessageId ? props.onRetryAssistantResponse : undefined}
+            onSave={props.onSaveAssistantResponse}
+            onRate={props.onRateAssistantResponse}
+            onOpenTarget={props.onOpenTarget}
+            onRevert={props.onRevertToMessage}
+            onFork={props.onForkAtMessage}
+          />
+        ) : null}
+
+        {!props.isNestedVariant && block.isUser ? (
           <div
             className={cn(
               "relative z-10 flex items-center gap-0.5 select-none transition-opacity duration-150",
@@ -2152,6 +2322,9 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
                       openTargets={props.openTargets}
                       onOpenTarget={props.onOpenTarget}
                       onSaveBittensorEvidence={props.onSaveBittensorEvidence}
+                      onRetryAssistantResponse={props.onRetryAssistantResponse}
+                      onSaveAssistantResponse={props.onSaveAssistantResponse}
+                      onRateAssistantResponse={props.onRateAssistantResponse}
                     />
                   </div>
                 );
@@ -2181,6 +2354,9 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
               openTargets={props.openTargets}
               onOpenTarget={props.onOpenTarget}
               onSaveBittensorEvidence={props.onSaveBittensorEvidence}
+              onRetryAssistantResponse={props.onRetryAssistantResponse}
+              onSaveAssistantResponse={props.onSaveAssistantResponse}
+              onRateAssistantResponse={props.onRateAssistantResponse}
             />
           ))}
         </div>

@@ -29,7 +29,12 @@ function initialAuthMode(): AuthMode {
 }
 
 function readableAuthError(error: unknown): string {
-  if (error instanceof DenApiError) return error.message;
+  if (error instanceof DenApiError) {
+    if (error.status >= 500) {
+      return "Account access is temporarily unavailable on this preview.";
+    }
+    return error.message;
+  }
   if (error instanceof Error && /timed out/i.test(error.message)) {
     return "The request took too long. Check your connection and try again.";
   }
@@ -45,6 +50,9 @@ export function PublicWebSigninPage({
   const [password, setPassword] = useState("");
   const [sessionBusy, setSessionBusy] = useState(true);
   const [submitBusy, setSubmitBusy] = useState(false);
+  const [accountServiceAvailable, setAccountServiceAvailable] = useState<
+    boolean | null
+  >(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
   const client = useMemo(
@@ -60,14 +68,15 @@ export function PublicWebSigninPage({
     setSessionBusy(true);
     setAuthError(null);
     try {
-      if (await checkPublicCloudSession(config, signal)) {
+      const signedIn = await checkPublicCloudSession(config, signal);
+      setAccountServiceAvailable(true);
+      if (signedIn) {
         onSignedIn();
       }
     } catch {
       if (signal?.aborted) return;
-      setAuthError(
-        "Matterhorn could not reach the account service. Check your connection and try again.",
-      );
+      setAccountServiceAvailable(false);
+      setAuthError("Account access is temporarily unavailable on this preview.");
     } finally {
       if (!signal?.aborted) setSessionBusy(false);
     }
@@ -79,6 +88,34 @@ export function PublicWebSigninPage({
     return () => controller.abort();
   }, [refreshSession]);
 
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    let frame: number | undefined;
+    const keepActiveFieldVisible = () => {
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        frame = undefined;
+        const active = document.activeElement;
+        if (!(active instanceof HTMLElement) || !active.closest(".public-auth-form")) return;
+
+        const rect = active.getBoundingClientRect();
+        const visibleTop = viewport.offsetTop + 12;
+        const visibleBottom = viewport.offsetTop + viewport.height - 12;
+        if (rect.top < visibleTop || rect.bottom > visibleBottom) {
+          active.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
+        }
+      });
+    };
+
+    viewport.addEventListener("resize", keepActiveFieldVisible);
+    return () => {
+      viewport.removeEventListener("resize", keepActiveFieldVisible);
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
   const selectMode = (nextMode: AuthMode) => {
     setMode(nextMode);
     setAuthError(null);
@@ -87,7 +124,7 @@ export function PublicWebSigninPage({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (submitBusy) return;
+    if (submitBusy || accountServiceAvailable === false) return;
     setSubmitBusy(true);
     setAuthError(null);
     try {
@@ -101,6 +138,9 @@ export function PublicWebSigninPage({
       }
       onSignedIn();
     } catch (error) {
+      if (error instanceof DenApiError && error.status >= 500) {
+        setAccountServiceAvailable(false);
+      }
       setAuthError(readableAuthError(error));
     } finally {
       setSubmitBusy(false);
@@ -108,6 +148,8 @@ export function PublicWebSigninPage({
   };
 
   const signingUp = mode === "sign-up";
+  const accountUnavailable = accountServiceAvailable === false;
+  const accessDisabled = sessionBusy || submitBusy || accountUnavailable;
 
   return (
     <main className="public-auth-shell">
@@ -133,6 +175,7 @@ export function PublicWebSigninPage({
               aria-pressed={!signingUp}
               className={!signingUp ? "is-active" : ""}
               onClick={() => selectMode("sign-in")}
+              disabled={sessionBusy || accountUnavailable}
             >
               Sign in
             </button>
@@ -141,6 +184,7 @@ export function PublicWebSigninPage({
               aria-pressed={signingUp}
               className={signingUp ? "is-active" : ""}
               onClick={() => selectMode("sign-up")}
+              disabled={sessionBusy || accountUnavailable}
             >
               Create account
             </button>
@@ -156,7 +200,7 @@ export function PublicWebSigninPage({
               inputMode="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              disabled={sessionBusy || submitBusy}
+              disabled={accessDisabled}
               required
             />
 
@@ -168,7 +212,7 @@ export function PublicWebSigninPage({
               autoComplete={signingUp ? "new-password" : "current-password"}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              disabled={sessionBusy || submitBusy}
+              disabled={accessDisabled}
               minLength={signingUp ? 12 : undefined}
               maxLength={256}
               required
@@ -182,7 +226,7 @@ export function PublicWebSigninPage({
             <button
               type="submit"
               className="public-auth-submit"
-              disabled={sessionBusy || submitBusy}
+              disabled={accessDisabled}
             >
               {sessionBusy
                 ? "Checking session..."
@@ -190,46 +234,63 @@ export function PublicWebSigninPage({
                   ? signingUp
                     ? "Creating account..."
                     : "Signing in..."
-                  : signingUp
-                    ? "Create account"
-                    : "Sign in"}
+                  : accountUnavailable
+                    ? "Account access unavailable"
+                    : signingUp
+                      ? "Create account"
+                      : "Sign in"}
             </button>
           </form>
 
-          <p
+          <div
             className={`public-auth-status ${
               authError ? "public-auth-status-error" : ""
             }`}
             role={authError ? "alert" : "status"}
             aria-live="polite"
           >
-            {authError ?? "Your workspace stays private to your account."}
-          </p>
+            <span>{authError ?? "Your workspace stays private to your account."}</span>
+            {accountUnavailable && !sessionBusy ? (
+              <button type="button" onClick={() => void refreshSession()}>
+                Check again
+              </button>
+            ) : null}
+          </div>
+
+          <nav className="public-auth-trust" aria-label="Security and privacy">
+            <a href="/security">Security</a>
+            <a href="/privacy">Privacy</a>
+          </nav>
         </section>
 
         <aside className="public-auth-context" aria-labelledby="public-auth-context-title">
-          <p className="public-auth-kicker">Designed for accountable work</p>
-          <h2 id="public-auth-context-title">
-            Keep context, actions, and evidence in one place.
-          </h2>
+          <h2 id="public-auth-context-title">Choose a desk. Ask for the outcome.</h2>
           <p className="public-auth-context-lead">
-            Matterhorn turns useful conversations into durable project work
-            while keeping approvals and final decisions with you.
+            Each desk gives your conversation the right working context, tools,
+            and outputs from the first message.
           </p>
-          <ol className="public-auth-principles">
-            <li>
-              <span className="public-auth-principle-index">01</span>
-              <span><strong>Visible control.</strong> Review actions before they happen.</span>
-            </li>
-            <li>
-              <span className="public-auth-principle-index">02</span>
-              <span><strong>Focused desks.</strong> Work with tools built for each domain.</span>
-            </li>
-            <li>
-              <span className="public-auth-principle-index">03</span>
-              <span><strong>Durable evidence.</strong> Keep outputs attached to their work.</span>
-            </li>
-          </ol>
+          <dl className="public-auth-desk-list">
+            <div>
+              <dt>Bittensor</dt>
+              <dd>Explore subnets, compare validators, and inspect wallet activity.</dd>
+            </div>
+            <div>
+              <dt>Hyperliquid</dt>
+              <dd>Study markets, funding, open orders, and account risk.</dd>
+            </div>
+            <div>
+              <dt>Polymarket</dt>
+              <dd>Discover markets, compare outcomes, and inspect liquidity.</dd>
+            </div>
+            <div>
+              <dt>Longevity</dt>
+              <dd>Build a guided program and turn the work into clear outputs.</dd>
+            </div>
+          </dl>
+          <p className="public-auth-control-boundary">
+            <strong>You stay in control.</strong> Financial actions move to a separate
+            wallet review. Matterhorn never holds your keys.
+          </p>
         </aside>
       </div>
     </main>

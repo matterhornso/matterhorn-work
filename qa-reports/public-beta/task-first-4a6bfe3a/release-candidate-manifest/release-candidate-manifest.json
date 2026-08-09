@@ -1,0 +1,34 @@
+{
+  "version": "matterhorn.release-candidate-manifest.v1",
+  "capturedAt": "2026-08-08T04:57:53.262Z",
+  "repository": "/private/tmp/matterhorn-cert-CQkzs4",
+  "branch": "",
+  "head": "4a6bfe3a1780a96fd2f1456916753818cd3d34d8",
+  "expectedHead": null,
+  "expectedHeadMatches": true,
+  "decision": "REVIEWABLE",
+  "reviewable": true,
+  "candidateSourceDigest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "totals": {
+    "candidateReview": 0,
+    "preserveOnly": 3,
+    "stagedCandidate": 0,
+    "stagedProtected": 0,
+    "unclassified": 0
+  },
+  "bucketCounts": {
+    "tests-and-release-documentation": 0,
+    "release-engineering": 0,
+    "public-web-security": 0,
+    "wallet-and-market-safety": 0,
+    "runtime-and-recovery": 0,
+    "ui-and-accessibility": 0,
+    "branding-and-product-truth": 0,
+    "unclassified": 0
+  },
+  "preserveOnly": {
+    "qa-reports/": 3
+  },
+  "blockers": [],
+  "candidateReview": []
+}

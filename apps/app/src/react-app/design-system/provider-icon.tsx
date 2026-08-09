@@ -49,7 +49,7 @@ export function ProviderIcon(props: ProviderIconProps) {
         />
       ) : isOpenAI ? (
         <svg
-          role="img"
+          aria-hidden="true"
           viewBox="0 0 24 24"
           xmlns="http://www.w3.org/2000/svg"
           fill="currentColor"
@@ -60,7 +60,7 @@ export function ProviderIcon(props: ProviderIconProps) {
         </svg>
       ) : isAnthropic ? (
         <svg
-          role="img"
+          aria-hidden="true"
           viewBox="0 0 24 24"
           xmlns="http://www.w3.org/2000/svg"
           fill="currentColor"
@@ -71,7 +71,7 @@ export function ProviderIcon(props: ProviderIconProps) {
         </svg>
       ) : isOpenCode ? (
         <svg
-          role="img"
+          aria-hidden="true"
           viewBox="0 0 24 24"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"

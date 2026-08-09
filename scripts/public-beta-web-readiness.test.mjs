@@ -40,6 +40,8 @@ const managedKeys = [
   "VITE_MATTERHORN_CLOUD_API_URL",
   "MATTERHORN_APP_URL",
   "MATTERHORN_PUBLIC_PROXY_MODE",
+  "MATTERHORN_CONTROL_PLANE_URL",
+  "MATTERHORN_PROXY_SECRET",
   "VITE_MATTERHORN_WORK_TOKEN",
   "VITE_MATTERHORN_WORK_HOST_TOKEN",
   "VITE_OPENWORK_TOKEN",
@@ -65,9 +67,11 @@ function publicWebEnvironment(overrides = {}) {
     VITE_MATTERHORN_REQUIRE_SIGNIN: "true",
     VITE_MATTERHORN_CLOUD_ENABLED: "true",
     VITE_MATTERHORN_CLOUD_URL: "https://app.matterhorn.example",
-    VITE_MATTERHORN_CLOUD_API_URL: "https://api.matterhorn.example",
+    VITE_MATTERHORN_CLOUD_API_URL: "https://app.matterhorn.example/api/den",
     MATTERHORN_APP_URL: "https://app.matterhorn.example",
     MATTERHORN_PUBLIC_PROXY_MODE: "same-origin",
+    MATTERHORN_CONTROL_PLANE_URL: "https://api-origin.matterhorn.example",
+    MATTERHORN_PROXY_SECRET: "a-high-entropy-edge-secret-value-123",
     ...overrides,
   };
 }
@@ -110,6 +114,15 @@ assert.ok(JSON.parse(missingProxyDeclaration.stdout).blockers.some((blocker) => 
 const noSignin = run({ VITE_MATTERHORN_REQUIRE_SIGNIN: "0" });
 assert.notEqual(noSignin.status, 0);
 assert.ok(JSON.parse(noSignin.stdout).blockers.some((blocker) => blocker.id === "web.require_signin"));
+
+const crossOriginCloudApi = run({ VITE_MATTERHORN_CLOUD_API_URL: "https://api.matterhorn.example/api/den" });
+assert.notEqual(crossOriginCloudApi.status, 0);
+assert.ok(JSON.parse(crossOriginCloudApi.stdout).blockers.some((blocker) => blocker.id === "web.cloud_api_same_origin"));
+
+const missingProxySecret = run({ MATTERHORN_PROXY_SECRET: "" });
+assert.notEqual(missingProxySecret.status, 0);
+assert.ok(JSON.parse(missingProxySecret.stdout).blockers.some((blocker) => blocker.id === "web.proxy_secret"));
+assert.doesNotMatch(missingProxySecret.stdout, /a-high-entropy-edge-secret-value-123/);
 
 const deploymentSource = readFileSync("apps/app/src/app/lib/matterhorn-deployment.ts", "utf8");
 const serverSource = readFileSync("apps/app/src/react-app/kernel/server-provider.tsx", "utf8");

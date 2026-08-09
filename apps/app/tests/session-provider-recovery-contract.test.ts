@@ -48,7 +48,8 @@ describe("session provider recovery", () => {
     expect(route).toContain('reason: "model_unavailable"');
     expect(route).toContain("writePendingDeskTask(workspaceId, pendingDeskTask)");
     expect(route).toContain("clearPendingDeskTask(workspaceId);");
-    expect(route).toContain("navigateToWorkspaceSession(workspaceId, selectedSessionId, { replace: true });");
+    expect(route).toContain("`${workspaceSessionRoute(workspaceId, selectedSessionId)}?desk=${encodeURIComponent(pendingDeskTask.deskId)}`");
+    expect(route).toContain("{ replace: true }");
     expect(route).toContain("readPendingDeskTaskReturn(location.search)");
     expect(route).not.toContain("readStoredPendingDeskTask(routeWorkspaceId)");
     expect(route).toContain('handleOpenSettings("/settings/ai", workspaceId, { pendingDeskTask })');

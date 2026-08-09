@@ -1,11 +1,13 @@
 import type { SettingsTab } from "../types";
 import { MATTERHORN_CLOUD_ENABLED } from "./den";
+import { isMatterhornPublicBetaWebDeployment } from "./matterhorn-deployment";
 
 export type MatterhornLaunchFeaturePolicy = {
   billing: boolean;
   cloud: boolean;
   generatedMedia: boolean;
   publicOauthConnectors: string[];
+  reviewedDeskActions: boolean;
 };
 
 function readBooleanFlag(env: Record<string, unknown> | undefined, key: string): boolean {
@@ -31,6 +33,7 @@ export function resolveMatterhornLaunchFeaturePolicy(
     cloud: cloudEnabled,
     generatedMedia: readBooleanFlag(env, "VITE_MATTERHORN_GENERATED_MEDIA_ENABLED"),
     publicOauthConnectors: readListFlag(env, "VITE_MATTERHORN_PUBLIC_OAUTH_CONNECTORS"),
+    reviewedDeskActions: !isMatterhornPublicBetaWebDeployment(env),
   };
 }
 

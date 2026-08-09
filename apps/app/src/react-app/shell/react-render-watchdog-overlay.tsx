@@ -86,7 +86,7 @@ export function ReactRenderWatchdogOverlay() {
   const hot = snapshot.slice(0, 12);
 
   return (
-    <div className="pointer-events-auto fixed bottom-3 left-3 z-[1100] w-[320px] overflow-hidden rounded-lg border border-dls-border bg-dls-canvas/95 text-[11px] text-dls-text shadow-lg backdrop-blur-sm">
+    <div className="pointer-events-auto fixed bottom-3 left-3 z-[var(--matterhorn-layer-diagnostics)] w-[320px] overflow-hidden rounded-lg border border-dls-border bg-dls-canvas/95 text-[11px] text-dls-text shadow-lg backdrop-blur-sm">
       <div className="flex items-center justify-between border-b border-dls-border px-2.5 py-1.5">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-dls-secondary">

@@ -1,0 +1,17 @@
+# Matterhorn Desks
+
+Matterhorn Desks is a task-first workspace for focused AI desks, tools, and durable project evidence. Users retain final control over reviewed actions and external wallet approvals.
+
+## Public resources
+
+- [Documentation](https://github.com/matterhornso/matterhorn-work/tree/dev/docs)
+- [Security policy](https://github.com/matterhornso/matterhorn-work/blob/dev/SECURITY.md)
+- [Source repository](https://github.com/matterhornso/matterhorn-work)
+- [Report a security issue](https://github.com/matterhornso/matterhorn-work/security/advisories/new)
+
+## Product boundaries
+
+- Public-beta protocol desks default to research, monitoring, previews, and evidence.
+- Reviewed financial actions are fail-closed unless explicitly enabled for a release.
+- Matterhorn does not hold private keys or sign wallet transactions for users.
+- Longevity workflows support non-medical planning and offline client deliverables.

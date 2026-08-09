@@ -1,0 +1,107 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "pnpm --filter @matterhorn-work/app build:web",
+  "outputDirectory": "apps/app/dist",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:; frame-src 'self' https:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self' https:"
+        },
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin-allow-popups"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/api/:path*"
+    },
+    {
+      "source": "/workspaces",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/workspaces"
+    },
+    {
+      "source": "/workspaces/:path*",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/workspaces/:path*"
+    },
+    {
+      "source": "/workspace/:path*",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/workspace/:path*"
+    },
+    {
+      "source": "/w/:path*",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/w/:path*"
+    },
+    {
+      "source": "/opencode/:path*",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/opencode/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/health"
+    },
+    {
+      "source": "/health/:path*",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/health/:path*"
+    },
+    {
+      "source": "/capabilities",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/capabilities"
+    },
+    {
+      "source": "/env/:path*",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/env/:path*"
+    },
+    {
+      "source": "/experimental/:path*",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/experimental/:path*"
+    },
+    {
+      "source": "/files/:path*",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/files/:path*"
+    },
+    {
+      "source": "/runtime/:path*",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/runtime/:path*"
+    },
+    {
+      "source": "/tokens/:path*",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/tokens/:path*"
+    },
+    {
+      "source": "/voice/:path*",
+      "destination": "/api/matterhorn-proxy?__matterhorn_path=/voice/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

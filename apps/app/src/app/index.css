@@ -81,6 +81,14 @@
   --status-blocked-rgb: 220 38 38;
   --nav-rail-width: 120px;
   --nav-rail-width-compact: 88px;
+  --matterhorn-layer-dropdown: 40;
+  --matterhorn-layer-sticky: 50;
+  --matterhorn-layer-modal-backdrop: 60;
+  --matterhorn-layer-modal: 70;
+  --matterhorn-layer-coachmark: 75;
+  --matterhorn-layer-toast: 80;
+  --matterhorn-layer-tooltip: 90;
+  --matterhorn-layer-diagnostics: 100;
   --dls-surface: #ffffff;
   --dls-sidebar: #f5fbff;
   --dls-app-bg: #f6f9ff;
@@ -631,6 +639,21 @@ select:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0s !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+  }
+
   .ow-dot-ticker {
     animation: none;
     background-color: rgb(var(--dls-accent-rgb)/0.6);

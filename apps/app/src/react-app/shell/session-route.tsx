@@ -82,7 +82,6 @@ import {
 import { t } from "../../i18n";
 import { useLocal } from "../kernel/local-provider";
 import { usePlatform } from "../kernel/platform";
-import { SessionPage } from "../domains/session/chat/session-page";
 import {
   clearPendingDeskTask,
   isPendingDeskTaskId,
@@ -176,6 +175,12 @@ import {
   resolveOptionalMatterhornContext,
   sanitizeMatterhornSystemContextValue,
 } from "../domains/session/context/session-system-context";
+
+const SessionPage = lazy(() =>
+  import("../domains/session/chat/session-page").then((module) => ({
+    default: module.SessionPage,
+  })),
+);
 
 import { readDenSettings } from "../../app/lib/den";
 import { denSessionUpdatedEvent } from "../../app/lib/den-session-events";
@@ -691,9 +696,14 @@ export function SessionRoute() {
   const handlePendingDeskTaskRestored = useCallback(() => {
     const workspaceId = selectedWorkspaceId || routeWorkspaceId;
     clearPendingDeskTask(workspaceId);
-    navigateToWorkspaceSession(workspaceId, selectedSessionId, { replace: true });
+    if (!workspaceId || !pendingDeskTask) return;
+    navigate(
+      `${workspaceSessionRoute(workspaceId, selectedSessionId)}?desk=${encodeURIComponent(pendingDeskTask.deskId)}`,
+      { replace: true },
+    );
   }, [
-    navigateToWorkspaceSession,
+    navigate,
+    pendingDeskTask,
     routeWorkspaceId,
     selectedSessionId,
     selectedWorkspaceId,
@@ -3381,7 +3391,17 @@ export function SessionRoute() {
         onAssistantOutput={handleAssistantOutputTiming}
       />
     ) : null}
-    <SessionPage
+    <Suspense
+      fallback={
+        <div
+          className="flex min-h-screen items-center justify-center text-sm text-dls-secondary"
+          role="status"
+        >
+          Preparing workspace…
+        </div>
+      }
+    >
+      <SessionPage
       selectedSessionId={selectedSessionId}
       workspaceHomeView={isWorkspaceHistoryRoute ? "history" : "home"}
       selectedWorkspaceId={selectedWorkspaceId}
@@ -3580,6 +3600,9 @@ export function SessionRoute() {
             }
             const workspacePath = workspace.path?.trim() || undefined;
             const sendImmediately = Boolean(options?.sendImmediately);
+            const activityWorkspaceIds = Array.from(new Set(
+              [workspaceId, endpoint.workspaceId].map((id) => id?.trim()).filter(Boolean),
+            ));
             const workspaceClient = createClient(
               endpoint.opencodeBaseUrl,
               workspacePath,
@@ -3645,10 +3668,12 @@ export function SessionRoute() {
                 return false;
               }
               if (sendImmediately) {
-                useSessionActivityStore.getState().startOptimisticRun(workspaceId, session.id, {
-                  title: title || "desk task",
-                  agent: agent || undefined,
-                });
+                for (const activityWorkspaceId of activityWorkspaceIds) {
+                  useSessionActivityStore.getState().startOptimisticRun(activityWorkspaceId, session.id, {
+                    title: title || "desk task",
+                    agent: agent || undefined,
+                  });
+                }
                 showToast({
                   title: `Starting ${title || "desk task"}`,
                   description: "Sending the task to the agent.",
@@ -3707,7 +3732,9 @@ export function SessionRoute() {
                 const operation = pendingModelOperation(session.id);
                 if (operation) recordModelOperationProviderError(operation, error);
                 const message = describeTaskCreateError(error);
-                useSessionActivityStore.getState().setRunStatus(workspaceId, session.id, { type: "idle" });
+                for (const activityWorkspaceId of activityWorkspaceIds) {
+                  useSessionActivityStore.getState().setRunStatus(activityWorkspaceId, session.id, { type: "idle" });
+                }
                 saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
                 focusPromptSoon();
                 recordInspectorEvent("desk.task_launch.fallback_saved", {
@@ -3831,7 +3858,8 @@ export function SessionRoute() {
       notFoundMessage={routeNotFoundMessage}
       onRevealPath={revealWorkspacePath}
       onAccessibleTargetsChange={setPaletteAccessibleTargets}
-    />
+      />
+    </Suspense>
     <CreateWorkspaceModal
       open={createWorkspaceOpen}
       onClose={() => {

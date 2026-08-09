@@ -14,6 +14,7 @@ const MANUAL_BROWSE_UPWARD_THRESHOLD_PX = 16;
 type SessionScrollControllerOptions = {
   selectedSessionId: string | null;
   renderedMessages: unknown;
+  startAtTop: boolean;
   containerRef: RefObject<HTMLDivElement | null>;
   contentRef: RefObject<HTMLDivElement | null>;
 };
@@ -275,7 +276,7 @@ export function useSessionScrollController(
       // touchpad, or scrollbar in the last SCROLL_GESTURE_WINDOW_MS, treat
       // that as intent to break out of autoscroll and leave their position
       // alone until the next handleScroll tick reclassifies the mode.
-      if (grew && isAtBottom && !hasScrollGesture()) {
+      if (grew && isAtBottom && !hasScrollGesture() && !options.startAtTop) {
         scrollToBottom("auto");
         return;
       }
@@ -285,7 +286,7 @@ export function useSessionScrollController(
 
     observer.observe(content);
     return () => observer.disconnect();
-  }, [hasScrollGesture, isAtBottom, options.contentRef, refreshTopClippedMessage, scrollToBottom]);
+  }, [hasScrollGesture, isAtBottom, options.contentRef, options.startAtTop, refreshTopClippedMessage, scrollToBottom]);
 
   useEffect(() => {
     if (selectedSessionId === previousSessionIdRef.current) return;
@@ -299,6 +300,24 @@ export function useSessionScrollController(
       if (!container) return;
 
       const savedState = getSessionScrollState(useSessionScrollStore.getState().sessions, selectedSessionId);
+      if (options.startAtTop) {
+        programmaticScrollRef.current = true;
+        container.scrollTop = 0;
+        lastKnownScrollTopRef.current = 0;
+        window.requestAnimationFrame(() => {
+          const next = options.containerRef.current;
+          if (!next) {
+            programmaticScrollRef.current = false;
+            return;
+          }
+          next.scrollTop = 0;
+          lastKnownScrollTopRef.current = 0;
+          refreshTopClippedMessage();
+          releaseProgrammaticScrollSoon();
+        });
+        return;
+      }
+
       if (savedState.mode === "manual") {
         programmaticScrollRef.current = true;
         container.scrollTop = Math.min(savedState.scrollTop, Math.max(0, container.scrollHeight - container.clientHeight));
@@ -319,7 +338,7 @@ export function useSessionScrollController(
 
       scrollToBottom("auto");
     });
-  }, [options.containerRef, releaseProgrammaticScrollSoon, saveScrollPosition, scrollToBottom, selectedSessionId]);
+  }, [options.containerRef, options.startAtTop, refreshTopClippedMessage, releaseProgrammaticScrollSoon, saveScrollPosition, scrollToBottom, selectedSessionId]);
 
   useEffect(() => {
     void options.renderedMessages;

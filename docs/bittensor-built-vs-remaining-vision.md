@@ -30,7 +30,7 @@ The intended user experience:
 - Public wallet intelligence reports with free TAO, stake value, subnet/validator concentration, slippage exposure, stale-data risk, largest positions, warnings, next questions, copilot actions, and watch suggestions.
 - Subnet intelligence reports with score, source/freshness, market/metagraph context, mechanism-awareness, validator concentration, adapter readiness, warnings, next questions, and watch suggestions.
 - Validator intelligence and deep-dive flows for public validator hotkeys.
-- In-memory public wallet baselines, optional public-data-only wallet timeline snapshots, `what changed in my wallet since last time?` comparison cards, and chat-level baseline reset/forget controls.
+- In-memory public wallet baselines, optional public-data-only wallet timeline snapshots, `what changed in my wallet since last time?` comparison cards, chat-level baseline reset/forget controls, and app controls to save, export, and clear public watch-only history.
 
 ### Staking And Signing Safety
 
@@ -165,7 +165,7 @@ Build:
 
 1. Real read-only adapter canary: choose one data/search or inference endpoint, pass the canary gate, run preview-confirm-invoke with endpoint allowlist/timeouts/rate limits, and keep it canary-only.
 2. External signer receipt UX: import/capture externally signed receipts in the app, show status, and offer a post-action public wallet diff prompt.
-3. Durable wallet timeline polish: timestamped public baselines, export/redaction, clear controls, and "since yesterday/last week" chat phrasing.
+3. Hosted wallet timeline isolation: scope persisted timelines by workspace/account before enabling them in a multi-tenant deployment, then add "since yesterday/last week" chat phrasing.
 4. Customer readiness UI: show latest local evidence state, missing artifacts, and P0/P1 blockers directly in the app.
 5. Bittensor event/notification polish: local notification summaries and event-stream integration for scheduled watch findings.
 6. Upstream OpenWork sync dry run: run the intake checker against current upstream, document any safe cherry-pick candidates, and keep Matterhorn-specific safety gates intact.

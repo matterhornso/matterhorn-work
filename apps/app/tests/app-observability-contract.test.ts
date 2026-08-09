@@ -110,6 +110,15 @@ describe("Matterhorn app observability contracts", () => {
     );
   });
 
+  test("new desk tasks expose optimistic progress under route and runtime workspace ids", () => {
+    const source = readReactAppSource("shell/session-route.tsx");
+
+    expect(source).toContain("[workspaceId, endpoint.workspaceId]");
+    expect(source).toContain("for (const activityWorkspaceId of activityWorkspaceIds)");
+    expect(source).toContain("startOptimisticRun(activityWorkspaceId, session.id");
+    expect(source).toContain("setRunStatus(activityWorkspaceId, session.id, { type: \"idle\" })");
+  });
+
   test("project Home clears focused desk state before route navigation", () => {
     const source = readReactAppSource("domains/session/chat/session-page.tsx");
     const goHomeBlock = source.slice(
@@ -126,9 +135,10 @@ describe("Matterhorn app observability contracts", () => {
 
   test("plain project Home URLs do not restore a persisted side panel", () => {
     const source = readReactAppSource("domains/session/chat/session-page.tsx");
+    const routedPanelStart = source.indexOf("// The URL is the shareable source of truth");
     const routedPanelBlock = source.slice(
-      source.indexOf("// The URL is the shareable source of truth"),
-      source.indexOf("setActiveWorkflowDeskId(null)"),
+      routedPanelStart,
+      source.indexOf("}, [routeSidePanel, setSidePanelState, sidePanelScopeId]);", routedPanelStart),
     );
 
     expect(routedPanelBlock).toContain("setSidePanelState(");

@@ -209,15 +209,6 @@ export function TransactionApproval({ store, onApprove, onReject, onSimulateTran
     return () => clearTimeout(timer);
   }, [countdown]);
 
-  useEffect(() => {
-    function handleTxRequest(e: Event) {
-      const detail = (e as CustomEvent).detail as TxApprovalRequest;
-      store.requestApproval(detail.to, detail.value, detail.data, detail.chainId, detail.proposedBy, detail.riskLevel);
-    }
-    window.addEventListener("matterhorn:tx-approval-request", handleTxRequest);
-    return () => window.removeEventListener("matterhorn:tx-approval-request", handleTxRequest);
-  }, [store]);
-
   // Allow rejecting via Escape key
   useEffect(() => {
     if (!pending) return;

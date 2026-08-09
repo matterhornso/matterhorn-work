@@ -238,7 +238,8 @@ assert.ok(
   "MCP page should clarify empty status means no external MCP servers",
 );
 assert.ok(
-  appMcpView.includes("server-backed and ready to install below"),
+  appMcpView.includes("Built-in Matterhorn MCPs are server-backed and ready to install") &&
+    appMcpView.includes("below. Copy a command for Codex"),
   "MCP page should tell users built-in Matterhorn MCPs are backend-backed and ready to install",
 );
 assert.ok(appMcpView.includes("Core Agent MCP"), "MCP page should expose the backend core agent MCP tools");

@@ -24,6 +24,7 @@ const NOW = new Date("2026-07-06T00:00:00.000Z");
 
 function mockProvider() {
   const calls: Array<{ network: SuiNetwork; input: Parameters<SuiReadClient["getBalance"]>[0] }> = [];
+  const transactionCalls: Array<{ network: SuiNetwork; input: Parameters<SuiReadClient["getTransaction"]>[0] }> = [];
   const provider = new SuiPublicReadProvider({
     now: () => NOW,
     clientFactory: (network) => ({
@@ -38,9 +39,17 @@ function mockProvider() {
           },
         };
       },
+      async getTransaction(input) {
+        transactionCalls.push({ network, input });
+        return {
+          digest: input.digest,
+          status: "success",
+          errorMessage: null,
+        };
+      },
     }),
   });
-  return { provider, calls };
+  return { provider, calls, transactionCalls };
 }
 
 describe("Sui public read provider", () => {
@@ -271,11 +280,55 @@ describe("Sui public read provider", () => {
         digestPresent: true,
         previewLinked: true,
         liveSubmissionByMatterhorn: false,
+        chainVerified: false,
       },
     });
     expect(receipt.receiptSha256).toMatch(/^[a-f0-9]{64}$/);
     expect(card.kind).toBe("sui_transaction_receipt");
     expect(serialized).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
+  });
+
+  test("verifies Sui transaction receipts against public chain data", async () => {
+    const { provider, transactionCalls } = mockProvider();
+    const digest = "5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky";
+
+    const receipt = await provider.verifyTransactionReceipt({
+      network: "mainnet",
+      previewSha256: "b".repeat(64),
+      transactionDigest: digest,
+      status: "unknown",
+    });
+    const card = buildSuiTransactionReceiptCard(receipt);
+
+    expect(transactionCalls).toEqual([{
+      network: "mainnet",
+      input: { digest, signal: undefined },
+    }]);
+    expect(receipt).toMatchObject({
+      status: "success",
+      verification: {
+        kind: "sui_rpc_transaction",
+        chainVerified: true,
+        source: "sui.grpc",
+        verifiedAt: NOW.toISOString(),
+      },
+    });
+    expect(card.summary).toContain("verified");
+    expect(card.items).toContainEqual(expect.objectContaining({
+      label: "Verification",
+      value: "Verified on Sui",
+    }));
+  });
+
+  test("uses chain status when supplied Sui receipt status conflicts", async () => {
+    const { provider } = mockProvider();
+    const receipt = await provider.verifyTransactionReceipt({
+      transactionDigest: "5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+      status: "failure",
+    });
+
+    expect(receipt.status).toBe("success");
+    expect(receipt.warnings.join(" ")).toContain("did not match Sui");
   });
 
   test("rejects invalid or secret-shaped Sui receipts", () => {

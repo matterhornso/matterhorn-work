@@ -126,7 +126,7 @@ describe("Shared primitives UI contract", () => {
     const source = readAppSource("domains/settings/shell/settings-shell.tsx");
     expect(source).not.toContain("rounded-2xl");
     expect(source).toContain(
-      'className="flex h-9 shrink-0 items-center justify-between px-4 md:hidden mac:titlebar-drag"',
+      'className="flex h-[calc(2.75rem+env(safe-area-inset-top))] shrink-0 items-center justify-between px-4 pt-[env(safe-area-inset-top)] md:hidden mac:titlebar-drag"',
     );
     expect(source).not.toContain("<ChevronRight");
     expect(source).not.toContain(
@@ -1013,6 +1013,12 @@ describe("Shared primitives UI contract", () => {
     expect(settingsRoute).not.toContain(
       "connectionsSnapshot.mcpServers.length",
     );
+    expect(source).toContain('aria-label="MCP connection summary"');
+    expect(source).toContain('aria-label="Configured MCP servers"');
+    expect(source).toContain("No external MCPs connected.");
+    expect(source).toContain("Manage MCPs");
+    expect(source).toContain("if (props.compact)");
+    expect(settingsRoute).toContain("onManageMcp={props.embedded");
     expect(english).toContain('"mcp.app_connected": "MCP server active"');
     expect(english).toContain('"mcp.apps_connected": "MCP servers active"');
     expect(english).not.toContain('"mcp.apps_connected": "apps connected"');
@@ -1062,19 +1068,24 @@ describe("Shared primitives UI contract", () => {
     expect(walletView).toContain('"h-auto justify-start gap-3 px-3 py-2.5"');
   });
 
-  test("tablet side panels stay visible until the docked lg layout is available", () => {
-    const mobileHook = readFileSync("apps/app/src/hooks/use-mobile.ts", "utf8");
+  test("secondary panels use a compact desktop sheet before the docked layout", () => {
+    const layoutPolicy = readFileSync(
+      "apps/app/src/react-app/domains/session/chat/session-layout-policy.ts",
+      "utf8",
+    );
     const sessionPage = readFileSync(
       "apps/app/src/react-app/domains/session/chat/session-page.tsx",
       "utf8",
     );
-    expect(mobileHook).toContain("const MOBILE_BREAKPOINT = 1024");
+    expect(layoutPolicy).toContain("SESSION_FULL_SCREEN_PANE_BREAKPOINT = 1024");
+    expect(layoutPolicy).toContain("SESSION_DOCKED_PANE_BREAKPOINT = 1280");
+    expect(layoutPolicy).toContain('return "sheet"');
     expect(sessionPage).toContain(
       'className="matterhorn-side-panel hidden h-full min-h-0 overflow-hidden bg-dls-background lg:flex lg:flex-col"',
     );
-    expect(sessionPage).toContain(
-      'className="matterhorn-side-panel fixed inset-0 z-40 flex bg-dls-background lg:hidden"',
-    );
+    expect(sessionPage).toContain("data-presentation={sidePanelPresentation}");
+    expect(sessionPage).toContain("lg:right-[var(--nav-rail-width-compact)]");
+    expect(sessionPage).toContain("xl:hidden");
   });
 
   test("Memory rail uses a cognitive icon instead of an archive-bin shape", () => {
@@ -1180,6 +1191,12 @@ describe("Shared primitives UI contract", () => {
     );
     expect(source).toContain(
       '<div className="flex min-w-0 flex-1 flex-col overflow-hidden">',
+    );
+    expect(source).not.toContain(
+      '<main className="flex min-h-0 flex-1 flex-col overflow-hidden">',
+    );
+    expect(source).toContain(
+      '<div className="flex min-h-0 flex-1 flex-col overflow-hidden">',
     );
   });
 

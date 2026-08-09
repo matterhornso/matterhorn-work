@@ -145,4 +145,13 @@ describe("desk workflow stage panel metadata", () => {
       expect(source).toContain("ProtocolDeskMark");
     }
   });
+
+  test("Longevity describes a guided workflow without implying offline runtime", () => {
+    const agentSource = readFileSync("packages/types/src/desk-agents.ts", "utf8");
+
+    expect(agentSource).toContain(
+      'description: "Guided longevity program workflow for creators, coaches, client packets, and service packaging."',
+    );
+    expect(agentSource).not.toContain("Offline longevity optimization workflow agent");
+  });
 });
