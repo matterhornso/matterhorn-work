@@ -5,7 +5,7 @@ ARG OPENCODE_VERSION=1.14.38
 ARG TARGETARCH
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl git tar unzip \
+  && apt-get install -y --no-install-recommends ca-certificates curl git gosu tar unzip \
   && npm install --global "bun@${BUN_VERSION}" "pnpm@10.27.0" \
   && rm -rf /var/lib/apt/lists/* /root/.npm
 
@@ -45,8 +45,6 @@ ENV NODE_ENV=production \
 
 COPY --chmod=0755 packaging/docker/public-beta-entrypoint.sh /usr/local/bin/matterhorn-public-beta
 
-USER node
-VOLUME ["/data"]
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
   CMD curl -fsS "http://127.0.0.1:${OPENWORK_PORT:-8787}/health/live" >/dev/null || exit 1

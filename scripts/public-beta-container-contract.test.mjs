@@ -11,12 +11,16 @@ for (const required of [
   "MATTERHORN_WORK_DATA_DIR=/data/matterhorn",
   "MATTERHORN_WORK_WORKSPACES=/data/workspace",
   "MATTERHORN_WORK_APPROVAL_MODE=manual",
-  "USER node",
-  'VOLUME ["/data"]',
+  "gosu",
   "/health/live",
 ]) {
   assert.ok(dockerfile.includes(required), `public Beta image must include ${required}`);
 }
+assert.doesNotMatch(
+  dockerfile,
+  /^VOLUME\b/m,
+  "public Beta persistence must use a host-managed /data mount",
+);
 assert.doesNotMatch(dockerfile, /ee\/apps\/den|ee\/packages\/den/);
 
 for (const required of [
@@ -25,7 +29,8 @@ for (const required of [
   "require_secret MATTERHORN_WORK_TRUSTED_PROXY_SECRET",
   "MATTERHORN_BUILD_COMMIT must be a full 40-character SHA",
   "MATTERHORN_WORK_CORS_ORIGINS must be the exact HTTPS app origin",
-  'exec bun /app/apps/server/src/cli.ts',
+  'install -d -m 0700 -o node -g node "${MATTERHORN_WORK_DATA_DIR}" "${MATTERHORN_WORK_WORKSPACES}"',
+  'exec gosu node bun /app/apps/server/src/cli.ts',
 ]) {
   assert.ok(entrypoint.includes(required), `public Beta entrypoint must include ${required}`);
 }
