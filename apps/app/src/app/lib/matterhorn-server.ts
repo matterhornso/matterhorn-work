@@ -847,6 +847,16 @@ export type MatterhornSuiTransactionReceipt = {
     digestPresent: true;
     previewLinked: boolean;
     liveSubmissionByMatterhorn: false;
+    chainVerified: false;
+  } | {
+    kind: "sui_rpc_transaction";
+    digestPresent: true;
+    previewLinked: boolean;
+    liveSubmissionByMatterhorn: false;
+    chainVerified: true;
+    source: "sui.grpc";
+    endpoint: string;
+    verifiedAt: string;
   };
   importedAt: string;
   receiptSha256: string;
@@ -2300,6 +2310,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         "/api/sui/transactions/receipt",
         { token, hostToken, method: "POST", body: payload, timeoutMs: timeouts.status },
       ),
+    suiVerifyTransactionReceipt: (payload: MatterhornSuiTransactionReceiptInput) =>
+      requestJson<MatterhornSuiTransactionReceiptResponse>(
+        baseUrl,
+        "/api/sui/transactions/verify-receipt",
+        { token, hostToken, method: "POST", body: payload, timeoutMs: timeouts.status },
+      ),
     workspaceSuiTransactionPreview: (
       workspaceId: string,
       payload: MatterhornSuiTransferPreviewInput,
@@ -2324,6 +2340,22 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       requestJson<MatterhornSuiTransactionReceiptResponse>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/sui/transactions/receipt`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: { payload, sessionId: options?.sessionId ?? null },
+          timeoutMs: timeouts.status,
+        },
+      ),
+    workspaceSuiVerifyTransactionReceipt: (
+      workspaceId: string,
+      payload: MatterhornSuiTransactionReceiptInput,
+      options?: { sessionId?: string | null },
+    ) =>
+      requestJson<MatterhornSuiTransactionReceiptResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/sui/transactions/verify-receipt`,
         {
           token,
           hostToken,

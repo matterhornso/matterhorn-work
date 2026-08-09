@@ -45,3 +45,11 @@ Latest local result:
 - App typecheck: pass
 - Server typecheck: pass
 - `git diff --check`: pass
+
+## RPC Verification Upgrade — 2026-08-09
+
+- Added `POST /api/sui/transactions/verify-receipt` and the workspace evidence equivalent.
+- The product receipt flow now derives transaction status from Sui gRPC instead of a user-selected status.
+- Verified evidence records the selected network, public gRPC source, verification time, and `chainVerified: true` without retaining signature material.
+- The metadata-only receipt route remains available for backward compatibility, but the Sui workflow panel no longer uses it.
+- A live testnet transaction was successfully verified through the installed Mysten gRPC client after the focused unit and type-check suites passed.

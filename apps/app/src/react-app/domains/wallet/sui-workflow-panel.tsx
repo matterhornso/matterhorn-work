@@ -175,7 +175,6 @@ export function SuiWorkflowPanel(props: {
   const [memo, setMemo] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [digest, setDigest] = useState("");
-  const [receiptStatus, setReceiptStatus] = useState<"success" | "failure" | "unknown">("success");
   const [explorerUrl, setExplorerUrl] = useState("");
   const [previewResponse, setPreviewResponse] = useState<MatterhornSuiTransactionPreviewResponse | null>(null);
   const [receiptResponse, setReceiptResponse] = useState<MatterhornSuiTransactionReceiptResponse | null>(null);
@@ -376,13 +375,12 @@ export function SuiWorkflowPanel(props: {
     setError(null);
     setBusyAction("receipt");
     try {
-      const response = await client.workspaceSuiTransactionReceipt(
+      const response = await client.workspaceSuiVerifyTransactionReceipt(
         workspaceId,
         {
           network: network as MatterhornSuiNetwork,
           previewSha256: previewResponse?.preview.previewSha256,
           transactionDigest: digest.trim(),
-          status: receiptStatus,
           sender: previewResponse?.preview.sender || effectiveSender || undefined,
           recipient: previewResponse?.preview.recipient || recipient.trim() || undefined,
           amountMist: previewResponse?.preview.amountMist,
@@ -393,7 +391,7 @@ export function SuiWorkflowPanel(props: {
       setReceiptResponse(response);
       emitEvidenceSaved(response.evidence?.outputPath);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not import Sui receipt.");
+      setError(err instanceof Error ? err.message : "Could not verify the Sui receipt.");
     } finally {
       setBusyAction(null);
     }
@@ -406,7 +404,6 @@ export function SuiWorkflowPanel(props: {
     network,
     previewResponse,
     props.sessionId,
-    receiptStatus,
     recipient,
     workspaceId,
   ]);
@@ -479,7 +476,7 @@ export function SuiWorkflowPanel(props: {
       }
       const nextStatus = "Transaction" in result ? "success" : "failure";
       const nextDigest = executed.digest;
-      const response = await client.workspaceSuiTransactionReceipt(
+      const response = await client.workspaceSuiVerifyTransactionReceipt(
         workspaceId,
         {
           network: network as MatterhornSuiNetwork,
@@ -493,7 +490,6 @@ export function SuiWorkflowPanel(props: {
         { sessionId: props.sessionId ?? null },
       );
       setDigest(nextDigest);
-      setReceiptStatus(nextStatus);
       setReceiptResponse(response);
       emitEvidenceSaved(response.evidence?.outputPath);
       if (nextStatus === "failure") {
@@ -947,7 +943,7 @@ export function SuiWorkflowPanel(props: {
         <div>
           <p className="text-sm font-semibold text-dls-text">Import receipt</p>
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
-            After signing in your wallet, paste the public transaction digest. Do not paste signatures or signed payloads.
+            Paste the public digest. Matterhorn will verify its status against the selected Sui network before saving evidence. Do not paste signatures or signed payloads.
           </p>
         </div>
         <WorkflowField label="Transaction digest" htmlFor={fieldId("digest")}>
@@ -960,18 +956,10 @@ export function SuiWorkflowPanel(props: {
           />
         </WorkflowField>
         <div className={receiptGridClass}>
-          <WorkflowField label="Status" htmlFor={fieldId("status")}>
-            <select
-              id={fieldId("status")}
-              className={SUI_PANEL_INPUT_CLASS}
-              value={receiptStatus}
-              onChange={(event) => setReceiptStatus(event.target.value as "success" | "failure" | "unknown")}
-            >
-              <option value="success">Success</option>
-              <option value="failure">Failure</option>
-              <option value="unknown">Unknown</option>
-            </select>
-          </WorkflowField>
+          <div className="rounded-lg bg-dls-surface-muted/[0.10] px-3 py-2">
+            <p className="text-xs font-medium text-dls-text">Status from Sui RPC</p>
+            <p className="mt-0.5 text-[11px] leading-4 text-dls-secondary">No user-entered status is trusted.</p>
+          </div>
           <WorkflowField label="Explorer URL" htmlFor={fieldId("explorer")} help="Optional public link.">
             <Input
               id={fieldId("explorer")}
@@ -988,10 +976,10 @@ export function SuiWorkflowPanel(props: {
           className="w-fit rounded-lg border-0 bg-dls-surface-muted/[0.10] text-dls-text shadow-none hover:bg-dls-surface-muted/[0.16]"
           disabled={!canImportReceipt || busyAction === "receipt"}
           onClick={importReceipt}
-          title={availability.importReceiptReason ?? "Import the public Sui transaction receipt"}
+          title={availability.importReceiptReason ?? "Verify and save the public Sui transaction receipt"}
         >
           {busyAction === "receipt" ? <RefreshCw className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
-          Import receipt
+          Verify receipt
         </Button>
       </div>
 
@@ -999,9 +987,9 @@ export function SuiWorkflowPanel(props: {
         <div className={SUI_PANEL_SECTION_CLASS}>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-dls-text">Receipt imported</p>
+              <p className="text-sm font-semibold text-dls-text">Receipt verified</p>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Status: {receipt.status}. Matterhorn did not sign or submit this transaction.
+                Status: {receipt.status}. Verified on Sui; Matterhorn did not sign or submit this transaction.
               </p>
             </div>
             {receipt.explorerUrl ? (

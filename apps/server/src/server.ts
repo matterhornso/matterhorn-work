@@ -96,6 +96,7 @@ import {
   planBittensorSubnetAdapterRoadmap,
   planBittensorSubnetAdapterOnboarding,
   planBittensorChat,
+  persistBittensorWalletTimelineSnapshot,
   probeBittensorSubnetAdapterConformance,
   previewBittensorSubnetInvocation,
   prepareBittensorExtrinsic,
@@ -2600,6 +2601,19 @@ function suiApiError(error: unknown): ApiError {
   return new ApiError(502, "sui_provider_unavailable", message || "Sui public read provider is unavailable");
 }
 
+function publicBittensorWalletTimelineStatus() {
+  const status = getBittensorWalletTimelineStoreStatus();
+  return {
+    kind: status.kind,
+    enabled: status.enabled,
+    walletCount: status.walletCount,
+    snapshotCount: status.snapshotCount,
+    retentionLimit: status.retentionLimit,
+    warnings: status.warnings,
+    updatedAt: status.updatedAt,
+  };
+}
+
 function memorySurface(value: URL): "client" | "mcp" {
   return value.searchParams.get("surface") === "mcp" ? "mcp" : "client";
 }
@@ -3380,7 +3394,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
         configuredNetworks: ["sui-testnet", "sui-mainnet"],
         publicReadRoutes: ["/api/sui/account/:address", "/api/sui/balance/:address"],
         transactionPreviewRoutes: ["/api/sui/transactions/preview"],
-        receiptRoutes: ["/api/sui/transactions/receipt"],
+        receiptRoutes: ["/api/sui/transactions/receipt", "/api/sui/transactions/verify-receipt"],
         signingBoundary: "client_wallet",
         docs: ["https://sdk.mystenlabs.com/dapp-kit/getting-started/react"],
       },
@@ -11507,6 +11521,18 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "POST", "/api/sui/transactions/verify-receipt", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    try {
+      const receipt = await suiProvider.verifyTransactionReceipt(body as SuiTransactionReceiptInput, {
+        signal: ctx.request.signal,
+      });
+      return jsonResponse({ success: true, receipt, cards: [buildSuiTransactionReceiptCard(receipt)] });
+    } catch (err) {
+      throw suiApiError(err);
+    }
+  });
+
   addRoute(routes, "POST", "/workspace/:id/sui/transactions/preview", "client", async (ctx) => {
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
@@ -11622,6 +11648,66 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "POST", "/workspace/:id/sui/transactions/verify-receipt", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const payload = body && typeof body === "object" && !Array.isArray(body) && "payload" in body
+      ? (body as Record<string, unknown>).payload
+      : body;
+    try {
+      const receipt = await suiProvider.verifyTransactionReceipt(payload as SuiTransactionReceiptInput, {
+        signal: ctx.request.signal,
+      });
+      const cards = [buildSuiTransactionReceiptCard(receipt)];
+      const bodyRecord = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {};
+      const requestedSessionId = typeof bodyRecord.sessionId === "string" ? bodyRecord.sessionId.trim() : "";
+      const sessionSlug = normalizeSessionSlug(requestedSessionId || `sui_${receipt.transactionDigest.slice(0, 16)}`);
+      const taskId = `sui_verified_receipt_${receipt.receiptSha256.slice(0, 16)}`;
+      const outputPath = `outputs/sui/${sessionSlug}/verified-transaction-receipt-${receipt.transactionDigest.slice(0, 16)}.json`;
+
+      await recordSuiWorkspaceEvidence({
+        workspace,
+        ctx,
+        taskId,
+        sessionSlug,
+        outputPath,
+        summary: "Verified Sui transaction receipt saved",
+        auditAction: "workspace.sui.receipt.verify",
+        outputPayload: {
+          version: "matterhorn.sui.workspace-evidence.v1",
+          kind: "verified_transaction_receipt",
+          workspaceId: workspace.id,
+          outputPath,
+          receipt,
+          cards,
+          safety: {
+            custody: false,
+            containsSignatureMaterial: false,
+            liveSubmissionByMatterhorn: false,
+            chainVerified: true,
+          },
+        },
+      });
+
+      return jsonResponse({
+        success: true,
+        receipt,
+        cards,
+        evidence: {
+          workspaceId: workspace.id,
+          outputPath,
+          taskId,
+          sessionSlug,
+          source: "task_events",
+        },
+      }, 201);
+    } catch (err) {
+      throw suiApiError(err);
+    }
+  });
+
   addRoute(routes, "GET", "/api/bittensor/subnets", "client", async () => {
     const subnets = await bittensorProvider.listSubnets();
     return jsonResponse({ success: true, subnets, cards: buildBittensorSubnetCards(subnets) });
@@ -11650,14 +11736,45 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/api/bittensor/wallet/timeline/status", "client", async () => {
-    return jsonResponse({ success: true, status: getBittensorWalletTimelineStoreStatus() });
+    return jsonResponse({ success: true, status: publicBittensorWalletTimelineStatus() });
   });
 
   addRoute(routes, "GET", "/api/bittensor/wallet/timeline/export", "client", async (ctx) => {
     const ss58Address = ctx.url.searchParams.get("ss58Address") ?? ctx.url.searchParams.get("ss58_address");
     if (ss58Address && !isValidSs58Address(ss58Address)) throw new ApiError(400, "invalid_ss58", "invalid SS58 address");
     const timeline = exportBittensorWalletTimeline({ ss58Address });
-    return jsonResponse({ success: true, timeline });
+    return jsonResponse({
+      success: true,
+      timeline: { ...timeline, status: publicBittensorWalletTimelineStatus() },
+    });
+  });
+
+  addRoute(routes, "POST", "/api/bittensor/wallet/timeline/capture", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const body = await readJsonBody(ctx.request);
+    const ss58Address = typeof body.ss58Address === "string" ? body.ss58Address.trim() : "";
+    if (!isValidSs58Address(ss58Address)) {
+      throw new ApiError(400, "invalid_ss58", "valid public SS58 address is required");
+    }
+    if (!getBittensorWalletTimelineStoreStatus().enabled) {
+      throw new ApiError(
+        409,
+        "bittensor_wallet_timeline_disabled",
+        "Wallet history is off. Enable public wallet timeline persistence on the Matterhorn server before saving snapshots.",
+      );
+    }
+    const wallet = await bittensorProvider.getWallet(ss58Address);
+    const snapshot = persistBittensorWalletTimelineSnapshot(wallet);
+    if (!snapshot) {
+      throw new ApiError(500, "bittensor_wallet_timeline_write_failed", "The public wallet snapshot could not be saved.");
+    }
+    return jsonResponse({
+      success: true,
+      wallet,
+      snapshot,
+      status: publicBittensorWalletTimelineStatus(),
+    }, 201);
   });
 
   addRoute(routes, "POST", "/api/bittensor/wallet/timeline/clear", "client", async (ctx) => {

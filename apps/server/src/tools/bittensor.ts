@@ -2070,16 +2070,17 @@ function walletFromTimelineSnapshot(snapshot: BittensorWalletTimelineSnapshot): 
   };
 }
 
-function rememberBittensorWalletTimelineSnapshot(wallet: BittensorWalletSnapshot): void {
+export function persistBittensorWalletTimelineSnapshot(wallet: BittensorWalletSnapshot): BittensorWalletTimelineSnapshot | null {
   const file = bittensorWalletTimelinePath();
-  if (!file) return;
+  if (!file) return null;
   loadPersistedWalletTimeline();
   const snapshot = buildBittensorWalletTimelineSnapshot(wallet);
   const validation = validateBittensorWalletTimelineSnapshot(snapshot);
-  if (!validation.ok) return;
+  if (!validation.ok) return null;
   const current = walletTimelineSnapshots.get(wallet.ss58Address) ?? [];
   walletTimelineSnapshots.set(wallet.ss58Address, [...current, snapshot].slice(-bittensorWalletTimelineRetentionLimit()));
   persistWalletTimeline();
+  return snapshot;
 }
 
 function latestBittensorWalletTimelineBaseline(ss58Address: string): { wallet: BittensorWalletSnapshot; updatedAt: string } | null {
@@ -6518,7 +6519,7 @@ function rememberBittensorWalletSnapshot(wallet: BittensorWalletSnapshot): void 
     if (!firstKey) break;
     walletSnapshotBaselines.delete(firstKey);
   }
-  rememberBittensorWalletTimelineSnapshot(wallet);
+  persistBittensorWalletTimelineSnapshot(wallet);
 }
 
 export function clearBittensorWalletSnapshotBaseline(ss58Address: string): BittensorWalletBaselineClearReport {

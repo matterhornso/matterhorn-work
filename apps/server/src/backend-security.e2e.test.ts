@@ -42,6 +42,7 @@ const priorEnv = {
   devLogFile: process.env.OPENWORK_DEV_LOG_FILE,
   toyUi: process.env.OPENWORK_TOY_UI,
   hyperliquidExecution: process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED,
+  bittensorTimelinePersistence: process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE,
 };
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
@@ -230,6 +231,8 @@ afterEach(async () => {
   else process.env.OPENWORK_TOY_UI = priorEnv.toyUi;
   if (priorEnv.hyperliquidExecution === undefined) delete process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED;
   else process.env.MATTERHORN_HYPERLIQUID_EXECUTION_ENABLED = priorEnv.hyperliquidExecution;
+  if (priorEnv.bittensorTimelinePersistence === undefined) delete process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE;
+  else process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE = priorEnv.bittensorTimelinePersistence;
 });
 
 // ---------------------------------------------------------------------------
@@ -597,6 +600,7 @@ describe("Protocol state mutations enforce client scope and workspace mode", () 
     "/api/polymarket/watches",
     "/api/polymarket/watches/act",
     "/api/bittensor/wallet/timeline/clear",
+    "/api/bittensor/wallet/timeline/capture",
     "/api/bittensor/monitoring/watchlist",
   ];
 
@@ -631,6 +635,25 @@ describe("Protocol state mutations enforce client scope and workspace mode", () 
     });
     expect(submission.response.status).toBe(503);
     expect(submission.payload.code).toBe("hyperliquid_execution_disabled");
+  });
+
+  test("Bittensor timeline capture fails clearly when public snapshot persistence is off", async () => {
+    delete process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE;
+    const { base, collaboratorToken } = await boot();
+    const status = await jsonFetch(base, "/api/bittensor/wallet/timeline/status", collaboratorToken);
+    expect(status.response.status).toBe(200);
+    expect(status.payload.status).not.toHaveProperty("path");
+
+    const result = await jsonFetch(base, "/api/bittensor/wallet/timeline/capture", collaboratorToken, {
+      method: "POST",
+      body: JSON.stringify({
+        ss58Address: "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1SecTest",
+      }),
+    });
+
+    expect(result.response.status).toBe(409);
+    expect(result.payload.code).toBe("bittensor_wallet_timeline_disabled");
+    expect(result.payload.message).toContain("Wallet history is off");
   });
 
   test("Hyperliquid execution tickets require a collaborator before intent validation", async () => {
