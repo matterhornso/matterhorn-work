@@ -318,7 +318,10 @@ async function assertNoVisible(locator, label) {
 }
 
 async function ensureWorkspaceHomeVisible(page, timeoutMs = 20_000) {
-  const home = page.getByLabel("Workspace home");
+  const home = page.getByRole("region", {
+    name: "Workspace home",
+    exact: true,
+  });
   try {
     await home.waitFor({ state: "visible", timeout: 3_000 });
     return;
@@ -549,7 +552,7 @@ async function startPrimaryDeskTask(page, config, desk) {
     `${desk.openLabel} desk card`,
   );
   await page
-    .getByText(desk.heading, { exact: true })
+    .getByRole("heading", { name: desk.heading, exact: true, level: 2 })
     .waitFor({ state: "visible", timeout: 15_000 });
   await assertNoVisible(
     page.getByText("Show technical prompt", { exact: false }),
@@ -640,7 +643,7 @@ async function startPrimaryDeskTask(page, config, desk) {
       );
     }
     await page
-      .getByText(desk.heading, { exact: true })
+      .getByRole("heading", { name: desk.heading, exact: true, level: 2 })
       .waitFor({ state: "visible", timeout: 15_000 });
     await page
       .getByText(
@@ -713,7 +716,8 @@ async function verifyReviewedActionChatHandoff(page, config) {
   const exactRequest =
     "Buy 0.001 BTC on Hyperliquid testnet as a market order with 100 bps max slippage.";
   const workspaceId = workspaceIdFromUrl(config.url);
-  if (!workspaceId) throw new Error(`Could not parse workspace id from ${config.url}`);
+  if (!workspaceId)
+    throw new Error(`Could not parse workspace id from ${config.url}`);
 
   await page.goto(workspaceUrl(config.url, "session"), {
     waitUntil: "load",
@@ -724,6 +728,28 @@ async function verifyReviewedActionChatHandoff(page, config) {
     page.getByTestId("open-hyperliquid-desk"),
     "Open Hyperliquid desk card",
   );
+  await page
+    .getByRole("heading", { name: "Hyperliquid desk", exact: true, level: 2 })
+    .waitFor({ state: "visible", timeout: 15_000 });
+  const moreTasks = page.getByRole("button", { name: /More tasks \(\d+\)/ });
+  if ((await moreTasks.count()) > 0 && (await moreTasks.first().isVisible())) {
+    await moreTasks.first().click();
+  }
+  const reviewedOrderTask = page.getByText("Place an order", { exact: true });
+  if (
+    (await reviewedOrderTask.count()) === 0 ||
+    !(await reviewedOrderTask.first().isVisible())
+  ) {
+    await assertNoVisible(reviewedOrderTask, "Public Beta reviewed order task");
+    await assertNoVisible(
+      page.getByRole("button", { name: "Prepare in chat", exact: true }),
+      "Public Beta reviewed action button",
+    );
+    return {
+      publicBetaReadOnly: true,
+      reviewedActionHidden: true,
+    };
+  }
   const taskGroup = page
     .getByLabel("Agent tasks")
     .locator("[data-workflow-stage]")
@@ -733,13 +759,14 @@ async function verifyReviewedActionChatHandoff(page, config) {
   await taskGroup
     .getByRole("button", { name: "Prepare in chat", exact: true })
     .click();
-  await page.waitForURL(
-    (url) => isWorkspaceSessionDetailUrl(url.toString()),
-    { timeout: 30_000, waitUntil: "commit" },
-  );
+  await page.waitForURL((url) => isWorkspaceSessionDetailUrl(url.toString()), {
+    timeout: 30_000,
+    waitUntil: "commit",
+  });
 
   const sessionId = new URL(page.url()).pathname.split("/").at(-1);
-  if (!sessionId) throw new Error("Reviewed action did not create a concrete chat id.");
+  if (!sessionId)
+    throw new Error("Reviewed action did not create a concrete chat id.");
   const composer = page.getByTestId("session-composer-shell");
   await composer.waitFor({ state: "visible", timeout: 20_000 });
   const editor = composer.getByRole("textbox", {
@@ -793,9 +820,6 @@ async function verifyReviewedActionChatHandoff(page, config) {
 
   await editor.fill(exactRequest);
   await composer.getByRole("button", { name: "Ask", exact: true }).click();
-  await page
-    .getByText("Hyperliquid order prepared", { exact: true })
-    .waitFor({ state: "visible", timeout: 15_000 });
   await page.waitForFunction(
     (expectedSessionId) =>
       (window.__matterhorn?.events?.(160) ?? []).some(
@@ -807,9 +831,18 @@ async function verifyReviewedActionChatHandoff(page, config) {
     sessionId,
     { timeout: 15_000 },
   );
+  await page.waitForURL(
+    (url) => url.searchParams.get("panel") === "hyperliquid",
+    { timeout: 15_000, waitUntil: "commit" },
+  );
+  await page
+    .getByRole("button", { name: "Review order ticket", exact: true })
+    .waitFor({ state: "visible", timeout: 15_000 });
   const finalUrl = new URL(page.url());
   if (finalUrl.searchParams.get("panel") !== "hyperliquid") {
-    throw new Error("Exact reviewed action did not open the Hyperliquid wallet review panel.");
+    throw new Error(
+      "Exact reviewed action did not open the Hyperliquid wallet review panel.",
+    );
   }
 
   return {
@@ -933,7 +966,7 @@ async function runSmoke(config) {
         { timeout: 30_000 },
       );
       await page
-        .getByLabel("Workspace home")
+        .getByRole("region", { name: "Workspace home", exact: true })
         .waitFor({ state: "visible", timeout: 20_000 });
       assertCurrentWorkspaceRoute(page, expectedWorkspaceId, "App open");
       report.artifacts.workspaceId = expectedWorkspaceId;
@@ -946,7 +979,7 @@ async function runSmoke(config) {
       async () => {
         await page
           .getByText(
-            "Chats, desks, notes, and saved outputs for this project.",
+            "Continue active work, start a focused desk task, or create something new.",
             { exact: true },
           )
           .waitFor({ state: "visible", timeout: 15_000 });
@@ -960,7 +993,7 @@ async function runSmoke(config) {
           .getByText("Open a desk", { exact: true })
           .waitFor({ state: "visible", timeout: 15_000 });
         await page
-          .getByLabel("Jot a note about outputs")
+          .getByLabel("Jot a note", { exact: true })
           .waitFor({ state: "visible", timeout: 15_000 });
         if (await page.getByLabel("Copy project path").count()) {
           throw new Error(
@@ -1058,7 +1091,7 @@ async function runSmoke(config) {
     await stage(
       report,
       "desk_reviewed_action_chat_handoff",
-      "Prepare a reviewed action in chat, then hand it to Wallet",
+      "Verify the reviewed-action boundary and enabled handoff",
       async () => {
         report.artifacts.reviewedActionChatHandoff =
           await verifyReviewedActionChatHandoff(page, config);
@@ -1098,7 +1131,10 @@ async function runSmoke(config) {
               config.outputDir,
               "persisted-chat-fresh-context-failed.png",
             );
-            await refreshPage.screenshot({ path: screenshotPath, fullPage: true });
+            await refreshPage.screenshot({
+              path: screenshotPath,
+              fullPage: true,
+            });
             const diagnostics = await refreshPage.evaluate(() => ({
               url: window.location.href,
               bodyText: document.body.innerText.slice(0, 4_000),
@@ -1109,7 +1145,8 @@ async function runSmoke(config) {
               screenshot: screenshotPath,
               diagnostics,
             };
-            const message = error instanceof Error ? error.message : String(error);
+            const message =
+              error instanceof Error ? error.message : String(error);
             throw new Error(
               `${message}\nFresh-context diagnostics: ${JSON.stringify(diagnostics)}`,
             );
@@ -1147,8 +1184,11 @@ async function runSmoke(config) {
           "Open Longevity desk card",
         );
         await page
-          .getByText("Longevity Agent", { exact: true })
-          .first()
+          .getByRole("heading", {
+            name: "Longevity desk",
+            exact: true,
+            level: 2,
+          })
           .waitFor({ state: "visible", timeout: 20_000 });
         await waitForAnyVisible(
           page,
@@ -1346,7 +1386,7 @@ async function runSmoke(config) {
           timeout: 30_000,
         });
         await page
-          .getByRole("heading", { name: "Settings", exact: true })
+          .getByRole("heading", { name: "Overview", exact: true, level: 1 })
           .waitFor({ state: "visible", timeout: 20_000 });
         await page
           .getByText("Workspace health", { exact: true })
@@ -1604,9 +1644,8 @@ async function runSmoke(config) {
           "configured MCP server or explicit empty state",
           20_000,
         );
-        const connectedSummaryLabel = await visibleMcpState.getAttribute(
-          "aria-label",
-        );
+        const connectedSummaryLabel =
+          await visibleMcpState.getAttribute("aria-label");
         const visibleConfiguredServer = await firstVisible(configuredServer);
         if (connectedSummaryLabel?.startsWith("Connected MCP servers:")) {
           const connectedNames = connectedSummaryLabel
