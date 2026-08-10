@@ -193,7 +193,11 @@ async function runProbe(config) {
   let appResponse;
   let healthResponse;
   try {
-    appResponse = await fetchWithTimeout(appUrl);
+    appResponse = await fetchWithTimeout(appUrl, {
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+      },
+    });
     checks.push(check("app_response", "App response", appResponse.ok, `App returned HTTP ${appResponse.status}.`));
     checks.push(check("app_response_origin", "App response origin", new URL(appResponse.url).origin === appUrl.origin, "The app response stays on the configured origin."));
     checks.push(...headerCheck("app", appResponse, { requireHsts: appUrl.protocol === "https:" }));
