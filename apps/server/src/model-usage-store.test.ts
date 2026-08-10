@@ -196,6 +196,33 @@ describe("MatterhornModelUsageStore", () => {
     expect(usage.status(subject).monthly.chargedTokens).toBe(0);
   });
 
+  test("releases abandoned reservations after the bounded inference window", async () => {
+    const usage = await store({ dailyLimit: 20_000 });
+    const subject = { id: "user_stale_reservation" };
+    const createdAt = Date.UTC(2026, 7, 10, 12, 0, 0);
+    expect(usage.reserve({
+      subject,
+      workspaceId: "ws_stale",
+      sessionId: "ses_stale",
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      now: new Date(createdAt),
+    }).allowed).toBe(true);
+
+    expect(usage.status(subject, new Date(createdAt + 14 * 60 * 1000)).pendingRequests).toBe(1);
+    const released = usage.status(subject, new Date(createdAt + 15 * 60 * 1000));
+    expect(released.pendingRequests).toBe(0);
+    expect(released.daily.chargedTokens).toBe(0);
+    expect(usage.reserve({
+      subject,
+      workspaceId: "ws_stale",
+      sessionId: "ses_after_release",
+      providerId: "cudos",
+      modelId: "asi1-mini",
+      now: new Date(createdAt + 15 * 60 * 1000),
+    }).allowed).toBe(true);
+  });
+
   test("normalizes only completed assistant usage records", () => {
     expect(modelUsageAssistantMessages([
       { info: { id: "user", role: "user", time: { created: 1, completed: 2 }, tokens: {} } },

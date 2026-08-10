@@ -100,6 +100,7 @@ const DEFAULT_MONTHLY_LIMIT = 2_000_000;
 const DEFAULT_GLOBAL_DAILY_LIMIT = 5_000_000;
 const DEFAULT_GLOBAL_MONTHLY_LIMIT = 50_000_000;
 const DEFAULT_RESERVATION_TOKENS = 32_000;
+const MODEL_USAGE_PENDING_TTL_MS = 15 * 60 * 1000;
 
 function openSqliteDatabase(path: string): SqliteDatabase {
   if (process.versions.bun) {
@@ -475,6 +476,14 @@ export class MatterhornModelUsageStore {
   }
 
   status(subject: ModelUsageSubject, now = new Date()): MatterhornModelUsageStatus {
+    // A process restart or disconnected event stream can prevent a reservation
+    // from ever reaching reconciliation. Do not let an abandoned request hold
+    // a user's or the platform's allowance forever.
+    statement(this.db, `
+      UPDATE model_usage_operations
+      SET status = 'cancelled', charged_tokens = 0, completed_at = ?
+      WHERE status = 'pending' AND created_at <= ?
+    `).run(now.getTime(), now.getTime() - MODEL_USAGE_PENDING_TTL_MS);
     const periods = utcPeriods(now);
     const subjectDaily = this.total(periods.dayStart, subject.id);
     const subjectMonthly = this.total(periods.monthStart, subject.id);
