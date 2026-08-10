@@ -137,6 +137,23 @@ function ModelRoutingRow({ item }: { item: ModelReadinessDetail }) {
   );
 }
 
+function compactTokenCount(value: number): string {
+  return new Intl.NumberFormat("en", {
+    notation: value >= 10_000 ? "compact" : "standard",
+    maximumFractionDigits: value >= 10_000 ? 1 : 0,
+  }).format(value);
+}
+
+function usageResetLabel(value: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "soon";
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
 export function AiSettingsView(props: AiSettingsViewProps) {
   const runtimeWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
   const [modelDetailsOpen, setModelDetailsOpen] = useState(false);
@@ -176,6 +193,18 @@ export function AiSettingsView(props: AiSettingsViewProps) {
       if (!client || !runtimeWorkspaceId)
         throw new Error("Matterhorn Desks engine is offline.");
       return client.workspaceModelSelection(runtimeWorkspaceId);
+    },
+  });
+  const workspaceModelUsageQuery = useQuery({
+    queryKey: ["settings-workspace-model-usage", runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && runtimeWorkspaceId),
+    staleTime: 15_000,
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client || !runtimeWorkspaceId)
+        throw new Error("Matterhorn Desks engine is offline.");
+      return client.workspaceModelUsageStatus(runtimeWorkspaceId);
     },
   });
   const saveWorkspaceDefaultMutation = useMutation({
@@ -688,6 +717,60 @@ export function AiSettingsView(props: AiSettingsViewProps) {
 
         </div>
       </LayoutSection>
+      ) : null}
+
+      {workspaceModelUsageQuery.data?.status ? (
+        <LayoutSection>
+          <LayoutSectionHeader>
+            <LayoutSectionTitle>Free beta allowance</LayoutSectionTitle>
+            <LayoutSectionDescription>
+              Model usage included with this beta account. There are no automatic charges.
+            </LayoutSectionDescription>
+          </LayoutSectionHeader>
+          <div className="divide-y divide-border/60 rounded-lg bg-dls-surface-raised/55 px-4">
+            {[
+              {
+                label: "Today",
+                period: workspaceModelUsageQuery.data.status.daily,
+              },
+              {
+                label: "This month",
+                period: workspaceModelUsageQuery.data.status.monthly,
+              },
+            ].map(({ label, period }) => (
+              <div
+                key={label}
+                className="grid gap-1 py-3.5 text-sm @md/settings:grid-cols-[8rem_1fr_auto] @md/settings:items-center @md/settings:gap-4"
+              >
+                <span className="font-medium text-dls-text">{label}</span>
+                <span className="text-dls-secondary">
+                  {compactTokenCount(period.chargedTokens)} used
+                  {period.limit === null
+                    ? ""
+                    : ` of ${compactTokenCount(period.limit)} weighted tokens`}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Resets {usageResetLabel(period.resetsAt)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+            Requests pause when an allowance is reached. Different models may use allowance at different rates.
+            {workspaceModelUsageQuery.data.status.pendingRequests > 0
+              ? ` ${workspaceModelUsageQuery.data.status.pendingRequests} active request${workspaceModelUsageQuery.data.status.pendingRequests === 1 ? " is" : "s are"} still being counted.`
+              : ""}
+          </p>
+          {!workspaceModelUsageQuery.data.status.enabled ? (
+            <SettingsNotice tone="error">
+              Usage protection is not active in this deployment. Do not open public signups yet.
+            </SettingsNotice>
+          ) : null}
+        </LayoutSection>
+      ) : workspaceModelUsageQuery.isError ? (
+        <SettingsNotice tone="error">
+          Usage allowance could not load. Refresh this page before starting another model request.
+        </SettingsNotice>
       ) : null}
 
       <LayoutSection>

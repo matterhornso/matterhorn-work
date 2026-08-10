@@ -1243,6 +1243,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const autoOpenedTargetRef = useRef<string | null>(null);
   const initializedAutoOpenSessionRef = useRef<string | null>(null);
   const handledTerminalFailureRef = useRef<string | null>(null);
+  const reconciledUsageMessageIdsRef = useRef(new Set<string>());
   const suppressNextAbortFailureRef = useRef(false);
   const opencodeClient = useMemo(
     () => createClient(props.opencodeBaseUrl, undefined, {
@@ -1393,7 +1394,14 @@ export function SessionSurface(props: SessionSurfaceProps) {
       completedAt: completedAssistant.info.time.completed,
       tokens: completedAssistant.info.tokens,
     });
-  }, [currentSnapshot, props.sessionId]);
+    if (reconciledUsageMessageIdsRef.current.has(completedAssistant.info.id)) return;
+    reconciledUsageMessageIdsRef.current.add(completedAssistant.info.id);
+    void props.client.reconcileWorkspaceModelUsage(props.workspaceId, {
+      sessionId: props.sessionId,
+    }).catch(() => {
+      reconciledUsageMessageIdsRef.current.delete(completedAssistant.info.id);
+    });
+  }, [currentSnapshot, props.client, props.sessionId, props.workspaceId]);
 
   const snapshot = resolveRenderedSessionSnapshot({
     sessionId: props.sessionId,

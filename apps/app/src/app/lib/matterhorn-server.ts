@@ -68,6 +68,11 @@ import type {
   MatterhornBackendModelsResponse,
 } from "@matterhorn-work/types/backend-models";
 import type {
+  MatterhornModelUsageReconcileRequest,
+  MatterhornModelUsageReconcileResponse,
+  MatterhornModelUsageStatusResponse,
+} from "@matterhorn-work/types/model-usage";
+import type {
   MatterhornBackendTeamAccessResponse,
   MatterhornBackendTeamAccessSummaryResponse,
   MatterhornTeamAccessTokenCreateRequest,
@@ -1646,6 +1651,21 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/backend/model-selection`,
         { token, hostToken, method: "DELETE", timeoutMs: timeouts.capabilities },
+      ),
+    workspaceModelUsageStatus: (workspaceId: string) =>
+      requestJson<MatterhornModelUsageStatusResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/model-usage/status`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    reconcileWorkspaceModelUsage: (
+      workspaceId: string,
+      body: MatterhornModelUsageReconcileRequest,
+    ) =>
+      requestJson<MatterhornModelUsageReconcileResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/model-usage/reconcile`,
+        { token, hostToken, method: "POST", body, timeoutMs: timeouts.capabilities },
       ),
     workspaceReadiness: (workspaceId: string) =>
       requestJson<MatterhornBackendReadinessResponse>(

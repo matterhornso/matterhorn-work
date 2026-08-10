@@ -444,6 +444,10 @@ import { Readable } from "node:stream";
 import { serve, type ServeRequestContext, type ServeResult } from "./serve-node.js";
 import { OperationalMetrics } from "./operational-metrics.js";
 import {
+  MatterhornModelUsageStore,
+  type ModelUsageSubject,
+} from "./model-usage-store.js";
+import {
   createGoogleWorkspaceConnectFlowManager,
   googleWorkspaceDisconnect,
   googleWorkspaceRunScopeSmokeTest,
@@ -749,6 +753,8 @@ const DEFAULT_RATE_LIMIT_READ_MAX_REQUESTS = 4_800;
 const DEFAULT_RATE_LIMIT_WRITE_MAX_REQUESTS = 1_200;
 const AUTH_ATTEMPT_WINDOW_MS = 10 * 60_000;
 const AUTH_ATTEMPT_MAX_REQUESTS = 10;
+const AUTH_SIGNUP_IP_MAX_REQUESTS = 20;
+const AUTH_SIGNIN_IP_MAX_REQUESTS = 50;
 
 export type RequestRateLimiter = {
   check: (
@@ -816,12 +822,12 @@ export function resolveRateLimitPeerAddress(
 
 function createAuthAttemptLimiter(store: RequestRateLimitStore) {
   return {
-    async check(key: string): Promise<boolean> {
+    async check(key: string, maxRequests = AUTH_ATTEMPT_MAX_REQUESTS): Promise<boolean> {
       const now = Date.now();
       const decision = await store.consume({
         key: `auth:${key}`,
         windowMs: AUTH_ATTEMPT_WINDOW_MS,
-        maxRequests: AUTH_ATTEMPT_MAX_REQUESTS,
+        maxRequests,
         now,
       });
       return decision.allowed;
@@ -958,6 +964,7 @@ interface RequestContext {
   actor?: Actor;
   matterhornSession?: MatterhornAuthSession;
   matterhornWorkspace?: WorkspaceInfo;
+  peerAddress?: string;
 }
 
 type ClientAccess = {
@@ -988,6 +995,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     watcherHandle = createWatcherHandle();
   };
   const operationalMetrics = new OperationalMetrics();
+  const modelUsageStore = new MatterhornModelUsageStore();
   const ownsRequestRateLimitStore = !config.requestRateLimitStore;
   const requestRateLimitStore = config.requestRateLimitStore ?? createInMemoryRequestRateLimitStore();
   const routes = createRoutes(
@@ -999,6 +1007,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
     restartReloadWatchers,
     operationalMetrics,
     requestRateLimitStore,
+    modelUsageStore,
   );
   const requestRateLimiter = createRequestRateLimiter(config.requestRateLimit, requestRateLimitStore);
 
@@ -1054,7 +1063,15 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
           const workspace = access.workspace ?? await resolveWorkspace(config, mount.workspaceId);
           proxyService = "opencode";
           proxyBaseUrl = workspace.baseUrl?.trim() || undefined;
-          const response = await proxyOpencodeRequest({ config, request, url, workspace, proxyPath: mount.restPath });
+          const response = await proxyOpencodeRequest({
+            config,
+            request,
+            url,
+            workspace,
+            proxyPath: mount.restPath,
+            access,
+            modelUsageStore,
+          });
           return finalize(response);
         } catch (error) {
           const apiError = error instanceof ApiError
@@ -1133,7 +1150,14 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
           proxyBaseUrl = workspace.baseUrl?.trim() || undefined;
           assertOpencodeProxyAllowed(access.actor, request.method, url.pathname);
           proxyService = "opencode";
-          const response = await proxyOpencodeRequest({ config, request, url, workspace });
+          const response = await proxyOpencodeRequest({
+            config,
+            request,
+            url,
+            workspace,
+            access,
+            modelUsageStore,
+          });
           return finalize(response);
         } catch (error) {
           const apiError = error instanceof ApiError
@@ -1183,6 +1207,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
           actor,
           matterhornSession: clientAccess?.session,
           matterhornWorkspace: clientAccess?.workspace,
+          peerAddress: rateLimitPeerAddress ?? undefined,
         });
         return finalize(response);
       } catch (error) {
@@ -1209,6 +1234,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
       watcherHandle.close();
       reloadBaselineRefreshers.delete(config);
       authStore.close();
+      modelUsageStore.close();
       if (ownsRequestRateLimitStore) await requestRateLimitStore.close?.();
       await (server.stop as unknown as (closeActiveConnections?: boolean) => void | Promise<void>)(closeActiveConnections);
     },
@@ -1523,12 +1549,116 @@ function assertModelSelectionInCatalog(
   }
 }
 
+function modelUsageSubject(access: Pick<ClientAccess, "actor" | "session">): ModelUsageSubject {
+  if (access.session?.user.id) return { id: `user:${access.session.user.id}` };
+  if (access.actor.tokenHash) return { id: `token:${access.actor.tokenHash}` };
+  throw new ApiError(401, "unauthorized", "An authenticated account is required for model usage.");
+}
+
+function clientAccessFromRequestContext(ctx: RequestContext, workspace: WorkspaceInfo): ClientAccess {
+  if (!ctx.actor) throw new ApiError(401, "unauthorized", "An authenticated account is required.");
+  return {
+    actor: ctx.actor,
+    ...(ctx.matterhornSession ? { session: ctx.matterhornSession } : {}),
+    workspace,
+  };
+}
+
+async function reconcileModelUsageSession(input: {
+  config: ServerConfig;
+  workspace: WorkspaceInfo;
+  store: MatterhornModelUsageStore;
+  subject: ModelUsageSubject;
+  sessionId: string;
+}): Promise<number> {
+  const opencode = createWorkspaceOpencodeClient(input.config, input.workspace);
+  const messages = unwrapOpencodeResult(
+    await opencode.session.messages({ sessionID: input.sessionId }),
+    `/session/${encodeURIComponent(input.sessionId)}/message`,
+  );
+  return input.store.reconcile({
+    subject: input.subject,
+    workspaceId: input.workspace.id,
+    sessionId: input.sessionId,
+    messages,
+  });
+}
+
+function scheduleModelUsageReconciliation(input: {
+  config: ServerConfig;
+  workspace: WorkspaceInfo;
+  store: MatterhornModelUsageStore;
+  subject: ModelUsageSubject;
+  sessionId: string;
+}): void {
+  const delays = [1_500, 3_000, 6_000, 12_000, 24_000, 45_000];
+  const run = (attempt: number) => {
+    const timer = setTimeout(() => {
+      void reconcileModelUsageSession(input)
+        .then((reconciled) => {
+          if (reconciled === 0 && !input.store.isClosed && attempt + 1 < delays.length) run(attempt + 1);
+        })
+        .catch(() => {
+          if (!input.store.isClosed && attempt + 1 < delays.length) run(attempt + 1);
+        });
+    }, delays[attempt]);
+    timer.unref?.();
+  };
+  run(0);
+}
+
+async function reserveModelUsage(input: {
+  config: ServerConfig;
+  workspace: WorkspaceInfo;
+  store: MatterhornModelUsageStore;
+  access: ClientAccess;
+  sessionId: string;
+  providerId: string;
+  modelId: string;
+}) {
+  const subject = modelUsageSubject(input.access);
+  await reconcileModelUsageSession({
+    config: input.config,
+    workspace: input.workspace,
+    store: input.store,
+    subject,
+    sessionId: input.sessionId,
+  }).catch(() => 0);
+  const reservation = input.store.reserve({
+    subject,
+    workspaceId: input.workspace.id,
+    sessionId: input.sessionId,
+    providerId: input.providerId,
+    modelId: input.modelId,
+  });
+  if (!reservation.allowed) {
+    const resetAt = reservation.status.blockReason === "monthly_limit" ||
+      reservation.status.blockReason === "global_monthly_limit"
+      ? reservation.status.monthly.resetsAt
+      : reservation.status.daily.resetsAt;
+    throw new ApiError(
+      429,
+      "model_usage_limit_reached",
+      `Model usage limit reached. Try again after ${new Date(resetAt).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}.`,
+      {
+        reason: reservation.status.blockReason,
+        dailyRemainingTokens: reservation.status.daily.remainingTokens,
+        monthlyRemainingTokens: reservation.status.monthly.remainingTokens,
+        resetsAt: resetAt,
+      },
+    );
+  }
+  return { reservation, subject };
+}
+
 async function proxyOpencodeRequest(input: {
   config: ServerConfig;
   request: Request;
   url: URL;
   workspace?: WorkspaceInfo;
   proxyPath?: string;
+  access?: ClientAccess;
+  modelUsageStore?: MatterhornModelUsageStore;
 }) {
   const workspace = input.workspace;
   const baseUrl = workspace ? resolveWorkspaceOpencodeConnection(input.config, workspace).baseUrl?.trim() ?? "" : "";
@@ -1574,6 +1704,8 @@ async function proxyOpencodeRequest(input: {
     : await input.request.arrayBuffer().then((buf) => (buf.byteLength > 0 ? buf : undefined));
   let body: BodyInit | undefined = rawBody;
   let promptAudit: { executionMode: MatterhornExecutionMode; agent?: string; sessionId: string } | null = null;
+  let usageReservationId: string | null = null;
+  let usageSubject: ModelUsageSubject | null = null;
   if (isSessionPromptProxyRequest(method, proxyPath)) {
     let payload: Record<string, unknown>;
     try {
@@ -1612,6 +1744,24 @@ async function proxyOpencodeRequest(input: {
 
     const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
     promptAudit = { executionMode: bodyExecutionMode, agent, sessionId };
+    if (workspace && input.access && input.modelUsageStore) {
+      const modelResolution = await resolveSessionPromptModel(
+        input.config,
+        workspace,
+        parseSessionPromptModel(payload),
+      );
+      const usage = await reserveModelUsage({
+        config: input.config,
+        workspace,
+        store: input.modelUsageStore,
+        access: input.access,
+        sessionId,
+        providerId: modelResolution.model.providerID,
+        modelId: modelResolution.model.modelID,
+      });
+      usageReservationId = usage.reservation.reservationId;
+      usageSubject = usage.subject;
+    }
   }
   if (method === "POST" && /^\/session\/[^/]+\/command$/.test(normalizeOpencodeProxyPath(proxyPath))) {
     void fetch(targetUrl, {
@@ -1634,6 +1784,10 @@ async function proxyOpencodeRequest(input: {
       body,
       signal: upstreamController.signal,
     });
+    if (!response.ok) input.modelUsageStore?.cancel(usageReservationId);
+  } catch (error) {
+    input.modelUsageStore?.cancel(usageReservationId);
+    throw error;
   } finally {
     input.request.signal.removeEventListener("abort", abortUpstreamConnect);
   }
@@ -1652,6 +1806,15 @@ async function proxyOpencodeRequest(input: {
         ...(promptAudit.agent ? { agent: promptAudit.agent.slice(0, 120) } : {}),
       },
     });
+    if (input.modelUsageStore && usageSubject && usageReservationId) {
+      scheduleModelUsageReconciliation({
+        config: input.config,
+        workspace,
+        store: input.modelUsageStore,
+        subject: usageSubject,
+        sessionId: promptAudit.sessionId,
+      });
+    }
   }
 
   return sanitizeProxyResponse(response, input.request.signal, upstreamController);
@@ -1864,6 +2027,8 @@ function withMatterhornAuthErrorMapping<T>(callback: () => T): T {
         : error.code === "email_taken" ||
             error.code === "organization_slug_taken"
           ? 409
+          : error.code === "signup_capacity_reached"
+            ? 503
           : 400;
     throw new ApiError(status, error.code, error.message);
   }
@@ -6234,6 +6399,7 @@ function createRoutes(
   onWorkspacesChanged: () => void,
   operationalMetrics: OperationalMetrics,
   requestRateLimitStore: RequestRateLimitStore,
+  modelUsageStore: MatterhornModelUsageStore,
 ): Route[] {
   const routes: Route[] = [];
   const billingRouteContext = createBillingRouteContext(config);
@@ -6290,11 +6456,20 @@ function createRoutes(
     return fileSessions.recordWorkspaceEvent({ workspaceId, ...input });
   };
 
-  addRoute(routes, "POST", "/api/auth/sign-up/email", "none", async ({ request }) => {
+  addRoute(routes, "POST", "/api/auth/sign-up/email", "none", async (ctx) => {
+    const { request } = ctx;
+    const signupsEnabled = process.env.MATTERHORN_SIGNUPS_ENABLED?.trim().toLowerCase();
+    if (signupsEnabled === "0" || signupsEnabled === "false" || signupsEnabled === "off") {
+      throw new ApiError(503, "signups_paused", "New accounts are paused while we prepare more beta places.");
+    }
     const body = await readJsonBody(request, 16 * 1024, "Sign-up");
     const email = stringBodyField(body, "email");
     const attemptKey = `sign-up:${email.trim().toLowerCase()}`;
-    if (!await authAttemptLimiter.check(attemptKey)) {
+    const peerAttemptKey = `sign-up-ip:${ctx.peerAddress ?? "unknown"}`;
+    if (
+      !await authAttemptLimiter.check(attemptKey) ||
+      !await authAttemptLimiter.check(peerAttemptKey, AUTH_SIGNUP_IP_MAX_REQUESTS)
+    ) {
       throw new ApiError(
         429,
         "rate_limited",
@@ -6306,6 +6481,10 @@ function createRoutes(
         email,
         password: stringBodyField(body, "password"),
         name: optionalStringBodyField(body, "name"),
+        maxAccounts: (() => {
+          const value = Number.parseInt(process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS?.trim() ?? "", 10);
+          return Number.isSafeInteger(value) && value > 0 ? value : null;
+        })(),
       }),
     );
     return matterhornAuthResponse(request, {
@@ -6314,11 +6493,16 @@ function createRoutes(
     }, session.token);
   });
 
-  addRoute(routes, "POST", "/api/auth/sign-in/email", "none", async ({ request }) => {
+  addRoute(routes, "POST", "/api/auth/sign-in/email", "none", async (ctx) => {
+    const { request } = ctx;
     const body = await readJsonBody(request, 16 * 1024, "Sign-in");
     const email = stringBodyField(body, "email");
     const attemptKey = `sign-in:${email.trim().toLowerCase()}`;
-    if (!await authAttemptLimiter.check(attemptKey)) {
+    const peerAttemptKey = `sign-in-ip:${ctx.peerAddress ?? "unknown"}`;
+    if (
+      !await authAttemptLimiter.check(attemptKey) ||
+      !await authAttemptLimiter.check(peerAttemptKey, AUTH_SIGNIN_IP_MAX_REQUESTS)
+    ) {
       throw new ApiError(
         429,
         "rate_limited",
@@ -6332,6 +6516,7 @@ function createRoutes(
       ),
     );
     await authAttemptLimiter.reset(attemptKey);
+    await authAttemptLimiter.reset(peerAttemptKey);
     return matterhornAuthResponse(request, {
       user: session.user,
       organization: matterhornActiveOrganization(authStore, session),
@@ -7807,6 +7992,37 @@ function createRoutes(
     return jsonResponse({ item }, 201);
   });
 
+  addRoute(routes, "GET", "/workspace/:id/model-usage/status", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const subject = modelUsageSubject(clientAccessFromRequestContext(ctx, workspace));
+    const pending = modelUsageStore.pendingSessions(subject)
+      .filter((entry) => entry.workspaceId === workspace.id);
+    await Promise.all(pending.map((entry) => reconcileModelUsageSession({
+      config,
+      workspace,
+      store: modelUsageStore,
+      subject,
+      sessionId: entry.sessionId,
+    }).catch(() => 0)));
+    return jsonResponse({ status: modelUsageStore.status(subject) });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/model-usage/reconcile", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    if (!sessionId) throw new ApiError(400, "invalid_payload", "sessionId is required");
+    const subject = modelUsageSubject(clientAccessFromRequestContext(ctx, workspace));
+    const reconciled = await reconcileModelUsageSession({
+      config,
+      workspace,
+      store: modelUsageStore,
+      subject,
+      sessionId,
+    });
+    return jsonResponse({ reconciled, status: modelUsageStore.status(subject) });
+  });
+
   addRoute(routes, "GET", "/workspace/:id/sessions", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const items = await listWorkspaceSessions(config, workspace, {
@@ -7881,6 +8097,16 @@ function createRoutes(
     const modeSystemPrompt = buildMatterhornExecutionModeSystemPrompt(executionMode);
     const requestedSystemPrompt = typeof body.system === "string" && body.system.trim() ? body.system.trim() : "";
 
+    const usage = await reserveModelUsage({
+      config,
+      workspace,
+      store: modelUsageStore,
+      access: clientAccessFromRequestContext(ctx, workspace),
+      sessionId,
+      providerId: modelResolution.model.providerID,
+      modelId: modelResolution.model.modelID,
+    });
+
     const promptBody = {
       sessionID: sessionId,
       ...(directory ? { directory } : {}),
@@ -7894,19 +8120,24 @@ function createRoutes(
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       parts,
     };
-    if (reasoningEffort) {
-      const { sessionID: _sessionID, directory: _directory, ...upstreamBody } = promptBody;
-      await postWorkspaceOpencodePromptWithReasoning({
-        config,
-        workspace,
-        sessionId,
-        body: upstreamBody,
-      });
-    } else {
-      unwrapOpencodeResult(
-        await sessionApi.promptAsync(promptBody),
-        `/session/${encodeURIComponent(sessionId)}/prompt_async`,
-      );
+    try {
+      if (reasoningEffort) {
+        const { sessionID: _sessionID, directory: _directory, ...upstreamBody } = promptBody;
+        await postWorkspaceOpencodePromptWithReasoning({
+          config,
+          workspace,
+          sessionId,
+          body: upstreamBody,
+        });
+      } else {
+        unwrapOpencodeResult(
+          await sessionApi.promptAsync(promptBody),
+          `/session/${encodeURIComponent(sessionId)}/prompt_async`,
+        );
+      }
+    } catch (error) {
+      modelUsageStore.cancel(usage.reservation.reservationId);
+      throw error;
     }
 
     await recordAudit(workspace.path, {
@@ -7919,6 +8150,16 @@ function createRoutes(
       timestamp: Date.now(),
       metadata: auditMetadata,
     });
+
+    if (usage.reservation.reservationId) {
+      scheduleModelUsageReconciliation({
+        config,
+        workspace,
+        store: modelUsageStore,
+        subject: usage.subject,
+        sessionId,
+      });
+    }
 
     return jsonResponse({ ok: true, accepted: true, sessionId }, 202);
   });

@@ -133,4 +133,21 @@ describe("AI provider UI contract", () => {
       'src="/matterhorn-logo-square.svg"',
     );
   });
+
+  test("shows a bounded free-beta allowance without implying automatic billing", () => {
+    const viewSource = readReactSource("domains/settings/pages/ai-view.tsx");
+    const sessionSource = readReactSource("domains/session/surface/session-surface.tsx");
+    const clientSource = readFileSync(
+      new URL("../src/app/lib/matterhorn-server.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(viewSource).toContain("Free beta allowance");
+    expect(viewSource).toContain("There are no automatic charges.");
+    expect(viewSource).toContain("Requests pause when an allowance is reached.");
+    expect(viewSource).toContain("workspaceModelUsageStatus");
+    expect(clientSource).toContain("/model-usage/status");
+    expect(clientSource).toContain("/model-usage/reconcile");
+    expect(sessionSource).toContain("reconcileWorkspaceModelUsage");
+  });
 });
