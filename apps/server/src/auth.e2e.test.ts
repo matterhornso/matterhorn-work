@@ -25,6 +25,8 @@ const roots: string[] = [];
 const stops: Array<() => void | Promise<void>> = [];
 const priorAuthDb = process.env.MATTERHORN_AUTH_DB;
 const priorDataDir = process.env.MATTERHORN_WORK_DATA_DIR;
+const priorSignupsEnabled = process.env.MATTERHORN_SIGNUPS_ENABLED;
+const priorSignupCapacity = process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS;
 
 function config(port: number, root: string): ServerConfig {
   return {
@@ -139,9 +141,42 @@ afterEach(async () => {
   else process.env.MATTERHORN_AUTH_DB = priorAuthDb;
   if (priorDataDir === undefined) delete process.env.MATTERHORN_WORK_DATA_DIR;
   else process.env.MATTERHORN_WORK_DATA_DIR = priorDataDir;
+  if (priorSignupsEnabled === undefined) delete process.env.MATTERHORN_SIGNUPS_ENABLED;
+  else process.env.MATTERHORN_SIGNUPS_ENABLED = priorSignupsEnabled;
+  if (priorSignupCapacity === undefined) delete process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS;
+  else process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS = priorSignupCapacity;
 });
 
 describe("public account authentication", () => {
+  test("pauses account creation and enforces the configured beta capacity", async () => {
+    const app = await boot();
+    process.env.MATTERHORN_SIGNUPS_ENABLED = "false";
+    const paused = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "paused@example.com", password: PASSWORD },
+    });
+    expect(paused.response.status).toBe(503);
+    expect(paused.payload.code).toBe("signups_paused");
+
+    process.env.MATTERHORN_SIGNUPS_ENABLED = "true";
+    process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS = "not-a-number";
+    const invalidCapacity = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "invalid-capacity@example.com", password: PASSWORD },
+    });
+    expect(invalidCapacity.response.status).toBe(503);
+    expect(invalidCapacity.payload.code).toBe("signup_configuration_invalid");
+
+    process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS = "1";
+    const accepted = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "first@example.com", password: PASSWORD },
+    });
+    expect(accepted.response.status).toBe(200);
+    const full = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "second@example.com", password: PASSWORD },
+    });
+    expect(full.response.status).toBe(503);
+    expect(full.payload.code).toBe("signup_capacity_reached");
+  });
+
   test("creates, restores, signs out, and signs back into an account", async () => {
     const first = await boot();
     const signup = await jsonRequest(first.base, "/api/auth/sign-up/email", {

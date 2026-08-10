@@ -53,6 +53,13 @@
     },
     {
       "source": "/workspace/:path*",
+      "missing": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/html.*"
+        }
+      ],
       "destination": "/api/matterhorn-proxy?__matterhorn_path=/workspace/:path*"
     },
     {

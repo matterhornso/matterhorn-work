@@ -71,6 +71,11 @@ function configuredVariableNames(keys) {
   return keys.filter((key) => readEnv(key)).join(", ");
 }
 
+function positiveInteger(key) {
+  const value = Number(readEnv(key));
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
 function check(id, label, owner, passed, note = null) {
   return {
     id,
@@ -109,6 +114,12 @@ function evaluate() {
   const app = urlOrNull(appUrl);
   const cloud = urlOrNull(cloudUrl);
   const cloudApi = urlOrNull(cloudApiUrl);
+  const usageDaily = positiveInteger("MATTERHORN_MODEL_USAGE_DAILY_LIMIT");
+  const usageMonthly = positiveInteger("MATTERHORN_MODEL_USAGE_MONTHLY_LIMIT");
+  const usageGlobalDaily = positiveInteger("MATTERHORN_MODEL_USAGE_GLOBAL_DAILY_LIMIT");
+  const usageGlobalMonthly = positiveInteger("MATTERHORN_MODEL_USAGE_GLOBAL_MONTHLY_LIMIT");
+  const usageReservation = positiveInteger("MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS");
+  const signupCapacity = positiveInteger("MATTERHORN_SIGNUP_MAX_ACCOUNTS");
 
   const checks = [
     check(
@@ -212,6 +223,58 @@ function evaluate() {
       "Security",
       proxySecretConfigured,
       "MATTERHORN_PROXY_SECRET must be a high-entropy server-only value of at least 32 characters.",
+    ),
+    check(
+      "signup.inference_provider",
+      "The managed ASI:Cloud inference credential is configured server-side",
+      "Platform",
+      readEnv("CUDOS_API_KEY").length >= 16,
+      "CUDOS_API_KEY must be configured in the backend secret manager.",
+    ),
+    check(
+      "signup.account_creation",
+      "Public account creation is explicitly enabled",
+      "Release owner",
+      enabled("MATTERHORN_SIGNUPS_ENABLED"),
+      "MATTERHORN_SIGNUPS_ENABLED must be true for an intentional signup launch.",
+    ),
+    check(
+      "signup.capacity",
+      "The public beta has an explicit account capacity",
+      "Release owner",
+      signupCapacity !== null,
+      "MATTERHORN_SIGNUP_MAX_ACCOUNTS must be a positive integer.",
+    ),
+    check(
+      "signup.usage_enforcement",
+      "Per-account model usage enforcement is fail-closed",
+      "Security",
+      readEnv("MATTERHORN_MODEL_USAGE_ENFORCEMENT").toLowerCase() === "hard",
+      "MATTERHORN_MODEL_USAGE_ENFORCEMENT must be hard before opening signups.",
+    ),
+    check(
+      "signup.user_allowance",
+      "Daily and monthly account allowances are explicit and valid",
+      "Product",
+      Boolean(usageDaily && usageMonthly && usageMonthly >= usageDaily),
+      "Set positive MATTERHORN_MODEL_USAGE_DAILY_LIMIT and MATTERHORN_MODEL_USAGE_MONTHLY_LIMIT values; monthly must be at least daily.",
+    ),
+    check(
+      "signup.platform_allowance",
+      "Daily and monthly platform spend guards are explicit and valid",
+      "Platform",
+      Boolean(usageGlobalDaily && usageGlobalMonthly && usageGlobalMonthly >= usageGlobalDaily),
+      "Set positive MATTERHORN_MODEL_USAGE_GLOBAL_DAILY_LIMIT and MATTERHORN_MODEL_USAGE_GLOBAL_MONTHLY_LIMIT values; monthly must be at least daily.",
+    ),
+    check(
+      "signup.usage_reservation",
+      "Each model request reserves a bounded allowance before dispatch",
+      "Security",
+      Boolean(
+        usageReservation && usageDaily && usageGlobalDaily &&
+        usageReservation <= usageDaily && usageReservation <= usageGlobalDaily
+      ),
+      "MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS must be positive and no greater than either daily limit.",
     ),
   ];
   const blockers = checks.filter((entry) => !entry.passed);

@@ -127,6 +127,11 @@
       "types": "./src/billing.ts",
       "development": "./src/billing.ts",
       "default": "./src/billing.ts"
+    },
+    "./model-usage": {
+      "types": "./src/model-usage.ts",
+      "development": "./src/model-usage.ts",
+      "default": "./src/model-usage.ts"
     }
   },
   "files": [

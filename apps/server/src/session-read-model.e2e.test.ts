@@ -13,6 +13,20 @@ type Served = {
 
 const stops: Array<() => void | Promise<void>> = [];
 const roots: string[] = [];
+const priorModelUsageEnv = {
+  enforcement: process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT,
+  daily: process.env.MATTERHORN_MODEL_USAGE_DAILY_LIMIT,
+  monthly: process.env.MATTERHORN_MODEL_USAGE_MONTHLY_LIMIT,
+  globalDaily: process.env.MATTERHORN_MODEL_USAGE_GLOBAL_DAILY_LIMIT,
+  globalMonthly: process.env.MATTERHORN_MODEL_USAGE_GLOBAL_MONTHLY_LIMIT,
+  reservation: process.env.MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS,
+  database: process.env.MATTERHORN_MODEL_USAGE_DB,
+};
+
+function restoreEnv(name: string, value: string | undefined) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
 
 afterEach(async () => {
   while (stops.length) {
@@ -21,6 +35,13 @@ afterEach(async () => {
   while (roots.length) {
     await rm(roots.pop()!, { recursive: true, force: true });
   }
+  restoreEnv("MATTERHORN_MODEL_USAGE_ENFORCEMENT", priorModelUsageEnv.enforcement);
+  restoreEnv("MATTERHORN_MODEL_USAGE_DAILY_LIMIT", priorModelUsageEnv.daily);
+  restoreEnv("MATTERHORN_MODEL_USAGE_MONTHLY_LIMIT", priorModelUsageEnv.monthly);
+  restoreEnv("MATTERHORN_MODEL_USAGE_GLOBAL_DAILY_LIMIT", priorModelUsageEnv.globalDaily);
+  restoreEnv("MATTERHORN_MODEL_USAGE_GLOBAL_MONTHLY_LIMIT", priorModelUsageEnv.globalMonthly);
+  restoreEnv("MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS", priorModelUsageEnv.reservation);
+  restoreEnv("MATTERHORN_MODEL_USAGE_DB", priorModelUsageEnv.database);
 });
 
 async function createWorkspaceRoot(folderName?: string) {
@@ -199,7 +220,21 @@ function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promis
   return { server, requests, streamAborts };
 }
 
-async function startOpenworkServer(input: { workspaceRoot: string; opencodeBaseUrl?: string; readOnly?: boolean }) {
+async function startOpenworkServer(input: {
+  workspaceRoot: string;
+  opencodeBaseUrl?: string;
+  readOnly?: boolean;
+  hardModelUsageLimit?: number;
+}) {
+  if (input.hardModelUsageLimit) {
+    process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT = "hard";
+    process.env.MATTERHORN_MODEL_USAGE_DAILY_LIMIT = String(input.hardModelUsageLimit);
+    process.env.MATTERHORN_MODEL_USAGE_MONTHLY_LIMIT = String(input.hardModelUsageLimit);
+    process.env.MATTERHORN_MODEL_USAGE_GLOBAL_DAILY_LIMIT = String(input.hardModelUsageLimit * 10);
+    process.env.MATTERHORN_MODEL_USAGE_GLOBAL_MONTHLY_LIMIT = String(input.hardModelUsageLimit * 10);
+    process.env.MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS = String(input.hardModelUsageLimit);
+    process.env.MATTERHORN_MODEL_USAGE_DB = join(input.workspaceRoot, ".model-usage.db");
+  }
   const config: ServerConfig = {
     host: "127.0.0.1",
     port: 0,
@@ -612,6 +647,46 @@ describe("workspace session read APIs", () => {
       },
     });
     expect(JSON.stringify(ledgerBody)).not.toContain("Summarize this workspace");
+  });
+
+  test("reserves a hard model allowance before dispatch and exposes account status", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+      hardModelUsageLimit: 32_000,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const prompt = () => fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Summarize this workspace",
+        model: { providerID: "openai", modelID: "gpt-4.1" },
+      }),
+    });
+
+    expect((await prompt()).status).toBe(202);
+    const blocked = await prompt();
+    expect(blocked.status).toBe(429);
+    await expect(blocked.json()).resolves.toMatchObject({ code: "model_usage_limit_reached" });
+
+    const status = await fetch(`${base}/workspace/ws_1/model-usage/status`, {
+      headers: auth(openwork.token),
+    });
+    expect(status.status).toBe(200);
+    await expect(status.json()).resolves.toMatchObject({
+      status: {
+        enforcement: "hard",
+        canStartRequest: false,
+        daily: { chargedTokens: 32_000, limit: 32_000 },
+        monthly: { chargedTokens: 32_000, limit: 32_000 },
+        pendingRequests: 1,
+      },
+    });
+    expect(mock.requests.filter((request) => request.pathname === "/session/ses_1/prompt_async")).toHaveLength(1);
   });
 
   test("submits stable route prompts with the server default model when no selection exists", async () => {

@@ -83,6 +83,7 @@ export class MatterhornAuthError extends Error {
       | "invalid_password"
       | "invalid_organization"
       | "organization_slug_taken"
+      | "signup_capacity_reached"
       | "unauthorized",
     message: string,
   ) {
@@ -297,6 +298,7 @@ export class MatterhornAuthStore {
     email: string;
     password: string;
     name?: string | null;
+    maxAccounts?: number | null;
   }): MatterhornAuthSession {
     const email = normalizeEmail(input.email);
     validatePassword(input.password);
@@ -320,6 +322,15 @@ export class MatterhornAuthStore {
     const passwordHash = hashPassword(input.password, salt);
 
     this.withTransaction(() => {
+      if (input.maxAccounts !== null && input.maxAccounts !== undefined) {
+        const row = statement(this.db, "SELECT COUNT(*) AS count FROM users").get() as { count?: number } | undefined;
+        if ((row?.count ?? 0) >= input.maxAccounts) {
+          throw new MatterhornAuthError(
+            "signup_capacity_reached",
+            "The public beta is full for now. Try again after more places open.",
+          );
+        }
+      }
       statement(
         this.db,
         `INSERT INTO users

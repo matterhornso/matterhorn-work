@@ -221,7 +221,7 @@ function ProfileReadinessSupportSection({
       <h4 className="font-semibold text-dls-text">
         {compact ? "Help and support" : readiness.stateCopy.headline}
       </h4>
-      <p>{compact ? "Get product help or report a problem." : readiness.stateCopy.body}</p>
+      {compact ? null : <p>{readiness.stateCopy.body}</p>}
       <div className="flex flex-wrap gap-2">
         {onSendFeedback ? (
           <button

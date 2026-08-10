@@ -42,6 +42,15 @@ const managedKeys = [
   "MATTERHORN_PUBLIC_PROXY_MODE",
   "MATTERHORN_CONTROL_PLANE_URL",
   "MATTERHORN_PROXY_SECRET",
+  "CUDOS_API_KEY",
+  "MATTERHORN_MODEL_USAGE_ENFORCEMENT",
+  "MATTERHORN_MODEL_USAGE_DAILY_LIMIT",
+  "MATTERHORN_MODEL_USAGE_MONTHLY_LIMIT",
+  "MATTERHORN_MODEL_USAGE_GLOBAL_DAILY_LIMIT",
+  "MATTERHORN_MODEL_USAGE_GLOBAL_MONTHLY_LIMIT",
+  "MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS",
+  "MATTERHORN_SIGNUPS_ENABLED",
+  "MATTERHORN_SIGNUP_MAX_ACCOUNTS",
   "VITE_MATTERHORN_WORK_TOKEN",
   "VITE_MATTERHORN_WORK_HOST_TOKEN",
   "VITE_OPENWORK_TOKEN",
@@ -72,6 +81,15 @@ function publicWebEnvironment(overrides = {}) {
     MATTERHORN_PUBLIC_PROXY_MODE: "same-origin",
     MATTERHORN_CONTROL_PLANE_URL: "https://api-origin.matterhorn.example",
     MATTERHORN_PROXY_SECRET: "a-high-entropy-edge-secret-value-123",
+    CUDOS_API_KEY: "managed-cudos-secret-placeholder",
+    MATTERHORN_MODEL_USAGE_ENFORCEMENT: "hard",
+    MATTERHORN_MODEL_USAGE_DAILY_LIMIT: "250000",
+    MATTERHORN_MODEL_USAGE_MONTHLY_LIMIT: "2000000",
+    MATTERHORN_MODEL_USAGE_GLOBAL_DAILY_LIMIT: "5000000",
+    MATTERHORN_MODEL_USAGE_GLOBAL_MONTHLY_LIMIT: "50000000",
+    MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS: "32000",
+    MATTERHORN_SIGNUPS_ENABLED: "true",
+    MATTERHORN_SIGNUP_MAX_ACCOUNTS: "100",
     ...overrides,
   };
 }
@@ -123,6 +141,19 @@ const missingProxySecret = run({ MATTERHORN_PROXY_SECRET: "" });
 assert.notEqual(missingProxySecret.status, 0);
 assert.ok(JSON.parse(missingProxySecret.stdout).blockers.some((blocker) => blocker.id === "web.proxy_secret"));
 assert.doesNotMatch(missingProxySecret.stdout, /a-high-entropy-edge-secret-value-123/);
+
+const unboundedUsage = run({ MATTERHORN_MODEL_USAGE_ENFORCEMENT: "off" });
+assert.notEqual(unboundedUsage.status, 0);
+assert.ok(JSON.parse(unboundedUsage.stdout).blockers.some((blocker) => blocker.id === "signup.usage_enforcement"));
+
+const missingInferenceProvider = run({ CUDOS_API_KEY: "" });
+assert.notEqual(missingInferenceProvider.status, 0);
+assert.ok(JSON.parse(missingInferenceProvider.stdout).blockers.some((blocker) => blocker.id === "signup.inference_provider"));
+assert.doesNotMatch(missingInferenceProvider.stdout, /managed-cudos-secret-placeholder/);
+
+const unlimitedSignups = run({ MATTERHORN_SIGNUP_MAX_ACCOUNTS: "" });
+assert.notEqual(unlimitedSignups.status, 0);
+assert.ok(JSON.parse(unlimitedSignups.stdout).blockers.some((blocker) => blocker.id === "signup.capacity"));
 
 const deploymentSource = readFileSync("apps/app/src/app/lib/matterhorn-deployment.ts", "utf8");
 const serverSource = readFileSync("apps/app/src/react-app/kernel/server-provider.tsx", "utf8");
