@@ -30,6 +30,9 @@ describe("AI provider UI contract", () => {
     expect(viewSource).toContain("catalog?.providers ?? []");
     expect(viewSource).toContain("catalogProviderById.get(provider.id)");
     expect(viewSource).toContain("Checking models...");
+    expect(viewSource).toContain("Checking model provider");
+    expect(viewSource).toContain("Loading the models managed for this workspace.");
+    expect(viewSource).toContain("Checking availability...");
     expect(viewSource).toContain("provider.modelCount");
     expect(viewSource).toContain("countConnectedCatalogModels(catalog)");
     expect(viewSource).not.toContain(

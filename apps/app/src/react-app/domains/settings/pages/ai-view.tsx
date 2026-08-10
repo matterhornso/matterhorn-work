@@ -280,6 +280,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
     : props.connectedModelCount;
   const providerCatalogLoading =
     workspaceBackendModelsQuery.isLoading || backendModelsQuery.isLoading;
+  const providerStateLoading = providerCatalogLoading && !backendModels;
   const catalogProviderById = new Map(
     (catalog?.providers ?? []).map((provider) => [provider.id, provider]),
   );
@@ -452,8 +453,10 @@ export function AiSettingsView(props: AiSettingsViewProps) {
         <LayoutSectionItem className="rounded-lg bg-dls-surface-raised/65 p-4">
           <LayoutSectionItemHeader>
             <LayoutSectionItemTitle>
-              {modelReadiness.currentChoice.label}
-              {modelReadiness.statusTone !== "ready" ? (
+              {providerStateLoading
+                ? "Checking model provider"
+                : modelReadiness.currentChoice.label}
+              {!providerStateLoading && modelReadiness.statusTone !== "ready" ? (
                 <SettingsStatusBadge
                   tone={modelReadiness.statusTone}
                   label={modelReadiness.statusLabel}
@@ -461,11 +464,13 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               ) : null}
             </LayoutSectionItemTitle>
             <LayoutSectionItemDescription>
-              {modelProviderReady
+              {providerStateLoading
+                ? "Loading the models managed for this workspace."
+                : modelProviderReady
                 ? `${modelReadiness.currentChoice.value}. ${modelReadiness.currentChoice.detail}`
                 : "Connect a provider below, then choose a model for chats and desk tasks."}
             </LayoutSectionItemDescription>
-            {modelProviderReady ? (
+            {modelProviderReady && !providerStateLoading ? (
               <LayoutSectionItemHeaderActions>
                 <Button
                   onClick={() => void props.onOpenModelPicker()}
@@ -814,7 +819,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                 </div>
                 <div className="text-xs leading-5 text-muted-foreground">
                   {props.providerCredentialsManaged
-                    ? cudosConnected
+                    ? providerStateLoading
+                      ? "Checking availability..."
+                      : cudosConnected
                       ? "7 models available through Matterhorn"
                       : "Unavailable in this deployment"
                     : cudosConnected

@@ -50,7 +50,8 @@ for (const required of [
 let serveSpaFallbackForProxyRoutes = false;
 const app = await listen((request, response) => {
   const isProxyRoute = request.url === "/workspaces" || request.url === "/opencode/global/health";
-  const status = isProxyRoute && !serveSpaFallbackForProxyRoutes ? 401 : 200;
+  const acceptsHtml = request.headers.accept?.includes("text/html") === true;
+  const status = isProxyRoute && !serveSpaFallbackForProxyRoutes ? 401 : acceptsHtml ? 200 : 406;
   const contentType = isProxyRoute && !serveSpaFallbackForProxyRoutes ? "application/json" : "text/html";
   response.writeHead(status, {
     "content-type": contentType,
@@ -61,7 +62,9 @@ const app = await listen((request, response) => {
   });
   response.end(status === 401
     ? JSON.stringify({ error: "Authentication required." })
-    : "<!doctype html><title>Matterhorn Desks</title>");
+    : status === 406
+      ? "<!doctype html><title>HTML navigation required</title>"
+      : "<!doctype html><title>Matterhorn Desks</title>");
 });
 
 let allowUntrusted = false;
