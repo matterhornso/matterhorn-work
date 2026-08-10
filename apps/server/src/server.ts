@@ -1792,7 +1792,8 @@ async function proxyOpencodeRequest(input: {
       if (promptAudit) {
         const errorPayload = await response.clone().json().catch(() => null);
         const errorRecord = recordLike(errorPayload);
-        const dataRecord = recordLike(errorRecord?.data);
+        const errorWrapper = recordLike(errorRecord?.error);
+        const dataRecord = recordLike(errorRecord?.data) ?? recordLike(errorWrapper?.data);
         const issues = Array.isArray(dataRecord?.issues)
           ? dataRecord.issues
           : Array.isArray(errorRecord?.issues)
@@ -1814,11 +1815,40 @@ async function proxyOpencodeRequest(input: {
             ...(typeof record.received === "string" ? { received: record.received.slice(0, 80) } : {}),
           }];
         });
-        const promptModel = recordLike(JSON.parse(typeof body === "string" ? body : "{}")?.model);
+        const promptPayload = recordLike(JSON.parse(typeof body === "string" ? body : "{}"));
+        const promptModel = recordLike(promptPayload?.model);
+        const promptParts = Array.isArray(promptPayload?.parts)
+          ? promptPayload.parts.slice(0, 16).map((part, index) => {
+            const record = recordLike(part);
+            return {
+              index,
+              type: stringValue(record?.type),
+              keys: record ? Object.keys(record).sort().slice(0, 16) : [],
+              ...(typeof record?.id === "string"
+                ? { idPrefix: record.id.slice(0, 8), idLength: record.id.length }
+                : {}),
+              ...(typeof record?.text === "string" ? { textLength: record.text.length } : {}),
+            };
+          })
+          : [];
         input.logger.log("warn", "OpenCode rejected a session prompt", {
           "opencode.status": response.status,
-          "opencode.error.name": stringValue(dataRecord?.name) ?? stringValue(errorRecord?.name) ?? undefined,
+          "opencode.error.top_level_keys": errorRecord ? Object.keys(errorRecord).sort().slice(0, 16) : undefined,
+          "opencode.error.wrapper_keys": errorWrapper ? Object.keys(errorWrapper).sort().slice(0, 16) : undefined,
+          "opencode.error.data_keys": dataRecord ? Object.keys(dataRecord).sort().slice(0, 16) : undefined,
+          "opencode.error.name": stringValue(dataRecord?.name)
+            ?? stringValue(errorWrapper?.name)
+            ?? stringValue(errorRecord?.name)
+            ?? undefined,
+          "opencode.error.code": stringValue(dataRecord?.code)
+            ?? stringValue(errorWrapper?.code)
+            ?? stringValue(errorRecord?.code)
+            ?? undefined,
           "opencode.error.issues": issueSummary.length ? issueSummary : undefined,
+          "prompt.keys": promptPayload ? Object.keys(promptPayload).sort().slice(0, 24) : undefined,
+          "prompt.parts": promptParts.length ? promptParts : undefined,
+          "prompt.system_length": typeof promptPayload?.system === "string" ? promptPayload.system.length : undefined,
+          "prompt.variant": stringValue(promptPayload?.variant),
           "prompt.model.provider_id": stringValue(promptModel?.providerID),
           "prompt.model.model_id": stringValue(promptModel?.modelID),
           "prompt.execution_mode": promptAudit.executionMode,
