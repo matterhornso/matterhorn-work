@@ -185,7 +185,7 @@ import {
 import { getReactQueryClient } from "../infra/query-client";
 import {
   ensureProviderListQuery,
-  getConnectedProviderItems,
+  getConnectedPromptProviderItems,
   refreshProviderListAfterEngineReload,
 } from "../domains/connections/provider-list-query";
 import {
@@ -1776,7 +1776,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           seenIds = new Set();
         }
         const options: ModelOption[] = [];
-        for (const provider of getConnectedProviderItems(data)) {
+        for (const provider of getConnectedPromptProviderItems(data)) {
           const modelIds = Object.keys(provider.models);
           const isNew = !seenIds.has(provider.id);
           for (const id of modelIds) {

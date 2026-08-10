@@ -18,7 +18,7 @@ import {
 import { useWorkspace } from "@/react-app/shell/workspace-provider";
 import { useCheckDesktopRestriction } from "@/react-app/domains/cloud/desktop-config-provider";
 import {
-  getConnectedProviderItems,
+  getConnectedPromptProviderItems,
   useProviderListQuery,
 } from "@/react-app/domains/connections/provider-list-query";
 import {
@@ -87,7 +87,7 @@ function useModelOptions(open: boolean) {
       restriction: "allowCustomProviders",
     });
 
-    const options = getConnectedProviderItems(data).flatMap((provider) =>
+    const options = getConnectedPromptProviderItems(data).flatMap((provider) =>
       Object.entries(provider.models).map(([id, model]) => {
         const behavior = getModelBehaviorSummary(
           provider.id,

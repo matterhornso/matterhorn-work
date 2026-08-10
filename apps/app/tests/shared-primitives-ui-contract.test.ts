@@ -54,6 +54,20 @@ describe("Shared primitives UI contract", () => {
     );
   });
 
+  test("compact model picker only advertises prompt-ready providers", () => {
+    const source = readAppPackageSource("components/model-select.tsx");
+    const settingsRoute = readAppSource("shell/settings-route.tsx");
+
+    expect(source).toContain("getConnectedPromptProviderItems(data)");
+    expect(source).not.toContain("getConnectedProviderItems(data)");
+    expect(settingsRoute).toContain(
+      "for (const provider of getConnectedPromptProviderItems(data))",
+    );
+    expect(settingsRoute).not.toContain(
+      "for (const provider of getConnectedProviderItems(data))",
+    );
+  });
+
   test("session note actions remain visually distinct from rename", () => {
     const source = readAppSource("domains/session/chat/session-page.tsx");
 

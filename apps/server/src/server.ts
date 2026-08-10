@@ -1065,6 +1065,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
           proxyBaseUrl = workspace.baseUrl?.trim() || undefined;
           const response = await proxyOpencodeRequest({
             config,
+            logger,
             request,
             url,
             workspace,
@@ -1152,6 +1153,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
           proxyService = "opencode";
           const response = await proxyOpencodeRequest({
             config,
+            logger,
             request,
             url,
             workspace,
@@ -1653,6 +1655,7 @@ async function reserveModelUsage(input: {
 
 async function proxyOpencodeRequest(input: {
   config: ServerConfig;
+  logger: ServerLogger;
   request: Request;
   url: URL;
   workspace?: WorkspaceInfo;
@@ -1678,8 +1681,14 @@ async function proxyOpencodeRequest(input: {
   headers.delete(MATTERHORN_EXECUTION_MODE_HEADER);
 
   const directory = workspace ? resolveOpencodeDirectory(workspace) : null;
-  if (directory && !headers.has("x-opencode-directory")) {
+  if (directory) {
+    // The workspace route is the authorization boundary. Never trust a
+    // browser- or SDK-supplied directory header here: SDK clients encode the
+    // value differently across runtimes, and an arbitrary value could point
+    // the shared engine outside the authorized workspace.
     headers.set("x-opencode-directory", buildOpencodeDirectoryHeader(directory));
+  } else {
+    headers.delete("x-opencode-directory");
   }
 
   const auth = workspace ? resolveWorkspaceOpencodeConnection(input.config, workspace).authHeader ?? null : null;
@@ -1741,6 +1750,15 @@ async function proxyOpencodeRequest(input: {
     else delete payload.reasoning_effort;
     body = JSON.stringify(payload);
     headers.delete("content-length");
+    const promptHeaderAllowlist = new Set([
+      "accept",
+      "authorization",
+      "content-type",
+      "x-opencode-directory",
+    ]);
+    for (const name of [...headers.keys()]) {
+      if (!promptHeaderAllowlist.has(name.toLowerCase())) headers.delete(name);
+    }
 
     const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
     promptAudit = { executionMode: bodyExecutionMode, agent, sessionId };
@@ -1784,7 +1802,76 @@ async function proxyOpencodeRequest(input: {
       body,
       signal: upstreamController.signal,
     });
-    if (!response.ok) input.modelUsageStore?.cancel(usageReservationId);
+    if (!response.ok) {
+      input.modelUsageStore?.cancel(usageReservationId);
+      if (promptAudit) {
+        const errorPayload = await response.clone().json().catch(() => null);
+        const errorRecord = recordLike(errorPayload);
+        const errorWrapper = recordLike(errorRecord?.error);
+        const dataRecord = recordLike(errorRecord?.data) ?? recordLike(errorWrapper?.data);
+        const errorIssues = Array.isArray(errorRecord?.error) ? errorRecord.error : [];
+        const issues = Array.isArray(dataRecord?.issues)
+          ? dataRecord.issues
+          : Array.isArray(errorRecord?.issues)
+            ? errorRecord.issues
+            : errorIssues;
+        const issueSummary = issues.slice(0, 8).flatMap((issue) => {
+          const record = recordLike(issue);
+          if (!record) return [];
+          const path = Array.isArray(record.path)
+            ? record.path
+              .filter((part): part is string | number => typeof part === "string" || typeof part === "number")
+              .slice(0, 8)
+              .join(".")
+            : "";
+          return [{
+            ...(typeof record.code === "string" ? { code: record.code.slice(0, 80) } : {}),
+            ...(path ? { path } : {}),
+            ...(typeof record.expected === "string" ? { expected: record.expected.slice(0, 80) } : {}),
+            ...(typeof record.received === "string" ? { received: record.received.slice(0, 80) } : {}),
+          }];
+        });
+        const promptPayload = recordLike(JSON.parse(typeof body === "string" ? body : "{}"));
+        const promptModel = recordLike(promptPayload?.model);
+        const promptParts = Array.isArray(promptPayload?.parts)
+          ? promptPayload.parts.slice(0, 16).map((part, index) => {
+            const record = recordLike(part);
+            return {
+              index,
+              type: stringValue(record?.type),
+              keys: record ? Object.keys(record).sort().slice(0, 16) : [],
+              ...(typeof record?.id === "string"
+                ? { idPrefix: record.id.slice(0, 8), idLength: record.id.length }
+                : {}),
+              ...(typeof record?.text === "string" ? { textLength: record.text.length } : {}),
+            };
+          })
+          : [];
+        input.logger.log("warn", "OpenCode rejected a session prompt", {
+          "opencode.status": response.status,
+          "opencode.error.top_level_keys": errorRecord ? Object.keys(errorRecord).sort().slice(0, 16) : undefined,
+          "opencode.error.wrapper_keys": errorWrapper ? Object.keys(errorWrapper).sort().slice(0, 16) : undefined,
+          "opencode.error.data_keys": dataRecord ? Object.keys(dataRecord).sort().slice(0, 16) : undefined,
+          "opencode.error.name": stringValue(dataRecord?.name)
+            ?? stringValue(errorWrapper?.name)
+            ?? stringValue(errorRecord?.name)
+            ?? undefined,
+          "opencode.error.code": stringValue(dataRecord?.code)
+            ?? stringValue(errorWrapper?.code)
+            ?? stringValue(errorRecord?.code)
+            ?? undefined,
+          "opencode.error.issues": issueSummary.length ? issueSummary : undefined,
+          "prompt.keys": promptPayload ? Object.keys(promptPayload).sort().slice(0, 24) : undefined,
+          "prompt.parts": promptParts.length ? promptParts : undefined,
+          "prompt.system_length": typeof promptPayload?.system === "string" ? promptPayload.system.length : undefined,
+          "prompt.variant": stringValue(promptPayload?.variant),
+          "prompt.model.provider_id": stringValue(promptModel?.providerID),
+          "prompt.model.model_id": stringValue(promptModel?.modelID),
+          "prompt.execution_mode": promptAudit.executionMode,
+          "prompt.agent": promptAudit.agent,
+        });
+      }
+    }
   } catch (error) {
     input.modelUsageStore?.cancel(usageReservationId);
     throw error;
