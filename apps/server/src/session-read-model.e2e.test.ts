@@ -889,6 +889,36 @@ describe("workspace session read APIs", () => {
     expect(proxyRequest?.directory).toBe(encodeURIComponent(workspaceRoot));
   });
 
+  test("overrides client directory headers with the authorized workspace directory", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+
+    const response = await fetch(
+      `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/prompt_async`,
+      {
+        method: "POST",
+        headers: {
+          ...auth(openwork.token),
+          "Content-Type": "application/json",
+          "X-Matterhorn-Execution-Mode": "work",
+          "X-OpenCode-Directory": encodeURIComponent("/tmp/untrusted-client-directory"),
+        },
+        body: JSON.stringify({ parts: [{ type: "text", text: "Use this workspace" }] }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const proxyRequest = mock.requests.find(
+      (request) => request.pathname === "/session/ses_1/prompt_async",
+    );
+    expect(proxyRequest?.directory).toBe(workspaceRoot);
+    expect(proxyRequest?.directory).not.toContain("untrusted-client-directory");
+  });
+
   test("cancels the upstream OpenCode stream when a proxied client disconnects", async () => {
     const workspaceRoot = await createWorkspaceRoot();
     const mock = startMockOpencode();

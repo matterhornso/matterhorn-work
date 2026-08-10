@@ -1681,8 +1681,14 @@ async function proxyOpencodeRequest(input: {
   headers.delete(MATTERHORN_EXECUTION_MODE_HEADER);
 
   const directory = workspace ? resolveOpencodeDirectory(workspace) : null;
-  if (directory && !headers.has("x-opencode-directory")) {
+  if (directory) {
+    // The workspace route is the authorization boundary. Never trust a
+    // browser- or SDK-supplied directory header here: SDK clients encode the
+    // value differently across runtimes, and an arbitrary value could point
+    // the shared engine outside the authorized workspace.
     headers.set("x-opencode-directory", buildOpencodeDirectoryHeader(directory));
+  } else {
+    headers.delete("x-opencode-directory");
   }
 
   const auth = workspace ? resolveWorkspaceOpencodeConnection(input.config, workspace).authHeader ?? null : null;
@@ -1794,11 +1800,12 @@ async function proxyOpencodeRequest(input: {
         const errorRecord = recordLike(errorPayload);
         const errorWrapper = recordLike(errorRecord?.error);
         const dataRecord = recordLike(errorRecord?.data) ?? recordLike(errorWrapper?.data);
+        const errorIssues = Array.isArray(errorRecord?.error) ? errorRecord.error : [];
         const issues = Array.isArray(dataRecord?.issues)
           ? dataRecord.issues
           : Array.isArray(errorRecord?.issues)
             ? errorRecord.issues
-            : [];
+            : errorIssues;
         const issueSummary = issues.slice(0, 8).flatMap((issue) => {
           const record = recordLike(issue);
           if (!record) return [];
