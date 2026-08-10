@@ -157,7 +157,9 @@ export function resolveMatterhornModelUsageConfig(
   const enforcement: MatterhornModelUsageEnforcement =
     requested === "hard" || requested === "monitor" || requested === "off"
       ? requested
-      : "off";
+      : requested
+        ? "hard"
+        : "off";
   return {
     enforcement,
     dailyLimit: optionalPositiveInteger(env.MATTERHORN_MODEL_USAGE_DAILY_LIMIT, DEFAULT_DAILY_LIMIT),

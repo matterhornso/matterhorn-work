@@ -158,6 +158,13 @@ describe("public account authentication", () => {
     expect(paused.payload.code).toBe("signups_paused");
 
     process.env.MATTERHORN_SIGNUPS_ENABLED = "true";
+    process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS = "not-a-number";
+    const invalidCapacity = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "invalid-capacity@example.com", password: PASSWORD },
+    });
+    expect(invalidCapacity.response.status).toBe(503);
+    expect(invalidCapacity.payload.code).toBe("signup_configuration_invalid");
+
     process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS = "1";
     const accepted = await jsonRequest(app.base, "/api/auth/sign-up/email", {
       body: { email: "first@example.com", password: PASSWORD },

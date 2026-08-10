@@ -39,6 +39,9 @@ describe("MatterhornModelUsageStore", () => {
     expect(resolveMatterhornModelUsageConfig({
       MATTERHORN_MODEL_USAGE_ENFORCEMENT: "hard",
     }).enforcement).toBe("hard");
+    expect(resolveMatterhornModelUsageConfig({
+      MATTERHORN_MODEL_USAGE_ENFORCEMENT: "typo",
+    }).enforcement).toBe("hard");
   });
 
   test("reserves quota before a model request and blocks at the hard daily limit", async () => {

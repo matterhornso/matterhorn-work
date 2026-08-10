@@ -6459,7 +6459,7 @@ function createRoutes(
   addRoute(routes, "POST", "/api/auth/sign-up/email", "none", async (ctx) => {
     const { request } = ctx;
     const signupsEnabled = process.env.MATTERHORN_SIGNUPS_ENABLED?.trim().toLowerCase();
-    if (signupsEnabled === "0" || signupsEnabled === "false" || signupsEnabled === "off") {
+    if (signupsEnabled && !/^(1|true|yes|on)$/.test(signupsEnabled)) {
       throw new ApiError(503, "signups_paused", "New accounts are paused while we prepare more beta places.");
     }
     const body = await readJsonBody(request, 16 * 1024, "Sign-up");
@@ -6482,8 +6482,13 @@ function createRoutes(
         password: stringBodyField(body, "password"),
         name: optionalStringBodyField(body, "name"),
         maxAccounts: (() => {
-          const value = Number.parseInt(process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS?.trim() ?? "", 10);
-          return Number.isSafeInteger(value) && value > 0 ? value : null;
+          const configured = process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS?.trim() ?? "";
+          if (!configured) return null;
+          const value = Number(configured);
+          if (!Number.isSafeInteger(value) || value <= 0) {
+            throw new ApiError(503, "signup_configuration_invalid", "New accounts are paused while signup capacity is corrected.");
+          }
+          return value;
         })(),
       }),
     );
