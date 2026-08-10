@@ -41,6 +41,7 @@ describe("Matterhorn Cloud availability contract", () => {
   test("keeps the Account surface focused on profile and Cloud state", () => {
     expect(accountSource).not.toContain("ProfileTaskLogSection");
     expect(accountSource).not.toContain("Recent task state from this workspace session.");
+    expect(accountSource).not.toContain("Get product help or report a problem.");
   });
 
   test("keeps unavailable team-provider sign-in actions out of AI settings", () => {
