@@ -127,6 +127,12 @@ for (const configPath of ["vercel.json", "apps/app/vercel.json"]) {
   for (const route of ["/api/:path*", "/workspaces", "/workspace/:path*", "/opencode/:path*", "/health/:path*"]) {
     assert.ok(serialized.includes(route), `${configPath} must proxy ${route}`);
   }
+  const workspaceProxy = config.rewrites.find((rewrite) => rewrite.source === "/workspace/:path*");
+  assert.deepEqual(
+    workspaceProxy?.missing,
+    [{ type: "header", key: "accept", value: ".*text/html.*" }],
+    `${configPath} must let HTML workspace deep links fall through to the SPA`,
+  );
   assert.equal(config.rewrites.at(-1)?.destination, "/index.html");
 }
 
