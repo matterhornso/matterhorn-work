@@ -1065,6 +1065,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
           proxyBaseUrl = workspace.baseUrl?.trim() || undefined;
           const response = await proxyOpencodeRequest({
             config,
+            logger,
             request,
             url,
             workspace,
@@ -1152,6 +1153,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
           proxyService = "opencode";
           const response = await proxyOpencodeRequest({
             config,
+            logger,
             request,
             url,
             workspace,
@@ -1653,6 +1655,7 @@ async function reserveModelUsage(input: {
 
 async function proxyOpencodeRequest(input: {
   config: ServerConfig;
+  logger: ServerLogger;
   request: Request;
   url: URL;
   workspace?: WorkspaceInfo;
@@ -1784,7 +1787,45 @@ async function proxyOpencodeRequest(input: {
       body,
       signal: upstreamController.signal,
     });
-    if (!response.ok) input.modelUsageStore?.cancel(usageReservationId);
+    if (!response.ok) {
+      input.modelUsageStore?.cancel(usageReservationId);
+      if (promptAudit) {
+        const errorPayload = await response.clone().json().catch(() => null);
+        const errorRecord = recordLike(errorPayload);
+        const dataRecord = recordLike(errorRecord?.data);
+        const issues = Array.isArray(dataRecord?.issues)
+          ? dataRecord.issues
+          : Array.isArray(errorRecord?.issues)
+            ? errorRecord.issues
+            : [];
+        const issueSummary = issues.slice(0, 8).flatMap((issue) => {
+          const record = recordLike(issue);
+          if (!record) return [];
+          const path = Array.isArray(record.path)
+            ? record.path
+              .filter((part): part is string | number => typeof part === "string" || typeof part === "number")
+              .slice(0, 8)
+              .join(".")
+            : "";
+          return [{
+            ...(typeof record.code === "string" ? { code: record.code.slice(0, 80) } : {}),
+            ...(path ? { path } : {}),
+            ...(typeof record.expected === "string" ? { expected: record.expected.slice(0, 80) } : {}),
+            ...(typeof record.received === "string" ? { received: record.received.slice(0, 80) } : {}),
+          }];
+        });
+        const promptModel = recordLike(JSON.parse(typeof body === "string" ? body : "{}")?.model);
+        input.logger.log("warn", "OpenCode rejected a session prompt", {
+          "opencode.status": response.status,
+          "opencode.error.name": stringValue(dataRecord?.name) ?? stringValue(errorRecord?.name) ?? undefined,
+          "opencode.error.issues": issueSummary.length ? issueSummary : undefined,
+          "prompt.model.provider_id": stringValue(promptModel?.providerID),
+          "prompt.model.model_id": stringValue(promptModel?.modelID),
+          "prompt.execution_mode": promptAudit.executionMode,
+          "prompt.agent": promptAudit.agent,
+        });
+      }
+    }
   } catch (error) {
     input.modelUsageStore?.cancel(usageReservationId);
     throw error;
