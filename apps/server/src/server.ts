@@ -1750,6 +1750,15 @@ async function proxyOpencodeRequest(input: {
     else delete payload.reasoning_effort;
     body = JSON.stringify(payload);
     headers.delete("content-length");
+    const promptHeaderAllowlist = new Set([
+      "accept",
+      "authorization",
+      "content-type",
+      "x-opencode-directory",
+    ]);
+    for (const name of [...headers.keys()]) {
+      if (!promptHeaderAllowlist.has(name.toLowerCase())) headers.delete(name);
+    }
 
     const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
     promptAudit = { executionMode: bodyExecutionMode, agent, sessionId };
