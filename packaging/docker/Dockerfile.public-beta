@@ -30,7 +30,7 @@ RUN set -eux; \
   rm /tmp/opencode.tar.gz; \
   opencode --version
 
-RUN mkdir -p /data/matterhorn /data/workspace /home/node/.config \
+RUN mkdir -p /data/matterhorn /data/workspace /data/opencode/xdg/data /data/opencode/xdg/state /home/node/.config \
   && chown -R node:node /app /data /home/node
 
 ENV NODE_ENV=production \
@@ -38,6 +38,8 @@ ENV NODE_ENV=production \
   OPENWORK_MANAGE_OPENCODE=1 \
   OPENWORK_OPENCODE_BIN=/usr/local/bin/opencode \
   OPENWORK_LOG_FORMAT=json \
+  XDG_DATA_HOME=/data/opencode/xdg/data \
+  XDG_STATE_HOME=/data/opencode/xdg/state \
   MATTERHORN_WORK_DATA_DIR=/data/matterhorn \
   MATTERHORN_WORK_WORKSPACES=/data/workspace \
   MATTERHORN_WORK_APPROVAL_MODE=manual \

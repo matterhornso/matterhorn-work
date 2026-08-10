@@ -8,6 +8,8 @@ const ciWorkflow = readFileSync(".github/workflows/ci-tests.yml", "utf8");
 for (const required of [
   "OPENWORK_MANAGE_OPENCODE=1",
   "OPENWORK_OPENCODE_BIN=/usr/local/bin/opencode",
+  "XDG_DATA_HOME=/data/opencode/xdg/data",
+  "XDG_STATE_HOME=/data/opencode/xdg/state",
   "MATTERHORN_WORK_DATA_DIR=/data/matterhorn",
   "MATTERHORN_WORK_WORKSPACES=/data/workspace",
   "MATTERHORN_WORK_APPROVAL_MODE=manual",
@@ -29,7 +31,10 @@ for (const required of [
   "require_secret MATTERHORN_WORK_TRUSTED_PROXY_SECRET",
   "MATTERHORN_BUILD_COMMIT must be a full 40-character SHA",
   "MATTERHORN_WORK_CORS_ORIGINS must be the exact HTTPS app origin",
-  'install -d -m 0700 -o node -g node "${MATTERHORN_WORK_DATA_DIR}" "${MATTERHORN_WORK_WORKSPACES}"',
+  '"${MATTERHORN_WORK_DATA_DIR}"',
+  '"${MATTERHORN_WORK_WORKSPACES}"',
+  '"${XDG_DATA_HOME}"',
+  '"${XDG_STATE_HOME}"',
   'exec gosu node bun /app/apps/server/src/cli.ts',
 ]) {
   assert.ok(entrypoint.includes(required), `public Beta entrypoint must include ${required}`);

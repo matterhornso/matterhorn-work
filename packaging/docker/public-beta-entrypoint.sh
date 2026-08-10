@@ -28,6 +28,10 @@ case "${MATTERHORN_WORK_CORS_ORIGINS}" in
 esac
 
 export OPENWORK_PORT="${PORT:-${OPENWORK_PORT:-8787}}"
-install -d -m 0700 -o node -g node "${MATTERHORN_WORK_DATA_DIR}" "${MATTERHORN_WORK_WORKSPACES}"
+install -d -m 0700 -o node -g node \
+  "${MATTERHORN_WORK_DATA_DIR}" \
+  "${MATTERHORN_WORK_WORKSPACES}" \
+  "${XDG_DATA_HOME}" \
+  "${XDG_STATE_HOME}"
 
 exec gosu node bun /app/apps/server/src/cli.ts
