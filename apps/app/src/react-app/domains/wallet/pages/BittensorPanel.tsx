@@ -1013,10 +1013,14 @@ function HyperliquidTradeExecution({
   initialDraft,
   initialOperation,
   executionAvailable,
+  workspaceId,
+  sessionId,
 }: {
   initialDraft?: HyperliquidDraftHandoff | null;
   initialOperation?: HyperliquidExecutionIntent["operation"] | null;
   executionAvailable?: boolean | null;
+  workspaceId?: string | null;
+  sessionId?: string | null;
 }) {
   const { address, isConnected } = useAccount();
   const { connectors, connect, isPending: connectPending } = useConnect();
@@ -1035,6 +1039,8 @@ function HyperliquidTradeExecution({
   const [intent, setIntent] = useState<HyperliquidExecutionIntent | null>(null);
   const [liveConfirmation, setLiveConfirmation] = useState("");
   const [receipt, setReceipt] = useState<HyperliquidExecutionReceipt | null>(null);
+  const [evidencePath, setEvidencePath] = useState<string | null>(null);
+  const [evidenceWarning, setEvidenceWarning] = useState<string | null>(null);
   const [busy, setBusy] = useState<"prepare" | "submit" | null>(null);
   const [tradeError, setTradeError] = useState<string | null>(null);
   // Execution must fail closed until the deployment reports this exact route is enabled.
@@ -1047,6 +1053,8 @@ function HyperliquidTradeExecution({
     setReviewDraft(null);
     setIntent(null);
     setReceipt(null);
+    setEvidencePath(null);
+    setEvidenceWarning(null);
     setTradeError(null);
     setLiveConfirmation("");
   }, []);
@@ -1164,6 +1172,8 @@ function HyperliquidTradeExecution({
       const { response, json } = await fetchMatterhornApiJson<{
         success?: boolean;
         receipt?: HyperliquidExecutionReceipt;
+        evidence?: { outputPath?: string };
+        evidenceWarning?: string;
         error?: { message?: string };
       }>("/api/hyperliquid/orders/submit", {
         method: "POST",
@@ -1173,10 +1183,16 @@ function HyperliquidTradeExecution({
           signerAddress: address,
           signature,
           liveConfirmation: intent.network === "mainnet" ? liveConfirmation : null,
+          workspaceId: workspaceId || null,
+          sessionId: sessionId || null,
         }),
       });
       if (!json.receipt) throw new Error(json.error?.message ?? "Hyperliquid did not return a submission receipt.");
       setReceipt(json.receipt);
+      setEvidencePath(json.evidence?.outputPath ?? null);
+      if (workspaceId && !json.evidence?.outputPath) {
+        setEvidenceWarning(json.evidenceWarning ?? "The action reached Hyperliquid, but its public receipt was not added to this workspace.");
+      }
       if (!response.ok || json.receipt.status !== "submitted") {
         setTradeError(json.receipt.status === "uncertain"
           ? "Submission status is uncertain. Check your Hyperliquid open orders before trying again."
@@ -1187,7 +1203,7 @@ function HyperliquidTradeExecution({
     } finally {
       setBusy(null);
     }
-  }, [address, intent, liveConfirmation, signTypedDataAsync]);
+  }, [address, intent, liveConfirmation, sessionId, signTypedDataAsync, workspaceId]);
 
   const shortWalletAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null;
   const firstConnector = connectors.find((connector) => connector.id !== "injected") ?? connectors[0];
@@ -1423,8 +1439,10 @@ function HyperliquidTradeExecution({
         <div className={cn("rounded-lg px-3 py-3 text-xs leading-5", receipt.status === "submitted" ? "bg-emerald-500/10 text-emerald-200" : "bg-red-500/10 text-red-200")}>
           <div className="font-semibold">{receipt.status === "submitted" ? `${operationCopy[receipt.operation].label} action sent to Hyperliquid` : `Action ${receipt.status}`}</div>
           <div className="mt-1 opacity-80">Receipt {receipt.intentId.slice(0, 8)} · {new Date(receipt.submittedAt).toLocaleString()}</div>
+          {evidencePath ? <div className="mt-1 break-all opacity-80">Saved to Outputs · {evidencePath}</div> : null}
         </div>
       ) : null}
+      {evidenceWarning ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Receipt not saved">{evidenceWarning}</Notice> : null}
       {tradeError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Hyperliquid action">{tradeError}</Notice> : null}
       <p className="text-[11px] leading-5 text-dls-secondary">
         {executionUnavailable
@@ -1447,9 +1465,13 @@ function HyperliquidTradeExecution({
 function PolymarketTradeExecution({
   initialDraft,
   initialOperation,
+  workspaceId,
+  sessionId,
 }: {
   initialDraft?: PolymarketDraftHandoff | null;
   initialOperation?: "buy" | "sell" | "cancel" | null;
+  workspaceId?: string | null;
+  sessionId?: string | null;
 }) {
   const { address, isConnected } = useAccount();
   const { connectors, connect, isPending: connectPending } = useConnect();
@@ -1468,6 +1490,8 @@ function PolymarketTradeExecution({
   const [handoff, setHandoff] = useState<Record<string, unknown> | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [receipt, setReceipt] = useState<PolymarketPublicReceipt | null>(null);
+  const [evidencePath, setEvidencePath] = useState<string | null>(null);
+  const [evidenceWarning, setEvidenceWarning] = useState<string | null>(null);
   const [busy, setBusy] = useState<"prepare" | "submit" | null>(null);
   const [tradeError, setTradeError] = useState<string | null>(null);
   const [marketQuery, setMarketQuery] = useState("");
@@ -1481,6 +1505,8 @@ function PolymarketTradeExecution({
     setCancelReview(null);
     setConfirmation("");
     setReceipt(null);
+    setEvidencePath(null);
+    setEvidenceWarning(null);
     setTradeError(null);
   }, []);
 
@@ -1690,37 +1716,78 @@ function PolymarketTradeExecution({
           cancelAll: cancelReview.cancelAll,
         });
         setReceipt(publicReceipt);
+        if (workspaceId) {
+          try {
+            const { response, json } = await fetchMatterhornApiJson<{
+              success?: boolean;
+              evidence?: { outputPath?: string };
+              error?: { message?: string };
+            }>(`/workspace/${encodeURIComponent(workspaceId)}/polymarket/cancellations/receipt`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sessionId: sessionId || null,
+                cancellation: cancelReview,
+                receipt: publicReceipt,
+              }),
+            });
+            if (!response.ok || !json.success) {
+              setEvidenceWarning(json.error?.message ?? "The cancellation succeeded, but its public receipt was not added to this workspace.");
+            } else {
+              setEvidencePath(json.evidence?.outputPath ?? null);
+            }
+          } catch {
+            setEvidenceWarning("The cancellation succeeded, but its public receipt was not added to this workspace.");
+          }
+        }
         return;
       }
       if (!prepared) return;
       const publicReceipt = await submitPolymarketOrder({ walletClient, order: prepared });
       setReceipt(publicReceipt);
       if (handoff) {
-        await fetchMatterhornApiJson("/api/polymarket/orders/receipt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            handoff,
-            receipt: {
-              previewSha256: prepared.previewSha256,
-              handoffSha256: typeof handoff.handoffSha256 === "string" ? handoff.handoffSha256 : null,
-              orderId: publicReceipt.orderId,
-              txHash: publicReceipt.transactionHashes[0] ?? null,
-              status: publicReceipt.status,
-              marketId: prepared.marketId,
-              outcome: prepared.outcome,
-              side: prepared.tradeSide.toLowerCase(),
-              submittedAt: publicReceipt.submittedAt,
-            },
-          }),
-        });
+        const receiptPath = workspaceId
+          ? `/workspace/${encodeURIComponent(workspaceId)}/polymarket/orders/receipt`
+          : "/api/polymarket/orders/receipt";
+        try {
+          const { response, json } = await fetchMatterhornApiJson<{
+            success?: boolean;
+            evidence?: { outputPath?: string };
+            error?: { message?: string };
+          }>(receiptPath, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: sessionId || null,
+              handoff,
+              receipt: {
+                previewSha256: prepared.previewSha256,
+                handoffSha256: typeof handoff.handoffSha256 === "string" ? handoff.handoffSha256 : null,
+                orderId: publicReceipt.orderId,
+                txHash: publicReceipt.transactionHashes[0] ?? null,
+                status: publicReceipt.status,
+                marketId: prepared.marketId,
+                outcome: prepared.outcome,
+                side: prepared.tradeSide.toLowerCase(),
+                submittedAt: publicReceipt.submittedAt,
+              },
+            }),
+          });
+          if (!response.ok || !json.success) {
+            setEvidenceWarning(json.error?.message ?? "The order succeeded, but its public receipt was not added to this workspace.");
+          } else {
+            setEvidencePath(json.evidence?.outputPath ?? null);
+          }
+        } catch {
+          setEvidenceWarning("The order succeeded, but its public receipt was not added to this workspace.");
+        }
       }
     } catch (error) {
       setTradeError(error instanceof Error ? error.message : "Wallet authorization or Polymarket submission failed.");
     } finally {
       setBusy(null);
     }
-  }, [address, cancelReview, confirmation, handoff, prepared, walletClient]);
+  }, [address, cancelReview, confirmation, handoff, prepared, sessionId, walletClient, workspaceId]);
 
   const firstConnector = connectors.find((connector) => connector.id !== "injected") ?? connectors[0];
   const onPolygon = walletClient?.chain?.id === POLYMARKET_CHAIN_ID;
@@ -2010,8 +2077,10 @@ function PolymarketTradeExecution({
         <div className="rounded-lg bg-emerald-500/10 px-3 py-3 text-xs leading-5 text-emerald-200">
           <div className="font-semibold">{tradeAction === "CANCEL" ? "Cancellation sent to Polymarket" : "Order sent to Polymarket"}</div>
           <div className="mt-1 opacity-80">{receipt.orderId ? `Order ${receipt.orderId}` : receipt.status} · {new Date(receipt.submittedAt).toLocaleString()}</div>
+          {evidencePath ? <div className="mt-1 break-all opacity-80">Saved to Outputs · {evidencePath}</div> : null}
         </div>
       ) : null}
+      {evidenceWarning ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Receipt not saved">{evidenceWarning}</Notice> : null}
       {tradeError ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Polymarket order">{tradeError}</Notice> : null}
       <p className="text-[11px] leading-5 text-dls-secondary">
         Browser-wallet EOA accounts are supported in this release. The temporary CLOB credential exists only in memory for this submission and is cleared immediately afterward.
@@ -2023,9 +2092,13 @@ function PolymarketTradeExecution({
 function BittensorConnectedWalletExecution({
   initialDraft,
   initialOperation,
+  workspaceId,
+  sessionId,
 }: {
   initialDraft?: BittensorDraftHandoff | null;
   initialOperation?: BittensorWalletAction | null;
+  workspaceId?: string | null;
+  sessionId?: string | null;
 }) {
   const [walletAction, setWalletAction] = useState<BittensorWalletAction>("transfer");
   const [accounts, setAccounts] = useState<BittensorExtensionAccount[]>([]);
@@ -2041,6 +2114,7 @@ function BittensorConnectedWalletExecution({
   const [busy, setBusy] = useState<"connect" | "prepare" | "submit" | null>(null);
   const [transferError, setTransferError] = useState<string | null>(null);
   const [evidenceWarning, setEvidenceWarning] = useState<string | null>(null);
+  const [evidencePath, setEvidencePath] = useState<string | null>(null);
 
   const resetReview = useCallback(() => {
     setBackendPreview(null);
@@ -2048,6 +2122,7 @@ function BittensorConnectedWalletExecution({
     setConfirmation("");
     setReceipt(null);
     setEvidenceWarning(null);
+    setEvidencePath(null);
   }, []);
 
   useEffect(() => {
@@ -2168,24 +2243,29 @@ function BittensorConnectedWalletExecution({
       setReceipt(publicReceipt);
 
       try {
-        const { response, json } = await fetchMatterhornApiJson<{ success?: boolean; error?: { message?: string } }>("/api/bittensor/extrinsics/receipt", {
+        const receiptPath = workspaceId
+          ? `/workspace/${encodeURIComponent(workspaceId)}/bittensor/extrinsics/receipt`
+          : "/api/bittensor/extrinsics/receipt";
+        const payload = {
+          preview: backendPreview,
+          signerAddress: publicReceipt.signerAddress,
+          result: {
+            status: "submitted",
+            txHash: publicReceipt.txHash,
+            blockHash: publicReceipt.blockHash,
+            message: `Connected Bittensor wallet finalized the reviewed ${publicReceipt.action}.`,
+            explorerUrl: null,
+          },
+        };
+        const { response, json } = await fetchMatterhornApiJson<{ success?: boolean; evidence?: { outputPath?: string }; error?: { message?: string } }>(receiptPath, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            preview: backendPreview,
-            signerAddress: publicReceipt.signerAddress,
-            result: {
-              status: "submitted",
-              txHash: publicReceipt.txHash,
-              blockHash: publicReceipt.blockHash,
-              message: `Connected Bittensor wallet finalized the reviewed ${publicReceipt.action}.`,
-              explorerUrl: null,
-            },
-          }),
+          body: JSON.stringify(workspaceId ? { sessionId: sessionId || null, payload } : payload),
         });
         if (!response.ok || !json.success) {
           throw new Error(json.error?.message ?? "Could not save public transaction evidence.");
         }
+        setEvidencePath(json.evidence?.outputPath ?? null);
       } catch (error) {
         setEvidenceWarning(
           `The ${prepared.action} finalized, but Matterhorn could not save its public receipt: ${
@@ -2198,7 +2278,7 @@ function BittensorConnectedWalletExecution({
     } finally {
       setBusy(null);
     }
-  }, [backendPreview, confirmation, prepared]);
+  }, [backendPreview, confirmation, prepared, sessionId, workspaceId]);
 
   const shortSender = sender ? shortAddress(sender) : "Not connected";
   const actionCopy = {
@@ -2392,6 +2472,7 @@ function BittensorConnectedWalletExecution({
         <div className="rounded-lg bg-emerald-500/10 px-3 py-3 text-xs leading-5 text-emerald-200">
           <div className="font-semibold">Bittensor {receipt.action} finalized</div>
           <div className="mt-1 break-all opacity-80">Transaction {receipt.txHash} · Block {receipt.blockHash}</div>
+          {evidencePath ? <div className="mt-1 break-all opacity-80">Saved to Outputs · {evidencePath}</div> : null}
         </div>
       ) : null}
       {evidenceWarning ? <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Receipt not saved">{evidenceWarning}</Notice> : null}
@@ -2407,10 +2488,14 @@ export default function BittensorPanel({
   initialVenue = "bittensor",
   openReviewedAction = false,
   initialOperation = null,
+  workspaceId = null,
+  sessionId = null,
 }: {
   initialVenue?: CryptoVenue;
   openReviewedAction?: boolean;
   initialOperation?: ReviewedActionOperation | null;
+  workspaceId?: string | null;
+  sessionId?: string | null;
 }) {
   const [venue, setVenue] = useState<CryptoVenue>(initialVenue);
   const [tab, setTab] = useState<Tab>("overview");
@@ -3316,6 +3401,8 @@ export default function BittensorPanel({
                     initialDraft={draftHandoff?.protocol === "hyperliquid" ? draftHandoff.draft : null}
                     initialOperation={initialOperation === "place_order" || initialOperation === "cancel_order" || initialOperation === "modify_order" || initialOperation === "close_position" ? initialOperation : null}
                     executionAvailable={marketExecutionReadiness?.reviewedWalletTickets.hyperliquid.available ?? null}
+                    workspaceId={workspaceId}
+                    sessionId={sessionId}
                   />
                 </Section>
               </div>
@@ -3327,6 +3414,8 @@ export default function BittensorPanel({
                   <PolymarketTradeExecution
                     initialDraft={draftHandoff?.protocol === "polymarket" ? draftHandoff.draft : null}
                     initialOperation={initialOperation === "buy" || initialOperation === "sell" || initialOperation === "cancel" ? initialOperation : null}
+                    workspaceId={workspaceId}
+                    sessionId={sessionId}
                   />
                 </Section>
               </div>
@@ -4202,6 +4291,8 @@ export default function BittensorPanel({
               <BittensorConnectedWalletExecution
                 initialDraft={draftHandoff?.protocol === "bittensor" ? draftHandoff.draft : null}
                 initialOperation={initialOperation === "transfer" || initialOperation === "stake" || initialOperation === "unstake" ? initialOperation : null}
+                workspaceId={workspaceId}
+                sessionId={sessionId}
               />
             </Section>
             <Section title="Agent preview and validator comparison" icon={<ArrowUpDown className="size-4" />}>

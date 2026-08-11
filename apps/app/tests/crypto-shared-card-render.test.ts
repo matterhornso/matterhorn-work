@@ -308,6 +308,44 @@ describe("crypto shared-card transcript rendering", () => {
     expect(html).not.toContain("Result</div>");
   });
 
+  test("uses Polymarket branding and exposes in-app Memory saving", () => {
+    const messages: UIMessage[] = [
+      {
+        id: "assistant-polymarket-result",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-matterhorn_crypto_chat",
+            toolCallId: "tool-polymarket-search",
+            state: "output-available",
+            input: { message: "find Polymarket markets about Matterhorn" },
+            output: {
+              cards: [{
+                kind: "polymarket_market_list",
+                title: "Polymarket markets",
+                items: [],
+                warnings: [],
+              }],
+            },
+          } as never,
+        ],
+      },
+    ];
+
+    const html = renderToStaticMarkup(
+      React.createElement(SessionTranscript, {
+        messages,
+        isStreaming: false,
+        developerMode: false,
+        onSaveResultToMemory: async () => undefined,
+      }),
+    );
+
+    expect(html).toContain("/assets/desks/polymarket/logo-light.svg");
+    expect(html).toContain("Save to Memory");
+    expect(html).toContain('aria-hidden="true"');
+  });
+
   test("renders shared-card account, preview, market, receipt, and watch fixtures", () => {
     const fixturePack = JSON.parse(readFileSync("qa-fixtures/crypto-shared-cards.v1.json", "utf8")) as {
       cards: Array<Record<string, unknown>>;

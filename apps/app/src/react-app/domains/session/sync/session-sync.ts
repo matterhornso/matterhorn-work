@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import type { Part, PermissionRequest, QuestionRequest, SessionStatus, Todo } from "@opencode-ai/sdk/v2/client";
+import type { Message, Part, PermissionRequest, QuestionRequest, SessionStatus, Todo } from "@opencode-ai/sdk/v2/client";
 
 import { getReactQueryClient } from "../../../infra/query-client";
 import { createClient } from "@/app/lib/opencode";
@@ -9,6 +9,7 @@ import { snapshotToUIMessages } from "./usechat-adapter";
 import type { MatterhornSessionSnapshot } from "@/app/lib/matterhorn-server";
 import { reconcileTranscriptMessages } from "./transcript-reconcile";
 import { useSessionActivityStore } from "../status/session-activity-store";
+import { buildOpenCodeMessageMetadata } from "../message-completion-metadata";
 
 type SyncOptions = {
   workspaceId: string;
@@ -673,19 +674,19 @@ function applyEvent(entry: SyncEntry, workspaceId: string, event: OpencodeEvent)
 
   if (event.type === "message.updated") {
     const props = (event.properties ?? {}) as {
-      info?: { id?: string; role?: UIMessage["role"] | string; sessionID?: string; time?: { created?: number } };
+      info?: Message;
     };
     const info = props.info;
-    if (!info?.id || !info.sessionID || (info.role !== "user" && info.role !== "assistant" && info.role !== "system")) {
+    if (!info?.id || !info.sessionID || (info.role !== "user" && info.role !== "assistant")) {
       return;
     }
     useSessionActivityStore.getState().markMessageRole(workspaceId, info.sessionID, info.id, info.role);
     if (!isTrackedSession(entry, info.sessionID)) return;
-    const created = info.time?.created;
+    const metadata = buildOpenCodeMessageMetadata(info);
     const next = {
       id: info.id,
       role: info.role,
-      ...(typeof created === "number" ? { metadata: { opencode: { created } } } : {}),
+      ...(metadata ? { metadata } : {}),
       parts: [],
     } satisfies UIMessage;
     queryClient.setQueryData<UIMessage[]>(transcriptKey(workspaceId, info.sessionID), (current = []) =>

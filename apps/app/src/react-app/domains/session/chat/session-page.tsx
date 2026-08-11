@@ -2400,6 +2400,8 @@ export function SessionPage(props: SessionPageProps) {
         initialVenue={visibleSidePanel}
         openReviewedAction={reviewedActionEntryProtocol === visibleSidePanel}
         initialReviewedActionOperation={reviewedActionEntryOperation}
+        workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
+        sessionId={props.selectedSessionId}
       />
     </div>
   ) : (

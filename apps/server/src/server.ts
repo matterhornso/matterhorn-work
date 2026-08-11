@@ -143,6 +143,7 @@ import {
   hyperliquidExecutionIntentStore,
   type CreateHyperliquidActionExecutionIntentInput,
   type CreateHyperliquidExecutionIntentInput,
+  type HyperliquidExecutionReceipt,
   type SubmitHyperliquidExecutionInput,
 } from "./tools/hyperliquid-live-execution.js";
 import {
@@ -6226,6 +6227,74 @@ async function recordBittensorWorkspaceEvidence(input: BittensorWorkspaceEvidenc
   });
 }
 
+type MarketWorkspaceReceiptInput = {
+  workspace: WorkspaceInfo;
+  ctx: RequestContext;
+  venue: "hyperliquid" | "polymarket";
+  taskId: string;
+  sessionSlug: string;
+  outputPath: string;
+  outputPayload: Record<string, unknown>;
+  summary: string;
+  auditAction: string;
+  metadata?: Record<string, string | number | boolean | null>;
+};
+
+async function recordMarketWorkspaceReceipt(input: MarketWorkspaceReceiptInput): Promise<void> {
+  const timestamp = Date.now();
+  const absPath = resolveSafeChildPath(input.workspace.path, input.outputPath);
+  await ensureDir(dirname(absPath));
+  await writeFile(absPath, JSON.stringify(input.outputPayload, null, 2) + "\n", "utf8");
+
+  const detail = `${input.venue};${input.sessionSlug};${input.venue}_transaction_receipt;outputs/${input.venue}`;
+  const metadata = {
+    evidenceKind: "transaction_receipt",
+    custody: false,
+    containsSignatureMaterial: false,
+    ...(input.metadata ?? {}),
+  };
+  await recordTaskEvent({
+    id: `task_evt_${shortId()}`,
+    workspaceId: input.workspace.id,
+    taskId: input.taskId,
+    type: "artifact_saved",
+    timestamp,
+    summary: input.summary,
+    detail,
+    artifactPath: input.outputPath,
+    stageName: `${input.venue}_receipt_evidence`,
+    metadata,
+  });
+  await recordTaskEvent({
+    id: `task_evt_${shortId()}`,
+    workspaceId: input.workspace.id,
+    taskId: input.taskId,
+    type: "completed",
+    timestamp: timestamp + 1,
+    summary: input.summary,
+    detail,
+    stageName: `${input.venue}_receipt_evidence`,
+    metadata,
+  });
+
+  await recordAudit(input.workspace.path, {
+    id: shortId(),
+    workspaceId: input.workspace.id,
+    actor: input.ctx.actor ?? { type: "remote" },
+    action: input.auditAction,
+    target: absPath,
+    summary: input.summary,
+    timestamp,
+    metadata: {
+      outputPath: input.outputPath,
+      taskId: input.taskId,
+      sessionSlug: input.sessionSlug,
+      venue: input.venue,
+      ...metadata,
+    },
+  });
+}
+
 const WALLET_SAFETY_EVENT_ACTIONS = new Set([
   "tx_proposed",
   "tx_approved",
@@ -11464,6 +11533,65 @@ function createRoutes(
     return jsonResponse({ success: verification.ok, ...verification });
   });
 
+  addRoute(routes, "POST", "/workspace/:id/hyperliquid/orders/receipt", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenHyperliquidCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Hyperliquid receipt evidence must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    const handoff = coerceHyperliquidHandoffReference(body.handoff);
+    if (!handoff) {
+      throw new ApiError(400, "invalid_handoff", "A valid signing handoff (previewSha256, handoffSha256, asset, side) is required to save a receipt.");
+    }
+    const verification = verifyHyperliquidReceipt(handoff, coerceHyperliquidReceiptInput(body.receipt));
+    if (!verification.ok || !verification.receipt) {
+      throw new ApiError(400, "receipt_mismatch", verification.errors.join(" ") || "The Hyperliquid receipt did not match the reviewed handoff.");
+    }
+
+    const requestedSessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const sessionSlug = normalizeSessionSlug(requestedSessionId || `hyperliquid_${shortId()}`);
+    const taskId = `hyperliquid_receipt_${shortId()}`;
+    const outputPath = `outputs/hyperliquid/${sessionSlug}/order-receipt-${shortId()}.json`;
+    await recordMarketWorkspaceReceipt({
+      workspace,
+      ctx,
+      venue: "hyperliquid",
+      taskId,
+      sessionSlug,
+      outputPath,
+      summary: "Hyperliquid order receipt saved",
+      auditAction: "workspace.hyperliquid.receipt.import",
+      metadata: {
+        receiptStatus: verification.receipt.status,
+        asset: verification.receipt.asset,
+        side: verification.receipt.side,
+      },
+      outputPayload: {
+        version: "matterhorn.market.workspace-evidence.v1",
+        kind: "transaction_receipt",
+        venue: "hyperliquid",
+        workspaceId: workspace.id,
+        outputPath,
+        receipt: verification.receipt,
+        safety: {
+          custody: false,
+          containsSignatureMaterial: false,
+          signingInMatterhorn: false,
+        },
+      },
+    });
+    return jsonResponse({
+      success: true,
+      receipt: verification.receipt,
+      matchesHandoff: true,
+      warnings: verification.warnings,
+      evidence: { workspaceId: workspace.id, outputPath, taskId, sessionSlug, source: "task_events" },
+    }, 201);
+  });
+
   addRoute(routes, "POST", "/api/hyperliquid/orders/execution-intent", "client", async (ctx) => {
     requireClientScope(ctx, "collaborator");
     const ownerKey = hyperliquidExecutionOwnerKey(ctx);
@@ -11536,8 +11664,65 @@ function createRoutes(
     const ownerKey = hyperliquidExecutionOwnerKey(ctx);
     const body = await readJsonBody(ctx.request);
     try {
-      const receipt = await hyperliquidExecutionIntentStore.submit(body as unknown as SubmitHyperliquidExecutionInput, ownerKey);
-      return jsonResponse({ success: receipt.status === "submitted", receipt });
+      const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
+      const workspace = workspaceId ? await resolveWorkspace(config, workspaceId) : null;
+      if (workspace) ensureWritable(config);
+      const receipt = await hyperliquidExecutionIntentStore.submit({
+        intentId: body.intentId,
+        signerAddress: body.signerAddress,
+        signature: body.signature,
+        liveConfirmation: body.liveConfirmation,
+      } as SubmitHyperliquidExecutionInput, ownerKey);
+
+      let evidence: { workspaceId: string; outputPath: string; taskId: string; sessionSlug: string; source: "task_events" } | undefined;
+      let evidenceWarning: string | undefined;
+      if (workspace) {
+        const requestedSessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+        const sessionSlug = normalizeSessionSlug(requestedSessionId || `hyperliquid_${receipt.intentId}`);
+        const taskId = `hyperliquid_execution_${receipt.intentId}`;
+        const outputPath = `outputs/hyperliquid/${sessionSlug}/execution-receipt-${receipt.intentId.replace(/[^a-z0-9_-]/gi, "_").slice(0, 48)}.json`;
+        const persistedReceipt: HyperliquidExecutionReceipt = {
+          ...receipt,
+          // Venue responses are intentionally excluded from durable evidence.
+          // They can contain unbounded or provider-controlled diagnostic fields.
+          venueResponse: null,
+        };
+        try {
+          await recordMarketWorkspaceReceipt({
+            workspace,
+            ctx,
+            venue: "hyperliquid",
+            taskId,
+            sessionSlug,
+            outputPath,
+            summary: "Hyperliquid execution receipt saved",
+            auditAction: "workspace.hyperliquid.execution_receipt.save",
+            metadata: {
+              receiptStatus: receipt.status,
+              operation: receipt.operation,
+              network: receipt.network,
+              asset: receipt.asset,
+            },
+            outputPayload: {
+              version: "matterhorn.market.workspace-evidence.v1",
+              kind: "execution_receipt",
+              venue: "hyperliquid",
+              workspaceId: workspace.id,
+              outputPath,
+              receipt: persistedReceipt,
+              safety: {
+                custody: false,
+                containsSignatureMaterial: false,
+                signatureStored: false,
+              },
+            },
+          });
+          evidence = { workspaceId: workspace.id, outputPath, taskId, sessionSlug, source: "task_events" };
+        } catch {
+          evidenceWarning = "The Hyperliquid action completed, but its public receipt could not be saved to workspace Outputs.";
+        }
+      }
+      return jsonResponse({ success: receipt.status === "submitted", receipt, evidence, evidenceWarning });
     } catch (err) {
       throw new ApiError(400, "hyperliquid_submission_rejected", err instanceof Error ? err.message : "Could not submit Hyperliquid order");
     }
@@ -11807,6 +11992,148 @@ function createRoutes(
     }
     const verification = verifyPolymarketReceipt(handoff, coercePolymarketReceiptInput(body.receipt));
     return jsonResponse({ success: verification.ok, ...verification });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/polymarket/orders/receipt", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenPolymarketCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Polymarket receipt evidence must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    const handoff = coercePolymarketHandoffReference(body.handoff);
+    if (!handoff) {
+      throw new ApiError(400, "invalid_handoff", "A valid signing handoff (previewSha256, handoffSha256, marketId, outcome, side) is required to save a receipt.");
+    }
+    const verification = verifyPolymarketReceipt(handoff, coercePolymarketReceiptInput(body.receipt));
+    if (!verification.ok || !verification.receipt) {
+      throw new ApiError(400, "receipt_mismatch", verification.errors.join(" ") || "The Polymarket receipt did not match the reviewed handoff.");
+    }
+
+    const requestedSessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const sessionSlug = normalizeSessionSlug(requestedSessionId || `polymarket_${shortId()}`);
+    const taskId = `polymarket_receipt_${shortId()}`;
+    const outputPath = `outputs/polymarket/${sessionSlug}/order-receipt-${shortId()}.json`;
+    await recordMarketWorkspaceReceipt({
+      workspace,
+      ctx,
+      venue: "polymarket",
+      taskId,
+      sessionSlug,
+      outputPath,
+      summary: "Polymarket order receipt saved",
+      auditAction: "workspace.polymarket.receipt.import",
+      metadata: {
+        receiptStatus: verification.receipt.status,
+        marketId: verification.receipt.marketId,
+        outcome: verification.receipt.outcome,
+        side: verification.receipt.side,
+      },
+      outputPayload: {
+        version: "matterhorn.market.workspace-evidence.v1",
+        kind: "transaction_receipt",
+        venue: "polymarket",
+        workspaceId: workspace.id,
+        outputPath,
+        receipt: verification.receipt,
+        safety: {
+          custody: false,
+          containsSignatureMaterial: false,
+          signingInMatterhorn: false,
+        },
+      },
+    });
+    return jsonResponse({
+      success: true,
+      receipt: verification.receipt,
+      matchesHandoff: true,
+      warnings: verification.warnings,
+      evidence: { workspaceId: workspace.id, outputPath, taskId, sessionSlug, source: "task_events" },
+    }, 201);
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/polymarket/cancellations/receipt", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenPolymarketCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Polymarket cancellation evidence must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+
+    const cancellation = body.cancellation && typeof body.cancellation === "object"
+      ? body.cancellation as Record<string, unknown>
+      : null;
+    const receiptInput = body.receipt && typeof body.receipt === "object"
+      ? body.receipt as Record<string, unknown>
+      : null;
+    const cancelAll = cancellation?.cancelAll === true;
+    const orderIds = Array.isArray(cancellation?.orderIds)
+      ? Array.from(new Set(cancellation.orderIds
+          .filter((value): value is string => typeof value === "string")
+          .map((value) => value.trim())
+          .filter(Boolean)))
+      : [];
+    if ((cancelAll && orderIds.length > 0) || (!cancelAll && orderIds.length === 0)) {
+      throw new ApiError(400, "invalid_cancellation", "Cancellation evidence must identify either cancel-all or one or more exact order IDs.");
+    }
+    if (orderIds.length > 50 || orderIds.some((id) => id.length < 6 || id.length > 160 || !/^[A-Za-z0-9_-]+$/.test(id))) {
+      throw new ApiError(400, "invalid_cancellation", "Cancellation evidence contains an invalid Polymarket order ID.");
+    }
+    const status = typeof receiptInput?.status === "string" ? receiptInput.status.trim().slice(0, 80) : "";
+    const submittedAt = typeof receiptInput?.submittedAt === "string" ? receiptInput.submittedAt.trim() : "";
+    if (!status || !submittedAt || !Number.isFinite(Date.parse(submittedAt))) {
+      throw new ApiError(400, "invalid_receipt", "A public cancellation status and timestamp are required.");
+    }
+
+    const requestedSessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const sessionSlug = normalizeSessionSlug(requestedSessionId || `polymarket_${shortId()}`);
+    const taskId = `polymarket_cancellation_${shortId()}`;
+    const outputPath = `outputs/polymarket/${sessionSlug}/cancellation-receipt-${shortId()}.json`;
+    const publicReceipt = {
+      action: "cancel_orders",
+      status,
+      cancelAll,
+      orderIds,
+      submittedAt: new Date(submittedAt).toISOString(),
+    };
+    await recordMarketWorkspaceReceipt({
+      workspace,
+      ctx,
+      venue: "polymarket",
+      taskId,
+      sessionSlug,
+      outputPath,
+      summary: "Polymarket cancellation receipt saved",
+      auditAction: "workspace.polymarket.cancellation.receipt.import",
+      metadata: {
+        receiptStatus: status,
+        actionType: "cancel_orders",
+        cancelAll,
+        orderCount: orderIds.length,
+      },
+      outputPayload: {
+        version: "matterhorn.market.workspace-evidence.v1",
+        kind: "transaction_receipt",
+        venue: "polymarket",
+        workspaceId: workspace.id,
+        outputPath,
+        receipt: publicReceipt,
+        safety: {
+          custody: false,
+          containsSignatureMaterial: false,
+          signingInMatterhorn: false,
+        },
+      },
+    });
+    return jsonResponse({
+      success: true,
+      receipt: publicReceipt,
+      evidence: { workspaceId: workspace.id, outputPath, taskId, sessionSlug, source: "task_events" },
+    }, 201);
   });
 
   addRoute(routes, "GET", "/api/sui/account/:address", "client", async (ctx) => {

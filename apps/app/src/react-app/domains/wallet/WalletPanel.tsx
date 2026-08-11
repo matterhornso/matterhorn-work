@@ -86,6 +86,8 @@ export type WalletPanelProps = {
   initialVenue?: CryptoVenue;
   openReviewedAction?: boolean;
   initialReviewedActionOperation?: ReviewedActionOperation | null;
+  workspaceId?: string | null;
+  sessionId?: string | null;
 };
 
 export function WalletPanel({
@@ -95,6 +97,8 @@ export function WalletPanel({
   initialVenue = "bittensor",
   openReviewedAction = false,
   initialReviewedActionOperation = null,
+  workspaceId = null,
+  sessionId = null,
 }: WalletPanelProps) {
   const state = useWalletStore(store);
   const [expanded, setExpanded] = useState(false);
@@ -167,6 +171,8 @@ export function WalletPanel({
             initialVenue={initialVenue}
             openReviewedAction={openReviewedAction}
             initialOperation={initialReviewedActionOperation}
+            workspaceId={workspaceId}
+            sessionId={sessionId}
           />
         </Suspense>
       </div>
@@ -381,6 +387,8 @@ export function WalletPanel({
               initialVenue={initialVenue}
               openReviewedAction={openReviewedAction}
               initialOperation={initialReviewedActionOperation}
+              workspaceId={workspaceId}
+              sessionId={sessionId}
             />
           </Suspense>
           <button

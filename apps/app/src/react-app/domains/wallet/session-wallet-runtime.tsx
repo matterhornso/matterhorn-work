@@ -14,6 +14,8 @@ export function SessionWalletPanel(props: {
   initialVenue: CryptoVenue;
   openReviewedAction: boolean;
   initialReviewedActionOperation: ReviewedActionOperation | null;
+  workspaceId?: string | null;
+  sessionId?: string | null;
 }) {
   const sessionWallet = useSessionWallet(props.store);
 
@@ -25,6 +27,8 @@ export function SessionWalletPanel(props: {
       initialVenue={props.initialVenue}
       openReviewedAction={props.openReviewedAction}
       initialReviewedActionOperation={props.initialReviewedActionOperation}
+      workspaceId={props.workspaceId}
+      sessionId={props.sessionId}
     />
   );
 }
