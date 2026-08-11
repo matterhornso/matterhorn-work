@@ -45,15 +45,30 @@ describe("AI provider UI contract", () => {
       "domains/settings/state/model-readiness-summary.ts",
     );
 
-    expect(summarySource).toContain(
-      "options: { connectedOnly?: boolean } = {}",
-    );
-    expect(summarySource).toContain(
-      "buildModelCatalogRows(catalog, { connectedOnly: true })",
-    );
+    expect(summarySource).toContain("connectedOnly?: boolean");
+    expect(summarySource).toContain("privacyPolicies?:");
+    expect(summarySource).toContain("connectedOnly: true");
+    expect(summarySource).toContain("privacyPolicies:");
     expect(summarySource).toContain("countConnectedCatalogModels");
     expect(summarySource).toContain("more provider");
     expect(summarySource).toContain("Connect a provider before chats and desk tasks can start.");
+  });
+
+  test("shows provider privacy at model setup and before the first prompt", () => {
+    const viewSource = readReactSource("domains/settings/pages/ai-view.tsx");
+    const surfaceSource = readReactSource(
+      "domains/session/surface/session-surface.tsx",
+    );
+
+    expect(viewSource).toContain("modelReadiness.providerPrivacy");
+    expect(viewSource).toContain("Review provider policy");
+    expect(surfaceSource).toContain(
+      "Matterhorn does not use prompts to train models.",
+    );
+    expect(surfaceSource).toContain("Privacy details");
+    expect(surfaceSource).toContain(
+      "props.providerPrivacyPolicy?.allowed === false",
+    );
   });
 
   test("connect-provider recovery from the picker opens the real provider flow", () => {

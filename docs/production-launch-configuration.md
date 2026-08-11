@@ -35,6 +35,10 @@ user failure.
   provider dispatch; completed assistant usage reconciles from the server-side
   engine record. An unreconciled reservation stays charged so a provider or
   callback failure cannot create an unlimited inference path.
+- Keep provider privacy enforcement `verified-only`. Do not enable hosted
+  prompts until the exact inference service has written no-training and
+  prompt-retention terms. A policy for a related provider product is not proof
+  for the configured API endpoint.
 - Keep Sui publishing on `sui-testnet` until reviewed mainnet packages and a separate money-path review exist.
 - Keep Matterhorn Cloud disabled unless its full acceptance flow has passed.
 - Public Beta web traffic must use the authenticated same-origin deployment
@@ -54,7 +58,13 @@ user failure.
 4. Deploy `packaging/docker/Dockerfile.public-beta` on a long-lived container host with an encrypted persistent volume mounted at `/data`. Set the exact app origin, three high-entropy server secrets, the exact build SHA, and provider credentials in that host's secret manager. The container fails startup when its token, host token, trusted-proxy secret, build SHA, or exact HTTPS CORS origin is missing.
 5. For Public Beta web, configure the same-origin proxy with `MATTERHORN_CONTROL_PLANE_URL` and `MATTERHORN_PROXY_SECRET` as server-only Vercel secrets. Route `/api`, `/workspaces`, `/workspace`, `/opencode`, and the other approved API roots through `api/matterhorn-proxy.mjs`. Set the same value as `MATTERHORN_WORK_TRUSTED_PROXY_SECRET` on the backend. Then set `MATTERHORN_PUBLIC_PROXY_MODE=same-origin`, `VITE_MATTERHORN_DEPLOYMENT=web`, `VITE_MATTERHORN_PUBLIC_BETA=1`, `VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED=1`, `VITE_MATTERHORN_REQUIRE_SIGNIN=1`, `VITE_MATTERHORN_CLOUD_URL=https://<app-origin>`, and `VITE_MATTERHORN_CLOUD_API_URL=https://<app-origin>/api/den`. The reviewed-actions flag exposes only audited agent-draft to exact-review to connected-wallet approval paths; it does not enable autonomous agent or watch submission. Leave every browser-side Matterhorn Desks URL and token variable unset. The deployment probe must confirm `/workspaces` and `/opencode` return a JSON `401` or `403` without authentication; an HTML SPA fallback is a launch blocker.
 6. Configure the server-managed ASI:Cloud credential, signup capacity, and
-   model limits from `.env.example`. The initial recommended free-beta policy
+   model limits from `.env.example`. After legal and security review of the
+   exact ASI:Cloud inference service, set
+   `MATTERHORN_PROVIDER_PRIVACY_MODE=verified-only`, declare
+   `MATTERHORN_CUDOS_TRAINING_USE=none`, link the reviewed HTTPS policy or DPA,
+   record the review date, and set the contractual prompt-retention period.
+   The public gate and prompt proxy fail closed when this evidence is absent or
+   stale. The initial recommended free-beta policy
    is 250k weighted tokens/day and 2m/month per account, with 5m/day and
    50m/month platform guards. Review actual provider costs before changing
    model weights or limits.

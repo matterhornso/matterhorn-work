@@ -17,7 +17,10 @@ import type {
   ProviderListResponse,
   TextPartInput,
 } from "@opencode-ai/sdk/v2/client";
-import type { MatterhornBackendModelSelectionResponse } from "@matterhorn-work/types/backend-models";
+import type {
+  MatterhornBackendModelSelectionResponse,
+  MatterhornProviderPrivacyPolicy,
+} from "@matterhorn-work/types/backend-models";
 
 import { createClient, unwrap } from "../../app/lib/opencode";
 import { forkSession, revertSession, shellInSession } from "../../app/lib/opencode-session";
@@ -1898,6 +1901,10 @@ export function SessionRoute() {
     workspaceModelSelection,
   }), [local.prefs.defaultModel, workspaceModelSelection]);
   const selectedPromptModel = selectedPromptModelResolution.model;
+  const selectedProviderPrivacyPolicy: MatterhornProviderPrivacyPolicy | null =
+    workspaceModelSelection?.privacy?.providers?.find(
+      (policy) => policy.providerId === selectedPromptModel?.providerID,
+    ) ?? null;
   const promptProviderReady = hasConnectedPromptProvider(providerListQuery.data);
   const selectedModelUnavailable = Boolean(
     !selectedPromptModel ||
@@ -2580,6 +2587,7 @@ export function SessionRoute() {
       modelPickerOpen: compactModelPickerOpen,
       modelUnavailable: selectedModelUnavailable,
       selectedModel: selectedPromptModel ?? { providerID: "", modelID: "" },
+      providerPrivacyPolicy: selectedProviderPrivacyPolicy,
       onModelPickerOpenChange: setCompactModelPickerOpen,
       onModelChange: (model: ModelRef) => {
         local.setPrefs((previous) => ({
@@ -2831,6 +2839,7 @@ export function SessionRoute() {
     selectedSessionKnown,
     selectedSessionPending,
     selectedModelUnavailable,
+    selectedProviderPrivacyPolicy,
     selectedPromptModel,
     selectedWorkspace,
     selectedWorkspaceEndpoint,

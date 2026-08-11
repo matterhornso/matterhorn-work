@@ -22,6 +22,13 @@ const priorModelUsageEnv = {
   reservation: process.env.MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS,
   database: process.env.MATTERHORN_MODEL_USAGE_DB,
 };
+const priorProviderPrivacyEnv = {
+  mode: process.env.MATTERHORN_PROVIDER_PRIVACY_MODE,
+  trainingUse: process.env.MATTERHORN_CUDOS_TRAINING_USE,
+  retentionDays: process.env.MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS,
+  policyUrl: process.env.MATTERHORN_CUDOS_PRIVACY_POLICY_URL,
+  verifiedAt: process.env.MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT,
+};
 
 function restoreEnv(name: string, value: string | undefined) {
   if (value === undefined) delete process.env[name];
@@ -42,6 +49,11 @@ afterEach(async () => {
   restoreEnv("MATTERHORN_MODEL_USAGE_GLOBAL_MONTHLY_LIMIT", priorModelUsageEnv.globalMonthly);
   restoreEnv("MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS", priorModelUsageEnv.reservation);
   restoreEnv("MATTERHORN_MODEL_USAGE_DB", priorModelUsageEnv.database);
+  restoreEnv("MATTERHORN_PROVIDER_PRIVACY_MODE", priorProviderPrivacyEnv.mode);
+  restoreEnv("MATTERHORN_CUDOS_TRAINING_USE", priorProviderPrivacyEnv.trainingUse);
+  restoreEnv("MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS", priorProviderPrivacyEnv.retentionDays);
+  restoreEnv("MATTERHORN_CUDOS_PRIVACY_POLICY_URL", priorProviderPrivacyEnv.policyUrl);
+  restoreEnv("MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT", priorProviderPrivacyEnv.verifiedAt);
 });
 
 async function createWorkspaceRoot(folderName?: string) {
@@ -659,6 +671,57 @@ describe("workspace session read APIs", () => {
       },
     });
     expect(JSON.stringify(ledgerBody)).not.toContain("Summarize this workspace");
+  });
+
+  test("blocks unverified model providers before stable or proxied prompt dispatch", async () => {
+    process.env.MATTERHORN_PROVIDER_PRIVACY_MODE = "verified-only";
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const promptBody = JSON.stringify({
+      message: "Do not send this prompt",
+      model: { providerID: "openai", modelID: "gpt-4.1" },
+    });
+
+    const stable = await fetch(
+      `${base}/workspace/ws_1/sessions/ses_1/messages`,
+      {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: promptBody,
+      },
+    );
+    expect(stable.status).toBe(403);
+    await expect(stable.json()).resolves.toMatchObject({
+      code: "provider_privacy_unverified",
+    });
+
+    const proxied = await fetch(
+      `${base}/workspace/ws_1/opencode/session/ses_1/prompt_async`,
+      {
+        method: "POST",
+        headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parts: [{ type: "text", text: "Do not send this either" }],
+          model: { providerID: "openai", modelID: "gpt-4.1" },
+        }),
+      },
+    );
+    expect(proxied.status).toBe(403);
+    await expect(proxied.json()).resolves.toMatchObject({
+      code: "provider_privacy_unverified",
+    });
+
+    expect(
+      mock.requests.filter(
+        (request) => request.pathname === "/session/ses_1/prompt_async",
+      ),
+    ).toHaveLength(0);
   });
 
   test("reserves a hard model allowance before dispatch and exposes account status", async () => {

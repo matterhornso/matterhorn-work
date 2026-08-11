@@ -391,6 +391,10 @@ import {
   writeWorkspaceModelSelection,
 } from "./backend-models.js";
 import {
+  providerPrivacyEnforcementMode,
+  resolveProviderPrivacyPolicy,
+} from "./provider-privacy.js";
+import {
   buildAppendOnlyRetentionPolicy,
   buildWorkspaceDataPolicyResponse,
   readWorkspaceDataPolicySync,
@@ -1763,26 +1767,41 @@ async function proxyOpencodeRequest(input: {
 
     const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
     promptAudit = { executionMode: bodyExecutionMode, agent, sessionId };
-    if (workspace && input.access && input.modelUsageStore) {
+    if (workspace) {
       const modelResolution = await resolveSessionPromptModel(
         input.config,
         workspace,
         parseSessionPromptModel(payload),
       );
-      const usage = await reserveModelUsage({
-        config: input.config,
-        workspace,
-        store: input.modelUsageStore,
-        access: input.access,
-        sessionId,
-        providerId: modelResolution.model.providerID,
-        modelId: modelResolution.model.modelID,
-      });
-      usageReservationId = usage.reservation.reservationId;
-      usageSubject = usage.subject;
+      assertPromptProviderPrivacy(modelResolution.model.providerID);
+      if (input.access && input.modelUsageStore) {
+        const usage = await reserveModelUsage({
+          config: input.config,
+          workspace,
+          store: input.modelUsageStore,
+          access: input.access,
+          sessionId,
+          providerId: modelResolution.model.providerID,
+          modelId: modelResolution.model.modelID,
+        });
+        usageReservationId = usage.reservation.reservationId;
+        usageSubject = usage.subject;
+      }
     }
   }
   if (method === "POST" && /^\/session\/[^/]+\/command$/.test(normalizeOpencodeProxyPath(proxyPath))) {
+    if (
+      workspace &&
+      providerPrivacyEnforcementMode() === "verified_only"
+    ) {
+      const payload = parseJsonObjectBody(rawBody, "Command");
+      const modelResolution = await resolveSessionPromptModel(
+        input.config,
+        workspace,
+        parseSessionCommandModel(payload),
+      );
+      assertPromptProviderPrivacy(modelResolution.model.providerID);
+    }
     void fetch(targetUrl, {
       method,
       headers,
@@ -1791,6 +1810,19 @@ async function proxyOpencodeRequest(input: {
       // Command failures are surfaced through the OpenCode event stream.
     });
     return jsonResponse({ ok: true, accepted: true });
+  }
+  if (
+    method === "POST" &&
+    /^\/session\/[^/]+\/summarize$/.test(normalizeOpencodeProxyPath(proxyPath)) &&
+    workspace &&
+    providerPrivacyEnforcementMode() === "verified_only"
+  ) {
+    const modelResolution = await resolveSessionPromptModel(
+      input.config,
+      workspace,
+      undefined,
+    );
+    assertPromptProviderPrivacy(modelResolution.model.providerID);
   }
   const upstreamController = new AbortController();
   const abortUpstreamConnect = () => upstreamController.abort();
@@ -7019,6 +7051,7 @@ function createRoutes(
       workspace,
       fallbackModel: fallbackModels.defaultModel,
       selection: models.workspaceSelection ?? null,
+      privacy: models.privacy,
     }));
   });
 
@@ -7043,6 +7076,7 @@ function createRoutes(
     }
     const currentModels = await buildWorkspaceBackendModels(config, workspace);
     assertModelSelectionInCatalog(currentModels.catalog, requestSelection);
+    assertPromptProviderPrivacy(requestSelection.providerId);
 
     let selection;
     try {
@@ -7070,6 +7104,7 @@ function createRoutes(
       workspace,
       fallbackModel: fallbackModels.defaultModel,
       selection,
+      privacy: models.privacy,
       auditLogged: true,
     }));
   });
@@ -7098,6 +7133,7 @@ function createRoutes(
       workspace,
       fallbackModel: fallbackModels.defaultModel,
       selection: null,
+      privacy: models.privacy,
       auditLogged: cleared,
     }));
   });
@@ -8226,6 +8262,7 @@ function createRoutes(
       throw new ApiError(400, "execution_mode_mismatch", "Prompt execution mode does not match the request header");
     }
     const modelResolution = await resolveSessionPromptModel(config, workspace, parseSessionPromptModel(body));
+    assertPromptProviderPrivacy(modelResolution.model.providerID);
     const requestVariant = typeof body.variant === "string" && body.variant.trim()
       ? body.variant.trim()
       : undefined;
@@ -13726,6 +13763,32 @@ type SessionPromptModelResolution = {
   variant?: string;
 };
 
+function parseJsonObjectBody(
+  rawBody: ArrayBuffer | undefined,
+  label: string,
+): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = rawBody
+      ? JSON.parse(new TextDecoder().decode(rawBody))
+      : {};
+  } catch {
+    throw new ApiError(
+      400,
+      "invalid_payload",
+      `${label} body must be valid JSON`,
+    );
+  }
+  if (!isRecord(parsed)) {
+    throw new ApiError(
+      400,
+      "invalid_payload",
+      `${label} body must be a JSON object`,
+    );
+  }
+  return parsed;
+}
+
 function parseSessionPromptModel(body: Record<string, unknown>): SessionPromptModel | undefined {
   if (isRecord(body.model)) {
     const providerID = typeof body.model.providerID === "string" ? body.model.providerID.trim() : "";
@@ -13743,6 +13806,41 @@ function parseSessionPromptModel(body: Record<string, unknown>): SessionPromptMo
     throw new ApiError(400, "invalid_payload", "providerID and modelID must be provided together");
   }
   return { providerID, modelID };
+}
+
+function parseSessionCommandModel(
+  body: Record<string, unknown>,
+): SessionPromptModel | undefined {
+  if (isRecord(body.model)) return parseSessionPromptModel(body);
+  if (typeof body.model !== "string" || !body.model.trim()) return undefined;
+  const value = body.model.trim();
+  const separator = value.indexOf("/");
+  if (separator <= 0 || separator === value.length - 1) {
+    throw new ApiError(
+      400,
+      "invalid_payload",
+      "command model must use provider/model",
+    );
+  }
+  return {
+    providerID: value.slice(0, separator),
+    modelID: value.slice(separator + 1),
+  };
+}
+
+function assertPromptProviderPrivacy(providerId: string): void {
+  const policy = resolveProviderPrivacyPolicy(providerId);
+  if (policy.allowed) return;
+  throw new ApiError(
+    403,
+    "provider_privacy_unverified",
+    `${policy.providerName} cannot receive prompts until its no-training and retention policy is verified. Choose a verified provider or ask the workspace owner to finish privacy setup.`,
+    {
+      providerId: policy.providerId,
+      privacyStatus: policy.status,
+      trainingUse: policy.trainingUse,
+    },
+  );
 }
 
 async function resolveSessionPromptModel(

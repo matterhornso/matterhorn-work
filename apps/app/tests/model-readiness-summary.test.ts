@@ -70,6 +70,22 @@ const baseBackendModels: MatterhornBackendModelsResponse = {
   privacy: {
     trainingUse: "none_by_default",
     feedbackUse: "eval_routing_product_quality_only",
+    matterhornTrainingUse: "none",
+    enforcementMode: "disclosure",
+    providers: [
+      {
+        providerId: "openai",
+        providerName: "OpenAI",
+        status: "unverified",
+        trainingUse: "unknown",
+        retentionDays: null,
+        policyUrl: null,
+        verifiedAt: null,
+        allowed: true,
+        label: "Provider policy not verified",
+        description: "Provider training and retention terms are not verified.",
+      },
+    ],
   },
   limitations: [],
 };
@@ -135,7 +151,10 @@ describe("model readiness summary", () => {
     );
     expect(summary.providerCatalog.value).toBe("1 provider · 2 models");
     expect(summary.selectionPolicy.value).toBe("Workspace");
-    expect(summary.trainingPolicy).toContain("not used to train models");
+    expect(summary.trainingPolicy).toContain("does not use workspace content");
+    expect(summary.providerPrivacy.value).toBe(
+      "Provider policy not verified",
+    );
   });
 
   test("shows workspace default as the current choice after local override is cleared", () => {
@@ -320,6 +339,8 @@ describe("model readiness summary", () => {
         modelCountLabel: "5 models",
         defaultModel: "gpt-4.1-mini",
         sampleModels: "gpt-4.1, gpt-4.1-mini, gpt-4o, o3 +1 more",
+        privacyLabel: "Provider policy not reported",
+        privacyTone: "neutral",
       },
     ]);
 

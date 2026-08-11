@@ -14,6 +14,7 @@ import { t } from "@/i18n";
 import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
 import { recordModelReasoningLevelSelection } from "@/app/lib/model-operation-metrics";
 import type { ModelBehaviorOption } from "@/app/types";
+import type { MatterhornProviderPrivacyPolicy } from "@matterhorn-work/types/backend-models";
 import { resolveProviderDisplayName } from "@/app/utils";
 import { cn } from "@/lib/utils";
 import { ProviderIcon } from "../../../design-system/provider-icon";
@@ -117,6 +118,17 @@ function catalogProviderSource(source?: string): ConnectedProvider["source"] {
     return source;
   }
   return undefined;
+}
+
+function providerPrivacyTone(
+  policy: MatterhornProviderPrivacyPolicy | undefined,
+) {
+  return policy?.status === "verified_no_training" ||
+    policy?.status === "local_processing"
+    ? "ready"
+    : policy
+      ? "warning"
+      : "neutral";
 }
 
 function ModelRoutingRow({ item }: { item: ModelReadinessDetail }) {
@@ -306,6 +318,10 @@ export function AiSettingsView(props: AiSettingsViewProps) {
           }));
   const cudosProvider = connectedProviders.find(
     (provider) => provider.id.trim().toLowerCase() === "cudos",
+  );
+  const providerPrivacyPolicies = backendModels?.privacy?.providers ?? [];
+  const cudosPrivacy = providerPrivacyPolicies.find(
+    (policy) => policy.providerId.trim().toLowerCase() === "cudos",
   );
   const otherConnectedProviders = connectedProviders.filter(
     (provider) =>
@@ -524,6 +540,32 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             ) : null}
           </LayoutSectionItemHeader>
 
+          {!providerStateLoading ? (
+            <div className="mt-3 flex max-w-[70ch] flex-col gap-1 border-t border-border/60 pt-3 sm:flex-row sm:items-start sm:gap-3">
+              <SettingsStatusBadge
+                tone={modelReadiness.providerPrivacy.tone}
+                label={modelReadiness.providerPrivacy.value}
+                className="min-h-6 justify-start px-0"
+              />
+              <p className="text-xs leading-5 text-dls-secondary">
+                {modelReadiness.providerPrivacy.detail}
+                {modelReadiness.providerPrivacy.policyUrl ? (
+                  <>
+                    {" "}
+                    <a
+                      href={modelReadiness.providerPrivacy.policyUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium text-dls-text underline underline-offset-4"
+                    >
+                      Review provider policy
+                    </a>
+                  </>
+                ) : null}
+              </p>
+            </div>
+          ) : null}
+
           {modelProviderReady && behaviorOptions.length > 1 ? (
             <div className="mt-1 border-t border-border/60 pt-3">
               <div className="grid items-center gap-2 py-1.5 @md/settings:grid-cols-[minmax(9rem,1fr)_auto]">
@@ -633,8 +675,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                           {row.providerName}
                         </div>
                       </div>
-                      <div className="shrink-0 text-dls-secondary">
-                        {row.modelCountLabel}
+                      <div className="shrink-0 text-right text-dls-secondary">
+                        <div>{row.modelCountLabel}</div>
+                        <div>{row.privacyLabel}</div>
                       </div>
                     </div>
                   ))}
@@ -816,6 +859,13 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                       Connected
                     </span>
                   ) : null}
+                  {cudosPrivacy ? (
+                    <SettingsStatusBadge
+                      tone={providerPrivacyTone(cudosPrivacy)}
+                      label={cudosPrivacy.label}
+                      className="min-h-6 px-0"
+                    />
+                  ) : null}
                 </div>
                 <div className="text-xs leading-5 text-muted-foreground">
                   {props.providerCredentialsManaged
@@ -855,6 +905,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               provider.id,
               provider.name,
             );
+            const privacyPolicy = providerPrivacyPolicies.find(
+              (policy) => policy.providerId === provider.id,
+            );
             return (
               <div
                 key={provider.id}
@@ -871,6 +924,13 @@ export function AiSettingsView(props: AiSettingsViewProps) {
                     <div className="truncate text-sm font-medium text-dls-text">
                       {providerName}
                     </div>
+                    {privacyPolicy ? (
+                      <SettingsStatusBadge
+                        tone={providerPrivacyTone(privacyPolicy)}
+                        label={privacyPolicy.label}
+                        className="min-h-6 justify-start px-0"
+                      />
+                    ) : null}
                     <div className="truncate text-xs text-muted-foreground">
                       {props.cloudProviderIds?.has(provider.id)
                         ? "Managed by your organization"

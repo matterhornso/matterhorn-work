@@ -187,9 +187,9 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("retentionLabel(store.retention)");
     expect(source).toContain("secretsLabel(store.containsSecrets)");
     expect(source).toContain("Workspace data policy");
-    expect(source).toContain("Model training");
+    expect(source).toContain("Matterhorn training use");
     expect(source).toContain(
-      "Workspace data is not used for RL or model training.",
+      "Matterhorn does not use workspace content to train models.",
     );
     expect(source).toContain("Feedback collection");
     expect(source).toContain("Toggle workspace feedback collection");

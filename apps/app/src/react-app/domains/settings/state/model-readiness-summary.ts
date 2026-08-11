@@ -25,6 +25,8 @@ export type ModelCatalogRow = {
   modelCountLabel: string;
   defaultModel: string;
   sampleModels: string;
+  privacyLabel: string;
+  privacyTone: ModelReadinessTone;
 };
 
 export type ModelReadinessSummary = {
@@ -37,6 +39,10 @@ export type ModelReadinessSummary = {
   providerList: ModelReadinessDetail;
   providerCatalog: ModelReadinessDetail;
   selectionPolicy: ModelReadinessDetail;
+  providerPrivacy: ModelReadinessDetail & {
+    tone: ModelReadinessTone;
+    policyUrl?: string;
+  };
   trainingPolicy: string;
   details: ModelReadinessDetail[];
   catalogRows: ModelCatalogRow[];
@@ -172,9 +178,22 @@ function sampleModelList(modelIds: string[], modelCount: number): string {
     : shown.join(", ");
 }
 
+function privacyTone(status: string | undefined): ModelReadinessTone {
+  if (status === "verified_no_training" || status === "local_processing") {
+    return "ready";
+  }
+  if (status === "opt_in_training" || status === "unverified") {
+    return "warning";
+  }
+  return "neutral";
+}
+
 export function buildModelCatalogRows(
   catalog: MatterhornBackendModelCatalogSnapshot | undefined,
-  options: { connectedOnly?: boolean } = {},
+  options: {
+    connectedOnly?: boolean;
+    privacyPolicies?: MatterhornBackendModelsResponse["privacy"]["providers"];
+  } = {},
 ): ModelCatalogRow[] {
   if (!catalog?.providers.length) return [];
 
@@ -188,6 +207,9 @@ export function buildModelCatalogRows(
       const samples = provider.sampleModels.length
         ? provider.sampleModels
         : provider.modelIds;
+      const privacy = options.privacyPolicies?.find(
+        (policy) => policy.providerId === provider.id,
+      );
       return {
         providerId: provider.id,
         providerName: resolveProviderDisplayName(provider.id, provider.name),
@@ -196,6 +218,8 @@ export function buildModelCatalogRows(
         modelCountLabel: formatModelCount(provider.modelCount),
         defaultModel: catalog.defaultModels[provider.id] ?? "Not set",
         sampleModels: sampleModelList(samples, provider.modelCount),
+        privacyLabel: privacy?.label ?? "Provider policy not reported",
+        privacyTone: privacyTone(privacy?.status),
       };
     });
 }
@@ -267,6 +291,15 @@ export function buildModelReadinessSummary(
     routing?.selection.preferenceStore === "server"
       ? "Workspace"
       : "This app";
+  const currentProviderId = currentModelRef.includes("/")
+    ? currentModelRef.slice(0, currentModelRef.indexOf("/"))
+    : effectiveModel?.providerId;
+  const selectedProviderPrivacy = backendModels?.privacy?.providers?.find(
+    (policy) => policy.providerId === currentProviderId,
+  );
+  const selectedProviderPrivacyTone = privacyTone(
+    selectedProviderPrivacy?.status,
+  );
 
   return {
     statusLabel: status.label,
@@ -324,11 +357,27 @@ export function buildModelReadinessSummary(
         ? "This workspace has a saved default. You can still choose another model for a chat."
         : "A model chosen here applies to this app until you save a workspace default.",
     },
+    providerPrivacy: {
+      label: "Prompt privacy",
+      value: selectedProviderPrivacy?.label ?? "Checking provider policy",
+      detail: selectedProviderPrivacy
+        ? selectedProviderPrivacy.allowed
+          ? selectedProviderPrivacy.description
+          : `${selectedProviderPrivacy.description} Sending is blocked in this deployment.`
+        : "Matterhorn has not received a provider policy for the selected model yet.",
+      tone: selectedProviderPrivacyTone,
+      ...(selectedProviderPrivacy?.policyUrl
+        ? { policyUrl: selectedProviderPrivacy.policyUrl }
+        : {}),
+    },
     trainingPolicy:
-      backendModels?.privacy.trainingUse === "none_by_default"
-        ? "Your conversations are not used to train models by default."
-        : "Training use is not reported for this workspace.",
-    catalogRows: buildModelCatalogRows(catalog, { connectedOnly: true }),
+      backendModels?.privacy?.matterhornTrainingUse === "none"
+        ? "Matterhorn does not use workspace content to train models. The selected provider processes the prompt under its separately reported policy."
+        : "Matterhorn training use is not reported for this workspace.",
+    catalogRows: buildModelCatalogRows(catalog, {
+      connectedOnly: true,
+      privacyPolicies: backendModels?.privacy?.providers,
+    }),
     details: [
       {
         label: "Model selection",

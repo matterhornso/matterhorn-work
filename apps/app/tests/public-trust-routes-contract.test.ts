@@ -43,6 +43,21 @@ describe("public trust routes", () => {
     }
   });
 
+  test("distinguishes hosted storage, Matterhorn training use, and provider processing", () => {
+    expect(trustRouteSource).toContain(
+      "Signed-in web\n              workspaces store this data",
+    );
+    expect(trustRouteSource).toContain(
+      "Matterhorn does not use workspace content to train models.",
+    );
+    expect(trustRouteSource).toContain(
+      "Public signup deployments block\n              prompts",
+    );
+    expect(trustRouteSource).toContain(
+      "does not\n            include prompt text, response text, code, file contents",
+    );
+  });
+
   test("does not treat arbitrary application routes as public trust pages", () => {
     expect(isPublicTrustPath("/session")).toBe(false);
     expect(isPublicTrustPath("/settings/security")).toBe(false);

@@ -37,7 +37,7 @@ type TrustPage = {
   sections: TrustSection[];
 };
 
-const LAST_UPDATED = "July 20, 2026";
+const LAST_UPDATED = "August 11, 2026";
 
 const pageLabels: Record<PublicTrustPath, string> = {
   "/privacy": "Privacy",
@@ -54,18 +54,19 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
       "What Matterhorn Desks stores, when data leaves your device, and the controls available to you.",
     sections: [
       {
-        title: "Local workspaces",
+        title: "Where workspace data is stored",
         body: (
           <>
             <p>
-              Matterhorn Desks is local-first. Workspace chats, notes, memory,
-              outputs, settings, and runtime data are stored on your device by
-              default. Local work does not require a Matterhorn Cloud account.
+              Desktop and local workspaces store chats, notes, memory, outputs,
+              settings, and runtime data on the connected device. Signed-in web
+              workspaces store this data in Matterhorn&apos;s hosted workspace
+              runtime so it remains available across sessions.
             </p>
             <p>
-              Use the export and encrypted backup tools before moving devices or
-              deleting a workspace. Removing local application data can
-              permanently remove data that has not been backed up.
+              Matterhorn does not use workspace content to train models. Use
+              the available export and deletion controls before moving devices
+              or removing a workspace; deleting data can be permanent.
             </p>
           </>
         ),
@@ -81,9 +82,12 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
               addresses, and tool parameters.
             </p>
             <p>
-              Provider handling is governed by that provider&apos;s terms and
-              privacy policy. Do not send secrets, seed phrases, private keys,
-              or information you are not authorized to share.
+              Matterhorn reports the selected model provider&apos;s training and
+              retention status in Models. Public signup deployments block
+              prompts unless the provider&apos;s no-training terms, retention
+              period, and privacy policy have been verified. Do not send
+              secrets, seed phrases, private keys, or information you are not
+              authorized to share.
             </p>
           </>
         ),
@@ -103,11 +107,10 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
         title: "Cloud and telemetry",
         body: (
           <p>
-            Cloud sync is used only when it is included in the build and you
-            sign in. Signed-in Cloud sessions can send minimal product events,
-            such as a session-start event and timestamp. Event payloads do not
-            include prompt text, code, or file paths. Local-only use does not
-            send these Cloud events.
+            Signed-in web sessions use Matterhorn&apos;s hosted workspace services.
+            Product telemetry is limited to operational events and does not
+            include prompt text, response text, code, file contents, or file
+            paths. Local-only use does not send these hosted product events.
           </p>
         ),
       },
@@ -115,9 +118,10 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
         title: "Your controls",
         body: (
           <p>
-            You can review saved memory, choose what to remember, export
-            workspace data, disconnect providers, and delete local workspace
-            data. For access, deletion, or privacy questions, contact{" "}
+            You can review saved memory, choose what to remember, disconnect
+            providers, and use the export or deletion controls available for
+            each workspace store. For hosted access, deletion, or privacy
+            questions, contact{" "}
             <a className="text-foreground underline underline-offset-4" href={`mailto:${MATTERHORN_SUPPORT_EMAIL}`}>
               {MATTERHORN_SUPPORT_EMAIL}
             </a>
