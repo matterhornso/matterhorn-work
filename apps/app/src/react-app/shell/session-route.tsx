@@ -2584,6 +2584,9 @@ export function SessionRoute() {
       onOpenAiProviders: () => {
         handleOpenSettings("/settings/ai");
       },
+      onOpenPrivacyDetails: () => {
+        handleOpenSettings("/settings/privacy");
+      },
       modelPickerOpen: compactModelPickerOpen,
       modelUnavailable: selectedModelUnavailable,
       selectedModel: selectedPromptModel ?? { providerID: "", modelID: "" },

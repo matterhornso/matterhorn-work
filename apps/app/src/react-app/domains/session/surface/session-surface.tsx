@@ -599,6 +599,7 @@ export type SessionSurfaceProps = {
   modelLabel: string;
   onModelClick: () => void;
   onOpenAiProviders?: () => void;
+  onOpenPrivacyDetails?: () => void;
   modelPickerOpen: boolean;
   modelUnavailable?: boolean;
   selectedModel: ModelRef;
@@ -3062,13 +3063,12 @@ export function SessionSurface(props: SessionSurfaceProps) {
       </div>
 
       <div ref={composerShellRef} className="shrink-0 bg-dls-surface px-0 pb-3 pt-3">
-        {renderedMessages.length === 0 ? (
-          <div
-            className="mx-auto mb-2 flex max-w-[920px] items-start gap-2 px-4 text-[11px] leading-4 text-dls-secondary"
-            aria-live="polite"
-          >
-            <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-            <p className="min-w-0">
+        <div
+          className="mx-auto mb-2 flex max-w-[920px] items-start gap-2 px-4 text-[11px] leading-4 text-dls-secondary"
+          aria-live="polite"
+        >
+          <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          <p className="min-w-0">
               {props.providerPrivacyPolicy ? (
                 props.providerPrivacyPolicy.allowed ? (
                   <>
@@ -3086,15 +3086,16 @@ export function SessionSurface(props: SessionSurfaceProps) {
               ) : (
                 <>Checking how the selected provider handles prompts.</>
               )}{" "}
-              <a
-                href="/privacy"
+              <button
+                type="button"
                 className="whitespace-nowrap text-dls-text underline decoration-dls-border underline-offset-2 hover:decoration-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/30"
+                onClick={props.onOpenPrivacyDetails}
+                disabled={!props.onOpenPrivacyDetails}
               >
                 Privacy details
-              </a>
-            </p>
-          </div>
-        ) : null}
+              </button>
+          </p>
+        </div>
         <DevProfiler id="SessionComposer">
         <ReactSessionComposer
           draft={draft}

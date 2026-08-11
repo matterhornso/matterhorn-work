@@ -54,8 +54,9 @@ describe("AI provider UI contract", () => {
     expect(summarySource).toContain("Connect a provider before chats and desk tasks can start.");
   });
 
-  test("shows provider privacy at model setup and before the first prompt", () => {
+  test("shows provider privacy at model setup and beside the composer", () => {
     const viewSource = readReactSource("domains/settings/pages/ai-view.tsx");
+    const routeSource = readReactSource("shell/session-route.tsx");
     const surfaceSource = readReactSource(
       "domains/session/surface/session-surface.tsx",
     );
@@ -66,6 +67,9 @@ describe("AI provider UI contract", () => {
       "Matterhorn does not use prompts to train models.",
     );
     expect(surfaceSource).toContain("Privacy details");
+    expect(surfaceSource).toContain("props.onOpenPrivacyDetails");
+    expect(surfaceSource).not.toContain('href="/privacy"');
+    expect(routeSource).toContain('handleOpenSettings("/settings/privacy")');
     expect(surfaceSource).toContain(
       "props.providerPrivacyPolicy?.allowed === false",
     );
