@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   buildDeskTaskPromptWithInput,
+  buildDeskTaskPromptRequestingInput,
   getDeskTaskInputRequirement,
   validateDeskTaskInput,
 } from "../src/react-app/domains/session/workflows/desk-task-inputs";
@@ -39,6 +40,18 @@ describe("desk task required inputs", () => {
 
   test("allows tasks without placeholders to launch immediately", () => {
     expect(getDeskTaskInputRequirement("Find useful Bittensor subnets for image generation.")).toBeNull();
+  });
+
+  test("starts placeholder tasks and asks for missing context in the main chat", () => {
+    const prompt = "Find Polymarket markets about <paste research topic>.";
+    const requirement = getDeskTaskInputRequirement(prompt)!;
+    const builtPrompt = buildDeskTaskPromptRequestingInput(prompt, requirement);
+
+    expect(builtPrompt).toContain("Find Polymarket markets about [waiting for research topic]");
+    expect(builtPrompt).toContain("ask me to provide research topic in chat");
+    expect(builtPrompt).toContain("Let me answer in the main chat composer");
+    expect(builtPrompt).toContain("Do not guess the missing information or start the task until I reply");
+    expect(builtPrompt).not.toContain("<paste research topic>");
   });
 
   test("accepts a natural-language market request and keeps a URL optional", () => {

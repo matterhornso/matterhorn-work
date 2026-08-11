@@ -388,9 +388,11 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain(': "Platform setup"');
     expect(src).toContain("actionDisabled={Boolean(launchingTaskTitle) || startTaskBlocked}");
     expect(src).toContain("Start an editable chat request. Exact terms move to Wallet for review and signature.");
-    expect(src).toContain("startTaskBlocker ?? inputRequirement?.helpText ?? undefined");
+    expect(src).toContain("Start this task, then answer the ${inputRequirement.label.toLowerCase()} question in chat.");
     expect(src).toContain("getDeskTaskInputRequirement(item.prompt)");
-    expect(src).toContain("buildDeskTaskPromptWithInput(pendingInput.prompt, pendingInput.requirement, taskInputValue)");
+    expect(src).toContain("buildDeskTaskPromptRequestingInput(item.prompt, requirement)");
+    expect(src).not.toContain("pendingInput");
+    expect(src).not.toContain("desk-task-input-");
   });
 
   test("Bittensor desk reports live provider readiness without blocking fallback task launch", () => {

@@ -140,3 +140,17 @@ export function buildDeskTaskPromptWithInput(
 
 Treat the request above as either a natural-language market or trade description, or an optional exact Polymarket URL or slug. Search the current public Polymarket catalog to resolve the exact market. If multiple markets plausibly match, show at most three concise choices and ask me to choose before continuing. Check compliance before preparing exact order terms. The Agent draft must remain non-submittable. If the request is an eligible buy, sell, or cancel action, direct me to the separate connected-wallet trade ticket for final review and authorization. Never auto-sign, auto-submit, or place a bet from chat or a watch.`;
 }
+
+export function buildDeskTaskPromptRequestingInput(
+  prompt: string,
+  requirement: DeskTaskInputRequirement,
+): string {
+  const requestedContext = requirement.label.toLowerCase();
+  const taskOutline = prompt.includes(requirement.placeholder)
+    ? prompt.replace(requirement.placeholder, `[waiting for ${requestedContext}]`)
+    : prompt;
+
+  return `${taskOutline}
+
+Before doing this task, ask me to provide ${requestedContext} in chat. Do not guess the missing information or start the task until I reply. Let me answer in the main chat composer. Ask only for public context and never request a seed phrase, private key, raw signature, signed payload, wallet export, or API secret.`;
+}
