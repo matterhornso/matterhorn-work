@@ -308,8 +308,8 @@ const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
     agentDescription: "Researches public market, exposure, and funding context without preparing orders.",
   },
   polymarket: {
-    shortDescription: "Research markets, liquidity, compliance context, and watch evidence.",
-    capabilityBullets: ["Market research", "Liquidity and compliance", "Watches and evidence"],
+    shortDescription: "Research prediction markets across venues, with Polymarket liquidity, compliance, and watch evidence.",
+    capabilityBullets: ["Cross-venue research", "Polymarket liquidity and compliance", "Watches and evidence"],
     primaryActions: [
       publicBetaAction("research_markets", "Research markets", "Research public prediction-market data"),
       publicBetaAction("review_liquidity", "Review liquidity", "Review public liquidity data"),
@@ -319,10 +319,10 @@ const PUBLIC_BETA_PROTOCOL_DESK_COPY: Partial<
       publicBetaAction("create_watch", "Create a watch", "Monitor public Polymarket data"),
       publicBetaAction("save_public_evidence", "Save public evidence", "Save public Polymarket evidence"),
     ],
-    safetySummary: "Public Beta is limited to Polymarket research, monitoring, and public evidence.",
-    railTitle: "Polymarket: markets, liquidity, compliance, watches, and public evidence",
-    sessionBoundary: "Public Beta keeps this desk read-only. Trade preparation, handoffs, and wallet actions stay hidden.",
-    agentDescription: "Researches public markets, liquidity, and compliance context without preparing trades.",
+    safetySummary: "Public Beta supports cross-venue research. Kalshi and Manifold remain research-only; Polymarket wallet actions stay hidden.",
+    railTitle: "Prediction markets: cross-venue research, Polymarket compliance, watches, and public evidence",
+    sessionBoundary: "Public Beta keeps this desk read-only. Kalshi and Manifold have no transaction path, and Polymarket wallet actions stay hidden.",
+    agentDescription: "Researches public prediction markets across supported venues without preparing trades.",
   },
   sui: {
     shortDescription: "Read public Sui account, object, network, and receipt evidence.",

@@ -172,6 +172,10 @@ import {
   verifyPolymarketReceipt,
 } from "./tools/polymarket.js";
 import {
+  buildPredictionMarketVenuesResponse,
+  searchPredictionMarkets,
+} from "./tools/prediction-markets.js";
+import {
   buildSuiAccountCard,
   buildSuiTransactionReceipt,
   buildSuiTransactionReceiptCard,
@@ -11763,6 +11767,16 @@ function createRoutes(
     } catch (err) {
       throw new ApiError(400, "hyperliquid_submission_rejected", err instanceof Error ? err.message : "Could not submit Hyperliquid order");
     }
+  });
+
+  addRoute(routes, "GET", "/api/prediction-markets/venues", "client", async () => {
+    return jsonResponse(buildPredictionMarketVenuesResponse());
+  });
+
+  addRoute(routes, "GET", "/api/prediction-markets/search", "client", async (ctx) => {
+    const query = ctx.url.searchParams.get("q") ?? ctx.url.searchParams.get("query") ?? "";
+    const limit = ctx.url.searchParams.get("limit") ? Number(ctx.url.searchParams.get("limit")) : 5;
+    return jsonResponse(await searchPredictionMarkets(query, limit));
   });
 
   addRoute(routes, "GET", "/api/polymarket/markets", "client", async (ctx) => {

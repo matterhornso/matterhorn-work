@@ -153,17 +153,20 @@ Standard actions:
 
 No live order submission in the customer UI. No API secret, private key, or raw signature fields.
 
-### Polymarket
+### Prediction markets
 
 Standard actions:
 
-- Market discovery.
+- Cross-venue market discovery across Polymarket, Kalshi, and Manifold.
 - Outcome probabilities.
-- Liquidity/orderbook context.
-- Compliance state.
+- Venue, market-type, source, and freshness comparison.
+- Polymarket liquidity/orderbook context.
+- Polymarket compliance state.
 - Preview only.
 - External wallet/client handoff.
 - Watches and receipts.
+
+Kalshi and Manifold remain research-only in Matterhorn.
 
 Compliance-blocked previews must not expose executable price, size, or share fields.
 

@@ -138,6 +138,7 @@ import {
   getDeskWorkflowManifest,
   type CustomerProtocolDeskId,
 } from "../workflows/protocol-desk-ui";
+import { PredictionMarketVenueCoverage } from "../workflows/prediction-market-venue-coverage";
 import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
 import { WorkflowStageCard } from "../workflows/workflow-stage-card";
@@ -1035,6 +1036,9 @@ function ProtocolDeskEmptyState({
           <span className="shrink-0 font-semibold text-dls-text">{providerNotice.label}</span>
           <span className="min-w-0 text-dls-secondary">{providerNotice.detail}</span>
         </div>
+      ) : null}
+      {panel === "polymarket" ? (
+        <PredictionMarketVenueCoverage client={matterhornServerClient} />
       ) : null}
       {launchingTaskTitle ? (
         <div className="mx-1 text-xs leading-5 text-dls-secondary" role="status">

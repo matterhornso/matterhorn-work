@@ -73,6 +73,10 @@ import type {
   MatterhornModelUsageStatusResponse,
 } from "@matterhorn-work/types/model-usage";
 import type {
+  MatterhornPredictionMarketSearchResponse,
+  MatterhornPredictionMarketVenuesResponse,
+} from "@matterhorn-work/types/prediction-markets";
+import type {
   MatterhornBackendTeamAccessResponse,
   MatterhornBackendTeamAccessSummaryResponse,
   MatterhornTeamAccessTokenCreateRequest,
@@ -1622,6 +1626,20 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         hostToken,
         timeoutMs: timeouts.capabilities,
       }),
+    predictionMarketVenues: () =>
+      requestJson<MatterhornPredictionMarketVenuesResponse>(baseUrl, "/api/prediction-markets/venues", {
+        token,
+        hostToken,
+        timeoutMs: timeouts.capabilities,
+      }),
+    searchPredictionMarkets: (query: string, limit = 5) => {
+      const params = new URLSearchParams({ query, limit: String(limit) });
+      return requestJson<MatterhornPredictionMarketSearchResponse>(
+        baseUrl,
+        `/api/prediction-markets/search?${params.toString()}`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      );
+    },
     backendModels: () =>
       requestJson<MatterhornBackendModelsResponse>(baseUrl, "/api/backend/models", {
         token,

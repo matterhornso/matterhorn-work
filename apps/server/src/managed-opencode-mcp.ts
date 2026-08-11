@@ -155,6 +155,23 @@ const MANAGED_MCP_TOOLS: ManagedMcpTool[] = [
     request: (args) => ({ path: "/api/hyperliquid/orders/preview", method: "POST", body: args }),
   },
   {
+    name: "matterhorn_prediction_market_venues",
+    title: "Prediction-market venue coverage",
+    description: "List the prediction-market venues Matterhorn can research and each venue's execution and eligibility boundary.",
+    inputSchema: objectSchema({}),
+    request: () => ({ path: "/api/prediction-markets/venues" }),
+  },
+  {
+    name: "matterhorn_prediction_markets_search",
+    title: "Prediction markets across venues",
+    description: "Search live public Polymarket, Kalshi, and Manifold markets. Kalshi and Manifold results are research-only in Matterhorn.",
+    inputSchema: objectSchema({
+      query: { type: "string", description: "Topic, event, or market search text." },
+      limit: { type: "number", minimum: 1, maximum: 10, description: "Maximum results per venue." },
+    }),
+    request: (args) => ({ path: queryPath("/api/prediction-markets/search", args, ["query", "limit"]) }),
+  },
+  {
     name: "matterhorn_polymarket_search_markets",
     title: "Polymarket market search",
     description: "Search public Polymarket markets with source, liquidity, and compliance context.",

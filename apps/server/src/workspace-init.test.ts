@@ -87,6 +87,8 @@ describe("ensureWorkspaceFiles", () => {
       expect(polymarketAgent).toContain("wallet-approved action agent");
       expect(polymarketAgent).toContain("websearch: deny");
       expect(polymarketAgent).toContain('"matterhorn-work_matterhorn_polymarket_search_markets": true');
+      expect(polymarketAgent).toContain('"matterhorn-work_matterhorn_prediction_markets_search": true');
+      expect(polymarketAgent).toContain("Kalshi and Manifold are research-only");
       expect(polymarketAgent).toContain('"matterhorn-work_matterhorn_crypto_chat": true');
       expect(polymarketAgent).toContain("buy, sell, and cancel actions");
       expect(polymarketAgent).toContain("typed Review in wallet card");
