@@ -7,6 +7,7 @@ import type { MatterhornSessionMessage, MatterhornSessionSnapshot } from "../../
 import { normalizeEvent, safeStringify } from "../../../../app/utils";
 import type { OpencodeEvent } from "../../../../app/types";
 import { createClient } from "../../../../app/lib/opencode";
+import { buildOpenCodeMessageMetadata } from "../message-completion-metadata";
 
 type TransportOptions = {
   baseUrl: string;
@@ -162,11 +163,11 @@ function mapToolPart(part: ToolPart): DynamicToolUIPart {
 
 export function snapshotToUIMessages(snapshot: MatterhornSessionSnapshot): UIMessage[] {
   return snapshot.messages.map((message) => {
-    const created = message.info.time?.created;
+    const metadata = buildOpenCodeMessageMetadata(message.info);
     return {
       id: message.info.id,
       role: message.info.role,
-      ...(typeof created === "number" ? { metadata: { opencode: { created } } } : {}),
+      ...(metadata ? { metadata } : {}),
       parts: message.parts.flatMap<UIMessage["parts"][number]>((part) => {
         if (part.type === "text") {
           if (part.synthetic || part.ignored) return [];

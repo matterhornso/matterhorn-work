@@ -133,8 +133,10 @@ import {
   type MatterhornSessionMemoryContext,
 } from "./memory-context-store";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
+import { getMatterhornMemoryPolicyDecision } from "../../memory/memory-policy";
 import { useQuickJot } from "../../notes";
 import type { BittensorPublicEvidenceCard } from "./message-list";
+import { buildResultCardMemoryRecord } from "./result-card-memory";
 
 const SessionTranscript = lazy(() => import("./message-list").then((module) => ({
   default: module.SessionTranscript,
@@ -2447,7 +2449,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     [activeWorkflowDeskAgent?.deskId, attachments.length, draft],
   );
 
-  const handleSaveBittensorEvidence = useCallback(async (card: BittensorPublicEvidenceCard) => {
+  const handleSaveBittensorEvidence = useCallback(async (card: BittensorPublicEvidenceCard): Promise<OpenTarget> => {
     const publicCard = publicBittensorEvidenceCard(card);
     const title = typeof publicCard.title === "string" && publicCard.title.trim()
       ? publicCard.title.trim()
@@ -2494,9 +2496,22 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
       window.dispatchEvent(new Event("matterhorn:project-evidence-updated"));
       window.dispatchEvent(new Event("matterhorn:task-log-updated"));
+      const target: OpenTarget = {
+        id: `file:${response.evidence.outputPath.toLowerCase()}`,
+        kind: "file",
+        value: response.evidence.outputPath,
+        name: outputTargetName(response.evidence.outputPath),
+        preview: "text",
+        confidence: 100,
+        reason: "saved result card",
+        exists: true,
+      };
+      setVerifiedOpenTargets((current) => current.some((item) => item.id === target.id)
+        ? current
+        : [...current, target]);
       setNotice({
-        title: "Bittensor output saved",
-        description: "Saved to Outputs and Project Activity.",
+        title: "Result saved to Outputs",
+        description: "It is also recorded in Project Activity. Select Open saved output to view it.",
         tone: "success",
       });
       recordInspectorEvent("bittensor.evidence.saved", {
@@ -2504,6 +2519,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         sessionId: props.sessionId,
         outputPath: response.evidence.outputPath,
       });
+      return target;
     } catch (error) {
       setNotice({
         title: "Could not save Bittensor output",
@@ -2518,6 +2534,63 @@ export function SessionSurface(props: SessionSurfaceProps) {
       throw error;
     }
   }, [bittensorContext, props.client, props.sessionId, props.workspaceId]);
+
+  const handleSaveResultToMemory = useCallback(async (card: BittensorPublicEvidenceCard) => {
+    const record = buildResultCardMemoryRecord({
+      card,
+      workspaceId: props.workspaceId,
+      sessionId: props.sessionId,
+    });
+    const policy = getMatterhornMemoryPolicyDecision(record);
+    if (policy.blockedReasons.length) {
+      const reason = policy.blockedReasons[0] ?? "Memory policy blocked this result.";
+      setNotice({
+        title: "Could not save to Memory",
+        description: reason,
+        tone: "warning",
+      });
+      throw new Error(reason);
+    }
+
+    recordInspectorEvent("session.result_memory.save_requested", {
+      workspaceId: props.workspaceId,
+      sessionId: props.sessionId,
+      recordId: record.id,
+      desk: policy.desk,
+      kind: record.kind,
+    });
+
+    try {
+      const response = await props.client.captureWorkspaceMemory(props.workspaceId, record);
+      window.dispatchEvent(new CustomEvent("matterhorn:memory-records-changed", {
+        detail: { workspaceId: props.workspaceId, record: response.record },
+      }));
+      setNotice({
+        title: "Saved to Memory",
+        description: "This result is now available from the Memory panel and can be reused in chat.",
+        tone: "success",
+      });
+      recordInspectorEvent("session.result_memory.saved", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        recordId: response.record.id,
+        desk: policy.desk,
+      });
+    } catch (error) {
+      setNotice({
+        title: "Could not save to Memory",
+        description: error instanceof Error ? error.message : "Try again when the workspace service is available.",
+        tone: "warning",
+      });
+      recordInspectorEvent("session.result_memory.save_failed", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        recordId: record.id,
+        reason: error instanceof Error ? error.message.slice(0, 160) : "unknown",
+      });
+      throw error;
+    }
+  }, [props.client, props.sessionId, props.workspaceId]);
 
   useEffect(() => {
     const handleVoiceTranscript = (event: Event) => {
@@ -2928,6 +3001,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     openTargets={verifiedOpenTargets}
                     onOpenTarget={props.onOpenTarget}
                     onSaveBittensorEvidence={handleSaveBittensorEvidence}
+                    onSaveResultToMemory={handleSaveResultToMemory}
                     onRetryAssistantResponse={handleRetryAssistantResponse}
                     onSaveAssistantResponse={handleSaveAssistantResponse}
                     onRateAssistantResponse={handleRateAssistantResponse}

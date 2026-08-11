@@ -478,6 +478,16 @@ export function MemoryPanel(props: MemoryPanelProps) {
     };
   }, [props.client, upsertSuggestionEntries, workspaceId]);
 
+  useEffect(() => {
+    const handleRecordsChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ workspaceId?: string }>).detail;
+      if (detail?.workspaceId && workspaceId && detail.workspaceId !== workspaceId) return;
+      void refresh();
+    };
+    window.addEventListener("matterhorn:memory-records-changed", handleRecordsChanged);
+    return () => window.removeEventListener("matterhorn:memory-records-changed", handleRecordsChanged);
+  }, [refresh, workspaceId]);
+
   const visibleSelectedRecords = useMemo(
     () => selectedRecords.filter((record) => records.some((candidate) => candidate.id === record.id)),
     [records, selectedRecords],

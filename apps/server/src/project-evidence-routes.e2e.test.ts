@@ -393,6 +393,196 @@ describe("project evidence routes", () => {
     expect(blocked.payload.code).toBe("forbidden");
   });
 
+  test("workspace market receipt routes persist verified public evidence only", async () => {
+    const { base, dir } = await boot();
+
+    const hyperliquidHandoff = {
+      previewSha256: "a".repeat(64),
+      handoffSha256: "b".repeat(64),
+      asset: "BTC",
+      side: "buy",
+    };
+    const hyperliquid = await jsonFetch(base, "/workspace/ws_evidence/hyperliquid/orders/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_market_receipts",
+        handoff: hyperliquidHandoff,
+        receipt: {
+          ...hyperliquidHandoff,
+          orderId: "hl-order-42",
+          txHash: "0xabc123",
+          status: "filled",
+          submittedAt: "2026-08-11T05:00:00.000Z",
+        },
+      }),
+    });
+    expect(hyperliquid.response.status).toBe(201);
+    expect(hyperliquid.payload.success).toBe(true);
+    expect(hyperliquid.payload.evidence.outputPath).toContain("outputs/hyperliquid/sess_market_receipts/order-receipt-");
+    expect(existsSync(join(dir, hyperliquid.payload.evidence.outputPath))).toBe(true);
+
+    const polymarketHandoff = {
+      previewSha256: "c".repeat(64),
+      handoffSha256: "d".repeat(64),
+      marketId: "pm-market-1",
+      outcome: "Yes",
+      side: "yes",
+    };
+    const polymarket = await jsonFetch(base, "/workspace/ws_evidence/polymarket/orders/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_market_receipts",
+        handoff: polymarketHandoff,
+        receipt: {
+          ...polymarketHandoff,
+          orderId: "pm-order-7",
+          txHash: "0xdef456",
+          status: "filled",
+          submittedAt: "2026-08-11T05:01:00.000Z",
+        },
+      }),
+    });
+    expect(polymarket.response.status).toBe(201);
+    expect(polymarket.payload.success).toBe(true);
+    expect(polymarket.payload.evidence.outputPath).toContain("outputs/polymarket/sess_market_receipts/order-receipt-");
+    expect(existsSync(join(dir, polymarket.payload.evidence.outputPath))).toBe(true);
+
+    const cancellation = await jsonFetch(base, "/workspace/ws_evidence/polymarket/cancellations/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_market_receipts",
+        cancellation: { cancelAll: false, orderIds: ["pm-order-7"] },
+        receipt: { status: "cancelled", submittedAt: "2026-08-11T05:02:00.000Z" },
+      }),
+    });
+    expect(cancellation.response.status).toBe(201);
+    expect(cancellation.payload.success).toBe(true);
+    expect(cancellation.payload.receipt).toMatchObject({
+      action: "cancel_orders",
+      status: "cancelled",
+      cancelAll: false,
+      orderIds: ["pm-order-7"],
+    });
+    expect(cancellation.payload.evidence.outputPath).toContain("outputs/polymarket/sess_market_receipts/cancellation-receipt-");
+    expect(existsSync(join(dir, cancellation.payload.evidence.outputPath))).toBe(true);
+
+    const hyperliquidFile = JSON.parse(readFileSync(join(dir, hyperliquid.payload.evidence.outputPath), "utf8"));
+    const polymarketFile = JSON.parse(readFileSync(join(dir, polymarket.payload.evidence.outputPath), "utf8"));
+    expect(hyperliquidFile).toMatchObject({
+      version: "matterhorn.market.workspace-evidence.v1",
+      kind: "transaction_receipt",
+      venue: "hyperliquid",
+      workspaceId: "ws_evidence",
+      safety: { custody: false, containsSignatureMaterial: false, signingInMatterhorn: false },
+    });
+    expect(polymarketFile).toMatchObject({
+      version: "matterhorn.market.workspace-evidence.v1",
+      kind: "transaction_receipt",
+      venue: "polymarket",
+      workspaceId: "ws_evidence",
+      safety: { custody: false, containsSignatureMaterial: false, signingInMatterhorn: false },
+    });
+
+    const evidence = await jsonFetch(base, "/workspace/ws_evidence/evidence?limit=30");
+    const outputPaths = evidence.payload.items
+      .filter((item: { type: string }) => item.type === "task.output_saved")
+      .map((item: { outputPath?: string }) => item.outputPath);
+    expect(outputPaths).toEqual(expect.arrayContaining([
+      hyperliquid.payload.evidence.outputPath,
+      polymarket.payload.evidence.outputPath,
+      cancellation.payload.evidence.outputPath,
+    ]));
+
+    const hyperliquidLedger = await jsonFetch(base, "/workspace/ws_evidence/data-ledger?kind=output&desk=hyperliquid&limit=20");
+    expect(hyperliquidLedger.payload.items.map((item: { outputPath?: string }) => item.outputPath)).toContain(hyperliquid.payload.evidence.outputPath);
+    const polymarketLedger = await jsonFetch(base, "/workspace/ws_evidence/data-ledger?kind=output&desk=polymarket&limit=20");
+    expect(polymarketLedger.payload.items.map((item: { outputPath?: string }) => item.outputPath)).toContain(polymarket.payload.evidence.outputPath);
+    expect(polymarketLedger.payload.items.map((item: { outputPath?: string }) => item.outputPath)).toContain(cancellation.payload.evidence.outputPath);
+
+    const serialized = JSON.stringify({ hyperliquidFile, polymarketFile, evidence: evidence.payload.items });
+    expect(serialized).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
+  });
+
+  test("workspace market receipt routes reject mismatches and signing secrets before storage", async () => {
+    const { base, dir } = await boot();
+
+    const mismatch = await jsonFetch(base, "/workspace/ws_evidence/hyperliquid/orders/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_rejected_receipt",
+        handoff: { previewSha256: "a".repeat(64), handoffSha256: "b".repeat(64), asset: "BTC", side: "buy" },
+        receipt: { previewSha256: "c".repeat(64), orderId: "wrong-order", asset: "BTC", side: "buy" },
+      }),
+    });
+    expect(mismatch.response.status).toBe(400);
+    expect(mismatch.payload.code).toBe("receipt_mismatch");
+
+    const secret = await jsonFetch(base, "/workspace/ws_evidence/polymarket/orders/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_rejected_receipt",
+        handoff: { previewSha256: "a".repeat(64), handoffSha256: "b".repeat(64), marketId: "m", outcome: "Yes", side: "yes" },
+        receipt: { orderId: "order", privateKey: "never-store-this" },
+      }),
+    });
+    expect(secret.response.status).toBe(400);
+    expect(secret.payload.code).toBe("market_secret_rejected");
+    const cancellationSecret = await jsonFetch(base, "/workspace/ws_evidence/polymarket/cancellations/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sess_rejected_receipt",
+        cancellation: { cancelAll: true, orderIds: [] },
+        receipt: { status: "cancelled", submittedAt: "2026-08-11T05:02:00.000Z", signature: "never-store-this" },
+      }),
+    });
+    expect(cancellationSecret.response.status).toBe(400);
+    expect(cancellationSecret.payload.code).toBe("market_secret_rejected");
+    expect(existsSync(join(dir, "outputs", "hyperliquid", "sess_rejected_receipt"))).toBe(false);
+    expect(existsSync(join(dir, "outputs", "polymarket", "sess_rejected_receipt"))).toBe(false);
+  });
+
+  test("workspace market receipt routes require collaborator scope", async () => {
+    const { base } = await boot();
+    const issued = await hostJsonFetch(base, "/tokens", {
+      method: "POST",
+      body: JSON.stringify({ scope: "viewer", label: "Market receipt viewer" }),
+    });
+    expect(issued.response.status).toBe(201);
+
+    const attempts = [
+      {
+        path: "/workspace/ws_evidence/hyperliquid/orders/receipt",
+        body: {
+          handoff: { previewSha256: "a".repeat(64), handoffSha256: "b".repeat(64), asset: "BTC", side: "buy" },
+          receipt: { orderId: "hl-order", status: "filled" },
+        },
+      },
+      {
+        path: "/workspace/ws_evidence/polymarket/orders/receipt",
+        body: {
+          handoff: { previewSha256: "c".repeat(64), handoffSha256: "d".repeat(64), marketId: "m", outcome: "Yes", side: "yes" },
+          receipt: { orderId: "pm-order", status: "filled" },
+        },
+      },
+      {
+        path: "/workspace/ws_evidence/polymarket/cancellations/receipt",
+        body: {
+          cancellation: { cancelAll: false, orderIds: ["pm-order"] },
+          receipt: { status: "cancelled", submittedAt: "2026-08-11T05:02:00.000Z" },
+        },
+      },
+    ];
+
+    for (const attempt of attempts) {
+      const blocked = await jsonFetch(base, attempt.path, {
+        method: "POST",
+        body: JSON.stringify(attempt.body),
+      }, String(issued.payload.token));
+      expect(blocked.response.status, attempt.path).toBe(403);
+      expect(blocked.payload.code, attempt.path).toBe("forbidden");
+    }
+  });
+
   test("workspace Bittensor public-read and receipt routes save output evidence", async () => {
     const { base, dir } = await boot();
 

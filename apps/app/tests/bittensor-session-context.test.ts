@@ -31,7 +31,7 @@ describe("Bittensor evidence UI contract", () => {
 
     expect(messageList).toContain("export type BittensorPublicEvidenceCard");
     expect(messageList).toContain("BittensorEvidenceSaveButton");
-    expect(messageList).toContain("Save output");
+    expect(messageList).toContain("Save to Outputs");
     expect(messageList).toContain("onSaveBittensorEvidence");
     expect(messageList).toContain("onSaveEvidence={props.onSaveBittensorEvidence}");
     expect(surface).toContain("handleSaveBittensorEvidence");
@@ -49,6 +49,25 @@ describe("Bittensor evidence UI contract", () => {
     expect(surface).toContain("cards: [publicCard]");
     expect(surface).not.toContain("data: card.data");
     expect(surface).not.toContain("source: card.source");
+  });
+
+  test("wallet-approved protocol receipts stay attached to the active workspace and session", () => {
+    const panel = readReactSource("domains/wallet/pages/BittensorPanel.tsx");
+    const walletPanel = readReactSource("domains/wallet/WalletPanel.tsx");
+    const sessionRuntime = readReactSource("domains/wallet/session-wallet-runtime.tsx");
+    const sessionPage = readReactSource("domains/session/chat/session-page.tsx");
+
+    expect(sessionPage).toContain("workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}");
+    expect(sessionPage).toContain("sessionId={props.selectedSessionId}");
+    expect(sessionRuntime).toContain("workspaceId={props.workspaceId}");
+    expect(sessionRuntime).toContain("sessionId={props.sessionId}");
+    expect(walletPanel).toContain("workspaceId={workspaceId}");
+    expect(walletPanel).toContain("sessionId={sessionId}");
+    expect(panel).toContain("/hyperliquid/orders/submit");
+    expect(panel).toContain("/polymarket/orders/receipt");
+    expect(panel).toContain("/bittensor/extrinsics/receipt");
+    expect(panel).toContain("Saved to Outputs · {evidencePath}");
+    expect(panel).toContain("Matterhorn never stores the wallet signature after submission.");
   });
 });
 

@@ -19,6 +19,13 @@ const messages: UIMessage[] = [
   {
     id: "msg_assistant_1",
     role: "assistant",
+    metadata: {
+      opencode: {
+        created: 1_000,
+        completed: 3_500,
+        tokens: { total: 1_650, input: 1_200, output: 400, reasoning: 50 },
+      },
+    },
     parts: [{ type: "text", text: "The current evidence favors validator A." }],
   },
 ];
@@ -52,6 +59,9 @@ describe("assistant response actions", () => {
     expect(html).toContain('aria-label="Revert to this response"');
     expect(html).toContain('aria-label="Fork conversation from this response"');
     expect(html).toContain("Completed");
+    expect(html).toContain("1,650 tokens");
+    expect(html).toContain("2.5 s");
+    expect(html).toContain("No transaction");
   });
 
   test("the active streaming response does not expose completion actions", () => {

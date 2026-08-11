@@ -14,6 +14,7 @@ import {
   Copy,
   ExternalLink,
   File as FileIcon,
+  FileText,
   Folder,
   GitFork,
   Globe,
@@ -54,6 +55,9 @@ import {
   reviewedActionHandoffFromCard,
   stageReviewedActionHandoff,
 } from "../../wallet/reviewed-action-handoff";
+import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
+import { resultCardDeskId } from "./result-card-memory";
+import { responseCompletionSummary } from "../message-completion-metadata";
 
 type TranscriptPart = Part;
 
@@ -189,7 +193,8 @@ type SessionTranscriptProps = {
   onForkAtMessage?: (messageId: string) => void;
   openTargets?: OpenTarget[];
   onOpenTarget?: (target: OpenTarget) => void;
-  onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
+  onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<OpenTarget | void> | OpenTarget | void;
+  onSaveResultToMemory?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
   onRetryAssistantResponse?: (messageId: string) => Promise<void> | void;
   onSaveAssistantResponse?: (messageId: string, text: string) => Promise<OpenTarget | void> | OpenTarget | void;
   onRateAssistantResponse?: (messageId: string, rating: "helpful" | "not_helpful") => Promise<void> | void;
@@ -522,6 +527,7 @@ function MessageActionIconButton(props: {
 }
 
 function AssistantResponseActions(props: {
+  message: UIMessage;
   messageId: string;
   getText: () => string;
   onRetry?: (messageId: string) => Promise<void> | void;
@@ -536,6 +542,16 @@ function AssistantResponseActions(props: {
   const [savedTarget, setSavedTarget] = useState<OpenTarget | null>(null);
   const [ratingState, setRatingState] = useState<"idle" | "submitting" | "helpful" | "not_helpful" | "failed">("idle");
   const busy = retryState === "retrying" || saveState === "saving" || ratingState === "submitting";
+  const completion = useMemo(() => responseCompletionSummary(props.message), [props.message]);
+  const statusLabel = saveState === "saved"
+    ? "Saved to Outputs"
+    : saveState === "failed"
+      ? "Save failed"
+      : retryState === "failed"
+        ? "Retry failed"
+        : ratingState === "failed"
+          ? "Feedback failed"
+          : "Completed";
 
   const rate = async (rating: "helpful" | "not_helpful") => {
     if (!props.onRate || busy) return;
@@ -550,10 +566,25 @@ function AssistantResponseActions(props: {
 
   return (
     <div className="mt-2 flex min-h-7 min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2" data-response-state={saveState === "saved" ? "saved" : "completed"}>
-      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-dls-muted" aria-live="polite">
-        <BadgeCheck size={13} aria-hidden="true" />
-        {saveState === "saved" ? "Saved to Outputs" : saveState === "failed" ? "Save failed" : retryState === "failed" ? "Retry failed" : ratingState === "failed" ? "Feedback failed" : "Completed"}
-      </span>
+      <div
+        className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] font-medium text-dls-muted"
+        aria-label={`${statusLabel}. ${completion.tokenLabel}. ${completion.durationLabel}. ${completion.transaction.detail}`}
+        aria-live="polite"
+        role="status"
+      >
+        <span className="inline-flex items-center gap-1.5">
+          <BadgeCheck size={13} aria-hidden="true" />
+          {statusLabel}
+        </span>
+        <span aria-hidden="true">·</span>
+        <span data-response-token-usage title={completion.tokenDetail}>{completion.tokenLabel}</span>
+        <span aria-hidden="true">·</span>
+        <span data-response-duration title={completion.durationDetail}>{completion.durationLabel}</span>
+        <span aria-hidden="true">·</span>
+        <span data-response-transaction={completion.transaction.state} title={completion.transaction.detail}>
+          {completion.transaction.label}
+        </span>
+      </div>
       <div
         className="relative z-10 flex max-w-full touch-pan-x items-center gap-0.5 overflow-x-auto select-none opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
         role="group"
@@ -1291,15 +1322,24 @@ function bittensorItemToneClass(tone?: BittensorChatCardItem["tone"]) {
   }
 }
 
-function BittensorCardIcon(props: { kind?: string; tone?: BittensorChatCard["tone"] }) {
+function BittensorCardIcon(props: { card: BittensorChatCard }) {
   const className = cn(
     "size-4 shrink-0",
-    props.tone === "good" && "text-emerald-700",
-    props.tone === "warning" && "text-amber-700",
-    props.tone === "danger" && "text-red-700",
-    !props.tone || props.tone === "default" ? "text-primary" : "",
+    props.card.tone === "good" && "text-emerald-700",
+    props.card.tone === "warning" && "text-amber-700",
+    props.card.tone === "danger" && "text-red-700",
+    !props.card.tone || props.card.tone === "default" ? "text-primary" : "",
   );
-  switch (props.kind) {
+  const deskId = resultCardDeskId(props.card);
+  if (deskId) {
+    return (
+      <span aria-hidden="true" className="inline-flex size-5 shrink-0 items-center justify-center">
+        <ProtocolDeskMark id={deskId} size={18} />
+      </span>
+    );
+  }
+
+  switch (props.card.kind) {
     case "wallet_snapshot":
     case "account_snapshot":
       return <Wallet className={className} strokeWidth={1.9} />;
@@ -1340,7 +1380,7 @@ function BittensorCardIcon(props: { kind?: string; tone?: BittensorChatCard["ton
     case "discovery":
       return <Search className={className} strokeWidth={1.9} />;
     default:
-      return <BrainCircuit className={className} strokeWidth={1.9} />;
+      return <FileText className={className} strokeWidth={1.9} />;
   }
 }
 
@@ -1404,36 +1444,88 @@ function isBittensorEvidenceCard(card: BittensorChatCard) {
 
 function BittensorEvidenceSaveButton(props: {
   card: BittensorChatCard;
-  onSaveEvidence: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
+  onSaveEvidence: (card: BittensorPublicEvidenceCard) => Promise<OpenTarget | void> | OpenTarget | void;
+  onOpenTarget?: (target: OpenTarget) => void;
+}) {
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [savedTarget, setSavedTarget] = useState<OpenTarget | null>(null);
+  const disabled = status === "saving";
+  const label = status === "saving"
+    ? "Saving..."
+    : status === "saved"
+      ? savedTarget
+        ? "Open saved output"
+        : "Saved to Outputs"
+      : status === "failed"
+        ? "Retry save"
+        : "Save to Outputs";
+
+  return (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1.5 rounded-md bg-dls-surface px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-dls-hover/45 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
+      disabled={disabled}
+      onClick={async () => {
+        if (savedTarget) {
+          props.onOpenTarget?.(savedTarget);
+          return;
+        }
+        setStatus("saving");
+        try {
+          const target = await props.onSaveEvidence(props.card);
+          setSavedTarget(target ?? null);
+          setStatus("saved");
+        } catch {
+          setStatus("failed");
+        }
+      }}
+      title={savedTarget ? "Open this result from workspace Outputs" : "Save this result to Outputs and Project Activity"}
+      aria-label={label}
+    >
+      {savedTarget ? <ExternalLink size={12} /> : status === "saved" ? <Check size={12} /> : <Save size={12} />}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function ResultCardMemorySaveButton(props: {
+  card: BittensorChatCard;
+  onSaveMemory: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
 }) {
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const disabled = status === "saving" || status === "saved";
   const label = status === "saving"
     ? "Saving..."
     : status === "saved"
-      ? "Saved"
+      ? "In Memory"
       : status === "failed"
-        ? "Retry save"
-        : "Save output";
+        ? "Retry Memory save"
+        : "Save to Memory";
 
   return (
     <button
       type="button"
-      className="inline-flex items-center gap-1.5 rounded-md bg-dls-surface px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-dls-hover/45 hover:text-primary disabled:opacity-60"
+      className="inline-flex items-center gap-1.5 rounded-md bg-dls-surface px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-dls-hover/45 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
       disabled={disabled}
       onClick={async () => {
         setStatus("saving");
         try {
-          await props.onSaveEvidence(props.card);
+          await props.onSaveMemory(props.card);
           setStatus("saved");
         } catch {
           setStatus("failed");
         }
       }}
-      title="Save this public Bittensor result to Outputs and Project Activity"
+      title="Save this visible result to workspace Memory for reuse in the app"
       aria-label={label}
     >
-      {status === "saved" ? <Check size={12} /> : <Save size={12} />}
+      {status === "saved" ? (
+        <Check size={12} />
+      ) : (
+        <span aria-hidden="true" className="inline-flex size-3 items-center justify-center">
+          <ProtocolDeskMark id="memory" size={12} />
+        </span>
+      )}
       <span>{label}</span>
     </button>
   );
@@ -1441,7 +1533,9 @@ function BittensorEvidenceSaveButton(props: {
 
 function BittensorToolCards(props: {
   cards: BittensorChatCard[];
-  onSaveEvidence?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
+  onSaveEvidence?: (card: BittensorPublicEvidenceCard) => Promise<OpenTarget | void> | OpenTarget | void;
+  onSaveMemory?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
+  onOpenTarget?: (target: OpenTarget) => void;
 }) {
   if (!props.cards.length) return null;
 
@@ -1461,7 +1555,7 @@ function BittensorToolCards(props: {
           >
             <div className="flex items-start gap-2.5">
               <div className="mt-0.5">
-                <BittensorCardIcon kind={card.kind} tone={card.tone} />
+                <BittensorCardIcon card={card} />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -1500,7 +1594,7 @@ function BittensorToolCards(props: {
                   </div>
                 ) : null}
 
-                {actions.length || canSaveEvidence || reviewedActionHandoff ? (
+                {actions.length || canSaveEvidence || props.onSaveMemory || reviewedActionHandoff ? (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {reviewedActionHandoff ? (
                       <button
@@ -1514,7 +1608,14 @@ function BittensorToolCards(props: {
                       </button>
                     ) : null}
                     {canSaveEvidence && props.onSaveEvidence ? (
-                      <BittensorEvidenceSaveButton card={card} onSaveEvidence={props.onSaveEvidence} />
+                      <BittensorEvidenceSaveButton
+                        card={card}
+                        onSaveEvidence={props.onSaveEvidence}
+                        onOpenTarget={props.onOpenTarget}
+                      />
+                    ) : null}
+                    {props.onSaveMemory ? (
+                      <ResultCardMemorySaveButton card={card} onSaveMemory={props.onSaveMemory} />
                     ) : null}
                     {actions.map((action, actionIndex) => (
                       <BittensorCardActionButton key={`${action.kind ?? "action"}:${action.label ?? actionIndex}`} card={card} action={action} />
@@ -1535,7 +1636,9 @@ function StepRow(props: {
   part: TranscriptPart;
   expanded: boolean;
   onToggle: () => void;
-  onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
+  onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<OpenTarget | void> | OpenTarget | void;
+  onSaveResultToMemory?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
+  onOpenTarget?: (target: OpenTarget) => void;
 }) {
   const summary = useMemo(() => summarizeStep(props.part), [props.part]);
   const toolState = useMemo(() => {
@@ -1627,7 +1730,12 @@ function StepRow(props: {
       {statusText ? <div className="ml-7 mt-2 text-sm leading-[1.65] text-muted-foreground">{statusText}</div> : null}
       {bittensorCards.length ? (
         <div className="mt-3 ml-7 max-w-[720px]">
-          <BittensorToolCards cards={bittensorCards} onSaveEvidence={props.onSaveBittensorEvidence} />
+          <BittensorToolCards
+            cards={bittensorCards}
+            onSaveEvidence={props.onSaveBittensorEvidence}
+            onSaveMemory={props.onSaveResultToMemory}
+            onOpenTarget={props.onOpenTarget}
+          />
         </div>
       ) : null}
       {props.expanded ? (
@@ -1670,7 +1778,9 @@ function StepsContainer(props: {
   isActive: boolean;
   expandedStepIds: Set<string>;
   onExpandedStepIdsChange: (updater: (current: Set<string>) => Set<string>) => void;
-  onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
+  onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<OpenTarget | void> | OpenTarget | void;
+  onSaveResultToMemory?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
+  onOpenTarget?: (target: OpenTarget) => void;
 }) {
   const toggleSteps = (id: string) => {
     props.onExpandedStepIdsChange((current) => {
@@ -1703,6 +1813,8 @@ function StepsContainer(props: {
                     expanded={props.expandedStepIds.has(rowId)}
                     onToggle={() => toggleSteps(rowId)}
                     onSaveBittensorEvidence={props.onSaveBittensorEvidence}
+                    onSaveResultToMemory={props.onSaveResultToMemory}
+                    onOpenTarget={props.onOpenTarget}
                   />
                 );
               })}
@@ -1815,7 +1927,8 @@ function MessageBlockRow(props: {
   onForkAtMessage?: (messageId: string) => void;
   openTargets?: OpenTarget[];
   onOpenTarget?: (target: OpenTarget) => void;
-  onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
+  onSaveBittensorEvidence?: (card: BittensorPublicEvidenceCard) => Promise<OpenTarget | void> | OpenTarget | void;
+  onSaveResultToMemory?: (card: BittensorPublicEvidenceCard) => Promise<void> | void;
   onRetryAssistantResponse?: (messageId: string) => Promise<void> | void;
   onSaveAssistantResponse?: (messageId: string, text: string) => Promise<OpenTarget | void> | OpenTarget | void;
   onRateAssistantResponse?: (messageId: string, rating: "helpful" | "not_helpful") => Promise<void> | void;
@@ -1861,6 +1974,8 @@ function MessageBlockRow(props: {
             expandedStepIds={props.expandedStepIds}
             onExpandedStepIdsChange={props.onExpandedStepIdsChange}
             onSaveBittensorEvidence={props.onSaveBittensorEvidence}
+            onSaveResultToMemory={props.onSaveResultToMemory}
+            onOpenTarget={props.onOpenTarget}
           />
         </div>
       </div>
@@ -1997,6 +2112,8 @@ function MessageBlockRow(props: {
                   expandedStepIds={props.expandedStepIds}
                   onExpandedStepIdsChange={props.onExpandedStepIdsChange}
                   onSaveBittensorEvidence={props.onSaveBittensorEvidence}
+                  onSaveResultToMemory={props.onSaveResultToMemory}
+                  onOpenTarget={props.onOpenTarget}
                 />
               ) : null}
             </div>
@@ -2007,6 +2124,7 @@ function MessageBlockRow(props: {
 
         {!props.isNestedVariant && !block.isUser && !isActiveAssistantResponse ? (
           <AssistantResponseActions
+            message={block.message}
             messageId={block.messageId}
             getText={() => messageToText(block.message)}
             onRetry={block.messageId === props.latestAssistantMessageId ? props.onRetryAssistantResponse : undefined}
@@ -2322,6 +2440,7 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
                       openTargets={props.openTargets}
                       onOpenTarget={props.onOpenTarget}
                       onSaveBittensorEvidence={props.onSaveBittensorEvidence}
+                      onSaveResultToMemory={props.onSaveResultToMemory}
                       onRetryAssistantResponse={props.onRetryAssistantResponse}
                       onSaveAssistantResponse={props.onSaveAssistantResponse}
                       onRateAssistantResponse={props.onRateAssistantResponse}
@@ -2354,6 +2473,7 @@ function SessionTranscriptInner(props: SessionTranscriptProps) {
               openTargets={props.openTargets}
               onOpenTarget={props.onOpenTarget}
               onSaveBittensorEvidence={props.onSaveBittensorEvidence}
+              onSaveResultToMemory={props.onSaveResultToMemory}
               onRetryAssistantResponse={props.onRetryAssistantResponse}
               onSaveAssistantResponse={props.onSaveAssistantResponse}
               onRateAssistantResponse={props.onRateAssistantResponse}

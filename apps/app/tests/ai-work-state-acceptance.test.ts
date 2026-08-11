@@ -57,10 +57,12 @@ describe("Milestone 3 AI work-state acceptance", () => {
 
   test("saved output has saving, success, and retry states", () => {
     expect(messages).toContain('useState<"idle" | "saving" | "saved" | "failed">');
-    expect(messages).toContain('"Save output"');
+    expect(messages).toContain('"Save to Outputs"');
     expect(messages).toContain('"Saving..."');
-    expect(messages).toContain('"Saved"');
+    expect(messages).toContain('"Saved to Outputs"');
+    expect(messages).toContain('"Open saved output"');
     expect(messages).toContain('"Retry save"');
-    expect(surface).toContain("Saved to Outputs and Project Activity.");
+    expect(surface).toContain("Result saved to Outputs");
+    expect(surface).toContain("Select Open saved output to view it.");
   });
 });

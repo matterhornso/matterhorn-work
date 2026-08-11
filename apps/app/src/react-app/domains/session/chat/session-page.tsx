@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import type { CSSProperties, FormEvent } from "react";
+import type { CSSProperties } from "react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -60,7 +60,6 @@ import type {
 } from "../../../../app/types";
 import type { ShareWorkspaceModalProps } from "../../workspace/types";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -143,10 +142,8 @@ import { ProtocolDeskMark } from "../workflows/protocol-brand-logo";
 import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
 import { WorkflowStageCard } from "../workflows/workflow-stage-card";
 import {
-  buildDeskTaskPromptWithInput,
+  buildDeskTaskPromptRequestingInput,
   getDeskTaskInputRequirement,
-  validateDeskTaskInput,
-  type DeskTaskInputRequirement,
 } from "../workflows/desk-task-inputs";
 import {
   groupMatterhornDeskTaskStarters,
@@ -847,19 +844,8 @@ function ProtocolDeskEmptyState({
   const draftConfig = getChatDraftConfig(panel);
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [launchingTaskTitle, setLaunchingTaskTitle] = useState<string | null>(null);
-  const [pendingInput, setPendingInput] = useState<{
-    key: string;
-    title: string;
-    prompt: string;
-    requirement: DeskTaskInputRequirement;
-  } | null>(null);
-  const [taskInputValue, setTaskInputValue] = useState("");
-  const [taskInputError, setTaskInputError] = useState<string | null>(null);
   useEffect(() => {
     setShowAllTasks(false);
-    setPendingInput(null);
-    setTaskInputValue("");
-    setTaskInputError(null);
   }, [panel]);
   const readinessWorkspaceId = runtimeWorkspaceId?.trim() ?? "";
   const readinessQuery = useQuery({
@@ -913,6 +899,10 @@ function ProtocolDeskEmptyState({
   const providerNotice = panel === "bittensor"
     ? bittensorSidecarNotice(bittensorSidecarQuery.data?.health, bittensorSidecarQuery.isError)
     : null;
+  const blankChatTitle = `${visual?.displayName ?? panel} chat`;
+  const blankChatDetail = panel === "polymarket"
+    ? "Research freely and prepare wallet-reviewed buy, sell, and cancel actions."
+    : "The desk agent and its working context are already selected.";
 
   const startTask = useCallback((
     prompt: string,
@@ -920,9 +910,6 @@ function ProtocolDeskEmptyState({
     options?: { sendImmediately?: boolean },
   ) => {
     setLaunchingTaskTitle(title);
-    setPendingInput(null);
-    setTaskInputValue("");
-    setTaskInputError(null);
     const result = onUsePrompt(prompt, title, options);
     void Promise.resolve(result)
       .then((started) => {
@@ -946,29 +933,11 @@ function ProtocolDeskEmptyState({
       startTask(item.prompt, item.title);
       return;
     }
-    setPendingInput({
-      key: `${panel}:${item.title}`,
-      title: item.title,
-      prompt: item.prompt,
-      requirement,
-    });
-    setTaskInputValue("");
-    setTaskInputError(null);
-  }, [panel, startTask]);
-
-  const handleTaskInputSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!pendingInput) return;
-    const validationError = validateDeskTaskInput(pendingInput.requirement, taskInputValue);
-    if (validationError) {
-      setTaskInputError(validationError);
-      return;
-    }
     startTask(
-      buildDeskTaskPromptWithInput(pendingInput.prompt, pendingInput.requirement, taskInputValue),
-      pendingInput.title,
+      buildDeskTaskPromptRequestingInput(item.prompt, requirement),
+      item.title,
     );
-  }, [pendingInput, startTask, taskInputValue]);
+  }, [startTask]);
 
   return (
     <section
@@ -1020,9 +989,24 @@ function ProtocolDeskEmptyState({
                 </Popover>
               </div>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
-                {visual?.shortDescription ?? "Focused protocol workspace."} Choose a task to start this desk agent.
+                {visual?.shortDescription ?? "Focused protocol workspace."} Start a blank chat or choose a task below.
               </p>
             </div>
+          </div>
+          <div className="flex shrink-0 flex-col items-start gap-1.5 pl-[4.5rem] lg:items-end lg:pl-0">
+            <Button
+              type="button"
+              size="sm"
+              className="h-11 px-4 sm:h-9"
+              disabled={Boolean(launchingTaskTitle) || startTaskBlocked}
+              title={startTaskBlocker ?? `Open a blank chat with the ${visual?.agentName ?? `${panel} agent`}.`}
+              onClick={() => startTask("", blankChatTitle, { sendImmediately: false })}
+            >
+              {launchingTaskTitle === blankChatTitle ? "Starting chat..." : `Start ${visual?.displayName ?? panel} chat`}
+            </Button>
+            <p className="max-w-xs text-xs leading-5 text-dls-secondary lg:text-right">
+              {blankChatDetail}
+            </p>
           </div>
         </div>
       </div>
@@ -1086,9 +1070,6 @@ function ProtocolDeskEmptyState({
                 const isLaunching = launchingTaskTitle === item.title;
                 const inputRequirement = getDeskTaskInputRequirement(item.prompt);
                 const opensReviewedAction = Boolean(item.reviewedAction);
-                const pendingInputKey = `${panel}:${item.title}`;
-                const inputOpen = pendingInput?.key === pendingInputKey;
-                const inputId = `desk-task-input-${panel}-${item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
                 const evidenceHint = panel === "bittensor"
                   ? "reads: public SS58 and subnet context"
                   : panel === "hyperliquid"
@@ -1111,64 +1092,16 @@ function ProtocolDeskEmptyState({
                           ? "Starting..."
                           : startTaskBlocked
                             ? startTaskActionLabel
-                            : inputRequirement?.actionLabel ?? draftConfig?.confirmCtaLabel ?? "Start task"}
+                            : draftConfig?.confirmCtaLabel ?? "Start task"}
                       actionDisabled={Boolean(launchingTaskTitle) || startTaskBlocked}
                       actionTitle={opensReviewedAction
                         ? "Start an editable chat request. Exact terms move to Wallet for review and signature."
-                        : startTaskBlocker ?? inputRequirement?.helpText ?? undefined}
+                        : startTaskBlocker ?? (inputRequirement
+                          ? `Start this task, then answer the ${inputRequirement.label.toLowerCase()} question in chat.`
+                          : undefined)}
                       actionPlacement="below"
                       onAction={() => handleTaskAction(item)}
                     />
-                    {inputOpen ? (
-                      <form
-                        className="ml-0 rounded-lg bg-dls-surface-muted/35 px-3 py-3 sm:ml-8"
-                        onSubmit={handleTaskInputSubmit}
-                      >
-                        <label htmlFor={inputId} className="text-[12px] font-semibold leading-5 text-dls-text">
-                          {pendingInput.requirement.label}
-                        </label>
-                        <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
-                          <Input
-                            id={inputId}
-                            value={taskInputValue}
-                            onChange={(event) => {
-                              setTaskInputValue(event.currentTarget.value);
-                              if (taskInputError) setTaskInputError(null);
-                            }}
-                            aria-invalid={Boolean(taskInputError)}
-                            aria-describedby={`${inputId}-hint`}
-                            placeholder={pendingInput.requirement.inputPlaceholder}
-                            className="h-8 border-dls-border/70 bg-background/35 text-[13px]"
-                          />
-                          <Button type="submit" size="sm" className="h-8">
-                            Start task
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 text-dls-secondary"
-                            onClick={() => {
-                              setPendingInput(null);
-                              setTaskInputValue("");
-                              setTaskInputError(null);
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                        <p
-                          id={`${inputId}-hint`}
-                          className={cn(
-                            "mt-2 text-xs leading-[18px]",
-                            taskInputError ? "text-red-11" : "text-dls-secondary",
-                          )}
-                          role={taskInputError ? "alert" : undefined}
-                        >
-                          {taskInputError ?? pendingInput.requirement.helpText}
-                        </p>
-                      </form>
-                    ) : null}
                   </div>
                 );
               })}
@@ -2400,6 +2333,8 @@ export function SessionPage(props: SessionPageProps) {
         initialVenue={visibleSidePanel}
         openReviewedAction={reviewedActionEntryProtocol === visibleSidePanel}
         initialReviewedActionOperation={reviewedActionEntryOperation}
+        workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
+        sessionId={props.selectedSessionId}
       />
     </div>
   ) : (
