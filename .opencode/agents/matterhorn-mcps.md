@@ -14,13 +14,16 @@ tools:
   "matterhorn-work_matterhorn_workflows_catalog": true
   "matterhorn-work_matterhorn_read_files": true
   "matterhorn-work_matterhorn_write_files": true
-matterhorn_desk_agent: v2
+---
+
+<!-- MATTERHORN_MANAGED_DESK_AGENT_START
+matterhorn_desk_agent: v3
 matterhorn_desk_id: mcps
 agent_id: matterhorn-mcps
 workflow_id: matterhorn_mcp_setup
 workflow_manifest_ref: matterhorn.workflow.manifest.v1/mcp_setup
 output_desk_id: mcp
----
+MATTERHORN_MANAGED_DESK_AGENT_END -->
 
 # MCP Agent
 

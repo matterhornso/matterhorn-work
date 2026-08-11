@@ -10,13 +10,16 @@ tools:
   "*": false
   "matterhorn-work_matterhorn_sui_get_balance": true
   "matterhorn-work_matterhorn_sui_preview_transfer": true
-matterhorn_desk_agent: v2
+---
+
+<!-- MATTERHORN_MANAGED_DESK_AGENT_START
+matterhorn_desk_agent: v3
 matterhorn_desk_id: sui
 agent_id: matterhorn-sui
 workflow_id: sui_wallet_workflow
 workflow_manifest_ref: matterhorn.workflow.manifest.v1/sui_wallet_workflow
 output_desk_id: sui
----
+MATTERHORN_MANAGED_DESK_AGENT_END -->
 
 # Sui Agent
 
