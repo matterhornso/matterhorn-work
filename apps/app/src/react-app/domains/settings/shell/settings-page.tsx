@@ -17,6 +17,7 @@ import {
   Image as ImageIcon,
   LayoutDashboard,
   RefreshCcw,
+  Shield,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -77,6 +78,8 @@ export function getSettingsTabIcon(tab: SettingsTab) {
       return Layout;
     case "permissions":
       return FolderLock;
+    case "privacy":
+      return Shield;
     case "cloud-account":
       return UserCircle;
     case "cloud-marketplaces":
@@ -126,6 +129,8 @@ export function getSettingsTabLabel(tab: SettingsTab) {
       return "Customization";
     case "permissions":
       return "Permissions";
+    case "privacy":
+      return "Privacy";
     case "cloud-account":
       return t("settings.tab_cloud_account");
     case "cloud-marketplaces":
@@ -177,6 +182,8 @@ export function getSettingsTabDescription(tab: SettingsTab) {
       return "Branding and shell controls";
     case "permissions":
       return "Folders the agent can use";
+    case "privacy":
+      return "Provider processing, storage, feedback, and retention";
     case "cloud-account":
       return t("settings.tab_description_cloud_account");
     case "cloud-marketplaces":
@@ -316,6 +323,7 @@ export function getSettingsTabStatus(
   switch (tab) {
     case "preferences":
     case "permissions":
+    case "privacy":
     case "appearance":
     case "extensions":
       return "Working";
@@ -347,7 +355,7 @@ export function getSettingsTabStatus(
 }
 
 export function getWorkspaceSettingsTabs(developerMode = false): SettingsTab[] {
-  const tabs: SettingsTab[] = ["preferences", "permissions", "wallet", "generated-media", "extensions"];
+  const tabs: SettingsTab[] = ["preferences", "permissions", "privacy", "wallet", "generated-media", "extensions"];
   if (developerMode) tabs.push("marketplace", "advanced");
   return filterLaunchSettingsTabs(tabs);
 }

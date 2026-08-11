@@ -206,6 +206,11 @@ const AiSettingsView = lazy(() =>
     default: module.AiSettingsView,
   })),
 );
+const PrivacySettingsView = lazy(() =>
+  import("../domains/settings/pages/privacy-view").then((module) => ({
+    default: module.PrivacySettingsView,
+  })),
+);
 const SettingsOverviewView = lazy(() =>
   import("../domains/settings/pages/overview-view").then((module) => ({
     default: module.SettingsOverviewView,
@@ -579,6 +584,7 @@ function parseSettingsPath(pathname: string): {
     case "ai":
     case "preferences":
     case "permissions":
+    case "privacy":
     case "shell":
     case "advanced":
     case "appearance":
@@ -2953,6 +2959,17 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
               }}
             />
           </SettingsStack>
+        );
+      case "privacy":
+        return (
+          <PrivacySettingsView
+            matterhornServerClient={settingsCapabilityClient}
+            runtimeWorkspaceId={runtimeWorkspaceId}
+            onOpenModels={() => navigateSettingsPath("ai")}
+            onOpenMemory={() => openWorkspaceSurfacePanel("memory")}
+            onOpenNotes={() => openWorkspaceSurfacePanel("notes")}
+            onOpenOutputs={openWorkspaceOutputs}
+          />
         );
       case "ai":
         return (
