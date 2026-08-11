@@ -77,6 +77,7 @@ type ProjectSurfaceCard = {
 const workspaceCards: SettingsHubCard[] = [
   { tab: "preferences", icon: Cog, title: "Preferences", desc: "Model and reasoning controls.", status: "Working" },
   { tab: "permissions", icon: FolderLock, title: "Permissions", desc: "Folders the agent can use.", status: "Working" },
+  { tab: "privacy", icon: ShieldCheck, title: "Privacy", desc: "Provider processing, storage, and retention.", status: "Working" },
   { tab: "wallet", icon: WalletIcon, title: "Wallet", desc: "Wallet connections and signing boundaries.", status: "Preview" },
   { tab: "generated-media", icon: ImageIcon, title: "Generated media", desc: "Image and NFT publishing readiness.", status: "Platform setup" },
   { tab: "extensions", icon: Puzzle, title: "MCPs & Tools", desc: "MCP servers and connectors.", status: "Working" },

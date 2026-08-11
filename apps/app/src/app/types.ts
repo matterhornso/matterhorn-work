@@ -178,6 +178,7 @@ export type SettingsTab =
   | "ai"
   | "preferences"
   | "permissions"
+  | "privacy"
   | "shell"
   | "cloud-account"
   | "cloud-marketplaces"

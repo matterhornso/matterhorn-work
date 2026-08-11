@@ -36,7 +36,7 @@ describe("Generated media settings surface", () => {
       '"generated-media": ["image-generation", "nft"]',
     );
     expect(settingsPage).toContain(
-      '["preferences", "permissions", "wallet", "generated-media", "extensions"]',
+      '["preferences", "permissions", "privacy", "wallet", "generated-media", "extensions"]',
     );
     expect(settingsPage).toContain("filterLaunchSettingsTabs(tabs)");
     expect(launchPolicy).toContain("VITE_MATTERHORN_GENERATED_MEDIA_ENABLED");
