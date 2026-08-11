@@ -256,7 +256,7 @@ for (const phrase of [
   "CustomerProtocolDeskVisual",
   "enrichCustomerWorkflowTemplate",
   "buildCustomerBetaDemoStarterCards",
-  "Choose a task to start this desk agent.",
+  "Start a blank chat or choose a task below.",
   "Allowed workspace intents",
   "Read and preview",
   "Preview only",
