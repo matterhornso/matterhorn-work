@@ -34,7 +34,7 @@ describe("stable launch feature policy", () => {
     });
   });
 
-  test("hides reviewed desk actions in the public Beta web policy", () => {
+  test("fails closed on reviewed desk actions in public Beta until explicitly enabled", () => {
     const publicBetaPolicy = resolveMatterhornLaunchFeaturePolicy({
       VITE_MATTERHORN_DEPLOYMENT: "web",
       VITE_MATTERHORN_PUBLIC_BETA: "1",
@@ -45,6 +45,16 @@ describe("stable launch feature policy", () => {
 
     expect(publicBetaPolicy.reviewedDeskActions).toBe(false);
     expect(ordinaryWebPolicy.reviewedDeskActions).toBe(true);
+  });
+
+  test("enables wallet-reviewed desk actions for an approved public Beta build", () => {
+    const policy = resolveMatterhornLaunchFeaturePolicy({
+      VITE_MATTERHORN_DEPLOYMENT: "web",
+      VITE_MATTERHORN_PUBLIC_BETA: "1",
+      VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED: "true",
+    });
+
+    expect(policy.reviewedDeskActions).toBe(true);
   });
 
   test("keeps launch navigation limited to approved surfaces", () => {

@@ -137,6 +137,13 @@ function evaluate() {
       "VITE_MATTERHORN_PUBLIC_BETA must be true.",
     ),
     check(
+      "web.reviewed_desk_actions",
+      "Wallet-reviewed desk actions are explicitly enabled",
+      "Release owner",
+      enabled("VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED"),
+      "VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED must be true to expose transaction preparation and wallet review in public Beta.",
+    ),
+    check(
       "web.require_signin",
       "Public web requires a Matterhorn Cloud sign-in before workspace access",
       "Security",

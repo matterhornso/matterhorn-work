@@ -15,6 +15,27 @@ const PUBLIC_BETA_PROTOCOL_DESKS: CustomerProtocolDeskId[] = [
 ];
 
 describe("public Beta desk surfaces", () => {
+  test("uses wallet-reviewed capability copy when the transactional launch flag is enabled", () => {
+    const expectedStatus = new Map<CustomerProtocolDeskId, string>([
+      ["bittensor", "Review in wallet"],
+      ["hyperliquid", "Review & submit"],
+      ["polymarket", "Review in wallet"],
+      ["sui", "Review in wallet"],
+    ]);
+
+    for (const deskId of PUBLIC_BETA_PROTOCOL_DESKS) {
+      const visual = getCustomerProtocolDeskVisualForLaunch(deskId, true);
+      expect(visual).not.toBeNull();
+      expect(visual?.statusLabel).toBe(expectedStatus.get(deskId));
+      expect([
+        visual?.safetySummary,
+        visual?.sessionBoundary,
+        visual?.agentDescription,
+      ].join(" ")).toMatch(/wallet|sign|submit/i);
+      expect(visual?.statusLabel).not.toBe("Read-only Beta");
+    }
+  });
+
   test("uses read-only copy across Home, rails, sessions, and capability detail", () => {
     for (const deskId of PUBLIC_BETA_PROTOCOL_DESKS) {
       const visual = getCustomerProtocolDeskVisualForLaunch(deskId, false);

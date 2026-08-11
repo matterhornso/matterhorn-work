@@ -34,6 +34,7 @@ assert.equal(vercelHeaders["x-frame-options"], "DENY");
 const managedKeys = [
   "VITE_MATTERHORN_DEPLOYMENT",
   "VITE_MATTERHORN_PUBLIC_BETA",
+  "VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED",
   "VITE_MATTERHORN_REQUIRE_SIGNIN",
   "VITE_MATTERHORN_CLOUD_ENABLED",
   "VITE_MATTERHORN_CLOUD_URL",
@@ -73,6 +74,7 @@ function publicWebEnvironment(overrides = {}) {
     ...env,
     VITE_MATTERHORN_DEPLOYMENT: "web",
     VITE_MATTERHORN_PUBLIC_BETA: "1",
+    VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED: "1",
     VITE_MATTERHORN_REQUIRE_SIGNIN: "true",
     VITE_MATTERHORN_CLOUD_ENABLED: "true",
     VITE_MATTERHORN_CLOUD_URL: "https://app.matterhorn.example",
@@ -132,6 +134,10 @@ assert.ok(JSON.parse(missingProxyDeclaration.stdout).blockers.some((blocker) => 
 const noSignin = run({ VITE_MATTERHORN_REQUIRE_SIGNIN: "0" });
 assert.notEqual(noSignin.status, 0);
 assert.ok(JSON.parse(noSignin.stdout).blockers.some((blocker) => blocker.id === "web.require_signin"));
+
+const noReviewedActions = run({ VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED: "0" });
+assert.notEqual(noReviewedActions.status, 0);
+assert.ok(JSON.parse(noReviewedActions.stdout).blockers.some((blocker) => blocker.id === "web.reviewed_desk_actions"));
 
 const crossOriginCloudApi = run({ VITE_MATTERHORN_CLOUD_API_URL: "https://api.matterhorn.example/api/den" });
 assert.notEqual(crossOriginCloudApi.status, 0);
