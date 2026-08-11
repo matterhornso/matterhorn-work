@@ -16,13 +16,16 @@ tools:
   "matterhorn-work_matterhorn_hyperliquid_get_funding": true
   "matterhorn-work_matterhorn_hyperliquid_preview_order": true
   "matterhorn-work_matterhorn_crypto_chat": true
-matterhorn_desk_agent: v2
+---
+
+<!-- MATTERHORN_MANAGED_DESK_AGENT_START
+matterhorn_desk_agent: v3
 matterhorn_desk_id: hyperliquid
 agent_id: matterhorn-hyperliquid
 workflow_id: hyperliquid_preview
 workflow_manifest_ref: matterhorn.workflow.manifest.v1/hyperliquid_preview
 output_desk_id: hyperliquid
----
+MATTERHORN_MANAGED_DESK_AGENT_END -->
 
 # Hyperliquid Agent
 

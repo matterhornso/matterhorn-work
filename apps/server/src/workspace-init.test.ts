@@ -15,6 +15,12 @@ async function withWorkspace(fn: (root: string) => Promise<void>) {
   }
 }
 
+function agentFrontmatter(source: string): string {
+  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) throw new Error("Expected agent markdown frontmatter.");
+  return match[1];
+}
+
 describe("ensureWorkspaceFiles", () => {
   test("creates default agent with artifact guidance for new workspaces", async () => {
     await withWorkspace(async (root) => {
@@ -38,9 +44,21 @@ describe("ensureWorkspaceFiles", () => {
       expect(agent.toLowerCase()).not.toContain("openwork");
       expect(bittensorAgent.toLowerCase()).not.toContain("openwork");
       expect(bittensorAgent).toContain("Bittensor Agent");
-      expect(bittensorAgent).toContain("matterhorn_desk_agent: v2");
+      expect(bittensorAgent).toContain("MATTERHORN_MANAGED_DESK_AGENT_START");
+      expect(bittensorAgent).toContain("matterhorn_desk_agent: v3");
       expect(bittensorAgent).toContain("matterhorn_desk_id: bittensor");
       expect(bittensorAgent).toContain("agent_id: matterhorn-bittensor");
+      for (const managedAgent of [
+        bittensorAgent,
+        hyperliquidAgent,
+        polymarketAgent,
+        suiAgent,
+        longevityAgent,
+      ]) {
+        expect(agentFrontmatter(managedAgent)).not.toMatch(
+          /matterhorn_desk_agent|matterhorn_desk_id|agent_id|workflow_id|workflow_manifest_ref|output_desk_id/,
+        );
+      }
       expect(bittensorAgent).toContain("## Enforced Matterhorn Desk Contract");
       expect(bittensorAgent).toContain("Runtime tools are deny-by-default");
       expect(bittensorAgent).toContain("The agent may never sign, submit, broadcast, or auto-execute");

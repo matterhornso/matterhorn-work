@@ -16,6 +16,12 @@ function assertNotMatches(source, pattern, label) {
   assert.equal(pattern.test(source), false, `${label} should not match ${pattern}`);
 }
 
+function agentFrontmatter(source, label) {
+  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  assert.ok(match, `${label} should have frontmatter`);
+  return match[1];
+}
+
 const [
   packageJson,
   deskAgents,
@@ -149,9 +155,10 @@ assertIncludes(workspaceInit, "MATTERHORN_DESK_AGENT_MANIFESTS", "workspace init
 assertIncludes(workspaceInit, "renderDeskAgentTemplate", "workspace init");
 assertIncludes(workspaceInit, "renderDeskAgentRuntimePermissions", "workspace init runtime permissions");
 assertIncludes(workspaceInit, "ensureMatterhornDeskAgents", "workspace init");
-assertIncludes(workspaceInit, "matterhorn_desk_agent: v2", "workspace init desk agent frontmatter");
-assertIncludes(workspaceInit, "matterhorn_desk_id: ${agent.deskId}", "workspace init desk agent frontmatter");
-assertIncludes(workspaceInit, "agent_id: ${agent.agentId}", "workspace init desk agent frontmatter");
+assertIncludes(workspaceInit, "matterhorn_desk_agent: v3", "workspace init managed desk marker");
+assertIncludes(workspaceInit, "matterhorn_desk_id: ${agent.deskId}", "workspace init managed desk marker");
+assertIncludes(workspaceInit, "agent_id: ${agent.agentId}", "workspace init managed desk marker");
+assertIncludes(workspaceInitTest, "agentFrontmatter", "workspace init provider-option regression test");
 assertIncludes(workspaceInit, ".opencode\", \"agents", "workspace init agent directory");
 assertIncludes(workspaceInit, "outputs/<desk>/<session-slug>/", "workspace artifact guidance");
 assertIncludes(workspaceInitTest, "matterhorn-bittensor.md", "workspace init tests");
@@ -167,7 +174,12 @@ for (const [activeAgent, label] of [
   [activePolymarketAgent, "active Polymarket agent"],
   [activeBittensorAgent, "active Bittensor agent"],
 ]) {
-  assertIncludes(activeAgent, "matterhorn_desk_agent: v2", `${label} contract version`);
+  assertIncludes(activeAgent, "matterhorn_desk_agent: v3", `${label} contract version`);
+  assertNotMatches(
+    agentFrontmatter(activeAgent, label),
+    /matterhorn_desk_agent|matterhorn_desk_id|agent_id|workflow_id|workflow_manifest_ref|output_desk_id/,
+    `${label} provider options`,
+  );
   assertIncludes(activeAgent, "## Enforced Matterhorn Desk Contract", `${label} generated contract`);
   assertIncludes(activeAgent, '"*": false', `${label} deny-by-default tool map`);
 }

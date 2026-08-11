@@ -13,13 +13,16 @@ tools:
   "matterhorn-work_matterhorn_workflows_prompt_pack": true
   "matterhorn-work_matterhorn_read_files": true
   "matterhorn-work_matterhorn_write_files": true
-matterhorn_desk_agent: v2
+---
+
+<!-- MATTERHORN_MANAGED_DESK_AGENT_START
+matterhorn_desk_agent: v3
 matterhorn_desk_id: wellness
 agent_id: matterhorn-longevity
 workflow_id: wellness_creator_services
 workflow_manifest_ref: matterhorn.workflow.manifest.v1/wellness_creator_services
 output_desk_id: longevity
----
+MATTERHORN_MANAGED_DESK_AGENT_END -->
 
 # Longevity Agent
 

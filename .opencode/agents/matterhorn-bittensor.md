@@ -10,13 +10,16 @@ tools:
   "*": false
   "matterhorn-work_matterhorn_bittensor_chat": true
   "matterhorn-work_matterhorn_crypto_chat": true
-matterhorn_desk_agent: v2
+---
+
+<!-- MATTERHORN_MANAGED_DESK_AGENT_START
+matterhorn_desk_agent: v3
 matterhorn_desk_id: bittensor
 agent_id: matterhorn-bittensor
 workflow_id: bittensor_operator
 workflow_manifest_ref: matterhorn.workflow.manifest.v1/bittensor_operator
 output_desk_id: bittensor
----
+MATTERHORN_MANAGED_DESK_AGENT_END -->
 
 # Bittensor Agent
 

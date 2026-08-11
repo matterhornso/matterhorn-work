@@ -171,13 +171,16 @@ function renderDeskAgentTemplate(agent: MatterhornDeskAgentManifest): string {
 description: ${agent.description}
 mode: primary
 temperature: ${agent.modelPolicy.temperature}
-${renderDeskAgentRuntimePermissions(agent)}${renderDeskAgentRuntimeTools(agent)}matterhorn_desk_agent: v2
+${renderDeskAgentRuntimePermissions(agent)}${renderDeskAgentRuntimeTools(agent)}---
+
+<!-- MATTERHORN_MANAGED_DESK_AGENT_START
+matterhorn_desk_agent: v3
 matterhorn_desk_id: ${agent.deskId}
 agent_id: ${agent.agentId}
 workflow_id: ${agent.workflowId}
 workflow_manifest_ref: ${agent.workflowManifestRef ?? "none"}
 output_desk_id: ${agent.outputDeskId}
----
+MATTERHORN_MANAGED_DESK_AGENT_END -->
 
 # ${agent.displayName}
 
@@ -257,7 +260,7 @@ async function ensureMatterhornDeskAgents(workspaceRoot: string): Promise<boolea
     const normalizedContent = content.endsWith("\n") ? content : `${content}\n`;
     if (await exists(agentPath)) {
       const current = await readFile(agentPath, "utf8");
-      if (!/matterhorn_desk_agent: v[12]/.test(current) || current === normalizedContent) continue;
+      if (!/matterhorn_desk_agent: v[123]/.test(current) || current === normalizedContent) continue;
     }
     await writeFile(agentPath, normalizedContent, "utf8");
     changed = true;

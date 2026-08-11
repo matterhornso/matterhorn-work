@@ -15,13 +15,16 @@ tools:
   "matterhorn-work_matterhorn_memory_list": true
   "matterhorn-work_matterhorn_memory_search": true
   "matterhorn-work_matterhorn_memory_update": true
-matterhorn_desk_agent: v2
+---
+
+<!-- MATTERHORN_MANAGED_DESK_AGENT_START
+matterhorn_desk_agent: v3
 matterhorn_desk_id: memory
 agent_id: matterhorn-memory
 workflow_id: matterhorn_memory_review
 workflow_manifest_ref: matterhorn.workflow.manifest.v1/memory_review
 output_desk_id: memory
----
+MATTERHORN_MANAGED_DESK_AGENT_END -->
 
 # Memory Agent
 
