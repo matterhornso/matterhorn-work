@@ -45,6 +45,7 @@ The beta auth layer does not require Clerk packages, but it documents the standa
 | `VITE_MATTERHORN_CLOUD_API_URL` | Required for public Beta | Same-origin account API base. Public Beta must use `https://<app-origin>/api/den`; never a direct backend origin. |
 | `VITE_MATTERHORN_DEPLOYMENT` | No | Use `web` only for a reviewed browser deployment; desktop is the default. |
 | `VITE_MATTERHORN_PUBLIC_BETA` | No | Requires the web deployment mode and turns on public-Beta browser safeguards. |
+| `VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED` | Required for transactional desks | Exposes audited transaction preparation and connected-wallet review paths. It does not allow agent or watch-triggered submission. |
 | `VITE_MATTERHORN_REQUIRE_SIGNIN` | No | Holds public web at sign-in until a Matterhorn Cloud session exists. |
 | `VITE_MATTERHORN_WORK_URL` / `VITE_OPENWORK_URL` | No | Protected local/private bridge only. Never set this or a Matterhorn Desks token in a public browser build. |
 | `VITE_OPENCODE_URL` | No | OpenCode engine URL. Defaults to `http://127.0.0.1:4096`. |
@@ -69,6 +70,7 @@ repository:
 ```bash
 VITE_MATTERHORN_DEPLOYMENT=web
 VITE_MATTERHORN_PUBLIC_BETA=1
+VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED=1
 VITE_MATTERHORN_REQUIRE_SIGNIN=1
 VITE_MATTERHORN_CLOUD_ENABLED=1
 VITE_MATTERHORN_CLOUD_URL=https://app.matterhorn.example

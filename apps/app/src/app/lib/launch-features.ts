@@ -28,12 +28,14 @@ export function resolveMatterhornLaunchFeaturePolicy(
   env: Record<string, unknown> | undefined,
   cloudEnabled = false,
 ): MatterhornLaunchFeaturePolicy {
+  const publicBetaWeb = isMatterhornPublicBetaWebDeployment(env);
   return {
     billing: readBooleanFlag(env, "VITE_MATTERHORN_BILLING_ENABLED"),
     cloud: cloudEnabled,
     generatedMedia: readBooleanFlag(env, "VITE_MATTERHORN_GENERATED_MEDIA_ENABLED"),
     publicOauthConnectors: readListFlag(env, "VITE_MATTERHORN_PUBLIC_OAUTH_CONNECTORS"),
-    reviewedDeskActions: !isMatterhornPublicBetaWebDeployment(env),
+    reviewedDeskActions: !publicBetaWeb
+      || readBooleanFlag(env, "VITE_MATTERHORN_REVIEWED_DESK_ACTIONS_ENABLED"),
   };
 }
 
