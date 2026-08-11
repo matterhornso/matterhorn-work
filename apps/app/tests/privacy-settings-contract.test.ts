@@ -130,6 +130,15 @@ describe("Privacy settings", () => {
     ]);
   });
 
+  test("fails closed while a rolling backend still returns the pre-privacy payload", () => {
+    const legacyModels = {
+      ...modelsFixture(),
+      privacy: undefined,
+    } as unknown as MatterhornBackendModelsResponse;
+
+    expect(activeProviderPrivacyPolicies(legacyModels)).toEqual([]);
+  });
+
   test("maps verified and blocked policies to explicit states", () => {
     expect(providerPrivacyTone(verifiedPolicy)).toBe("ready");
     expect(providerRetentionLabel(verifiedPolicy)).toBe("No provider retention");

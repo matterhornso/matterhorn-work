@@ -54,8 +54,14 @@ export function providerRetentionLabel(policy: MatterhornProviderPrivacyPolicy) 
 export function activeProviderPrivacyPolicies(
   models: MatterhornBackendModelsResponse,
 ) {
+  const catalogProviders = Array.isArray(models.catalog?.providers)
+    ? models.catalog.providers
+    : [];
+  const privacyProviders = Array.isArray(models.privacy?.providers)
+    ? models.privacy.providers
+    : [];
   const activeProviderIds = new Set(
-    models.catalog.providers
+    catalogProviders
       .filter(
         (provider) =>
           provider.connected &&
@@ -64,7 +70,7 @@ export function activeProviderPrivacyPolicies(
       )
       .map((provider) => provider.id.trim().toLowerCase()),
   );
-  return models.privacy.providers.filter((policy) =>
+  return privacyProviders.filter((policy) =>
     activeProviderIds.has(policy.providerId.trim().toLowerCase()),
   );
 }
