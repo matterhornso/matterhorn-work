@@ -330,6 +330,19 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(surfaceSrc).not.toContain("starters fill the composer");
   });
 
+  test("focused desks offer a blank chat with the desk agent already selected", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(src).toContain('const blankChatTitle = `${visual?.displayName ?? panel} chat`;');
+    expect(src).toContain("Start a blank chat or choose a task below.");
+    expect(src).toContain('onClick={() => startTask("", blankChatTitle, { sendImmediately: false })}');
+    expect(src).toContain('`Start ${visual?.displayName ?? panel} chat`');
+    expect(src).toContain("The desk agent and its working context are already selected.");
+    expect(src).toContain("Research freely and prepare wallet-reviewed buy, sell, and cancel actions.");
+    expect(src).toContain("agent: agentIdForDesk(focusedProtocolPanel)");
+    expect(src).toContain("deskId: focusedProtocolPanel");
+  });
+
   test("focused desk close cannot overwrite a newly opened task session", () => {
     const src = readAppSource("domains/session/chat/session-page.tsx");
     const routeState = readAppSource("shell/session-panel-route.ts");

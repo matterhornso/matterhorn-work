@@ -899,6 +899,10 @@ function ProtocolDeskEmptyState({
   const providerNotice = panel === "bittensor"
     ? bittensorSidecarNotice(bittensorSidecarQuery.data?.health, bittensorSidecarQuery.isError)
     : null;
+  const blankChatTitle = `${visual?.displayName ?? panel} chat`;
+  const blankChatDetail = panel === "polymarket"
+    ? "Research freely and prepare wallet-reviewed buy, sell, and cancel actions."
+    : "The desk agent and its working context are already selected.";
 
   const startTask = useCallback((
     prompt: string,
@@ -985,9 +989,24 @@ function ProtocolDeskEmptyState({
                 </Popover>
               </div>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
-                {visual?.shortDescription ?? "Focused protocol workspace."} Choose a task to start this desk agent.
+                {visual?.shortDescription ?? "Focused protocol workspace."} Start a blank chat or choose a task below.
               </p>
             </div>
+          </div>
+          <div className="flex shrink-0 flex-col items-start gap-1.5 pl-[4.5rem] lg:items-end lg:pl-0">
+            <Button
+              type="button"
+              size="sm"
+              className="h-11 px-4 sm:h-9"
+              disabled={Boolean(launchingTaskTitle) || startTaskBlocked}
+              title={startTaskBlocker ?? `Open a blank chat with the ${visual?.agentName ?? `${panel} agent`}.`}
+              onClick={() => startTask("", blankChatTitle, { sendImmediately: false })}
+            >
+              {launchingTaskTitle === blankChatTitle ? "Starting chat..." : `Start ${visual?.displayName ?? panel} chat`}
+            </Button>
+            <p className="max-w-xs text-xs leading-5 text-dls-secondary lg:text-right">
+              {blankChatDetail}
+            </p>
           </div>
         </div>
       </div>
