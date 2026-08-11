@@ -5,6 +5,7 @@ import type { UIMessage } from "ai";
 import { useQuery } from "@tanstack/react-query";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
 import type { MatterhornExecutionMode } from "@matterhorn-work/types/execution-mode";
+import type { MatterhornProviderPrivacyPolicy } from "@matterhorn-work/types/backend-models";
 import {
   AlertCircle,
   ArrowDown,
@@ -601,6 +602,7 @@ export type SessionSurfaceProps = {
   modelPickerOpen: boolean;
   modelUnavailable?: boolean;
   selectedModel: ModelRef;
+  providerPrivacyPolicy?: MatterhornProviderPrivacyPolicy | null;
   onModelPickerOpenChange: (open: boolean) => void;
   onModelChange: (model: ModelRef) => void;
   onSendDraft: (draft: ComposerDraft) => Promise<void> | void;
@@ -3060,6 +3062,39 @@ export function SessionSurface(props: SessionSurfaceProps) {
       </div>
 
       <div ref={composerShellRef} className="shrink-0 bg-dls-surface px-0 pb-3 pt-3">
+        {renderedMessages.length === 0 ? (
+          <div
+            className="mx-auto mb-2 flex max-w-[920px] items-start gap-2 px-4 text-[11px] leading-4 text-dls-secondary"
+            aria-live="polite"
+          >
+            <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+            <p className="min-w-0">
+              {props.providerPrivacyPolicy ? (
+                props.providerPrivacyPolicy.allowed ? (
+                  <>
+                    Matterhorn does not use prompts to train models.{" "}
+                    {props.providerPrivacyPolicy.providerName} processes this
+                    prompt. {props.providerPrivacyPolicy.label}.
+                  </>
+                ) : (
+                  <>
+                    Sending is blocked because{" "}
+                    {props.providerPrivacyPolicy.providerName}&apos;s training and
+                    retention terms are not verified.
+                  </>
+                )
+              ) : (
+                <>Checking how the selected provider handles prompts.</>
+              )}{" "}
+              <a
+                href="/privacy"
+                className="whitespace-nowrap text-dls-text underline decoration-dls-border underline-offset-2 hover:decoration-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/30"
+              >
+                Privacy details
+              </a>
+            </p>
+          </div>
+        ) : null}
         <DevProfiler id="SessionComposer">
         <ReactSessionComposer
           draft={draft}
@@ -3069,7 +3104,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
         onStop={handleAbort}
         busy={chatStreaming}
         disabled={model.transitionState !== "idle"}
-        sendDisabled={model.transitionState !== "idle" || (Boolean(props.modelUnavailable) && !localReviewedActionReady)}
+        sendDisabled={
+          model.transitionState !== "idle" ||
+          props.providerPrivacyPolicy?.allowed === false ||
+          (Boolean(props.modelUnavailable) && !localReviewedActionReady)
+        }
         modelUnavailable={Boolean(props.modelUnavailable)}
         onOpenAiProviders={props.onOpenAiProviders}
         statusLabel={statusLabel(snapshot ?? undefined, chatStreaming)}

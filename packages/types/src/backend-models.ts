@@ -59,6 +59,7 @@ export interface MatterhornBackendModelSelectionResponse {
     writeRequires: Array<"collaborator" | "writable_server">;
     feedbackTrainingUse: "none_by_default";
   };
+  privacy: MatterhornProviderPrivacySummary;
 }
 
 export type MatterhornBackendModelCatalogErrorCode =
@@ -74,6 +75,40 @@ export interface MatterhornBackendModelProviderSummary {
   modelCount: number;
   modelIds: string[];
   sampleModels: string[];
+}
+
+export type MatterhornProviderPrivacyStatus =
+  | "verified_no_training"
+  | "local_processing"
+  | "opt_in_training"
+  | "unverified";
+
+export type MatterhornProviderTrainingUse =
+  | "none"
+  | "opt_in_only"
+  | "unknown";
+
+export type MatterhornProviderPrivacyEnforcementMode =
+  | "verified_only"
+  | "disclosure";
+
+export interface MatterhornProviderPrivacyPolicy {
+  providerId: string;
+  providerName: string;
+  status: MatterhornProviderPrivacyStatus;
+  trainingUse: MatterhornProviderTrainingUse;
+  retentionDays: number | null;
+  policyUrl: string | null;
+  verifiedAt: string | null;
+  allowed: boolean;
+  label: string;
+  description: string;
+}
+
+export interface MatterhornProviderPrivacySummary {
+  matterhornTrainingUse: "none";
+  enforcementMode: MatterhornProviderPrivacyEnforcementMode;
+  providers: MatterhornProviderPrivacyPolicy[];
 }
 
 export interface MatterhornBackendModelCatalogSnapshot extends MatterhornCapability {
@@ -121,6 +156,6 @@ export interface MatterhornBackendModelsResponse {
   privacy: {
     trainingUse: "none_by_default";
     feedbackUse: "eval_routing_product_quality_only";
-  };
+  } & MatterhornProviderPrivacySummary;
   limitations: string[];
 }

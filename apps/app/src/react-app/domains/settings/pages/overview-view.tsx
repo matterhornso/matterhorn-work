@@ -929,11 +929,15 @@ function DataPolicySection(props: {
       <div className="mb-4 grid gap-2 lg:grid-cols-3">
         <div className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-medium text-dls-text">Model training</p>
+            <p className="text-xs font-medium text-dls-text">
+              Matterhorn training use
+            </p>
             <StatusBadge>Off</StatusBadge>
           </div>
           <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
-            Workspace data is not used for RL or model training.
+            Matterhorn does not use workspace content to train models. Your
+            selected provider processes prompts under its separately reported
+            policy.
           </p>
         </div>
         <div className="rounded-md bg-dls-surface-muted/[0.08] px-3 py-2.5">

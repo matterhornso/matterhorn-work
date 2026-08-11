@@ -44,6 +44,11 @@ const managedKeys = [
   "MATTERHORN_CONTROL_PLANE_URL",
   "MATTERHORN_PROXY_SECRET",
   "CUDOS_API_KEY",
+  "MATTERHORN_PROVIDER_PRIVACY_MODE",
+  "MATTERHORN_CUDOS_TRAINING_USE",
+  "MATTERHORN_CUDOS_PRIVACY_POLICY_URL",
+  "MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT",
+  "MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS",
   "MATTERHORN_MODEL_USAGE_ENFORCEMENT",
   "MATTERHORN_MODEL_USAGE_DAILY_LIMIT",
   "MATTERHORN_MODEL_USAGE_MONTHLY_LIMIT",
@@ -84,6 +89,11 @@ function publicWebEnvironment(overrides = {}) {
     MATTERHORN_CONTROL_PLANE_URL: "https://api-origin.matterhorn.example",
     MATTERHORN_PROXY_SECRET: "a-high-entropy-edge-secret-value-123",
     CUDOS_API_KEY: "managed-cudos-secret-placeholder",
+    MATTERHORN_PROVIDER_PRIVACY_MODE: "verified-only",
+    MATTERHORN_CUDOS_TRAINING_USE: "none",
+    MATTERHORN_CUDOS_PRIVACY_POLICY_URL: "https://provider.example/privacy",
+    MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT: new Date().toISOString(),
+    MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS: "0",
     MATTERHORN_MODEL_USAGE_ENFORCEMENT: "hard",
     MATTERHORN_MODEL_USAGE_DAILY_LIMIT: "250000",
     MATTERHORN_MODEL_USAGE_MONTHLY_LIMIT: "2000000",
@@ -156,6 +166,18 @@ const missingInferenceProvider = run({ CUDOS_API_KEY: "" });
 assert.notEqual(missingInferenceProvider.status, 0);
 assert.ok(JSON.parse(missingInferenceProvider.stdout).blockers.some((blocker) => blocker.id === "signup.inference_provider"));
 assert.doesNotMatch(missingInferenceProvider.stdout, /managed-cudos-secret-placeholder/);
+
+const unverifiedProviderPrivacy = run({ MATTERHORN_PROVIDER_PRIVACY_MODE: "disclosure" });
+assert.notEqual(unverifiedProviderPrivacy.status, 0);
+assert.ok(JSON.parse(unverifiedProviderPrivacy.stdout).blockers.some((blocker) => blocker.id === "signup.provider_privacy_enforcement"));
+
+const missingNoTrainingTerms = run({ MATTERHORN_CUDOS_TRAINING_USE: "" });
+assert.notEqual(missingNoTrainingTerms.status, 0);
+assert.ok(JSON.parse(missingNoTrainingTerms.stdout).blockers.some((blocker) => blocker.id === "signup.provider_no_training"));
+
+const missingRetentionTerms = run({ MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS: "" });
+assert.notEqual(missingRetentionTerms.status, 0);
+assert.ok(JSON.parse(missingRetentionTerms.stdout).blockers.some((blocker) => blocker.id === "signup.provider_retention"));
 
 const unlimitedSignups = run({ MATTERHORN_SIGNUP_MAX_ACCOUNTS: "" });
 assert.notEqual(unlimitedSignups.status, 0);

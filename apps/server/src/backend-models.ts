@@ -9,6 +9,7 @@ import type { MatterhornCapability } from "@matterhorn-work/types/backend-capabi
 import { join } from "node:path";
 import { readFile, rm } from "node:fs/promises";
 import { atomicWriteTextFile } from "./atomic-file.js";
+import { buildProviderPrivacySummary } from "./provider-privacy.js";
 import type { Actor, WorkspaceInfo } from "./types.js";
 import { exists } from "./utils.js";
 
@@ -192,6 +193,7 @@ export function buildWorkspaceModelSelectionResponse(input: {
   workspace: WorkspaceInfo;
   fallbackModel: MatterhornBackendModelsResponse["defaultModel"];
   selection?: MatterhornBackendModelSelectionRecord | null;
+  privacy: MatterhornBackendModelsResponse["privacy"];
   auditLogged?: boolean;
 }): MatterhornBackendModelSelectionResponse {
   const selection = input.selection ?? null;
@@ -236,6 +238,7 @@ export function buildWorkspaceModelSelectionResponse(input: {
       writeRequires: ["collaborator", "writable_server"],
       feedbackTrainingUse: "none_by_default",
     },
+    privacy: input.privacy,
   };
 }
 
@@ -244,6 +247,7 @@ export function buildBackendModels(input: {
   selection?: MatterhornBackendModelSelectionRecord | null;
 } = {}): MatterhornBackendModelsResponse {
   const catalog = fallbackCatalog(input.catalog);
+  const providerPrivacy = buildProviderPrivacySummary(catalog.providers);
   const promptProviders = configuredPromptProviders(catalog);
   const canAnswerPrompts = promptProviders.length > 0;
   const catalogDefault = defaultModelForCatalog(catalog);
@@ -304,13 +308,15 @@ export function buildBackendModels(input: {
     privacy: {
       trainingUse: "none_by_default",
       feedbackUse: "eval_routing_product_quality_only",
+      ...providerPrivacy,
     },
     limitations: [
       "Connect a model provider before starting chats or desk tasks. A model catalog alone does not make a provider ready.",
       input.selection
         ? "A workspace default model is saved. You can still choose another available model for a specific chat."
         : "When a provider is connected, choose a model for this chat or save one as the workspace default.",
-      "User feedback is stored for eval, routing, and product quality review only. It is not used for RL or model training by default.",
+      "Matterhorn does not use workspace content for model training. Connected model providers process prompts under their separately reported provider policy.",
+      "User feedback is stored for eval, routing, and product quality review only. It is not used for RL or model training.",
     ],
   };
 }
