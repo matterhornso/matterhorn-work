@@ -2149,6 +2149,7 @@ function withMatterhornAuthErrorMapping<T>(callback: () => T): T {
       error.code === "invalid_credentials" || error.code === "unauthorized"
         ? 401
         : error.code === "email_taken" ||
+            error.code === "account_owns_shared_organization" ||
             error.code === "organization_slug_taken"
           ? 409
           : error.code === "signup_capacity_reached"
@@ -2196,6 +2197,38 @@ function matterhornOrganizationWorkspaceId(organizationId: string): string {
     .digest("hex")
     .slice(0, 16);
   return `ws_web_${digest}`;
+}
+
+async function purgeMatterhornOrganizationWorkspaces(
+  config: ServerConfig,
+  organizationIds: string[],
+): Promise<{ complete: boolean; failedOrganizationIds: string[] }> {
+  const workspaceRoot = resolve(resolveMatterhornDataRoot(), "web-workspaces");
+  const failedOrganizationIds: string[] = [];
+
+  for (const organizationId of organizationIds) {
+    const workspacePath = resolve(workspaceRoot, organizationId);
+    if (workspacePath === workspaceRoot || !workspacePath.startsWith(`${workspaceRoot}${sep}`)) {
+      failedOrganizationIds.push(organizationId);
+      continue;
+    }
+    try {
+      await rm(workspacePath, { recursive: true, force: true });
+    } catch {
+      failedOrganizationIds.push(organizationId);
+      continue;
+    }
+    const workspaceId = matterhornOrganizationWorkspaceId(organizationId);
+    config.workspaces = config.workspaces.filter((entry) => entry.id !== workspaceId);
+    config.authorizedRoots = config.authorizedRoots.filter(
+      (root) => resolve(root) !== workspacePath,
+    );
+  }
+
+  return {
+    complete: failedOrganizationIds.length === 0,
+    failedOrganizationIds,
+  };
 }
 
 async function ensureMatterhornOrganizationWorkspace(
@@ -6728,6 +6761,106 @@ function createRoutes(
       "Set-Cookie",
       matterhornSessionCookie(request, "", { clear: true }),
     );
+    return response;
+  });
+
+  addRoute(routes, "GET", "/api/auth/account/security", "none", async ({ request }) => {
+    const token = requireMatterhornSessionToken(request, authStore);
+    const summary = withMatterhornAuthErrorMapping(() =>
+      authStore.securitySummary(token),
+    );
+    const response = jsonResponse(summary);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "POST", "/api/auth/account/revoke-other-sessions", "none", async ({ request }) => {
+    const token = requireMatterhornSessionToken(request, authStore);
+    const revokedSessions = withMatterhornAuthErrorMapping(() =>
+      authStore.revokeOtherSessions(token),
+    );
+    return jsonResponse({ ok: true, revokedSessions });
+  });
+
+  addRoute(routes, "POST", "/api/auth/account/change-password", "none", async ({ request }) => {
+    const token = requireMatterhornSessionToken(request, authStore);
+    const session = requireMatterhornAuthSession(request, authStore);
+    if (!await authAttemptLimiter.check(`account-security:${session.user.id}`)) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many account security attempts. Try again in a few minutes.",
+      );
+    }
+    const body = await readJsonBody(request, 16 * 1024, "Password change");
+    withMatterhornAuthErrorMapping(() =>
+      authStore.changePassword(token, {
+        currentPassword: stringBodyField(body, "currentPassword"),
+        newPassword: stringBodyField(body, "newPassword"),
+      }),
+    );
+    const response = jsonResponse({ ok: true, signedOutEverywhere: true });
+    response.headers.append(
+      "Set-Cookie",
+      matterhornSessionCookie(request, "", { clear: true }),
+    );
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "DELETE", "/api/auth/account", "none", async ({ request }) => {
+    const token = requireMatterhornSessionToken(request, authStore);
+    const session = requireMatterhornAuthSession(request, authStore);
+    if (!await authAttemptLimiter.check(`account-security:${session.user.id}`)) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many account security attempts. Try again in a few minutes.",
+      );
+    }
+    const body = await readJsonBody(request, 16 * 1024, "Account deletion");
+    const confirmationEmail = stringBodyField(body, "confirmationEmail")
+      .trim()
+      .toLowerCase();
+    if (confirmationEmail !== session.user.email.trim().toLowerCase()) {
+      throw new ApiError(
+        400,
+        "invalid_confirmation",
+        "Enter the signed-in email address exactly to confirm account deletion.",
+      );
+    }
+    const deletion = withMatterhornAuthErrorMapping(() =>
+      authStore.deleteAccount(token, stringBodyField(body, "password")),
+    );
+    const memoryDeletionFailures: string[] = [];
+    for (const organizationId of deletion.deletedOrganizationIds) {
+      try {
+        await memoryVault.purgeWorkspace(
+          matterhornOrganizationWorkspaceId(organizationId),
+        );
+      } catch {
+        memoryDeletionFailures.push(organizationId);
+      }
+    }
+    const workspaceDeletion = await purgeMatterhornOrganizationWorkspaces(
+      config,
+      deletion.deletedOrganizationIds,
+    );
+    onWorkspacesChanged();
+
+    const response = jsonResponse({
+      ok: true,
+      deletedOrganizationCount: deletion.deletedOrganizationIds.length,
+      workspaceDataDeletionComplete:
+        workspaceDeletion.complete && memoryDeletionFailures.length === 0,
+      workspaceDataDeletionFailures:
+        workspaceDeletion.failedOrganizationIds.length + memoryDeletionFailures.length,
+    });
+    response.headers.append(
+      "Set-Cookie",
+      matterhornSessionCookie(request, "", { clear: true }),
+    );
+    response.headers.set("Cache-Control", "no-store");
     return response;
   });
 

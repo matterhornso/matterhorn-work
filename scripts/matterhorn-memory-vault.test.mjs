@@ -161,6 +161,31 @@ try {
     /cannot be saved|forbidden secret/i,
   )
 
+  await vault.captureRecord(record({
+    id: "mem_workspace_purge",
+    title: "Workspace deletion record",
+    tags: ["bittensor", "workspace:ws_account_deleted"],
+  }))
+  await vault.storeSuggestions([suggestion({
+    id: "suggestion_workspace_purge",
+    proposedRecord: record({
+      id: "mem_workspace_purge_suggestion",
+      title: "Workspace deletion suggestion",
+      tags: ["bittensor", "workspace:ws_account_deleted"],
+    }),
+  })])
+  const workspacePurge = await vault.purgeWorkspace("ws_account_deleted")
+  assert.equal(workspacePurge.deletedRecords, 1)
+  assert.equal(workspacePurge.deletedSuggestions, 1)
+  assert.equal(await vault.getRecord("mem_workspace_purge"), null)
+  assert.equal(await vault.getSuggestion("suggestion_workspace_purge"), null)
+  const purgedIndex = await readFile(path.join(rootDir, "memory-index.json"), "utf8")
+  const purgedInbox = await readFile(path.join(rootDir, "memory-suggestions.json"), "utf8")
+  const purgedLog = await readFile(path.join(rootDir, "memory-log.jsonl"), "utf8")
+  assert.doesNotMatch(purgedIndex, /mem_workspace_purge/)
+  assert.doesNotMatch(purgedInbox, /suggestion_workspace_purge/)
+  assert.doesNotMatch(purgedLog, /mem_workspace_purge|suggestion_workspace_purge/)
+
   const exported = await vault.exportBundle(exportDir)
   assert.equal(exported.version, MATTERHORN_MEMORY_VAULT_VERSION)
   assert.equal(exported.recordCount, 2)

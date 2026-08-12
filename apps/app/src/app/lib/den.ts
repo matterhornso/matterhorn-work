@@ -120,6 +120,18 @@ export type DenOrgSummary = {
   role: "owner" | "admin" | "member";
 };
 
+export type DenAccountSecuritySummary = {
+  sessionCount: number;
+  organizations: DenOrgSummary[];
+  sharedOrganizationsBlockingDeletion: DenOrgSummary[];
+};
+
+export type DenAccountDeletionResult = {
+  deletedOrganizationCount: number;
+  workspaceDataDeletionComplete: boolean;
+  workspaceDataDeletionFailures: number;
+};
+
 export type DenWorkerSummary = {
   workerId: string;
   workerName: string;
@@ -1784,6 +1796,52 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
         token,
         body: {},
       });
+    },
+
+    async getAccountSecurity(): Promise<DenAccountSecuritySummary> {
+      return requestJson<DenAccountSecuritySummary>(
+        baseUrls,
+        "/api/auth/account/security",
+        { method: "GET", token },
+      );
+    },
+
+    async revokeOtherSessions(): Promise<{ revokedSessions: number }> {
+      return requestJson<{ revokedSessions: number }>(
+        baseUrls,
+        "/api/auth/account/revoke-other-sessions",
+        { method: "POST", token, body: {} },
+      );
+    },
+
+    async changePassword(
+      currentPassword: string,
+      newPassword: string,
+    ): Promise<void> {
+      await requestJson<unknown>(
+        baseUrls,
+        "/api/auth/account/change-password",
+        {
+          method: "POST",
+          token,
+          body: { currentPassword, newPassword },
+        },
+      );
+    },
+
+    async deleteAccount(
+      password: string,
+      confirmationEmail: string,
+    ): Promise<DenAccountDeletionResult> {
+      return requestJson<DenAccountDeletionResult>(
+        baseUrls,
+        "/api/auth/account",
+        {
+          method: "DELETE",
+          token,
+          body: { password, confirmationEmail: confirmationEmail.trim() },
+        },
+      );
     },
 
     async getSession(): Promise<DenUser> {

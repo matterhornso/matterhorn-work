@@ -73,6 +73,17 @@ export type MatterhornAuthSession = {
   expiresAt: number;
 };
 
+export type MatterhornAuthSecuritySummary = {
+  sessionCount: number;
+  organizations: MatterhornAuthOrganization[];
+  sharedOrganizationsBlockingDeletion: MatterhornAuthOrganization[];
+};
+
+export type MatterhornAuthAccountDeletion = {
+  userId: string;
+  deletedOrganizationIds: string[];
+};
+
 export class MatterhornAuthError extends Error {
   constructor(
     readonly code:
@@ -82,6 +93,7 @@ export class MatterhornAuthError extends Error {
       | "invalid_name"
       | "invalid_password"
       | "invalid_organization"
+      | "account_owns_shared_organization"
       | "organization_slug_taken"
       | "signup_capacity_reached"
       | "unauthorized",
@@ -455,6 +467,123 @@ export class MatterhornAuthStore {
     );
   }
 
+  securitySummary(token: string): MatterhornAuthSecuritySummary {
+    const session = this.requireSession(token);
+    const organizations = this.listOrganizations(session.user.id);
+    const sharedOrganizationIds = new Set(
+      (statement(
+        this.db,
+        `SELECT owner.organization_id
+          FROM organization_members owner
+          JOIN organization_members other
+            ON other.organization_id = owner.organization_id
+            AND other.user_id <> owner.user_id
+          WHERE owner.user_id = ? AND owner.role = 'owner'
+          GROUP BY owner.organization_id`,
+      ).all(session.user.id) as Array<{ organization_id: string }>).map(
+        (row) => row.organization_id,
+      ),
+    );
+    const count = statement(
+      this.db,
+      "SELECT COUNT(*) AS count FROM sessions WHERE user_id = ? AND expires_at > ?",
+    ).get(session.user.id, Date.now()) as { count?: number } | undefined;
+    return {
+      sessionCount: count?.count ?? 0,
+      organizations,
+      sharedOrganizationsBlockingDeletion: organizations.filter(
+        (organization) =>
+          organization.role === "owner" &&
+          sharedOrganizationIds.has(organization.id),
+      ),
+    };
+  }
+
+  revokeOtherSessions(token: string): number {
+    const session = this.requireSession(token);
+    const result = statement(
+      this.db,
+      "DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?",
+    ).run(session.user.id, hashSessionToken(token));
+    return result.changes ?? 0;
+  }
+
+  changePassword(
+    token: string,
+    input: { currentPassword: string; newPassword: string },
+  ): void {
+    const session = this.requireSession(token);
+    validatePassword(input.newPassword);
+    const row = statement(
+      this.db,
+      `SELECT id, email, name, password_hash, password_salt
+        FROM users WHERE id = ? LIMIT 1`,
+    ).get(session.user.id) as UserRow | undefined;
+    if (!row || !this.passwordMatches(row, input.currentPassword)) {
+      throw new MatterhornAuthError(
+        "invalid_credentials",
+        "Current password is incorrect.",
+      );
+    }
+    if (this.passwordMatches(row, input.newPassword)) {
+      throw new MatterhornAuthError(
+        "invalid_password",
+        "Choose a new password that is different from the current password.",
+      );
+    }
+
+    const salt = randomBytes(16);
+    const passwordHash = hashPassword(input.newPassword, salt);
+    this.withTransaction(() => {
+      statement(
+        this.db,
+        "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?",
+      ).run(passwordHash.toString("hex"), salt.toString("hex"), session.user.id);
+      statement(this.db, "DELETE FROM sessions WHERE user_id = ?").run(
+        session.user.id,
+      );
+    });
+  }
+
+  deleteAccount(
+    token: string,
+    password: string,
+  ): MatterhornAuthAccountDeletion {
+    const session = this.requireSession(token);
+    const row = statement(
+      this.db,
+      `SELECT id, email, name, password_hash, password_salt
+        FROM users WHERE id = ? LIMIT 1`,
+    ).get(session.user.id) as UserRow | undefined;
+    if (!row || !this.passwordMatches(row, password)) {
+      throw new MatterhornAuthError(
+        "invalid_credentials",
+        "Password is incorrect.",
+      );
+    }
+
+    const summary = this.securitySummary(token);
+    if (summary.sharedOrganizationsBlockingDeletion.length > 0) {
+      throw new MatterhornAuthError(
+        "account_owns_shared_organization",
+        "Transfer ownership or remove the other members from each owned workspace before deleting this account.",
+      );
+    }
+    const deletedOrganizationIds = summary.organizations
+      .filter((organization) => organization.role === "owner")
+      .map((organization) => organization.id);
+
+    this.withTransaction(() => {
+      for (const organizationId of deletedOrganizationIds) {
+        statement(this.db, "DELETE FROM organizations WHERE id = ?").run(
+          organizationId,
+        );
+      }
+      statement(this.db, "DELETE FROM users WHERE id = ?").run(session.user.id);
+    });
+    return { userId: session.user.id, deletedOrganizationIds };
+  }
+
   listOrganizations(userId: string): MatterhornAuthOrganization[] {
     return statement(
       this.db,
@@ -555,6 +684,12 @@ export class MatterhornAuthStore {
       );
     }
     return session;
+  }
+
+  private passwordMatches(row: UserRow, password: string): boolean {
+    const actual = hashPassword(password, Buffer.from(row.password_salt, "hex"));
+    const expected = Buffer.from(row.password_hash, "hex");
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
   }
 
   private createSessionForUser(

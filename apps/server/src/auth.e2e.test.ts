@@ -25,6 +25,7 @@ const roots: string[] = [];
 const stops: Array<() => void | Promise<void>> = [];
 const priorAuthDb = process.env.MATTERHORN_AUTH_DB;
 const priorDataDir = process.env.MATTERHORN_WORK_DATA_DIR;
+const priorMemoryRoot = process.env.MATTERHORN_WORK_MEMORY_ROOT;
 const priorSignupsEnabled = process.env.MATTERHORN_SIGNUPS_ENABLED;
 const priorSignupCapacity = process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS;
 
@@ -70,6 +71,7 @@ async function boot(root?: string) {
     root ?? mkdtempSync(join(tmpdir(), "matterhorn-auth-e2e-"));
   if (!root) roots.push(resolvedRoot);
   process.env.MATTERHORN_WORK_DATA_DIR = join(resolvedRoot, "data");
+  process.env.MATTERHORN_WORK_MEMORY_ROOT = join(resolvedRoot, "memory");
   delete process.env.MATTERHORN_AUTH_DB;
   const server = await startServer(
     config(await getFreePort(), resolvedRoot),
@@ -96,6 +98,7 @@ async function jsonRequest(
     body?: Record<string, unknown>;
     cookie?: string;
     bearer?: string;
+    method?: "GET" | "POST" | "DELETE";
     forwardedProto?: "http" | "https";
     origin?: string;
   } = {},
@@ -109,7 +112,7 @@ async function jsonRequest(
   }
   if (options.origin) headers.set("Origin", options.origin);
   const response = await fetch(`${base}${path}`, {
-    method: options.body ? "POST" : "GET",
+    method: options.method ?? (options.body ? "POST" : "GET"),
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
@@ -141,6 +144,8 @@ afterEach(async () => {
   else process.env.MATTERHORN_AUTH_DB = priorAuthDb;
   if (priorDataDir === undefined) delete process.env.MATTERHORN_WORK_DATA_DIR;
   else process.env.MATTERHORN_WORK_DATA_DIR = priorDataDir;
+  if (priorMemoryRoot === undefined) delete process.env.MATTERHORN_WORK_MEMORY_ROOT;
+  else process.env.MATTERHORN_WORK_MEMORY_ROOT = priorMemoryRoot;
   if (priorSignupsEnabled === undefined) delete process.env.MATTERHORN_SIGNUPS_ENABLED;
   else process.env.MATTERHORN_SIGNUPS_ENABLED = priorSignupsEnabled;
   if (priorSignupCapacity === undefined) delete process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS;
@@ -260,6 +265,184 @@ describe("public account authentication", () => {
     );
     expect(signedBackIn.response.status).toBe(200);
     expect(signedBackIn.payload.user.email).toBe("new.user@example.com");
+  });
+
+  test("manages sessions, rotates passwords, and deletes owned account data", async () => {
+    const app = await boot();
+    const email = "security-owner@example.com";
+    const newPassword = "matterhorn-new-secure-password";
+    const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email, password: PASSWORD, name: "Security Owner" },
+    });
+    const firstCookie = sessionCookie(signup.response);
+    const secondSignIn = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: PASSWORD },
+    });
+    const secondCookie = sessionCookie(secondSignIn.response);
+
+    const security = await jsonRequest(app.base, "/api/auth/account/security", {
+      cookie: secondCookie,
+    });
+    expect(security.response.status).toBe(200);
+    expect(security.payload.sessionCount).toBe(2);
+    expect(security.payload.organizations).toHaveLength(1);
+    expect(security.payload.sharedOrganizationsBlockingDeletion).toEqual([]);
+    expect(security.response.headers.get("cache-control")).toBe("no-store");
+
+    const revoked = await jsonRequest(
+      app.base,
+      "/api/auth/account/revoke-other-sessions",
+      { cookie: secondCookie, body: {} },
+    );
+    expect(revoked.response.status).toBe(200);
+    expect(revoked.payload.revokedSessions).toBe(1);
+    expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: firstCookie })).response.status).toBe(401);
+    expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: secondCookie })).response.status).toBe(200);
+
+    const wrongCurrentPassword = await jsonRequest(
+      app.base,
+      "/api/auth/account/change-password",
+      {
+        cookie: secondCookie,
+        body: { currentPassword: `${PASSWORD}-wrong`, newPassword },
+      },
+    );
+    expect(wrongCurrentPassword.response.status).toBe(401);
+    expect(wrongCurrentPassword.payload.code).toBe("invalid_credentials");
+
+    const changed = await jsonRequest(
+      app.base,
+      "/api/auth/account/change-password",
+      {
+        cookie: secondCookie,
+        body: { currentPassword: PASSWORD, newPassword },
+      },
+    );
+    expect(changed.response.status).toBe(200);
+    expect(changed.payload.signedOutEverywhere).toBe(true);
+    expect(changed.response.headers.get("set-cookie") ?? "").toContain("Max-Age=0");
+    expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: secondCookie })).response.status).toBe(401);
+
+    const oldPassword = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: PASSWORD },
+    });
+    expect(oldPassword.response.status).toBe(401);
+    const signedBackIn = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: newPassword },
+    });
+    expect(signedBackIn.response.status).toBe(200);
+    const deletionCookie = sessionCookie(signedBackIn.response);
+
+    const workspaces = await jsonRequest(app.base, "/workspaces", {
+      cookie: deletionCookie,
+    });
+    expect(workspaces.response.status).toBe(200);
+    const workspacePath = workspaces.payload.items[0].path as string;
+    const workspaceId = workspaces.payload.items[0].id as string;
+    expect(statSync(workspacePath).isDirectory()).toBe(true);
+    const capturedMemory = await jsonRequest(app.base, "/api/memory/capture", {
+      cookie: deletionCookie,
+      body: {
+        record: {
+          id: "mem_account_deletion",
+          kind: "user_preference",
+          scope: "workspace",
+          title: "Account deletion fixture",
+          summary: "This private account memory must be permanently removed.",
+          body: { responseStyle: "private-deletion-fixture" },
+          tags: ["account-deletion"],
+          links: [],
+          provenance: {
+            source: "user_confirmed",
+            capturedAt: "2026-08-12T00:00:00.000Z",
+            capturedBy: "user",
+            confidence: 1,
+            reasonRemembered: "Account deletion acceptance fixture.",
+          },
+          sensitivity: "private",
+          createdAt: "2026-08-12T00:00:00.000Z",
+          updatedAt: "2026-08-12T00:00:00.000Z",
+          canUseInChat: true,
+          canExport: false,
+          canDelete: true,
+        },
+      },
+    });
+    expect(capturedMemory.response.status).toBe(200);
+    expect(capturedMemory.payload.record.tags).toContain(`workspace:${workspaceId}`);
+
+    const invalidConfirmation = await jsonRequest(app.base, "/api/auth/account", {
+      method: "DELETE",
+      cookie: deletionCookie,
+      body: { password: newPassword, confirmationEmail: "wrong@example.com" },
+    });
+    expect(invalidConfirmation.response.status).toBe(400);
+    expect(invalidConfirmation.payload.code).toBe("invalid_confirmation");
+
+    const deleted = await jsonRequest(app.base, "/api/auth/account", {
+      method: "DELETE",
+      cookie: deletionCookie,
+      body: { password: newPassword, confirmationEmail: email.toUpperCase() },
+    });
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload.deletedOrganizationCount).toBe(1);
+    expect(deleted.payload.workspaceDataDeletionComplete).toBe(true);
+    expect(deleted.payload.workspaceDataDeletionFailures).toBe(0);
+    expect(deleted.response.headers.get("set-cookie") ?? "").toContain("Max-Age=0");
+    expect(() => statSync(workspacePath)).toThrow();
+    const memoryIndex = readFileSync(
+      join(app.root, "memory", "memory-index.json"),
+      "utf8",
+    );
+    expect(memoryIndex).not.toContain("mem_account_deletion");
+    expect(memoryIndex).not.toContain("private-deletion-fixture");
+    expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: deletionCookie })).response.status).toBe(401);
+    expect((await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: newPassword },
+    })).response.status).toBe(401);
+  });
+
+  test("blocks deletion while the account owns a workspace with other members", async () => {
+    const app = await boot();
+    const owner = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "shared-owner@example.com", password: PASSWORD },
+    });
+    const member = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "shared-member@example.com", password: PASSWORD },
+    });
+    const ownerCookie = sessionCookie(owner.response);
+    const db = new Database(app.authDb);
+    try {
+      db.query(
+        `INSERT INTO organization_members (organization_id, user_id, role, created_at)
+          VALUES (?, ?, 'member', ?)`,
+      ).run(owner.payload.organization.id, member.payload.user.id, Date.now());
+    } finally {
+      db.close();
+    }
+
+    const security = await jsonRequest(app.base, "/api/auth/account/security", {
+      cookie: ownerCookie,
+    });
+    expect(security.response.status).toBe(200);
+    expect(security.payload.sharedOrganizationsBlockingDeletion).toEqual([
+      expect.objectContaining({
+        id: owner.payload.organization.id,
+        role: "owner",
+      }),
+    ]);
+
+    const blocked = await jsonRequest(app.base, "/api/auth/account", {
+      method: "DELETE",
+      cookie: ownerCookie,
+      body: {
+        password: PASSWORD,
+        confirmationEmail: "shared-owner@example.com",
+      },
+    });
+    expect(blocked.response.status).toBe(409);
+    expect(blocked.payload.code).toBe("account_owns_shared_organization");
+    expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: ownerCookie })).response.status).toBe(200);
   });
 
   test("serves the default desktop policy only to signed-in accounts", async () => {
