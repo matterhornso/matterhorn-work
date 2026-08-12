@@ -7,7 +7,11 @@ import {
   type FormEvent,
 } from "react";
 
-import { createDenClient, DenApiError } from "../../../app/lib/den";
+import {
+  createDenClient,
+  DenApiError,
+  type DenPublicAuthConfig,
+} from "../../../app/lib/den";
 import {
   checkPublicCloudSession,
   type PublicCloudConfig,
@@ -57,6 +61,8 @@ export function PublicWebSigninPage({
   const [accountServiceAvailable, setAccountServiceAvailable] = useState<
     boolean | null
   >(null);
+  const [publicAuthConfig, setPublicAuthConfig] =
+    useState<DenPublicAuthConfig | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -75,7 +81,15 @@ export function PublicWebSigninPage({
     try {
       const signedIn = await checkPublicCloudSession(config, signal);
       setAccountServiceAvailable(true);
-      if (signedIn) onSignedIn();
+      if (signedIn) {
+        onSignedIn();
+        return;
+      }
+      try {
+        setPublicAuthConfig(await client.getPublicAuthConfig());
+      } catch (error) {
+        if (!(error instanceof DenApiError) || error.status !== 404) throw error;
+      }
     } catch {
       if (signal?.aborted) return;
       setAccountServiceAvailable(false);
@@ -83,7 +97,7 @@ export function PublicWebSigninPage({
     } finally {
       if (!signal?.aborted) setSessionBusy(false);
     }
-  }, [config, onSignedIn]);
+  }, [client, config, onSignedIn]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -102,6 +116,14 @@ export function PublicWebSigninPage({
       `${url.pathname}${url.search}${url.hash}`,
     );
   }, [mode, resetToken]);
+
+  useEffect(() => {
+    if (mode !== "sign-up" || publicAuthConfig?.signupsAvailable !== false) return;
+    setMode("sign-in");
+    setStatusMessage(
+      "New account creation is temporarily paused. Existing users can still sign in.",
+    );
+  }, [mode, publicAuthConfig?.signupsAvailable]);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -243,6 +265,9 @@ export function PublicWebSigninPage({
   const signingUp = mode === "sign-up";
   const primaryMode = mode === "sign-in" || mode === "sign-up";
   const accountUnavailable = accountServiceAvailable === false;
+  const signupsPaused = publicAuthConfig?.signupsAvailable === false;
+  const passwordResetUnavailable =
+    publicAuthConfig?.passwordResetAvailable === false;
   const accessDisabled = sessionBusy || submitBusy || accountUnavailable;
   const formTitle =
     mode === "verify-email"
@@ -286,7 +311,7 @@ export function PublicWebSigninPage({
               aria-pressed={signingUp}
               className={signingUp ? "is-active" : ""}
               onClick={() => selectMode("sign-up")}
-              disabled={sessionBusy || accountUnavailable}
+              disabled={sessionBusy || accountUnavailable || signupsPaused}
             >
               Create account
             </button>
@@ -428,7 +453,12 @@ export function PublicWebSigninPage({
 
           <div className="public-auth-secondary-actions">
             {mode === "sign-in" ? (
-              <button type="button" onClick={() => selectMode("request-reset")}>
+              <button
+                type="button"
+                onClick={() => selectMode("request-reset")}
+                disabled={passwordResetUnavailable}
+                title={passwordResetUnavailable ? "Password recovery is temporarily unavailable." : undefined}
+              >
                 Forgot password?
               </button>
             ) : null}
@@ -450,7 +480,11 @@ export function PublicWebSigninPage({
             aria-live="polite"
           >
             <span>
-              {authError ?? statusMessage ?? "Your workspace stays private to your account."}
+              {authError ??
+                statusMessage ??
+                (signupsPaused
+                  ? "New accounts are paused. Existing users can sign in."
+                  : "Your workspace stays private to your account.")}
             </span>
             {accountUnavailable && !sessionBusy ? (
               <button type="button" onClick={() => void refreshSession()}>

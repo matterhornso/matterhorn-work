@@ -2185,6 +2185,53 @@ function requireMatterhornEmailDelivery(config: EmailSendConfig): void {
   }
 }
 
+function matterhornPublicAuthConfig() {
+  const production = process.env.NODE_ENV === "production";
+  const signupFlag = process.env.MATTERHORN_SIGNUPS_ENABLED?.trim().toLowerCase() ?? "";
+  const signupsExplicitlyEnabled = /^(1|true|yes|on)$/.test(signupFlag);
+  const signupsAllowedByFlag = production
+    ? signupsExplicitlyEnabled
+    : !signupFlag || signupsExplicitlyEnabled;
+  const emailVerificationRequired = enabledEnvironmentFlag(
+    "MATTERHORN_EMAIL_VERIFICATION_REQUIRED",
+  );
+  const legalAcceptanceRequired = enabledEnvironmentFlag(
+    "MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED",
+  );
+  const emailDeliveryAvailable = matterhornEmailDeliveryConfigured(
+    matterhornEmailConfig(),
+  );
+  const termsVersion = process.env.MATTERHORN_TERMS_VERSION?.trim() ?? "";
+  const privacyVersion = process.env.MATTERHORN_PRIVACY_VERSION?.trim() ?? "";
+  const legalVersionsReady =
+    Boolean(termsVersion && privacyVersion) &&
+    termsVersion.length <= 64 &&
+    privacyVersion.length <= 64;
+  const productionSafetyReady =
+    !production ||
+    (emailVerificationRequired &&
+      legalAcceptanceRequired &&
+      process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT?.trim().toLowerCase() === "hard");
+  const signupsAvailable =
+    signupsAllowedByFlag &&
+    productionSafetyReady &&
+    (!emailVerificationRequired || emailDeliveryAvailable) &&
+    (!legalAcceptanceRequired || legalVersionsReady);
+
+  return {
+    signupsAvailable,
+    signupStatus: signupsAvailable
+      ? "open"
+      : signupsAllowedByFlag
+        ? "setup_required"
+        : "paused",
+    emailVerificationRequired,
+    passwordResetAvailable: emailDeliveryAvailable,
+    legalAcceptanceRequired,
+    minimumPasswordLength: 12,
+  } as const;
+}
+
 async function sendMatterhornAccountEmail(
   input: Parameters<typeof sendEmail>[0],
 ): Promise<void> {
@@ -6741,6 +6788,12 @@ function createRoutes(
   const recordWorkspaceFileEvent = (workspaceId: string, input: { type: "write" | "delete" | "rename" | "mkdir"; path: string; toPath?: string; revision?: string }) => {
     return fileSessions.recordWorkspaceEvent({ workspaceId, ...input });
   };
+
+  addRoute(routes, "GET", "/api/auth/config", "none", async () => {
+    const response = jsonResponse(matterhornPublicAuthConfig());
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
 
   addRoute(routes, "POST", "/api/auth/sign-up/email", "none", async (ctx) => {
     const { request } = ctx;

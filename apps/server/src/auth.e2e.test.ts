@@ -326,6 +326,17 @@ describe("public account authentication", () => {
     const app = await boot();
     process.env.NODE_ENV = "production";
     delete process.env.MATTERHORN_SIGNUPS_ENABLED;
+    const pausedConfig = await jsonRequest(app.base, "/api/auth/config");
+    expect(pausedConfig.response.status).toBe(200);
+    expect(pausedConfig.payload).toEqual({
+      signupsAvailable: false,
+      signupStatus: "paused",
+      emailVerificationRequired: false,
+      passwordResetAvailable: false,
+      legalAcceptanceRequired: false,
+      minimumPasswordLength: 12,
+    });
+    expect(pausedConfig.response.headers.get("cache-control")).toBe("no-store");
     const implicit = await jsonRequest(app.base, "/api/auth/sign-up/email", {
       body: { email: "implicit@example.com", password: PASSWORD },
     });
@@ -336,6 +347,9 @@ describe("public account authentication", () => {
     process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
     process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "false";
     process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT = "off";
+    const unsafeConfig = await jsonRequest(app.base, "/api/auth/config");
+    expect(unsafeConfig.payload.signupStatus).toBe("setup_required");
+    expect(unsafeConfig.payload.signupsAvailable).toBe(false);
     const unsafe = await jsonRequest(app.base, "/api/auth/sign-up/email", {
       body: { email: "unsafe@example.com", password: PASSWORD },
     });

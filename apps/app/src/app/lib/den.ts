@@ -132,6 +132,15 @@ export type DenAccountDeletionResult = {
   workspaceDataDeletionFailures: number;
 };
 
+export type DenPublicAuthConfig = {
+  signupsAvailable: boolean;
+  signupStatus: "open" | "paused" | "setup_required";
+  emailVerificationRequired: boolean;
+  passwordResetAvailable: boolean;
+  legalAcceptanceRequired: boolean;
+  minimumPasswordLength: number;
+};
+
 export type DenWorkerSummary = {
   workerId: string;
   workerName: string;
@@ -1743,6 +1752,12 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
   const token = options.token?.trim() ?? null;
 
   return {
+    async getPublicAuthConfig(): Promise<DenPublicAuthConfig> {
+      return requestJson<DenPublicAuthConfig>(baseUrls, "/api/auth/config", {
+        method: "GET",
+      });
+    },
+
     async setActiveOrganization(input: { organizationId?: string | null; organizationSlug?: string | null }): Promise<void> {
       await ensureActiveOrganization(baseUrls, token, input);
     },
