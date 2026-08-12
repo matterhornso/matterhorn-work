@@ -251,6 +251,9 @@ function verifyStoredPassword(
     : Buffer.alloc(64);
   const actual = current
     ? deriveCurrentPasswordHash(password, salt)
+    // This branch only verifies pre-v2 hashes. A successful sign-in rewrites
+    // the row with the current OWASP-aligned profile before issuing a session.
+    // lgtm[js/insufficient-password-hash]
     : scryptSync(password, salt, 64);
   return {
     matches: timingSafeEqual(actual, expected),
