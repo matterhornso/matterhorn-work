@@ -278,7 +278,10 @@ describe("public account authentication", () => {
     expect(resetDelivery.payload.template).toBe("passwordReset");
     const resetLink = new URL(String(resetDelivery.payload.props.resetLink));
     expect(resetLink.origin).toBe(app.base);
-    const resetToken = resetLink.searchParams.get("token") ?? "";
+    expect(resetLink.search).toBe("");
+    const resetFragment = new URLSearchParams(resetLink.hash.slice(1));
+    expect(resetFragment.get("mode")).toBe("reset-password");
+    const resetToken = resetFragment.get("token") ?? "";
     expect(resetToken.length).toBeGreaterThan(30);
 
     const unknownReset = await jsonRequest(app.base, "/api/auth/password-reset/request", {
@@ -1151,6 +1154,40 @@ describe("public account authentication", () => {
       },
     );
     expect(unaffected.response.status).toBe(401);
+  });
+
+  test("does not let a successful account clear the source-IP credential budget", async () => {
+    const app = await boot();
+    const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "limiter-reset@example.com", password: PASSWORD },
+    });
+    expect(signup.response.status).toBe(200);
+
+    for (let cycle = 0; cycle < 5; cycle += 1) {
+      for (let attempt = 0; attempt < 9; attempt += 1) {
+        const rejected = await jsonRequest(
+          app.base,
+          "/api/auth/sign-in/email",
+          {
+            body: {
+              email: `invalid-${cycle}-${attempt}`,
+              password: `${PASSWORD}-wrong`,
+            },
+          },
+        );
+        expect(rejected.response.status).toBe(400);
+      }
+      const valid = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+        body: { email: "limiter-reset@example.com", password: PASSWORD },
+      });
+      expect(valid.response.status).toBe(200);
+    }
+
+    const limited = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email: "final-invalid", password: `${PASSWORD}-wrong` },
+    });
+    expect(limited.response.status).toBe(429);
+    expect(limited.payload.code).toBe("rate_limited");
   });
 
   test("accepts bearer sessions and enforces configured browser origins", async () => {

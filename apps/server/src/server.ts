@@ -347,7 +347,10 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { isIP } from "node:net";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { ApprovalRequest, Capabilities, ServerConfig, WorkspaceInfo, Actor, ReloadReason, ReloadTrigger, TokenScope, MatterhornTaskEventType, RequestRateLimitConfig, RequestRateLimitStore } from "./types.js";
-import { createInMemoryRequestRateLimitStore } from "./request-rate-limit-store.js";
+import {
+  createDefaultRequestRateLimitStore,
+  createInMemoryRequestRateLimitStore,
+} from "./request-rate-limit-store.js";
 import { ApprovalService } from "./approvals.js";
 import { addPlugin, listPlugins, normalizePluginSpec, removePlugin } from "./plugins.js";
 import { sanitizePortableOpencodeConfig } from "./portable-opencode.js";
@@ -1007,7 +1010,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const operationalMetrics = new OperationalMetrics();
   const modelUsageStore = new MatterhornModelUsageStore();
   const ownsRequestRateLimitStore = !config.requestRateLimitStore;
-  const requestRateLimitStore = config.requestRateLimitStore ?? createInMemoryRequestRateLimitStore();
+  const requestRateLimitStore = config.requestRateLimitStore ?? createDefaultRequestRateLimitStore();
   const routes = createRoutes(
     config,
     approvals,
@@ -6934,7 +6937,6 @@ function createRoutes(
       authStore.verifyEmail(email, stringBodyField(body, "code")),
     );
     await authAttemptLimiter.reset(attemptKey);
-    await authAttemptLimiter.reset(peerAttemptKey);
     return matterhornAuthResponse(ctx.request, {
       user: session.user,
       organization: matterhornActiveOrganization(authStore, session),
@@ -7008,9 +7010,10 @@ function createRoutes(
         }
         appUrl.pathname = "/";
         appUrl.search = "";
-        appUrl.hash = "";
-        appUrl.searchParams.set("mode", "reset-password");
-        appUrl.searchParams.set("token", challenge.resetToken);
+        appUrl.hash = new URLSearchParams({
+          mode: "reset-password",
+          token: challenge.resetToken,
+        }).toString();
         await sendMatterhornAccountEmail({
           to: challenge.email,
           template: "passwordReset",
@@ -7077,7 +7080,6 @@ function createRoutes(
       ),
     );
     await authAttemptLimiter.reset(attemptKey);
-    await authAttemptLimiter.reset(peerAttemptKey);
     return matterhornAuthResponse(request, {
       user: session.user,
       organization: matterhornActiveOrganization(authStore, session),

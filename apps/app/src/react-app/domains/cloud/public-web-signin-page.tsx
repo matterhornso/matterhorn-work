@@ -40,17 +40,24 @@ const AUTH_CONFIG_FAIL_CLOSED: DenPublicAuthConfig = {
   minimumPasswordLength: 12,
 };
 
+function authLocationValue(name: string): string | null {
+  if (typeof window === "undefined") return null;
+  const url = new URL(window.location.href);
+  const queryValue = url.searchParams.get(name)?.trim();
+  if (queryValue) return queryValue;
+  const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+  return new URLSearchParams(fragment).get(name)?.trim() || null;
+}
+
 function initialAuthMode(): AuthMode {
-  if (typeof window === "undefined") return "sign-in";
-  const mode = new URLSearchParams(window.location.search).get("mode");
+  const mode = authLocationValue("mode");
   if (mode === "sign-up") return "sign-up";
   if (mode === "reset-password") return "reset-password";
   return "sign-in";
 }
 
 function initialResetToken(): string {
-  if (typeof window === "undefined") return "";
-  return new URLSearchParams(window.location.search).get("token")?.trim() ?? "";
+  return authLocationValue("token") ?? "";
 }
 
 export function PublicWebSigninPage({
@@ -119,8 +126,16 @@ export function PublicWebSigninPage({
   useEffect(() => {
     if (mode !== "reset-password" || !resetToken) return;
     const url = new URL(window.location.href);
-    if (!url.searchParams.has("token")) return;
     url.searchParams.delete("token");
+    if (url.searchParams.get("mode") === "reset-password") {
+      url.searchParams.delete("mode");
+    }
+    const fragment = new URLSearchParams(
+      url.hash.startsWith("#") ? url.hash.slice(1) : url.hash,
+    );
+    fragment.delete("token");
+    if (fragment.get("mode") === "reset-password") fragment.delete("mode");
+    url.hash = fragment.toString();
     window.history.replaceState(
       {},
       "",

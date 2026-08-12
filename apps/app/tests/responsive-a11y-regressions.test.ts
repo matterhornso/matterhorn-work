@@ -124,6 +124,8 @@ describe("responsive accessibility regressions", () => {
     expect(signin).toContain("Forgot password?");
     expect(signin).toContain("Passwords do not match.");
     expect(signin).toContain('url.searchParams.delete("token")');
+    expect(signin).toContain('fragment.delete("token")');
+    expect(signin).toContain('authLocationValue("token")');
     expect(signin).toContain("window.history.replaceState");
     expect(signin).toContain('name="legalAccepted"');
     expect(signin).toContain('<a href="/terms"');

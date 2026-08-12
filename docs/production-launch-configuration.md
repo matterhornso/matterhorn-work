@@ -42,6 +42,11 @@ user failure.
   provider dispatch; completed assistant usage reconciles from the server-side
   engine record. An unreconciled reservation stays charged so a provider or
   callback failure cannot create an unlimited inference path.
+- Production persists HTTP and account-attempt budgets in
+  `<MATTERHORN_WORK_DATA_DIR>/auth/rate-limits.db`. This keeps throttles intact
+  across restarts and makes increments atomic across processes sharing the
+  persistent volume. `MATTERHORN_WORK_RATE_LIMIT_DB` is an explicit path
+  override, not a reason to place the database on ephemeral storage.
 - Keep provider privacy enforcement `verified-only`. Do not enable hosted
   prompts until the exact inference service has written no-training and
   prompt-retention terms. A policy for a related provider product is not proof
