@@ -130,6 +130,8 @@ describe("responsive accessibility regressions", () => {
     expect(signin).toContain('<a href="/privacy"');
     expect(signin).toContain("client.signUpEmail(email, password, legalAccepted)");
     expect(signin).toContain("client.getPublicAuthConfig()");
+    expect(signin).toContain("AUTH_CONFIG_FAIL_CLOSED");
+    expect(signin).toContain("never infer that signup or recovery is safe");
     expect(signin).toContain("New accounts are paused. Existing users can sign in.");
     expect(den).toContain('"/api/auth/config"');
     expect(den).toContain('"/api/auth/verify-email"');

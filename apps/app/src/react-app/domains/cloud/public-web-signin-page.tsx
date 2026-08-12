@@ -31,6 +31,15 @@ type AuthMode =
   | "request-reset"
   | "reset-password";
 
+const AUTH_CONFIG_FAIL_CLOSED: DenPublicAuthConfig = {
+  signupsAvailable: false,
+  signupStatus: "setup_required",
+  emailVerificationRequired: false,
+  passwordResetAvailable: false,
+  legalAcceptanceRequired: false,
+  minimumPasswordLength: 12,
+};
+
 function initialAuthMode(): AuthMode {
   if (typeof window === "undefined") return "sign-in";
   const mode = new URLSearchParams(window.location.search).get("mode");
@@ -87,8 +96,10 @@ export function PublicWebSigninPage({
       }
       try {
         setPublicAuthConfig(await client.getPublicAuthConfig());
-      } catch (error) {
-        if (!(error instanceof DenApiError) || error.status !== 404) throw error;
+      } catch {
+        // Keep established accounts usable during a rolling deployment, but
+        // never infer that signup or recovery is safe from a missing config.
+        setPublicAuthConfig(AUTH_CONFIG_FAIL_CLOSED);
       }
     } catch {
       if (signal?.aborted) return;
@@ -121,9 +132,11 @@ export function PublicWebSigninPage({
     if (mode !== "sign-up" || publicAuthConfig?.signupsAvailable !== false) return;
     setMode("sign-in");
     setStatusMessage(
-      "New account creation is temporarily paused. Existing users can still sign in.",
+      publicAuthConfig.signupStatus === "setup_required"
+        ? "New account creation is waiting for secure deployment setup. Existing users can still sign in."
+        : "New account creation is temporarily paused. Existing users can still sign in.",
     );
-  }, [mode, publicAuthConfig?.signupsAvailable]);
+  }, [mode, publicAuthConfig]);
 
   useEffect(() => {
     const viewport = window.visualViewport;
