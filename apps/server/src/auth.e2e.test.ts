@@ -28,6 +28,15 @@ const priorDataDir = process.env.MATTERHORN_WORK_DATA_DIR;
 const priorMemoryRoot = process.env.MATTERHORN_WORK_MEMORY_ROOT;
 const priorSignupsEnabled = process.env.MATTERHORN_SIGNUPS_ENABLED;
 const priorSignupCapacity = process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS;
+const priorEmailVerificationRequired = process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED;
+const priorEmailFrom = process.env.MATTERHORN_EMAIL_FROM;
+const priorEmailDevMode = process.env.MATTERHORN_EMAIL_DEV_MODE;
+const priorAppUrl = process.env.MATTERHORN_APP_URL;
+const priorResendApiKey = process.env.MATTERHORN_RESEND_API_KEY;
+const priorSmtpHost = process.env.MATTERHORN_SMTP_HOST;
+const priorLegalAcceptanceRequired = process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED;
+const priorTermsVersion = process.env.MATTERHORN_TERMS_VERSION;
+const priorPrivacyVersion = process.env.MATTERHORN_PRIVACY_VERSION;
 
 function config(port: number, root: string): ServerConfig {
   return {
@@ -135,6 +144,28 @@ function cookieToken(cookie: string): string {
   return decodeURIComponent(cookie.slice("mh_session=".length));
 }
 
+async function captureDevEmail<T>(callback: () => Promise<T>): Promise<{
+  result: T;
+  payload: { template: string; props: Record<string, unknown> };
+}> {
+  const original = console.info;
+  const lines: string[] = [];
+  console.info = (...values: unknown[]) => {
+    const line = values.map(String).join(" ");
+    if (line.startsWith("[email] dev email payload")) lines.push(line);
+    else original(...values);
+  };
+  try {
+    const result = await callback();
+    const line = lines.at(-1);
+    if (!line) throw new Error("Expected a development email payload.");
+    const start = line.indexOf("{");
+    return { result, payload: JSON.parse(line.slice(start)) };
+  } finally {
+    console.info = original;
+  }
+}
+
 afterEach(async () => {
   while (stops.length) await stops.pop()?.();
   while (roots.length) {
@@ -150,9 +181,141 @@ afterEach(async () => {
   else process.env.MATTERHORN_SIGNUPS_ENABLED = priorSignupsEnabled;
   if (priorSignupCapacity === undefined) delete process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS;
   else process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS = priorSignupCapacity;
+  if (priorEmailVerificationRequired === undefined) delete process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED;
+  else process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = priorEmailVerificationRequired;
+  if (priorEmailFrom === undefined) delete process.env.MATTERHORN_EMAIL_FROM;
+  else process.env.MATTERHORN_EMAIL_FROM = priorEmailFrom;
+  if (priorEmailDevMode === undefined) delete process.env.MATTERHORN_EMAIL_DEV_MODE;
+  else process.env.MATTERHORN_EMAIL_DEV_MODE = priorEmailDevMode;
+  if (priorAppUrl === undefined) delete process.env.MATTERHORN_APP_URL;
+  else process.env.MATTERHORN_APP_URL = priorAppUrl;
+  if (priorResendApiKey === undefined) delete process.env.MATTERHORN_RESEND_API_KEY;
+  else process.env.MATTERHORN_RESEND_API_KEY = priorResendApiKey;
+  if (priorSmtpHost === undefined) delete process.env.MATTERHORN_SMTP_HOST;
+  else process.env.MATTERHORN_SMTP_HOST = priorSmtpHost;
+  if (priorLegalAcceptanceRequired === undefined) delete process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED;
+  else process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = priorLegalAcceptanceRequired;
+  if (priorTermsVersion === undefined) delete process.env.MATTERHORN_TERMS_VERSION;
+  else process.env.MATTERHORN_TERMS_VERSION = priorTermsVersion;
+  if (priorPrivacyVersion === undefined) delete process.env.MATTERHORN_PRIVACY_VERSION;
+  else process.env.MATTERHORN_PRIVACY_VERSION = priorPrivacyVersion;
 });
 
 describe("public account authentication", () => {
+  test("verifies email and completes enumeration-safe password recovery", async () => {
+    const app = await boot();
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "true";
+    process.env.MATTERHORN_EMAIL_FROM = "Matterhorn Desks <accounts@example.com>";
+    process.env.MATTERHORN_EMAIL_DEV_MODE = "true";
+    process.env.MATTERHORN_APP_URL = app.base;
+    process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "true";
+    process.env.MATTERHORN_TERMS_VERSION = "terms-2026-08";
+    process.env.MATTERHORN_PRIVACY_VERSION = "privacy-2026-08";
+
+    const missingAcceptance = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "verify@example.com", password: PASSWORD },
+    });
+    expect(missingAcceptance.response.status).toBe(400);
+    expect(missingAcceptance.payload.code).toBe("legal_acceptance_required");
+
+    const verificationDelivery = await captureDevEmail(() =>
+      jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: {
+          email: "verify@example.com",
+          password: PASSWORD,
+          legalAccepted: true,
+        },
+      }),
+    );
+    expect(verificationDelivery.result.response.status).toBe(202);
+    expect(verificationDelivery.result.payload.verificationRequired).toBe(true);
+    expect(verificationDelivery.result.response.headers.get("set-cookie")).toBeNull();
+    expect(verificationDelivery.payload.template).toBe("verification");
+    const code = String(verificationDelivery.payload.props.verificationCode);
+    expect(code).toMatch(/^\d{6}$/);
+    const acceptanceDb = new Database(app.authDb, { readonly: true });
+    expect(
+      acceptanceDb.query(
+        "SELECT terms_version, privacy_version FROM account_legal_acceptances",
+      ).get(),
+    ).toEqual({
+      terms_version: "terms-2026-08",
+      privacy_version: "privacy-2026-08",
+    });
+    acceptanceDb.close();
+
+    const blockedSignIn = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email: "verify@example.com", password: PASSWORD },
+    });
+    expect(blockedSignIn.response.status).toBe(403);
+    expect(blockedSignIn.payload.code).toBe("email_unverified");
+
+    const verified = await jsonRequest(app.base, "/api/auth/verify-email", {
+      body: { email: "verify@example.com", code },
+    });
+    expect(verified.response.status).toBe(200);
+    expect(verified.payload.user.emailVerified).toBe(true);
+    const cookie = sessionCookie(verified.response);
+
+    const reusedCode = await jsonRequest(app.base, "/api/auth/verify-email", {
+      body: { email: "verify@example.com", code },
+    });
+    expect(reusedCode.response.status).toBe(400);
+    expect(reusedCode.payload.code).toBe("invalid_verification_code");
+
+    const resetDelivery = await captureDevEmail(() =>
+      jsonRequest(app.base, "/api/auth/password-reset/request", {
+        body: { email: "verify@example.com" },
+      }),
+    );
+    expect(resetDelivery.result.response.status).toBe(202);
+    expect(resetDelivery.payload.template).toBe("passwordReset");
+    const resetLink = new URL(String(resetDelivery.payload.props.resetLink));
+    expect(resetLink.origin).toBe(app.base);
+    const resetToken = resetLink.searchParams.get("token") ?? "";
+    expect(resetToken.length).toBeGreaterThan(30);
+
+    const unknownReset = await jsonRequest(app.base, "/api/auth/password-reset/request", {
+      body: { email: "unknown@example.com" },
+    });
+    expect(unknownReset.response.status).toBe(202);
+    expect(unknownReset.payload).toEqual(resetDelivery.result.payload);
+
+    const confirmed = await jsonRequest(app.base, "/api/auth/password-reset/confirm", {
+      body: { token: resetToken, newPassword: "matterhorn-reset-password" },
+    });
+    expect(confirmed.response.status).toBe(200);
+    const oldSession = await jsonRequest(app.base, "/api/den/v1/session", { cookie });
+    expect(oldSession.payload).toEqual({ authenticated: false });
+    const oldPassword = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email: "verify@example.com", password: PASSWORD },
+    });
+    expect(oldPassword.response.status).toBe(401);
+    const newPassword = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email: "verify@example.com", password: "matterhorn-reset-password" },
+    });
+    expect(newPassword.response.status).toBe(200);
+  });
+
+  test("fails closed before creating an account when verification email is not configured", async () => {
+    const app = await boot();
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "true";
+    delete process.env.MATTERHORN_EMAIL_DEV_MODE;
+    delete process.env.MATTERHORN_RESEND_API_KEY;
+    delete process.env.MATTERHORN_SMTP_HOST;
+    const unavailable = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "not-created@example.com", password: PASSWORD },
+    });
+    expect(unavailable.response.status).toBe(503);
+    expect(unavailable.payload.code).toBe("email_delivery_unavailable");
+
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
+    const created = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "not-created@example.com", password: PASSWORD },
+    });
+    expect(created.response.status).toBe(200);
+  });
+
   test("pauses account creation and enforces the configured beta capacity", async () => {
     const app = await boot();
     process.env.MATTERHORN_SIGNUPS_ENABLED = "false";

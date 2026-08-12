@@ -50,6 +50,23 @@ The beta auth layer does not require Clerk packages, but it documents the standa
 | `VITE_MATTERHORN_WORK_URL` / `VITE_OPENWORK_URL` | No | Protected local/private bridge only. Never set this or a Matterhorn Desks token in a public browser build. |
 | `VITE_OPENCODE_URL` | No | OpenCode engine URL. Defaults to `http://127.0.0.1:4096`. |
 
+### First-party account email
+
+| Variable | Required? | Purpose |
+|---|---|---|
+| `MATTERHORN_EMAIL_VERIFICATION_REQUIRED` | Required for public signup | Keeps new accounts signed out until the six-digit email challenge is completed. |
+| `MATTERHORN_EMAIL_FROM` | Required for public signup | Verified transactional sender identity. |
+| `MATTERHORN_RESEND_API_KEY` | Required when using Resend | Server-only delivery credential. |
+| `MATTERHORN_SMTP_HOST`, `MATTERHORN_SMTP_PORT`, `MATTERHORN_SMTP_USER`, `MATTERHORN_SMTP_PASSWORD`, `MATTERHORN_SMTP_SECURE` | Alternative to Resend | Authenticated SMTP delivery configuration. |
+| `MATTERHORN_EMAIL_DEV_MODE` | Local development only | Emits template payloads locally. Production ignores this flag. |
+| `MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED` | Required for public signup | Rejects account creation unless the user explicitly accepts the Terms and acknowledges the Privacy notice. |
+| `MATTERHORN_TERMS_VERSION`, `MATTERHORN_PRIVACY_VERSION` | Required for public signup | Versions stored with the server-side acceptance record. |
+
+Verification codes expire after 10 minutes. Password reset links expire after
+one hour, can be used once, and revoke every active session when the password
+changes. Reset requests always return the same response whether or not an
+account exists, so the endpoint does not disclose registered addresses.
+
 ## Local/offline testing
 
 The desktop and local development layers are designed so testers can use local workspaces without signing in:
@@ -78,6 +95,12 @@ VITE_MATTERHORN_CLOUD_API_URL=https://app.matterhorn.example/api/den
 MATTERHORN_APP_URL=https://app.matterhorn.example
 MATTERHORN_CONTROL_PLANE_URL=https://api-origin.matterhorn.example
 MATTERHORN_PROXY_SECRET=<server-only-high-entropy-secret>
+MATTERHORN_EMAIL_VERIFICATION_REQUIRED=1
+MATTERHORN_EMAIL_FROM="Matterhorn Desks <accounts@matterhorn.example>"
+MATTERHORN_RESEND_API_KEY=<server-only-resend-secret>
+MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED=1
+MATTERHORN_TERMS_VERSION=<approved-terms-version>
+MATTERHORN_PRIVACY_VERSION=<approved-privacy-version>
 ```
 
 Do not configure `VITE_MATTERHORN_WORK_URL`, `VITE_MATTERHORN_WORK_TOKEN`,

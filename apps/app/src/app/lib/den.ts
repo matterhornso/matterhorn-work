@@ -293,6 +293,11 @@ type DenAuthResult = {
   token: string | null;
 };
 
+export type DenSignUpResult = DenAuthResult & {
+  verificationRequired: boolean;
+  email: string | null;
+};
+
 export type DenDesktopHandoffExchange = {
   user: DenUser | null;
   token: string | null;
@@ -1778,16 +1783,62 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
       return { user: getUser(payload), token: getToken(payload) };
     },
 
-    async signUpEmail(email: string, password: string): Promise<DenAuthResult> {
+    async signUpEmail(
+      email: string,
+      password: string,
+      legalAccepted = false,
+    ): Promise<DenSignUpResult> {
       const payload = await requestJson<unknown>(baseUrls, "/api/auth/sign-up/email", {
         method: "POST",
         body: {
           name: DEFAULT_DEN_AUTH_NAME,
           email: email.trim(),
           password,
+          legalAccepted,
         },
       });
+      return {
+        user: getUser(payload),
+        token: getToken(payload),
+        verificationRequired:
+          isRecord(payload) && payload.verificationRequired === true,
+        email:
+          isRecord(payload) && typeof payload.email === "string"
+            ? payload.email
+            : null,
+      };
+    },
+
+    async verifyEmail(email: string, code: string): Promise<DenAuthResult> {
+      const payload = await requestJson<unknown>(baseUrls, "/api/auth/verify-email", {
+        method: "POST",
+        body: { email: email.trim(), code: code.trim() },
+      });
       return { user: getUser(payload), token: getToken(payload) };
+    },
+
+    async resendVerification(email: string): Promise<void> {
+      await requestJson<unknown>(baseUrls, "/api/auth/resend-verification", {
+        method: "POST",
+        body: { email: email.trim() },
+      });
+    },
+
+    async requestPasswordReset(email: string): Promise<void> {
+      await requestJson<unknown>(baseUrls, "/api/auth/password-reset/request", {
+        method: "POST",
+        body: { email: email.trim() },
+      });
+    },
+
+    async confirmPasswordReset(
+      resetToken: string,
+      newPassword: string,
+    ): Promise<void> {
+      await requestJson<unknown>(baseUrls, "/api/auth/password-reset/confirm", {
+        method: "POST",
+        body: { token: resetToken.trim(), newPassword },
+      });
     },
 
     async signOut() {

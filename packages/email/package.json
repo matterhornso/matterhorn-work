@@ -6,12 +6,12 @@
     ".": {
       "types": "./src/index.ts",
       "development": "./src/index.ts",
-      "default": "./dist/index.js"
+      "default": "./src/index.ts"
     },
     "./templates": {
       "types": "./src/templates/index.ts",
       "development": "./src/templates/index.ts",
-      "default": "./dist/templates/index.js"
+      "default": "./src/templates/index.ts"
     }
   },
   "files": [

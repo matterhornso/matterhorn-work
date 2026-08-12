@@ -104,12 +104,33 @@ describe("responsive accessibility regressions", () => {
     expect(signin).toContain('<a href="/privacy">Privacy</a>');
     expect(signin).toContain("window.visualViewport");
     expect(signin).toContain('active.closest(".public-auth-form")');
-    expect(signin).toContain('active.scrollIntoView({ block: "center"');
+    expect(signin).toContain("active.scrollIntoView({");
+    expect(signin).toContain('block: "center"');
     expect(signinStyles).toContain("overflow-wrap: anywhere");
     expect(signinStyles).toContain("safe-area-inset-bottom");
     expect(signinStyles).toContain(".public-auth-trust a:focus-visible");
     expect(signinStyles).toContain(".public-auth-status button:focus-visible");
+    expect(signinStyles).toContain(".public-auth-secondary-actions button:focus-visible");
     expect(signinStyles).toContain("grid-template-columns: minmax(96px, 0.32fr) minmax(0, 1fr)");
+  });
+
+  test("public account access exposes self-service verification and recovery", () => {
+    const signin = readAppSource("domains/cloud/public-web-signin-page.tsx");
+    const den = readAppFile("src/app/lib/den.ts");
+
+    expect(signin).toContain('mode === "verify-email"');
+    expect(signin).toContain('autoComplete="one-time-code"');
+    expect(signin).toContain('inputMode="numeric"');
+    expect(signin).toContain("Forgot password?");
+    expect(signin).toContain("Passwords do not match.");
+    expect(signin).toContain('name="legalAccepted"');
+    expect(signin).toContain('<a href="/terms"');
+    expect(signin).toContain('<a href="/privacy"');
+    expect(signin).toContain("client.signUpEmail(email, password, legalAccepted)");
+    expect(den).toContain('"/api/auth/verify-email"');
+    expect(den).toContain('"/api/auth/resend-verification"');
+    expect(den).toContain('"/api/auth/password-reset/request"');
+    expect(den).toContain('"/api/auth/password-reset/confirm"');
   });
 
   test("MCP Settings preserves sequential section and item heading levels", () => {

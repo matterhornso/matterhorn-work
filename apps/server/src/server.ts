@@ -324,6 +324,7 @@ import type {
   MatterhornBackendReadinessResponse,
 } from "@matterhorn-work/types/backend-readiness";
 import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
+import { sendEmail, type EmailSendConfig } from "@matterhorn-work/email";
 import type {
   MatterhornTeamAccessTokenDescriptor,
   MatterhornTeamShareableTokenScope,
@@ -2140,6 +2141,64 @@ function matterhornAuthResponse(
   return response;
 }
 
+function enabledEnvironmentFlag(name: string): boolean {
+  return /^(1|true|yes|on)$/i.test(process.env[name]?.trim() ?? "");
+}
+
+function matterhornEmailConfig(): EmailSendConfig {
+  const configuredPort = Number(process.env.MATTERHORN_SMTP_PORT?.trim() || 587);
+  const smtpPort = Number.isSafeInteger(configuredPort) && configuredPort > 0
+    ? configuredPort
+    : 587;
+  const devMode =
+    process.env.NODE_ENV !== "production" &&
+    enabledEnvironmentFlag("MATTERHORN_EMAIL_DEV_MODE");
+  return {
+    from: process.env.MATTERHORN_EMAIL_FROM?.trim(),
+    resendApiKey: process.env.MATTERHORN_RESEND_API_KEY?.trim(),
+    smtp: {
+      host: process.env.MATTERHORN_SMTP_HOST?.trim(),
+      port: smtpPort,
+      user: process.env.MATTERHORN_SMTP_USER?.trim(),
+      pass: process.env.MATTERHORN_SMTP_PASSWORD,
+      secure: enabledEnvironmentFlag("MATTERHORN_SMTP_SECURE"),
+    },
+    devMode,
+  };
+}
+
+function matterhornEmailDeliveryConfigured(config: EmailSendConfig): boolean {
+  if (config.devMode) return true;
+  return Boolean(
+    config.from &&
+      (config.resendApiKey || config.smtp?.host),
+  );
+}
+
+function requireMatterhornEmailDelivery(config: EmailSendConfig): void {
+  if (!matterhornEmailDeliveryConfigured(config)) {
+    throw new ApiError(
+      503,
+      "email_delivery_unavailable",
+      "Account email is temporarily unavailable. Try again shortly.",
+    );
+  }
+}
+
+async function sendMatterhornAccountEmail(
+  input: Parameters<typeof sendEmail>[0],
+): Promise<void> {
+  try {
+    await sendEmail(input);
+  } catch {
+    throw new ApiError(
+      503,
+      "email_delivery_failed",
+      "Account email could not be delivered. Try again shortly.",
+    );
+  }
+}
+
 function withMatterhornAuthErrorMapping<T>(callback: () => T): T {
   try {
     return callback();
@@ -2148,6 +2207,8 @@ function withMatterhornAuthErrorMapping<T>(callback: () => T): T {
     const status =
       error.code === "invalid_credentials" || error.code === "unauthorized"
         ? 401
+        : error.code === "email_unverified"
+          ? 403
         : error.code === "email_taken" ||
             error.code === "account_owns_shared_organization" ||
             error.code === "organization_slug_taken"
@@ -6687,7 +6748,35 @@ function createRoutes(
     if (signupsEnabled && !/^(1|true|yes|on)$/.test(signupsEnabled)) {
       throw new ApiError(503, "signups_paused", "New accounts are paused while we prepare more beta places.");
     }
+    const verificationRequired = enabledEnvironmentFlag(
+      "MATTERHORN_EMAIL_VERIFICATION_REQUIRED",
+    );
+    const emailConfig = matterhornEmailConfig();
+    if (verificationRequired) requireMatterhornEmailDelivery(emailConfig);
     const body = await readJsonBody(request, 16 * 1024, "Sign-up");
+    const legalAcceptanceRequired = enabledEnvironmentFlag(
+      "MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED",
+    );
+    const termsVersion = process.env.MATTERHORN_TERMS_VERSION?.trim() ?? "";
+    const privacyVersion = process.env.MATTERHORN_PRIVACY_VERSION?.trim() ?? "";
+    if (
+      legalAcceptanceRequired &&
+      (!termsVersion || termsVersion.length > 64 ||
+        !privacyVersion || privacyVersion.length > 64)
+    ) {
+      throw new ApiError(
+        503,
+        "legal_acceptance_configuration_invalid",
+        "New accounts are paused while the Terms and Privacy versions are configured.",
+      );
+    }
+    if (legalAcceptanceRequired && body.legalAccepted !== true) {
+      throw new ApiError(
+        400,
+        "legal_acceptance_required",
+        "Accept the Terms and acknowledge the Privacy notice to create an account.",
+      );
+    }
     const email = stringBodyField(body, "email");
     const attemptKey = `sign-up:${email.trim().toLowerCase()}`;
     const peerAttemptKey = `sign-up-ip:${ctx.peerAddress ?? "unknown"}`;
@@ -6706,6 +6795,11 @@ function createRoutes(
         email,
         password: stringBodyField(body, "password"),
         name: optionalStringBodyField(body, "name"),
+        emailVerified: !verificationRequired,
+        legalAcceptance:
+          body.legalAccepted === true && termsVersion && privacyVersion
+            ? { termsVersion, privacyVersion }
+            : null,
         maxAccounts: (() => {
           const configured = process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS?.trim() ?? "";
           if (!configured) return null;
@@ -6717,10 +6811,178 @@ function createRoutes(
         })(),
       }),
     );
+    if (verificationRequired) {
+      authStore.signOut(session.token);
+      const challenge = withMatterhornAuthErrorMapping(() =>
+        authStore.createEmailVerificationChallenge(email),
+      );
+      if (!challenge) {
+        throw new ApiError(
+          409,
+          "email_verification_unavailable",
+          "Email verification could not be started. Sign in or request a new code.",
+        );
+      }
+      await sendMatterhornAccountEmail({
+        to: challenge.email,
+        template: "verification",
+        props: { verificationCode: challenge.verificationCode },
+        config: emailConfig,
+      });
+      const response = jsonResponse(
+        {
+          verificationRequired: true,
+          email: challenge.email,
+          expiresAt: challenge.expiresAt,
+        },
+        202,
+      );
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    }
     return matterhornAuthResponse(request, {
       user: session.user,
       organization: matterhornActiveOrganization(authStore, session),
     }, session.token);
+  });
+
+  addRoute(routes, "POST", "/api/auth/verify-email", "none", async (ctx) => {
+    const body = await readJsonBody(ctx.request, 16 * 1024, "Email verification");
+    const email = stringBodyField(body, "email");
+    const attemptKey = `verify-email:${email.trim().toLowerCase()}`;
+    const peerAttemptKey = `verify-email-ip:${ctx.peerAddress ?? "unknown"}`;
+    if (
+      !await authAttemptLimiter.check(attemptKey) ||
+      !await authAttemptLimiter.check(peerAttemptKey, AUTH_SIGNIN_IP_MAX_REQUESTS)
+    ) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many verification attempts. Request a new code or try again later.",
+      );
+    }
+    const session = withMatterhornAuthErrorMapping(() =>
+      authStore.verifyEmail(email, stringBodyField(body, "code")),
+    );
+    await authAttemptLimiter.reset(attemptKey);
+    await authAttemptLimiter.reset(peerAttemptKey);
+    return matterhornAuthResponse(ctx.request, {
+      user: session.user,
+      organization: matterhornActiveOrganization(authStore, session),
+    }, session.token);
+  });
+
+  addRoute(routes, "POST", "/api/auth/resend-verification", "none", async (ctx) => {
+    const body = await readJsonBody(ctx.request, 16 * 1024, "Email verification resend");
+    const email = stringBodyField(body, "email");
+    const attemptKey = `resend-verification:${email.trim().toLowerCase()}`;
+    const peerAttemptKey = `resend-verification-ip:${ctx.peerAddress ?? "unknown"}`;
+    if (
+      !await authAttemptLimiter.check(attemptKey, 3) ||
+      !await authAttemptLimiter.check(peerAttemptKey, AUTH_SIGNUP_IP_MAX_REQUESTS)
+    ) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many verification emails. Try again in a few minutes.",
+      );
+    }
+    const emailConfig = matterhornEmailConfig();
+    requireMatterhornEmailDelivery(emailConfig);
+    const challenge = withMatterhornAuthErrorMapping(() =>
+      authStore.createEmailVerificationChallenge(email),
+    );
+    if (challenge) {
+      await sendMatterhornAccountEmail({
+        to: challenge.email,
+        template: "verification",
+        props: { verificationCode: challenge.verificationCode },
+        config: emailConfig,
+      });
+    }
+    const response = jsonResponse({
+      ok: true,
+      message: "If that account still needs verification, a new code has been sent.",
+    }, 202);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "POST", "/api/auth/password-reset/request", "none", async (ctx) => {
+    const body = await readJsonBody(ctx.request, 16 * 1024, "Password reset request");
+    const email = stringBodyField(body, "email");
+    const attemptKey = `password-reset:${email.trim().toLowerCase()}`;
+    const peerAttemptKey = `password-reset-ip:${ctx.peerAddress ?? "unknown"}`;
+    if (
+      !await authAttemptLimiter.check(attemptKey, 3) ||
+      !await authAttemptLimiter.check(peerAttemptKey, AUTH_SIGNUP_IP_MAX_REQUESTS)
+    ) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many password reset requests. Try again in a few minutes.",
+      );
+    }
+    const emailConfig = matterhornEmailConfig();
+    requireMatterhornEmailDelivery(emailConfig);
+    const challenge = withMatterhornAuthErrorMapping(() =>
+      authStore.createPasswordResetChallenge(email),
+    );
+    if (challenge) {
+      try {
+        const appUrl = new URL(process.env.MATTERHORN_APP_URL?.trim() ?? "");
+        if (
+          appUrl.protocol !== "https:" &&
+          !(process.env.NODE_ENV !== "production" && appUrl.protocol === "http:")
+        ) {
+          throw new Error("Matterhorn app URL must use HTTPS.");
+        }
+        appUrl.pathname = "/";
+        appUrl.search = "";
+        appUrl.hash = "";
+        appUrl.searchParams.set("mode", "reset-password");
+        appUrl.searchParams.set("token", challenge.resetToken);
+        await sendMatterhornAccountEmail({
+          to: challenge.email,
+          template: "passwordReset",
+          props: { resetLink: appUrl.toString() },
+          config: emailConfig,
+        });
+      } catch {
+        console.error("[auth] Password reset email delivery failed.");
+      }
+    }
+    const response = jsonResponse({
+      ok: true,
+      message: "If an account exists for that email, a password reset link has been sent.",
+    }, 202);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "POST", "/api/auth/password-reset/confirm", "none", async (ctx) => {
+    const body = await readJsonBody(ctx.request, 16 * 1024, "Password reset");
+    const attemptKey = `password-reset-confirm:${ctx.peerAddress ?? "unknown"}`;
+    if (!await authAttemptLimiter.check(attemptKey, AUTH_SIGNIN_IP_MAX_REQUESTS)) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many password reset attempts. Try again in a few minutes.",
+      );
+    }
+    withMatterhornAuthErrorMapping(() =>
+      authStore.resetPassword(
+        stringBodyField(body, "token"),
+        stringBodyField(body, "newPassword"),
+      ),
+    );
+    const response = jsonResponse({ ok: true });
+    response.headers.append(
+      "Set-Cookie",
+      matterhornSessionCookie(ctx.request, "", { clear: true }),
+    );
+    response.headers.set("Cache-Control", "no-store");
+    return response;
   });
 
   addRoute(routes, "POST", "/api/auth/sign-in/email", "none", async (ctx) => {

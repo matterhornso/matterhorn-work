@@ -36,6 +36,7 @@ type UserRow = {
   name: string | null;
   password_hash: string;
   password_salt: string;
+  email_verified_at: number | null;
 };
 
 type SessionRow = {
@@ -56,6 +57,19 @@ export type MatterhornAuthUser = {
   id: string;
   email: string;
   name: string | null;
+  emailVerified: boolean;
+};
+
+export type MatterhornEmailVerificationChallenge = {
+  email: string;
+  verificationCode: string;
+  expiresAt: number;
+};
+
+export type MatterhornPasswordResetChallenge = {
+  email: string;
+  resetToken: string;
+  expiresAt: number;
 };
 
 export type MatterhornAuthOrganization = {
@@ -84,6 +98,11 @@ export type MatterhornAuthAccountDeletion = {
   deletedOrganizationIds: string[];
 };
 
+export type MatterhornAuthLegalAcceptance = {
+  termsVersion: string;
+  privacyVersion: string;
+};
+
 export class MatterhornAuthError extends Error {
   constructor(
     readonly code:
@@ -92,6 +111,11 @@ export class MatterhornAuthError extends Error {
       | "invalid_email"
       | "invalid_name"
       | "invalid_password"
+      | "email_unverified"
+      | "invalid_verification_code"
+      | "expired_verification_code"
+      | "invalid_reset_token"
+      | "expired_reset_token"
       | "invalid_organization"
       | "account_owns_shared_organization"
       | "organization_slug_taken"
@@ -106,6 +130,8 @@ export class MatterhornAuthError extends Error {
 
 const require = createRequire(import.meta.url);
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const EMAIL_VERIFICATION_TTL_MS = 10 * 60 * 1000;
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 const PASSWORD_MIN_LENGTH = 12;
 const PASSWORD_MAX_LENGTH = 256;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -211,11 +237,23 @@ function hashSessionToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+function hashPasswordResetToken(token: string): string {
+  return createHash("sha256")
+    .update("matterhorn-password-reset\0")
+    .update(token)
+    .digest("hex");
+}
+
+function hashVerificationCode(code: string, salt: Buffer): Buffer {
+  return scryptSync(`matterhorn-email-verification\0${code}`, salt, 64);
+}
+
 function userFromRow(row: UserRow): MatterhornAuthUser {
   return {
     id: row.id,
     email: row.email,
     name: row.name,
+    emailVerified: row.email_verified_at !== null,
   };
 }
 
@@ -265,6 +303,7 @@ export class MatterhornAuthStore {
         name TEXT,
         password_hash TEXT NOT NULL,
         password_salt TEXT NOT NULL,
+        email_verified_at INTEGER,
         created_at INTEGER NOT NULL
       );
 
@@ -300,6 +339,44 @@ export class MatterhornAuthStore {
       CREATE INDEX IF NOT EXISTS organization_members_user_id_idx
         ON organization_members(user_id);
     `);
+    const userColumns = statement(this.db, "PRAGMA table_info(users)").all() as Array<{ name?: string }>;
+    if (!userColumns.some((column) => column.name === "email_verified_at")) {
+      this.db.exec("ALTER TABLE users ADD COLUMN email_verified_at INTEGER");
+      this.db.exec("UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL");
+    }
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS email_verification_challenges (
+        user_id TEXT PRIMARY KEY,
+        code_hash TEXT NOT NULL,
+        code_salt TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS password_reset_challenges (
+        token_hash TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS account_legal_acceptances (
+        user_id TEXT PRIMARY KEY,
+        terms_version TEXT NOT NULL,
+        privacy_version TEXT NOT NULL,
+        accepted_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS email_verification_expires_at_idx
+        ON email_verification_challenges(expires_at);
+      CREATE INDEX IF NOT EXISTS password_reset_user_id_idx
+        ON password_reset_challenges(user_id);
+      CREATE INDEX IF NOT EXISTS password_reset_expires_at_idx
+        ON password_reset_challenges(expires_at);
+    `);
   }
 
   close(): void {
@@ -311,6 +388,8 @@ export class MatterhornAuthStore {
     password: string;
     name?: string | null;
     maxAccounts?: number | null;
+    emailVerified?: boolean;
+    legalAcceptance?: MatterhornAuthLegalAcceptance | null;
   }): MatterhornAuthSession {
     const email = normalizeEmail(input.email);
     validatePassword(input.password);
@@ -346,14 +425,15 @@ export class MatterhornAuthStore {
       statement(
         this.db,
         `INSERT INTO users
-          (id, email, name, password_hash, password_salt, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)`,
+          (id, email, name, password_hash, password_salt, email_verified_at, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         userId,
         email,
         name,
         passwordHash.toString("hex"),
         salt.toString("hex"),
+        input.emailVerified === false ? null : now,
         now,
       );
       statement(
@@ -372,6 +452,19 @@ export class MatterhornAuthStore {
           (organization_id, user_id, role, created_at)
           VALUES (?, ?, 'owner', ?)`,
       ).run(organizationId, userId, now);
+      if (input.legalAcceptance) {
+        statement(
+          this.db,
+          `INSERT INTO account_legal_acceptances
+            (user_id, terms_version, privacy_version, accepted_at)
+            VALUES (?, ?, ?, ?)`,
+        ).run(
+          userId,
+          input.legalAcceptance.termsVersion,
+          input.legalAcceptance.privacyVersion,
+          now,
+        );
+      }
     });
 
     return this.createSessionForUser(userId, organizationId);
@@ -381,7 +474,7 @@ export class MatterhornAuthStore {
     const email = normalizeEmail(emailInput);
     const row = statement(
       this.db,
-      `SELECT id, email, name, password_hash, password_salt
+      `SELECT id, email, name, password_hash, password_salt, email_verified_at
         FROM users WHERE email = ? LIMIT 1`,
     ).get(email) as UserRow | undefined;
     if (!row) {
@@ -404,6 +497,12 @@ export class MatterhornAuthStore {
         "Email or password is incorrect.",
       );
     }
+    if (row.email_verified_at === null) {
+      throw new MatterhornAuthError(
+        "email_unverified",
+        "Verify your email before signing in.",
+      );
+    }
 
     const firstOrg = statement(
       this.db,
@@ -417,6 +516,206 @@ export class MatterhornAuthStore {
       row.id,
       firstOrg?.organization_id ?? null,
     );
+  }
+
+  createEmailVerificationChallenge(
+    emailInput: string,
+  ): MatterhornEmailVerificationChallenge | null {
+    const email = normalizeEmail(emailInput);
+    const user = statement(
+      this.db,
+      `SELECT id, email, name, password_hash, password_salt, email_verified_at
+        FROM users WHERE email = ? LIMIT 1`,
+    ).get(email) as UserRow | undefined;
+    if (!user || user.email_verified_at !== null) return null;
+
+    const verificationCode = String(
+      100_000 + randomBytes(4).readUInt32BE(0) % 900_000,
+    );
+    const salt = randomBytes(16);
+    const now = Date.now();
+    const expiresAt = now + EMAIL_VERIFICATION_TTL_MS;
+    const codeHash = hashVerificationCode(verificationCode, salt);
+    statement(
+      this.db,
+      `INSERT INTO email_verification_challenges
+        (user_id, code_hash, code_salt, expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+          code_hash = excluded.code_hash,
+          code_salt = excluded.code_salt,
+          expires_at = excluded.expires_at,
+          created_at = excluded.created_at`,
+    ).run(
+      user.id,
+      codeHash.toString("hex"),
+      salt.toString("hex"),
+      expiresAt,
+      now,
+    );
+    return { email: user.email, verificationCode, expiresAt };
+  }
+
+  verifyEmail(emailInput: string, codeInput: string): MatterhornAuthSession {
+    const email = normalizeEmail(emailInput);
+    const code = codeInput.trim();
+    const user = statement(
+      this.db,
+      `SELECT id, email, name, password_hash, password_salt, email_verified_at
+        FROM users WHERE email = ? LIMIT 1`,
+    ).get(email) as UserRow | undefined;
+    if (!user || user.email_verified_at !== null || !/^\d{6}$/.test(code)) {
+      throw new MatterhornAuthError(
+        "invalid_verification_code",
+        "That verification code is invalid.",
+      );
+    }
+    const challenge = statement(
+      this.db,
+      `SELECT code_hash, code_salt, expires_at
+        FROM email_verification_challenges WHERE user_id = ? LIMIT 1`,
+    ).get(user.id) as {
+      code_hash: string;
+      code_salt: string;
+      expires_at: number;
+    } | undefined;
+    if (!challenge) {
+      throw new MatterhornAuthError(
+        "invalid_verification_code",
+        "That verification code is invalid.",
+      );
+    }
+    if (challenge.expires_at <= Date.now()) {
+      statement(
+        this.db,
+        "DELETE FROM email_verification_challenges WHERE user_id = ?",
+      ).run(user.id);
+      throw new MatterhornAuthError(
+        "expired_verification_code",
+        "That verification code has expired. Request a new code.",
+      );
+    }
+    const actual = hashVerificationCode(
+      code,
+      Buffer.from(challenge.code_salt, "hex"),
+    );
+    const expected = Buffer.from(challenge.code_hash, "hex");
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+      throw new MatterhornAuthError(
+        "invalid_verification_code",
+        "That verification code is invalid.",
+      );
+    }
+
+    const verifiedAt = Date.now();
+    this.withTransaction(() => {
+      statement(
+        this.db,
+        "UPDATE users SET email_verified_at = ? WHERE id = ?",
+      ).run(verifiedAt, user.id);
+      statement(
+        this.db,
+        "DELETE FROM email_verification_challenges WHERE user_id = ?",
+      ).run(user.id);
+    });
+    const firstOrg = statement(
+      this.db,
+      `SELECT organization_id
+        FROM organization_members
+        WHERE user_id = ?
+        ORDER BY created_at ASC
+        LIMIT 1`,
+    ).get(user.id) as { organization_id: string } | undefined;
+    return this.createSessionForUser(
+      user.id,
+      firstOrg?.organization_id ?? null,
+    );
+  }
+
+  createPasswordResetChallenge(
+    emailInput: string,
+  ): MatterhornPasswordResetChallenge | null {
+    const email = normalizeEmail(emailInput);
+    const user = statement(
+      this.db,
+      `SELECT id, email, name, password_hash, password_salt, email_verified_at
+        FROM users WHERE email = ? LIMIT 1`,
+    ).get(email) as UserRow | undefined;
+    if (!user || user.email_verified_at === null) return null;
+
+    const resetToken = randomBytes(32).toString("base64url");
+    const tokenHash = hashPasswordResetToken(resetToken);
+    const now = Date.now();
+    const expiresAt = now + PASSWORD_RESET_TTL_MS;
+    this.withTransaction(() => {
+      statement(
+        this.db,
+        "DELETE FROM password_reset_challenges WHERE user_id = ?",
+      ).run(user.id);
+      statement(
+        this.db,
+        `INSERT INTO password_reset_challenges
+          (token_hash, user_id, expires_at, created_at)
+          VALUES (?, ?, ?, ?)`,
+      ).run(tokenHash, user.id, expiresAt, now);
+    });
+    return { email: user.email, resetToken, expiresAt };
+  }
+
+  resetPassword(resetTokenInput: string, newPassword: string): void {
+    validatePassword(newPassword);
+    const resetToken = resetTokenInput.trim();
+    if (!resetToken || resetToken.length > 256) {
+      throw new MatterhornAuthError(
+        "invalid_reset_token",
+        "That password reset link is invalid.",
+      );
+    }
+    const tokenHash = hashPasswordResetToken(resetToken);
+    const challenge = statement(
+      this.db,
+      `SELECT token_hash, user_id, expires_at
+        FROM password_reset_challenges WHERE token_hash = ? LIMIT 1`,
+    ).get(tokenHash) as {
+      token_hash: string;
+      user_id: string;
+      expires_at: number;
+    } | undefined;
+    if (!challenge) {
+      throw new MatterhornAuthError(
+        "invalid_reset_token",
+        "That password reset link is invalid or has already been used.",
+      );
+    }
+    if (challenge.expires_at <= Date.now()) {
+      statement(
+        this.db,
+        "DELETE FROM password_reset_challenges WHERE token_hash = ?",
+      ).run(tokenHash);
+      throw new MatterhornAuthError(
+        "expired_reset_token",
+        "That password reset link has expired. Request a new one.",
+      );
+    }
+    const salt = randomBytes(16);
+    const passwordHash = hashPassword(newPassword, salt);
+    this.withTransaction(() => {
+      statement(
+        this.db,
+        "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?",
+      ).run(
+        passwordHash.toString("hex"),
+        salt.toString("hex"),
+        challenge.user_id,
+      );
+      statement(this.db, "DELETE FROM sessions WHERE user_id = ?").run(
+        challenge.user_id,
+      );
+      statement(
+        this.db,
+        "DELETE FROM password_reset_challenges WHERE user_id = ?",
+      ).run(challenge.user_id);
+    });
   }
 
   getSession(token: string): MatterhornAuthSession | null {
@@ -436,7 +735,7 @@ export class MatterhornAuthStore {
 
     const user = statement(
       this.db,
-      `SELECT id, email, name, password_hash, password_salt
+      `SELECT id, email, name, password_hash, password_salt, email_verified_at
         FROM users WHERE id = ? LIMIT 1`,
     ).get(row.user_id) as UserRow | undefined;
     if (!user) return null;
@@ -516,7 +815,7 @@ export class MatterhornAuthStore {
     validatePassword(input.newPassword);
     const row = statement(
       this.db,
-      `SELECT id, email, name, password_hash, password_salt
+      `SELECT id, email, name, password_hash, password_salt, email_verified_at
         FROM users WHERE id = ? LIMIT 1`,
     ).get(session.user.id) as UserRow | undefined;
     if (!row || !this.passwordMatches(row, input.currentPassword)) {
@@ -552,7 +851,7 @@ export class MatterhornAuthStore {
     const session = this.requireSession(token);
     const row = statement(
       this.db,
-      `SELECT id, email, name, password_hash, password_salt
+      `SELECT id, email, name, password_hash, password_salt, email_verified_at
         FROM users WHERE id = ? LIMIT 1`,
     ).get(session.user.id) as UserRow | undefined;
     if (!row || !this.passwordMatches(row, password)) {
