@@ -38,6 +38,7 @@ type SessionActivityStore = {
   seedSessionRun: (workspaceId: string, sessionId: string, status: unknown, assistantOutput: boolean) => void;
   startOptimisticRun: (workspaceId: string, sessionId: string, options?: { title?: string; agent?: string }) => void;
   cancelOptimisticRun: (workspaceId: string, sessionId: string) => void;
+  reconcileStaleOptimisticRuns: (workspaceId: string, now?: number) => void;
   setRunStatus: (workspaceId: string, sessionId: string, status: unknown) => void;
   markMessageRole: (workspaceId: string, sessionId: string, messageId: string, role: SessionMessageRole) => void;
   markAssistantOutput: (workspaceId: string, sessionId: string, messageId?: string, options?: { allowUnknownMessageRole?: boolean }) => void;
@@ -48,6 +49,8 @@ type SessionActivityStore = {
   setCompacting: (workspaceId: string, sessionId: string, compacting: boolean) => void;
   removeSession: (workspaceId: string, sessionId: string) => void;
 };
+
+export const OPTIMISTIC_RUN_RECONCILE_GRACE_MS = 15_000;
 
 const createRecord = (): SessionActivityRecord => ({
   status: "idle",
@@ -78,6 +81,33 @@ function normalizeRunStatus(status: unknown): "idle" | "running" | "retry" {
 
 function sessionRunStatus(session: SessionLike) {
   return session.status ?? session.state ?? session.runStatus;
+}
+
+function pendingOptimisticRun(record: SessionActivityRecord) {
+  return record.runActive && !record.runConfirmed && Boolean(record.optimisticRunTitle);
+}
+
+function preservePendingOptimisticRun(
+  record: SessionActivityRecord,
+  now: number,
+  assistantOutput = false,
+) {
+  if (assistantOutput || !pendingOptimisticRun(record) || !record.runStartedAt) return false;
+  return now - record.runStartedAt < OPTIMISTIC_RUN_RECONCILE_GRACE_MS;
+}
+
+function clearRun(record: SessionActivityRecord): SessionActivityRecord {
+  return {
+    ...record,
+    runActive: false,
+    runConfirmed: false,
+    assistantOutput: false,
+    compacting: false,
+    optimisticRunTitle: undefined,
+    optimisticRunAgent: undefined,
+    waitingPermissionIds: [],
+    waitingQuestionIds: [],
+  };
 }
 
 function statusForRecord(record: SessionActivityRecord): SessionActivityStatus {
@@ -151,6 +181,7 @@ export const useSessionActivityStore = create<SessionActivityStore>((set, get) =
   seedWorkspaceSessions: (workspaceId, sessions) => {
     const id = workspaceId.trim();
     if (!id) return;
+    const now = Date.now();
     set((state) => {
       let nextState = state;
       for (const session of sessions) {
@@ -163,7 +194,7 @@ export const useSessionActivityStore = create<SessionActivityStore>((set, get) =
           ...updateRecord(nextState, id, sessionId, (record) => {
             const normalized = normalizeRunStatus(status);
             const runActive = normalized === "running" || normalized === "retry";
-            if (!runActive && record.status !== "idle") return record;
+            if (!runActive && preservePendingOptimisticRun(record, now)) return record;
             return {
               ...record,
               runActive,
@@ -184,10 +215,11 @@ export const useSessionActivityStore = create<SessionActivityStore>((set, get) =
     const workspace = workspaceId.trim();
     const session = sessionId.trim();
     if (!workspace || !session) return;
+    const now = Date.now();
     set((state) => updateRecord(state, workspace, session, (record) => {
       const normalized = normalizeRunStatus(status);
       const runActive = normalized === "running" || normalized === "retry";
-      if (!runActive && record.status !== "idle" && !assistantOutput) return record;
+      if (!runActive && preservePendingOptimisticRun(record, now, assistantOutput)) return record;
       return {
         ...record,
         runActive,
@@ -226,27 +258,39 @@ export const useSessionActivityStore = create<SessionActivityStore>((set, get) =
     const session = sessionId.trim();
     if (!workspace || !session) return;
     set((state) => updateRecord(state, workspace, session, (record) => ({
-      ...record,
-      runActive: false,
-      runConfirmed: false,
-      assistantOutput: false,
+      ...clearRun(record),
       errorActive: false,
-      compacting: false,
-      optimisticRunTitle: undefined,
-      optimisticRunAgent: undefined,
-      waitingPermissionIds: [],
-      waitingQuestionIds: [],
     })));
+  },
+  reconcileStaleOptimisticRuns: (workspaceId, now = Date.now()) => {
+    const workspace = workspaceId.trim();
+    if (!workspace) return;
+    set((state) => {
+      const records = state.recordsByWorkspaceId[workspace];
+      if (!records) return state;
+      let nextState = state;
+      let changed = false;
+      for (const [sessionId, record] of Object.entries(records)) {
+        if (!pendingOptimisticRun(record) || !record.runStartedAt) continue;
+        if (now - record.runStartedAt < OPTIMISTIC_RUN_RECONCILE_GRACE_MS) continue;
+        nextState = {
+          ...nextState,
+          ...updateRecord(nextState, workspace, sessionId, clearRun),
+        };
+        changed = true;
+      }
+      return changed ? nextState : state;
+    });
   },
   setRunStatus: (workspaceId, sessionId, status) => {
     const workspace = workspaceId.trim();
     const session = sessionId.trim();
     if (!workspace || !session) return;
+    const now = Date.now();
     set((state) => updateRecord(state, workspace, session, (record) => {
       const normalized = normalizeRunStatus(status);
       const runActive = normalized === "running" || normalized === "retry";
-      const pendingOptimisticRun = Boolean(record.optimisticRunTitle) && !record.runConfirmed && !record.assistantOutput;
-      if (!runActive && pendingOptimisticRun) return record;
+      if (!runActive && preservePendingOptimisticRun(record, now, record.assistantOutput)) return record;
       return {
         ...record,
         runActive,
