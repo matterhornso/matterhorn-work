@@ -80,6 +80,14 @@ user failure.
    is 250k weighted tokens/day and 2m/month per account, with 5m/day and
    50m/month platform guards. Review actual provider costs before changing
    model weights or limits.
+
+   The public ASI:One privacy policy currently states that foundational-model
+   training is opt-in and off by default, but its general retention section
+   does not define a numeric retention period for this API integration. Treat
+   that as useful no-training evidence, not as sufficient API-retention proof:
+   <https://asi1.ai/legal/privacy>. Obtain written API-specific retention terms
+   or a DPA before setting `MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS`. Do not infer
+   `0` or `30` from unrelated product or analytics language.
 7. Configure Stripe test credentials, webhook secret, Plus/Max test prices, and a test customer. Free-beta allowance is not a paid subscription and never creates an automatic charge.
 8. Configure OpenAI image generation, public HTTPS Walrus endpoints, and reviewed Sui testnet package IDs.
 9. Leave Cloud disabled for desktop/local builds, or complete the separate Cloud acceptance flow before setting `VITE_MATTERHORN_CLOUD_ENABLED=1` for public web.
