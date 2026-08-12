@@ -1,10 +1,29 @@
 import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MCPS_PROTOCOL_DESK_MANIFEST } from "@matterhorn-work/types";
 
 import { HostedMcpSummary } from "../src/react-app/domains/settings/pages/hosted-mcp-summary";
 
 describe("hosted MCP summary", () => {
+  test("keeps the shared manifest aligned with managed web capability", () => {
+    expect(MCPS_PROTOCOL_DESK_MANIFEST.status).toBe("beta_ready");
+    expect(MCPS_PROTOCOL_DESK_MANIFEST.backendStatus).toBe("partial");
+    expect(MCPS_PROTOCOL_DESK_MANIFEST.actionStatus).toBe("read_only");
+    expect(MCPS_PROTOCOL_DESK_MANIFEST.extensionStatus).toBe(
+      "built_in_partial",
+    );
+    expect(MCPS_PROTOCOL_DESK_MANIFEST.launcherDescription).toContain(
+      "Matterhorn-managed tools on web",
+    );
+    expect(MCPS_PROTOCOL_DESK_MANIFEST.launcherDescription).toContain(
+      "Matterhorn Desktop",
+    );
+    expect(MCPS_PROTOCOL_DESK_MANIFEST.emptyStateCopy.headline).not.toContain(
+      "coming soon",
+    );
+  });
+
   test("presents the managed Public Beta tool inventory", () => {
     const html = renderToStaticMarkup(
       React.createElement(HostedMcpSummary, {

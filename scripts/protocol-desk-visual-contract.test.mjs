@@ -263,9 +263,14 @@ for (const forbidden of ["live payment", "live email", "live hosting"]) {
   );
 }
 
-// 10. MCPs desk is planned-not-live.
+// 10. MCPs desk exposes managed web tools without claiming web installation.
 const mcpsBlock = deskBlocks.mcps;
-assert.ok(mcpsBlock.includes('status: "planned_not_live"'), "MCPs must be planned_not_live");
+assert.ok(mcpsBlock.includes('status: "beta_ready"'), "MCPs must be beta_ready");
+assert.ok(mcpsBlock.includes('backendStatus: "partial"'), "MCPs must disclose partial backend capability");
+assert.ok(mcpsBlock.includes('actionStatus: "read_only"'), "MCPs web actions must remain read-only");
+assert.ok(mcpsBlock.includes('extensionStatus: "built_in_partial"'), "MCPs must disclose the managed/custom capability split");
+assert.ok(mcpsBlock.includes("Matterhorn Desktop"), "MCPs must direct custom configuration to Matterhorn Desktop");
+assert.equal(mcpsBlock.toLowerCase().includes("coming soon"), false, "MCPs must not claim live managed tools are coming soon");
 
 // 11. Memory desk has visible/forgettable actions.
 const memoryBlock = deskBlocks.memory;
@@ -366,7 +371,7 @@ const expectedReadinessTones = {
   sui: "beta_ready",
   wellness: "workflow_ready",
   memory: "beta_ready",
-  mcps: "local_only",
+  mcps: "beta_ready",
 };
 for (const [id, tone] of Object.entries(expectedReadinessTones)) {
   assert.ok(
@@ -408,9 +413,9 @@ const expectedStatusLabels = {
     extensionStatus: "built_in_live",
   },
   mcps: {
-    backendStatus: "disabled",
-    actionStatus: "workflow_only",
-    extensionStatus: "requires_setup",
+    backendStatus: "partial",
+    actionStatus: "read_only",
+    extensionStatus: "built_in_partial",
   },
 };
 for (const [id, expected] of Object.entries(expectedStatusLabels)) {
@@ -463,9 +468,9 @@ for (const forbidden of ["live payment", "live email", "live hosting"]) {
   );
 }
 
-// 24. MCPs desk is disabled as a backend and requires user setup for extensions.
-assert.ok(deskBlocks.mcps.includes('backendStatus: "disabled"'), "MCPs backendStatus must be disabled");
-assert.ok(deskBlocks.mcps.includes('extensionStatus: "requires_setup"'), "MCPs extensionStatus must be requires_setup");
+// 24. MCPs exposes managed web health while custom extensions stay desktop-only.
+assert.ok(deskBlocks.mcps.includes('backendStatus: "partial"'), "MCPs backendStatus must be partial");
+assert.ok(deskBlocks.mcps.includes('extensionStatus: "built_in_partial"'), "MCPs extensionStatus must be built_in_partial");
 
 // 25. Every desk exposes capability bullets, safety summary, and suggested prompt titles.
 for (const id of expectedDeskIds) {

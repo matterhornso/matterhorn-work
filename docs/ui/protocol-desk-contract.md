@@ -116,7 +116,7 @@ interface ProtocolBrandAssetManifest {
 | Polymarket | `markets` | `preview_only` | `preview_only` | Preview | `/workspaces/polymarket` | `evm_preview` |
 | Wellness | `wellness` | `workflow_ready` | `workflow_ready` | Ready | `/workspaces/wellness` | `none` |
 | Memory | `memory` | `beta_ready` | `beta_ready` | Beta | `/memory` | `none` |
-| MCPs | `mcps` | `planned_not_live` | `local_only` | Soon | `/mcps` | `none` |
+| MCPs | `mcps` | `beta_ready` | `beta_ready` | Beta | `/mcps` | `none` |
 
 ### Production consumption helpers
 
@@ -208,7 +208,7 @@ Each desk exposes launcher-ready copy:
 - Market desks (`hyperliquid`, `polymarket`) are `preview_only`, do not require an external signer, and do not mention private keys, API secrets, raw signatures, signed payloads, custody, or live submission in manifest copy.
 - Bittensor is `beta_ready`, requires an external signer, and distinguishes SS58/coldkey/hotkey from EVM wallets.
 - Wellness is `workflow_ready`, requires no wallet, and is explicitly non-medical and non-Web3.
-- MCPs is `planned_not_live`.
+- MCPs exposes managed tools and connection health on web. Its backend is `partial`: custom MCP installation, credentials, and permission configuration remain in Matterhorn Desktop.
 - Memory is `beta_ready` and includes a `forget record` action.
 
 ## UI implementation guidance
