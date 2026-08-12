@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import type { MatterhornSessionSnapshot } from "../src/app/lib/matterhorn-server";
-import { useSessionActivityStore } from "../src/react-app/domains/session/status/session-activity-store";
+import {
+  OPTIMISTIC_RUN_RECONCILE_GRACE_MS,
+  useSessionActivityStore,
+} from "../src/react-app/domains/session/status/session-activity-store";
 import { latestSessionSnapshotFailure } from "../src/react-app/domains/session/surface/session-surface";
 
 describe("session activity timing", () => {
@@ -88,6 +91,54 @@ describe("session activity timing", () => {
 
     activity.seedSessionRun(workspaceId, sessionId, { type: "idle" }, true);
     expect(activity.getStatus(workspaceId, sessionId)).toBe("idle");
+  });
+
+  test("lets an authoritative idle snapshot clear an unconfirmed run after the startup grace period", () => {
+    const workspaceId = "ws_stale_optimistic_snapshot";
+    const sessionId = "ses_stale_optimistic_snapshot";
+    const activity = useSessionActivityStore.getState();
+
+    activity.startOptimisticRun(workspaceId, sessionId, { title: "Compare validators" });
+    const record = useSessionActivityStore.getState().recordsByWorkspaceId[workspaceId]?.[sessionId];
+    expect(record).toBeDefined();
+    useSessionActivityStore.setState((state) => ({
+      recordsByWorkspaceId: {
+        ...state.recordsByWorkspaceId,
+        [workspaceId]: {
+          ...state.recordsByWorkspaceId[workspaceId],
+          [sessionId]: {
+            ...record!,
+            runStartedAt: Date.now() - OPTIMISTIC_RUN_RECONCILE_GRACE_MS - 1,
+          },
+        },
+      },
+    }));
+
+    activity.seedSessionRun(workspaceId, sessionId, { type: "idle" }, false);
+
+    expect(activity.getStatus(workspaceId, sessionId)).toBe("idle");
+    expect(useSessionActivityStore.getState().recordsByWorkspaceId[workspaceId]?.[sessionId]?.optimisticRunTitle).toBeUndefined();
+  });
+
+  test("expires an unconfirmed background run so Home and the sidebar cannot spin forever", () => {
+    const workspaceId = "ws_stale_background_run";
+    const sessionId = "ses_stale_background_run";
+    const activity = useSessionActivityStore.getState();
+
+    activity.startOptimisticRun(workspaceId, sessionId, { title: "Research markets" });
+    const runStartedAt = useSessionActivityStore.getState().recordsByWorkspaceId[workspaceId]?.[sessionId]?.runStartedAt;
+    expect(runStartedAt).toBeNumber();
+
+    activity.reconcileStaleOptimisticRuns(
+      workspaceId,
+      (runStartedAt ?? 0) + OPTIMISTIC_RUN_RECONCILE_GRACE_MS + 1,
+    );
+
+    const record = useSessionActivityStore.getState().recordsByWorkspaceId[workspaceId]?.[sessionId];
+    expect(activity.getStatus(workspaceId, sessionId)).toBe("idle");
+    expect(record?.runActive).toBe(false);
+    expect(record?.runStartedAt).toBeUndefined();
+    expect(record?.optimisticRunTitle).toBeUndefined();
   });
 
   test("treats an empty model abort as a neutral cancellation with the prompt available", () => {

@@ -1660,6 +1660,7 @@ export function SessionRoute() {
     [errorsByWorkspaceId, retryingWorkspaceIds, sessionsByWorkspaceId, workspaces],
   );
   const seedWorkspaceActivitySessions = useSessionActivityStore((state) => state.seedWorkspaceSessions);
+  const reconcileStaleOptimisticRuns = useSessionActivityStore((state) => state.reconcileStaleOptimisticRuns);
   const sessionActivityByWorkspaceId = useSessionActivityStore((state) => state.statusesByWorkspaceId);
 
   useEffect(() => {
@@ -1671,6 +1672,24 @@ export function SessionRoute() {
       }
     }
   }, [seedWorkspaceActivitySessions, workspaceSessionGroups]);
+
+  useEffect(() => {
+    const activityWorkspaceIds = Array.from(new Set(workspaceSessionGroups.flatMap((group) => {
+      const serverId = workspaceServerId(group.workspace);
+      return serverId && serverId !== group.workspace.id
+        ? [group.workspace.id, serverId]
+        : [group.workspace.id];
+    })));
+    if (activityWorkspaceIds.length === 0) return;
+    const reconcile = () => {
+      for (const workspaceId of activityWorkspaceIds) {
+        reconcileStaleOptimisticRuns(workspaceId);
+      }
+    };
+    reconcile();
+    const intervalId = window.setInterval(reconcile, 5_000);
+    return () => window.clearInterval(intervalId);
+  }, [reconcileStaleOptimisticRuns, workspaceSessionGroups]);
 
   const sidebarSessionStatusById = useMemo(() => {
     const next: Record<string, string> = {};

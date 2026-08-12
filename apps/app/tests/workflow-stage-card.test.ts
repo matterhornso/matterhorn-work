@@ -583,7 +583,8 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain('if (sessionActivityStatus !== "thinking" && sessionActivityStatus !== "responding") return;');
     expect(src).toContain('setRunStatus(props.workspaceId, props.sessionId, { type: "idle" })');
     expect(storeSrc).toContain("pendingOptimisticRun");
-    expect(storeSrc).toContain("!record.runConfirmed && !record.assistantOutput");
+    expect(storeSrc).toContain("preservePendingOptimisticRun");
+    expect(storeSrc).toContain("OPTIMISTIC_RUN_RECONCILE_GRACE_MS");
   });
 });
 
