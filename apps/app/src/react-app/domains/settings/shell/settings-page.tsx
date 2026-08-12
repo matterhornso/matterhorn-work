@@ -48,6 +48,7 @@ import {
 import { t } from "../../../../i18n";
 import type { SettingsTab } from "../../../../app/types";
 import { filterLaunchSettingsTabs } from "../../../../app/lib/launch-features";
+import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import type {
   MatterhornCapabilityStatus,
   MatterhornSettingsSectionCapability,
@@ -142,7 +143,9 @@ export function getSettingsTabLabel(tab: SettingsTab) {
     case "skills":
       return t("settings.tab_skills");
     case "extensions":
-      return t("settings.tab_extensions");
+      return isPublicBetaWebDeployment()
+        ? "Tools"
+        : t("settings.tab_extensions");
     case "environment":
       return t("settings.tab_environment");
     case "advanced":
@@ -195,7 +198,9 @@ export function getSettingsTabDescription(tab: SettingsTab) {
     case "skills":
       return t("settings.tab_description_skills");
     case "extensions":
-      return t("settings.tab_description_extensions");
+      return isPublicBetaWebDeployment()
+        ? "Review managed tools available to this workspace"
+        : t("settings.tab_description_extensions");
     case "environment":
       return t("settings.tab_description_environment");
     case "advanced":

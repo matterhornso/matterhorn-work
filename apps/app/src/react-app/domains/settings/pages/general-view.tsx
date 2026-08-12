@@ -28,6 +28,7 @@ import { t } from "../../../../i18n";
 import type { SettingsTab } from "../../../../app/types";
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import { isSettingsTabVisibleAtLaunch } from "../../../../app/lib/launch-features";
+import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import type {
   MatterhornCapabilityStatus,
   MatterhornSettingsSectionCapability,
@@ -368,6 +369,7 @@ function TaskLogsSection(props: {
 }
 
 export function GeneralSettingsView(props: GeneralSettingsViewProps) {
+  const hostedManagedTools = isPublicBetaWebDeployment();
   const projectSurfaceActions: Record<ProjectSurfaceSection, () => void> = {
     memory: props.onOpenMemoryReview,
     notes: props.onOpenNotes,
@@ -390,8 +392,16 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
                 <SettingsCard
                   key={card.tab}
                   icon={card.icon}
-                  title={card.title}
-                  desc={card.desc}
+                  title={
+                    card.tab === "extensions" && hostedManagedTools
+                      ? "Tools"
+                      : card.title
+                  }
+                  desc={
+                    card.tab === "extensions" && hostedManagedTools
+                      ? "Managed desk and workspace tools."
+                      : card.desc
+                  }
                   status={liveStatus ?? card.status}
                   onClick={() => props.onNavigateTab(card.tab)}
                 />

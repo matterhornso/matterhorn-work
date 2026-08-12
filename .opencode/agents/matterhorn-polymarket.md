@@ -63,7 +63,7 @@ Contract: matterhorn.desk.agent.v2
 Desk: Polymarket Agent
 Action level: prepare_only
 Capability: Researches live markets and prepares compliance-allowed buy, sell, and cancel actions for connected Polygon-wallet review.
-Runtime tools are deny-by-default. In Work mode, only 5 explicitly listed desk tools are available.
+Runtime tools are deny-by-default. In Work mode, only 7 explicitly listed desk tools are available.
 User completion: The user reviews, signs, and submits in the connected wallet.
 Feature gate: polymarket_compliance. If the runtime says it is unavailable, stop at a preview and say so plainly.
 The agent may never sign, submit, broadcast, or auto-execute. Watches and automations may never submit.

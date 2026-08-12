@@ -52,6 +52,7 @@ import {
 } from "../../../../app/lib/desktop";
 import { MATTERHORN_CLOUD_ENABLED } from "../../../../app/lib/den";
 import { isPublicOauthConnectorEnabledAtLaunch } from "../../../../app/lib/launch-features";
+import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import { getMcpIdentityKey, normalizeMcpSlug } from "../../../../app/mcp";
 import type { McpServerEntry, McpStatusMap } from "../../../../app/types";
 import {
@@ -89,6 +90,7 @@ import {
   deriveCompactMcpState,
   isEmptyMcpStatusMessage,
 } from "./mcp-compact-state";
+import { HostedMcpSummary } from "./hosted-mcp-summary";
 import { ProtocolBrandLogo } from "../../session/workflows/protocol-brand-logo";
 import type { CustomerProtocolDeskId } from "../../session/workflows/protocol-desk-ui";
 
@@ -166,6 +168,8 @@ export type McpViewProps = {
   compact?: boolean;
   /** Opens the full MCP management route from the contextual rail summary. */
   onManageMcp?: () => void;
+  /** Overrides hosted managed mode for focused rendering and tests. */
+  hostedManagedMode?: boolean;
 };
 
 const builtInExtensionDisabledReason = "Disabled by organization";
@@ -982,6 +986,8 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
 export function McpView(props: McpViewProps) {
   const { showToast } = useStatusToasts();
   const showHeader = props.showHeader !== false;
+  const hostedManagedMode =
+    props.hostedManagedMode ?? isPublicBetaWebDeployment();
   const [detailEntry, setDetailEntry] = useState<McpDirectoryInfo | null>(null);
   const [detailSkill, setDetailSkill] = useState<SkillItem | null>(null);
   const [detailSkillContent, setDetailSkillContent] = useState<string | null>(
@@ -1068,6 +1074,11 @@ export function McpView(props: McpViewProps) {
     const request = props.detailEntryRequest;
     if (!request || handledDetailRequestRef.current === request.requestId)
       return;
+    if (hostedManagedMode) {
+      handledDetailRequestRef.current = request.requestId;
+      props.onDetailEntryRequestHandled?.(request.requestId);
+      return;
+    }
     const requestedId = request.id.trim();
     if (!requestedId) return;
 
@@ -1089,6 +1100,7 @@ export function McpView(props: McpViewProps) {
     props.detailEntryRequest,
     props.onDetailEntryRequestHandled,
     quickConnectList,
+    hostedManagedMode,
   ]);
 
   useEffect(() => {
@@ -1096,9 +1108,17 @@ export function McpView(props: McpViewProps) {
     if (requestId == null || handledAddMcpRequestRef.current === requestId)
       return;
     handledAddMcpRequestRef.current = requestId;
+    if (hostedManagedMode) {
+      props.onAddMcpRequestHandled?.(requestId);
+      return;
+    }
     setAddMcpModalOpen(true);
     props.onAddMcpRequestHandled?.(requestId);
-  }, [props.addMcpRequestId, props.onAddMcpRequestHandled]);
+  }, [
+    props.addMcpRequestId,
+    props.onAddMcpRequestHandled,
+    hostedManagedMode,
+  ]);
 
   useEffect(() => {
     if (!isDesktopRuntime()) return;
@@ -1307,6 +1327,33 @@ export function McpView(props: McpViewProps) {
     : 0;
   const hiddenOrPolicyCount = hiddenCount + policyHiddenBuiltInCount;
   const mcpStatusIsEmpty = isEmptyMcpStatusMessage(props.mcpStatus);
+
+  if (hostedManagedMode) {
+    const statusLabel = (status: ReactMcpStatus) => {
+      if (status === "connected") return "Ready";
+      if (status === "needs_auth") return "Sign in required";
+      if (status === "needs_client_registration") return "Setup required";
+      if (status === "disabled") return "Disabled";
+      if (status === "failed") return "Unavailable";
+      return "Offline";
+    };
+
+    return (
+      <HostedMcpSummary
+        compact={props.compact}
+        showHeader={showHeader}
+        connections={props.mcpServers.map((server) => {
+          const status = resolveStatus(server);
+          return {
+            name: displayName(server.name),
+            statusLabel: statusLabel(status),
+            ready: status === "connected",
+          };
+        })}
+        onViewTools={props.onManageMcp}
+      />
+    );
+  }
 
   const requestLogout = (name: string) => {
     if (!name.trim()) return;
