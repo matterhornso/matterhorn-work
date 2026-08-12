@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -355,7 +356,15 @@ describe("workspace session read APIs", () => {
     );
     expect(response.headers.get("x-matterhorn-archive-sha256")).toMatch(/^[a-f0-9]{64}$/);
 
-    const archive = JSON.parse(gunzipSync(Buffer.from(await response.arrayBuffer())).toString("utf8"));
+    const compressedArchive = Buffer.from(await response.arrayBuffer());
+    expect(response.headers.get("x-matterhorn-archive-sha256")).toBe(
+      createHash("sha256").update(compressedArchive).digest("hex"),
+    );
+    const uncompressedArchive = gunzipSync(compressedArchive);
+    expect(response.headers.get("x-matterhorn-archive-uncompressed-bytes")).toBe(
+      String(uncompressedArchive.byteLength),
+    );
+    const archive = JSON.parse(uncompressedArchive.toString("utf8"));
     expect(archive.version).toBe("matterhorn.workspace-data-archive.v1");
     expect(archive.workspace).toMatchObject({ id: "ws_1", name: "Workspace" });
     expect(archive.data.notes).toEqual([

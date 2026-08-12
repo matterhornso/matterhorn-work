@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { gunzipSync } from "node:zlib";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -90,6 +91,15 @@ describe("workspace data archive", () => {
 
     const archive = JSON.parse(gunzipSync(result.compressed).toString("utf8"));
     expect(archive.version).toBe("matterhorn.workspace-data-archive.v1");
+    expect(result.sha256).toBe(
+      createHash("sha256").update(result.compressed).digest("hex"),
+    );
+    expect(archive.manifest.integrity).toEqual({
+      algorithm: "sha256",
+      dataSha256: createHash("sha256")
+        .update(JSON.stringify(archive.data))
+        .digest("hex"),
+    });
     expect(archive.manifest.limits.behavior).toContain(
       "fails instead of truncating",
     );
@@ -133,5 +143,32 @@ describe("workspace data archive", () => {
         activity: {},
       }),
     ).rejects.toThrow("per-file safety limit");
+  });
+
+  test("never follows output symlinks outside the workspace", async () => {
+    const workspace = await fixtureWorkspace();
+    const outside = await mkdtemp(join(tmpdir(), "matterhorn-archive-outside-"));
+    roots.push(outside);
+    await mkdir(join(workspace.path, "outputs"), { recursive: true });
+    await writeFile(join(outside, "private.txt"), "outside workspace");
+    await symlink(
+      join(outside, "private.txt"),
+      join(workspace.path, "outputs", "outside-link.txt"),
+    );
+
+    const result = await buildMatterhornWorkspaceArchive({
+      workspace,
+      configuration: {},
+      notes: [],
+      memory: { records: [], suggestions: [] },
+      chats: [],
+      activity: {},
+    });
+    const archive = JSON.parse(
+      gunzipSync(result.compressed).toString("utf8"),
+    );
+
+    expect(archive.data.files).toEqual([]);
+    expect(JSON.stringify(archive)).not.toContain("outside workspace");
   });
 });

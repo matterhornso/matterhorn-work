@@ -2204,7 +2204,8 @@ describe("backend control plane routes", () => {
     expect(result.payload.policy.retention.purgeSupported).toBe(false);
     expect(result.payload.policy.trainingUse).toBe("none_by_default");
     expect(result.payload.policy.feedbackUse).toBe("eval_routing_product_quality_only");
-    expect(result.payload.policy.limitations.join(" ")).toContain("Append-only audit, task event, and workflow run rows do not have a purge endpoint");
+    expect(result.payload.policy.limitations.join(" ")).toContain("Append-only audit, task event, and workflow run rows do not currently have a purge endpoint");
+    expect(JSON.stringify(result.payload)).not.toContain("local build");
 
     const serialized = JSON.stringify(result.payload);
     expect(serialized).not.toContain(TOKEN);
@@ -2225,9 +2226,12 @@ describe("backend control plane routes", () => {
     expect(initial.payload.policy.appendOnlyRetention).toMatchObject({
       mode: "accountability_default",
       exportRoute: "/workspace/ws_backend/data-ledger/export",
+      summary: expect.stringContaining("append-only workspace records"),
+      windowLabel: "No automatic purge window is configured",
       purgeSupported: false,
       configurable: false,
     });
+    expect(JSON.stringify(initial.payload)).not.toContain("local build");
     expect(initial.payload.controls.modelTraining).toMatchObject({
       status: "unsupported",
       configurable: false,

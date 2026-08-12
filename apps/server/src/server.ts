@@ -5038,7 +5038,7 @@ function buildWorkspaceDataControls(
       export: capability("working", "Export controls", "Notes, memory, outputs, feedback, and event ledgers report their available export paths."),
       deletion: capability("preview", "Deletion controls", "Notes, memory, outputs, and feedback support scoped deletes; append-only logs remain retained for accountability."),
       limitations: [
-        "Append-only audit, task event, and workflow run rows do not have a purge endpoint in this local build.",
+        "Append-only audit, task event, and workflow run rows do not currently have a purge endpoint.",
         "Chat/session history remains controlled by the workspace engine store.",
         "Feedback is stored for eval, routing, and product quality only; it is not used for model training by default.",
       ],
