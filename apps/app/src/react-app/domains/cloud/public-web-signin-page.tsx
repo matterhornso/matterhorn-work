@@ -12,6 +12,7 @@ import {
   checkPublicCloudSession,
   type PublicCloudConfig,
 } from "../../../app/lib/public-cloud-config";
+import { publicWebAuthErrorMessage } from "./public-web-auth-errors";
 import "./public-web-signin.css";
 
 type PublicWebSigninPageProps = {
@@ -37,19 +38,6 @@ function initialAuthMode(): AuthMode {
 function initialResetToken(): string {
   if (typeof window === "undefined") return "";
   return new URLSearchParams(window.location.search).get("token")?.trim() ?? "";
-}
-
-function readableAuthError(error: unknown): string {
-  if (error instanceof DenApiError) {
-    if (error.status >= 500) {
-      return "Account access is temporarily unavailable. Please try again shortly.";
-    }
-    return error.message;
-  }
-  if (error instanceof Error && /timed out/i.test(error.message)) {
-    return "The request took too long. Check your connection and try again.";
-  }
-  return "Matterhorn could not complete that request. Please try again.";
 }
 
 export function PublicWebSigninPage({
@@ -217,10 +205,7 @@ export function PublicWebSigninPage({
         setMode("verify-email");
         setStatusMessage("Verify your email to finish signing in.");
       } else {
-        if (error instanceof DenApiError && error.status >= 500) {
-          setAccountServiceAvailable(false);
-        }
-        setAuthError(readableAuthError(error));
+        setAuthError(publicWebAuthErrorMessage(error));
       }
     } finally {
       setSubmitBusy(false);
@@ -237,7 +222,7 @@ export function PublicWebSigninPage({
       setVerificationCode("");
       setStatusMessage("If verification is still needed, a new code is on its way.");
     } catch (error) {
-      setAuthError(readableAuthError(error));
+      setAuthError(publicWebAuthErrorMessage(error));
     } finally {
       setSubmitBusy(false);
     }
