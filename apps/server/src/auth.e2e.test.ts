@@ -37,6 +37,8 @@ const priorSmtpHost = process.env.MATTERHORN_SMTP_HOST;
 const priorLegalAcceptanceRequired = process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED;
 const priorTermsVersion = process.env.MATTERHORN_TERMS_VERSION;
 const priorPrivacyVersion = process.env.MATTERHORN_PRIVACY_VERSION;
+const priorNodeEnv = process.env.NODE_ENV;
+const priorUsageEnforcement = process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT;
 
 function config(port: number, root: string): ServerConfig {
   return {
@@ -199,6 +201,10 @@ afterEach(async () => {
   else process.env.MATTERHORN_TERMS_VERSION = priorTermsVersion;
   if (priorPrivacyVersion === undefined) delete process.env.MATTERHORN_PRIVACY_VERSION;
   else process.env.MATTERHORN_PRIVACY_VERSION = priorPrivacyVersion;
+  if (priorNodeEnv === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = priorNodeEnv;
+  if (priorUsageEnforcement === undefined) delete process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT;
+  else process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT = priorUsageEnforcement;
 });
 
 describe("public account authentication", () => {
@@ -314,6 +320,31 @@ describe("public account authentication", () => {
       body: { email: "not-created@example.com", password: PASSWORD },
     });
     expect(created.response.status).toBe(200);
+  });
+
+  test("requires an explicit production signup flag and all signup safety controls", async () => {
+    const app = await boot();
+    process.env.NODE_ENV = "production";
+    delete process.env.MATTERHORN_SIGNUPS_ENABLED;
+    const implicit = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "implicit@example.com", password: PASSWORD },
+    });
+    expect(implicit.response.status).toBe(503);
+    expect(implicit.payload.code).toBe("signups_paused");
+
+    process.env.MATTERHORN_SIGNUPS_ENABLED = "true";
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
+    process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "false";
+    process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT = "off";
+    const unsafe = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "unsafe@example.com", password: PASSWORD },
+    });
+    expect(unsafe.response.status).toBe(503);
+    expect(unsafe.payload.code).toBe("signup_security_configuration_invalid");
+
+    const database = new Database(app.authDb, { readonly: true });
+    expect(database.query("SELECT COUNT(*) AS count FROM users").get()).toEqual({ count: 0 });
+    database.close();
   });
 
   test("pauses account creation and enforces the configured beta capacity", async () => {

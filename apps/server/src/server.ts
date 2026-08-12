@@ -6745,18 +6745,34 @@ function createRoutes(
   addRoute(routes, "POST", "/api/auth/sign-up/email", "none", async (ctx) => {
     const { request } = ctx;
     const signupsEnabled = process.env.MATTERHORN_SIGNUPS_ENABLED?.trim().toLowerCase();
-    if (signupsEnabled && !/^(1|true|yes|on)$/.test(signupsEnabled)) {
+    const signupsExplicitlyEnabled = /^(1|true|yes|on)$/.test(signupsEnabled ?? "");
+    if (
+      (process.env.NODE_ENV === "production" && !signupsExplicitlyEnabled) ||
+      (signupsEnabled && !signupsExplicitlyEnabled)
+    ) {
       throw new ApiError(503, "signups_paused", "New accounts are paused while we prepare more beta places.");
     }
     const verificationRequired = enabledEnvironmentFlag(
       "MATTERHORN_EMAIL_VERIFICATION_REQUIRED",
     );
-    const emailConfig = matterhornEmailConfig();
-    if (verificationRequired) requireMatterhornEmailDelivery(emailConfig);
-    const body = await readJsonBody(request, 16 * 1024, "Sign-up");
     const legalAcceptanceRequired = enabledEnvironmentFlag(
       "MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED",
     );
+    if (
+      process.env.NODE_ENV === "production" &&
+      (!verificationRequired ||
+        !legalAcceptanceRequired ||
+        process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT?.trim().toLowerCase() !== "hard")
+    ) {
+      throw new ApiError(
+        503,
+        "signup_security_configuration_invalid",
+        "New accounts are paused while verification, legal acceptance, and usage limits are configured.",
+      );
+    }
+    const emailConfig = matterhornEmailConfig();
+    if (verificationRequired) requireMatterhornEmailDelivery(emailConfig);
+    const body = await readJsonBody(request, 16 * 1024, "Sign-up");
     const termsVersion = process.env.MATTERHORN_TERMS_VERSION?.trim() ?? "";
     const privacyVersion = process.env.MATTERHORN_PRIVACY_VERSION?.trim() ?? "";
     if (
