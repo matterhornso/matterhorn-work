@@ -37,6 +37,7 @@ type SessionActivityStore = {
   seedWorkspaceSessions: (workspaceId: string, sessions: SessionLike[]) => void;
   seedSessionRun: (workspaceId: string, sessionId: string, status: unknown, assistantOutput: boolean) => void;
   startOptimisticRun: (workspaceId: string, sessionId: string, options?: { title?: string; agent?: string }) => void;
+  cancelOptimisticRun: (workspaceId: string, sessionId: string) => void;
   setRunStatus: (workspaceId: string, sessionId: string, status: unknown) => void;
   markMessageRole: (workspaceId: string, sessionId: string, messageId: string, role: SessionMessageRole) => void;
   markAssistantOutput: (workspaceId: string, sessionId: string, messageId?: string, options?: { allowUnknownMessageRole?: boolean }) => void;
@@ -216,6 +217,23 @@ export const useSessionActivityStore = create<SessionActivityStore>((set, get) =
       compacting: false,
       optimisticRunTitle: title || record.optimisticRunTitle,
       optimisticRunAgent: agent || record.optimisticRunAgent,
+      waitingPermissionIds: [],
+      waitingQuestionIds: [],
+    })));
+  },
+  cancelOptimisticRun: (workspaceId, sessionId) => {
+    const workspace = workspaceId.trim();
+    const session = sessionId.trim();
+    if (!workspace || !session) return;
+    set((state) => updateRecord(state, workspace, session, (record) => ({
+      ...record,
+      runActive: false,
+      runConfirmed: false,
+      assistantOutput: false,
+      errorActive: false,
+      compacting: false,
+      optimisticRunTitle: undefined,
+      optimisticRunAgent: undefined,
       waitingPermissionIds: [],
       waitingQuestionIds: [],
     })));

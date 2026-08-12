@@ -440,7 +440,9 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(launcherBlock).toContain("Add a provider in Models, then choose one of its available models.");
     expect(launcherBlock).toContain('title: `Starting ${title || "desk task"}`');
     expect(launcherBlock).toContain('title: `${title || "Desk task"} started`');
-    expect(launcherBlock).toContain('title: "Task needs review before sending"');
+    expect(launcherBlock).toContain('title: "Task was not sent"');
+    expect(launcherBlock).toContain('reason: "provider_privacy_unverified"');
+    expect(launcherBlock).toContain('actionLabel: "Privacy details"');
     expect(launcherBlock).toContain('recordInspectorEvent("desk.task_launch.requested"');
     expect(launcherBlock).toContain('recordInspectorEvent("desk.task_launch.session_created"');
     expect(launcherBlock).toContain('recordInspectorEvent("desk.task_launch.prompt_send_started"');
@@ -517,7 +519,7 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).toContain("getMatterhornDeskAgentById(agentId)");
     expect(src).toContain("buildMatterhornDeskAgentSystemPrompt(deskAgent)");
     expect(src).toContain("startOptimisticRun(activityWorkspaceId, session.id");
-    expect(src).toContain("setRunStatus(activityWorkspaceId, session.id, { type: \"idle\" })");
+    expect(src).toContain("cancelOptimisticRun(activityWorkspaceId, session.id)");
   });
 
   test("task launcher exposes an immediate in-session activity state", () => {
