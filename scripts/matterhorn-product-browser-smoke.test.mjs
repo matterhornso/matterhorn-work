@@ -191,6 +191,13 @@ assert.ok(
   "product browser smoke should reject raw provider-key controls in the web build",
 );
 assert.ok(
+  script.includes('report.artifacts.mcpMode = "hosted-managed"') &&
+    script.includes('["Available in this workspace", "Managed connections"]') &&
+    script.includes('"Reviewed wallet actions"') &&
+    script.includes("Hosted managed Tools exposed local-only control"),
+  "product browser smoke should verify the hosted managed-tools boundary without expecting local MCP setup",
+);
+assert.ok(
   script.includes('[aria-label^="Connected MCP servers:"]') &&
     script.includes("getByText(/^Synced /)") &&
     script.includes("Connected MCP summary did not name any servers.") &&

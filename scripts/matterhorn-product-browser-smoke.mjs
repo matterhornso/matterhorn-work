@@ -1594,6 +1594,30 @@ async function runSmoke(config) {
           waitUntil: "load",
           timeout: 30_000,
         });
+        if (config.hostedAccount) {
+          await page
+            .getByRole("heading", { name: "Tools", exact: true })
+            .waitFor({ state: "visible", timeout: 20_000 });
+          for (const heading of ["Available in this workspace", "Managed connections"]) {
+            await page
+              .getByRole("heading", { name: heading, exact: true })
+              .waitFor({ state: "visible", timeout: 20_000 });
+          }
+          for (const capability of ["Desk research", "Workspace evidence", "Reviewed wallet actions"]) {
+            await page
+              .getByText(capability, { exact: true })
+              .waitFor({ state: "visible", timeout: 20_000 });
+          }
+          for (const localOnlyControl of ["Add Custom MCP", "Available MCPs & connectors", "Generate client config"]) {
+            if (await firstVisible(page.getByText(localOnlyControl, { exact: true }))) {
+              throw new Error(`Hosted managed Tools exposed local-only control: ${localOnlyControl}.`);
+            }
+          }
+          report.artifacts.mcpMode = "hosted-managed";
+          report.artifacts.connectedMcpServers = [];
+          report.artifacts.mcpSettingsUrl = page.url();
+          return;
+        }
         await page
           .getByRole("heading", { name: "MCPs & Tools", exact: true })
           .waitFor({ state: "visible", timeout: 20_000 });
