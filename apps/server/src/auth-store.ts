@@ -848,6 +848,22 @@ export class MatterhornAuthStore {
     token: string,
     password: string,
   ): MatterhornAuthAccountDeletion {
+    const deletion = this.prepareAccountDeletion(token, password);
+    this.withTransaction(() => {
+      for (const organizationId of deletion.deletedOrganizationIds) {
+        statement(this.db, "DELETE FROM organizations WHERE id = ?").run(
+          organizationId,
+        );
+      }
+      statement(this.db, "DELETE FROM users WHERE id = ?").run(deletion.userId);
+    });
+    return deletion;
+  }
+
+  prepareAccountDeletion(
+    token: string,
+    password: string,
+  ): MatterhornAuthAccountDeletion {
     const session = this.requireSession(token);
     const row = statement(
       this.db,
@@ -871,15 +887,6 @@ export class MatterhornAuthStore {
     const deletedOrganizationIds = summary.organizations
       .filter((organization) => organization.role === "owner")
       .map((organization) => organization.id);
-
-    this.withTransaction(() => {
-      for (const organizationId of deletedOrganizationIds) {
-        statement(this.db, "DELETE FROM organizations WHERE id = ?").run(
-          organizationId,
-        );
-      }
-      statement(this.db, "DELETE FROM users WHERE id = ?").run(session.user.id);
-    });
     return { userId: session.user.id, deletedOrganizationIds };
   }
 

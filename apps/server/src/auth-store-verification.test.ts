@@ -184,4 +184,23 @@ describe("account verification and password recovery", () => {
     inspector.close();
     store.close();
   });
+
+  test("prepares account deletion without removing the recoverable account", () => {
+    const fixture = createStore();
+    const session = fixture.store.createAccount({
+      email: "deletion-plan@example.com",
+      password: PASSWORD,
+    });
+
+    const plan = fixture.store.prepareAccountDeletion(session.token, PASSWORD);
+    expect(plan.userId).toBe(session.user.id);
+    expect(plan.deletedOrganizationIds).toHaveLength(1);
+    expect(fixture.store.getSession(session.token)?.user.email).toBe(
+      "deletion-plan@example.com",
+    );
+
+    fixture.store.deleteAccount(session.token, PASSWORD);
+    expect(fixture.store.getSession(session.token)).toBeNull();
+    fixture.store.close();
+  });
 });

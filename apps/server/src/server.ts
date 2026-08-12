@@ -7107,8 +7107,9 @@ function createRoutes(
         "Enter the signed-in email address exactly to confirm account deletion.",
       );
     }
+    const password = stringBodyField(body, "password");
     const deletion = withMatterhornAuthErrorMapping(() =>
-      authStore.deleteAccount(token, stringBodyField(body, "password")),
+      authStore.prepareAccountDeletion(token, password),
     );
     const memoryDeletionFailures: string[] = [];
     for (const organizationId of deletion.deletedOrganizationIds) {
@@ -7125,14 +7126,26 @@ function createRoutes(
       deletion.deletedOrganizationIds,
     );
     onWorkspacesChanged();
+    const deletionFailureCount =
+      workspaceDeletion.failedOrganizationIds.length +
+      memoryDeletionFailures.length;
+    if (deletionFailureCount > 0) {
+      throw new ApiError(
+        503,
+        "account_data_deletion_failed",
+        "Account data could not be fully deleted. Your account remains active; try again or contact support.",
+      );
+    }
+
+    withMatterhornAuthErrorMapping(() =>
+      authStore.deleteAccount(token, password),
+    );
 
     const response = jsonResponse({
       ok: true,
       deletedOrganizationCount: deletion.deletedOrganizationIds.length,
-      workspaceDataDeletionComplete:
-        workspaceDeletion.complete && memoryDeletionFailures.length === 0,
-      workspaceDataDeletionFailures:
-        workspaceDeletion.failedOrganizationIds.length + memoryDeletionFailures.length,
+      workspaceDataDeletionComplete: true,
+      workspaceDataDeletionFailures: 0,
     });
     response.headers.append(
       "Set-Cookie",
