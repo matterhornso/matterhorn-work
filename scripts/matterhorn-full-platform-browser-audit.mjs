@@ -27,6 +27,7 @@ const settingsSurfaces = [
   ["settings-generated-media", "settings/generated-media", ["Production readiness", "Media library"]],
   ["settings-extensions", "settings/extensions", ["Matterhorn MCPs"]],
   ["settings-ai", "settings/ai", ["Models"]],
+  ["settings-privacy", "settings/privacy", ["Model processing", "Workspace data", "Complete workspace archive"]],
   ["settings-customization", "settings/shell", ["Customization"]],
   ["settings-appearance", "settings/appearance", ["Appearance"]],
   ["settings-updates", "settings/updates", ["Updates"]],
