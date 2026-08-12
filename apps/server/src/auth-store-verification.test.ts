@@ -59,9 +59,13 @@ describe("account verification and password recovery", () => {
     );
     expect(challenge?.verificationCode).toMatch(/^\d{6}$/);
     const inspector = new Database(path);
+    const password = inspector
+      .query("SELECT password_hash FROM users WHERE email = ?")
+      .get("new.user@example.com") as { password_hash: string };
     const persisted = inspector
       .query("SELECT code_hash, code_salt FROM email_verification_challenges")
       .get() as { code_hash: string; code_salt: string };
+    expect(password.password_hash).toStartWith("scrypt-v2$32768$8$3$");
     expect(persisted.code_hash).not.toContain(challenge!.verificationCode);
     expect(persisted.code_salt).not.toBe("");
     inspector.close();
@@ -181,6 +185,10 @@ describe("account verification and password recovery", () => {
     const columns = inspector.query("PRAGMA table_info(users)").all() as Array<{ name: string }>;
     expect(columns.some((column) => column.name === "email_verified_at")).toBe(true);
     expect(store.signIn("legacy@example.com", PASSWORD).user.emailVerified).toBe(true);
+    const upgraded = inspector
+      .query("SELECT password_hash FROM users WHERE id = 'usr_legacy'")
+      .get() as { password_hash: string };
+    expect(upgraded.password_hash).toStartWith("scrypt-v2$32768$8$3$");
     inspector.close();
     store.close();
   });

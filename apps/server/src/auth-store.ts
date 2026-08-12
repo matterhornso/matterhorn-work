@@ -1,6 +1,7 @@
 import {
   createHash,
   randomBytes,
+  randomInt,
   randomUUID,
   scryptSync,
   timingSafeEqual,
@@ -220,15 +221,48 @@ function normalizeOrganizationSlug(slug: string): string {
   return normalized;
 }
 
-function hashPassword(password: string, salt: Buffer): Buffer {
-  return scryptSync(password, salt, 64);
+const PASSWORD_HASH_PREFIX = "scrypt-v2$32768$8$3$";
+const PASSWORD_SCRYPT_OPTIONS = {
+  N: 2 ** 15,
+  r: 8,
+  p: 3,
+  maxmem: 64 * 1024 * 1024,
+} as const;
+
+function deriveCurrentPasswordHash(password: string, salt: Buffer): Buffer {
+  return scryptSync(password, salt, 64, PASSWORD_SCRYPT_OPTIONS);
+}
+
+function encodePasswordHash(password: string, salt: Buffer): string {
+  return `${PASSWORD_HASH_PREFIX}${deriveCurrentPasswordHash(password, salt).toString("hex")}`;
+}
+
+function verifyStoredPassword(
+  password: string,
+  salt: Buffer,
+  storedHash: string,
+): { matches: boolean; needsUpgrade: boolean } {
+  const current = storedHash.startsWith(PASSWORD_HASH_PREFIX);
+  const encoded = current
+    ? storedHash.slice(PASSWORD_HASH_PREFIX.length)
+    : storedHash;
+  const expected = /^[a-f0-9]{128}$/i.test(encoded)
+    ? Buffer.from(encoded, "hex")
+    : Buffer.alloc(64);
+  const actual = current
+    ? deriveCurrentPasswordHash(password, salt)
+    : scryptSync(password, salt, 64);
+  return {
+    matches: timingSafeEqual(actual, expected),
+    needsUpgrade: !current,
+  };
 }
 
 const MISSING_USER_SALT = createHash("sha256")
   .update("matterhorn-auth-missing-user")
   .digest()
   .subarray(0, 16);
-const MISSING_USER_HASH = hashPassword(
+const MISSING_USER_HASH = encodePasswordHash(
   "matterhorn-auth-missing-user-password",
   MISSING_USER_SALT,
 );
@@ -410,7 +444,7 @@ export class MatterhornAuthStore {
     const organizationId = `org_${randomUUID().replaceAll("-", "")}`;
     const organizationSlug = `personal-${userId.slice(-12)}`;
     const salt = randomBytes(16);
-    const passwordHash = hashPassword(input.password, salt);
+    const passwordHash = encodePasswordHash(input.password, salt);
 
     this.withTransaction(() => {
       if (input.maxAccounts !== null && input.maxAccounts !== undefined) {
@@ -431,7 +465,7 @@ export class MatterhornAuthStore {
         userId,
         email,
         name,
-        passwordHash.toString("hex"),
+        passwordHash,
         salt.toString("hex"),
         input.emailVerified === false ? null : now,
         now,
@@ -478,20 +512,19 @@ export class MatterhornAuthStore {
         FROM users WHERE email = ? LIMIT 1`,
     ).get(email) as UserRow | undefined;
     if (!row) {
-      const actual = hashPassword(password, MISSING_USER_SALT);
-      timingSafeEqual(actual, MISSING_USER_HASH);
+      verifyStoredPassword(password, MISSING_USER_SALT, MISSING_USER_HASH);
       throw new MatterhornAuthError(
         "invalid_credentials",
         "Email or password is incorrect.",
       );
     }
 
-    const actual = hashPassword(password, Buffer.from(row.password_salt, "hex"));
-    const expected = Buffer.from(row.password_hash, "hex");
-    if (
-      actual.length !== expected.length ||
-      !timingSafeEqual(actual, expected)
-    ) {
+    const passwordVerification = verifyStoredPassword(
+      password,
+      Buffer.from(row.password_salt, "hex"),
+      row.password_hash,
+    );
+    if (!passwordVerification.matches) {
       throw new MatterhornAuthError(
         "invalid_credentials",
         "Email or password is incorrect.",
@@ -501,6 +534,15 @@ export class MatterhornAuthStore {
       throw new MatterhornAuthError(
         "email_unverified",
         "Verify your email before signing in.",
+      );
+    }
+    if (passwordVerification.needsUpgrade) {
+      statement(
+        this.db,
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+      ).run(
+        encodePasswordHash(password, Buffer.from(row.password_salt, "hex")),
+        row.id,
       );
     }
 
@@ -529,9 +571,7 @@ export class MatterhornAuthStore {
     ).get(email) as UserRow | undefined;
     if (!user || user.email_verified_at !== null) return null;
 
-    const verificationCode = String(
-      100_000 + randomBytes(4).readUInt32BE(0) % 900_000,
-    );
+    const verificationCode = String(randomInt(100_000, 1_000_000));
     const salt = randomBytes(16);
     const now = Date.now();
     const expiresAt = now + EMAIL_VERIFICATION_TTL_MS;
@@ -698,13 +738,13 @@ export class MatterhornAuthStore {
       );
     }
     const salt = randomBytes(16);
-    const passwordHash = hashPassword(newPassword, salt);
+    const passwordHash = encodePasswordHash(newPassword, salt);
     this.withTransaction(() => {
       statement(
         this.db,
         "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?",
       ).run(
-        passwordHash.toString("hex"),
+        passwordHash,
         salt.toString("hex"),
         challenge.user_id,
       );
@@ -832,12 +872,12 @@ export class MatterhornAuthStore {
     }
 
     const salt = randomBytes(16);
-    const passwordHash = hashPassword(input.newPassword, salt);
+    const passwordHash = encodePasswordHash(input.newPassword, salt);
     this.withTransaction(() => {
       statement(
         this.db,
         "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?",
-      ).run(passwordHash.toString("hex"), salt.toString("hex"), session.user.id);
+      ).run(passwordHash, salt.toString("hex"), session.user.id);
       statement(this.db, "DELETE FROM sessions WHERE user_id = ?").run(
         session.user.id,
       );
@@ -993,9 +1033,11 @@ export class MatterhornAuthStore {
   }
 
   private passwordMatches(row: UserRow, password: string): boolean {
-    const actual = hashPassword(password, Buffer.from(row.password_salt, "hex"));
-    const expected = Buffer.from(row.password_hash, "hex");
-    return actual.length === expected.length && timingSafeEqual(actual, expected);
+    return verifyStoredPassword(
+      password,
+      Buffer.from(row.password_salt, "hex"),
+      row.password_hash,
+    ).matches;
   }
 
   private createSessionForUser(

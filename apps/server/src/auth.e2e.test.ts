@@ -1101,7 +1101,9 @@ describe("public account authentication", () => {
       const session = db.query(
         "SELECT token_hash FROM sessions WHERE user_id = ?",
       ).get(signup.payload.user.id) as { token_hash: string };
-      expect(user.password_hash).toMatch(/^[a-f0-9]{128}$/);
+      expect(user.password_hash).toMatch(
+        /^scrypt-v2\$32768\$8\$3\$[a-f0-9]{128}$/,
+      );
       expect(user.password_salt).toMatch(/^[a-f0-9]{32}$/);
       expect(session.token_hash).toMatch(/^[a-f0-9]{64}$/);
       expect(session.token_hash).not.toBe(rawToken);
