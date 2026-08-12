@@ -249,11 +249,15 @@ function verifyStoredPassword(
   const expected = /^[a-f0-9]{128}$/i.test(encoded)
     ? Buffer.from(encoded, "hex")
     : Buffer.alloc(64);
-  const actual = current
-    ? deriveCurrentPasswordHash(password, salt)
+  let actual: Buffer;
+  if (current) {
+    actual = deriveCurrentPasswordHash(password, salt);
+  } else {
     // This branch only verifies pre-v2 hashes. A successful sign-in rewrites
     // the row with the current OWASP-aligned profile before issuing a session.
-    : scryptSync(password, salt, 64); // lgtm[js/insufficient-password-hash]
+    // codeql[js/insufficient-password-hash]
+    actual = scryptSync(password, salt, 64);
+  }
   return {
     matches: timingSafeEqual(actual, expected),
     needsUpgrade: !current,
