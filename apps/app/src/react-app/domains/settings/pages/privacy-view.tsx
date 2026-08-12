@@ -1,4 +1,5 @@
 /** @jsxImportSource react */
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
@@ -8,7 +9,7 @@ import type {
   MatterhornProviderPrivacyPolicy,
 } from "@matterhorn-work/types/backend-models";
 import type { MatterhornWorkspaceFeedbackUse } from "@matterhorn-work/types/backend-data-policy";
-import { ArrowUpRight, Database, FileText, NotebookPen } from "lucide-react";
+import { ArrowUpRight, Database, Download, FileText, NotebookPen } from "lucide-react";
 
 import { SettingsNotice, SettingsStatusBadge } from "../settings-section";
 import {
@@ -33,6 +34,34 @@ export type PrivacySettingsViewProps = {
   onOpenNotes: () => void;
   onOpenOutputs: () => void;
 };
+
+function safeArchiveFilePart(value: string) {
+  return (
+    value
+      .replace(/[^a-z0-9._-]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "workspace"
+  );
+}
+
+function downloadWorkspaceArchiveFile(input: {
+  filename: string;
+  data: ArrayBuffer;
+  contentType: string | null;
+}) {
+  const blob = new Blob([input.data], {
+    type: input.contentType ?? "application/gzip",
+  });
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = input.filename;
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+}
 
 export function providerPrivacyTone(policy: MatterhornProviderPrivacyPolicy) {
   if (
@@ -90,6 +119,7 @@ export function providerVerificationLabel(policy: MatterhornProviderPrivacyPolic
 export function PrivacySettingsView(props: PrivacySettingsViewProps) {
   const workspaceId = props.runtimeWorkspaceId?.trim() ?? "";
   const queryClient = useQueryClient();
+  const [archiveDownloaded, setArchiveDownloaded] = useState(false);
   const privacyQuery = useQuery({
     queryKey: ["settings-privacy-center", workspaceId],
     enabled: Boolean(props.matterhornServerClient && workspaceId),
@@ -125,6 +155,27 @@ export function PrivacySettingsView(props: PrivacySettingsViewProps) {
       void queryClient.invalidateQueries({
         queryKey: ["settings-workspace-backend-control-plane", workspaceId],
       });
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client || !workspaceId) {
+        throw new Error("Open a connected workspace to download its archive.");
+      }
+      return client.exportWorkspaceDataArchive(workspaceId);
+    },
+    onMutate: () => setArchiveDownloaded(false),
+    onSuccess: (archive) => {
+      downloadWorkspaceArchiveFile({
+        filename:
+          archive.filename ??
+          `matterhorn-workspace-${safeArchiveFilePart(workspaceId)}-${new Date().toISOString().slice(0, 10)}.json.gz`,
+        data: archive.data,
+        contentType: archive.contentType,
+      });
+      setArchiveDownloaded(true);
     },
   });
 
@@ -246,6 +297,39 @@ export function PrivacySettingsView(props: PrivacySettingsViewProps) {
                 <FileText data-icon="inline-start" /> Outputs
               </Button>
             </div>
+          </LayoutSectionItem>
+          <LayoutSectionItem className="py-3">
+            <LayoutSectionItemHeader>
+              <LayoutSectionItemTitle>Complete workspace archive</LayoutSectionItemTitle>
+              <LayoutSectionItemDescription>
+                Download chats, todos, notes, confirmed memory, the memory review inbox, outputs, and sanitized workspace settings. Secrets and authentication material are excluded.
+              </LayoutSectionItemDescription>
+              <LayoutSectionItemHeaderActions>
+                <Button
+                  variant="outline"
+                  disabled={
+                    !props.matterhornServerClient ||
+                    !workspaceId ||
+                    archiveMutation.isPending
+                  }
+                  onClick={() => archiveMutation.mutate()}
+                >
+                  <Download data-icon="inline-start" />
+                  {archiveMutation.isPending ? "Preparing…" : "Download archive"}
+                </Button>
+              </LayoutSectionItemHeaderActions>
+            </LayoutSectionItemHeader>
+            {archiveDownloaded ? (
+              <p role="status" className="text-xs text-muted-foreground">
+                Workspace archive downloaded.
+              </p>
+            ) : archiveMutation.isError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {archiveMutation.error instanceof Error
+                  ? archiveMutation.error.message
+                  : "Workspace archive could not be downloaded."}
+              </p>
+            ) : null}
           </LayoutSectionItem>
           <LayoutSectionItem className="py-3">
             <LayoutSectionItemHeader>

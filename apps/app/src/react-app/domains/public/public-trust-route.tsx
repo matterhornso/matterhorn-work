@@ -117,16 +117,23 @@ const trustPages: Record<Exclude<PublicTrustPath, "/status">, TrustPage> = {
       {
         title: "Your controls",
         body: (
-          <p>
-            You can review saved memory, choose what to remember, disconnect
-            providers, and use the export or deletion controls available for
-            each workspace store. For hosted access, deletion, or privacy
-            questions, contact{" "}
-            <a className="text-foreground underline underline-offset-4" href={`mailto:${MATTERHORN_SUPPORT_EMAIL}`}>
-              {MATTERHORN_SUPPORT_EMAIL}
-            </a>
-            .
-          </p>
+          <>
+            <p>
+              You can review saved memory, choose what to remember, disconnect
+              providers, and use the export or deletion controls available for
+              each workspace store.
+            </p>
+            <p>
+              Download a complete workspace archive from Settings → Privacy.
+              Download your profile, legal acceptance, and memberships from
+              Settings → Account. For hosted access, deletion, or privacy
+              questions, contact{" "}
+              <a className="text-foreground underline underline-offset-4" href={`mailto:${MATTERHORN_SUPPORT_EMAIL}`}>
+                {MATTERHORN_SUPPORT_EMAIL}
+              </a>
+              .
+            </p>
+          </>
         ),
       },
     ],
