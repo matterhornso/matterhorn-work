@@ -92,6 +92,18 @@ export function PublicWebSigninPage({
   }, [refreshSession]);
 
   useEffect(() => {
+    if (mode !== "reset-password" || !resetToken) return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("token")) return;
+    url.searchParams.delete("token");
+    window.history.replaceState(
+      {},
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }, [mode, resetToken]);
+
+  useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
 

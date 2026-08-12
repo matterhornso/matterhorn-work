@@ -123,6 +123,8 @@ describe("responsive accessibility regressions", () => {
     expect(signin).toContain('inputMode="numeric"');
     expect(signin).toContain("Forgot password?");
     expect(signin).toContain("Passwords do not match.");
+    expect(signin).toContain('url.searchParams.delete("token")');
+    expect(signin).toContain("window.history.replaceState");
     expect(signin).toContain('name="legalAccepted"');
     expect(signin).toContain('<a href="/terms"');
     expect(signin).toContain('<a href="/privacy"');
