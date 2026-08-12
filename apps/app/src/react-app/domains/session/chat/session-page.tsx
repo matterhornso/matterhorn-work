@@ -30,6 +30,7 @@ import {
 import { t } from "../../../../i18n";
 import { OPENWORK_EXTENSION_CATALOG } from "../../../../app/constants";
 import { MATTERHORN_LAUNCH_FEATURES } from "../../../../app/lib/launch-features";
+import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import {
   type MatterhornServerClient,
   type MatterhornServerStatus,
@@ -1401,6 +1402,7 @@ function writeHiddenAccessibleTargetIds(workspaceId: string | null | undefined, 
 export function SessionPage(props: SessionPageProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const hostedManagedTools = isPublicBetaWebDeployment();
   const liveLocationRef = useRef(location);
   liveLocationRef.current = location;
   const { config: shellConfig } = useShellConfig();
@@ -1583,7 +1585,9 @@ export function SessionPage(props: SessionPageProps) {
     : visibleSidePanel === "wallet"
       ? "Wallet"
       : visibleSidePanel === "extensions"
-        ? "MCPs & Tools"
+        ? hostedManagedTools
+          ? "Tools"
+          : "MCPs & Tools"
         : visibleSidePanel === "memory"
           ? "Memory"
           : visibleSidePanel === "notes"
@@ -3443,12 +3447,14 @@ export function SessionPage(props: SessionPageProps) {
                 extensionsRailActive && RAIL_ACTIVE_CLASS,
               )}
               onClick={props.settingsSlot ? openExtensionsRailPane : props.onOpenSettings}
-              title="MCPs & Connectors"
-              aria-label="MCPs & Connectors"
+              title={hostedManagedTools ? "Tools" : "MCPs & Connectors"}
+              aria-label={hostedManagedTools ? "Tools" : "MCPs & Connectors"}
               aria-pressed={extensionsRailActive}
             >
               <Settings2 size={17} />
-              <span className={RAIL_LABEL_CLASS}>MCPs</span>
+              <span className={RAIL_LABEL_CLASS}>
+                {hostedManagedTools ? "Tools" : "MCPs"}
+              </span>
             </Button>
             <Button
               variant="ghost"

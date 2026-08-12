@@ -3,6 +3,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Cpu, RefreshCw } from "lucide-react";
 
 import { t } from "../../../../i18n";
+import { isPublicBetaWebDeployment } from "../../../../app/lib/matterhorn-deployment";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -47,14 +48,19 @@ export type ExtensionsViewProps = {
   setSectionRoute?: (tab: "mcp" | "skills" | "plugins") => void;
   showHeader?: boolean;
   compact?: boolean;
+  /** Overrides the hosted managed-tools boundary for focused rendering and tests. */
+  hostedManagedMode?: boolean;
 };
 
 export function ExtensionsView(props: ExtensionsViewProps) {
+  const hostedManagedMode =
+    props.hostedManagedMode ?? isPublicBetaWebDeployment();
   const [view, setView] = useState<"my" | "marketplace">("my");
-  const marketplaceAvailable = Boolean(props.cloudMarketplaceView);
+  const marketplaceAvailable =
+    !hostedManagedMode && Boolean(props.cloudMarketplaceView);
   const pluginCount = useMemo(
-    () => props.extensions.pluginList().length,
-    [props.extensions],
+    () => (hostedManagedMode ? 0 : props.extensions.pluginList().length),
+    [hostedManagedMode, props.extensions],
   );
   const connectedAppNames = props.mcpConnectedAppNames.map(mcpServerDisplayName);
   const connectedAppCount = connectedAppNames.length;
@@ -77,7 +83,8 @@ export function ExtensionsView(props: ExtensionsViewProps) {
       "w-full animate-in fade-in duration-300",
       props.compact ? "space-y-4 max-w-none" : "space-y-6 max-w-3xl",
     )}>
-      {connectedAppCount > 0 || !marketplaceAvailable ? (
+      {!hostedManagedMode &&
+      (connectedAppCount > 0 || !marketplaceAvailable) ? (
         <div className="flex min-w-0 items-start justify-between gap-3 text-xs">
           {connectedAppCount > 0 ? (
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">

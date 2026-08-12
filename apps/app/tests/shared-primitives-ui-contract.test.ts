@@ -1007,7 +1007,10 @@ describe("Shared primitives UI contract", () => {
       '"grid min-w-0 flex-1 grid-cols-2 rounded-md bg-dls-surface-muted/[0.14] p-1"',
     );
     expect(extensionsSource).toContain(
-      "const marketplaceAvailable = Boolean(props.cloudMarketplaceView)",
+      "const marketplaceAvailable =",
+    );
+    expect(extensionsSource).toContain(
+      "!hostedManagedMode && Boolean(props.cloudMarketplaceView)",
     );
     expect(extensionsSource).toContain(
       "!marketplaceAvailable ? refreshButton : null",
