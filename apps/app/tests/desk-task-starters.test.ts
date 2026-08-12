@@ -142,6 +142,8 @@ describe("desk task starters", () => {
     expect(polymarketPrompts).toContain("Polymarket SELL order");
     expect(polymarketPrompts).toContain("Polymarket order cancellation");
     expect(polymarketPrompts).toContain("Never place or auto-execute a bet");
+    expect(polymarketPrompts).toContain("Polymarket, Kalshi, and Manifold");
+    expect(polymarketPrompts).toContain("Keep Kalshi and Manifold research-only");
     expect(polymarketPrompts).toContain("describe market or trade");
     expect(polymarketPrompts).not.toContain("<paste market URL or slug>");
     expect(hyperliquidPrompts).toContain("dedicated trade ticket");

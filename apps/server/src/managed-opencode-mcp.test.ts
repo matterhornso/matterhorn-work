@@ -76,6 +76,7 @@ describe("managed OpenCode Matterhorn MCP", () => {
     const body = result.body as { result: { tools: Array<{ name: string }> } };
     expect(body.result.tools.map((tool) => tool.name)).toEqual(managedOpencodeMcpToolNames());
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_hyperliquid_get_orderbook");
+    expect(managedOpencodeMcpToolNames()).toContain("matterhorn_prediction_markets_search");
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_polymarket_check_compliance");
     expect(managedOpencodeMcpToolNames()).toContain("matterhorn_sui_preview_transfer");
   });

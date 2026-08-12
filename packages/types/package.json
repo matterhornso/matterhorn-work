@@ -132,6 +132,11 @@
       "types": "./src/model-usage.ts",
       "development": "./src/model-usage.ts",
       "default": "./src/model-usage.ts"
+    },
+    "./prediction-markets": {
+      "types": "./src/prediction-markets.ts",
+      "development": "./src/prediction-markets.ts",
+      "default": "./src/prediction-markets.ts"
     }
   },
   "files": [

@@ -30,7 +30,7 @@ export const MATTERHORN_RECOMMENDED_DESK_TASK_IDS: Record<
 > = {
   bittensor: ["discover-subnets", "compare-validators", "review-subnet-emissions"],
   hyperliquid: ["market-overview", "orderbook", "compare-funding"],
-  polymarket: ["discover-markets", "research-market", "check-compliance"],
+  polymarket: ["compare-venues", "discover-markets", "check-compliance"],
   sui: ["read-wallet", "validate-recipient", "review-transfer-fees"],
   wellness: ["client-intake", "define-goals", "strength-plan"],
 };
@@ -300,10 +300,16 @@ export const MATTERHORN_DESK_TASK_STARTERS = {
   ],
   polymarket: [
     {
+      id: "compare-venues",
+      title: "Compare venues",
+      detail: "Search Polymarket, Kalshi, and Manifold without assuming the same access or transaction rules.",
+      prompt: "Compare prediction markets across Polymarket, Kalshi, and Manifold about <paste research topic>. Identify each venue, market type, probability, liquidity, source, and freshness. Keep Kalshi and Manifold research-only, and do not prepare any transaction.",
+    },
+    {
       id: "discover-markets",
       title: "Discover markets",
-      detail: "Search public markets by topic, category, or current event.",
-      prompt: "Find Polymarket markets about <paste research topic>. Summarize public market options, source, freshness, and the limits of the available data. Do not place a bet.",
+      detail: "Search supported public venues by topic, category, or current event.",
+      prompt: "Find prediction markets across supported venues about <paste research topic>. Summarize venue, market type, public probability, source, freshness, and the limits of the available data. Do not prepare or place a bet.",
     },
     {
       id: "research-market",
