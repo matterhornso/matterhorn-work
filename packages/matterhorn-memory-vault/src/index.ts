@@ -367,6 +367,15 @@ export class MatterhornMemoryVault {
       .slice(0, limit)
   }
 
+  async listAllSuggestions(options: Omit<MatterhornMemorySuggestionListOptions, "limit"> = {}): Promise<MatterhornMemorySuggestionInboxEntry[]> {
+    await this.initialize()
+    return Object.values((await this.readSuggestionInbox()).entries)
+      .filter((entry) => options.status ? entry.status === options.status : true)
+      .filter((entry) => options.desk ? entry.suggestion.desk === options.desk : true)
+      .filter((entry) => options.includeResolved ? true : entry.status === "pending" || entry.status === "blocked")
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  }
+
   async getSuggestion(id: string): Promise<MatterhornMemorySuggestionInboxEntry | null> {
     await this.initialize()
     return (await this.readSuggestionInbox()).entries[id] ?? null

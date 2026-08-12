@@ -58,7 +58,7 @@ describe("project feedback UI contract", () => {
     expect(source).toContain("client.workspaceBackendSupportReport(workspaceId)");
     expect(source).toContain("Ledger JSON");
     expect(source).toContain("Support report");
-    expect(source).toContain("Download redacted project evidence");
+    expect(source).toContain("Download the workspace archive, redacted project");
     expect(source).toContain("ProjectLedgerControlSummary");
     expect(source).toContain("client.listProjectDataLedger(workspaceId, { limit: 50 })");
     expect(source).toContain("exportable");

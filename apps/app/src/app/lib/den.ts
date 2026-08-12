@@ -126,6 +126,22 @@ export type DenAccountSecuritySummary = {
   sharedOrganizationsBlockingDeletion: DenOrgSummary[];
 };
 
+export type DenAccountExport = {
+  version: "matterhorn.account-export.v1";
+  generatedAt: string;
+  filename: string;
+  account: DenUser & { emailVerified: boolean; createdAt: string };
+  legalAcceptance: {
+    termsVersion: string;
+    privacyVersion: string;
+    acceptedAt: string;
+  } | null;
+  organizations: DenOrgSummary[];
+  security: { activeSessionCount: number };
+  includes: string[];
+  excludes: string[];
+};
+
 export type DenAccountDeletionResult = {
   deletedOrganizationCount: number;
   workspaceDataDeletionComplete: boolean;
@@ -1868,6 +1884,14 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
       return requestJson<DenAccountSecuritySummary>(
         baseUrls,
         "/api/auth/account/security",
+        { method: "GET", token },
+      );
+    },
+
+    async exportAccount(): Promise<DenAccountExport> {
+      return requestJson<DenAccountExport>(
+        baseUrls,
+        "/api/auth/account/export",
         { method: "GET", token },
       );
     },

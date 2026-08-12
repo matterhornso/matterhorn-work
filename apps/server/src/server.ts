@@ -452,6 +452,7 @@ import {
   stripSensitiveWorkspaceExportData,
   type WorkspaceExportSensitiveMode,
 } from "./workspace-export-safety.js";
+import { buildMatterhornWorkspaceArchive } from "./workspace-data-archive.js";
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { serve, type ServeRequestContext, type ServeResult } from "./serve-node.js";
@@ -7107,6 +7108,15 @@ function createRoutes(
     return response;
   });
 
+  addRoute(routes, "GET", "/api/auth/account/export", "none", async ({ request }) => {
+    const token = requireMatterhornSessionToken(request, authStore);
+    const accountExport = withMatterhornAuthErrorMapping(() => authStore.exportAccount(token));
+    const response = jsonResponse(accountExport);
+    response.headers.set("Cache-Control", "no-store");
+    response.headers.set("Content-Disposition", `attachment; filename="${accountExport.filename}"`);
+    return response;
+  });
+
   addRoute(routes, "POST", "/api/auth/account/revoke-other-sessions", "none", async ({ request }) => {
     const token = requireMatterhornSessionToken(request, authStore);
     const revokedSessions = withMatterhornAuthErrorMapping(() =>
@@ -10314,6 +10324,49 @@ function createRoutes(
     const sensitiveMode = parseWorkspaceExportSensitiveMode(ctx.url.searchParams.get("sensitive"));
     const exportPayload = await exportWorkspace(workspace, { sensitiveMode });
     return jsonResponse(exportPayload);
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/data-archive", "client", async (ctx) => {
+    requireClientScope(ctx, "viewer");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
+    const notesStore = new MatterhornNotesStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+    try {
+      const [configuration, notes, memoryRecords, memorySuggestions, chats, activity] = await Promise.all([
+        exportWorkspace(workspace, { sensitiveMode: "exclude" }),
+        notesStore.exportAllNotes(),
+        workspaceVault.listAllRecords({
+          scope: "workspace",
+          tags: [workspaceMemoryTag(workspace.id)],
+        }),
+        workspaceVault.listAllSuggestions({ includeResolved: true }).then((entries) =>
+          entries.filter((entry) => memorySuggestionBelongsToWorkspace(entry.suggestion, workspace)),
+        ),
+        exportAllWorkspaceChats(config, workspace),
+        buildProjectDataLedger({ workspace, limit: 300 }),
+      ]);
+      const archive = await buildMatterhornWorkspaceArchive({
+        workspace,
+        configuration,
+        notes,
+        memory: { records: memoryRecords, suggestions: memorySuggestions },
+        chats,
+        activity,
+      });
+      const headers = new Headers();
+      headers.set("Content-Type", archive.contentType);
+      headers.set("Content-Length", String(archive.compressed.byteLength));
+      headers.set("Content-Disposition", `attachment; filename="${archive.filename}"`);
+      headers.set("Cache-Control", "no-store");
+      headers.set("X-Matterhorn-Archive-Sha256", archive.sha256);
+      headers.set("X-Matterhorn-Archive-Uncompressed-Bytes", String(archive.uncompressedBytes));
+      return new Response(Uint8Array.from(archive.compressed), { status: 200, headers });
+    } catch (error) {
+      if (error instanceof Error && /archive.*(?:exceeds|safety limit)|exceeds the .*safety limit/i.test(error.message)) {
+        throw new ApiError(413, "workspace_archive_too_large", error.message);
+      }
+      throw error;
+    }
   });
 
   addRoute(routes, "POST", "/workspace/:id/import/preview", "client", async (ctx) => {
@@ -14462,6 +14515,33 @@ async function readWorkspaceSessionMessages(
   } catch (error) {
     remapSessionReadError(error);
   }
+}
+
+async function exportAllWorkspaceChats(config: ServerConfig, workspace: WorkspaceInfo) {
+  const maxSessions = 2_000;
+  const sessions = await listWorkspaceSessions(config, workspace, { limit: maxSessions + 1 });
+  if (sessions.length > maxSessions) {
+    throw new Error(`Workspace archive exceeds the ${maxSessions}-chat safety limit. Remove old chats before exporting.`);
+  }
+
+  const chats: Array<{
+    session: (typeof sessions)[number];
+    messages: Awaited<ReturnType<typeof readWorkspaceSessionMessages>>;
+    todos: Awaited<ReturnType<typeof readWorkspaceSessionTodos>>;
+  }> = [];
+  const concurrency = 4;
+  for (let index = 0; index < sessions.length; index += concurrency) {
+    const batch = sessions.slice(index, index + concurrency);
+    const items = await Promise.all(
+      batch.map(async (session) => ({
+        session,
+        messages: await readWorkspaceSessionMessages(config, workspace, session.id, {}),
+        todos: await readWorkspaceSessionTodos(config, workspace, session.id),
+      })),
+    );
+    chats.push(...items);
+  }
+  return chats;
 }
 
 async function readWorkspaceSessionTodos(config: ServerConfig, workspace: WorkspaceInfo, sessionId: string) {

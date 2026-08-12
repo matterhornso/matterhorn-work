@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, LogOut, Trash2 } from "lucide-react";
+import { Download, KeyRound, LogOut, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +32,19 @@ function mutationMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.trim() ? error.message : fallback;
 }
 
+function downloadAccountRecord(filename: string, payload: unknown): void {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+}
+
 export function AccountSecuritySection({
   client,
   user,
@@ -55,6 +68,12 @@ export function AccountSecuritySection({
     mutationFn: () => client.revokeOtherSessions(),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["account-security"] });
+    },
+  });
+  const exportMutation = useMutation({
+    mutationFn: () => client.exportAccount(),
+    onSuccess: (accountExport) => {
+      downloadAccountRecord(accountExport.filename, accountExport);
     },
   });
   const passwordMutation = useMutation({
@@ -133,6 +152,35 @@ export function AccountSecuritySection({
         {revokeMutation.isError ? (
           <SettingsNotice tone="error">
             {mutationMessage(revokeMutation.error, "Other sessions could not be signed out.")}
+          </SettingsNotice>
+        ) : null}
+      </SettingsInset>
+
+      <SettingsInset className="flex flex-col gap-4 rounded-lg p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-sm font-medium text-dls-text">
+              <Download className="size-4 text-dls-secondary" aria-hidden="true" />
+              Account record
+            </p>
+            <p className="mt-1 max-w-[68ch] text-xs leading-5 text-dls-secondary">
+              Download your profile, legal acceptance, workspace memberships, and active-session count.
+              Workspace chats and files are exported separately.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            className="min-h-11 self-start sm:min-h-9"
+            disabled={exportMutation.isPending}
+            onClick={() => exportMutation.mutate()}
+          >
+            {exportMutation.isPending ? "Preparing download…" : "Download account record"}
+          </Button>
+        </div>
+        {exportMutation.isSuccess ? <SettingsNotice>Account record downloaded.</SettingsNotice> : null}
+        {exportMutation.isError ? (
+          <SettingsNotice tone="error">
+            {mutationMessage(exportMutation.error, "Account record could not be downloaded.")}
           </SettingsNotice>
         ) : null}
       </SettingsInset>

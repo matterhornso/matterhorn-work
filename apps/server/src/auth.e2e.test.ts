@@ -208,6 +208,78 @@ afterEach(async () => {
 });
 
 describe("public account authentication", () => {
+  test("exports only the signed-in account record and never credential material", async () => {
+    const app = await boot();
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
+    process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "true";
+    process.env.MATTERHORN_TERMS_VERSION = "terms-export-test";
+    process.env.MATTERHORN_PRIVACY_VERSION = "privacy-export-test";
+
+    const owner = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: {
+        email: "account-export@example.com",
+        password: PASSWORD,
+        name: "Account Export",
+        legalAccepted: true,
+      },
+    });
+    expect(owner.response.status).toBe(200);
+    const ownerCookie = sessionCookie(owner.response);
+    const ownerToken = cookieToken(ownerCookie);
+    const other = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: {
+        email: "other-account@example.com",
+        password: PASSWORD,
+        name: "Other Account",
+        legalAccepted: true,
+      },
+    });
+    expect(other.response.status).toBe(200);
+
+    expect((await jsonRequest(app.base, "/api/auth/account/export")).response.status).toBe(401);
+    const exported = await jsonRequest(app.base, "/api/auth/account/export", { cookie: ownerCookie });
+    expect(exported.response.status).toBe(200);
+    expect(exported.response.headers.get("cache-control")).toBe("no-store");
+    expect(exported.response.headers.get("content-disposition")).toMatch(
+      /^attachment; filename="matterhorn-account-\d{4}-\d{2}-\d{2}\.json"$/,
+    );
+    expect(exported.payload).toEqual(expect.objectContaining({
+      version: "matterhorn.account-export.v1",
+      filename: expect.stringMatching(/^matterhorn-account-\d{4}-\d{2}-\d{2}\.json$/),
+      account: expect.objectContaining({
+        id: owner.payload.user.id,
+        email: "account-export@example.com",
+        name: "Account Export",
+        emailVerified: true,
+        createdAt: expect.any(String),
+      }),
+      legalAcceptance: {
+        termsVersion: "terms-export-test",
+        privacyVersion: "privacy-export-test",
+        acceptedAt: expect.any(String),
+      },
+      organizations: [expect.objectContaining({ id: owner.payload.organization.id, role: "owner" })],
+      security: { activeSessionCount: 1 },
+      includes: ["account_profile", "legal_acceptance", "organization_memberships", "session_count"],
+    }));
+    expect(Number.isNaN(Date.parse(exported.payload.generatedAt))).toBe(false);
+    expect(Number.isNaN(Date.parse(exported.payload.account.createdAt))).toBe(false);
+    expect(Number.isNaN(Date.parse(exported.payload.legalAcceptance.acceptedAt))).toBe(false);
+
+    const serialized = JSON.stringify(exported.payload);
+    expect(serialized).not.toContain(ownerToken);
+    expect(serialized).not.toContain(PASSWORD);
+    expect(serialized).not.toContain("password_hash");
+    expect(serialized).not.toContain("password_salt");
+    expect(serialized).not.toContain("token_hash");
+    expect(serialized).not.toContain("verificationCode");
+    expect(serialized).not.toContain("resetToken");
+    expect(serialized).not.toContain("other-account@example.com");
+    expect(serialized).not.toContain(other.payload.organization.id);
+    expect(exported.payload.excludes.join(" ")).toContain("never exported");
+    expect(exported.payload.excludes.join(" ")).toContain("exported separately");
+  });
+
   test("verifies email and completes enumeration-safe password recovery", async () => {
     const app = await boot();
     process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "true";

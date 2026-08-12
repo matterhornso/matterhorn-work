@@ -160,6 +160,19 @@ function downloadJsonFile(filename: string, content: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
+function downloadBinaryFile(filename: string, data: ArrayBuffer, contentType: string | null) {
+  if (typeof document === "undefined") return;
+  const blob = new Blob([data], { type: contentType ?? "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
 async function writeClipboardText(content: string) {
   if (typeof navigator === "undefined" || !navigator.clipboard) {
     throw new Error("Clipboard is unavailable in this browser.");
@@ -1825,6 +1838,8 @@ export function SettingsOverviewView(props: {
     useState<ExportActionStatus | null>(null);
   const [supportReportStatus, setSupportReportStatus] =
     useState<ExportActionStatus | null>(null);
+  const [workspaceArchiveStatus, setWorkspaceArchiveStatus] =
+    useState<ExportActionStatus | null>(null);
   const [advancedOverviewOpen, setAdvancedOverviewOpen] = useState(false);
   const [dataPrivacyOpen, setDataPrivacyOpen] = useState(false);
   const notesWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
@@ -2177,6 +2192,33 @@ export function SettingsOverviewView(props: {
     }
   }, [props.matterhornServerClient, props.runtimeWorkspaceId, showToast]);
 
+  const exportWorkspaceArchive = useCallback(async () => {
+    const client = props.matterhornServerClient;
+    const workspaceId = props.runtimeWorkspaceId?.trim();
+    if (!client || !workspaceId) {
+      const message = "Open a connected workspace to download its archive.";
+      setWorkspaceArchiveStatus({ tone: "error", message });
+      showToast({ tone: "error", title: "Workspace archive unavailable", description: message });
+      return;
+    }
+    setWorkspaceArchiveStatus({ tone: "info", message: "Preparing workspace archive…" });
+    try {
+      const result = await client.exportWorkspaceDataArchive(workspaceId);
+      downloadBinaryFile(
+        result.filename ?? `matterhorn-workspace-${safeDownloadFilePart(workspaceId)}-${new Date().toISOString().slice(0, 10)}.json.gz`,
+        result.data,
+        result.contentType,
+      );
+      const message = "Downloaded chats, notes, memory, outputs, and sanitized workspace settings.";
+      setWorkspaceArchiveStatus({ tone: "success", message });
+      showToast({ tone: "success", title: "Workspace archive downloaded", description: message });
+    } catch (error) {
+      const message = exportErrorMessage(error, "Could not download the workspace archive.");
+      setWorkspaceArchiveStatus({ tone: "error", message });
+      showToast({ tone: "error", title: "Workspace archive failed", description: message });
+    }
+  }, [props.matterhornServerClient, props.runtimeWorkspaceId, showToast]);
+
   const exportSupportReport = useCallback(async () => {
     const client = props.matterhornServerClient;
     const workspaceId = props.runtimeWorkspaceId?.trim();
@@ -2509,11 +2551,21 @@ export function SettingsOverviewView(props: {
                     />
                     <div className="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-xs leading-5 text-dls-secondary">
-                        Download redacted project evidence or copy a support
-                        report with backend, billing, wallet, and data-policy
-                        readiness.
+                        Download the workspace archive, redacted project
+                        evidence, or a support report with backend, billing,
+                        wallet, and data-policy readiness.
                       </p>
                       <div className="flex flex-wrap items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-fit gap-1.5 px-2 text-xs text-dls-secondary hover:text-dls-text"
+                          onClick={() => void exportWorkspaceArchive()}
+                          disabled={!props.matterhornServerClient || !props.runtimeWorkspaceId}
+                        >
+                          <Download className="size-3.5" />
+                          Workspace archive
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -2557,7 +2609,7 @@ export function SettingsOverviewView(props: {
                       </div>
                     </div>
                     <InlineActionStatus
-                      status={supportReportStatus ?? ledgerExportStatus}
+                      status={workspaceArchiveStatus ?? supportReportStatus ?? ledgerExportStatus}
                     />
                     <Row
                       label="Wallet safety"

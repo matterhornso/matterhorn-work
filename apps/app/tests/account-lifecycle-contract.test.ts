@@ -10,14 +10,38 @@ const accountSecuritySource = await Bun.file(
 const denSessionSource = await Bun.file(
   new URL("../src/react-app/domains/settings/cloud/use-den-session.tsx", import.meta.url),
 ).text();
+const matterhornServerSource = await Bun.file(
+  new URL("../src/app/lib/matterhorn-server.ts", import.meta.url),
+).text();
+const overviewSource = await Bun.file(
+  new URL("../src/react-app/domains/settings/pages/overview-view.tsx", import.meta.url),
+).text();
 
 describe("account lifecycle contract", () => {
   test("exposes first-party session and account lifecycle requests", () => {
     expect(denSource).toContain('"/api/auth/account/security"');
+    expect(denSource).toContain('"/api/auth/account/export"');
     expect(denSource).toContain('"/api/auth/account/revoke-other-sessions"');
     expect(denSource).toContain('"/api/auth/account/change-password"');
     expect(denSource).toContain('"/api/auth/account"');
     expect(denSource).toContain('method: "DELETE"');
+  });
+
+  test("downloads a bounded account record without claiming to include workspace content", () => {
+    expect(accountSecuritySource).toContain("client.exportAccount()");
+    expect(accountSecuritySource).toContain("Download account record");
+    expect(accountSecuritySource).toContain("Preparing download…");
+    expect(accountSecuritySource).toContain("Account record downloaded.");
+    expect(accountSecuritySource).toContain("Workspace chats and files are exported separately.");
+    expect(accountSecuritySource).toContain("URL.revokeObjectURL");
+  });
+
+  test("offers a distinct full workspace archive from the workspace settings surface", () => {
+    expect(matterhornServerSource).toContain("exportWorkspaceDataArchive");
+    expect(matterhornServerSource).toContain("/data-archive");
+    expect(overviewSource).toContain("Preparing workspace archive…");
+    expect(overviewSource).toContain("Workspace archive");
+    expect(overviewSource).toContain("Downloaded chats, notes, memory, outputs, and sanitized workspace settings.");
   });
 
   test("renders signed-in security controls even when optional Cloud products are unavailable", () => {
@@ -42,6 +66,7 @@ describe("account lifecycle contract", () => {
     expect(accountSecuritySource).toContain("Signing out…");
     expect(accountSecuritySource).toContain("Changing password…");
     expect(accountSecuritySource).toContain("Deleting account…");
+    expect(accountSecuritySource).toContain("Preparing download…");
     expect(accountSecuritySource).toContain("aria-invalid=");
   });
 });

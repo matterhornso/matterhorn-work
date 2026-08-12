@@ -99,6 +99,27 @@ export type MatterhornAuthAccountDeletion = {
   deletedOrganizationIds: string[];
 };
 
+export type MatterhornAuthAccountExport = {
+  version: "matterhorn.account-export.v1";
+  generatedAt: string;
+  filename: string;
+  account: MatterhornAuthUser & { createdAt: string };
+  legalAcceptance: {
+    termsVersion: string;
+    privacyVersion: string;
+    acceptedAt: string;
+  } | null;
+  organizations: MatterhornAuthOrganization[];
+  security: { activeSessionCount: number };
+  includes: Array<
+    | "account_profile"
+    | "legal_acceptance"
+    | "organization_memberships"
+    | "session_count"
+  >;
+  excludes: string[];
+};
+
 export type MatterhornAuthLegalAcceptance = {
   termsVersion: string;
   privacyVersion: string;
@@ -841,6 +862,70 @@ export class MatterhornAuthStore {
           organization.role === "owner" &&
           sharedOrganizationIds.has(organization.id),
       ),
+    };
+  }
+
+  exportAccount(token: string): MatterhornAuthAccountExport {
+    const session = this.requireSession(token);
+    const user = statement(
+      this.db,
+      `SELECT id, email, name, email_verified_at, created_at
+        FROM users WHERE id = ? LIMIT 1`,
+    ).get(session.user.id) as {
+      id: string;
+      email: string;
+      name: string | null;
+      email_verified_at: number | null;
+      created_at: number;
+    } | undefined;
+    if (!user) {
+      throw new MatterhornAuthError("unauthorized", "Session is no longer valid.");
+    }
+    const legalAcceptance = statement(
+      this.db,
+      `SELECT terms_version, privacy_version, accepted_at
+        FROM account_legal_acceptances WHERE user_id = ? LIMIT 1`,
+    ).get(session.user.id) as {
+      terms_version: string;
+      privacy_version: string;
+      accepted_at: number;
+    } | undefined;
+    const activeSessions = statement(
+      this.db,
+      "SELECT COUNT(*) AS count FROM sessions WHERE user_id = ? AND expires_at > ?",
+    ).get(session.user.id, Date.now()) as { count?: number } | undefined;
+    const generatedAt = new Date().toISOString();
+
+    return {
+      version: "matterhorn.account-export.v1",
+      generatedAt,
+      filename: `matterhorn-account-${generatedAt.slice(0, 10)}.json`,
+      account: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        emailVerified: user.email_verified_at !== null,
+        createdAt: new Date(user.created_at).toISOString(),
+      },
+      legalAcceptance: legalAcceptance
+        ? {
+          termsVersion: legalAcceptance.terms_version,
+          privacyVersion: legalAcceptance.privacy_version,
+          acceptedAt: new Date(legalAcceptance.accepted_at).toISOString(),
+        }
+        : null,
+      organizations: this.listOrganizations(session.user.id),
+      security: { activeSessionCount: activeSessions?.count ?? 0 },
+      includes: [
+        "account_profile",
+        "legal_acceptance",
+        "organization_memberships",
+        "session_count",
+      ],
+      excludes: [
+        "Session tokens, password hashes, reset challenges, and verification codes are never exported.",
+        "Workspace chats, files, notes, outputs, and memory are exported separately from each workspace.",
+      ],
     };
   }
 
