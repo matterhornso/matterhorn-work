@@ -47,6 +47,22 @@ describe("session activity timing", () => {
     expect(activity.getStatus(workspaceId, sessionId)).toBe("idle");
   });
 
+  test("explicitly cancels an optimistic run when dispatch is rejected before sending", () => {
+    const workspaceId = "ws_rejected_dispatch";
+    const sessionId = "ses_rejected_dispatch";
+    const activity = useSessionActivityStore.getState();
+
+    activity.startOptimisticRun(workspaceId, sessionId, { title: "Compare validators" });
+    activity.cancelOptimisticRun(workspaceId, sessionId);
+
+    const record = useSessionActivityStore.getState().recordsByWorkspaceId[workspaceId]?.[sessionId];
+    expect(activity.getStatus(workspaceId, sessionId)).toBe("idle");
+    expect(record?.runActive).toBe(false);
+    expect(record?.runStartedAt).toBeUndefined();
+    expect(record?.optimisticRunTitle).toBeUndefined();
+    expect(record?.optimisticRunAgent).toBeUndefined();
+  });
+
   test("clears an optimistic run after assistant output completes without a busy event", () => {
     const workspaceId = "ws_optimistic_output";
     const sessionId = "ses_optimistic_output";

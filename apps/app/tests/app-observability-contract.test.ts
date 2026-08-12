@@ -116,7 +116,7 @@ describe("Matterhorn app observability contracts", () => {
     expect(source).toContain("[workspaceId, endpoint.workspaceId]");
     expect(source).toContain("for (const activityWorkspaceId of activityWorkspaceIds)");
     expect(source).toContain("startOptimisticRun(activityWorkspaceId, session.id");
-    expect(source).toContain("setRunStatus(activityWorkspaceId, session.id, { type: \"idle\" })");
+    expect(source).toContain("cancelOptimisticRun(activityWorkspaceId, session.id)");
   });
 
   test("project Home clears focused desk state before route navigation", () => {

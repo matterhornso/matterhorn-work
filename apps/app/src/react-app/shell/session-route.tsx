@@ -376,9 +376,16 @@ function describeWorkspaceCreateError(error: unknown) {
   return message;
 }
 
+function isProviderPrivacyUnverifiedError(error: unknown) {
+  return describeRouteError(error).toLowerCase().includes("provider_privacy_unverified");
+}
+
 function describeTaskCreateError(error: unknown) {
   const message = describeRouteError(error);
   const lower = message.toLowerCase();
+  if (isProviderPrivacyUnverifiedError(error)) {
+    return "The selected model provider is not approved to receive prompts yet. Its no-training and retention terms must be verified first.";
+  }
   if (
     lower.includes("opencode_unconfigured") ||
     lower.includes("opencode base url is missing")
@@ -3610,6 +3617,21 @@ export function SessionRoute() {
               });
               return false;
             }
+            if (options?.sendImmediately && selectedProviderPrivacyPolicy?.allowed === false) {
+              recordInspectorEvent("desk.task_launch.failed", {
+                ...taskLaunchEvent,
+                reason: "provider_privacy_unverified",
+              });
+              showToast({
+                title: "Task was not sent",
+                description: `${selectedProviderPrivacyPolicy.providerName} is blocked until its no-training and retention terms are verified. Nothing was sent to the provider.`,
+                tone: "warning",
+                actionLabel: "Privacy details",
+                onAction: () => handleOpenSettings("/settings/privacy", workspaceId),
+                durationMs: 0,
+              });
+              return false;
+            }
             const workspacePath = workspace.path?.trim() || undefined;
             const sendImmediately = Boolean(options?.sendImmediately);
             const activityWorkspaceIds = Array.from(new Set(
@@ -3743,9 +3765,10 @@ export function SessionRoute() {
               } catch (error) {
                 const operation = pendingModelOperation(session.id);
                 if (operation) recordModelOperationProviderError(operation, error);
+                const privacyBlocked = isProviderPrivacyUnverifiedError(error);
                 const message = describeTaskCreateError(error);
                 for (const activityWorkspaceId of activityWorkspaceIds) {
-                  useSessionActivityStore.getState().setRunStatus(activityWorkspaceId, session.id, { type: "idle" });
+                  useSessionActivityStore.getState().cancelOptimisticRun(activityWorkspaceId, session.id);
                 }
                 saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
                 focusPromptSoon();
@@ -3755,10 +3778,14 @@ export function SessionRoute() {
                   reason: message,
                 });
                 showToast({
-                  title: "Task needs review before sending",
+                  title: "Task was not sent",
                   description: `${message} The prompt is saved in the composer.`,
                   tone: "warning",
-                  durationMs: 5200,
+                  actionLabel: privacyBlocked ? "Privacy details" : undefined,
+                  onAction: privacyBlocked
+                    ? () => handleOpenSettings("/settings/privacy", workspaceId)
+                    : undefined,
+                  durationMs: privacyBlocked ? 0 : 5200,
                 });
                 return false;
               }
