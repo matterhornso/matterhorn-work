@@ -97,8 +97,6 @@ for (const visibleText of [
   "Explore subnets",
   "Read market overview",
   "Check compliance",
-  "Describe market",
-  "Describe the market or trade",
   "Review transfer fees",
   "7 stages",
   "Run in chat",
@@ -158,6 +156,12 @@ for (const visibleText of [
     `product browser smoke should exercise ${visibleText}`,
   );
 }
+
+assert.equal(
+  script.includes("Describe market"),
+  false,
+  "product browser smoke should start Polymarket tasks before collecting missing context in chat",
+);
 
 assert.ok(
   script.includes("/api/auth/sign-up/email") &&

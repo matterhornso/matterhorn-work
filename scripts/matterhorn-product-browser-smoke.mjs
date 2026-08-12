@@ -516,11 +516,6 @@ const primaryDeskSmokeScenarios = [
     openLabel: "Open Polymarket",
     heading: "Polymarket desk",
     expectedTask: "Check compliance",
-    inputFixture: {
-      actionLabel: "Describe market",
-      fieldLabel: "Describe the market or trade",
-      value: "Preview YES on Bitcoin reaching $150,000 before 2027 with $50",
-    },
   },
   {
     id: "sui",
@@ -573,29 +568,10 @@ async function startPrimaryDeskTask(page, config, desk) {
     .filter({ has: page.getByText(desk.expectedTask, { exact: true }) })
     .first();
   await taskGroup.waitFor({ state: "visible", timeout: 15_000 });
-  if (desk.inputFixture) {
-    await clickFirstVisible(
-      taskGroup.getByRole("button", {
-        name: desk.inputFixture.actionLabel,
-        exact: true,
-      }),
-      `${desk.name} ${desk.inputFixture.actionLabel} button`,
-    );
-    const input = page.getByLabel(desk.inputFixture.fieldLabel, {
-      exact: true,
-    });
-    await input.waitFor({ state: "visible", timeout: 10_000 });
-    await input.fill(desk.inputFixture.value);
-    const inputForm = input.locator("xpath=ancestor::form");
-    await inputForm
-      .getByRole("button", { name: "Start task", exact: true })
-      .click();
-  } else {
-    await clickFirstVisible(
-      taskGroup.getByRole("button", { name: /^Start task/ }),
-      `${desk.name} Start task button`,
-    );
-  }
+  await clickFirstVisible(
+    taskGroup.getByRole("button", { name: /^Start task/ }),
+    `${desk.name} Start task button`,
+  );
   const currentUrlAfterTaskLaunch = page.url();
   if (
     !isWorkspaceSessionDetailUrl(currentUrlAfterTaskLaunch) &&

@@ -67,6 +67,16 @@ one hour, can be used once, and revoke every active session when the password
 changes. Reset requests always return the same response whether or not an
 account exists, so the endpoint does not disclose registered addresses.
 
+## Data portability and deletion
+
+- **Account record** — Settings → Account downloads the signed-in user's profile, legal-acceptance versions and time, organization memberships, and active-session count.
+- **Workspace archive** — Settings → Privacy downloads a gzip JSON archive containing complete chat messages and todos, active notes, confirmed memory, the memory review inbox, workspace outputs, generated files, sanitized settings, and a redacted activity snapshot.
+- **Integrity and boundaries** — each workspace archive includes SHA-256 integrity metadata and explicit inclusion, exclusion, redaction, and safety-limit disclosures. The export fails rather than silently truncating, and it never follows workspace symlinks.
+- **Secret exclusion** — account exports never contain password hashes, session tokens, recovery challenges, or verification codes. Workspace archives exclude authentication material, raw provider credentials, unsanitized configuration, and provider-side logs.
+- **Deletion** — Settings → Account supports confirmed account deletion. Workspace-level deletion controls remain scoped to the stores that advertise deletion; append-only accountability history is disclosed separately.
+
+Export account and workspace data before deleting it. A workspace archive contains user content in readable JSON or lossless base64 and should be stored with the same care as the original workspace.
+
 ## Local/offline testing
 
 The desktop and local development layers are designed so testers can use local workspaces without signing in:
