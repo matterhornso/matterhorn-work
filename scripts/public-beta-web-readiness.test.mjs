@@ -10,27 +10,32 @@ assert.equal(packageJson.scripts["test:public-beta-web-readiness"], "node script
 const publicBetaLaunchDoc = readFileSync("docs/public-beta-launch-2026-07-17.md", "utf8");
 const productionLaunchDoc = readFileSync("docs/production-launch-configuration.md", "utf8");
 const gateSource = readFileSync("scripts/public-beta-web-readiness.mjs", "utf8");
-const vercelConfig = JSON.parse(readFileSync("apps/app/vercel.json", "utf8"));
+const vercelConfigs = [
+  JSON.parse(readFileSync("vercel.json", "utf8")),
+  JSON.parse(readFileSync("apps/app/vercel.json", "utf8")),
+];
 for (const source of [publicBetaLaunchDoc, productionLaunchDoc, gateSource]) {
   assert.doesNotMatch(source, /pnpm (?:gate:public-beta-web|launch:readiness) --(?: |\s*\\)/);
 }
 assert.match(gateSource, /pnpm gate:public-beta-web --json/);
 
-const vercelHeaders = Object.fromEntries(
-  vercelConfig.headers
-    .find((entry) => entry.source === "/(.*)")
-    .headers
-    .map((header) => [header.key.toLowerCase(), header.value]),
-);
-assert.match(vercelHeaders["content-security-policy"], /frame-ancestors 'none'/);
-assert.match(vercelHeaders["content-security-policy"], /base-uri 'none'/);
-assert.match(vercelHeaders["content-security-policy"], /object-src 'none'/);
-assert.match(vercelHeaders["content-security-policy"], /script-src 'self' https:\/\/challenges\.cloudflare\.com/);
-assert.equal(vercelHeaders["cross-origin-opener-policy"], "same-origin-allow-popups");
-assert.equal(vercelHeaders["permissions-policy"], "camera=(), microphone=(), geolocation=()");
-assert.equal(vercelHeaders["referrer-policy"], "strict-origin-when-cross-origin");
-assert.equal(vercelHeaders["x-content-type-options"], "nosniff");
-assert.equal(vercelHeaders["x-frame-options"], "DENY");
+for (const vercelConfig of vercelConfigs) {
+  const vercelHeaders = Object.fromEntries(
+    vercelConfig.headers
+      .find((entry) => entry.source === "/(.*)")
+      .headers
+      .map((header) => [header.key.toLowerCase(), header.value]),
+  );
+  assert.match(vercelHeaders["content-security-policy"], /frame-ancestors 'none'/);
+  assert.match(vercelHeaders["content-security-policy"], /base-uri 'none'/);
+  assert.match(vercelHeaders["content-security-policy"], /object-src 'none'/);
+  assert.match(vercelHeaders["content-security-policy"], /script-src 'self' https:\/\/challenges\.cloudflare\.com/);
+  assert.equal(vercelHeaders["cross-origin-opener-policy"], "same-origin-allow-popups");
+  assert.equal(vercelHeaders["permissions-policy"], "camera=(), microphone=(), geolocation=()");
+  assert.equal(vercelHeaders["referrer-policy"], "strict-origin-when-cross-origin");
+  assert.equal(vercelHeaders["x-content-type-options"], "nosniff");
+  assert.equal(vercelHeaders["x-frame-options"], "DENY");
+}
 
 const managedKeys = [
   "VITE_MATTERHORN_DEPLOYMENT",
