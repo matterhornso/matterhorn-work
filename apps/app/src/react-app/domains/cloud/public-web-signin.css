@@ -238,6 +238,23 @@
   line-height: 1.5;
 }
 
+.public-auth-turnstile {
+  min-width: 0;
+  min-height: 65px;
+  margin-top: 6px;
+}
+
+.public-auth-turnstile > div {
+  max-width: 100%;
+}
+
+.public-auth-turnstile p {
+  margin: 7px 0 0;
+  color: var(--auth-error);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .public-auth-submit {
   min-height: 44px;
   margin-top: 9px;

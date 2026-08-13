@@ -25,6 +25,7 @@ const vercelHeaders = Object.fromEntries(
 assert.match(vercelHeaders["content-security-policy"], /frame-ancestors 'none'/);
 assert.match(vercelHeaders["content-security-policy"], /base-uri 'none'/);
 assert.match(vercelHeaders["content-security-policy"], /object-src 'none'/);
+assert.match(vercelHeaders["content-security-policy"], /script-src 'self' https:\/\/challenges\.cloudflare\.com/);
 assert.equal(vercelHeaders["cross-origin-opener-policy"], "same-origin-allow-popups");
 assert.equal(vercelHeaders["permissions-policy"], "camera=(), microphone=(), geolocation=()");
 assert.equal(vercelHeaders["referrer-policy"], "strict-origin-when-cross-origin");
@@ -58,6 +59,9 @@ const managedKeys = [
   "MATTERHORN_SIGNUPS_ENABLED",
   "MATTERHORN_SIGNUP_MAX_ACCOUNTS",
   "MATTERHORN_EMAIL_VERIFICATION_REQUIRED",
+  "MATTERHORN_TURNSTILE_SITEKEY",
+  "TURNSTILE_SECRET",
+  "TURNSTILE_HOSTNAMES",
   "MATTERHORN_EMAIL_FROM",
   "MATTERHORN_RESEND_API_KEY",
   "MATTERHORN_SMTP_HOST",
@@ -112,6 +116,9 @@ function publicWebEnvironment(overrides = {}) {
     MATTERHORN_SIGNUPS_ENABLED: "true",
     MATTERHORN_SIGNUP_MAX_ACCOUNTS: "100",
     MATTERHORN_EMAIL_VERIFICATION_REQUIRED: "true",
+    MATTERHORN_TURNSTILE_SITEKEY: "0x4AAAAAAAtest-site-key",
+    TURNSTILE_SECRET: "test-turnstile-secret-value",
+    TURNSTILE_HOSTNAMES: "app.matterhorn.example",
     MATTERHORN_EMAIL_FROM: "Matterhorn Desks <accounts@matterhorn.example>",
     MATTERHORN_RESEND_API_KEY: "re_test_managed_server_secret",
     MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED: "true",
@@ -201,6 +208,16 @@ assert.ok(JSON.parse(unlimitedSignups.stdout).blockers.some((blocker) => blocker
 const unverifiedSignups = run({ MATTERHORN_EMAIL_VERIFICATION_REQUIRED: "false" });
 assert.notEqual(unverifiedSignups.status, 0);
 assert.ok(JSON.parse(unverifiedSignups.stdout).blockers.some((blocker) => blocker.id === "signup.email_verification"));
+
+const missingTurnstile = run({ TURNSTILE_SECRET: "" });
+assert.notEqual(missingTurnstile.status, 0);
+assert.ok(JSON.parse(missingTurnstile.stdout).blockers.some((blocker) => blocker.id === "signup.bot_protection"));
+
+const unsafeTurnstileHosts = run({
+  TURNSTILE_HOSTNAMES: "app.matterhorn.example,localhost",
+});
+assert.notEqual(unsafeTurnstileHosts.status, 0);
+assert.ok(JSON.parse(unsafeTurnstileHosts.stdout).blockers.some((blocker) => blocker.id === "signup.bot_protection"));
 
 const missingEmailDelivery = run({ MATTERHORN_RESEND_API_KEY: "" });
 assert.notEqual(missingEmailDelivery.status, 0);

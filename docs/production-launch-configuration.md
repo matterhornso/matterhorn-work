@@ -34,6 +34,10 @@ user failure.
 - Require email ownership with `MATTERHORN_EMAIL_VERIFICATION_REQUIRED=true`
   and a verified transactional sender. Production signup fails closed before
   creating an account when neither Resend nor authenticated SMTP is configured.
+- Require Cloudflare Turnstile with `MATTERHORN_TURNSTILE_SITEKEY`, the
+  server-only `TURNSTILE_SECRET`, and an exact production
+  `TURNSTILE_HOSTNAMES` allowlist. Signup verifies the single-use token,
+  `signup` action, and returned hostname before creating an account.
 - Require versioned Terms and Privacy acknowledgement with
   `MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED=true`, `MATTERHORN_TERMS_VERSION`, and
   `MATTERHORN_PRIVACY_VERSION`. Acceptance is stored against the account and
@@ -72,6 +76,8 @@ user failure.
 6. Configure the server-managed ASI:Cloud credential, signup capacity,
    `MATTERHORN_EMAIL_VERIFICATION_REQUIRED=true`, `MATTERHORN_EMAIL_FROM`, and
    either `MATTERHORN_RESEND_API_KEY` or the authenticated SMTP variables.
+   Configure the Turnstile site key and secret, and set
+   `TURNSTILE_HOSTNAMES` to the exact public app hostname without localhost.
    Set the approved Terms and Privacy versions and enable legal acceptance.
    Complete one real verification email and one real password reset before
    inviting users. Then configure the

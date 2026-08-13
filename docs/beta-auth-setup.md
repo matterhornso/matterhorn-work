@@ -56,6 +56,9 @@ The beta auth layer does not require Clerk packages, but it documents the standa
 |---|---|---|
 | `MATTERHORN_EMAIL_VERIFICATION_REQUIRED` | Required for public signup | Keeps new accounts signed out until the six-digit email challenge is completed. |
 | `MATTERHORN_EMAIL_FROM` | Required for public signup | Verified transactional sender identity. |
+| `MATTERHORN_TURNSTILE_SITEKEY` | Required for public signup | Public Cloudflare Turnstile widget site key returned by `/api/auth/config`. |
+| `TURNSTILE_SECRET` | Required for public signup | Server-only Turnstile Siteverify credential. Never expose this in a browser variable. |
+| `TURNSTILE_HOSTNAMES` | Required for public signup | Comma-separated exact frontend hostname allowlist. Production must contain only production hosts, never localhost. |
 | `MATTERHORN_RESEND_API_KEY` | Required when using Resend | Server-only delivery credential. |
 | `MATTERHORN_SMTP_HOST`, `MATTERHORN_SMTP_PORT`, `MATTERHORN_SMTP_USER`, `MATTERHORN_SMTP_PASSWORD`, `MATTERHORN_SMTP_SECURE` | Alternative to Resend | Authenticated SMTP delivery configuration. |
 | `MATTERHORN_EMAIL_DEV_MODE` | Local development only | Emits template payloads locally. Production ignores this flag. |
@@ -108,6 +111,9 @@ MATTERHORN_PROXY_SECRET=<server-only-high-entropy-secret>
 MATTERHORN_EMAIL_VERIFICATION_REQUIRED=1
 MATTERHORN_EMAIL_FROM="Matterhorn Desks <accounts@matterhorn.example>"
 MATTERHORN_RESEND_API_KEY=<server-only-resend-secret>
+MATTERHORN_TURNSTILE_SITEKEY=<public-turnstile-site-key>
+TURNSTILE_SECRET=<server-only-turnstile-secret>
+TURNSTILE_HOSTNAMES=app.matterhorn.example
 MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED=1
 MATTERHORN_TERMS_VERSION=<approved-terms-version>
 MATTERHORN_PRIVACY_VERSION=<approved-privacy-version>

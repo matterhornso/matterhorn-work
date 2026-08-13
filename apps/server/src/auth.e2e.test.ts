@@ -21,6 +21,7 @@ type JsonResult = {
 const TOKEN = "owt_auth_test_token";
 const HOST_TOKEN = "owt_auth_test_host_token";
 const PASSWORD = "matterhorn-test-password";
+const nativeFetch = globalThis.fetch;
 const roots: string[] = [];
 const stops: Array<() => void | Promise<void>> = [];
 const priorAuthDb = process.env.MATTERHORN_AUTH_DB;
@@ -39,6 +40,9 @@ const priorTermsVersion = process.env.MATTERHORN_TERMS_VERSION;
 const priorPrivacyVersion = process.env.MATTERHORN_PRIVACY_VERSION;
 const priorNodeEnv = process.env.NODE_ENV;
 const priorUsageEnforcement = process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT;
+const priorTurnstileSiteKey = process.env.MATTERHORN_TURNSTILE_SITEKEY;
+const priorTurnstileSecret = process.env.TURNSTILE_SECRET;
+const priorTurnstileHostnames = process.env.TURNSTILE_HOSTNAMES;
 
 function config(port: number, root: string): ServerConfig {
   return {
@@ -169,6 +173,7 @@ async function captureDevEmail<T>(callback: () => Promise<T>): Promise<{
 }
 
 afterEach(async () => {
+  globalThis.fetch = nativeFetch;
   while (stops.length) await stops.pop()?.();
   while (roots.length) {
     rmSync(roots.pop()!, { force: true, recursive: true });
@@ -205,6 +210,12 @@ afterEach(async () => {
   else process.env.NODE_ENV = priorNodeEnv;
   if (priorUsageEnforcement === undefined) delete process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT;
   else process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT = priorUsageEnforcement;
+  if (priorTurnstileSiteKey === undefined) delete process.env.MATTERHORN_TURNSTILE_SITEKEY;
+  else process.env.MATTERHORN_TURNSTILE_SITEKEY = priorTurnstileSiteKey;
+  if (priorTurnstileSecret === undefined) delete process.env.TURNSTILE_SECRET;
+  else process.env.TURNSTILE_SECRET = priorTurnstileSecret;
+  if (priorTurnstileHostnames === undefined) delete process.env.TURNSTILE_HOSTNAMES;
+  else process.env.TURNSTILE_HOSTNAMES = priorTurnstileHostnames;
 });
 
 describe("public account authentication", () => {
@@ -410,6 +421,7 @@ describe("public account authentication", () => {
       passwordResetAvailable: false,
       legalAcceptanceRequired: false,
       minimumPasswordLength: 12,
+      turnstileSiteKey: null,
     });
     expect(pausedConfig.response.headers.get("cache-control")).toBe("no-store");
     const implicit = await jsonRequest(app.base, "/api/auth/sign-up/email", {
@@ -434,6 +446,57 @@ describe("public account authentication", () => {
     const database = new Database(app.authDb, { readonly: true });
     expect(database.query("SELECT COUNT(*) AS count FROM users").get()).toEqual({ count: 0 });
     database.close();
+  });
+
+  test("requires a valid, single-use Turnstile token when signup protection is configured", async () => {
+    const app = await boot();
+    process.env.MATTERHORN_TURNSTILE_SITEKEY = "site-key";
+    process.env.TURNSTILE_SECRET = "secret-key";
+    process.env.TURNSTILE_HOSTNAMES = "matterhorn.example";
+    const redeemed = new Set<string>();
+    globalThis.fetch = (async (input, init) => {
+      if (String(input) === "https://challenges.cloudflare.com/turnstile/v0/siteverify") {
+        const token = new URLSearchParams(String(init?.body)).get("response") ?? "";
+        if (token === "valid-token" && !redeemed.has(token)) {
+          redeemed.add(token);
+          return Response.json({
+            success: true,
+            action: "signup",
+            hostname: "matterhorn.example",
+          });
+        }
+        return Response.json({
+          success: false,
+          "error-codes": ["timeout-or-duplicate"],
+        });
+      }
+      return nativeFetch(input, init);
+    }) as typeof fetch;
+
+    const missing = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "missing-turnstile@example.com", password: PASSWORD },
+    });
+    expect(missing.response.status).toBe(403);
+    expect(missing.payload.code).toBe("turnstile_verification_failed");
+
+    const accepted = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: {
+        email: "turnstile-accepted@example.com",
+        password: PASSWORD,
+        turnstileToken: "valid-token",
+      },
+    });
+    expect(accepted.response.status).toBe(200);
+
+    const replayed = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: {
+        email: "turnstile-replayed@example.com",
+        password: PASSWORD,
+        turnstileToken: "valid-token",
+      },
+    });
+    expect(replayed.response.status).toBe(403);
+    expect(replayed.payload.code).toBe("turnstile_verification_failed");
   });
 
   test("pauses account creation and enforces the configured beta capacity", async () => {

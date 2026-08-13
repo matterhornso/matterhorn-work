@@ -134,6 +134,14 @@ function evaluate() {
   const usageGlobalMonthly = positiveInteger("MATTERHORN_MODEL_USAGE_GLOBAL_MONTHLY_LIMIT");
   const usageReservation = positiveInteger("MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS");
   const signupCapacity = positiveInteger("MATTERHORN_SIGNUP_MAX_ACCOUNTS");
+  const turnstileSiteKey = readEnv("MATTERHORN_TURNSTILE_SITEKEY");
+  const turnstileSecretConfigured = readEnv("TURNSTILE_SECRET").length >= 20;
+  const turnstileHostnames = new Set(
+    readEnv("TURNSTILE_HOSTNAMES")
+      .split(",")
+      .map((hostname) => hostname.trim().toLowerCase())
+      .filter(Boolean),
+  );
   const cudosPrivacyPolicyUrl = readEnv("MATTERHORN_CUDOS_PRIVACY_POLICY_URL");
   const cudosPromptRetentionDays = nonNegativeInteger("MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS");
   const emailFrom = readEnv("MATTERHORN_EMAIL_FROM");
@@ -297,6 +305,17 @@ function evaluate() {
       "Security",
       enabled("MATTERHORN_EMAIL_VERIFICATION_REQUIRED"),
       "MATTERHORN_EMAIL_VERIFICATION_REQUIRED must be true before opening signups.",
+    ),
+    check(
+      "signup.bot_protection",
+      "Public account creation requires server-verified Turnstile protection",
+      "Security",
+      turnstileSiteKey.startsWith("0x") &&
+        turnstileSecretConfigured &&
+        Boolean(app?.hostname && turnstileHostnames.has(app.hostname.toLowerCase())) &&
+        !turnstileHostnames.has("localhost") &&
+        !turnstileHostnames.has("127.0.0.1"),
+      "Configure MATTERHORN_TURNSTILE_SITEKEY, TURNSTILE_SECRET, and a production-only TURNSTILE_HOSTNAMES allowlist containing the app hostname.",
     ),
     check(
       "signup.email_sender",

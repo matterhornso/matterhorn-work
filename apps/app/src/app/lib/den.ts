@@ -155,6 +155,7 @@ export type DenPublicAuthConfig = {
   passwordResetAvailable: boolean;
   legalAcceptanceRequired: boolean;
   minimumPasswordLength: number;
+  turnstileSiteKey: string | null;
 };
 
 export type DenWorkerSummary = {
@@ -1818,6 +1819,7 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
       email: string,
       password: string,
       legalAccepted = false,
+      turnstileToken?: string,
     ): Promise<DenSignUpResult> {
       const payload = await requestJson<unknown>(baseUrls, "/api/auth/sign-up/email", {
         method: "POST",
@@ -1826,6 +1828,7 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
           email: email.trim(),
           password,
           legalAccepted,
+          turnstileToken,
         },
       });
       return {

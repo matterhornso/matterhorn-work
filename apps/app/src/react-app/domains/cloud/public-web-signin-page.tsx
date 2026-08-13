@@ -17,6 +17,7 @@ import {
   type PublicCloudConfig,
 } from "../../../app/lib/public-cloud-config";
 import { publicWebAuthErrorMessage } from "./public-web-auth-errors";
+import { PublicTurnstile } from "./public-turnstile";
 import "./public-web-signin.css";
 
 type PublicWebSigninPageProps = {
@@ -38,6 +39,7 @@ const AUTH_CONFIG_FAIL_CLOSED: DenPublicAuthConfig = {
   passwordResetAvailable: false,
   legalAcceptanceRequired: false,
   minimumPasswordLength: 12,
+  turnstileSiteKey: null,
 };
 
 function authLocationValue(name: string): string | null {
@@ -70,6 +72,8 @@ export function PublicWebSigninPage({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [legalAccepted, setLegalAccepted] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileResetSignal, setTurnstileResetSignal] = useState(0);
   const [resetToken] = useState(initialResetToken);
   const [resetRequested, setResetRequested] = useState(false);
   const [sessionBusy, setSessionBusy] = useState(true);
@@ -196,6 +200,8 @@ export function PublicWebSigninPage({
     setConfirmPassword("");
     setVerificationCode("");
     setLegalAccepted(false);
+    setTurnstileToken(null);
+    setTurnstileResetSignal((value) => value + 1);
     setResetRequested(false);
   };
 
@@ -209,12 +215,22 @@ export function PublicWebSigninPage({
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (submitBusy || accountServiceAvailable === false) return;
+    if (mode === "sign-up" && !turnstileToken) {
+      setAuthError("Complete the security check before creating your account.");
+      return;
+    }
+    const submittingSignup = mode === "sign-up";
     setSubmitBusy(true);
     setAuthError(null);
     setStatusMessage(null);
     try {
       if (mode === "sign-up") {
-        const result = await client.signUpEmail(email, password, legalAccepted);
+        const result = await client.signUpEmail(
+          email,
+          password,
+          legalAccepted,
+          turnstileToken ?? undefined,
+        );
         if (result.verificationRequired) {
           setEmail(result.email ?? email.trim());
           setPassword("");
@@ -270,6 +286,10 @@ export function PublicWebSigninPage({
         setAuthError(publicWebAuthErrorMessage(error));
       }
     } finally {
+      if (submittingSignup) {
+        setTurnstileToken(null);
+        setTurnstileResetSignal((value) => value + 1);
+      }
       setSubmitBusy(false);
     }
   };
@@ -417,21 +437,30 @@ export function PublicWebSigninPage({
             ) : null}
 
             {mode === "sign-up" ? (
-              <label className="public-auth-legal" htmlFor="matterhorn-auth-legal">
-                <input
-                  id="matterhorn-auth-legal"
-                  name="legalAccepted"
-                  type="checkbox"
-                  checked={legalAccepted}
-                  onChange={(event) => setLegalAccepted(event.target.checked)}
-                  disabled={accessDisabled}
-                  required
-                />
-                <span>
-                  I agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
-                  {" "}and acknowledge the <a href="/privacy" target="_blank" rel="noreferrer">Privacy notice</a>.
-                </span>
-              </label>
+              <>
+                <label className="public-auth-legal" htmlFor="matterhorn-auth-legal">
+                  <input
+                    id="matterhorn-auth-legal"
+                    name="legalAccepted"
+                    type="checkbox"
+                    checked={legalAccepted}
+                    onChange={(event) => setLegalAccepted(event.target.checked)}
+                    disabled={accessDisabled}
+                    required
+                  />
+                  <span>
+                    I agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
+                    {" "}and acknowledge the <a href="/privacy" target="_blank" rel="noreferrer">Privacy notice</a>.
+                  </span>
+                </label>
+                {publicAuthConfig?.turnstileSiteKey ? (
+                  <PublicTurnstile
+                    siteKey={publicAuthConfig.turnstileSiteKey}
+                    resetSignal={turnstileResetSignal}
+                    onTokenChange={setTurnstileToken}
+                  />
+                ) : null}
+              </>
             ) : null}
 
             {mode === "verify-email" ? (

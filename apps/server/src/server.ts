@@ -360,6 +360,10 @@ import { installHubSkill, listHubSkills } from "./skill-hub.js";
 import { deleteCommand, listCommands, repairCommands, upsertCommand } from "./commands.js";
 import { ApiError, formatError } from "./errors.js";
 import {
+  resolveMatterhornTurnstileConfig,
+  verifyMatterhornTurnstile,
+} from "./turnstile.js";
+import {
   MatterhornAuthError,
   MatterhornAuthStore,
   resolveMatterhornDataRoot,
@@ -2194,6 +2198,7 @@ function requireMatterhornEmailDelivery(config: EmailSendConfig): void {
 
 function matterhornPublicAuthConfig() {
   const production = process.env.NODE_ENV === "production";
+  const turnstile = resolveMatterhornTurnstileConfig();
   const signupFlag = process.env.MATTERHORN_SIGNUPS_ENABLED?.trim().toLowerCase() ?? "";
   const signupsExplicitlyEnabled = /^(1|true|yes|on)$/.test(signupFlag);
   const signupsAllowedByFlag = production
@@ -2218,7 +2223,8 @@ function matterhornPublicAuthConfig() {
     !production ||
     (emailVerificationRequired &&
       legalAcceptanceRequired &&
-      process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT?.trim().toLowerCase() === "hard");
+      process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT?.trim().toLowerCase() === "hard" &&
+      turnstile.ready);
   const signupsAvailable =
     signupsAllowedByFlag &&
     productionSafetyReady &&
@@ -2236,6 +2242,7 @@ function matterhornPublicAuthConfig() {
     passwordResetAvailable: emailDeliveryAvailable,
     legalAcceptanceRequired,
     minimumPasswordLength: 12,
+    turnstileSiteKey: turnstile.ready ? turnstile.siteKey : null,
   } as const;
 }
 
@@ -6804,6 +6811,9 @@ function createRoutes(
 
   addRoute(routes, "POST", "/api/auth/sign-up/email", "none", async (ctx) => {
     const { request } = ctx;
+    const production = process.env.NODE_ENV === "production";
+    const turnstile = resolveMatterhornTurnstileConfig();
+    const turnstileRequired = production || turnstile.configured;
     const signupsEnabled = process.env.MATTERHORN_SIGNUPS_ENABLED?.trim().toLowerCase();
     const signupsExplicitlyEnabled = /^(1|true|yes|on)$/.test(signupsEnabled ?? "");
     if (
@@ -6819,10 +6829,11 @@ function createRoutes(
       "MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED",
     );
     if (
-      process.env.NODE_ENV === "production" &&
+      production &&
       (!verificationRequired ||
         !legalAcceptanceRequired ||
-        process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT?.trim().toLowerCase() !== "hard")
+        process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT?.trim().toLowerCase() !== "hard" ||
+        !turnstile.ready)
     ) {
       throw new ApiError(
         503,
@@ -6833,6 +6844,40 @@ function createRoutes(
     const emailConfig = matterhornEmailConfig();
     if (verificationRequired) requireMatterhornEmailDelivery(emailConfig);
     const body = await readJsonBody(request, 16 * 1024, "Sign-up");
+    const email = stringBodyField(body, "email");
+    const attemptKey = `sign-up:${email.trim().toLowerCase()}`;
+    const peerAttemptKey = `sign-up-ip:${ctx.peerAddress ?? "unknown"}`;
+    if (
+      !await authAttemptLimiter.check(attemptKey) ||
+      !await authAttemptLimiter.check(peerAttemptKey, AUTH_SIGNUP_IP_MAX_REQUESTS)
+    ) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many account attempts. Try again in a few minutes.",
+      );
+    }
+    if (turnstileRequired) {
+      if (!turnstile.ready) {
+        throw new ApiError(
+          503,
+          "signup_security_configuration_invalid",
+          "New accounts are paused while signup security is configured.",
+        );
+      }
+      const verified = await verifyMatterhornTurnstile({
+        config: turnstile,
+        token: body.turnstileToken,
+        remoteIp: ctx.peerAddress,
+      });
+      if (!verified) {
+        throw new ApiError(
+          403,
+          "turnstile_verification_failed",
+          "Complete the security check and try again.",
+        );
+      }
+    }
     const termsVersion = process.env.MATTERHORN_TERMS_VERSION?.trim() ?? "";
     const privacyVersion = process.env.MATTERHORN_PRIVACY_VERSION?.trim() ?? "";
     if (
@@ -6851,19 +6896,6 @@ function createRoutes(
         400,
         "legal_acceptance_required",
         "Accept the Terms and acknowledge the Privacy notice to create an account.",
-      );
-    }
-    const email = stringBodyField(body, "email");
-    const attemptKey = `sign-up:${email.trim().toLowerCase()}`;
-    const peerAttemptKey = `sign-up-ip:${ctx.peerAddress ?? "unknown"}`;
-    if (
-      !await authAttemptLimiter.check(attemptKey) ||
-      !await authAttemptLimiter.check(peerAttemptKey, AUTH_SIGNUP_IP_MAX_REQUESTS)
-    ) {
-      throw new ApiError(
-        429,
-        "rate_limited",
-        "Too many account attempts. Try again in a few minutes.",
       );
     }
     const session = withMatterhornAuthErrorMapping(() =>
