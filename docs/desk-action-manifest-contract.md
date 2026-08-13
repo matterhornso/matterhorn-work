@@ -114,14 +114,16 @@ interface DeskActionManifest {
 | `memory_forget_record` | Forget record | `live_read` | settings |
 | `memory_export` | Export memory | `live_read` | summary |
 
-### MCPs (`planned_not_live`)
+### MCPs (`beta_ready`, managed web tools)
 
 | Action ID | Title | Execution state | Result cards |
 | --- | --- | --- | --- |
-| `mcps_browse_tools` | Browse tools | `planned_not_live` | summary |
+| `mcps_browse_tools` | Browse tools | `live_read` | summary |
 | `mcps_install_tool` | Install tool | `planned_not_live` | settings |
 | `mcps_manage_permissions` | Manage permissions | `planned_not_live` | settings |
-| `mcps_view_usage_guide` | Usage guide | `planned_not_live` | education |
+| `mcps_view_usage_guide` | Usage guide | `live_read` | education |
+
+Web workspaces expose the managed tool inventory, connection health, and usage guidance. Custom MCP installation, credentials, and permission changes remain desktop-only and therefore stay `planned_not_live` in the web action contract.
 
 ## Safety invariants
 

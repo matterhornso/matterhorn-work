@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import type {
   MatterhornBackendModelsResponse,
   MatterhornProviderPrivacyPolicy,
@@ -137,6 +138,34 @@ describe("Privacy settings", () => {
     } as unknown as MatterhornBackendModelsResponse;
 
     expect(activeProviderPrivacyPolicies(legacyModels)).toEqual([]);
+  });
+
+  test("makes the complete workspace archive discoverable from Privacy", () => {
+    const privacySource = readFileSync(
+      new URL(
+        "../src/react-app/domains/settings/pages/privacy-view.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const publicPrivacySource = readFileSync(
+      new URL(
+        "../src/react-app/domains/public/public-trust-route.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(privacySource).toContain("Complete workspace archive");
+    expect(privacySource).toContain("client.exportWorkspaceDataArchive(workspaceId)");
+    expect(privacySource).toContain("Secrets and authentication material are excluded.");
+    expect(privacySource).toContain("Download archive");
+    expect(publicPrivacySource).toContain(
+      "Download a complete workspace archive from Settings → Privacy.",
+    );
+    expect(publicPrivacySource).toContain(
+      "Settings → Account",
+    );
   });
 
   test("maps verified and blocked policies to explicit states", () => {

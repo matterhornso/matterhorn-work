@@ -1601,6 +1601,7 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     // workspace request, especially while provider clients reconnect.
     engineReload: 30_000,
     workspaceExport: 30_000,
+    workspaceArchive: 120_000,
     workspaceImport: 30_000,
     binary: 60_000,
   };
@@ -1823,6 +1824,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         timeoutMs: timeouts.workspaceExport,
       });
     },
+    exportWorkspaceDataArchive: (workspaceId: string) =>
+      requestBinary(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/data-archive`,
+        { token, hostToken, timeoutMs: timeouts.workspaceArchive },
+      ),
     importWorkspace: (workspaceId: string, payload: Record<string, unknown>) =>
       requestJson<{ ok: boolean; preview?: MatterhornWorkspaceImportPreview }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/import`, {
         token,

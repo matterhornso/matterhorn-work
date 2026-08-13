@@ -8,6 +8,7 @@ import {
   isWebDeployment,
 } from "../../app/lib/matterhorn-deployment";
 import { hydrateMatterhornServerSettingsFromEnv } from "../../app/lib/matterhorn-server";
+import { MATTERHORN_LAUNCH_FEATURES } from "../../app/lib/launch-features";
 import { isDesktopRuntime } from "../../app/utils";
 import { DenAuthProvider } from "../domains/cloud/den-auth-provider";
 import { BetaAuthProvider } from "../domains/auth";
@@ -93,6 +94,7 @@ function routeNeedsWalletRuntime(
   requireSignin: boolean,
   hasCachedAuth: boolean,
   publicBetaWeb: boolean,
+  reviewedDeskActions: boolean,
 ): boolean {
   // Public required-signin builds only mount this authenticated shell after
   // their cookie-backed session has been verified by PublicSigninBootstrap.
@@ -114,7 +116,10 @@ function routeNeedsWalletRuntime(
 
   if (/(?:^|\/)settings\/wallet(?:\/|$)/.test(path)) return true;
   const panel = new URLSearchParams(search).get("panel")?.toLowerCase() ?? "";
-  if (publicBetaWeb && panel !== "wallet") return false;
+  // Public Beta keeps protocol rails light while reviewed actions are hidden.
+  // Once the audited wallet-review paths are enabled, their protocol panels
+  // need the same wallet providers as the standalone Wallet surface.
+  if (publicBetaWeb && panel !== "wallet" && !reviewedDeskActions) return false;
   return WALLET_RUNTIME_PANELS.has(panel);
 }
 
@@ -147,6 +152,7 @@ export function AppProviders({ children }: AppProvidersProps) {
           requireSignin,
           hasCachedAuth,
           publicBetaWeb,
+          MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions,
         )}
       >
         <BootStateProvider>

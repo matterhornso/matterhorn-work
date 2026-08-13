@@ -11,7 +11,7 @@ export function VerificationEmail({ verificationCode }: VerificationEmailProps) 
       <Preview>Your Matterhorn Desks verification code is {verificationCode}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
-          <Text style={styles.eyebrow}>Matterhorn Desks</Text>
+          <Text style={styles.brand}>Matterhorn Desks</Text>
           <Heading style={styles.heading}>Verify your email</Heading>
           <Text style={styles.text}>Enter this code to finish signing in to Matterhorn Desks.</Text>
           <Section style={styles.codeBox}>
@@ -26,48 +26,46 @@ export function VerificationEmail({ verificationCode }: VerificationEmailProps) 
 
 const styles = {
   body: {
-    backgroundColor: "#f6f4ef",
-    color: "#171412",
-    fontFamily: "Arial, sans-serif",
+    backgroundColor: "#05070b",
+    color: "#fafcff",
+    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif",
     margin: 0,
   },
   container: {
-    backgroundColor: "#fffdf8",
-    border: "1px solid #e8dfd0",
-    borderRadius: "20px",
+    backgroundColor: "#0b0f14",
+    border: "1px solid rgba(209, 242, 255, 0.24)",
+    borderRadius: "10px",
     margin: "40px auto",
     maxWidth: "520px",
     padding: "32px",
   },
-  eyebrow: {
-    color: "#8a5a28",
-    fontSize: "13px",
-    fontWeight: 700,
-    letterSpacing: "0.08em",
-    margin: "0 0 12px",
-    textTransform: "uppercase" as const,
+  brand: {
+    color: "#d1f2ff",
+    fontSize: "14px",
+    fontWeight: 650,
+    margin: "0 0 28px",
   },
   heading: {
-    color: "#171412",
-    fontSize: "28px",
-    lineHeight: "34px",
+    color: "#fafcff",
+    fontSize: "26px",
+    lineHeight: "32px",
     margin: "0 0 16px",
   },
   text: {
-    color: "#4d4640",
+    color: "#c5d0dc",
     fontSize: "16px",
     lineHeight: "24px",
     margin: "0 0 24px",
   },
   codeBox: {
-    backgroundColor: "#171412",
-    borderRadius: "16px",
+    backgroundColor: "#151d26",
+    borderRadius: "8px",
     margin: "0 0 24px",
     padding: "22px",
     textAlign: "center" as const,
   },
   code: {
-    color: "#fff8eb",
+    color: "#d1f2ff",
     fontSize: "34px",
     fontWeight: 700,
     letterSpacing: "0.18em",
@@ -75,7 +73,7 @@ const styles = {
     margin: 0,
   },
   footer: {
-    color: "#756c62",
+    color: "#9caaba",
     fontSize: "14px",
     lineHeight: "21px",
     margin: 0,

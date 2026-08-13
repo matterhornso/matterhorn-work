@@ -50,6 +50,36 @@ The beta auth layer does not require Clerk packages, but it documents the standa
 | `VITE_MATTERHORN_WORK_URL` / `VITE_OPENWORK_URL` | No | Protected local/private bridge only. Never set this or a Matterhorn Desks token in a public browser build. |
 | `VITE_OPENCODE_URL` | No | OpenCode engine URL. Defaults to `http://127.0.0.1:4096`. |
 
+### First-party account email
+
+| Variable | Required? | Purpose |
+|---|---|---|
+| `MATTERHORN_EMAIL_VERIFICATION_REQUIRED` | Required for public signup | Keeps new accounts signed out until the six-digit email challenge is completed. |
+| `MATTERHORN_EMAIL_FROM` | Required for public signup | Verified transactional sender identity. |
+| `MATTERHORN_TURNSTILE_SITEKEY` | Required for public signup | Public Cloudflare Turnstile widget site key returned by `/api/auth/config`. |
+| `TURNSTILE_SECRET` | Required for public signup | Server-only Turnstile Siteverify credential. Never expose this in a browser variable. |
+| `TURNSTILE_HOSTNAMES` | Required for public signup | Comma-separated exact frontend hostname allowlist. Production must contain only production hosts, never localhost. |
+| `MATTERHORN_RESEND_API_KEY` | Required when using Resend | Server-only delivery credential. |
+| `MATTERHORN_SMTP_HOST`, `MATTERHORN_SMTP_PORT`, `MATTERHORN_SMTP_USER`, `MATTERHORN_SMTP_PASSWORD`, `MATTERHORN_SMTP_SECURE` | Alternative to Resend | Authenticated SMTP delivery configuration. |
+| `MATTERHORN_EMAIL_DEV_MODE` | Local development only | Emits template payloads locally. Production ignores this flag. |
+| `MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED` | Required for public signup | Rejects account creation unless the user explicitly accepts the Terms and acknowledges the Privacy notice. |
+| `MATTERHORN_TERMS_VERSION`, `MATTERHORN_PRIVACY_VERSION` | Required for public signup | Versions stored with the server-side acceptance record. |
+
+Verification codes expire after 10 minutes. Password reset links expire after
+one hour, can be used once, and revoke every active session when the password
+changes. Reset requests always return the same response whether or not an
+account exists, so the endpoint does not disclose registered addresses.
+
+## Data portability and deletion
+
+- **Account record** — Settings → Account downloads the signed-in user's profile, legal-acceptance versions and time, organization memberships, and active-session count.
+- **Workspace archive** — Settings → Privacy downloads a gzip JSON archive containing complete chat messages and todos, active notes, confirmed memory, the memory review inbox, workspace outputs, generated files, sanitized settings, and a redacted activity snapshot.
+- **Integrity and boundaries** — each workspace archive includes SHA-256 integrity metadata and explicit inclusion, exclusion, redaction, and safety-limit disclosures. The export fails rather than silently truncating, and it never follows workspace symlinks.
+- **Secret exclusion** — account exports never contain password hashes, session tokens, recovery challenges, or verification codes. Workspace archives exclude authentication material, raw provider credentials, unsanitized configuration, and provider-side logs.
+- **Deletion** — Settings → Account supports confirmed account deletion. Workspace-level deletion controls remain scoped to the stores that advertise deletion; append-only accountability history is disclosed separately.
+
+Export account and workspace data before deleting it. A workspace archive contains user content in readable JSON or lossless base64 and should be stored with the same care as the original workspace.
+
 ## Local/offline testing
 
 The desktop and local development layers are designed so testers can use local workspaces without signing in:
@@ -78,6 +108,15 @@ VITE_MATTERHORN_CLOUD_API_URL=https://app.matterhorn.example/api/den
 MATTERHORN_APP_URL=https://app.matterhorn.example
 MATTERHORN_CONTROL_PLANE_URL=https://api-origin.matterhorn.example
 MATTERHORN_PROXY_SECRET=<server-only-high-entropy-secret>
+MATTERHORN_EMAIL_VERIFICATION_REQUIRED=1
+MATTERHORN_EMAIL_FROM="Matterhorn Desks <accounts@matterhorn.example>"
+MATTERHORN_RESEND_API_KEY=<server-only-resend-secret>
+MATTERHORN_TURNSTILE_SITEKEY=<public-turnstile-site-key>
+TURNSTILE_SECRET=<server-only-turnstile-secret>
+TURNSTILE_HOSTNAMES=app.matterhorn.example
+MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED=1
+MATTERHORN_TERMS_VERSION=<approved-terms-version>
+MATTERHORN_PRIVACY_VERSION=<approved-privacy-version>
 ```
 
 Do not configure `VITE_MATTERHORN_WORK_URL`, `VITE_MATTERHORN_WORK_TOKEN`,

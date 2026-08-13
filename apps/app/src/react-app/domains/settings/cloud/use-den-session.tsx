@@ -556,6 +556,7 @@ export function useDenSession({
     onOpenControlPlane: openControlPlane,
     onRefreshOrgs: refreshOrgs,
     onResetBaseUrl: () => setBaseUrlDraft(baseUrl),
+    onSessionEnded: (message?: string | null) => clearSignedInState(message),
     onSignOut: signOut,
     onSubmitManualAuth: submitManualAuth,
   };

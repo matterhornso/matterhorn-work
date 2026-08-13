@@ -90,6 +90,9 @@ for (const phrase of [
   "Local/offline",
   "Continue offline",
   "Matterhorn account is separate from any Web3 wallet",
+  "Settings → Account downloads",
+  "Settings → Privacy downloads",
+  "fails rather than silently truncating",
 ]) {
   assert.ok(setupDoc.includes(phrase), `beta auth setup doc must mention "${phrase}"`);
 }

@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { createInMemoryRequestRateLimitStore } from "./request-rate-limit-store.js";
+import {
+  createInMemoryRequestRateLimitStore,
+  createSqliteRequestRateLimitStore,
+} from "./request-rate-limit-store.js";
 import { createRequestRateLimiter, resolveRateLimitPeerAddress } from "./server.js";
 
 describe("shared request rate-limit store", () => {
@@ -54,5 +61,70 @@ describe("shared request rate-limit store", () => {
       },
     });
     expect(resolveRateLimitPeerAddress(invalid, "10.0.0.5", "edge-secret")).toBe("10.0.0.5");
+  });
+
+  test("atomically shares hosted budgets across independent SQLite connections", () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-rate-limit-"));
+    const path = join(root, "auth", "rate-limits.db");
+    const first = createSqliteRequestRateLimitStore(path);
+    const second = createSqliteRequestRateLimitStore(path);
+    try {
+      const input = {
+        key: "auth:sign-up-ip:203.0.113.20",
+        windowMs: 60_000,
+        maxRequests: 2,
+        now: 1_000,
+      };
+      expect(first.consume(input)).toEqual({ allowed: true, resetAt: 61_000 });
+      expect(second.consume(input)).toEqual({ allowed: true, resetAt: 61_000 });
+      expect(first.consume(input)).toEqual({ allowed: false, resetAt: 61_000 });
+      expect(statSync(path).mode & 0o777).toBe(0o600);
+      const inspection = new Database(path, { readonly: true });
+      const persisted = inspection
+        .query("SELECT key FROM request_rate_limits LIMIT 1")
+        .get() as { key: string };
+      inspection.close();
+      expect(persisted.key).toMatch(/^[a-f0-9]{64}$/);
+      expect(persisted.key).not.toContain("203.0.113.20");
+
+      second.reset(input.key);
+      expect(first.consume(input)).toEqual({ allowed: true, resetAt: 61_000 });
+    } finally {
+      first.close?.();
+      second.close?.();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("persists a hosted budget across a process-style reopen and expires it safely", async () => {
+    const root = mkdtempSync(join(tmpdir(), "matterhorn-rate-limit-reopen-"));
+    const path = join(root, "rate-limits.db");
+    try {
+      const first = createSqliteRequestRateLimitStore(path);
+      expect((await first.consume({
+        key: "auth:password-reset:user@example.test",
+        windowMs: 10_000,
+        maxRequests: 1,
+        now: 5_000,
+      })).allowed).toBe(true);
+      first.close?.();
+
+      const reopened = createSqliteRequestRateLimitStore(path);
+      expect((await reopened.consume({
+        key: "auth:password-reset:user@example.test",
+        windowMs: 10_000,
+        maxRequests: 1,
+        now: 6_000,
+      })).allowed).toBe(false);
+      expect((await reopened.consume({
+        key: "auth:password-reset:user@example.test",
+        windowMs: 10_000,
+        maxRequests: 1,
+        now: 15_000,
+      })).allowed).toBe(true);
+      reopened.close?.();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

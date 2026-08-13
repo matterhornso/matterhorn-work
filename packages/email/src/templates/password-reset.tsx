@@ -11,7 +11,7 @@ export function PasswordResetEmail({ resetLink }: PasswordResetEmailProps) {
       <Preview>Reset your Matterhorn Desks password</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
-          <Text style={styles.eyebrow}>Matterhorn Desks account</Text>
+          <Text style={styles.brand}>Matterhorn Desks</Text>
           <Heading style={styles.heading}>Reset your password</Heading>
           <Text style={styles.text}>Use this secure link to choose a new password for your Matterhorn Desks account.</Text>
           <Button href={resetLink} style={styles.button}>Reset password</Button>
@@ -27,43 +27,41 @@ export function PasswordResetEmail({ resetLink }: PasswordResetEmailProps) {
 
 const styles = {
   body: {
-    backgroundColor: "#f6f4ef",
-    color: "#171412",
-    fontFamily: "Arial, sans-serif",
+    backgroundColor: "#05070b",
+    color: "#fafcff",
+    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif",
     margin: 0,
   },
   container: {
-    backgroundColor: "#fffdf8",
-    border: "1px solid #e8dfd0",
-    borderRadius: "20px",
+    backgroundColor: "#0b0f14",
+    border: "1px solid rgba(209, 242, 255, 0.24)",
+    borderRadius: "10px",
     margin: "40px auto",
     maxWidth: "560px",
     padding: "32px",
   },
-  eyebrow: {
-    color: "#8a5a28",
-    fontSize: "13px",
-    fontWeight: 700,
-    letterSpacing: "0.08em",
-    margin: "0 0 12px",
-    textTransform: "uppercase" as const,
+  brand: {
+    color: "#d1f2ff",
+    fontSize: "14px",
+    fontWeight: 650,
+    margin: "0 0 28px",
   },
   heading: {
-    color: "#171412",
-    fontSize: "28px",
-    lineHeight: "34px",
+    color: "#fafcff",
+    fontSize: "26px",
+    lineHeight: "32px",
     margin: "0 0 16px",
   },
   text: {
-    color: "#4d4640",
+    color: "#c5d0dc",
     fontSize: "16px",
     lineHeight: "24px",
     margin: "0 0 24px",
   },
   button: {
-    backgroundColor: "#171412",
-    borderRadius: "999px",
-    color: "#fff8eb",
+    backgroundColor: "#d1f2ff",
+    borderRadius: "8px",
+    color: "#0c0c0c",
     display: "inline-block",
     fontSize: "15px",
     fontWeight: 700,
@@ -72,17 +70,17 @@ const styles = {
     textDecoration: "none",
   },
   hr: {
-    borderColor: "#e8dfd0",
+    borderColor: "rgba(209, 242, 255, 0.24)",
     margin: "28px 0 18px",
   },
   footer: {
-    color: "#756c62",
+    color: "#9caaba",
     fontSize: "14px",
     lineHeight: "21px",
     margin: "0 0 8px",
   },
   link: {
-    color: "#5b3a18",
+    color: "#d1f2ff",
     fontSize: "13px",
     lineHeight: "19px",
     margin: 0,

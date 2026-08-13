@@ -52,6 +52,12 @@ export interface MatterhornMemoryForgetResult {
   reason: string
 }
 
+export interface MatterhornMemoryWorkspacePurgeResult {
+  workspaceId: string
+  deletedRecords: number
+  deletedSuggestions: number
+}
+
 export interface MatterhornMemoryExportResult {
   version: typeof MATTERHORN_MEMORY_VAULT_VERSION
   outputDir: string
@@ -361,6 +367,15 @@ export class MatterhornMemoryVault {
       .slice(0, limit)
   }
 
+  async listAllSuggestions(options: Omit<MatterhornMemorySuggestionListOptions, "limit"> = {}): Promise<MatterhornMemorySuggestionInboxEntry[]> {
+    await this.initialize()
+    return Object.values((await this.readSuggestionInbox()).entries)
+      .filter((entry) => options.status ? entry.status === options.status : true)
+      .filter((entry) => options.desk ? entry.suggestion.desk === options.desk : true)
+      .filter((entry) => options.includeResolved ? true : entry.status === "pending" || entry.status === "blocked")
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  }
+
   async getSuggestion(id: string): Promise<MatterhornMemorySuggestionInboxEntry | null> {
     await this.initialize()
     return (await this.readSuggestionInbox()).entries[id] ?? null
@@ -543,6 +558,56 @@ export class MatterhornMemoryVault {
     await this.writeIndex(index)
     await this.appendLog("forget", id, { reason })
     return { id, forgotten: true, reason }
+  }
+
+  async purgeWorkspace(workspaceId: string): Promise<MatterhornMemoryWorkspacePurgeResult> {
+    await this.initialize()
+    if (!SAFE_MEMORY_ID_PATTERN.test(workspaceId)) {
+      throw new Error("Workspace id contains unsupported characters.")
+    }
+    const workspaceTag = `workspace:${workspaceId}`.toLowerCase()
+    const index = await this.readIndex()
+    const inbox = await this.readSuggestionInbox()
+    const recordIds = Object.values(index.entries)
+      .filter((entry) => entry.record.tags.some((tag) => tag.toLowerCase() === workspaceTag))
+      .map((entry) => entry.record.id)
+    const suggestionIds = Object.values(inbox.entries)
+      .filter((entry) => entry.suggestion.proposedRecord.tags.some((tag) => tag.toLowerCase() === workspaceTag))
+      .map((entry) => entry.id)
+    const deletedIds = new Set([...recordIds, ...suggestionIds])
+
+    for (const recordId of recordIds) {
+      const entry = index.entries[recordId]
+      if (entry) await rm(entry.markdownPath, { force: true })
+      delete index.entries[recordId]
+    }
+    for (const suggestionId of suggestionIds) {
+      delete inbox.entries[suggestionId]
+    }
+    await this.writeIndex(index)
+    await this.writeSuggestionInbox(inbox)
+
+    try {
+      const lines = (await readFile(this.logPath, "utf8")).split("\n")
+      const retained = lines.filter((line) => {
+        if (!line.trim()) return false
+        try {
+          const parsed = JSON.parse(line) as { id?: unknown }
+          return typeof parsed.id !== "string" || !deletedIds.has(parsed.id)
+        } catch {
+          return true
+        }
+      })
+      await writeFile(this.logPath, retained.length ? `${retained.join("\n")}\n` : "", "utf8")
+    } catch (error) {
+      if (!isNotFoundError(error)) throw error
+    }
+
+    return {
+      workspaceId,
+      deletedRecords: recordIds.length,
+      deletedSuggestions: suggestionIds.length,
+    }
   }
 
   async exportBundle(outputDir: string): Promise<MatterhornMemoryExportResult> {

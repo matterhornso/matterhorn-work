@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, realpath, rm, symlink } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gunzipSync } from "node:zlib";
 
 import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
@@ -325,6 +327,68 @@ async function waitUntil(predicate: () => boolean) {
 }
 
 describe("workspace session read APIs", () => {
+  test("downloads an authenticated workspace archive with full chat and output content", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    await mkdir(join(workspaceRoot, "outputs", "bittensor"), { recursive: true });
+    await writeFile(join(workspaceRoot, "outputs", "bittensor", "validator-report.md"), "# Validator report\n");
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+
+    const createdNote = await fetch(`${base}/workspace/ws_1/notes`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Validator research", body: "Compare validator take and uptime." }),
+    });
+    expect(createdNote.status).toBe(201);
+    expect((await fetch(`${base}/workspace/ws_1/data-archive`)).status).toBe(401);
+
+    const response = await fetch(`${base}/workspace/ws_1/data-archive`, { headers: auth(openwork.token) });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/gzip");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("content-disposition")).toMatch(
+      /^attachment; filename="matterhorn-workspace-Workspace-\d{4}-\d{2}-\d{2}\.json\.gz"$/,
+    );
+    expect(response.headers.get("x-matterhorn-archive-sha256")).toMatch(/^[a-f0-9]{64}$/);
+
+    const compressedArchive = Buffer.from(await response.arrayBuffer());
+    expect(response.headers.get("x-matterhorn-archive-sha256")).toBe(
+      createHash("sha256").update(compressedArchive).digest("hex"),
+    );
+    const uncompressedArchive = gunzipSync(compressedArchive);
+    expect(response.headers.get("x-matterhorn-archive-uncompressed-bytes")).toBe(
+      String(uncompressedArchive.byteLength),
+    );
+    const archive = JSON.parse(uncompressedArchive.toString("utf8"));
+    expect(archive.version).toBe("matterhorn.workspace-data-archive.v1");
+    expect(archive.workspace).toMatchObject({ id: "ws_1", name: "Workspace" });
+    expect(archive.data.notes).toEqual([
+      expect.objectContaining({ title: "Validator research", body: "Compare validator take and uptime." }),
+    ]);
+    expect(archive.data.chats).toEqual([
+      expect.objectContaining({
+        session: expect.objectContaining({ id: "ses_1" }),
+        messages: [expect.objectContaining({
+          parts: expect.arrayContaining([expect.objectContaining({ text: "hostname: mock-host" })]),
+        })],
+      }),
+    ]);
+    expect(archive.data.files).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: "outputs/bittensor/validator-report.md",
+        encoding: "utf8",
+        content: "# Validator report\n",
+      }),
+    ]));
+    expect(JSON.stringify(archive.data.configuration)).not.toContain(openwork.token);
+    expect(JSON.stringify(archive.data.configuration)).not.toContain('"apiKey":');
+  });
+
   test("lists sessions and returns session details, messages, and snapshot", async () => {
     const workspaceRoot = await createWorkspaceRoot();
     const mock = startMockOpencode();

@@ -25,6 +25,7 @@ const vercelHeaders = Object.fromEntries(
 assert.match(vercelHeaders["content-security-policy"], /frame-ancestors 'none'/);
 assert.match(vercelHeaders["content-security-policy"], /base-uri 'none'/);
 assert.match(vercelHeaders["content-security-policy"], /object-src 'none'/);
+assert.match(vercelHeaders["content-security-policy"], /script-src 'self' https:\/\/challenges\.cloudflare\.com/);
 assert.equal(vercelHeaders["cross-origin-opener-policy"], "same-origin-allow-popups");
 assert.equal(vercelHeaders["permissions-policy"], "camera=(), microphone=(), geolocation=()");
 assert.equal(vercelHeaders["referrer-policy"], "strict-origin-when-cross-origin");
@@ -57,6 +58,18 @@ const managedKeys = [
   "MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS",
   "MATTERHORN_SIGNUPS_ENABLED",
   "MATTERHORN_SIGNUP_MAX_ACCOUNTS",
+  "MATTERHORN_EMAIL_VERIFICATION_REQUIRED",
+  "MATTERHORN_TURNSTILE_SITEKEY",
+  "TURNSTILE_SECRET",
+  "TURNSTILE_HOSTNAMES",
+  "MATTERHORN_EMAIL_FROM",
+  "MATTERHORN_RESEND_API_KEY",
+  "MATTERHORN_SMTP_HOST",
+  "MATTERHORN_SMTP_USER",
+  "MATTERHORN_SMTP_PASSWORD",
+  "MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED",
+  "MATTERHORN_TERMS_VERSION",
+  "MATTERHORN_PRIVACY_VERSION",
   "VITE_MATTERHORN_WORK_TOKEN",
   "VITE_MATTERHORN_WORK_HOST_TOKEN",
   "VITE_OPENWORK_TOKEN",
@@ -102,6 +115,15 @@ function publicWebEnvironment(overrides = {}) {
     MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS: "32000",
     MATTERHORN_SIGNUPS_ENABLED: "true",
     MATTERHORN_SIGNUP_MAX_ACCOUNTS: "100",
+    MATTERHORN_EMAIL_VERIFICATION_REQUIRED: "true",
+    MATTERHORN_TURNSTILE_SITEKEY: "0x4AAAAAAAtest-site-key",
+    TURNSTILE_SECRET: "test-turnstile-secret-value",
+    TURNSTILE_HOSTNAMES: "app.matterhorn.example",
+    MATTERHORN_EMAIL_FROM: "Matterhorn Desks <accounts@matterhorn.example>",
+    MATTERHORN_RESEND_API_KEY: "re_test_managed_server_secret",
+    MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED: "true",
+    MATTERHORN_TERMS_VERSION: "2026-08-13",
+    MATTERHORN_PRIVACY_VERSION: "2026-08-13",
     ...overrides,
   };
 }
@@ -182,6 +204,33 @@ assert.ok(JSON.parse(missingRetentionTerms.stdout).blockers.some((blocker) => bl
 const unlimitedSignups = run({ MATTERHORN_SIGNUP_MAX_ACCOUNTS: "" });
 assert.notEqual(unlimitedSignups.status, 0);
 assert.ok(JSON.parse(unlimitedSignups.stdout).blockers.some((blocker) => blocker.id === "signup.capacity"));
+
+const unverifiedSignups = run({ MATTERHORN_EMAIL_VERIFICATION_REQUIRED: "false" });
+assert.notEqual(unverifiedSignups.status, 0);
+assert.ok(JSON.parse(unverifiedSignups.stdout).blockers.some((blocker) => blocker.id === "signup.email_verification"));
+
+const missingTurnstile = run({ TURNSTILE_SECRET: "" });
+assert.notEqual(missingTurnstile.status, 0);
+assert.ok(JSON.parse(missingTurnstile.stdout).blockers.some((blocker) => blocker.id === "signup.bot_protection"));
+
+const unsafeTurnstileHosts = run({
+  TURNSTILE_HOSTNAMES: "app.matterhorn.example,localhost",
+});
+assert.notEqual(unsafeTurnstileHosts.status, 0);
+assert.ok(JSON.parse(unsafeTurnstileHosts.stdout).blockers.some((blocker) => blocker.id === "signup.bot_protection"));
+
+const missingEmailDelivery = run({ MATTERHORN_RESEND_API_KEY: "" });
+assert.notEqual(missingEmailDelivery.status, 0);
+assert.ok(JSON.parse(missingEmailDelivery.stdout).blockers.some((blocker) => blocker.id === "signup.email_delivery"));
+assert.doesNotMatch(missingEmailDelivery.stdout, /re_test_managed_server_secret/);
+
+const missingLegalAcceptance = run({ MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED: "false" });
+assert.notEqual(missingLegalAcceptance.status, 0);
+assert.ok(JSON.parse(missingLegalAcceptance.stdout).blockers.some((blocker) => blocker.id === "signup.legal_acceptance"));
+
+const missingLegalVersion = run({ MATTERHORN_PRIVACY_VERSION: "" });
+assert.notEqual(missingLegalVersion.status, 0);
+assert.ok(JSON.parse(missingLegalVersion.stdout).blockers.some((blocker) => blocker.id === "signup.legal_versions"));
 
 const deploymentSource = readFileSync("apps/app/src/app/lib/matterhorn-deployment.ts", "utf8");
 const serverSource = readFileSync("apps/app/src/react-app/kernel/server-provider.tsx", "utf8");

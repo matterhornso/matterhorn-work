@@ -64,7 +64,10 @@ describe("wallet runtime connector contract", () => {
       'new URLSearchParams(search).get("panel")',
     );
     expect(providersSource).toContain(
-      'if (publicBetaWeb && panel !== "wallet") return false',
+      'if (publicBetaWeb && panel !== "wallet" && !reviewedDeskActions) return false',
+    );
+    expect(providersSource).toContain(
+      "MATTERHORN_LAUNCH_FEATURES.reviewedDeskActions",
     );
     expect(providersSource).toContain("<WalletProvider>");
     expect(providersSource).toContain("<LazyWalletRuntimeProvider");

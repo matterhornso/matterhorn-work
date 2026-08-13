@@ -17,6 +17,7 @@ import { t } from "@/i18n";
 import { MATTERHORN_CLOUD_ENABLED } from "../../../../app/lib/den";
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import { CloudAccountSection } from "../cloud/cloud-account-section";
+import { AccountSecuritySection } from "../cloud/account-security-section";
 import { useCloudSession } from "../cloud/cloud-session-provider";
 import { CloudDevMode } from "../cloud/dev-mode";
 import type { useDenSession } from "../cloud/use-den-session";
@@ -59,6 +60,7 @@ type CloudAccountSession = Pick<
   | "onOpenControlPlane"
   | "onRefreshOrgs"
   | "onResetBaseUrl"
+  | "onSessionEnded"
   | "onSignOut"
   | "onSubmitManualAuth"
 >;
@@ -272,7 +274,7 @@ export function CloudAccountView({
   matterhornServerClient,
   onSendFeedback,
 }: CloudAccountViewProps) {
-  const { activeOrganization, isSignedIn, statusMessage } = useCloudSession();
+  const { activeOrganization, client, isSignedIn, statusMessage, user } = useCloudSession();
   const navigate = useNavigate();
 
   const profileReadiness = React.useMemo(
@@ -471,6 +473,14 @@ export function CloudAccountView({
           />
         )}
       </SettingsSection> : null}
+
+      {isSignedIn && user ? (
+        <AccountSecuritySection
+          client={client}
+          user={user}
+          onSessionEnded={session.onSessionEnded}
+        />
+      ) : null}
 
     </SettingsStack>
   );

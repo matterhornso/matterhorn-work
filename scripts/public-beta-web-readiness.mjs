@@ -134,8 +134,23 @@ function evaluate() {
   const usageGlobalMonthly = positiveInteger("MATTERHORN_MODEL_USAGE_GLOBAL_MONTHLY_LIMIT");
   const usageReservation = positiveInteger("MATTERHORN_MODEL_USAGE_RESERVATION_TOKENS");
   const signupCapacity = positiveInteger("MATTERHORN_SIGNUP_MAX_ACCOUNTS");
+  const turnstileSiteKey = readEnv("MATTERHORN_TURNSTILE_SITEKEY");
+  const turnstileSecretConfigured = readEnv("TURNSTILE_SECRET").length >= 20;
+  const turnstileHostnames = new Set(
+    readEnv("TURNSTILE_HOSTNAMES")
+      .split(",")
+      .map((hostname) => hostname.trim().toLowerCase())
+      .filter(Boolean),
+  );
   const cudosPrivacyPolicyUrl = readEnv("MATTERHORN_CUDOS_PRIVACY_POLICY_URL");
   const cudosPromptRetentionDays = nonNegativeInteger("MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS");
+  const emailFrom = readEnv("MATTERHORN_EMAIL_FROM");
+  const resendConfigured = readEnv("MATTERHORN_RESEND_API_KEY").length >= 16;
+  const smtpConfigured = Boolean(
+    readEnv("MATTERHORN_SMTP_HOST") &&
+      readEnv("MATTERHORN_SMTP_USER") &&
+      readEnv("MATTERHORN_SMTP_PASSWORD"),
+  );
 
   const checks = [
     check(
@@ -283,6 +298,52 @@ function evaluate() {
       "Release owner",
       enabled("MATTERHORN_SIGNUPS_ENABLED"),
       "MATTERHORN_SIGNUPS_ENABLED must be true for an intentional signup launch.",
+    ),
+    check(
+      "signup.email_verification",
+      "New public accounts must verify their email before receiving a session",
+      "Security",
+      enabled("MATTERHORN_EMAIL_VERIFICATION_REQUIRED"),
+      "MATTERHORN_EMAIL_VERIFICATION_REQUIRED must be true before opening signups.",
+    ),
+    check(
+      "signup.bot_protection",
+      "Public account creation requires server-verified Turnstile protection",
+      "Security",
+      turnstileSiteKey.startsWith("0x") &&
+        turnstileSecretConfigured &&
+        Boolean(app?.hostname && turnstileHostnames.has(app.hostname.toLowerCase())) &&
+        !turnstileHostnames.has("localhost") &&
+        !turnstileHostnames.has("127.0.0.1"),
+      "Configure MATTERHORN_TURNSTILE_SITEKEY, TURNSTILE_SECRET, and a production-only TURNSTILE_HOSTNAMES allowlist containing the app hostname.",
+    ),
+    check(
+      "signup.email_sender",
+      "Transactional account email has an explicit sender identity",
+      "Platform",
+      Boolean(emailFrom && emailFrom.includes("@")),
+      "MATTERHORN_EMAIL_FROM must be a valid sender identity for verification and password recovery.",
+    ),
+    check(
+      "signup.email_delivery",
+      "Transactional email delivery is configured server-side",
+      "Platform",
+      resendConfigured || smtpConfigured,
+      "Configure MATTERHORN_RESEND_API_KEY or authenticated MATTERHORN_SMTP_HOST, MATTERHORN_SMTP_USER, and MATTERHORN_SMTP_PASSWORD.",
+    ),
+    check(
+      "signup.legal_acceptance",
+      "Public signup requires an explicit Terms and Privacy acknowledgement",
+      "Legal and product",
+      enabled("MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED"),
+      "MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED must be true before opening signups.",
+    ),
+    check(
+      "signup.legal_versions",
+      "Terms and Privacy acceptance records use explicit document versions",
+      "Legal",
+      Boolean(readEnv("MATTERHORN_TERMS_VERSION") && readEnv("MATTERHORN_PRIVACY_VERSION")),
+      "Set MATTERHORN_TERMS_VERSION and MATTERHORN_PRIVACY_VERSION to the approved public document versions.",
     ),
     check(
       "signup.capacity",

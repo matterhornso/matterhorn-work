@@ -104,12 +104,62 @@ describe("responsive accessibility regressions", () => {
     expect(signin).toContain('<a href="/privacy">Privacy</a>');
     expect(signin).toContain("window.visualViewport");
     expect(signin).toContain('active.closest(".public-auth-form")');
-    expect(signin).toContain('active.scrollIntoView({ block: "center"');
+    expect(signin).toContain("active.scrollIntoView({");
+    expect(signin).toContain('block: "center"');
     expect(signinStyles).toContain("overflow-wrap: anywhere");
     expect(signinStyles).toContain("safe-area-inset-bottom");
     expect(signinStyles).toContain(".public-auth-trust a:focus-visible");
     expect(signinStyles).toContain(".public-auth-status button:focus-visible");
+    expect(signinStyles).toContain(".public-auth-secondary-actions button:focus-visible");
     expect(signinStyles).toContain("grid-template-columns: minmax(96px, 0.32fr) minmax(0, 1fr)");
+  });
+
+  test("public account access exposes self-service verification and recovery", () => {
+    const signin = readAppSource("domains/cloud/public-web-signin-page.tsx");
+    const den = readAppFile("src/app/lib/den.ts");
+
+    expect(signin).toContain('mode === "verify-email"');
+    expect(signin).toContain('autoComplete="one-time-code"');
+    expect(signin).toContain('inputMode="numeric"');
+    expect(signin).toContain("Forgot password?");
+    expect(signin).toContain("Passwords do not match.");
+    expect(signin).toContain('url.searchParams.delete("token")');
+    expect(signin).toContain('fragment.delete("token")');
+    expect(signin).toContain('authLocationValue("token")');
+    expect(signin).toContain("window.history.replaceState");
+    expect(signin).toContain('name="legalAccepted"');
+    expect(signin).toContain('<a href="/terms"');
+    expect(signin).toContain('<a href="/privacy"');
+    expect(signin).toContain("client.signUpEmail(");
+    expect(signin).toContain("turnstileToken ?? undefined");
+    expect(signin).toContain("<PublicTurnstile");
+    expect(signin).toContain("resetSignal={turnstileResetSignal}");
+    expect(signin).toContain("client.getPublicAuthConfig()");
+    expect(signin).toContain("AUTH_CONFIG_FAIL_CLOSED");
+    expect(signin).toContain("never infer that signup or recovery is safe");
+    expect(signin).toContain("New accounts are paused. Existing users can sign in.");
+    expect(den).toContain('"/api/auth/config"');
+    expect(den).toContain('"/api/auth/verify-email"');
+    expect(den).toContain('"/api/auth/resend-verification"');
+    expect(den).toContain('"/api/auth/password-reset/request"');
+    expect(den).toContain('"/api/auth/password-reset/confirm"');
+  });
+
+  test("public signup uses a resettable, action-bound Turnstile widget", () => {
+    const turnstile = readAppSource("domains/cloud/public-turnstile.tsx");
+    const signin = readAppSource("domains/cloud/public-web-signin-page.tsx");
+    const signinStyles = readAppSource("domains/cloud/public-web-signin.css");
+
+    expect(turnstile).toContain("https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit");
+    expect(turnstile).toContain('action: "signup"');
+    expect(turnstile).toContain('size: "flexible"');
+    expect(turnstile).toContain("window.turnstile.reset(widgetId)");
+    expect(turnstile).toContain("window.turnstile.remove(widgetId)");
+    expect(turnstile).not.toContain("TURNSTILE_SECRET");
+    expect(signin).toContain("Complete the security check before creating your account.");
+    expect(signin).toContain("setTurnstileResetSignal((value) => value + 1)");
+    expect(signinStyles).toContain(".public-auth-turnstile");
+    expect(signinStyles).toContain("min-height: 65px");
   });
 
   test("MCP Settings preserves sequential section and item heading levels", () => {

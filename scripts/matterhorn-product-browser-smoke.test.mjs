@@ -97,8 +97,6 @@ for (const visibleText of [
   "Explore subnets",
   "Read market overview",
   "Check compliance",
-  "Describe market",
-  "Describe the market or trade",
   "Review transfer fees",
   "7 stages",
   "Run in chat",
@@ -159,6 +157,12 @@ for (const visibleText of [
   );
 }
 
+assert.equal(
+  script.includes("Describe market"),
+  false,
+  "product browser smoke should start Polymarket tasks before collecting missing context in chat",
+);
+
 assert.ok(
   script.includes("/api/auth/sign-up/email") &&
     script.includes("/api/den/v1/me") &&
@@ -185,6 +189,13 @@ assert.ok(
 assert.ok(
   script.includes("The web build exposed a raw provider-key control."),
   "product browser smoke should reject raw provider-key controls in the web build",
+);
+assert.ok(
+  script.includes('report.artifacts.mcpMode = "hosted-managed"') &&
+    script.includes('["Available in this workspace", "Managed connections"]') &&
+    script.includes('"Reviewed wallet actions"') &&
+    script.includes("Hosted managed Tools exposed local-only control"),
+  "product browser smoke should verify the hosted managed-tools boundary without expecting local MCP setup",
 );
 assert.ok(
   script.includes('[aria-label^="Connected MCP servers:"]') &&

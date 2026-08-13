@@ -120,6 +120,44 @@ export type DenOrgSummary = {
   role: "owner" | "admin" | "member";
 };
 
+export type DenAccountSecuritySummary = {
+  sessionCount: number;
+  organizations: DenOrgSummary[];
+  sharedOrganizationsBlockingDeletion: DenOrgSummary[];
+};
+
+export type DenAccountExport = {
+  version: "matterhorn.account-export.v1";
+  generatedAt: string;
+  filename: string;
+  account: DenUser & { emailVerified: boolean; createdAt: string };
+  legalAcceptance: {
+    termsVersion: string;
+    privacyVersion: string;
+    acceptedAt: string;
+  } | null;
+  organizations: DenOrgSummary[];
+  security: { activeSessionCount: number };
+  includes: string[];
+  excludes: string[];
+};
+
+export type DenAccountDeletionResult = {
+  deletedOrganizationCount: number;
+  workspaceDataDeletionComplete: boolean;
+  workspaceDataDeletionFailures: number;
+};
+
+export type DenPublicAuthConfig = {
+  signupsAvailable: boolean;
+  signupStatus: "open" | "paused" | "setup_required";
+  emailVerificationRequired: boolean;
+  passwordResetAvailable: boolean;
+  legalAcceptanceRequired: boolean;
+  minimumPasswordLength: number;
+  turnstileSiteKey: string | null;
+};
+
 export type DenWorkerSummary = {
   workerId: string;
   workerName: string;
@@ -279,6 +317,11 @@ export type DenBillingSummary = {
 type DenAuthResult = {
   user: DenUser | null;
   token: string | null;
+};
+
+export type DenSignUpResult = DenAuthResult & {
+  verificationRequired: boolean;
+  email: string | null;
 };
 
 export type DenDesktopHandoffExchange = {
@@ -1726,6 +1769,12 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
   const token = options.token?.trim() ?? null;
 
   return {
+    async getPublicAuthConfig(): Promise<DenPublicAuthConfig> {
+      return requestJson<DenPublicAuthConfig>(baseUrls, "/api/auth/config", {
+        method: "GET",
+      });
+    },
+
     async setActiveOrganization(input: { organizationId?: string | null; organizationSlug?: string | null }): Promise<void> {
       await ensureActiveOrganization(baseUrls, token, input);
     },
@@ -1766,16 +1815,64 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
       return { user: getUser(payload), token: getToken(payload) };
     },
 
-    async signUpEmail(email: string, password: string): Promise<DenAuthResult> {
+    async signUpEmail(
+      email: string,
+      password: string,
+      legalAccepted = false,
+      turnstileToken?: string,
+    ): Promise<DenSignUpResult> {
       const payload = await requestJson<unknown>(baseUrls, "/api/auth/sign-up/email", {
         method: "POST",
         body: {
           name: DEFAULT_DEN_AUTH_NAME,
           email: email.trim(),
           password,
+          legalAccepted,
+          turnstileToken,
         },
       });
+      return {
+        user: getUser(payload),
+        token: getToken(payload),
+        verificationRequired:
+          isRecord(payload) && payload.verificationRequired === true,
+        email:
+          isRecord(payload) && typeof payload.email === "string"
+            ? payload.email
+            : null,
+      };
+    },
+
+    async verifyEmail(email: string, code: string): Promise<DenAuthResult> {
+      const payload = await requestJson<unknown>(baseUrls, "/api/auth/verify-email", {
+        method: "POST",
+        body: { email: email.trim(), code: code.trim() },
+      });
       return { user: getUser(payload), token: getToken(payload) };
+    },
+
+    async resendVerification(email: string): Promise<void> {
+      await requestJson<unknown>(baseUrls, "/api/auth/resend-verification", {
+        method: "POST",
+        body: { email: email.trim() },
+      });
+    },
+
+    async requestPasswordReset(email: string): Promise<void> {
+      await requestJson<unknown>(baseUrls, "/api/auth/password-reset/request", {
+        method: "POST",
+        body: { email: email.trim() },
+      });
+    },
+
+    async confirmPasswordReset(
+      resetToken: string,
+      newPassword: string,
+    ): Promise<void> {
+      await requestJson<unknown>(baseUrls, "/api/auth/password-reset/confirm", {
+        method: "POST",
+        body: { token: resetToken.trim(), newPassword },
+      });
     },
 
     async signOut() {
@@ -1784,6 +1881,60 @@ export function createDenClient(options: { baseUrl: string; apiBaseUrl?: string 
         token,
         body: {},
       });
+    },
+
+    async getAccountSecurity(): Promise<DenAccountSecuritySummary> {
+      return requestJson<DenAccountSecuritySummary>(
+        baseUrls,
+        "/api/auth/account/security",
+        { method: "GET", token },
+      );
+    },
+
+    async exportAccount(): Promise<DenAccountExport> {
+      return requestJson<DenAccountExport>(
+        baseUrls,
+        "/api/auth/account/export",
+        { method: "GET", token },
+      );
+    },
+
+    async revokeOtherSessions(): Promise<{ revokedSessions: number }> {
+      return requestJson<{ revokedSessions: number }>(
+        baseUrls,
+        "/api/auth/account/revoke-other-sessions",
+        { method: "POST", token, body: {} },
+      );
+    },
+
+    async changePassword(
+      currentPassword: string,
+      newPassword: string,
+    ): Promise<void> {
+      await requestJson<unknown>(
+        baseUrls,
+        "/api/auth/account/change-password",
+        {
+          method: "POST",
+          token,
+          body: { currentPassword, newPassword },
+        },
+      );
+    },
+
+    async deleteAccount(
+      password: string,
+      confirmationEmail: string,
+    ): Promise<DenAccountDeletionResult> {
+      return requestJson<DenAccountDeletionResult>(
+        baseUrls,
+        "/api/auth/account",
+        {
+          method: "DELETE",
+          token,
+          body: { password, confirmationEmail: confirmationEmail.trim() },
+        },
+      );
     },
 
     async getSession(): Promise<DenUser> {

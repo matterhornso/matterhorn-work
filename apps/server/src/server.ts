@@ -324,6 +324,7 @@ import type {
   MatterhornBackendReadinessResponse,
 } from "@matterhorn-work/types/backend-readiness";
 import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
+import { sendEmail, type EmailSendConfig } from "@matterhorn-work/email";
 import type {
   MatterhornTeamAccessTokenDescriptor,
   MatterhornTeamShareableTokenScope,
@@ -346,7 +347,10 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { isIP } from "node:net";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { ApprovalRequest, Capabilities, ServerConfig, WorkspaceInfo, Actor, ReloadReason, ReloadTrigger, TokenScope, MatterhornTaskEventType, RequestRateLimitConfig, RequestRateLimitStore } from "./types.js";
-import { createInMemoryRequestRateLimitStore } from "./request-rate-limit-store.js";
+import {
+  createDefaultRequestRateLimitStore,
+  createInMemoryRequestRateLimitStore,
+} from "./request-rate-limit-store.js";
 import { ApprovalService } from "./approvals.js";
 import { addPlugin, listPlugins, normalizePluginSpec, removePlugin } from "./plugins.js";
 import { sanitizePortableOpencodeConfig } from "./portable-opencode.js";
@@ -355,6 +359,10 @@ import { deleteSkill, listSkills, upsertSkill } from "./skills.js";
 import { installHubSkill, listHubSkills } from "./skill-hub.js";
 import { deleteCommand, listCommands, repairCommands, upsertCommand } from "./commands.js";
 import { ApiError, formatError } from "./errors.js";
+import {
+  resolveMatterhornTurnstileConfig,
+  verifyMatterhornTurnstile,
+} from "./turnstile.js";
 import {
   MatterhornAuthError,
   MatterhornAuthStore,
@@ -448,6 +456,10 @@ import {
   stripSensitiveWorkspaceExportData,
   type WorkspaceExportSensitiveMode,
 } from "./workspace-export-safety.js";
+import {
+  buildMatterhornWorkspaceArchive,
+  WorkspaceArchiveLimitError,
+} from "./workspace-data-archive.js";
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { serve, type ServeRequestContext, type ServeResult } from "./serve-node.js";
@@ -1006,7 +1018,7 @@ export async function startServer(config: ServerConfig): Promise<ServeResult> {
   const operationalMetrics = new OperationalMetrics();
   const modelUsageStore = new MatterhornModelUsageStore();
   const ownsRequestRateLimitStore = !config.requestRateLimitStore;
-  const requestRateLimitStore = config.requestRateLimitStore ?? createInMemoryRequestRateLimitStore();
+  const requestRateLimitStore = config.requestRateLimitStore ?? createDefaultRequestRateLimitStore();
   const routes = createRoutes(
     config,
     approvals,
@@ -2140,6 +2152,114 @@ function matterhornAuthResponse(
   return response;
 }
 
+function enabledEnvironmentFlag(name: string): boolean {
+  return /^(1|true|yes|on)$/i.test(process.env[name]?.trim() ?? "");
+}
+
+function matterhornEmailConfig(): EmailSendConfig {
+  const configuredPort = Number(process.env.MATTERHORN_SMTP_PORT?.trim() || 587);
+  const smtpPort = Number.isSafeInteger(configuredPort) && configuredPort > 0
+    ? configuredPort
+    : 587;
+  const devMode =
+    process.env.NODE_ENV !== "production" &&
+    enabledEnvironmentFlag("MATTERHORN_EMAIL_DEV_MODE");
+  return {
+    from: process.env.MATTERHORN_EMAIL_FROM?.trim(),
+    resendApiKey: process.env.MATTERHORN_RESEND_API_KEY?.trim(),
+    smtp: {
+      host: process.env.MATTERHORN_SMTP_HOST?.trim(),
+      port: smtpPort,
+      user: process.env.MATTERHORN_SMTP_USER?.trim(),
+      pass: process.env.MATTERHORN_SMTP_PASSWORD,
+      secure: enabledEnvironmentFlag("MATTERHORN_SMTP_SECURE"),
+    },
+    devMode,
+  };
+}
+
+function matterhornEmailDeliveryConfigured(config: EmailSendConfig): boolean {
+  if (config.devMode) return true;
+  return Boolean(
+    config.from &&
+      (config.resendApiKey || config.smtp?.host),
+  );
+}
+
+function requireMatterhornEmailDelivery(config: EmailSendConfig): void {
+  if (!matterhornEmailDeliveryConfigured(config)) {
+    throw new ApiError(
+      503,
+      "email_delivery_unavailable",
+      "Account email is temporarily unavailable. Try again shortly.",
+    );
+  }
+}
+
+function matterhornPublicAuthConfig() {
+  const production = process.env.NODE_ENV === "production";
+  const turnstile = resolveMatterhornTurnstileConfig();
+  const signupFlag = process.env.MATTERHORN_SIGNUPS_ENABLED?.trim().toLowerCase() ?? "";
+  const signupsExplicitlyEnabled = /^(1|true|yes|on)$/.test(signupFlag);
+  const signupsAllowedByFlag = production
+    ? signupsExplicitlyEnabled
+    : !signupFlag || signupsExplicitlyEnabled;
+  const emailVerificationRequired = enabledEnvironmentFlag(
+    "MATTERHORN_EMAIL_VERIFICATION_REQUIRED",
+  );
+  const legalAcceptanceRequired = enabledEnvironmentFlag(
+    "MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED",
+  );
+  const emailDeliveryAvailable = matterhornEmailDeliveryConfigured(
+    matterhornEmailConfig(),
+  );
+  const termsVersion = process.env.MATTERHORN_TERMS_VERSION?.trim() ?? "";
+  const privacyVersion = process.env.MATTERHORN_PRIVACY_VERSION?.trim() ?? "";
+  const legalVersionsReady =
+    Boolean(termsVersion && privacyVersion) &&
+    termsVersion.length <= 64 &&
+    privacyVersion.length <= 64;
+  const productionSafetyReady =
+    !production ||
+    (emailVerificationRequired &&
+      legalAcceptanceRequired &&
+      process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT?.trim().toLowerCase() === "hard" &&
+      turnstile.ready);
+  const signupsAvailable =
+    signupsAllowedByFlag &&
+    productionSafetyReady &&
+    (!emailVerificationRequired || emailDeliveryAvailable) &&
+    (!legalAcceptanceRequired || legalVersionsReady);
+
+  return {
+    signupsAvailable,
+    signupStatus: signupsAvailable
+      ? "open"
+      : signupsAllowedByFlag
+        ? "setup_required"
+        : "paused",
+    emailVerificationRequired,
+    passwordResetAvailable: emailDeliveryAvailable,
+    legalAcceptanceRequired,
+    minimumPasswordLength: 12,
+    turnstileSiteKey: turnstile.ready ? turnstile.siteKey : null,
+  } as const;
+}
+
+async function sendMatterhornAccountEmail(
+  input: Parameters<typeof sendEmail>[0],
+): Promise<void> {
+  try {
+    await sendEmail(input);
+  } catch {
+    throw new ApiError(
+      503,
+      "email_delivery_failed",
+      "Account email could not be delivered. Try again shortly.",
+    );
+  }
+}
+
 function withMatterhornAuthErrorMapping<T>(callback: () => T): T {
   try {
     return callback();
@@ -2148,7 +2268,10 @@ function withMatterhornAuthErrorMapping<T>(callback: () => T): T {
     const status =
       error.code === "invalid_credentials" || error.code === "unauthorized"
         ? 401
+        : error.code === "email_unverified"
+          ? 403
         : error.code === "email_taken" ||
+            error.code === "account_owns_shared_organization" ||
             error.code === "organization_slug_taken"
           ? 409
           : error.code === "signup_capacity_reached"
@@ -2196,6 +2319,38 @@ function matterhornOrganizationWorkspaceId(organizationId: string): string {
     .digest("hex")
     .slice(0, 16);
   return `ws_web_${digest}`;
+}
+
+async function purgeMatterhornOrganizationWorkspaces(
+  config: ServerConfig,
+  organizationIds: string[],
+): Promise<{ complete: boolean; failedOrganizationIds: string[] }> {
+  const workspaceRoot = resolve(resolveMatterhornDataRoot(), "web-workspaces");
+  const failedOrganizationIds: string[] = [];
+
+  for (const organizationId of organizationIds) {
+    const workspacePath = resolve(workspaceRoot, organizationId);
+    if (workspacePath === workspaceRoot || !workspacePath.startsWith(`${workspaceRoot}${sep}`)) {
+      failedOrganizationIds.push(organizationId);
+      continue;
+    }
+    try {
+      await rm(workspacePath, { recursive: true, force: true });
+    } catch {
+      failedOrganizationIds.push(organizationId);
+      continue;
+    }
+    const workspaceId = matterhornOrganizationWorkspaceId(organizationId);
+    config.workspaces = config.workspaces.filter((entry) => entry.id !== workspaceId);
+    config.authorizedRoots = config.authorizedRoots.filter(
+      (root) => resolve(root) !== workspacePath,
+    );
+  }
+
+  return {
+    complete: failedOrganizationIds.length === 0,
+    failedOrganizationIds,
+  };
 }
 
 async function ensureMatterhornOrganizationWorkspace(
@@ -4893,7 +5048,7 @@ function buildWorkspaceDataControls(
       export: capability("working", "Export controls", "Notes, memory, outputs, feedback, and event ledgers report their available export paths."),
       deletion: capability("preview", "Deletion controls", "Notes, memory, outputs, and feedback support scoped deletes; append-only logs remain retained for accountability."),
       limitations: [
-        "Append-only audit, task event, and workflow run rows do not have a purge endpoint in this local build.",
+        "Append-only audit, task event, and workflow run rows do not currently have a purge endpoint.",
         "Chat/session history remains controlled by the workspace engine store.",
         "Feedback is stored for eval, routing, and product quality only; it is not used for model training by default.",
       ],
@@ -6648,12 +6803,46 @@ function createRoutes(
     return fileSessions.recordWorkspaceEvent({ workspaceId, ...input });
   };
 
+  addRoute(routes, "GET", "/api/auth/config", "none", async () => {
+    const response = jsonResponse(matterhornPublicAuthConfig());
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
   addRoute(routes, "POST", "/api/auth/sign-up/email", "none", async (ctx) => {
     const { request } = ctx;
+    const production = process.env.NODE_ENV === "production";
+    const turnstile = resolveMatterhornTurnstileConfig();
+    const turnstileRequired = production || turnstile.configured;
     const signupsEnabled = process.env.MATTERHORN_SIGNUPS_ENABLED?.trim().toLowerCase();
-    if (signupsEnabled && !/^(1|true|yes|on)$/.test(signupsEnabled)) {
+    const signupsExplicitlyEnabled = /^(1|true|yes|on)$/.test(signupsEnabled ?? "");
+    if (
+      (process.env.NODE_ENV === "production" && !signupsExplicitlyEnabled) ||
+      (signupsEnabled && !signupsExplicitlyEnabled)
+    ) {
       throw new ApiError(503, "signups_paused", "New accounts are paused while we prepare more beta places.");
     }
+    const verificationRequired = enabledEnvironmentFlag(
+      "MATTERHORN_EMAIL_VERIFICATION_REQUIRED",
+    );
+    const legalAcceptanceRequired = enabledEnvironmentFlag(
+      "MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED",
+    );
+    if (
+      production &&
+      (!verificationRequired ||
+        !legalAcceptanceRequired ||
+        process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT?.trim().toLowerCase() !== "hard" ||
+        !turnstile.ready)
+    ) {
+      throw new ApiError(
+        503,
+        "signup_security_configuration_invalid",
+        "New accounts are paused while verification, legal acceptance, and usage limits are configured.",
+      );
+    }
+    const emailConfig = matterhornEmailConfig();
+    if (verificationRequired) requireMatterhornEmailDelivery(emailConfig);
     const body = await readJsonBody(request, 16 * 1024, "Sign-up");
     const email = stringBodyField(body, "email");
     const attemptKey = `sign-up:${email.trim().toLowerCase()}`;
@@ -6668,11 +6857,57 @@ function createRoutes(
         "Too many account attempts. Try again in a few minutes.",
       );
     }
+    if (turnstileRequired) {
+      if (!turnstile.ready) {
+        throw new ApiError(
+          503,
+          "signup_security_configuration_invalid",
+          "New accounts are paused while signup security is configured.",
+        );
+      }
+      const verified = await verifyMatterhornTurnstile({
+        config: turnstile,
+        token: body.turnstileToken,
+        remoteIp: ctx.peerAddress,
+      });
+      if (!verified) {
+        throw new ApiError(
+          403,
+          "turnstile_verification_failed",
+          "Complete the security check and try again.",
+        );
+      }
+    }
+    const termsVersion = process.env.MATTERHORN_TERMS_VERSION?.trim() ?? "";
+    const privacyVersion = process.env.MATTERHORN_PRIVACY_VERSION?.trim() ?? "";
+    if (
+      legalAcceptanceRequired &&
+      (!termsVersion || termsVersion.length > 64 ||
+        !privacyVersion || privacyVersion.length > 64)
+    ) {
+      throw new ApiError(
+        503,
+        "legal_acceptance_configuration_invalid",
+        "New accounts are paused while the Terms and Privacy versions are configured.",
+      );
+    }
+    if (legalAcceptanceRequired && body.legalAccepted !== true) {
+      throw new ApiError(
+        400,
+        "legal_acceptance_required",
+        "Accept the Terms and acknowledge the Privacy notice to create an account.",
+      );
+    }
     const session = withMatterhornAuthErrorMapping(() =>
       authStore.createAccount({
         email,
         password: stringBodyField(body, "password"),
         name: optionalStringBodyField(body, "name"),
+        emailVerified: !verificationRequired,
+        legalAcceptance:
+          body.legalAccepted === true && termsVersion && privacyVersion
+            ? { termsVersion, privacyVersion }
+            : null,
         maxAccounts: (() => {
           const configured = process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS?.trim() ?? "";
           if (!configured) return null;
@@ -6684,10 +6919,178 @@ function createRoutes(
         })(),
       }),
     );
+    if (verificationRequired) {
+      authStore.signOut(session.token);
+      const challenge = withMatterhornAuthErrorMapping(() =>
+        authStore.createEmailVerificationChallenge(email),
+      );
+      if (!challenge) {
+        throw new ApiError(
+          409,
+          "email_verification_unavailable",
+          "Email verification could not be started. Sign in or request a new code.",
+        );
+      }
+      await sendMatterhornAccountEmail({
+        to: challenge.email,
+        template: "verification",
+        props: { verificationCode: challenge.verificationCode },
+        config: emailConfig,
+      });
+      const response = jsonResponse(
+        {
+          verificationRequired: true,
+          email: challenge.email,
+          expiresAt: challenge.expiresAt,
+        },
+        202,
+      );
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    }
     return matterhornAuthResponse(request, {
       user: session.user,
       organization: matterhornActiveOrganization(authStore, session),
     }, session.token);
+  });
+
+  addRoute(routes, "POST", "/api/auth/verify-email", "none", async (ctx) => {
+    const body = await readJsonBody(ctx.request, 16 * 1024, "Email verification");
+    const email = stringBodyField(body, "email");
+    const attemptKey = `verify-email:${email.trim().toLowerCase()}`;
+    const peerAttemptKey = `verify-email-ip:${ctx.peerAddress ?? "unknown"}`;
+    if (
+      !await authAttemptLimiter.check(attemptKey) ||
+      !await authAttemptLimiter.check(peerAttemptKey, AUTH_SIGNIN_IP_MAX_REQUESTS)
+    ) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many verification attempts. Request a new code or try again later.",
+      );
+    }
+    const session = withMatterhornAuthErrorMapping(() =>
+      authStore.verifyEmail(email, stringBodyField(body, "code")),
+    );
+    await authAttemptLimiter.reset(attemptKey);
+    return matterhornAuthResponse(ctx.request, {
+      user: session.user,
+      organization: matterhornActiveOrganization(authStore, session),
+    }, session.token);
+  });
+
+  addRoute(routes, "POST", "/api/auth/resend-verification", "none", async (ctx) => {
+    const body = await readJsonBody(ctx.request, 16 * 1024, "Email verification resend");
+    const email = stringBodyField(body, "email");
+    const attemptKey = `resend-verification:${email.trim().toLowerCase()}`;
+    const peerAttemptKey = `resend-verification-ip:${ctx.peerAddress ?? "unknown"}`;
+    if (
+      !await authAttemptLimiter.check(attemptKey, 3) ||
+      !await authAttemptLimiter.check(peerAttemptKey, AUTH_SIGNUP_IP_MAX_REQUESTS)
+    ) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many verification emails. Try again in a few minutes.",
+      );
+    }
+    const emailConfig = matterhornEmailConfig();
+    requireMatterhornEmailDelivery(emailConfig);
+    const challenge = withMatterhornAuthErrorMapping(() =>
+      authStore.createEmailVerificationChallenge(email),
+    );
+    if (challenge) {
+      await sendMatterhornAccountEmail({
+        to: challenge.email,
+        template: "verification",
+        props: { verificationCode: challenge.verificationCode },
+        config: emailConfig,
+      });
+    }
+    const response = jsonResponse({
+      ok: true,
+      message: "If that account still needs verification, a new code has been sent.",
+    }, 202);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "POST", "/api/auth/password-reset/request", "none", async (ctx) => {
+    const body = await readJsonBody(ctx.request, 16 * 1024, "Password reset request");
+    const email = stringBodyField(body, "email");
+    const attemptKey = `password-reset:${email.trim().toLowerCase()}`;
+    const peerAttemptKey = `password-reset-ip:${ctx.peerAddress ?? "unknown"}`;
+    if (
+      !await authAttemptLimiter.check(attemptKey, 3) ||
+      !await authAttemptLimiter.check(peerAttemptKey, AUTH_SIGNUP_IP_MAX_REQUESTS)
+    ) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many password reset requests. Try again in a few minutes.",
+      );
+    }
+    const emailConfig = matterhornEmailConfig();
+    requireMatterhornEmailDelivery(emailConfig);
+    const challenge = withMatterhornAuthErrorMapping(() =>
+      authStore.createPasswordResetChallenge(email),
+    );
+    if (challenge) {
+      try {
+        const appUrl = new URL(process.env.MATTERHORN_APP_URL?.trim() ?? "");
+        if (
+          appUrl.protocol !== "https:" &&
+          !(process.env.NODE_ENV !== "production" && appUrl.protocol === "http:")
+        ) {
+          throw new Error("Matterhorn app URL must use HTTPS.");
+        }
+        appUrl.pathname = "/";
+        appUrl.search = "";
+        appUrl.hash = new URLSearchParams({
+          mode: "reset-password",
+          token: challenge.resetToken,
+        }).toString();
+        await sendMatterhornAccountEmail({
+          to: challenge.email,
+          template: "passwordReset",
+          props: { resetLink: appUrl.toString() },
+          config: emailConfig,
+        });
+      } catch {
+        console.error("[auth] Password reset email delivery failed.");
+      }
+    }
+    const response = jsonResponse({
+      ok: true,
+      message: "If an account exists for that email, a password reset link has been sent.",
+    }, 202);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "POST", "/api/auth/password-reset/confirm", "none", async (ctx) => {
+    const body = await readJsonBody(ctx.request, 16 * 1024, "Password reset");
+    const attemptKey = `password-reset-confirm:${ctx.peerAddress ?? "unknown"}`;
+    if (!await authAttemptLimiter.check(attemptKey, AUTH_SIGNIN_IP_MAX_REQUESTS)) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many password reset attempts. Try again in a few minutes.",
+      );
+    }
+    withMatterhornAuthErrorMapping(() =>
+      authStore.resetPassword(
+        stringBodyField(body, "token"),
+        stringBodyField(body, "newPassword"),
+      ),
+    );
+    const response = jsonResponse({ ok: true });
+    response.headers.append(
+      "Set-Cookie",
+      matterhornSessionCookie(ctx.request, "", { clear: true }),
+    );
+    response.headers.set("Cache-Control", "no-store");
+    return response;
   });
 
   addRoute(routes, "POST", "/api/auth/sign-in/email", "none", async (ctx) => {
@@ -6713,7 +7116,6 @@ function createRoutes(
       ),
     );
     await authAttemptLimiter.reset(attemptKey);
-    await authAttemptLimiter.reset(peerAttemptKey);
     return matterhornAuthResponse(request, {
       user: session.user,
       organization: matterhornActiveOrganization(authStore, session),
@@ -6728,6 +7130,128 @@ function createRoutes(
       "Set-Cookie",
       matterhornSessionCookie(request, "", { clear: true }),
     );
+    return response;
+  });
+
+  addRoute(routes, "GET", "/api/auth/account/security", "none", async ({ request }) => {
+    const token = requireMatterhornSessionToken(request, authStore);
+    const summary = withMatterhornAuthErrorMapping(() =>
+      authStore.securitySummary(token),
+    );
+    const response = jsonResponse(summary);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "GET", "/api/auth/account/export", "none", async ({ request }) => {
+    const token = requireMatterhornSessionToken(request, authStore);
+    const accountExport = withMatterhornAuthErrorMapping(() => authStore.exportAccount(token));
+    const response = jsonResponse(accountExport);
+    response.headers.set("Cache-Control", "no-store");
+    response.headers.set("Content-Disposition", `attachment; filename="${accountExport.filename}"`);
+    return response;
+  });
+
+  addRoute(routes, "POST", "/api/auth/account/revoke-other-sessions", "none", async ({ request }) => {
+    const token = requireMatterhornSessionToken(request, authStore);
+    const revokedSessions = withMatterhornAuthErrorMapping(() =>
+      authStore.revokeOtherSessions(token),
+    );
+    return jsonResponse({ ok: true, revokedSessions });
+  });
+
+  addRoute(routes, "POST", "/api/auth/account/change-password", "none", async ({ request }) => {
+    const token = requireMatterhornSessionToken(request, authStore);
+    const session = requireMatterhornAuthSession(request, authStore);
+    if (!await authAttemptLimiter.check(`account-security:${session.user.id}`)) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many account security attempts. Try again in a few minutes.",
+      );
+    }
+    const body = await readJsonBody(request, 16 * 1024, "Password change");
+    withMatterhornAuthErrorMapping(() =>
+      authStore.changePassword(token, {
+        currentPassword: stringBodyField(body, "currentPassword"),
+        newPassword: stringBodyField(body, "newPassword"),
+      }),
+    );
+    const response = jsonResponse({ ok: true, signedOutEverywhere: true });
+    response.headers.append(
+      "Set-Cookie",
+      matterhornSessionCookie(request, "", { clear: true }),
+    );
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  });
+
+  addRoute(routes, "DELETE", "/api/auth/account", "none", async ({ request }) => {
+    const token = requireMatterhornSessionToken(request, authStore);
+    const session = requireMatterhornAuthSession(request, authStore);
+    if (!await authAttemptLimiter.check(`account-security:${session.user.id}`)) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "Too many account security attempts. Try again in a few minutes.",
+      );
+    }
+    const body = await readJsonBody(request, 16 * 1024, "Account deletion");
+    const confirmationEmail = stringBodyField(body, "confirmationEmail")
+      .trim()
+      .toLowerCase();
+    if (confirmationEmail !== session.user.email.trim().toLowerCase()) {
+      throw new ApiError(
+        400,
+        "invalid_confirmation",
+        "Enter the signed-in email address exactly to confirm account deletion.",
+      );
+    }
+    const password = stringBodyField(body, "password");
+    const deletion = withMatterhornAuthErrorMapping(() =>
+      authStore.prepareAccountDeletion(token, password),
+    );
+    const memoryDeletionFailures: string[] = [];
+    for (const organizationId of deletion.deletedOrganizationIds) {
+      try {
+        await memoryVault.purgeWorkspace(
+          matterhornOrganizationWorkspaceId(organizationId),
+        );
+      } catch {
+        memoryDeletionFailures.push(organizationId);
+      }
+    }
+    const workspaceDeletion = await purgeMatterhornOrganizationWorkspaces(
+      config,
+      deletion.deletedOrganizationIds,
+    );
+    onWorkspacesChanged();
+    const deletionFailureCount =
+      workspaceDeletion.failedOrganizationIds.length +
+      memoryDeletionFailures.length;
+    if (deletionFailureCount > 0) {
+      throw new ApiError(
+        503,
+        "account_data_deletion_failed",
+        "Account data could not be fully deleted. Your account remains active; try again or contact support.",
+      );
+    }
+
+    withMatterhornAuthErrorMapping(() =>
+      authStore.deleteAccount(token, password),
+    );
+
+    const response = jsonResponse({
+      ok: true,
+      deletedOrganizationCount: deletion.deletedOrganizationIds.length,
+      workspaceDataDeletionComplete: true,
+      workspaceDataDeletionFailures: 0,
+    });
+    response.headers.append(
+      "Set-Cookie",
+      matterhornSessionCookie(request, "", { clear: true }),
+    );
+    response.headers.set("Cache-Control", "no-store");
     return response;
   });
 
@@ -9835,6 +10359,49 @@ function createRoutes(
     const sensitiveMode = parseWorkspaceExportSensitiveMode(ctx.url.searchParams.get("sensitive"));
     const exportPayload = await exportWorkspace(workspace, { sensitiveMode });
     return jsonResponse(exportPayload);
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/data-archive", "client", async (ctx) => {
+    requireClientScope(ctx, "viewer");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
+    const notesStore = new MatterhornNotesStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+    try {
+      const [configuration, notes, memoryRecords, memorySuggestions, chats, activity] = await Promise.all([
+        exportWorkspace(workspace, { sensitiveMode: "exclude" }),
+        notesStore.exportAllNotes(),
+        workspaceVault.listAllRecords({
+          scope: "workspace",
+          tags: [workspaceMemoryTag(workspace.id)],
+        }),
+        workspaceVault.listAllSuggestions({ includeResolved: true }).then((entries) =>
+          entries.filter((entry) => memorySuggestionBelongsToWorkspace(entry.suggestion, workspace)),
+        ),
+        exportAllWorkspaceChats(config, workspace),
+        buildProjectDataLedger({ workspace, limit: 300 }),
+      ]);
+      const archive = await buildMatterhornWorkspaceArchive({
+        workspace,
+        configuration,
+        notes,
+        memory: { records: memoryRecords, suggestions: memorySuggestions },
+        chats,
+        activity,
+      });
+      const headers = new Headers();
+      headers.set("Content-Type", archive.contentType);
+      headers.set("Content-Length", String(archive.compressed.byteLength));
+      headers.set("Content-Disposition", `attachment; filename="${archive.filename}"`);
+      headers.set("Cache-Control", "no-store");
+      headers.set("X-Matterhorn-Archive-Sha256", archive.sha256);
+      headers.set("X-Matterhorn-Archive-Uncompressed-Bytes", String(archive.uncompressedBytes));
+      return new Response(Uint8Array.from(archive.compressed), { status: 200, headers });
+    } catch (error) {
+      if (error instanceof WorkspaceArchiveLimitError) {
+        throw new ApiError(413, "workspace_archive_too_large", error.message);
+      }
+      throw error;
+    }
   });
 
   addRoute(routes, "POST", "/workspace/:id/import/preview", "client", async (ctx) => {
@@ -13983,6 +14550,35 @@ async function readWorkspaceSessionMessages(
   } catch (error) {
     remapSessionReadError(error);
   }
+}
+
+async function exportAllWorkspaceChats(config: ServerConfig, workspace: WorkspaceInfo) {
+  const maxSessions = 2_000;
+  const sessions = await listWorkspaceSessions(config, workspace, { limit: maxSessions + 1 });
+  if (sessions.length > maxSessions) {
+    throw new WorkspaceArchiveLimitError(
+      `Workspace archive exceeds the ${maxSessions}-chat safety limit. Remove old chats before exporting.`,
+    );
+  }
+
+  const chats: Array<{
+    session: (typeof sessions)[number];
+    messages: Awaited<ReturnType<typeof readWorkspaceSessionMessages>>;
+    todos: Awaited<ReturnType<typeof readWorkspaceSessionTodos>>;
+  }> = [];
+  const concurrency = 4;
+  for (let index = 0; index < sessions.length; index += concurrency) {
+    const batch = sessions.slice(index, index + concurrency);
+    const items = await Promise.all(
+      batch.map(async (session) => ({
+        session,
+        messages: await readWorkspaceSessionMessages(config, workspace, session.id, {}),
+        todos: await readWorkspaceSessionTodos(config, workspace, session.id),
+      })),
+    );
+    chats.push(...items);
+  }
+  return chats;
 }
 
 async function readWorkspaceSessionTodos(config: ServerConfig, workspace: WorkspaceInfo, sessionId: string) {

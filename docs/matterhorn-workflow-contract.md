@@ -489,7 +489,7 @@ interface MatterhornDeskManifest {
 | Polymarket | `preview_only` | Research market or manage watchlist | Preview-only. No live submission, signing, custody, or secrets. |
 | Wellness | `workflow_ready` | Build a wellness program packet | Educational content only. Not medical advice. No live payments, email, hosting, or data access. |
 | Memory | `beta_ready` | Review and manage saved memory | User-controlled memory. Nothing hidden. Secrets, keys, and clinical records are rejected. |
-| MCP | `planned_not_live` | Manage MCP tool preferences | MCP tools operate with explicit user approval. No secrets or custody. |
+| MCP | `beta_ready` | View managed tools and connection health | Managed web tools follow workspace access boundaries. Custom MCP configuration stays in Matterhorn Desktop; no secrets or custody. |
 | Settings | `beta_ready` | Manage preferences | Settings never request private keys, seed phrases, API secrets, or signatures. |
 | Services | `planned_not_live` | Plan future service capabilities | Planned-not-live. No provider execution, hosting, email, payments, or identity access today. |
 

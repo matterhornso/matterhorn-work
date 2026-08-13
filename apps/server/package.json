@@ -47,6 +47,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@matterhorn-work/email": "workspace:*",
     "@matterhorn-work/memory-vault": "workspace:*",
     "@matterhorn-work/types": "workspace:*",
     "@msgpack/msgpack": "^3.1.2",

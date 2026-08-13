@@ -26,11 +26,11 @@ export function buildAppendOnlyRetentionPolicy(workspaceId: string): MatterhornW
   return {
     mode: "accountability_default",
     label: "Accountability default",
-    summary: "Audit, task event, and workflow run rows are append-only local records retained for accountability and exported through the project ledger.",
+    summary: "Audit, task event, and workflow run rows are append-only workspace records retained for accountability and exported through the project ledger.",
     stores: ["audit", "taskEvents", "workflowRuns"],
     exportRoute: `/workspace/${encodeURIComponent(workspaceId)}/data-ledger/export`,
     windowDays: null,
-    windowLabel: "No automatic purge window in this local build.",
+    windowLabel: "No automatic purge window is configured",
     purgeSupported: false,
     configurable: false,
   };

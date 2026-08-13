@@ -21,12 +21,28 @@ type JsonResult = {
 const TOKEN = "owt_auth_test_token";
 const HOST_TOKEN = "owt_auth_test_host_token";
 const PASSWORD = "matterhorn-test-password";
+const nativeFetch = globalThis.fetch;
 const roots: string[] = [];
 const stops: Array<() => void | Promise<void>> = [];
 const priorAuthDb = process.env.MATTERHORN_AUTH_DB;
 const priorDataDir = process.env.MATTERHORN_WORK_DATA_DIR;
+const priorMemoryRoot = process.env.MATTERHORN_WORK_MEMORY_ROOT;
 const priorSignupsEnabled = process.env.MATTERHORN_SIGNUPS_ENABLED;
 const priorSignupCapacity = process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS;
+const priorEmailVerificationRequired = process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED;
+const priorEmailFrom = process.env.MATTERHORN_EMAIL_FROM;
+const priorEmailDevMode = process.env.MATTERHORN_EMAIL_DEV_MODE;
+const priorAppUrl = process.env.MATTERHORN_APP_URL;
+const priorResendApiKey = process.env.MATTERHORN_RESEND_API_KEY;
+const priorSmtpHost = process.env.MATTERHORN_SMTP_HOST;
+const priorLegalAcceptanceRequired = process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED;
+const priorTermsVersion = process.env.MATTERHORN_TERMS_VERSION;
+const priorPrivacyVersion = process.env.MATTERHORN_PRIVACY_VERSION;
+const priorNodeEnv = process.env.NODE_ENV;
+const priorUsageEnforcement = process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT;
+const priorTurnstileSiteKey = process.env.MATTERHORN_TURNSTILE_SITEKEY;
+const priorTurnstileSecret = process.env.TURNSTILE_SECRET;
+const priorTurnstileHostnames = process.env.TURNSTILE_HOSTNAMES;
 
 function config(port: number, root: string): ServerConfig {
   return {
@@ -70,6 +86,7 @@ async function boot(root?: string) {
     root ?? mkdtempSync(join(tmpdir(), "matterhorn-auth-e2e-"));
   if (!root) roots.push(resolvedRoot);
   process.env.MATTERHORN_WORK_DATA_DIR = join(resolvedRoot, "data");
+  process.env.MATTERHORN_WORK_MEMORY_ROOT = join(resolvedRoot, "memory");
   delete process.env.MATTERHORN_AUTH_DB;
   const server = await startServer(
     config(await getFreePort(), resolvedRoot),
@@ -96,6 +113,7 @@ async function jsonRequest(
     body?: Record<string, unknown>;
     cookie?: string;
     bearer?: string;
+    method?: "GET" | "POST" | "DELETE";
     forwardedProto?: "http" | "https";
     origin?: string;
   } = {},
@@ -109,7 +127,7 @@ async function jsonRequest(
   }
   if (options.origin) headers.set("Origin", options.origin);
   const response = await fetch(`${base}${path}`, {
-    method: options.body ? "POST" : "GET",
+    method: options.method ?? (options.body ? "POST" : "GET"),
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
@@ -132,7 +150,30 @@ function cookieToken(cookie: string): string {
   return decodeURIComponent(cookie.slice("mh_session=".length));
 }
 
+async function captureDevEmail<T>(callback: () => Promise<T>): Promise<{
+  result: T;
+  payload: { template: string; props: Record<string, unknown> };
+}> {
+  const original = console.info;
+  const lines: string[] = [];
+  console.info = (...values: unknown[]) => {
+    const line = values.map(String).join(" ");
+    if (line.startsWith("[email] dev email payload")) lines.push(line);
+    else original(...values);
+  };
+  try {
+    const result = await callback();
+    const line = lines.at(-1);
+    if (!line) throw new Error("Expected a development email payload.");
+    const start = line.indexOf("{");
+    return { result, payload: JSON.parse(line.slice(start)) };
+  } finally {
+    console.info = original;
+  }
+}
+
 afterEach(async () => {
+  globalThis.fetch = nativeFetch;
   while (stops.length) await stops.pop()?.();
   while (roots.length) {
     rmSync(roots.pop()!, { force: true, recursive: true });
@@ -141,13 +182,323 @@ afterEach(async () => {
   else process.env.MATTERHORN_AUTH_DB = priorAuthDb;
   if (priorDataDir === undefined) delete process.env.MATTERHORN_WORK_DATA_DIR;
   else process.env.MATTERHORN_WORK_DATA_DIR = priorDataDir;
+  if (priorMemoryRoot === undefined) delete process.env.MATTERHORN_WORK_MEMORY_ROOT;
+  else process.env.MATTERHORN_WORK_MEMORY_ROOT = priorMemoryRoot;
   if (priorSignupsEnabled === undefined) delete process.env.MATTERHORN_SIGNUPS_ENABLED;
   else process.env.MATTERHORN_SIGNUPS_ENABLED = priorSignupsEnabled;
   if (priorSignupCapacity === undefined) delete process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS;
   else process.env.MATTERHORN_SIGNUP_MAX_ACCOUNTS = priorSignupCapacity;
+  if (priorEmailVerificationRequired === undefined) delete process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED;
+  else process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = priorEmailVerificationRequired;
+  if (priorEmailFrom === undefined) delete process.env.MATTERHORN_EMAIL_FROM;
+  else process.env.MATTERHORN_EMAIL_FROM = priorEmailFrom;
+  if (priorEmailDevMode === undefined) delete process.env.MATTERHORN_EMAIL_DEV_MODE;
+  else process.env.MATTERHORN_EMAIL_DEV_MODE = priorEmailDevMode;
+  if (priorAppUrl === undefined) delete process.env.MATTERHORN_APP_URL;
+  else process.env.MATTERHORN_APP_URL = priorAppUrl;
+  if (priorResendApiKey === undefined) delete process.env.MATTERHORN_RESEND_API_KEY;
+  else process.env.MATTERHORN_RESEND_API_KEY = priorResendApiKey;
+  if (priorSmtpHost === undefined) delete process.env.MATTERHORN_SMTP_HOST;
+  else process.env.MATTERHORN_SMTP_HOST = priorSmtpHost;
+  if (priorLegalAcceptanceRequired === undefined) delete process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED;
+  else process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = priorLegalAcceptanceRequired;
+  if (priorTermsVersion === undefined) delete process.env.MATTERHORN_TERMS_VERSION;
+  else process.env.MATTERHORN_TERMS_VERSION = priorTermsVersion;
+  if (priorPrivacyVersion === undefined) delete process.env.MATTERHORN_PRIVACY_VERSION;
+  else process.env.MATTERHORN_PRIVACY_VERSION = priorPrivacyVersion;
+  if (priorNodeEnv === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = priorNodeEnv;
+  if (priorUsageEnforcement === undefined) delete process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT;
+  else process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT = priorUsageEnforcement;
+  if (priorTurnstileSiteKey === undefined) delete process.env.MATTERHORN_TURNSTILE_SITEKEY;
+  else process.env.MATTERHORN_TURNSTILE_SITEKEY = priorTurnstileSiteKey;
+  if (priorTurnstileSecret === undefined) delete process.env.TURNSTILE_SECRET;
+  else process.env.TURNSTILE_SECRET = priorTurnstileSecret;
+  if (priorTurnstileHostnames === undefined) delete process.env.TURNSTILE_HOSTNAMES;
+  else process.env.TURNSTILE_HOSTNAMES = priorTurnstileHostnames;
 });
 
 describe("public account authentication", () => {
+  test("exports only the signed-in account record and never credential material", async () => {
+    const app = await boot();
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
+    process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "true";
+    process.env.MATTERHORN_TERMS_VERSION = "terms-export-test";
+    process.env.MATTERHORN_PRIVACY_VERSION = "privacy-export-test";
+
+    const owner = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: {
+        email: "account-export@example.com",
+        password: PASSWORD,
+        name: "Account Export",
+        legalAccepted: true,
+      },
+    });
+    expect(owner.response.status).toBe(200);
+    const ownerCookie = sessionCookie(owner.response);
+    const ownerToken = cookieToken(ownerCookie);
+    const other = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: {
+        email: "other-account@example.com",
+        password: PASSWORD,
+        name: "Other Account",
+        legalAccepted: true,
+      },
+    });
+    expect(other.response.status).toBe(200);
+
+    expect((await jsonRequest(app.base, "/api/auth/account/export")).response.status).toBe(401);
+    const exported = await jsonRequest(app.base, "/api/auth/account/export", { cookie: ownerCookie });
+    expect(exported.response.status).toBe(200);
+    expect(exported.response.headers.get("cache-control")).toBe("no-store");
+    expect(exported.response.headers.get("content-disposition")).toMatch(
+      /^attachment; filename="matterhorn-account-\d{4}-\d{2}-\d{2}\.json"$/,
+    );
+    expect(exported.payload).toEqual(expect.objectContaining({
+      version: "matterhorn.account-export.v1",
+      filename: expect.stringMatching(/^matterhorn-account-\d{4}-\d{2}-\d{2}\.json$/),
+      account: expect.objectContaining({
+        id: owner.payload.user.id,
+        email: "account-export@example.com",
+        name: "Account Export",
+        emailVerified: true,
+        createdAt: expect.any(String),
+      }),
+      legalAcceptance: {
+        termsVersion: "terms-export-test",
+        privacyVersion: "privacy-export-test",
+        acceptedAt: expect.any(String),
+      },
+      organizations: [expect.objectContaining({ id: owner.payload.organization.id, role: "owner" })],
+      security: { activeSessionCount: 1 },
+      includes: ["account_profile", "legal_acceptance", "organization_memberships", "session_count"],
+    }));
+    expect(Number.isNaN(Date.parse(exported.payload.generatedAt))).toBe(false);
+    expect(Number.isNaN(Date.parse(exported.payload.account.createdAt))).toBe(false);
+    expect(Number.isNaN(Date.parse(exported.payload.legalAcceptance.acceptedAt))).toBe(false);
+
+    const serialized = JSON.stringify(exported.payload);
+    expect(serialized).not.toContain(ownerToken);
+    expect(serialized).not.toContain(PASSWORD);
+    expect(serialized).not.toContain("password_hash");
+    expect(serialized).not.toContain("password_salt");
+    expect(serialized).not.toContain("token_hash");
+    expect(serialized).not.toContain("verificationCode");
+    expect(serialized).not.toContain("resetToken");
+    expect(serialized).not.toContain("other-account@example.com");
+    expect(serialized).not.toContain(other.payload.organization.id);
+    expect(exported.payload.excludes.join(" ")).toContain("never exported");
+    expect(exported.payload.excludes.join(" ")).toContain("exported separately");
+  });
+
+  test("verifies email and completes enumeration-safe password recovery", async () => {
+    const app = await boot();
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "true";
+    process.env.MATTERHORN_EMAIL_FROM = "Matterhorn Desks <accounts@example.com>";
+    process.env.MATTERHORN_EMAIL_DEV_MODE = "true";
+    process.env.MATTERHORN_APP_URL = app.base;
+    process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "true";
+    process.env.MATTERHORN_TERMS_VERSION = "terms-2026-08";
+    process.env.MATTERHORN_PRIVACY_VERSION = "privacy-2026-08";
+
+    const missingAcceptance = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "verify@example.com", password: PASSWORD },
+    });
+    expect(missingAcceptance.response.status).toBe(400);
+    expect(missingAcceptance.payload.code).toBe("legal_acceptance_required");
+
+    const verificationDelivery = await captureDevEmail(() =>
+      jsonRequest(app.base, "/api/auth/sign-up/email", {
+        body: {
+          email: "verify@example.com",
+          password: PASSWORD,
+          legalAccepted: true,
+        },
+      }),
+    );
+    expect(verificationDelivery.result.response.status).toBe(202);
+    expect(verificationDelivery.result.payload.verificationRequired).toBe(true);
+    expect(verificationDelivery.result.response.headers.get("set-cookie")).toBeNull();
+    expect(verificationDelivery.payload.template).toBe("verification");
+    const code = String(verificationDelivery.payload.props.verificationCode);
+    expect(code).toMatch(/^\d{6}$/);
+    const acceptanceDb = new Database(app.authDb, { readonly: true });
+    expect(
+      acceptanceDb.query(
+        "SELECT terms_version, privacy_version FROM account_legal_acceptances",
+      ).get(),
+    ).toEqual({
+      terms_version: "terms-2026-08",
+      privacy_version: "privacy-2026-08",
+    });
+    acceptanceDb.close();
+
+    const blockedSignIn = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email: "verify@example.com", password: PASSWORD },
+    });
+    expect(blockedSignIn.response.status).toBe(403);
+    expect(blockedSignIn.payload.code).toBe("email_unverified");
+
+    const verified = await jsonRequest(app.base, "/api/auth/verify-email", {
+      body: { email: "verify@example.com", code },
+    });
+    expect(verified.response.status).toBe(200);
+    expect(verified.payload.user.emailVerified).toBe(true);
+    const cookie = sessionCookie(verified.response);
+
+    const reusedCode = await jsonRequest(app.base, "/api/auth/verify-email", {
+      body: { email: "verify@example.com", code },
+    });
+    expect(reusedCode.response.status).toBe(400);
+    expect(reusedCode.payload.code).toBe("invalid_verification_code");
+
+    const resetDelivery = await captureDevEmail(() =>
+      jsonRequest(app.base, "/api/auth/password-reset/request", {
+        body: { email: "verify@example.com" },
+      }),
+    );
+    expect(resetDelivery.result.response.status).toBe(202);
+    expect(resetDelivery.payload.template).toBe("passwordReset");
+    const resetLink = new URL(String(resetDelivery.payload.props.resetLink));
+    expect(resetLink.origin).toBe(app.base);
+    expect(resetLink.search).toBe("");
+    const resetFragment = new URLSearchParams(resetLink.hash.slice(1));
+    expect(resetFragment.get("mode")).toBe("reset-password");
+    const resetToken = resetFragment.get("token") ?? "";
+    expect(resetToken.length).toBeGreaterThan(30);
+
+    const unknownReset = await jsonRequest(app.base, "/api/auth/password-reset/request", {
+      body: { email: "unknown@example.com" },
+    });
+    expect(unknownReset.response.status).toBe(202);
+    expect(unknownReset.payload).toEqual(resetDelivery.result.payload);
+
+    const confirmed = await jsonRequest(app.base, "/api/auth/password-reset/confirm", {
+      body: { token: resetToken, newPassword: "matterhorn-reset-password" },
+    });
+    expect(confirmed.response.status).toBe(200);
+    const oldSession = await jsonRequest(app.base, "/api/den/v1/session", { cookie });
+    expect(oldSession.payload).toEqual({ authenticated: false });
+    const oldPassword = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email: "verify@example.com", password: PASSWORD },
+    });
+    expect(oldPassword.response.status).toBe(401);
+    const newPassword = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email: "verify@example.com", password: "matterhorn-reset-password" },
+    });
+    expect(newPassword.response.status).toBe(200);
+  });
+
+  test("fails closed before creating an account when verification email is not configured", async () => {
+    const app = await boot();
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "true";
+    delete process.env.MATTERHORN_EMAIL_DEV_MODE;
+    delete process.env.MATTERHORN_RESEND_API_KEY;
+    delete process.env.MATTERHORN_SMTP_HOST;
+    const unavailable = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "not-created@example.com", password: PASSWORD },
+    });
+    expect(unavailable.response.status).toBe(503);
+    expect(unavailable.payload.code).toBe("email_delivery_unavailable");
+
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
+    const created = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "not-created@example.com", password: PASSWORD },
+    });
+    expect(created.response.status).toBe(200);
+  });
+
+  test("requires an explicit production signup flag and all signup safety controls", async () => {
+    const app = await boot();
+    process.env.NODE_ENV = "production";
+    delete process.env.MATTERHORN_SIGNUPS_ENABLED;
+    const pausedConfig = await jsonRequest(app.base, "/api/auth/config");
+    expect(pausedConfig.response.status).toBe(200);
+    expect(pausedConfig.payload).toEqual({
+      signupsAvailable: false,
+      signupStatus: "paused",
+      emailVerificationRequired: false,
+      passwordResetAvailable: false,
+      legalAcceptanceRequired: false,
+      minimumPasswordLength: 12,
+      turnstileSiteKey: null,
+    });
+    expect(pausedConfig.response.headers.get("cache-control")).toBe("no-store");
+    const implicit = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "implicit@example.com", password: PASSWORD },
+    });
+    expect(implicit.response.status).toBe(503);
+    expect(implicit.payload.code).toBe("signups_paused");
+
+    process.env.MATTERHORN_SIGNUPS_ENABLED = "true";
+    process.env.MATTERHORN_EMAIL_VERIFICATION_REQUIRED = "false";
+    process.env.MATTERHORN_LEGAL_ACCEPTANCE_REQUIRED = "false";
+    process.env.MATTERHORN_MODEL_USAGE_ENFORCEMENT = "off";
+    const unsafeConfig = await jsonRequest(app.base, "/api/auth/config");
+    expect(unsafeConfig.payload.signupStatus).toBe("setup_required");
+    expect(unsafeConfig.payload.signupsAvailable).toBe(false);
+    const unsafe = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "unsafe@example.com", password: PASSWORD },
+    });
+    expect(unsafe.response.status).toBe(503);
+    expect(unsafe.payload.code).toBe("signup_security_configuration_invalid");
+
+    const database = new Database(app.authDb, { readonly: true });
+    expect(database.query("SELECT COUNT(*) AS count FROM users").get()).toEqual({ count: 0 });
+    database.close();
+  });
+
+  test("requires a valid, single-use Turnstile token when signup protection is configured", async () => {
+    const app = await boot();
+    process.env.MATTERHORN_TURNSTILE_SITEKEY = "site-key";
+    process.env.TURNSTILE_SECRET = "secret-key";
+    process.env.TURNSTILE_HOSTNAMES = "matterhorn.example";
+    const redeemed = new Set<string>();
+    globalThis.fetch = (async (input, init) => {
+      if (String(input) === "https://challenges.cloudflare.com/turnstile/v0/siteverify") {
+        const token = new URLSearchParams(String(init?.body)).get("response") ?? "";
+        if (token === "valid-token" && !redeemed.has(token)) {
+          redeemed.add(token);
+          return Response.json({
+            success: true,
+            action: "signup",
+            hostname: "matterhorn.example",
+          });
+        }
+        return Response.json({
+          success: false,
+          "error-codes": ["timeout-or-duplicate"],
+        });
+      }
+      return nativeFetch(input, init);
+    }) as typeof fetch;
+
+    const missing = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "missing-turnstile@example.com", password: PASSWORD },
+    });
+    expect(missing.response.status).toBe(403);
+    expect(missing.payload.code).toBe("turnstile_verification_failed");
+
+    const accepted = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: {
+        email: "turnstile-accepted@example.com",
+        password: PASSWORD,
+        turnstileToken: "valid-token",
+      },
+    });
+    expect(accepted.response.status).toBe(200);
+
+    const replayed = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: {
+        email: "turnstile-replayed@example.com",
+        password: PASSWORD,
+        turnstileToken: "valid-token",
+      },
+    });
+    expect(replayed.response.status).toBe(403);
+    expect(replayed.payload.code).toBe("turnstile_verification_failed");
+  });
+
   test("pauses account creation and enforces the configured beta capacity", async () => {
     const app = await boot();
     process.env.MATTERHORN_SIGNUPS_ENABLED = "false";
@@ -260,6 +611,184 @@ describe("public account authentication", () => {
     );
     expect(signedBackIn.response.status).toBe(200);
     expect(signedBackIn.payload.user.email).toBe("new.user@example.com");
+  });
+
+  test("manages sessions, rotates passwords, and deletes owned account data", async () => {
+    const app = await boot();
+    const email = "security-owner@example.com";
+    const newPassword = "matterhorn-new-secure-password";
+    const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email, password: PASSWORD, name: "Security Owner" },
+    });
+    const firstCookie = sessionCookie(signup.response);
+    const secondSignIn = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: PASSWORD },
+    });
+    const secondCookie = sessionCookie(secondSignIn.response);
+
+    const security = await jsonRequest(app.base, "/api/auth/account/security", {
+      cookie: secondCookie,
+    });
+    expect(security.response.status).toBe(200);
+    expect(security.payload.sessionCount).toBe(2);
+    expect(security.payload.organizations).toHaveLength(1);
+    expect(security.payload.sharedOrganizationsBlockingDeletion).toEqual([]);
+    expect(security.response.headers.get("cache-control")).toBe("no-store");
+
+    const revoked = await jsonRequest(
+      app.base,
+      "/api/auth/account/revoke-other-sessions",
+      { cookie: secondCookie, body: {} },
+    );
+    expect(revoked.response.status).toBe(200);
+    expect(revoked.payload.revokedSessions).toBe(1);
+    expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: firstCookie })).response.status).toBe(401);
+    expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: secondCookie })).response.status).toBe(200);
+
+    const wrongCurrentPassword = await jsonRequest(
+      app.base,
+      "/api/auth/account/change-password",
+      {
+        cookie: secondCookie,
+        body: { currentPassword: `${PASSWORD}-wrong`, newPassword },
+      },
+    );
+    expect(wrongCurrentPassword.response.status).toBe(401);
+    expect(wrongCurrentPassword.payload.code).toBe("invalid_credentials");
+
+    const changed = await jsonRequest(
+      app.base,
+      "/api/auth/account/change-password",
+      {
+        cookie: secondCookie,
+        body: { currentPassword: PASSWORD, newPassword },
+      },
+    );
+    expect(changed.response.status).toBe(200);
+    expect(changed.payload.signedOutEverywhere).toBe(true);
+    expect(changed.response.headers.get("set-cookie") ?? "").toContain("Max-Age=0");
+    expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: secondCookie })).response.status).toBe(401);
+
+    const oldPassword = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: PASSWORD },
+    });
+    expect(oldPassword.response.status).toBe(401);
+    const signedBackIn = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: newPassword },
+    });
+    expect(signedBackIn.response.status).toBe(200);
+    const deletionCookie = sessionCookie(signedBackIn.response);
+
+    const workspaces = await jsonRequest(app.base, "/workspaces", {
+      cookie: deletionCookie,
+    });
+    expect(workspaces.response.status).toBe(200);
+    const workspacePath = workspaces.payload.items[0].path as string;
+    const workspaceId = workspaces.payload.items[0].id as string;
+    expect(statSync(workspacePath).isDirectory()).toBe(true);
+    const capturedMemory = await jsonRequest(app.base, "/api/memory/capture", {
+      cookie: deletionCookie,
+      body: {
+        record: {
+          id: "mem_account_deletion",
+          kind: "user_preference",
+          scope: "workspace",
+          title: "Account deletion fixture",
+          summary: "This private account memory must be permanently removed.",
+          body: { responseStyle: "private-deletion-fixture" },
+          tags: ["account-deletion"],
+          links: [],
+          provenance: {
+            source: "user_confirmed",
+            capturedAt: "2026-08-12T00:00:00.000Z",
+            capturedBy: "user",
+            confidence: 1,
+            reasonRemembered: "Account deletion acceptance fixture.",
+          },
+          sensitivity: "private",
+          createdAt: "2026-08-12T00:00:00.000Z",
+          updatedAt: "2026-08-12T00:00:00.000Z",
+          canUseInChat: true,
+          canExport: false,
+          canDelete: true,
+        },
+      },
+    });
+    expect(capturedMemory.response.status).toBe(200);
+    expect(capturedMemory.payload.record.tags).toContain(`workspace:${workspaceId}`);
+
+    const invalidConfirmation = await jsonRequest(app.base, "/api/auth/account", {
+      method: "DELETE",
+      cookie: deletionCookie,
+      body: { password: newPassword, confirmationEmail: "wrong@example.com" },
+    });
+    expect(invalidConfirmation.response.status).toBe(400);
+    expect(invalidConfirmation.payload.code).toBe("invalid_confirmation");
+
+    const deleted = await jsonRequest(app.base, "/api/auth/account", {
+      method: "DELETE",
+      cookie: deletionCookie,
+      body: { password: newPassword, confirmationEmail: email.toUpperCase() },
+    });
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload.deletedOrganizationCount).toBe(1);
+    expect(deleted.payload.workspaceDataDeletionComplete).toBe(true);
+    expect(deleted.payload.workspaceDataDeletionFailures).toBe(0);
+    expect(deleted.response.headers.get("set-cookie") ?? "").toContain("Max-Age=0");
+    expect(() => statSync(workspacePath)).toThrow();
+    const memoryIndex = readFileSync(
+      join(app.root, "memory", "memory-index.json"),
+      "utf8",
+    );
+    expect(memoryIndex).not.toContain("mem_account_deletion");
+    expect(memoryIndex).not.toContain("private-deletion-fixture");
+    expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: deletionCookie })).response.status).toBe(401);
+    expect((await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email, password: newPassword },
+    })).response.status).toBe(401);
+  });
+
+  test("blocks deletion while the account owns a workspace with other members", async () => {
+    const app = await boot();
+    const owner = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "shared-owner@example.com", password: PASSWORD },
+    });
+    const member = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "shared-member@example.com", password: PASSWORD },
+    });
+    const ownerCookie = sessionCookie(owner.response);
+    const db = new Database(app.authDb);
+    try {
+      db.query(
+        `INSERT INTO organization_members (organization_id, user_id, role, created_at)
+          VALUES (?, ?, 'member', ?)`,
+      ).run(owner.payload.organization.id, member.payload.user.id, Date.now());
+    } finally {
+      db.close();
+    }
+
+    const security = await jsonRequest(app.base, "/api/auth/account/security", {
+      cookie: ownerCookie,
+    });
+    expect(security.response.status).toBe(200);
+    expect(security.payload.sharedOrganizationsBlockingDeletion).toEqual([
+      expect.objectContaining({
+        id: owner.payload.organization.id,
+        role: "owner",
+      }),
+    ]);
+
+    const blocked = await jsonRequest(app.base, "/api/auth/account", {
+      method: "DELETE",
+      cookie: ownerCookie,
+      body: {
+        password: PASSWORD,
+        confirmationEmail: "shared-owner@example.com",
+      },
+    });
+    expect(blocked.response.status).toBe(409);
+    expect(blocked.payload.code).toBe("account_owns_shared_organization");
+    expect((await jsonRequest(app.base, "/api/den/v1/me", { cookie: ownerCookie })).response.status).toBe(200);
   });
 
   test("serves the default desktop policy only to signed-in accounts", async () => {
@@ -710,7 +1239,9 @@ describe("public account authentication", () => {
       const session = db.query(
         "SELECT token_hash FROM sessions WHERE user_id = ?",
       ).get(signup.payload.user.id) as { token_hash: string };
-      expect(user.password_hash).toMatch(/^[a-f0-9]{128}$/);
+      expect(user.password_hash).toMatch(
+        /^scrypt-v2\$32768\$8\$3\$[a-f0-9]{128}$/,
+      );
       expect(user.password_salt).toMatch(/^[a-f0-9]{32}$/);
       expect(session.token_hash).toMatch(/^[a-f0-9]{64}$/);
       expect(session.token_hash).not.toBe(rawToken);
@@ -758,6 +1289,40 @@ describe("public account authentication", () => {
       },
     );
     expect(unaffected.response.status).toBe(401);
+  });
+
+  test("does not let a successful account clear the source-IP credential budget", async () => {
+    const app = await boot();
+    const signup = await jsonRequest(app.base, "/api/auth/sign-up/email", {
+      body: { email: "limiter-reset@example.com", password: PASSWORD },
+    });
+    expect(signup.response.status).toBe(200);
+
+    for (let cycle = 0; cycle < 5; cycle += 1) {
+      for (let attempt = 0; attempt < 9; attempt += 1) {
+        const rejected = await jsonRequest(
+          app.base,
+          "/api/auth/sign-in/email",
+          {
+            body: {
+              email: `invalid-${cycle}-${attempt}`,
+              password: `${PASSWORD}-wrong`,
+            },
+          },
+        );
+        expect(rejected.response.status).toBe(400);
+      }
+      const valid = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+        body: { email: "limiter-reset@example.com", password: PASSWORD },
+      });
+      expect(valid.response.status).toBe(200);
+    }
+
+    const limited = await jsonRequest(app.base, "/api/auth/sign-in/email", {
+      body: { email: "final-invalid", password: `${PASSWORD}-wrong` },
+    });
+    expect(limited.response.status).toBe(429);
+    expect(limited.payload.code).toBe("rate_limited");
   });
 
   test("accepts bearer sessions and enforces configured browser origins", async () => {

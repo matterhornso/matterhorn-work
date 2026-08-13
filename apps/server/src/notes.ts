@@ -100,6 +100,13 @@ export class MatterhornNotesStore {
     return notes.slice(0, limit);
   }
 
+  async exportAllNotes(options: { includeDeleted?: boolean } = {}): Promise<MatterhornNote[]> {
+    await this.initialize();
+    return Object.values((await this.readIndex()).entries)
+      .filter((note) => options.includeDeleted ? true : !note.deletedAt)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
   async getNote(id: string): Promise<MatterhornNote | null> {
     await this.initialize();
     return (await this.readIndex()).entries[id] ?? null;
