@@ -5,7 +5,10 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildMatterhornWorkspaceArchive } from "./workspace-data-archive.js";
+import {
+  buildMatterhornWorkspaceArchive,
+  WorkspaceArchiveLimitError,
+} from "./workspace-data-archive.js";
 import type { WorkspaceInfo } from "./types.js";
 
 const roots: string[] = [];
@@ -133,16 +136,34 @@ describe("workspace data archive", () => {
       Buffer.alloc(1025),
     );
 
-    await expect(
-      buildMatterhornWorkspaceArchive({
-        workspace,
-        configuration: {},
-        notes: [],
-        memory: { records: [], suggestions: [] },
-        chats: [],
-        activity: {},
-      }),
-    ).rejects.toThrow("per-file safety limit");
+    const result = buildMatterhornWorkspaceArchive({
+      workspace,
+      configuration: {},
+      notes: [],
+      memory: { records: [], suggestions: [] },
+      chats: [],
+      activity: {},
+    });
+    await expect(result).rejects.toBeInstanceOf(WorkspaceArchiveLimitError);
+    await expect(result).rejects.toThrow("per-file safety limit");
+  });
+
+  test("sanitizes adversarial workspace names in linear time", async () => {
+    const workspace = await fixtureWorkspace();
+    workspace.name = `${"-".repeat(100_000)}Launch room${"!".repeat(100_000)}`;
+
+    const result = await buildMatterhornWorkspaceArchive({
+      workspace,
+      configuration: {},
+      notes: [],
+      memory: { records: [], suggestions: [] },
+      chats: [],
+      activity: {},
+    });
+
+    expect(result.filename).toMatch(
+      /^matterhorn-workspace-Launch-room-\d{4}-\d{2}-\d{2}\.json\.gz$/,
+    );
   });
 
   test("never follows output symlinks outside the workspace", async () => {
@@ -170,5 +191,28 @@ describe("workspace data archive", () => {
 
     expect(archive.data.files).toEqual([]);
     expect(JSON.stringify(archive)).not.toContain("outside workspace");
+  });
+
+  test("never follows a symlinked output directory", async () => {
+    const workspace = await fixtureWorkspace();
+    const outside = await mkdtemp(join(tmpdir(), "matterhorn-archive-root-outside-"));
+    roots.push(outside);
+    await writeFile(join(outside, "private.txt"), "outside directory");
+    await symlink(outside, join(workspace.path, "outputs"));
+
+    const result = await buildMatterhornWorkspaceArchive({
+      workspace,
+      configuration: {},
+      notes: [],
+      memory: { records: [], suggestions: [] },
+      chats: [],
+      activity: {},
+    });
+    const archive = JSON.parse(
+      gunzipSync(result.compressed).toString("utf8"),
+    );
+
+    expect(archive.data.files).toEqual([]);
+    expect(JSON.stringify(archive)).not.toContain("outside directory");
   });
 });

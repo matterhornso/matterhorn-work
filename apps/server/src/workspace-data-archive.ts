@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open, readdir, type FileHandle } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { promisify } from "node:util";
 import { gzip } from "node:zlib";
@@ -11,6 +12,16 @@ const DEFAULT_MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
 const MAX_ARCHIVE_BYTES_UPPER_BOUND = 256 * 1024 * 1024;
 const DEFAULT_MAX_FILE_BYTES = 20 * 1024 * 1024;
 const DEFAULT_MAX_FILE_COUNT = 5_000;
+const ARCHIVE_READ_CHUNK_BYTES = 64 * 1024;
+
+export class WorkspaceArchiveLimitError extends Error {
+  readonly code = "workspace_archive_too_large";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkspaceArchiveLimitError";
+  }
+}
 
 export type MatterhornWorkspaceArchiveFile = {
   path: string;
@@ -96,12 +107,55 @@ function archiveFilename(
   workspace: WorkspaceInfo,
   generatedAt: string,
 ): string {
-  const workspacePart =
-    (workspace.name || workspace.id)
-      .replace(/[^a-z0-9._-]+/gi, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 80) || "workspace";
+  const source = workspace.name || workspace.id;
+  const normalized: string[] = [];
+  let separatorPending = false;
+  for (const character of source) {
+    const code = character.codePointAt(0) ?? -1;
+    const allowed =
+      (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      character === "." ||
+      character === "_" ||
+      character === "-";
+    if (!allowed) {
+      separatorPending = true;
+      continue;
+    }
+    if (separatorPending) normalized.push("-");
+    normalized.push(character);
+    separatorPending = false;
+  }
+  let start = 0;
+  let end = normalized.length;
+  while (start < end && normalized[start] === "-") start += 1;
+  while (end > start && normalized[end - 1] === "-") end -= 1;
+  const workspacePart = normalized.slice(start, end).join("").slice(0, 80) || "workspace";
   return `matterhorn-workspace-${workspacePart}-${generatedAt.slice(0, 10)}.json.gz`;
+}
+
+async function readBoundedArchiveFile(
+  handle: FileHandle,
+  maximumBytes: number,
+  displayPath: string,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  while (totalBytes <= maximumBytes) {
+    const remaining = maximumBytes + 1 - totalBytes;
+    const chunk = Buffer.allocUnsafe(Math.min(ARCHIVE_READ_CHUNK_BYTES, remaining));
+    const { bytesRead } = await handle.read(chunk, 0, chunk.byteLength, totalBytes);
+    if (bytesRead === 0) break;
+    chunks.push(chunk.subarray(0, bytesRead));
+    totalBytes += bytesRead;
+  }
+  if (totalBytes > maximumBytes) {
+    throw new WorkspaceArchiveLimitError(
+      `Workspace archive file ${displayPath} exceeds the ${maximumBytes}-byte per-file safety limit.`,
+    );
+  }
+  return Buffer.concat(chunks, totalBytes);
 }
 
 function encodeFileContent(
@@ -126,13 +180,15 @@ async function collectDirectoryFiles(input: {
   const rootPath = join(input.workspaceRoot, input.rootRelativePath);
   let rootInfo;
   try {
-    rootInfo = await stat(rootPath);
+    rootInfo = await lstat(rootPath);
   } catch {
     return;
   }
   if (!rootInfo.isDirectory()) return;
 
   const visit = async (directory: string): Promise<void> => {
+    const directoryInfo = await lstat(directory);
+    if (directoryInfo.isSymbolicLink() || !directoryInfo.isDirectory()) return;
     const entries = await readdir(directory, { withFileTypes: true });
     entries.sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
@@ -144,29 +200,61 @@ async function collectDirectoryFiles(input: {
       }
       if (!entry.isFile()) continue;
       if (input.files.length >= input.limits.fileCount) {
-        throw new Error(
+        throw new WorkspaceArchiveLimitError(
           `Workspace archive exceeds the ${input.limits.fileCount}-file safety limit. Remove old outputs or raise MATTERHORN_WORKSPACE_ARCHIVE_MAX_FILES.`,
         );
       }
-      const info = await stat(absolutePath);
-      if (info.size > input.limits.fileBytes) {
-        throw new Error(
-          `Workspace archive file ${relative(input.workspaceRoot, absolutePath)} exceeds the ${input.limits.fileBytes}-byte per-file safety limit.`,
-        );
+      const displayPath = relative(input.workspaceRoot, absolutePath).replaceAll("\\", "/");
+      let handle: FileHandle;
+      try {
+        handle = await open(absolutePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+      } catch (error) {
+        const code = error && typeof error === "object" && "code" in error
+          ? String(error.code)
+          : "";
+        if (code === "ENOENT" || code === "ELOOP") continue;
+        throw error;
       }
-      input.state.rawBytes += info.size;
-      if (input.state.rawBytes > input.limits.totalBytes) {
-        throw new Error(
-          `Workspace archive files exceed the ${input.limits.totalBytes}-byte safety limit. Remove old outputs or raise MATTERHORN_WORKSPACE_ARCHIVE_MAX_BYTES.`,
+      try {
+        const before = await handle.stat();
+        if (!before.isFile()) continue;
+        if (before.size > input.limits.fileBytes) {
+          throw new WorkspaceArchiveLimitError(
+            `Workspace archive file ${displayPath} exceeds the ${input.limits.fileBytes}-byte per-file safety limit.`,
+          );
+        }
+        const bytes = await readBoundedArchiveFile(
+          handle,
+          input.limits.fileBytes,
+          displayPath,
         );
+        const after = await handle.stat();
+        if (
+          before.dev !== after.dev ||
+          before.ino !== after.ino ||
+          before.size !== after.size ||
+          before.mtimeMs !== after.mtimeMs ||
+          after.size !== bytes.byteLength
+        ) {
+          throw new Error(
+            `Workspace archive file ${displayPath} changed during export. Retry the download.`,
+          );
+        }
+        input.state.rawBytes += bytes.byteLength;
+        if (input.state.rawBytes > input.limits.totalBytes) {
+          throw new WorkspaceArchiveLimitError(
+            `Workspace archive files exceed the ${input.limits.totalBytes}-byte safety limit. Remove old outputs or raise MATTERHORN_WORKSPACE_ARCHIVE_MAX_BYTES.`,
+          );
+        }
+        input.files.push({
+          path: displayPath,
+          size: bytes.byteLength,
+          updatedAt: after.mtime.toISOString(),
+          ...encodeFileContent(bytes),
+        });
+      } finally {
+        await handle.close();
       }
-      const bytes = await readFile(absolutePath);
-      input.files.push({
-        path: relative(input.workspaceRoot, absolutePath).replaceAll("\\", "/"),
-        size: info.size,
-        updatedAt: info.mtime.toISOString(),
-        ...encodeFileContent(bytes),
-      });
     }
   };
 
@@ -266,7 +354,7 @@ export async function buildMatterhornWorkspaceArchive(
     "utf8",
   );
   if (archiveBytes.byteLength > limits.totalBytes) {
-    throw new Error(
+    throw new WorkspaceArchiveLimitError(
       `Workspace archive is ${archiveBytes.byteLength} bytes before compression and exceeds the ${limits.totalBytes}-byte safety limit.`,
     );
   }

@@ -452,7 +452,10 @@ import {
   stripSensitiveWorkspaceExportData,
   type WorkspaceExportSensitiveMode,
 } from "./workspace-export-safety.js";
-import { buildMatterhornWorkspaceArchive } from "./workspace-data-archive.js";
+import {
+  buildMatterhornWorkspaceArchive,
+  WorkspaceArchiveLimitError,
+} from "./workspace-data-archive.js";
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { serve, type ServeRequestContext, type ServeResult } from "./serve-node.js";
@@ -10362,7 +10365,7 @@ function createRoutes(
       headers.set("X-Matterhorn-Archive-Uncompressed-Bytes", String(archive.uncompressedBytes));
       return new Response(Uint8Array.from(archive.compressed), { status: 200, headers });
     } catch (error) {
-      if (error instanceof Error && /archive.*(?:exceeds|safety limit)|exceeds the .*safety limit/i.test(error.message)) {
+      if (error instanceof WorkspaceArchiveLimitError) {
         throw new ApiError(413, "workspace_archive_too_large", error.message);
       }
       throw error;
@@ -14521,7 +14524,9 @@ async function exportAllWorkspaceChats(config: ServerConfig, workspace: Workspac
   const maxSessions = 2_000;
   const sessions = await listWorkspaceSessions(config, workspace, { limit: maxSessions + 1 });
   if (sessions.length > maxSessions) {
-    throw new Error(`Workspace archive exceeds the ${maxSessions}-chat safety limit. Remove old chats before exporting.`);
+    throw new WorkspaceArchiveLimitError(
+      `Workspace archive exceeds the ${maxSessions}-chat safety limit. Remove old chats before exporting.`,
+    );
   }
 
   const chats: Array<{
