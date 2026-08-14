@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
 
@@ -8,7 +7,7 @@ const repoRoot = resolve(import.meta.dirname, "..");
 const DEFAULT_OUTPUT_DIR = "qa-reports/matterhorn-product-browser-smoke";
 const DEFAULT_RUNTIME_FILE = resolve(
   process.env.MATTERHORN_MEDIA_SMOKE_RUNTIME_FILE
-    || resolve(tmpdir(), "matterhorn-generated-media-smoke-runtime.json"),
+    || resolve(repoRoot, ".matterhorn-work", "runtime", "matterhorn-generated-media-smoke-runtime.json"),
 );
 
 function parseArgs(argv = process.argv.slice(2)) {

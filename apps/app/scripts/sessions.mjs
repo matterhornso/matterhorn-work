@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   findFreePort,
+  isolatedOpencodeTestConfig,
   makeClient,
   parseArgs,
   spawnOpencodeServe,
@@ -15,11 +16,12 @@ const port = await findFreePort();
 const server = await spawnOpencodeServe({
   directory,
   port,
+  configContent: isolatedOpencodeTestConfig,
 });
 
 try {
   const client = makeClient({ baseUrl: server.baseUrl, directory: server.cwd });
-  await waitForHealthy(client);
+  await waitForHealthy(client, { runtime: server });
 
   const before = await client.session.list({ limit: 20 });
   assert.ok(Array.isArray(before));

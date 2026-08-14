@@ -197,7 +197,7 @@ try {
   const port = await findFreePort();
   server = await spawnOpencodeServe({ directory: tmpdir, port });
   const client = makeClient({ baseUrl: server.baseUrl, directory: server.cwd });
-  await waitForHealthy(client);
+  await waitForHealthy(client, { runtime: server });
 
   const agents = await client.app.agents();
   const agentName = agents?.[0]?.name ?? "default";

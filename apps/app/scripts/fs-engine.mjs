@@ -4,6 +4,7 @@ import path from "node:path";
 
 import {
   findFreePort,
+  isolatedOpencodeTestConfig,
   makeClient,
   parseArgs,
   spawnOpencodeServe,
@@ -14,11 +15,15 @@ const args = parseArgs(process.argv.slice(2));
 const directory = args.get("dir") ?? process.cwd();
 
 const port = await findFreePort();
-const server = await spawnOpencodeServe({ directory, port });
+const server = await spawnOpencodeServe({
+  directory,
+  port,
+  configContent: isolatedOpencodeTestConfig,
+});
 
 try {
   const client = makeClient({ baseUrl: server.baseUrl, directory: server.cwd });
-  await waitForHealthy(client);
+  await waitForHealthy(client, { runtime: server });
 
   const root = ".openwork/test-engine";
   const nestedDir = path.join(root, "nested");

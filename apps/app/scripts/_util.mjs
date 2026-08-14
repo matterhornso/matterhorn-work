@@ -6,6 +6,13 @@ import { realpathSync, statSync } from "node:fs";
 
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 
+export const isolatedOpencodeTestConfig = Object.freeze({
+  permission: {
+    "*": "deny",
+    read: "allow",
+  },
+});
+
 function resolveBasicAuthHeader() {
   const password = process.env.OPENCODE_SERVER_PASSWORD?.trim() ?? "";
   if (!password) return undefined;
@@ -53,6 +60,7 @@ export async function spawnOpencodeServe({
   hostname = "127.0.0.1",
   port,
   corsOrigins = [],
+  configContent,
 }) {
   assert.ok(directory && directory.trim(), "directory is required");
   assert.ok(Number.isInteger(port) && port > 0, "port must be a positive integer");
@@ -83,26 +91,43 @@ export async function spawnOpencodeServe({
     process.exit(0);
   }
 
+  const serializedConfig = configContent === undefined
+    ? undefined
+    : typeof configContent === "string"
+      ? configContent
+      : JSON.stringify(configContent);
   const child = spawn(engineBin, args, {
     cwd,
-    stdio: ["ignore", "ignore", "pipe"],
+    stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
       // Make it explicit we're a non-TUI client.
       OPENCODE_CLIENT: "matterhorn-work-test",
+      ...(serializedConfig ? { OPENCODE_CONFIG_CONTENT: serializedConfig } : {}),
     },
   });
 
   const baseUrl = `http://${hostname}:${port}`;
 
-  // If the process dies early, surface stderr.
+  // OpenCode writes startup diagnostics to both streams depending on platform.
+  // Keep a bounded combined tail so CI failures remain actionable.
+  let output = "";
   let stderr = "";
+  const appendOutput = (chunk) => {
+    output = `${output}${String(chunk)}`.slice(-32_768);
+  };
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", appendOutput);
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk) => {
-    stderr += chunk;
+    const text = String(chunk);
+    stderr = `${stderr}${text}`.slice(-32_768);
+    appendOutput(text);
   });
   child.on("error", (error) => {
-    stderr += `${error instanceof Error ? error.message : String(error)}\n`;
+    const text = `${error instanceof Error ? error.message : String(error)}\n`;
+    stderr = `${stderr}${text}`.slice(-32_768);
+    appendOutput(text);
   });
 
   async function waitForExit(ms) {
@@ -144,16 +169,37 @@ export async function spawnOpencodeServe({
     getStderr() {
       return stderr;
     },
+    getOutput() {
+      return output;
+    },
   };
 }
 
-export async function waitForHealthy(client, { timeoutMs = 10_000, pollMs = 250 } = {}) {
+export async function waitForHealthy(
+  client,
+  { timeoutMs = 15_000, pollMs = 250, requestTimeoutMs = 1_500, runtime } = {},
+) {
   const start = Date.now();
   let lastError;
 
   while (Date.now() - start < timeoutMs) {
+    if (
+      runtime?.child &&
+      (runtime.child.exitCode !== null || runtime.child.signalCode !== null)
+    ) {
+      const exit = runtime.child.exitCode === null
+        ? `signal ${runtime.child.signalCode}`
+        : `exit code ${runtime.child.exitCode}`;
+      const diagnostics = runtime.getOutput?.().trim();
+      throw new Error(
+        `OpenCode exited before /global/health became ready (${exit})` +
+          (diagnostics ? `:\n${diagnostics}` : "."),
+      );
+    }
     try {
-      const health = await client.global.health();
+      const health = await client.global.health({
+        signal: AbortSignal.timeout(requestTimeoutMs),
+      });
       assert.equal(health.healthy, true);
       assert.ok(typeof health.version === "string");
       return health;
@@ -164,7 +210,11 @@ export async function waitForHealthy(client, { timeoutMs = 10_000, pollMs = 250 
   }
 
   const msg = lastError instanceof Error ? lastError.message : String(lastError);
-  throw new Error(`Timed out waiting for /global/health: ${msg}`);
+  const diagnostics = runtime?.getOutput?.().trim();
+  throw new Error(
+    `Timed out waiting for /global/health after ${timeoutMs}ms: ${msg}` +
+      (diagnostics ? `\nOpenCode output:\n${diagnostics}` : ""),
+  );
 }
 
 export function normalizeEvent(raw) {

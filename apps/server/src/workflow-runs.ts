@@ -1,4 +1,4 @@
-import { appendFile, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, open, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   MatterhornWorkflowRun,
@@ -338,10 +338,14 @@ export class WorkflowRunEngine {
 
     for (const file of files) {
       const path = join(dir, file);
+      let handle: Awaited<ReturnType<typeof open>> | undefined;
       try {
-        const fileStats = await stat(path);
+        // Validate and read through the same descriptor so the path cannot be
+        // swapped between a stat call and the subsequent read.
+        handle = await open(path, "r");
+        const fileStats = await handle.stat();
         if (!fileStats.isFile() || fileStats.size <= 0 || fileStats.size > 2_000_000) continue;
-        const lines = (await readFile(path, "utf8"))
+        const lines = (await handle.readFile("utf8"))
           .split("\n")
           .map((line) => line.trim())
           .filter(Boolean);
@@ -432,6 +436,8 @@ export class WorkflowRunEngine {
         this.runsByWorkspace.set(workspaceId, workspaceRuns);
       } catch {
         // A partial or corrupted log must not prevent other workspace runs from loading.
+      } finally {
+        await handle?.close();
       }
     }
     this.pruneWorkspaceRuns(workspaceId);
