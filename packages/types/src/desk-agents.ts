@@ -876,6 +876,21 @@ export function buildMatterhornDeskAgentSystemPrompt(agent: MatterhornDeskAgentM
   ].join("\n\n");
 }
 
+/**
+ * Request-scoped reminder for a managed desk. The complete, versioned desk
+ * contract already lives in the OpenCode agent definition generated during
+ * workspace initialization. Re-sending that same contract on every turn
+ * duplicates hundreds of tokens without adding an enforcement boundary.
+ */
+export function buildMatterhornDeskRequestOverlay(agent: MatterhornDeskAgentManifest): string {
+  return [
+    "## Active Matterhorn Desk",
+    `Desk: ${agent.displayName}`,
+    `Contract: ${agent.version}`,
+    "Follow the managed desk contract and its deny-by-default tool allowlist loaded by the runtime.",
+  ].join("\n");
+}
+
 export function buildMatterhornDeskRuntimeTools(agent: MatterhornDeskAgentManifest): Record<string, boolean> | undefined {
   if (agent.toolPolicy.runtimeKind !== "managed_desk") return undefined;
   return Object.fromEntries([

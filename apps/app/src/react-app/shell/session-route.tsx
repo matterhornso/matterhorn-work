@@ -107,12 +107,12 @@ import {
 } from "../domains/session/perspectives/response-perspective";
 import {
   buildMatterhornExecutionModeSystemPrompt,
-  buildMatterhornExecutionModeTools,
   executionModesEnabled,
   readMatterhornExecutionMode,
   writeMatterhornExecutionMode,
   type MatterhornExecutionMode,
 } from "../domains/session/modes/execution-mode";
+import { buildMatterhornPromptTools } from "../domains/session/modes/prompt-tool-policy";
 import { buildOpenworkEnvSystemContext } from "../domains/session/sync/env-context";
 import {
   permissionKey as reactPermissionKey,
@@ -161,22 +161,26 @@ import { useReactRenderWatchdog } from "./react-render-watchdog";
 import { useWallet } from "../domains/wallet/WalletProvider";
 import {
   buildDirectResponseSystemPrompt,
+  buildGeneralCryptoSafetySystemPrompt,
   buildMatterhornOrientationSystemPrompt,
   buildProtocolDeskCryptoSafetySystemPrompt,
-  buildCryptoSystemPrompt,
   shouldInjectMatterhornOrientationPrompt,
   shouldInjectCryptoPrompt,
 } from "../domains/wallet/prompts/crypto-system-prompt";
 import {
-  buildMatterhornDeskAgentSystemPrompt,
+  buildMatterhornDeskRequestOverlay,
   getMatterhornDeskAgentById,
 } from "@matterhorn-work/types/desk-agents";
 import { getCustomerProtocolDeskVisual } from "../domains/session/workflows/protocol-desk-ui";
 import {
   buildMatterhornPublicWalletContext,
   compileMatterhornSessionSystemContext,
+  estimateMatterhornContextTokens,
+  MATTERHORN_DESK_CONTEXT_MAX_CHARS,
+  MATTERHORN_GENERAL_CONTEXT_MAX_CHARS,
   resolveOptionalMatterhornContext,
   sanitizeMatterhornSystemContextValue,
+  shouldInjectEnvironmentMetadata,
 } from "../domains/session/context/session-system-context";
 
 const SessionPage = lazy(() =>
@@ -2473,15 +2477,22 @@ export function SessionRoute() {
       pid: matterhornServerHostInfoState?.pid ?? null,
       port: matterhornServerHostInfoState?.port ?? null,
     });
-    const envSystemContextPromise = resolveOptionalMatterhornContext(
-      buildOpenworkEnvSystemContext(client, {
-        cacheKey: sessionId,
-        runtimeKey: envRuntimeKey,
-      }),
-      400,
-    );
+    const includeEnvironmentMetadata = (
+      isGeneralMatterhornAgent || contextPolicy?.includeEnvironmentVariableNames === true
+    ) && shouldInjectEnvironmentMetadata(text);
+    const envSystemContextPromise = includeEnvironmentMetadata
+      ? resolveOptionalMatterhornContext(
+          buildOpenworkEnvSystemContext(client, {
+            cacheKey: sessionId,
+            runtimeKey: envRuntimeKey,
+          }),
+          400,
+        )
+      : Promise.resolve(undefined);
 
-    const includeWalletPublicContext = isGeneralMatterhornAgent || contextPolicy?.includeWalletPublicContext === true;
+    const includeWalletPublicContext = contextPolicy?.includeWalletPublicContext === true || (
+      isGeneralMatterhornAgent && shouldInjectCryptoPrompt(text)
+    );
     const walletContext = wallet.snapshot.isConnected && includeWalletPublicContext
       ? buildMatterhornPublicWalletContext({
           address: wallet.snapshot.address,
@@ -2500,19 +2511,14 @@ export function SessionRoute() {
     const cryptoPrompt =
       includeCryptoSafetyPolicy && shouldInjectCryptoPrompt(text)
         ? isGeneralMatterhornAgent
-          ? buildCryptoSystemPrompt(
-              wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.address : null,
-              wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.chainId : null,
-              wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.ethBalance : null,
-              wallet.snapshot.isConnected && includeWalletPublicContext ? wallet.snapshot.usdcBalance : null,
-            )
+          ? buildGeneralCryptoSafetySystemPrompt()
           : buildProtocolDeskCryptoSafetySystemPrompt()
         : "";
 
     const responsePerspectivePrompt = buildResponsePerspectiveSystemPrompt(responsePerspective);
     const executionModePrompt = buildMatterhornExecutionModeSystemPrompt(requestedExecutionMode);
     const directResponsePrompt = buildDirectResponseSystemPrompt();
-    const deskAgentInstructions = deskAgent ? buildMatterhornDeskAgentSystemPrompt(deskAgent) : "";
+    const deskAgentInstructions = deskAgent ? buildMatterhornDeskRequestOverlay(deskAgent) : "";
     const workflowRunPromptPromise = client && selectedWorkspaceId && agentId
       ? resolveOptionalMatterhornContext(
           client.listWorkflowRuns({
@@ -2541,29 +2547,33 @@ export function SessionRoute() {
     ]);
 
     const compiled = compileMatterhornSessionSystemContext([
-      { id: "execution_mode", content: executionModePrompt },
+      // Hosted prompts pass through the control plane, which appends and
+      // enforces this exact block. Keep it client-side only for direct local
+      // runtimes so web requests do not pay for the same policy twice.
+      { id: "execution_mode", content: executionModePrompt, enabled: !publicBetaWeb },
       { id: "desk_contract", content: deskAgentInstructions },
       { id: "direct_response", content: directResponsePrompt },
       {
         id: "environment_metadata",
         content: envSystemContext,
-        enabled: isGeneralMatterhornAgent || contextPolicy?.includeEnvironmentVariableNames === true,
+        enabled: includeEnvironmentMetadata,
       },
       { id: "wallet_public_metadata", content: walletContext },
       { id: "crypto_safety", content: cryptoPrompt },
       { id: "workspace_orientation", content: matterhornOrientationPrompt },
       { id: "workflow_run", content: workflowRunPrompt },
       { id: "response_perspective", content: responsePerspectivePrompt },
-    ]);
+    ], deskAgent ? MATTERHORN_DESK_CONTEXT_MAX_CHARS : MATTERHORN_GENERAL_CONTEXT_MAX_CHARS);
     recordInspectorEvent("session.prompt.context_built", {
       durationMs: Math.round(performance.now() - contextBuildStartedAt),
       contextChars: compiled?.length ?? 0,
+      estimatedContextTokens: estimateMatterhornContextTokens(compiled),
       executionMode: requestedExecutionMode,
       agentId: agentId ?? "matterhorn",
       specializedDesk: Boolean(deskAgent),
     });
     return compiled;
-  }, [client, executionMode, matterhornServerHostInfoState?.pid, matterhornServerHostInfoState?.port, responsePerspective, selectedWorkspaceId, wallet.snapshot]);
+  }, [client, executionMode, matterhornServerHostInfoState?.pid, matterhornServerHostInfoState?.port, publicBetaWeb, responsePerspective, selectedWorkspaceId, wallet.snapshot]);
 
   const selectedAgentRef = useRef<string | null>(selectedAgent);
 
@@ -2669,7 +2679,12 @@ export function SessionRoute() {
           draftToParts(draft, selectedWorkspaceRoot),
           buildSessionSystemContext(text, selectedSessionId, selectedAgent, executionMode),
         ]);
-        const executionModeTools = buildMatterhornExecutionModeTools(executionMode, selectedAgent);
+        const executionModeTools = buildMatterhornPromptTools({
+          mode: executionMode,
+          agentId: selectedAgent,
+          text,
+          hasAttachments: draft.attachments.length > 0,
+        });
 
         const dispatchStartedAt = performance.now();
         promptTimingRef.current.set(selectedSessionId, {
