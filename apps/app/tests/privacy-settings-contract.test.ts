@@ -184,5 +184,18 @@ describe("Privacy settings", () => {
     expect(providerPrivacyTone(blocked)).toBe("error");
     expect(providerRetentionLabel(blocked)).toBe("Retention not verified");
     expect(providerVerificationLabel(blocked)).toBe("Not verified");
+
+    const reviewedProviderPolicy = {
+      ...verifiedPolicy,
+      status: "opt_in_training" as const,
+      trainingUse: "opt_in_only" as const,
+      retentionDays: null,
+      allowed: true,
+      label: "Training opt-in disabled",
+    };
+    expect(providerPrivacyTone(reviewedProviderPolicy)).toBe("warning");
+    expect(providerRetentionLabel(reviewedProviderPolicy)).toBe(
+      "Provider-policy retention",
+    );
   });
 });

@@ -57,6 +57,50 @@ describe("provider privacy policy", () => {
     });
   });
 
+  test("allows reviewed opt-in-only terms when training opt-in is explicitly disabled", () => {
+    const policy = resolveProviderPrivacyPolicy(
+      "cudos",
+      "ASI:Cloud",
+      {
+        MATTERHORN_PROVIDER_PRIVACY_MODE: "verified-only",
+        MATTERHORN_CUDOS_TRAINING_USE: "opt-in-only",
+        MATTERHORN_CUDOS_TRAINING_OPTED_IN: "false",
+        MATTERHORN_CUDOS_PROMPT_RETENTION_POLICY: "provider-policy",
+        MATTERHORN_CUDOS_PRIVACY_POLICY_URL: "https://asi1.ai/legal/privacy",
+        MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT: "2026-08-13T00:00:00.000Z",
+      },
+      new Date("2026-08-14T00:00:00.000Z"),
+    );
+
+    expect(policy).toMatchObject({
+      status: "opt_in_training",
+      trainingUse: "opt_in_only",
+      retentionDays: null,
+      allowed: true,
+      label: "Training opt-in disabled",
+    });
+    expect(policy.description).toContain("retention follows the linked provider policy");
+  });
+
+  test("keeps opt-in-only CUDOS blocked unless the account state and retention policy are explicit", () => {
+    const base = {
+      MATTERHORN_PROVIDER_PRIVACY_MODE: "verified-only",
+      MATTERHORN_CUDOS_TRAINING_USE: "opt-in-only",
+      MATTERHORN_CUDOS_PRIVACY_POLICY_URL: "https://asi1.ai/legal/privacy",
+      MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT: "2026-08-13T00:00:00.000Z",
+    };
+
+    expect(resolveProviderPrivacyPolicy("cudos", "ASI:Cloud", base).allowed).toBe(false);
+    expect(resolveProviderPrivacyPolicy("cudos", "ASI:Cloud", {
+      ...base,
+      MATTERHORN_CUDOS_TRAINING_OPTED_IN: "false",
+    }).allowed).toBe(false);
+    expect(resolveProviderPrivacyPolicy("cudos", "ASI:Cloud", {
+      ...base,
+      MATTERHORN_CUDOS_PROMPT_RETENTION_POLICY: "provider-policy",
+    }).allowed).toBe(false);
+  });
+
   test("rejects stale verification evidence", () => {
     const policy = resolveProviderPrivacyPolicy(
       "cudos",

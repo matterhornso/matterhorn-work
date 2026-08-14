@@ -66,6 +66,12 @@ function cudosTrainingUse(
   return "unknown";
 }
 
+function explicitlyDisabled(value: string | undefined): boolean {
+  return new Set(["0", "false", "no", "off"]).has(
+    normalized(value).toLowerCase(),
+  );
+}
+
 export function resolveProviderPrivacyPolicy(
   providerId: string,
   providerName = providerId,
@@ -105,17 +111,27 @@ export function resolveProviderPrivacyPolicy(
       env.MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT,
       now,
     );
-    const verified =
+    const fixedRetentionVerified =
       trainingUse === "none" &&
       retentionDays !== null &&
       policyUrl !== null &&
       verifiedAt !== null;
     const optInOnly = trainingUse === "opt_in_only";
+    const providerPolicyRetention =
+      normalized(env.MATTERHORN_CUDOS_PROMPT_RETENTION_POLICY).toLowerCase() ===
+      "provider-policy";
+    const optInPolicyVerified =
+      optInOnly &&
+      explicitlyDisabled(env.MATTERHORN_CUDOS_TRAINING_OPTED_IN) &&
+      providerPolicyRetention &&
+      policyUrl !== null &&
+      verifiedAt !== null;
+    const verified = fixedRetentionVerified || optInPolicyVerified;
 
     return {
       providerId,
       providerName: name,
-      status: verified
+      status: fixedRetentionVerified
         ? "verified_no_training"
         : optInOnly
           ? "opt_in_training"
@@ -126,12 +142,16 @@ export function resolveProviderPrivacyPolicy(
       verifiedAt,
       allowed: enforcementMode === "disclosure" || verified,
       label: verified
-        ? "No training verified"
+        ? optInPolicyVerified
+          ? "Training opt-in disabled"
+          : "No training verified"
         : optInOnly
           ? "Training requires provider opt-in"
           : "Provider policy not verified",
-      description: verified
-        ? `Provider terms prohibit training with customer prompts. Prompt retention is limited to ${retentionDays} day${retentionDays === 1 ? "" : "s"}.`
+      description: optInPolicyVerified
+        ? "Provider policy says customer prompts are not used for foundational-model training unless the provider account opts in; this deployment declares that opt-in disabled. Prompt retention follows the linked provider policy rather than a numeric API retention term."
+        : fixedRetentionVerified
+          ? `Provider terms prohibit training with customer prompts. Prompt retention is limited to ${retentionDays} day${retentionDays === 1 ? "" : "s"}.`
         : "Matterhorn has not verified this provider's training and prompt-retention terms for this deployment.",
     };
   }

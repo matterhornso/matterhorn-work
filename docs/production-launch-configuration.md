@@ -83,9 +83,14 @@ user failure.
    inviting users. Then configure the
    model limits from `.env.example`. After legal and security review of the
    exact ASI:Cloud inference service, set
-   `MATTERHORN_PROVIDER_PRIVACY_MODE=verified-only`, declare
-   `MATTERHORN_CUDOS_TRAINING_USE=none`, link the reviewed HTTPS policy or DPA,
-   record the review date, and set the contractual prompt-retention period.
+   `MATTERHORN_PROVIDER_PRIVACY_MODE=verified-only`, link the reviewed HTTPS
+   policy or DPA, and record the review date. Prefer contractual no-training
+   and numeric retention terms. When relying on the provider's opt-in-only
+   policy instead, declare `MATTERHORN_CUDOS_TRAINING_USE=opt-in-only`, verify
+   the provider account has not opted in with
+   `MATTERHORN_CUDOS_TRAINING_OPTED_IN=false`, and explicitly acknowledge
+   policy-based retention with
+   `MATTERHORN_CUDOS_PROMPT_RETENTION_POLICY=provider-policy`.
    The public gate and prompt proxy fail closed when this evidence is absent or
    stale. The initial recommended free-beta policy
    is 250k weighted tokens/day and 2m/month per account, with 5m/day and
@@ -95,10 +100,12 @@ user failure.
    The public ASI:One privacy policy currently states that foundational-model
    training is opt-in and off by default, but its general retention section
    does not define a numeric retention period for this API integration. Treat
-   that as useful no-training evidence, not as sufficient API-retention proof:
+   that as useful opt-in-only evidence and disclose policy-based retention:
    <https://asi1.ai/legal/privacy>. Obtain written API-specific retention terms
    or a DPA before setting `MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS`. Do not infer
-   `0` or `30` from unrelated product or analytics language.
+   `0` or `30` from unrelated product or analytics language. The prompt gate
+   remains closed unless either contractual terms or the explicit reviewed
+   provider-policy declarations above are present.
 7. Configure Stripe test credentials, webhook secret, Plus/Max test prices, and a test customer. Free-beta allowance is not a paid subscription and never creates an automatic charge.
 8. Configure OpenAI image generation, public HTTPS Walrus endpoints, and reviewed Sui testnet package IDs.
 9. Leave Cloud disabled for desktop/local builds, or complete the separate Cloud acceptance flow before setting `VITE_MATTERHORN_CLOUD_ENABLED=1` for public web.

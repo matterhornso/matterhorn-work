@@ -4,6 +4,7 @@ import { Send, User, Wallet, ArrowUpRight, CheckCircle, Star, Folder, BookmarkPl
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { parseUnits } from "viem";
 import type { WalletStore } from "../state/wallet-store";
 import { useWalletStore } from "../state/wallet-store";
 import { tokensForChain } from "../../../infra/token-registry";
@@ -65,11 +66,22 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
       : "";
 
   const handleSend = async () => {
-    if (!selectedMeta || !state.address || !state.chainId || !effectiveAddress) return;
+    if (!selectedMeta || !state.address || !state.chainId) {
+      setError("Connect a Base wallet before preparing a transfer.");
+      return;
+    }
+    if (![8453, 84532].includes(state.chainId)) {
+      setError("Switch your wallet to Base or Base Sepolia before continuing.");
+      return;
+    }
+    if (!effectiveAddress) {
+      setError("Enter a valid 0x address or a resolvable ENS name.");
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
-      const raw = String(Math.round(Number(amount) * 10 ** selectedMeta.decimals));
+      const raw = parseUnits(amount, selectedMeta.decimals).toString();
       const res = await fetch("/api/transfer/build", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -80,10 +92,37 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
           amount: raw,
         }),
       });
-      const json = await res.json();
-      if (json.success) {
+      const json: unknown = await res.json();
+      if (
+        res.ok &&
+        typeof json === "object" &&
+        json !== null &&
+        "success" in json &&
+        json.success === true &&
+        "to" in json &&
+        typeof json.to === "string" &&
+        "value" in json &&
+        typeof json.value === "string" &&
+        "data" in json &&
+        typeof json.data === "string"
+      ) {
         store.requestApproval(json.to, json.value, json.data, state.chainId, "transfer", "low");
+        return;
       }
+      const message =
+        typeof json === "object" &&
+        json !== null &&
+        "error" in json &&
+        typeof json.error === "string"
+          ? json.error
+          : "Matterhorn could not prepare this transfer.";
+      setError(message);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Matterhorn could not prepare this transfer.",
+      );
     } finally {
       setLoading(false);
     }

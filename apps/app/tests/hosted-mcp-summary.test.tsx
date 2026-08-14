@@ -38,6 +38,9 @@ describe("hosted MCP summary", () => {
     expect(html).toContain("Workspace evidence");
     expect(html).toContain("Reviewed wallet actions");
     expect(html).toContain("Matterhorn Desktop");
+    expect(html).toContain("Use Matterhorn in Codex or Claude");
+    expect(html).toContain("Open MCP install guide");
+    expect(html).toContain("Public npm packages are not available yet");
     expect(html).toContain("<h2");
     expect(html).toContain("<h3");
     expect(html).toContain("<h4");

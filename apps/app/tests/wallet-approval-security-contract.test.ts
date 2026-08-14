@@ -374,4 +374,20 @@ describe("Wallet approval security contract", () => {
     expect(ensSource).toContain('http("https://ethereum-rpc.publicnode.com")');
     expect(ensSource).not.toContain("transport: http(),");
   });
+
+  test("the hosted wallet rail exposes the reviewed Base transfer flow", () => {
+    const settingsSource = readAppSource(
+      "domains/settings/pages/wallet-view.tsx",
+    );
+    const transferSource = readAppSource(
+      "domains/wallet/pages/TransferPanel.tsx",
+    );
+
+    expect(settingsSource).toContain("Send on Base");
+    expect(settingsSource).toContain("<TransferPanel store={store}");
+    expect(settingsSource).toContain("simulates it and checks your limits");
+    expect(transferSource).toContain("parseUnits(amount, selectedMeta.decimals)");
+    expect(transferSource).toContain("store.requestApproval(");
+    expect(transferSource).toContain("Switch your wallet to Base or Base Sepolia");
+  });
 });
