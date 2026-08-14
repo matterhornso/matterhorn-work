@@ -11,6 +11,10 @@ import {
   readMatterhornExecutionMode,
   writeMatterhornExecutionMode,
 } from "../src/react-app/domains/session/modes/execution-mode";
+import {
+  buildMatterhornPromptTools,
+  promptNeedsMatterhornTools,
+} from "../src/react-app/domains/session/modes/prompt-tool-policy";
 
 function readReactSource(path: string) {
   return readFileSync(new URL(`../src/react-app/${path}`, import.meta.url), "utf8");
@@ -71,6 +75,39 @@ describe("Matterhorn execution modes", () => {
     expect(buildMatterhornExecutionModeTools("work", "matterhorn-sui")).toBeUndefined();
   });
 
+  test("omits the tool catalog for answer-only Work turns", () => {
+    expect(promptNeedsMatterhornTools("Reply with exactly: CUDOS_READY")).toBe(false);
+    expect(promptNeedsMatterhornTools("Explain proof of stake in plain English.")).toBe(false);
+    expect(buildMatterhornPromptTools({
+      mode: "work",
+      agentId: null,
+      text: "Reply with exactly: CUDOS_READY",
+    })).toEqual({ "*": false });
+  });
+
+  test("preserves tools for data access, mutations, attachments, and managed desks", () => {
+    for (const text of [
+      "Read the current workspace files and write a report.",
+      "Show my live Sui wallet balance.",
+      "Research the latest Bittensor validator data.",
+      "Save this response to an output.",
+    ]) {
+      expect(promptNeedsMatterhornTools(text)).toBe(true);
+      expect(buildMatterhornPromptTools({ mode: "work", agentId: null, text })).toBeUndefined();
+    }
+    expect(buildMatterhornPromptTools({
+      mode: "work",
+      agentId: null,
+      text: "Summarize this",
+      hasAttachments: true,
+    })).toBeUndefined();
+    expect(buildMatterhornPromptTools({
+      mode: "work",
+      agentId: "matterhorn-sui",
+      text: "Explain this transaction",
+    })).toBeUndefined();
+  });
+
   test("persists mode per workspace session and defaults safely to Work", () => {
     const values = new Map<string, string>();
     (globalThis as { window: unknown }).window = {
@@ -91,7 +128,7 @@ describe("Matterhorn execution modes", () => {
     const surface = readReactSource("domains/session/surface/session-surface.tsx");
     const composer = readReactSource("domains/session/surface/composer/composer.tsx");
 
-    expect(route).toContain("buildMatterhornExecutionModeTools(executionMode, selectedAgent)");
+    expect(route).toContain("buildMatterhornPromptTools({");
     expect(route).toContain("writeMatterhornExecutionMode(selectedWorkspaceId, selectedSessionId, mode)");
     expect(route).toContain("recordSessionExecutionMode(selectedWorkspaceId, selectedSessionId, mode, previousMode)");
     expect(route).toContain("executionMode !== \"work\"");

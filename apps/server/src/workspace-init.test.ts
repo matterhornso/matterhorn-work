@@ -41,6 +41,7 @@ describe("ensureWorkspaceFiles", () => {
       expect(agent).toContain("outputs/");
       expect(agent).toContain("<!-- MATTERHORN_ARTIFACTS_START -->");
       expect(agent).toContain("<!-- MATTERHORN_BROWSER_START -->");
+      expect(agent.length).toBeLessThan(2_500);
       expect(agent.toLowerCase()).not.toContain("openwork");
       expect(bittensorAgent.toLowerCase()).not.toContain("openwork");
       expect(bittensorAgent).toContain("Bittensor Agent");

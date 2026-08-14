@@ -41,13 +41,13 @@ describe("Matterhorn response perspectives", () => {
     expect(route).toContain("writeResponsePerspective(selectedWorkspaceId, selectedSessionId, perspective)");
   });
 
-  test("injects the selected desk agent safety contract into every prompt", () => {
+  test("injects a compact selected-desk overlay while the runtime owns the full contract", () => {
     const route = readReactSource("shell/session-route.tsx");
     const compiler = readReactSource("domains/session/context/session-system-context.ts");
     const longevity = getMatterhornDeskAgentById("matterhorn-longevity");
 
     expect(route).toContain("const deskAgent = getMatterhornDeskAgentById(agentId);");
-    expect(route).toContain("buildMatterhornDeskAgentSystemPrompt(deskAgent)");
+    expect(route).toContain("buildMatterhornDeskRequestOverlay(deskAgent)");
     expect(route).toContain('{ id: "desk_contract", content: deskAgentInstructions }');
     expect(route).toContain("compileMatterhornSessionSystemContext([");
     expect(compiler).toContain('"desk_contract",');

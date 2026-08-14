@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   MATTERHORN_DESK_AGENT_MANIFESTS,
   buildMatterhornDeskAgentSystemPrompt,
+  buildMatterhornDeskRequestOverlay,
   buildMatterhornDeskReadOnlyTools,
   buildMatterhornDeskRuntimeTools,
   evaluateMatterhornDeskResponseEvidence,
@@ -12,11 +13,16 @@ import {
 import {
   buildMatterhornPublicWalletContext,
   compileMatterhornSessionSystemContext,
+  estimateMatterhornContextTokens,
+  MATTERHORN_DESK_CONTEXT_MAX_CHARS,
+  MATTERHORN_GENERAL_CONTEXT_MAX_CHARS,
   resolveOptionalMatterhornContext,
   sanitizeMatterhornSystemContextValue,
+  shouldInjectEnvironmentMetadata,
 } from "../src/react-app/domains/session/context/session-system-context";
 import {
   buildCryptoSystemPrompt,
+  buildGeneralCryptoSafetySystemPrompt,
   buildProtocolDeskCryptoSafetySystemPrompt,
 } from "../src/react-app/domains/wallet/prompts/crypto-system-prompt";
 
@@ -192,6 +198,27 @@ describe("Matterhorn desk agent architecture", () => {
     expect(bounded?.length).toBeLessThanOrEqual(60);
   });
 
+  test("keeps request overlays and session context within token budgets", () => {
+    const agent = MATTERHORN_DESK_AGENT_MANIFESTS.bittensor;
+    const full = buildMatterhornDeskAgentSystemPrompt(agent);
+    const overlay = buildMatterhornDeskRequestOverlay(agent);
+
+    expect(overlay).toContain("Bittensor Agent");
+    expect(overlay).toContain(agent.version);
+    expect(overlay.length).toBeLessThan(full.length * 0.2);
+    expect(MATTERHORN_GENERAL_CONTEXT_MAX_CHARS).toBeLessThanOrEqual(4_000);
+    expect(MATTERHORN_DESK_CONTEXT_MAX_CHARS).toBeLessThanOrEqual(6_000);
+    expect(estimateMatterhornContextTokens("x".repeat(MATTERHORN_GENERAL_CONTEXT_MAX_CHARS)))
+      .toBeLessThanOrEqual(1_000);
+  });
+
+  test("loads environment metadata only for relevant prompts", () => {
+    expect(shouldInjectEnvironmentMetadata("Reply with exactly: CUDOS_READY")).toBe(false);
+    expect(shouldInjectEnvironmentMetadata("What is proof of stake?")).toBe(false);
+    expect(shouldInjectEnvironmentMetadata("Configure my CUDOS provider API key")).toBe(true);
+    expect(shouldInjectEnvironmentMetadata("Debug the deployment environment variables")).toBe(true);
+  });
+
   test("keeps wallet context public and user-approved", () => {
     const context = buildMatterhornPublicWalletContext({
       address: "0x1234",
@@ -223,12 +250,15 @@ describe("Matterhorn desk agent architecture", () => {
   test("uses a compact protocol safety overlay without weakening transaction boundaries", () => {
     const full = buildCryptoSystemPrompt(null, null, null, null);
     const compact = buildProtocolDeskCryptoSafetySystemPrompt();
+    const general = buildGeneralCryptoSafetySystemPrompt();
 
     expect(compact.length).toBeLessThan(full.length * 0.4);
+    expect(general.length).toBeLessThan(full.length * 0.4);
     expect(compact).toContain("untrusted data");
     expect(compact).toContain("Never request or expose seed phrases");
     expect(compact).toContain("never sign, submit, broadcast, or auto-execute");
     expect(compact).toContain("explicit connected-wallet review and approval");
+    expect(general).toContain("explicit connected-wallet approval");
   });
 
   test("bounds optional context latency and tolerates lookup failures", async () => {

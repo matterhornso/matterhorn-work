@@ -27,8 +27,26 @@ const CONTEXT_ORDER: MatterhornSessionContextBlockId[] = [
   "response_perspective",
 ];
 
-const DEFAULT_MAX_CONTEXT_CHARS = 64_000;
+export const MATTERHORN_GENERAL_CONTEXT_MAX_CHARS = 4_000;
+export const MATTERHORN_DESK_CONTEXT_MAX_CHARS = 6_000;
+const DEFAULT_MAX_CONTEXT_CHARS = MATTERHORN_DESK_CONTEXT_MAX_CHARS;
 const DEFAULT_CONTEXT_VALUE_MAX_CHARS = 256;
+
+const ENVIRONMENT_CONTEXT_PATTERNS: readonly RegExp[] = [
+  /\b(?:env|environment variables?|configuration|configure|setup|deploy|runtime)\b/i,
+  /\b(?:api key|credential|provider|integration|connection|mcp)\b/i,
+];
+
+export function shouldInjectEnvironmentMetadata(text: string): boolean {
+  return ENVIRONMENT_CONTEXT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+export function estimateMatterhornContextTokens(value: string | null | undefined): number {
+  if (!value) return 0;
+  // A deterministic conservative estimator for regression budgets. Provider
+  // tokenizers differ, so production usage remains the authoritative metric.
+  return Math.ceil(value.length / 4);
+}
 
 export function sanitizeMatterhornSystemContextValue(
   value: unknown,
