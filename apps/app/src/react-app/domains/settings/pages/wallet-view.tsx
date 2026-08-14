@@ -41,6 +41,7 @@ import {
   Globe,
   Waves,
   Info,
+  Send,
 } from "lucide-react";
 import type { MatterhornProjectDataLedgerEntry } from "@matterhorn-work/types/project-data-ledger";
 import type { MatterhornWalletSafetyPolicy } from "@matterhorn-work/types/wallet-safety-policy";
@@ -74,6 +75,7 @@ import {
 import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import { SuiWorkflowPanel } from "../../wallet/sui-workflow-panel";
 import { usePhantomSui } from "../../wallet/phantom-sui-provider";
+import TransferPanel from "../../wallet/pages/TransferPanel";
 import {
   backendCapabilityLabel,
   walletRuntimeSupportSummary,
@@ -2002,6 +2004,7 @@ export function WalletSettingsView({
   const connectionAttemptRef = useRef(0);
   const [refreshing, setRefreshing] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showBaseTransfer, setShowBaseTransfer] = useState(false);
 
   // Sync wagmi state → wallet store
   const syncStore = useCallback(() => {
@@ -2378,6 +2381,40 @@ export function WalletSettingsView({
             sessionId={sessionId}
           />
         </section>
+        {state.isConnected ? (
+          <section className="matterhorn-rail-section">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-dls-text">
+                  Send on Base
+                </h3>
+                <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                  Prepare a same-chain ETH or token transfer. Matterhorn simulates it and checks your limits before your wallet asks you to sign.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant={showBaseTransfer ? "secondary" : "default"}
+                className="shrink-0"
+                onClick={() => {
+                  if (!showBaseTransfer && ![8453, 84532].includes(chainId)) {
+                    void handleSwitchChain(84532);
+                  }
+                  setShowBaseTransfer((visible) => !visible);
+                }}
+              >
+                <Send className="size-3.5" />
+                {showBaseTransfer ? "Close" : "Send"}
+              </Button>
+            </div>
+            {showBaseTransfer ? (
+              <div className="mt-3 overflow-hidden rounded-lg bg-dls-surface-muted/[0.06] ring-1 ring-dls-border/40">
+                <TransferPanel store={store} />
+              </div>
+            ) : null}
+          </section>
+        ) : null}
         <WalletSafetyPolicyControls
           compact
           store={store}

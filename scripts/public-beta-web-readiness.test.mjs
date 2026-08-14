@@ -55,6 +55,8 @@ const managedKeys = [
   "MATTERHORN_CUDOS_PRIVACY_POLICY_URL",
   "MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT",
   "MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS",
+  "MATTERHORN_CUDOS_TRAINING_OPTED_IN",
+  "MATTERHORN_CUDOS_PROMPT_RETENTION_POLICY",
   "MATTERHORN_MODEL_USAGE_ENFORCEMENT",
   "MATTERHORN_MODEL_USAGE_DAILY_LIMIT",
   "MATTERHORN_MODEL_USAGE_MONTHLY_LIMIT",
@@ -205,6 +207,23 @@ assert.ok(JSON.parse(missingNoTrainingTerms.stdout).blockers.some((blocker) => b
 const missingRetentionTerms = run({ MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS: "" });
 assert.notEqual(missingRetentionTerms.status, 0);
 assert.ok(JSON.parse(missingRetentionTerms.stdout).blockers.some((blocker) => blocker.id === "signup.provider_retention"));
+
+const reviewedProviderPolicy = run({
+  MATTERHORN_CUDOS_TRAINING_USE: "opt-in-only",
+  MATTERHORN_CUDOS_TRAINING_OPTED_IN: "false",
+  MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS: "",
+  MATTERHORN_CUDOS_PROMPT_RETENTION_POLICY: "provider-policy",
+});
+assert.equal(reviewedProviderPolicy.status, 0, reviewedProviderPolicy.stderr || reviewedProviderPolicy.stdout);
+
+const providerPolicyWithoutAccountDeclaration = run({
+  MATTERHORN_CUDOS_TRAINING_USE: "opt-in-only",
+  MATTERHORN_CUDOS_TRAINING_OPTED_IN: "",
+  MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS: "",
+  MATTERHORN_CUDOS_PROMPT_RETENTION_POLICY: "provider-policy",
+});
+assert.notEqual(providerPolicyWithoutAccountDeclaration.status, 0);
+assert.ok(JSON.parse(providerPolicyWithoutAccountDeclaration.stdout).blockers.some((blocker) => blocker.id === "signup.provider_no_training"));
 
 const unlimitedSignups = run({ MATTERHORN_SIGNUP_MAX_ACCOUNTS: "" });
 assert.notEqual(unlimitedSignups.status, 0);

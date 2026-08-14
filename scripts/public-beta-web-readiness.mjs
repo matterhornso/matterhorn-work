@@ -144,6 +144,17 @@ function evaluate() {
   );
   const cudosPrivacyPolicyUrl = readEnv("MATTERHORN_CUDOS_PRIVACY_POLICY_URL");
   const cudosPromptRetentionDays = nonNegativeInteger("MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS");
+  const cudosTrainingUse = readEnv("MATTERHORN_CUDOS_TRAINING_USE").toLowerCase();
+  const cudosTrainingOptedIn = readEnv("MATTERHORN_CUDOS_TRAINING_OPTED_IN").toLowerCase();
+  const cudosProviderPolicyRetention =
+    readEnv("MATTERHORN_CUDOS_PROMPT_RETENTION_POLICY").toLowerCase() ===
+    "provider-policy";
+  const cudosFixedTerms =
+    cudosTrainingUse === "none" && cudosPromptRetentionDays !== null;
+  const cudosReviewedProviderPolicy =
+    cudosTrainingUse === "opt-in-only" &&
+    new Set(["0", "false", "no", "off"]).has(cudosTrainingOptedIn) &&
+    cudosProviderPolicyRetention;
   const emailFrom = readEnv("MATTERHORN_EMAIL_FROM");
   const resendConfigured = readEnv("MATTERHORN_RESEND_API_KEY").length >= 16;
   const smtpConfigured = Boolean(
@@ -271,26 +282,26 @@ function evaluate() {
     ),
     check(
       "signup.provider_privacy_enforcement",
-      "Hosted model requests accept only providers with a verified no-training policy",
+      "Hosted model requests accept only providers with a reviewed training and retention policy",
       "Security and legal",
       readEnv("MATTERHORN_PROVIDER_PRIVACY_MODE").toLowerCase() === "verified-only",
       "MATTERHORN_PROVIDER_PRIVACY_MODE must be verified-only before opening signups.",
     ),
     check(
       "signup.provider_no_training",
-      "ASI:Cloud no-training terms are verified and linked",
+      "ASI:Cloud training terms are verified and linked",
       "Security and legal",
-      readEnv("MATTERHORN_CUDOS_TRAINING_USE").toLowerCase() === "none" &&
+      (cudosFixedTerms || cudosReviewedProviderPolicy) &&
         isHttpsUrl(cudosPrivacyPolicyUrl) &&
         recentDate("MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT"),
-      "Set MATTERHORN_CUDOS_TRAINING_USE=none, an HTTPS MATTERHORN_CUDOS_PRIVACY_POLICY_URL, and a current MATTERHORN_CUDOS_PRIVACY_VERIFIED_AT after written provider review.",
+      "Declare either reviewed no-training terms or opt-in-only terms with MATTERHORN_CUDOS_TRAINING_OPTED_IN=false, then link the HTTPS provider policy and current review date.",
     ),
     check(
       "signup.provider_retention",
       "ASI:Cloud prompt retention is explicitly declared",
       "Security and legal",
-      cudosPromptRetentionDays !== null,
-      "MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS must be a non-negative integer backed by the reviewed provider terms.",
+      cudosFixedTerms || cudosReviewedProviderPolicy,
+      "Declare either a contractual MATTERHORN_CUDOS_PROMPT_RETENTION_DAYS value or MATTERHORN_CUDOS_PROMPT_RETENTION_POLICY=provider-policy after reviewing the linked provider policy.",
     ),
     check(
       "signup.account_creation",

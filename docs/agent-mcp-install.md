@@ -4,6 +4,12 @@ This guide shows how to connect Matterhorn Desks to Codex, Claude Code, Claude D
 
 The default setup uses local stdio MCP servers launched by the client. The server-control MCP (`matterhorn-work-mcp`) talks to a running Matterhorn Desks server over `MATTERHORN_WORK_SERVER_URL`.
 
+> **Current distribution:** the MCP packages are not published to npm yet. Clone
+> this repository and run `pnpm install` once, then use the absolute `index.mjs`
+> paths shown below. The package names are reserved for a later npm release;
+> do not use the older `npx -y matterhorn-work-*-mcp` examples until that release
+> is published.
+
 After setup, use [Matterhorn Desks Agent Operator Workflow](./agent-operator-workflow.md) for the copy-paste Codex/Claude loop: doctor, session, prompt, event watch, file reads/writes, approvals, and Bittensor chat.
 
 ## What “Connected” Means
@@ -33,6 +39,17 @@ You need:
 - `MATTERHORN_WORK_SERVER_URL`, usually `http://127.0.0.1:8787`
 - `MATTERHORN_WORK_TOKEN`, the client token used for normal server tools
 - `MATTERHORN_WORK_HOST_TOKEN`, the host token used only for approval tools
+
+You also need a local checkout:
+
+```bash
+git clone https://github.com/matterhornso/matterhorn-work.git
+cd matterhorn-work
+pnpm install
+```
+
+In the commands below, replace `<matterhorn-repo>` with that checkout's
+absolute path.
 
 Use the host token only in a trusted local MCP client. Leave it out if the client should not be able to list or answer host approval requests.
 
@@ -79,20 +96,20 @@ codex mcp add matterhorn-work \
   --env MATTERHORN_WORK_SERVER_URL=http://127.0.0.1:8787 \
   --env MATTERHORN_WORK_TOKEN=<client-token> \
   --env MATTERHORN_WORK_HOST_TOKEN=<host-token> \
-  -- npx -y matterhorn-work-mcp
+  -- node <matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs
 ```
 
 Add the full profile one server at a time:
 
 ```bash
-codex mcp add matterhorn-work-ui -- npx -y matterhorn-work-ui-mcp
+codex mcp add matterhorn-work-ui -- node <matterhorn-repo>/packages/matterhorn-work-ui-mcp/index.mjs
 
 codex mcp add matterhorn-work-crypto \
   --env MATTERHORN_WORK_SERVER_URL=http://127.0.0.1:8787 \
   --env MATTERHORN_SERVER_URL=http://127.0.0.1:8787 \
-  -- npx -y matterhorn-work-crypto-mcp
+  -- node <matterhorn-repo>/packages/matterhorn-work-crypto-mcp/index.mjs
 
-codex mcp add matterhorn-work-wallet -- npx -y matterhorn-work-wallet-mcp
+codex mcp add matterhorn-work-wallet -- node <matterhorn-repo>/packages/matterhorn-work-wallet-mcp/index.mjs
 ```
 
 Verify inside Codex with `/mcp`, then ask Codex to call `matterhorn_status`.
@@ -101,8 +118,8 @@ Equivalent `config.toml` entry for the server-control MCP:
 
 ```toml
 [mcp_servers.matterhorn-work]
-command = "npx"
-args = ["-y", "matterhorn-work-mcp"]
+command = "node"
+args = ["<matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs"]
 
 [mcp_servers.matterhorn-work.env]
 MATTERHORN_WORK_SERVER_URL = "http://127.0.0.1:8787"
@@ -122,7 +139,7 @@ claude mcp add --transport stdio \
   --env MATTERHORN_WORK_TOKEN=<client-token> \
   --env MATTERHORN_WORK_HOST_TOKEN=<host-token> \
   matterhorn-work \
-  -- npx -y matterhorn-work-mcp
+  -- node <matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs
 ```
 
 For a project-shared setup, generate the JSON and place it in a project `.mcp.json`:
@@ -183,8 +200,8 @@ Use this minimal stdio config when a client accepts the common `mcpServers` shap
 {
   "mcpServers": {
     "matterhorn-work": {
-      "command": "npx",
-      "args": ["-y", "matterhorn-work-mcp"],
+      "command": "node",
+      "args": ["<matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs"],
       "env": {
         "MATTERHORN_WORK_SERVER_URL": "http://127.0.0.1:8787",
         "MATTERHORN_WORK_TOKEN": "<client-token>",
@@ -214,7 +231,7 @@ For upstream OpenWork checks without MCP, use `matterhorn-work upstream openwork
 
 ## Troubleshooting
 
-- If the server does not start, run `npx -y matterhorn-work-mcp` manually with the same environment variables.
+- If the server does not start, run `node <matterhorn-repo>/packages/matterhorn-work-mcp/index.mjs` manually with the same environment variables.
 - If tools return `MATTERHORN_WORK_TOKEN is required`, check that the MCP client passes environment variables to stdio servers.
 - If approval tools fail, check `MATTERHORN_WORK_HOST_TOKEN`; normal read/chat tools only need `MATTERHORN_WORK_TOKEN`.
 - If Claude Desktop does not show the server, restart the app and check MCP logs.

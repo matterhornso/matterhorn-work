@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   CircleAlert,
   FileCheck2,
+  ExternalLink,
   SearchCheck,
   WalletCards,
 } from "lucide-react";
@@ -233,6 +234,34 @@ export function HostedMcpSummary(props: HostedMcpSummaryProps) {
         <p className="mt-4 text-xs leading-5 text-dls-secondary">
           Need a custom MCP server or local connector? Use Matterhorn Desktop,
           where credentials and configuration stay under your control.
+        </p>
+      </section>
+
+      <section aria-labelledby="external-agent-tools-heading">
+        <SectionHeading
+          id="external-agent-tools-heading"
+          className="text-base font-semibold text-dls-text"
+        >
+          Use Matterhorn in Codex or Claude
+        </SectionHeading>
+        <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
+          Matterhorn also ships local MCP servers for Codex, Claude Code,
+          Claude Desktop, and Cursor. They connect a trusted local agent client
+          to your running Matterhorn workspace; they are separate from the
+          managed tools above.
+        </p>
+        <a
+          href="https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-mcp-install.md"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-dls-surface-muted/30 px-3 text-xs font-semibold text-dls-text transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.35)]"
+        >
+          Open MCP install guide
+          <ExternalLink className="size-3.5" aria-hidden="true" />
+        </a>
+        <p className="mt-2 text-[11px] leading-4 text-dls-muted">
+          Current release: install from the Matterhorn repository. Public npm
+          packages are not available yet.
         </p>
       </section>
     </section>

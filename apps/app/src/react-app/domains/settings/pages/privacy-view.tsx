@@ -76,6 +76,13 @@ export function providerPrivacyTone(policy: MatterhornProviderPrivacyPolicy) {
 
 export function providerRetentionLabel(policy: MatterhornProviderPrivacyPolicy) {
   if (policy.retentionDays === 0) return "No provider retention";
+  if (
+    policy.retentionDays == null &&
+    policy.status === "opt_in_training" &&
+    policy.allowed
+  ) {
+    return "Provider-policy retention";
+  }
   if (policy.retentionDays == null) return "Retention not verified";
   return `${policy.retentionDays}-day provider retention`;
 }

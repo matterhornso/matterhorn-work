@@ -580,7 +580,7 @@ function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): stri
 type SessionError = {
   message: string;
   detail?: string;
-  kind?: "model-not-found" | "provider-unavailable" | "cancelled" | "generic";
+  kind?: "model-not-found" | "provider-unavailable" | "privacy-blocked" | "cancelled" | "generic";
   retryable?: boolean;
   /** For model-not-found: the model that failed. */
   failedModel?: { providerID: string; modelID: string };
@@ -950,6 +950,15 @@ export function parseSessionError(thrown: unknown): SessionError {
     // Not JSON — fall through to plain message
   }
   const diagnostic = `${raw}\n${parsed ? JSON.stringify(parsed) : ""}`;
+  if (/provider_privacy_unverified/i.test(diagnostic)) {
+    return {
+      message: "ASI:Cloud is not ready to receive prompts.",
+      detail:
+        "Matterhorn has the API key, but this deployment has not finished verifying the provider's training and retention policy. No prompt was sent.",
+      kind: "privacy-blocked",
+      retryable: false,
+    };
+  }
   if (/no provider available|provider.{0,72}(?:not available|unavailable|not configured|not authenticated)/i.test(diagnostic)) {
     return {
       message: "This model is not ready in this workspace.",
@@ -1011,7 +1020,7 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
           message: "Generation stopped. Your prompt is still available to edit or send again.",
           kind: "cancelled",
         } satisfies SessionError
-      : normalizedError.kind === "provider-unavailable" || normalizedError.kind === "model-not-found"
+      : normalizedError.kind === "provider-unavailable" || normalizedError.kind === "model-not-found" || normalizedError.kind === "privacy-blocked"
         ? normalizedError
         : {
             message: detail || "Matterhorn could not complete this response. Your prompt is ready to retry.",
@@ -1021,7 +1030,7 @@ export function latestSessionSnapshotFailure(snapshot: MatterhornSessionSnapshot
   };
 }
 
-function SessionErrorCard({ error, onDismiss, onRetry, retrying, onChangeModel, onOpenModelPicker, onOpenAiProviders }: {
+function SessionErrorCard({ error, onDismiss, onRetry, retrying, onChangeModel, onOpenModelPicker, onOpenAiProviders, onOpenPrivacyDetails }: {
   error: SessionError;
   onDismiss: () => void;
   onRetry?: () => void | Promise<void>;
@@ -1029,6 +1038,7 @@ function SessionErrorCard({ error, onDismiss, onRetry, retrying, onChangeModel, 
   onChangeModel?: (model: { providerID: string; modelID: string }) => void;
   onOpenModelPicker?: () => void;
   onOpenAiProviders?: () => void;
+  onOpenPrivacyDetails?: () => void;
 }) {
   const cancelled = error.kind === "cancelled";
   return (
@@ -1074,6 +1084,20 @@ function SessionErrorCard({ error, onDismiss, onRetry, retrying, onChangeModel, 
                   }}
                 >
                   Choose another model
+                </button>
+              </div>
+            ) : null}
+            {error.kind === "privacy-blocked" && onOpenPrivacyDetails ? (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  className="inline-flex min-h-10 items-center rounded-md bg-dls-accent px-3 text-xs font-semibold text-[var(--dls-accent-fg)] transition-colors hover:bg-[var(--dls-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--dls-accent-rgb)/0.32)]"
+                  onClick={() => {
+                    onOpenPrivacyDetails();
+                    onDismiss();
+                  }}
+                >
+                  Review privacy
                 </button>
               </div>
             ) : null}
@@ -2887,6 +2911,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     onChangeModel={props.onChangeModel}
                     onOpenModelPicker={props.onModelClick}
                     onOpenAiProviders={props.onOpenAiProviders}
+                    onOpenPrivacyDetails={props.onOpenPrivacyDetails}
                   />
                 ) : sessionMissing ? (
                   <div className="mx-auto flex max-w-sm items-center justify-center gap-2 rounded-lg bg-dls-canvas/45 px-6 py-5 text-sm text-dls-secondary">
@@ -2918,6 +2943,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   onChangeModel={props.onChangeModel}
                   onOpenModelPicker={props.onModelClick}
                   onOpenAiProviders={props.onOpenAiProviders}
+                  onOpenPrivacyDetails={props.onOpenPrivacyDetails}
                 />
               ) : activeDeskMode ? (
                 <div className="space-y-2">
@@ -3019,6 +3045,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                       onChangeModel={props.onChangeModel}
                       onOpenModelPicker={props.onModelClick}
                       onOpenAiProviders={props.onOpenAiProviders}
+                      onOpenPrivacyDetails={props.onOpenPrivacyDetails}
                     />
                   ) : null}
                 </Suspense>

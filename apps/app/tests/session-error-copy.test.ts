@@ -38,4 +38,22 @@ describe("session error copy", () => {
     expect(parsed.kind).toBe("model-not-found");
     expect(parsed.message).toBe("Model matterhorn/research-large is not available.");
   });
+
+  test("replaces provider privacy diagnostics with a clear, non-retryable explanation", () => {
+    const parsed = parseSessionError(new Error(JSON.stringify({
+      code: "provider_privacy_unverified",
+      message: "ASI:Cloud cannot receive prompts until its no-training and retention policy is verified.",
+      details: {
+        providerId: "cudos",
+        privacyStatus: "opt_in_training",
+        trainingUse: "opt_in_only",
+      },
+    })));
+
+    expect(parsed.kind).toBe("privacy-blocked");
+    expect(parsed.retryable).toBe(false);
+    expect(parsed.message).toBe("ASI:Cloud is not ready to receive prompts.");
+    expect(parsed.detail).toContain("No prompt was sent");
+    expect(`${parsed.message} ${parsed.detail}`).not.toContain("provider_privacy_unverified");
+  });
 });
