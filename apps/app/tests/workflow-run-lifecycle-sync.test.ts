@@ -6,6 +6,10 @@ const surfaceSource = readFileSync(
   new URL("../src/react-app/domains/session/surface/session-surface.tsx", import.meta.url),
   "utf8",
 );
+const routeSource = readFileSync(
+  new URL("../src/react-app/shell/session-route.tsx", import.meta.url),
+  "utf8",
+);
 
 describe("workflow run lifecycle sync", () => {
   test("exposes waiting and completion mutations on the backend client", () => {
@@ -23,5 +27,12 @@ describe("workflow run lifecycle sync", () => {
     expect(surfaceSource).toContain("props.client.completeWorkflowRun");
     expect(surfaceSource).toContain("hasVisibleAssistantMessage");
     expect(surfaceSource).toContain("linkedWorkflowRun?.agentId ?? matterhornDeskAgentIdForDesk(activeDeskMode)");
+  });
+
+  test("reuses the lifecycle query before falling back to a pre-prompt request", () => {
+    expect(routeSource).toContain('const queryKey = ["session-workflow-run", selectedWorkspaceId, sessionId] as const;');
+    expect(routeSource).toContain("getQueryData<MatterhornWorkflowRunListItem | null>(queryKey)");
+    expect(routeSource).toContain("if (cachedRun !== undefined)");
+    expect(routeSource).toContain("client.listWorkflowRuns");
   });
 });

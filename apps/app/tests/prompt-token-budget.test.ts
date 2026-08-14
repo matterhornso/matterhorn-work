@@ -23,36 +23,36 @@ function estimatedTokens(
 }
 
 describe("Matterhorn prompt token budgets", () => {
-  test("keeps a hosted answer-only turn under 250 Matterhorn-added context tokens", () => {
+  test("keeps a hosted answer-only turn under 125 Matterhorn-added context tokens", () => {
     const tokens = estimatedTokens([
       { id: "direct_response", content: buildDirectResponseSystemPrompt() },
       { id: "response_perspective", content: buildResponsePerspectiveSystemPrompt("balanced") },
     ], MATTERHORN_GENERAL_CONTEXT_MAX_CHARS);
 
-    expect(tokens).toBeLessThanOrEqual(250);
+    expect(tokens).toBeLessThanOrEqual(125);
   });
 
-  test("keeps a direct local answer-only turn under 450 Matterhorn-added context tokens", () => {
+  test("keeps a direct local answer-only turn under 325 Matterhorn-added context tokens", () => {
     const tokens = estimatedTokens([
       { id: "execution_mode", content: buildMatterhornExecutionModeSystemPrompt("work") },
       { id: "direct_response", content: buildDirectResponseSystemPrompt() },
       { id: "response_perspective", content: buildResponsePerspectiveSystemPrompt("balanced") },
     ], MATTERHORN_GENERAL_CONTEXT_MAX_CHARS);
 
-    expect(tokens).toBeLessThanOrEqual(450);
+    expect(tokens).toBeLessThanOrEqual(325);
   });
 
-  test("keeps general crypto safety under 500 Matterhorn-added context tokens", () => {
+  test("keeps general crypto safety under 350 Matterhorn-added context tokens", () => {
     const tokens = estimatedTokens([
       { id: "direct_response", content: buildDirectResponseSystemPrompt() },
       { id: "crypto_safety", content: buildGeneralCryptoSafetySystemPrompt() },
       { id: "response_perspective", content: buildResponsePerspectiveSystemPrompt("balanced") },
     ], MATTERHORN_GENERAL_CONTEXT_MAX_CHARS);
 
-    expect(tokens).toBeLessThanOrEqual(500);
+    expect(tokens).toBeLessThanOrEqual(350);
   });
 
-  test("keeps a specialized desk request overlay under 500 Matterhorn-added context tokens", () => {
+  test("keeps a specialized desk request overlay under 450 Matterhorn-added context tokens", () => {
     const tokens = estimatedTokens([
       { id: "desk_contract", content: buildMatterhornDeskRequestOverlay(MATTERHORN_DESK_AGENT_MANIFESTS.bittensor) },
       { id: "direct_response", content: buildDirectResponseSystemPrompt() },
@@ -60,6 +60,6 @@ describe("Matterhorn prompt token budgets", () => {
       { id: "response_perspective", content: buildResponsePerspectiveSystemPrompt("balanced") },
     ], MATTERHORN_DESK_CONTEXT_MAX_CHARS);
 
-    expect(tokens).toBeLessThanOrEqual(500);
+    expect(tokens).toBeLessThanOrEqual(450);
   });
 });

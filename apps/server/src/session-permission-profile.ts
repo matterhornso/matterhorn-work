@@ -31,13 +31,31 @@ export function normalizeMatterhornPermissionRules(value: unknown): MatterhornPe
 export function buildMatterhornSessionPermissionProfile(input: {
   agentPermission: MatterhornPermissionRule[];
   requestTools?: Record<string, boolean>;
+  requestToolProfiles?: readonly Record<string, boolean>[];
 }): MatterhornPermissionRule[] {
-  const requestRules = Object.entries(input.requestTools ?? {}).map(([permission, enabled]) => ({
+  const profiles = [
+    ...(input.requestToolProfiles ?? []),
+    ...(input.requestTools ? [input.requestTools] : []),
+  ];
+  const requestRules = profiles.flatMap((profile) => Object.entries(profile).map(([permission, enabled]) => ({
     permission,
     pattern: "*",
     action: enabled ? "allow" as const : "deny" as const,
-  }));
-  return [...input.agentPermission, ...requestRules];
+  })));
+  const combined = [...input.agentPermission, ...requestRules];
+  // OpenCode appends session permission updates. Only the rules at and after
+  // the final wildcard can affect the resulting policy: that wildcard resets
+  // every earlier tool decision, while following exact rules selectively
+  // re-enable or restrict capabilities. Sending the irrelevant prefix would
+  // grow long-lived sessions every time their routed capability family changes.
+  let finalResetIndex = -1;
+  for (let index = combined.length - 1; index >= 0; index -= 1) {
+    if (combined[index]?.permission === "*") {
+      finalResetIndex = index;
+      break;
+    }
+  }
+  return finalResetIndex > 0 ? combined.slice(finalResetIndex) : combined;
 }
 
 /**

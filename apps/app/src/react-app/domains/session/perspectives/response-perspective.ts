@@ -56,11 +56,13 @@ export function writeResponsePerspective(
 }
 
 export function buildResponsePerspectiveSystemPrompt(perspective: ResponsePerspective) {
+  // Balanced is the runtime default and is already enforced by the direct
+  // response and execution-mode contracts. Sending another neutral framing
+  // block on every turn adds tokens without changing behavior.
+  if (perspective === "balanced") return "";
   const framing = perspective === "cautious"
     ? "Answer cautiously. Lead with material risks, failure cases, reversibility, and what could go wrong before describing upside."
-    : perspective === "optimistic"
-      ? "Answer constructively. Lead with realistic possibilities, opportunities, and actionable next steps while acknowledging material tradeoffs."
-      : "Answer factually and directly. Present evidence and material tradeoffs without optimistic or pessimistic spin.";
+    : "Answer constructively. Lead with realistic possibilities, opportunities, and actionable next steps while acknowledging material tradeoffs.";
 
   return `## Response Perspective\n${framing}\nThis changes framing only. Never remove, weaken, delay, or hide safety constraints, non-custodial boundaries, external-signer requirements, financial risk disclosures, compliance limits, or wellness disclaimers.`;
 }

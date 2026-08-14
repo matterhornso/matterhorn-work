@@ -1257,7 +1257,6 @@ describe("workspace session read APIs", () => {
     expect(permissionUpdates[0]?.body).toMatchObject({
       permission: expect.arrayContaining([
         { permission: "*", pattern: "*", action: "deny" },
-        { permission: "edit", pattern: "*", action: "ask" },
       ]),
     });
     const planPermission = (permissionUpdates[1]?.body as { permission?: unknown[] })?.permission ?? [];
@@ -1302,6 +1301,45 @@ describe("workspace session read APIs", () => {
     });
     expect(JSON.stringify(permissionUpdate?.body)).not.toContain("custom_read");
     expect(String((promptRequest?.body as { system?: unknown })?.system)).toContain("Mode: work");
+  });
+
+  test("routes general crypto prompts to only the relevant managed tool family", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+
+    const response = await fetch(`http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/prompt_async`, {
+      method: "POST",
+      headers: {
+        ...auth(openwork.token),
+        "Content-Type": "application/json",
+        "X-Matterhorn-Execution-Mode": "work",
+      },
+      body: JSON.stringify({
+        agent: "matterhorn",
+        parts: [{ type: "text", text: "Compare the latest Bittensor subnet emissions" }],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const permissionUpdate = mock.requests.find((request) => (
+      request.pathname === "/session/ses_1" && request.method === "PATCH"
+    ));
+    const routedPermission = (permissionUpdate?.body as { permission?: unknown[] })?.permission ?? [];
+    expect(routedPermission).toEqual(expect.arrayContaining([
+      { permission: "*", pattern: "*", action: "deny" },
+      { permission: "matterhorn-work_matterhorn_bittensor_chat", pattern: "*", action: "allow" },
+      { permission: "matterhorn-work_matterhorn_crypto_chat", pattern: "*", action: "allow" },
+    ]));
+    expect(JSON.stringify(routedPermission)).not.toContain("hyperliquid");
+    expect(JSON.stringify(routedPermission)).not.toContain("sui_");
+    expect(JSON.stringify(routedPermission)).not.toContain("prediction_markets");
+
+    const promptRequest = mock.requests.find((request) => request.pathname === "/session/ses_1/prompt_async");
+    expect(promptRequest?.body).not.toHaveProperty("tools");
   });
 
   test("restores Work permissions after an answer-only turn without growing the profile per prompt", async () => {

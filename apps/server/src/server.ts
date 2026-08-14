@@ -347,6 +347,7 @@ import { homedir, hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { isIP } from "node:net";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
+import { buildMatterhornGeneralCryptoToolProfile } from "./agent-tool-routing.js";
 import {
   buildMatterhornSessionPermissionProfile,
   matterhornPermissionProfileIsActive,
@@ -1403,7 +1404,7 @@ async function ensureMatterhornSessionPermissionProfile(input: {
   workspace: WorkspaceInfo;
   sessionId: string;
   agentId?: string;
-  requestTools?: Record<string, boolean>;
+  requestToolProfiles?: readonly Record<string, boolean>[];
 }): Promise<void> {
   const opencode = createWorkspaceOpencodeClient(input.config, input.workspace);
   const directory = resolveOpencodeDirectory(input.workspace) ?? undefined;
@@ -1432,7 +1433,7 @@ async function ensureMatterhornSessionPermissionProfile(input: {
   }
   const profile = buildMatterhornSessionPermissionProfile({
     agentPermission,
-    ...(input.requestTools ? { requestTools: input.requestTools } : {}),
+    ...(input.requestToolProfiles ? { requestToolProfiles: input.requestToolProfiles } : {}),
   });
   const current = normalizeMatterhornPermissionRules(session.permission);
   if (matterhornPermissionProfileIsActive(current, profile)) return;
@@ -1461,6 +1462,27 @@ async function ensureMatterhornSessionPermissionProfile(input: {
     );
   }
   await response.arrayBuffer();
+}
+
+function promptTextFromParts(value: unknown): string {
+  if (!Array.isArray(value)) return "";
+  return value
+    .flatMap((part) => (
+      part && typeof part === "object" && typeof (part as Record<string, unknown>).text === "string"
+        ? [(part as Record<string, unknown>).text as string]
+        : []
+    ))
+    .join("\n")
+    .slice(0, 8_000);
+}
+
+function promptPartsHaveAttachments(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  return value.some((part) => {
+    if (!part || typeof part !== "object") return false;
+    const type = (part as Record<string, unknown>).type;
+    return typeof type === "string" && type !== "text";
+  });
 }
 
 async function postWorkspaceOpencodePromptWithReasoning(input: {
@@ -1820,7 +1842,7 @@ async function proxyOpencodeRequest(input: {
     workspace: WorkspaceInfo;
     sessionId: string;
     agentId?: string;
-    requestTools?: Record<string, boolean>;
+    requestToolProfiles?: readonly Record<string, boolean>[];
   } | null = null;
   let usageReservationId: string | null = null;
   let usageSubject: ModelUsageSubject | null = null;
@@ -1848,9 +1870,18 @@ async function proxyOpencodeRequest(input: {
     const agent = typeof payload.agent === "string" && payload.agent.trim() ? payload.agent.trim() : undefined;
     const reasoningEffort = parsePromptReasoningEffort(payload);
     const modeTools = buildMatterhornExecutionModeTools(bodyExecutionMode, agent);
-    const requestTools = modeTools ?? restrictMatterhornClientToolHints(
+    const routedTools = modeTools ?? (bodyExecutionMode === "work"
+      ? buildMatterhornGeneralCryptoToolProfile({
+          agentId: agent,
+          text: promptTextFromParts(payload.parts),
+          hasAttachments: promptPartsHaveAttachments(payload.parts),
+        })
+      : undefined);
+    const clientRestrictions = restrictMatterhornClientToolHints(
       isBooleanRecord(payload.tools) ? payload.tools : undefined,
     );
+    const requestToolProfiles = [routedTools, clientRestrictions]
+      .filter((profile): profile is Record<string, boolean> => Boolean(profile));
     // OpenCode 1.18 persists PromptInput.tools on the session. Translate the
     // deprecated request field into an explicit, restorable session profile
     // and never forward it to prompt_async, otherwise an answer-only or Plan
@@ -1883,7 +1914,7 @@ async function proxyOpencodeRequest(input: {
         workspace,
         sessionId,
         ...(agent ? { agentId: agent } : {}),
-        ...(requestTools ? { requestTools } : {}),
+        ...(requestToolProfiles.length ? { requestToolProfiles } : {}),
       };
       const modelResolution = await resolveSessionPromptModel(
         input.config,
@@ -9138,9 +9169,18 @@ function createRoutes(
 
     const agent = typeof body.agent === "string" && body.agent.trim() ? body.agent.trim() : undefined;
     const modeTools = buildMatterhornExecutionModeTools(executionMode, agent);
-    const requestTools = modeTools ?? restrictMatterhornClientToolHints(
+    const routedTools = modeTools ?? (executionMode === "work"
+      ? buildMatterhornGeneralCryptoToolProfile({
+          agentId: agent,
+          text: promptTextFromParts(parts),
+          hasAttachments: promptPartsHaveAttachments(parts),
+        })
+      : undefined);
+    const clientRestrictions = restrictMatterhornClientToolHints(
       isBooleanRecord(body.tools) ? body.tools : undefined,
     );
+    const requestToolProfiles = [routedTools, clientRestrictions]
+      .filter((profile): profile is Record<string, boolean> => Boolean(profile));
     const modeSystemPrompt = buildMatterhornExecutionModeSystemPrompt(executionMode);
     const requestedSystemPrompt = typeof body.system === "string" && body.system.trim() ? body.system.trim() : "";
 
@@ -9172,7 +9212,7 @@ function createRoutes(
         workspace,
         sessionId,
         ...(agent ? { agentId: agent } : {}),
-        ...(requestTools ? { requestTools } : {}),
+        ...(requestToolProfiles.length ? { requestToolProfiles } : {}),
       });
       if (reasoningEffort) {
         const { sessionID: _sessionID, directory: _directory, ...upstreamBody } = promptBody;

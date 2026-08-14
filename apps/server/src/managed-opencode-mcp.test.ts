@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { handleManagedOpencodeMcp, managedOpencodeMcpToolNames } from "./managed-opencode-mcp.js";
+import {
+  handleManagedOpencodeMcp,
+  managedOpencodeMcpToolNames,
+  MANAGED_MCP_MODEL_CONTENT_MAX_CHARS,
+} from "./managed-opencode-mcp.js";
 import type { ManagedMcpToolCallMetric } from "./managed-opencode-mcp.js";
 import {
   buildManagedOpencodeRuntimeConfig,
@@ -51,6 +55,9 @@ describe("managed OpenCode Matterhorn MCP", () => {
       env: ["CUDOS_API_KEY"],
       options: {
         baseURL: "https://inference.asicloud.cudos.org/v1",
+        headerTimeout: 30_000,
+        chunkTimeout: 45_000,
+        timeout: 120_000,
       },
     });
     expect(Object.keys(config.provider.cudos.models)).toHaveLength(7);
@@ -271,6 +278,40 @@ describe("managed OpenCode Matterhorn MCP", () => {
         },
       },
     });
+  });
+
+  test("bounds model-facing tool content while preserving full structured evidence", async () => {
+    const largeResult = {
+      success: true,
+      markets: Array.from({ length: 100 }, (_, index) => ({
+        id: `market-${index}`,
+        description: `Market ${index} ${"detail ".repeat(300)}`,
+      })),
+    };
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0",
+        id: "bounded-context",
+        method: "tools/call",
+        params: { name: "matterhorn_prediction_markets_search", arguments: { query: "markets" } },
+      },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+      fetchImpl: Object.assign(
+        async () => Response.json(largeResult),
+        { preconnect: fetch.preconnect },
+      ),
+    });
+    const body = result.body as {
+      result: {
+        content: Array<{ type: string; text: string }>;
+        structuredContent: { result: typeof largeResult };
+      };
+    };
+    const modelText = body.result.content[0]!.text;
+    expect(modelText.length).toBeLessThanOrEqual(MANAGED_MCP_MODEL_CONTENT_MAX_CHARS);
+    expect(modelText).toContain("shortened for model context");
+    expect(body.result.structuredContent.result.markets).toHaveLength(100);
   });
 
   test("acknowledges notifications without a response body", async () => {

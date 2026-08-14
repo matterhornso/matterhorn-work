@@ -23,9 +23,32 @@ describe("session permission profiles", () => {
       agentPermission,
       requestTools: { "*": false, read: true },
     })).toEqual([
-      ...agentPermission,
       { permission: "*", pattern: "*", action: "deny" },
       { permission: "read", pattern: "*", action: "allow" },
+    ]);
+  });
+
+  test("retains the agent baseline when a request has no wildcard reset", () => {
+    expect(buildMatterhornSessionPermissionProfile({
+      agentPermission,
+      requestTools: { edit: false },
+    })).toEqual([
+      ...agentPermission,
+      { permission: "edit", pattern: "*", action: "deny" },
+    ]);
+  });
+
+  test("applies server routing before client restrictions", () => {
+    expect(buildMatterhornSessionPermissionProfile({
+      agentPermission,
+      requestToolProfiles: [
+        { "*": false, safe_read: true },
+        { safe_read: false },
+      ],
+    }).slice(-3)).toEqual([
+      { permission: "*", pattern: "*", action: "deny" },
+      { permission: "safe_read", pattern: "*", action: "allow" },
+      { permission: "safe_read", pattern: "*", action: "deny" },
     ]);
   });
 
