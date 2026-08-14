@@ -80,6 +80,7 @@ function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promis
     untrustedPromptHeaders: Record<string, string | null>;
   }> = [];
   const streamAborts = { count: 0 };
+  let sessionPermission: Array<{ permission: string; pattern: string; action: "allow" | "deny" | "ask" }> = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -125,6 +126,29 @@ function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promis
           default: { openai: "gpt-4.1-mini", anthropic: "claude-3-sonnet" },
           connected: ["openai"],
         });
+      }
+
+      if (url.pathname === "/agent") {
+        const basePermission = [
+          { permission: "*", pattern: "*", action: "deny" },
+          { permission: "read", pattern: "*", action: "allow" },
+          { permission: "edit", pattern: "*", action: "ask" },
+        ];
+        return Response.json([
+          { name: "matterhorn", mode: "primary", permission: basePermission, options: {} },
+          { name: "build", mode: "primary", permission: basePermission, options: {} },
+          { name: "custom-agent", mode: "primary", permission: basePermission, options: {} },
+          {
+            name: "matterhorn-sui",
+            mode: "primary",
+            permission: [
+              { permission: "*", pattern: "*", action: "deny" },
+              { permission: "matterhorn-work_matterhorn_sui_get_balance", pattern: "*", action: "allow" },
+              { permission: "matterhorn-work_matterhorn_sui_preview_transfer", pattern: "*", action: "allow" },
+            ],
+            options: {},
+          },
+        ]);
       }
 
       if (url.pathname === "/session" && request.method === "POST") {
@@ -178,12 +202,26 @@ function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promis
         return new Response(stream, { headers: { "content-type": "text/event-stream" } });
       }
 
+      if (url.pathname === "/session/ses_1" && request.method === "PATCH") {
+        const update = body && typeof body === "object" ? body as { permission?: typeof sessionPermission } : {};
+        sessionPermission = [...sessionPermission, ...(update.permission ?? [])];
+        return Response.json({
+          id: "ses_1",
+          title: "Hostname Check",
+          slug: "hostname-check",
+          directory: request.headers.get("x-opencode-directory"),
+          permission: sessionPermission,
+          time: { created: 100, updated: 200 },
+        });
+      }
+
       if (url.pathname === "/session/ses_1") {
         return Response.json({
           id: "ses_1",
           title: "Hostname Check",
           slug: "hostname-check",
           directory: request.headers.get("x-opencode-directory"),
+          permission: sessionPermission,
           time: { created: 100, updated: 200 },
         });
       }
@@ -1200,20 +1238,34 @@ describe("workspace session read APIs", () => {
     expect(promptRequests).toHaveLength(2);
     expect(promptRequests[0]?.body).toMatchObject({
       agent: "custom-agent",
-      tools: { "*": false },
     });
+    expect(promptRequests[0]?.body).not.toHaveProperty("tools");
     expect(promptRequests[0]?.body).not.toHaveProperty("executionMode");
     expect(String((promptRequests[0]?.body as { system?: unknown })?.system)).toContain("Mode: discuss");
     expect(String((promptRequests[0]?.body as { system?: unknown })?.system)).toContain("Existing workspace context");
     expect(promptRequests[1]?.body).toMatchObject({
       agent: "matterhorn-sui",
-      tools: {
-        "*": false,
-        "matterhorn-work_matterhorn_sui_get_balance": true,
-      },
     });
+    expect(promptRequests[1]?.body).not.toHaveProperty("tools");
     expect(JSON.stringify(promptRequests[1]?.body)).not.toContain("preview_transfer");
     expect(String((promptRequests[1]?.body as { system?: unknown })?.system)).toContain("Mode: plan");
+
+    const permissionUpdates = mock.requests.filter((request) => (
+      request.pathname === "/session/ses_1" && request.method === "PATCH"
+    ));
+    expect(permissionUpdates).toHaveLength(2);
+    expect(permissionUpdates[0]?.body).toMatchObject({
+      permission: expect.arrayContaining([
+        { permission: "*", pattern: "*", action: "deny" },
+        { permission: "edit", pattern: "*", action: "ask" },
+      ]),
+    });
+    const planPermission = (permissionUpdates[1]?.body as { permission?: unknown[] })?.permission ?? [];
+    expect(Array.isArray(planPermission)).toBe(true);
+    expect(planPermission.slice(-2)).toEqual([
+      { permission: "*", pattern: "*", action: "deny" },
+      { permission: "matterhorn-work_matterhorn_sui_get_balance", pattern: "*", action: "allow" },
+    ]);
   });
 
   test("preserves Work-mode request tools without broadening them", async () => {
@@ -1240,8 +1292,49 @@ describe("workspace session read APIs", () => {
 
     expect(response.status).toBe(200);
     const promptRequest = mock.requests.find((request) => request.pathname === "/session/ses_1/prompt_async");
-    expect(promptRequest?.body).toMatchObject({ tools: { custom_read: true, custom_write: false } });
+    expect(promptRequest?.body).not.toHaveProperty("tools");
+    const permissionUpdate = mock.requests.find((request) => request.pathname === "/session/ses_1" && request.method === "PATCH");
+    expect(permissionUpdate?.body).toMatchObject({
+      permission: expect.arrayContaining([
+        { permission: "edit", pattern: "*", action: "ask" },
+        { permission: "custom_write", pattern: "*", action: "deny" },
+      ]),
+    });
+    expect(JSON.stringify(permissionUpdate?.body)).not.toContain("custom_read");
     expect(String((promptRequest?.body as { system?: unknown })?.system)).toContain("Mode: work");
+  });
+
+  test("restores Work permissions after an answer-only turn without growing the profile per prompt", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+    const url = `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/opencode/session/ses_1/prompt_async`;
+    const send = (body: Record<string, unknown>) => fetch(url, {
+      method: "POST",
+      headers: {
+        ...auth(openwork.token),
+        "Content-Type": "application/json",
+        "X-Matterhorn-Execution-Mode": "work",
+      },
+      body: JSON.stringify({ agent: "matterhorn", parts: [{ type: "text", text: "Test" }], ...body }),
+    });
+
+    expect((await send({ tools: { "*": false } })).status).toBe(200);
+    expect((await send({})).status).toBe(200);
+    expect((await send({})).status).toBe(200);
+
+    const permissionUpdates = mock.requests.filter((request) => (
+      request.pathname === "/session/ses_1" && request.method === "PATCH"
+    ));
+    expect(permissionUpdates).toHaveLength(2);
+    const restored = (permissionUpdates[1]?.body as { permission?: unknown[] })?.permission ?? [];
+    expect(restored.at(-1)).toEqual({ permission: "edit", pattern: "*", action: "ask" });
+    const prompts = mock.requests.filter((request) => request.pathname === "/session/ses_1/prompt_async");
+    expect(prompts).toHaveLength(3);
+    expect(prompts.every((request) => !(request.body as Record<string, unknown>)?.tools)).toBe(true);
   });
 
   test("blocks mutating session proxy routes outside Work mode", async () => {
@@ -1396,13 +1489,15 @@ describe("workspace session read APIs", () => {
     });
     expect(prompt.status).toBe(202);
     const promptRequest = mock.requests.find((request) => request.pathname === "/session/ses_1/prompt_async");
-    expect(promptRequest?.body).toMatchObject({
-      tools: {
-        "*": false,
-        "matterhorn-work_matterhorn_sui_get_balance": true,
-      },
-    });
+    expect(promptRequest?.body).not.toHaveProperty("tools");
     expect(JSON.stringify(promptRequest?.body)).not.toContain("preview_transfer");
+    const permissionUpdate = mock.requests.find((request) => request.pathname === "/session/ses_1" && request.method === "PATCH");
+    const planPermission = (permissionUpdate?.body as { permission?: unknown[] })?.permission ?? [];
+    expect(Array.isArray(planPermission)).toBe(true);
+    expect(planPermission.slice(-2)).toEqual([
+      { permission: "*", pattern: "*", action: "deny" },
+      { permission: "matterhorn-work_matterhorn_sui_get_balance", pattern: "*", action: "allow" },
+    ]);
 
     const auditResponse = await fetch(`${base}/workspace/ws_1/audit?limit=10`, {
       headers: auth(openwork.token),

@@ -347,6 +347,13 @@ import { homedir, hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { isIP } from "node:net";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
+import {
+  buildMatterhornSessionPermissionProfile,
+  matterhornPermissionProfileIsActive,
+  normalizeMatterhornPermissionRules,
+  restrictMatterhornClientToolHints,
+  type MatterhornPermissionRule,
+} from "./session-permission-profile.js";
 import type { ApprovalRequest, Capabilities, ServerConfig, WorkspaceInfo, Actor, ReloadReason, ReloadTrigger, TokenScope, MatterhornTaskEventType, RequestRateLimitConfig, RequestRateLimitStore } from "./types.js";
 import {
   createDefaultRequestRateLimitStore,
@@ -1391,6 +1398,71 @@ function createWorkspaceOpencodeClient(config: ServerConfig, workspace: Workspac
   });
 }
 
+async function ensureMatterhornSessionPermissionProfile(input: {
+  config: ServerConfig;
+  workspace: WorkspaceInfo;
+  sessionId: string;
+  agentId?: string;
+  requestTools?: Record<string, boolean>;
+}): Promise<void> {
+  const opencode = createWorkspaceOpencodeClient(input.config, input.workspace);
+  const directory = resolveOpencodeDirectory(input.workspace) ?? undefined;
+  const [session, agents] = await Promise.all([
+    opencode.session.get({
+      sessionID: input.sessionId,
+      ...(directory ? { directory } : {}),
+    }).then((result) => unwrapOpencodeResult(
+      result,
+      `/session/${encodeURIComponent(input.sessionId)}`,
+    )),
+    opencode.app.agents({
+      ...(directory ? { directory } : {}),
+    }).then((result) => unwrapOpencodeResult(result, "/agent")),
+  ]);
+
+  const effectiveAgentId = input.agentId?.trim() || session.agent?.trim() || "matterhorn";
+  const agent = agents.find((candidate) => candidate.name === effectiveAgentId);
+  if (!agent) {
+    throw new ApiError(400, "agent_unavailable", `Agent ${effectiveAgentId} is not available in this workspace`);
+  }
+
+  const agentPermission = normalizeMatterhornPermissionRules(agent.permission);
+  if (agentPermission.length === 0) {
+    throw new ApiError(503, "agent_permission_unavailable", `Agent ${effectiveAgentId} has no runtime permission policy`);
+  }
+  const profile = buildMatterhornSessionPermissionProfile({
+    agentPermission,
+    ...(input.requestTools ? { requestTools: input.requestTools } : {}),
+  });
+  const current = normalizeMatterhornPermissionRules(session.permission);
+  if (matterhornPermissionProfileIsActive(current, profile)) return;
+
+  // The generated 1.18.18 SDK serializes a PermissionRuleset array as `{}` on
+  // PATCH. Use the upstream HTTP contract directly until that generator bug is
+  // fixed; the response is still validated by OpenCode itself.
+  const connection = resolveWorkspaceOpencodeConnection(input.config, input.workspace);
+  const baseUrl = connection.baseUrl?.trim().replace(/\/+$/, "");
+  if (!baseUrl) {
+    throw new ApiError(400, "opencode_unconfigured", "Agent runtime is not connected for this workspace");
+  }
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (connection.authHeader) headers.set("Authorization", connection.authHeader);
+  if (directory) headers.set("x-opencode-directory", buildOpencodeDirectoryHeader(directory));
+  const response = await fetch(`${baseUrl}/session/${encodeURIComponent(input.sessionId)}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ permission: profile as MatterhornPermissionRule[] }),
+  });
+  if (!response.ok) {
+    throw new ApiError(
+      502,
+      "opencode_request_failed",
+      `OpenCode permission update failed with HTTP ${response.status}`,
+    );
+  }
+  await response.arrayBuffer();
+}
+
 async function postWorkspaceOpencodePromptWithReasoning(input: {
   config: ServerConfig;
   workspace: WorkspaceInfo;
@@ -1744,6 +1816,12 @@ async function proxyOpencodeRequest(input: {
     : await input.request.arrayBuffer().then((buf) => (buf.byteLength > 0 ? buf : undefined));
   let body: BodyInit | undefined = rawBody;
   let promptAudit: { executionMode: MatterhornExecutionMode; agent?: string; sessionId: string } | null = null;
+  let promptPermissionRequest: {
+    workspace: WorkspaceInfo;
+    sessionId: string;
+    agentId?: string;
+    requestTools?: Record<string, boolean>;
+  } | null = null;
   let usageReservationId: string | null = null;
   let usageSubject: ModelUsageSubject | null = null;
   if (isSessionPromptProxyRequest(method, proxyPath)) {
@@ -1769,8 +1847,15 @@ async function proxyOpencodeRequest(input: {
 
     const agent = typeof payload.agent === "string" && payload.agent.trim() ? payload.agent.trim() : undefined;
     const reasoningEffort = parsePromptReasoningEffort(payload);
-    const tools = buildMatterhornExecutionModeTools(bodyExecutionMode, agent);
-    if (tools) payload.tools = tools;
+    const modeTools = buildMatterhornExecutionModeTools(bodyExecutionMode, agent);
+    const requestTools = modeTools ?? restrictMatterhornClientToolHints(
+      isBooleanRecord(payload.tools) ? payload.tools : undefined,
+    );
+    // OpenCode 1.18 persists PromptInput.tools on the session. Translate the
+    // deprecated request field into an explicit, restorable session profile
+    // and never forward it to prompt_async, otherwise an answer-only or Plan
+    // turn can silently disable tools on every later Work turn.
+    delete payload.tools;
     const enforcedSystemPrompt = buildMatterhornExecutionModeSystemPrompt(bodyExecutionMode);
     payload.system = typeof payload.system === "string" && payload.system.trim()
       ? `${payload.system.trim()}\n\n${enforcedSystemPrompt}`
@@ -1794,6 +1879,12 @@ async function proxyOpencodeRequest(input: {
     const sessionId = decodeURIComponent(normalizeOpencodeProxyPath(proxyPath).split("/")[2] ?? "");
     promptAudit = { executionMode: bodyExecutionMode, agent, sessionId };
     if (workspace) {
+      promptPermissionRequest = {
+        workspace,
+        sessionId,
+        ...(agent ? { agentId: agent } : {}),
+        ...(requestTools ? { requestTools } : {}),
+      };
       const modelResolution = await resolveSessionPromptModel(
         input.config,
         workspace,
@@ -1849,6 +1940,17 @@ async function proxyOpencodeRequest(input: {
       undefined,
     );
     assertPromptProviderPrivacy(modelResolution.model.providerID);
+  }
+  if (promptPermissionRequest) {
+    try {
+      await ensureMatterhornSessionPermissionProfile({
+        config: input.config,
+        ...promptPermissionRequest,
+      });
+    } catch (error) {
+      input.modelUsageStore?.cancel(usageReservationId);
+      throw error;
+    }
   }
   const upstreamController = new AbortController();
   const abortUpstreamConnect = () => upstreamController.abort();
@@ -9036,6 +9138,9 @@ function createRoutes(
 
     const agent = typeof body.agent === "string" && body.agent.trim() ? body.agent.trim() : undefined;
     const modeTools = buildMatterhornExecutionModeTools(executionMode, agent);
+    const requestTools = modeTools ?? restrictMatterhornClientToolHints(
+      isBooleanRecord(body.tools) ? body.tools : undefined,
+    );
     const modeSystemPrompt = buildMatterhornExecutionModeSystemPrompt(executionMode);
     const requestedSystemPrompt = typeof body.system === "string" && body.system.trim() ? body.system.trim() : "";
 
@@ -9057,12 +9162,18 @@ function createRoutes(
       ...(agent ? { agent } : {}),
       ...(effectiveVariant ? { variant: effectiveVariant } : {}),
       ...(typeof body.noReply === "boolean" ? { noReply: body.noReply } : {}),
-      ...(modeTools ? { tools: modeTools } : isBooleanRecord(body.tools) ? { tools: body.tools } : {}),
       system: requestedSystemPrompt ? `${requestedSystemPrompt}\n\n${modeSystemPrompt}` : modeSystemPrompt,
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       parts,
     };
     try {
+      await ensureMatterhornSessionPermissionProfile({
+        config,
+        workspace,
+        sessionId,
+        ...(agent ? { agentId: agent } : {}),
+        ...(requestTools ? { requestTools } : {}),
+      });
       if (reasoningEffort) {
         const { sessionID: _sessionID, directory: _directory, ...upstreamBody } = promptBody;
         await postWorkspaceOpencodePromptWithReasoning({
