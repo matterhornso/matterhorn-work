@@ -33,7 +33,7 @@ overrides:
   ip-address: 10.3.1
   js-yaml: 4.3.1
   minimatch: 10.2.3
-  nanoid: 3.3.17
+  nanoid: 3.3.18
   next: 16.2.11
   picomatch: 2.3.2
   postcss: 8.5.23
@@ -119,8 +119,8 @@ importers:
         specifier: ^2.20.1
         version: 2.20.1(typescript@5.9.3)
       '@opencode-ai/sdk':
-        specifier: ^1.14.38
-        version: 1.14.38
+        specifier: 1.18.18
+        version: 1.18.18
       '@paper-design/shaders-react':
         specifier: 0.0.72
         version: 0.0.72(@types/react@19.2.14)(react@19.2.8)
@@ -255,8 +255,8 @@ importers:
   apps/desktop:
     dependencies:
       '@opencode-ai/sdk':
-        specifier: ^1.14.38
-        version: 1.14.38
+        specifier: 1.18.18
+        version: 1.18.18
       better-sqlite3:
         specifier: ^11.10.0
         version: 11.10.0
@@ -301,8 +301,8 @@ importers:
   apps/opencode-router:
     dependencies:
       '@opencode-ai/sdk':
-        specifier: ^1.14.38
-        version: 1.14.38
+        specifier: 1.18.18
+        version: 1.18.18
       '@slack/socket-mode':
         specifier: ^2.0.5
         version: 2.0.5
@@ -335,8 +335,8 @@ importers:
   apps/orchestrator:
     dependencies:
       '@opencode-ai/sdk':
-        specifier: ^1.14.38
-        version: 1.14.38
+        specifier: 1.18.18
+        version: 1.18.18
       '@opentui/core':
         specifier: 0.1.77
         version: 0.1.77(stage-js@1.0.0-alpha.17)(typescript@5.9.3)(web-tree-sitter@0.25.10)
@@ -396,8 +396,8 @@ importers:
         specifier: ^2.20.1
         version: 2.20.1(typescript@5.9.3)
       '@opencode-ai/sdk':
-        specifier: ^1.14.38
-        version: 1.14.38
+        specifier: 1.18.18
+        version: 1.18.18
       better-sqlite3:
         specifier: ^11.10.0
         version: 11.10.0
@@ -1809,8 +1809,8 @@ packages:
   '@open-draft/until@2.1.0':
     resolution: {integrity: sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg==}
 
-  '@opencode-ai/sdk@1.14.38':
-    resolution: {integrity: sha512-0BNDR/xQHF4k17ocSVtwk3GM5jHAym0lOnuT25K3Z7XZoHxwQG1zVe+jhJrK459oZH3gUKp2FrCk6G6OB/Fn6A==}
+  '@opencode-ai/sdk@1.18.18':
+    resolution: {integrity: sha512-zJlwXskIR47V1dkPJqeKBgq7nejG1uU8lJaGIGqbX3MWRCT8vKn0fEotbxuPCKnTdmWsDyNGNg9q1qIliDSMDA==}
 
   '@opentelemetry/api-logs@0.220.0':
     resolution: {integrity: sha512-CmVa4ImJ+ynfrPMNaAXHET6Bhb44SwzmfyVJFq9ni2jgXJR/l7C6gfVFddNmHP+ZOkP9cf4f9DBe68qVLTHc9w==}
@@ -5113,8 +5113,8 @@ packages:
   mz@2.7.0:
     resolution: {integrity: sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==}
 
-  nanoid@3.3.17:
-    resolution: {integrity: sha512-xQLf0A3HOMlgHq0n247/LRuAOYmB7dXJ/DvAxGvsSBij45XtBSmQycu+F8ODbHwns/XyFZagyL1+J0Offw1E0g==}
+  nanoid@3.3.18:
+    resolution: {integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -8354,7 +8354,7 @@ snapshots:
 
   '@open-draft/until@2.1.0': {}
 
-  '@opencode-ai/sdk@1.14.38':
+  '@opencode-ai/sdk@1.18.18':
     dependencies:
       cross-spawn: 7.0.6
 
@@ -11883,7 +11883,7 @@ snapshots:
       object-assign: 4.1.1
       thenify-all: 1.6.0
 
-  nanoid@3.3.17: {}
+  nanoid@3.3.18: {}
 
   nanostores@1.4.0: {}
 
@@ -12298,7 +12298,7 @@ snapshots:
 
   postcss@8.5.23:
     dependencies:
-      nanoid: 3.3.17
+      nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
 

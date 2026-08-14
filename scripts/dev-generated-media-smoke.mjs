@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { existsSync } from "node:fs";
+import { chmod, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -10,12 +12,17 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
+const runtimeManifestPath = path.resolve(
+  process.env.MATTERHORN_MEDIA_SMOKE_RUNTIME_FILE?.trim()
+    || path.join(rootDir, ".matterhorn-work", "runtime", "matterhorn-generated-media-smoke-runtime.json"),
+);
 
 const clientToken = process.env.MATTERHORN_MEDIA_SMOKE_CLIENT_TOKEN?.trim() || "matterhorn-media-smoke-client-token";
 const hostToken = process.env.MATTERHORN_MEDIA_SMOKE_HOST_TOKEN?.trim() || "matterhorn-media-smoke-host-token";
 const preferredServerPort = Number(process.env.MATTERHORN_MEDIA_SMOKE_SERVER_PORT?.trim() || "4125");
 const preferredAppPort = Number(process.env.MATTERHORN_MEDIA_SMOKE_APP_PORT?.trim() || "5282");
 const workspaceRoot = path.resolve(process.env.MATTERHORN_MEDIA_SMOKE_WORKSPACE?.trim() || rootDir);
+const expectedWorkspaceId = `ws_${createHash("sha256").update(workspaceRoot).digest("hex").slice(0, 12)}`;
 const storageEpochs = process.env.MATTERHORN_MEDIA_SMOKE_WALRUS_EPOCHS?.trim() || "3";
 const requestRateLimitMax = process.env.MATTERHORN_MEDIA_SMOKE_REQUEST_RATE_LIMIT_MAX?.trim() || "5000";
 const parsedPromptResponseDelayMs = Number(process.env.MATTERHORN_MEDIA_SMOKE_RESPONSE_DELAY_MS?.trim() || "0");
@@ -698,6 +705,29 @@ async function waitForHttp(url, options = {}) {
   throw new Error(`Timed out waiting for ${url}${lastError ? ` (${lastError})` : ""}`);
 }
 
+async function writeRuntimeManifest(manifest) {
+  const runtimeDir = path.dirname(runtimeManifestPath);
+  await mkdir(runtimeDir, { recursive: true, mode: 0o700 });
+  await chmod(runtimeDir, 0o700);
+
+  const temporaryPath = path.join(
+    runtimeDir,
+    `.${path.basename(runtimeManifestPath)}.${process.pid}.${randomUUID()}.tmp`,
+  );
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(manifest, null, 2)}\n`, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600,
+    });
+    await rename(temporaryPath, runtimeManifestPath);
+    await chmod(runtimeManifestPath, 0o600);
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => {});
+    throw error;
+  }
+}
+
 async function shutdown(exitCode = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -711,6 +741,13 @@ async function shutdown(exitCode = 0) {
   }
   fakeWalrusServer?.close();
   fakeOpencodeServer?.close();
+
+  try {
+    const runtime = JSON.parse(await readFile(runtimeManifestPath, "utf8"));
+    if (runtime?.pid === process.pid) await unlink(runtimeManifestPath);
+  } catch {
+    // The manifest is best-effort and may have been replaced by a newer stack.
+  }
 
   process.exit(exitCode);
 }
@@ -786,16 +823,21 @@ async function main() {
     timeoutMs: 45_000,
     headers: { Authorization: `Bearer ${clientToken}` },
   });
-  const activeWorkspaceId =
+  const reportedWorkspaceId =
     String(workspaceList.activeId ?? "").trim() ||
     String(workspaceList.items?.[0]?.id ?? workspaceList.workspaces?.[0]?.id ?? "").trim();
 
-  if (!activeWorkspaceId) {
+  if (!reportedWorkspaceId) {
     throw new Error("Matterhorn Desks server started, but it did not report an active workspace.");
+  }
+  if (reportedWorkspaceId !== expectedWorkspaceId) {
+    throw new Error(
+      `Generated-media smoke workspace mismatch: expected ${expectedWorkspaceId}, received ${reportedWorkspaceId}.`,
+    );
   }
 
   const billingStatus = await waitForJson(
-    `${serverUrl}/workspace/${encodeURIComponent(activeWorkspaceId)}/billing/status`,
+    `${serverUrl}/workspace/${encodeURIComponent(expectedWorkspaceId)}/billing/status`,
     {
       timeoutMs: 45_000,
       headers: { Authorization: `Bearer ${clientToken}` },
@@ -829,8 +871,16 @@ async function main() {
 
   await waitForHttp(appUrl, { timeoutMs: 45_000 });
 
-  const sessionUrl = `${appUrl}/workspace/${encodeURIComponent(activeWorkspaceId)}/session`;
-  const settingsUrl = `${appUrl}/workspace/${encodeURIComponent(activeWorkspaceId)}/settings/overview`;
+  const sessionUrl = `${appUrl}/workspace/${encodeURIComponent(expectedWorkspaceId)}/session`;
+  const settingsUrl = `${appUrl}/workspace/${encodeURIComponent(expectedWorkspaceId)}/settings/overview`;
+  await writeRuntimeManifest({
+    pid: process.pid,
+    appUrl,
+    serverUrl,
+    workspaceId: expectedWorkspaceId,
+    sessionUrl,
+    startedAt: new Date().toISOString(),
+  });
   const lines = [
     "",
     "Matterhorn generated-media smoke app is ready.",
@@ -841,6 +891,7 @@ async function main() {
     `Walrus:    ${fakeWalrusUrl}`,
     `Workspace: ${workspaceRoot}`,
     `Client token: ${clientToken}`,
+    `Runtime:    ${runtimeManifestPath}`,
     "",
     "Suggested smoke flow:",
     "1. Open the App link, create or open a chat session, and generate an image.",

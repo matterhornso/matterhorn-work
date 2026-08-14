@@ -1,4 +1,4 @@
-import { appendFile, writeFile } from "node:fs/promises";
+import { appendFile, open, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   MatterhornWorkflowRun,
@@ -8,6 +8,7 @@ import type {
   MatterhornWorkflowRunStageInput,
   MatterhornWorkflowRunStatus,
 } from "@matterhorn-work/types/workflow-runs";
+import { MATTERHORN_WORKFLOW_RUN_EVENT_TYPES } from "@matterhorn-work/types/workflow-runs";
 import {
   createWorkflowRunEventId,
   createWorkflowRunId,
@@ -56,6 +57,7 @@ export class WorkflowRunEngine {
   private maxRunsPerWorkspace: number;
   private maxEventsPerRun: number;
   private onEvent?: (run: MatterhornWorkflowRun, event: MatterhornWorkflowRunEvent) => void | Promise<void>;
+  private loadPromises = new Map<string, Promise<void>>();
 
   constructor(options: WorkflowRunEngineOptions = {}) {
     this.persistenceRoot = options.persistenceRoot;
@@ -310,12 +312,134 @@ export class WorkflowRunEngine {
   }
 
   async loadFromDisk(workspaceId: string): Promise<void> {
-    const dir = this.runDir(workspaceId);
-    if (!dir) return;
-    if (!(await exists(dir))) return;
+    const existingLoad = this.loadPromises.get(workspaceId);
+    if (existingLoad) return existingLoad;
 
-    // Basic JSONL replay is optional; for now we keep memory as source of truth
-    // and use disk as an append-only durable log. This method is a hook for
-    // future startup replay.
+    const load = this.replayWorkspaceFromDisk(workspaceId);
+    this.loadPromises.set(workspaceId, load);
+    try {
+      await load;
+    } catch (error) {
+      this.loadPromises.delete(workspaceId);
+      throw error;
+    }
+  }
+
+  private async replayWorkspaceFromDisk(workspaceId: string): Promise<void> {
+    const dir = this.runDir(workspaceId);
+    if (!dir || !(await exists(dir))) return;
+
+    const entries = await readdir(dir, { withFileTypes: true });
+    const files = entries
+      .filter((entry) => entry.isFile() && entry.name.startsWith("run_") && entry.name.endsWith(".jsonl"))
+      .map((entry) => entry.name)
+      .sort()
+      .slice(-this.maxRunsPerWorkspace);
+
+    for (const file of files) {
+      const path = join(dir, file);
+      let handle: Awaited<ReturnType<typeof open>> | undefined;
+      try {
+        // Validate and read through the same descriptor so the path cannot be
+        // swapped between a stat call and the subsequent read.
+        handle = await open(path, "r");
+        const fileStats = await handle.stat();
+        if (!fileStats.isFile() || fileStats.size <= 0 || fileStats.size > 2_000_000) continue;
+        const lines = (await handle.readFile("utf8"))
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean);
+        if (!lines.length) continue;
+
+        const header = JSON.parse(lines[0]!) as Record<string, unknown>;
+        const workflowRunId = typeof header.workflowRunId === "string" ? header.workflowRunId : "";
+        const expectedRunId = file.slice(0, -".jsonl".length);
+        if (!workflowRunId || workflowRunId !== expectedRunId || header.workspaceId !== workspaceId) continue;
+
+        const sessionId = typeof header.sessionId === "string" ? header.sessionId : "";
+        const deskId = typeof header.deskId === "string" ? header.deskId : "";
+        const agentId = typeof header.agentId === "string" ? header.agentId : "";
+        const workflowId = typeof header.workflowId === "string" ? header.workflowId : "";
+        const visibleUserIntent = typeof header.visibleUserIntent === "string" ? header.visibleUserIntent : "";
+        const outputBasePath = typeof header.outputBasePath === "string" ? header.outputBasePath : "";
+        const createdAt = Number(header.createdAt);
+        if (
+          !sessionId || !deskId || !agentId || !workflowId || !visibleUserIntent || !outputBasePath
+          || !Number.isFinite(createdAt)
+        ) continue;
+
+        const events: MatterhornWorkflowRunEvent[] = [];
+        let status: MatterhornWorkflowRunStatus = "staged";
+        let updatedAt = createdAt;
+        let stageId: string | undefined;
+        let actionId: string | undefined;
+        for (const line of lines.slice(1)) {
+          const candidate = JSON.parse(line) as Record<string, unknown>;
+          if (
+            typeof candidate.eventId !== "string"
+            || candidate.workflowRunId !== workflowRunId
+            || typeof candidate.type !== "string"
+            || !MATTERHORN_WORKFLOW_RUN_EVENT_TYPES.includes(candidate.type as MatterhornWorkflowRunEventType)
+            || !Number.isFinite(Number(candidate.timestamp))
+          ) continue;
+
+          const event: MatterhornWorkflowRunEvent = {
+            eventId: candidate.eventId,
+            workflowRunId,
+            type: candidate.type as MatterhornWorkflowRunEventType,
+            timestamp: Number(candidate.timestamp),
+            ...(typeof candidate.stageId === "string" ? { stageId: candidate.stageId } : {}),
+            ...(typeof candidate.actionId === "string" ? { actionId: candidate.actionId } : {}),
+            ...(candidate.payload !== undefined
+              ? { payload: sanitizeWorkflowRunEventPayload(candidate.payload) }
+              : {}),
+            ...(candidate.redacted === true ? { redacted: true } : {}),
+          };
+          events.push(event);
+          updatedAt = Math.max(updatedAt, event.timestamp);
+          stageId = event.stageId ?? stageId;
+          actionId = event.actionId ?? actionId;
+          if (event.type === "workflow.started") status = "running";
+          if (event.type === "workflow.waiting_for_user") status = "waiting";
+          if (event.type === "workflow.completed") status = "completed";
+          if (event.type === "workflow.failed") status = "failed";
+          if (event.type === "workflow.cancelled") status = "cancelled";
+        }
+
+        const run: MatterhornWorkflowRun = {
+          workflowRunId,
+          workspaceId,
+          sessionId,
+          deskId,
+          agentId,
+          workflowId,
+          ...(actionId ? { actionId } : {}),
+          ...(stageId ? { stageId } : {}),
+          visibleUserIntent,
+          ...(typeof header.hiddenAgentInstructions === "string"
+            ? { hiddenAgentInstructions: header.hiddenAgentInstructions }
+            : {}),
+          ...(typeof header.workflowManifestRef === "string"
+            ? { workflowManifestRef: header.workflowManifestRef }
+            : {}),
+          status,
+          outputBasePath,
+          createdAt,
+          updatedAt,
+          events: events.slice(-this.maxEventsPerRun),
+        };
+
+        if (this.runs.has(workflowRunId)) continue;
+        this.runs.set(workflowRunId, run);
+        const workspaceRuns = this.runsByWorkspace.get(workspaceId) ?? new Set<string>();
+        workspaceRuns.add(workflowRunId);
+        this.runsByWorkspace.set(workspaceId, workspaceRuns);
+      } catch {
+        // A partial or corrupted log must not prevent other workspace runs from loading.
+      } finally {
+        await handle?.close();
+      }
+    }
+    this.pruneWorkspaceRuns(workspaceId);
   }
 }

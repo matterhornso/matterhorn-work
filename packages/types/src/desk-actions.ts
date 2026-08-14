@@ -1,7 +1,7 @@
 import {
   defineDeskTransactionContract,
   type DeskActionTransactionContract,
-} from "./desk-transactions";
+} from "./desk-transactions.js";
 
 // Desk Action Manifest contract for production Desk V2 action surfaces.
 // This file defines every action a user can invoke from a desk launcher or chat thread,

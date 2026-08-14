@@ -110,6 +110,27 @@ describe("WorkflowRunEngine", () => {
     expect(content).toContain("workflow.staged");
     expect(content).toContain("workflow.started");
 
+    const reloaded = new WorkflowRunEngine({ persistenceRoot: dir });
+    await reloaded.loadFromDisk("ws_1");
+    expect(reloaded.getRun(run.workflowRunId)).toMatchObject({
+      workflowRunId: run.workflowRunId,
+      workspaceId: "ws_1",
+      sessionId: "sess_abc",
+      status: "running",
+    });
+    expect(reloaded.listEvents(run.workflowRunId).map((event) => event.type)).toEqual([
+      "workflow.staged",
+      "workflow.started",
+    ]);
+
+    await reloaded.recordWaitingForUser(run.workflowRunId, "Choose a program goal");
+    expect(reloaded.getRun(run.workflowRunId)?.status).toBe("waiting");
+
+    const loadedAgain = new WorkflowRunEngine({ persistenceRoot: dir });
+    await loadedAgain.loadFromDisk("ws_1");
+    expect(loadedAgain.getRun(run.workflowRunId)?.status).toBe("waiting");
+    expect(loadedAgain.listRuns({ workspaceId: "ws_1" })).toHaveLength(1);
+
     rmSync(dir, { recursive: true, force: true });
   });
 });

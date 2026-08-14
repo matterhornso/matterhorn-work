@@ -84,7 +84,7 @@ assert.ok(
 );
 assert.ok(
   script.includes('waitForJson(`${serverUrl}/workspaces`, {\n    timeoutMs: 45_000') &&
-    script.includes('`${serverUrl}/workspace/${encodeURIComponent(activeWorkspaceId)}/billing/status`,\n    {\n      timeoutMs: 45_000'),
+    script.includes('`${serverUrl}/workspace/${encodeURIComponent(expectedWorkspaceId)}/billing/status`,\n    {\n      timeoutMs: 45_000'),
   "generated-media smoke launcher should allow authenticated workspace bootstrap routes the full startup window",
 );
 assert.ok(
@@ -118,6 +118,25 @@ assert.ok(
     script.includes("VITE_MATTERHORN_WORK_TOKEN") &&
     script.includes("VITE_MATTERHORN_WORK_FORCE_SETTINGS"),
   "generated-media smoke launcher should wire the app to the local Matterhorn server",
+);
+assert.ok(
+  script.includes("matterhorn-generated-media-smoke-runtime.json") &&
+    script.includes("runtimeManifestPath") &&
+    script.includes("workspaceId: expectedWorkspaceId") &&
+    script.includes("sessionUrl") &&
+    script.includes("runtime?.pid === process.pid") &&
+    script.includes("await unlink(runtimeManifestPath)"),
+  "generated-media smoke launcher should publish its live workspace URL and only remove its own runtime manifest",
+);
+assert.ok(
+  script.includes('path.join(rootDir, ".matterhorn-work", "runtime"') &&
+    script.includes("expectedWorkspaceId") &&
+    script.includes("reportedWorkspaceId !== expectedWorkspaceId") &&
+    script.includes("randomUUID()") &&
+    script.includes("flag: \"wx\"") &&
+    script.includes("mode: 0o600") &&
+    script.includes("await rename(temporaryPath, runtimeManifestPath)"),
+  "generated-media smoke launcher should validate the server workspace and atomically publish a private runtime manifest outside the shared OS temp directory",
 );
 assert.ok(
   script.includes('"node_modules", "vite", "bin", "vite.js"') &&

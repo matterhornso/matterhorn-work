@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   findFreePort,
+  isolatedOpencodeTestConfig,
   makeClient,
   normalizeEvent,
   parseArgs,
@@ -14,7 +15,11 @@ const directory = args.get("dir") ?? process.cwd();
 const requireAi = args.get("require-ai") === "true";
 
 const port = await findFreePort();
-const server = await spawnOpencodeServe({ directory, port });
+const server = await spawnOpencodeServe({
+  directory,
+  port,
+  configContent: isolatedOpencodeTestConfig,
+});
 
 const results = {
   ok: true,
@@ -47,7 +52,7 @@ try {
   const client = makeClient({ baseUrl: server.baseUrl, directory: server.cwd });
 
   await step("health", async () => {
-    const health = await waitForHealthy(client);
+    const health = await waitForHealthy(client, { runtime: server });
     return health;
   });
 
@@ -154,6 +159,7 @@ try {
   results.ok = false;
   results.error = message;
   results.stderr = server.getStderr();
+  results.opencodeOutput = server.getOutput();
   console.error(JSON.stringify(results, null, 2));
   process.exitCode = 1;
 } finally {

@@ -28,6 +28,11 @@ import type {
   MatterhornProjectFeedbackResponse,
 } from "@matterhorn-work/types/project-data-ledger";
 import type {
+  MatterhornWorkspaceMissionOverviewResponse,
+  MatterhornWorkspaceMissionResponse,
+  MatterhornWorkspaceMissionUpdateRequest,
+} from "@matterhorn-work/types/workspace-mission";
+import type {
   MatterhornWalletSafetyPolicyResponse,
   MatterhornWalletSafetyPolicyUpdateRequest,
 } from "@matterhorn-work/types";
@@ -2094,6 +2099,44 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         { token, hostToken, timeoutMs: timeouts.status },
       );
     },
+    getWorkspaceMission: (workspaceId: string) =>
+      requestJson<MatterhornWorkspaceMissionResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/mission`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      ),
+    updateWorkspaceMission: (
+      workspaceId: string,
+      update: MatterhornWorkspaceMissionUpdateRequest,
+    ) =>
+      requestJson<MatterhornWorkspaceMissionResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/mission`,
+        {
+          token,
+          hostToken,
+          method: "PATCH",
+          body: update,
+          timeoutMs: timeouts.config,
+        },
+      ),
+    deleteWorkspaceMission: (workspaceId: string) =>
+      requestJson<MatterhornWorkspaceMissionResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/mission`,
+        {
+          token,
+          hostToken,
+          method: "DELETE",
+          timeoutMs: timeouts.config,
+        },
+      ),
+    getWorkspaceMissionOverview: (workspaceId: string) =>
+      requestJson<MatterhornWorkspaceMissionOverviewResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/mission/overview`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      ),
     recordWalletSafetyEvent: (workspaceId: string, event: MatterhornWalletSafetyEventInput) =>
       requestJson<MatterhornWalletSafetyEventResponse>(
         baseUrl,

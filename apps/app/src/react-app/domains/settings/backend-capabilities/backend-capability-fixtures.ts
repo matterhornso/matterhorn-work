@@ -54,7 +54,7 @@ function settingsCap(
 function baseServer() {
   return {
     version: "0.13.12",
-    opencodeVersion: "1.14.38",
+    opencodeVersion: "1.18.18",
     host: "127.0.0.1",
     port: 3000,
     readOnly: false,

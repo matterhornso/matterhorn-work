@@ -298,6 +298,10 @@ function requestIsStreaming(input: RequestInfo | URL, init?: RequestInit): boole
   return typeof accept === "string" && accept.toLowerCase().includes("text/event-stream");
 }
 
+export function resolveOpencodeRequestTimeoutMs(input: RequestInfo | URL, init?: RequestInit): number {
+  return requestIsStreaming(input, init) ? 0 : DEFAULT_OPENCODE_REQUEST_TIMEOUT_MS;
+}
+
 function nativeFetchRef(): typeof globalThis.fetch {
   if (typeof window !== "undefined" && typeof window.fetch === "function") return window.fetch.bind(window);
   return globalThis.fetch as typeof globalThis.fetch;
@@ -323,7 +327,7 @@ const createDesktopFetch = (auth?: OpencodeAuth) => {
       : desktopFetch;
     // Streams should never be timed out at the transport layer; the caller
     // aborts via AbortSignal when the subscription unmounts.
-    const timeoutMs = shouldStream ? 0 : DEFAULT_OPENCODE_REQUEST_TIMEOUT_MS;
+    const timeoutMs = resolveOpencodeRequestTimeoutMs(input, init);
 
     if (input instanceof Request) {
       const headers = new Headers(input.headers);
@@ -373,8 +377,13 @@ export function createClient(baseUrl: string, directory?: string, auth?: Opencod
 
   const fetchImpl = isDesktopRuntime()
     ? createDesktopFetch(auth)
-    : (input: RequestInfo | URL, init?: RequestInit) =>
-        fetchWithTimeout(globalThis.fetch, input, init, DEFAULT_OPENCODE_REQUEST_TIMEOUT_MS);
+    : (input: RequestInfo | URL, init?: RequestInit) => {
+        // OpenWork v0.18.23 keeps web event streams outside the ordinary
+        // request timeout. The subscription owner remains responsible for
+        // cancellation through its AbortSignal.
+        const timeoutMs = resolveOpencodeRequestTimeoutMs(input, init);
+        return fetchWithTimeout(globalThis.fetch, input, init, timeoutMs);
+      };
   const client = createOpencodeClient({
     baseUrl,
     directory,

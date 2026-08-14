@@ -110,8 +110,8 @@ const STAGES = [
   },
   {
     id: "daemon.electron.perimeter",
-    label: "Daemon and Electron perimeter",
-    summary: "Daemon token/CORS guards, trusted IPC, desktop fetch restrictions, alpha packaging, and remote debugging gates.",
+    label: "Agent runtime and Electron perimeter",
+    summary: "OpenWork/OpenCode compatibility, daemon token/CORS guards, trusted IPC, desktop fetch restrictions, packaging, and remote debugging gates.",
     themes: [
       "T5 desktop daemon perimeter",
       "Trusted Electron IPC",
@@ -135,6 +135,9 @@ const STAGES = [
       "&&",
       "node",
       "scripts/release-workflow-safety.test.mjs",
+      "&&",
+      "node",
+      "scripts/opencode-runtime-compatibility.test.mjs",
       "&&",
       "bun",
       "test",

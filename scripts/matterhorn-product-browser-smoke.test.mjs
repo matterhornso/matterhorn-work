@@ -30,6 +30,17 @@ assert.ok(
   "product browser smoke should expose URL, output, and strict env controls",
 );
 assert.ok(
+  script.includes("resolveFixtureUrl") &&
+    script.includes("matterhorn-generated-media-smoke-runtime.json") &&
+    script.includes("no live fixture manifest exists") &&
+    script.includes("process.kill(runtimePid, 0)") &&
+    script.includes("is stale. Restart pnpm dev:generated-media-smoke") &&
+    script.includes("does not contain a valid workspace session URL") &&
+    script.includes("config.url = sessionUrl") &&
+    script.includes("config.serverUrl = runtime.serverUrl.trim()"),
+  "product browser smoke should discover the launcher's current workspace instead of relying on a stale hard-coded id",
+);
+assert.ok(
   script.includes('document.querySelector("#root")') &&
     script.includes("childElementCount"),
   "product browser smoke should wait for the Vite React app to mount",
