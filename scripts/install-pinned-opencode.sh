@@ -14,6 +14,12 @@ case "$(uname -s):$(uname -m)" in
   Linux:aarch64|Linux:arm64)
     ASSET="opencode-linux-arm64.tar.gz"
     ;;
+  Darwin:arm64|Darwin:aarch64)
+    ASSET="opencode-darwin-arm64.zip"
+    ;;
+  Darwin:x86_64|Darwin:amd64)
+    ASSET="opencode-darwin-x64-baseline.zip"
+    ;;
   *)
     printf 'Unsupported OpenCode installer platform: %s/%s\n' "$(uname -s)" "$(uname -m)" >&2
     exit 1
@@ -51,8 +57,20 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 printf 'Downloading pinned OpenCode %s (%s)\n' "$VERSION" "$ASSET"
 curl --proto '=https' --tlsv1.2 -fsSL --retry 3 --retry-all-errors "$URL" -o "$TMP_DIR/$ASSET"
-printf '%s  %s\n' "$EXPECTED_SHA256" "$TMP_DIR/$ASSET" | sha256sum -c -
-tar -xzf "$TMP_DIR/$ASSET" -C "$TMP_DIR"
+if command -v sha256sum >/dev/null 2>&1; then
+  ACTUAL_SHA256="$(sha256sum "$TMP_DIR/$ASSET" | awk '{print $1}')"
+else
+  ACTUAL_SHA256="$(shasum -a 256 "$TMP_DIR/$ASSET" | awk '{print $1}')"
+fi
+if [ "$(printf '%s' "$ACTUAL_SHA256" | tr '[:upper:]' '[:lower:]')" != "$(printf '%s' "$EXPECTED_SHA256" | tr '[:upper:]' '[:lower:]')" ]; then
+  printf 'OpenCode archive checksum verification failed for %s.\n' "$ASSET" >&2
+  exit 1
+fi
+if [[ "$ASSET" == *.zip ]]; then
+  unzip -q "$TMP_DIR/$ASSET" -d "$TMP_DIR"
+else
+  tar -xzf "$TMP_DIR/$ASSET" -C "$TMP_DIR"
+fi
 BINARY="$(find "$TMP_DIR" -type f -name opencode -print -quit)"
 if [ -z "$BINARY" ]; then
   printf 'The verified OpenCode archive did not contain the expected binary.\n' >&2

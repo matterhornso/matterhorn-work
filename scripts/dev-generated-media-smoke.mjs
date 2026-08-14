@@ -2,6 +2,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync } from "node:fs";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +11,10 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
+const runtimeManifestPath = path.resolve(
+  process.env.MATTERHORN_MEDIA_SMOKE_RUNTIME_FILE?.trim()
+    || path.join(os.tmpdir(), "matterhorn-generated-media-smoke-runtime.json"),
+);
 
 const clientToken = process.env.MATTERHORN_MEDIA_SMOKE_CLIENT_TOKEN?.trim() || "matterhorn-media-smoke-client-token";
 const hostToken = process.env.MATTERHORN_MEDIA_SMOKE_HOST_TOKEN?.trim() || "matterhorn-media-smoke-host-token";
@@ -712,6 +717,13 @@ async function shutdown(exitCode = 0) {
   fakeWalrusServer?.close();
   fakeOpencodeServer?.close();
 
+  try {
+    const runtime = JSON.parse(await readFile(runtimeManifestPath, "utf8"));
+    if (runtime?.pid === process.pid) await unlink(runtimeManifestPath);
+  } catch {
+    // The manifest is best-effort and may have been replaced by a newer stack.
+  }
+
   process.exit(exitCode);
 }
 
@@ -831,6 +843,18 @@ async function main() {
 
   const sessionUrl = `${appUrl}/workspace/${encodeURIComponent(activeWorkspaceId)}/session`;
   const settingsUrl = `${appUrl}/workspace/${encodeURIComponent(activeWorkspaceId)}/settings/overview`;
+  await writeFile(
+    runtimeManifestPath,
+    `${JSON.stringify({
+      pid: process.pid,
+      appUrl,
+      serverUrl,
+      workspaceId: activeWorkspaceId,
+      sessionUrl,
+      startedAt: new Date().toISOString(),
+    }, null, 2)}\n`,
+    "utf8",
+  );
   const lines = [
     "",
     "Matterhorn generated-media smoke app is ready.",
@@ -841,6 +865,7 @@ async function main() {
     `Walrus:    ${fakeWalrusUrl}`,
     `Workspace: ${workspaceRoot}`,
     `Client token: ${clientToken}`,
+    `Runtime:    ${runtimeManifestPath}`,
     "",
     "Suggested smoke flow:",
     "1. Open the App link, create or open a chat session, and generate an image.",

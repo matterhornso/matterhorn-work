@@ -1,11 +1,15 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
 
 const repoRoot = resolve(import.meta.dirname, "..");
-const DEFAULT_URL = "http://127.0.0.1:5182/workspace/ws_9d76fd6566f5/session";
 const DEFAULT_OUTPUT_DIR = "qa-reports/matterhorn-product-browser-smoke";
+const DEFAULT_RUNTIME_FILE = resolve(
+  process.env.MATTERHORN_MEDIA_SMOKE_RUNTIME_FILE
+    || resolve(tmpdir(), "matterhorn-generated-media-smoke-runtime.json"),
+);
 
 function parseArgs(argv = process.argv.slice(2)) {
   const flags = new Set();
@@ -51,7 +55,7 @@ function parseArgs(argv = process.argv.slice(2)) {
     url:
       values.get("--url") ||
       process.env.MATTERHORN_PRODUCT_BROWSER_URL ||
-      DEFAULT_URL,
+      "",
     serverUrl:
       values.get("--server-url") ||
       process.env.MATTERHORN_PRODUCT_BROWSER_SERVER_URL ||
@@ -63,6 +67,44 @@ function parseArgs(argv = process.argv.slice(2)) {
         DEFAULT_OUTPUT_DIR,
     ),
   };
+}
+
+async function resolveFixtureUrl(config) {
+  if (config.url) return;
+  let runtime;
+  try {
+    runtime = JSON.parse(await readFile(DEFAULT_RUNTIME_FILE, "utf8"));
+  } catch {
+    throw new Error(
+      `No product smoke URL was provided and no live fixture manifest exists at ${DEFAULT_RUNTIME_FILE}. Start pnpm dev:generated-media-smoke, or pass --url explicitly.`,
+    );
+  }
+  const runtimePid = Number(runtime?.pid);
+  let runtimeIsAlive = Number.isInteger(runtimePid) && runtimePid > 0;
+  if (runtimeIsAlive) {
+    try {
+      process.kill(runtimePid, 0);
+    } catch {
+      runtimeIsAlive = false;
+    }
+  }
+  if (!runtimeIsAlive) {
+    throw new Error(
+      `The generated-media fixture manifest at ${DEFAULT_RUNTIME_FILE} is stale. Restart pnpm dev:generated-media-smoke.`,
+    );
+  }
+  const sessionUrl = typeof runtime?.sessionUrl === "string"
+    ? runtime.sessionUrl.trim()
+    : "";
+  if (!sessionUrl || !workspaceIdFromUrl(sessionUrl)) {
+    throw new Error(
+      `The generated-media fixture manifest at ${DEFAULT_RUNTIME_FILE} does not contain a valid workspace session URL. Restart pnpm dev:generated-media-smoke.`,
+    );
+  }
+  config.url = sessionUrl;
+  if (!config.serverUrl && typeof runtime?.serverUrl === "string") {
+    config.serverUrl = runtime.serverUrl.trim();
+  }
 }
 
 function printHelp() {
@@ -1937,7 +1979,8 @@ if (config.help) {
   process.exit(0);
 }
 
-runSmoke(config)
+resolveFixtureUrl(config)
+  .then(() => runSmoke(config))
   .then((report) => {
     emitReport(report, config);
     if (config.strict && !report.ready) process.exit(1);

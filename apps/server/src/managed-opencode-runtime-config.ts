@@ -3,6 +3,34 @@ import { buildManagedCudosProviderConfig, CUDOS_PROVIDER_ID } from "./cudos-prov
 
 const BUILTIN_MCP_NAME = "matterhorn-work";
 
+/**
+ * Hosted workspaces run an untrusted model against user-owned project data.
+ * Keep the runtime fail-closed even when a prompt does not select one of the
+ * generated desk agents. The explicitly exposed Matterhorn MCP is the only
+ * unattended action surface; file edits and browser automation still require
+ * a human permission reply, while shell, delegation, network fetches, and
+ * workspace escapes stay unavailable.
+ */
+export const MANAGED_OPENCODE_PERMISSION_POLICY = {
+  "*": "deny",
+  question: "allow",
+  read: "allow",
+  glob: "allow",
+  grep: "allow",
+  list: "allow",
+  todowrite: "allow",
+  skill: "allow",
+  edit: "ask",
+  doom_loop: "ask",
+  "chrome-devtools_*": "ask",
+  "matterhorn-work_*": "allow",
+  bash: "deny",
+  task: "deny",
+  webfetch: "deny",
+  websearch: "deny",
+  external_directory: "deny",
+} as const;
+
 export function buildManagedOpencodeRuntimeConfig(input: {
   serverUrl: string;
   clientToken: string;
@@ -15,6 +43,7 @@ export function buildManagedOpencodeRuntimeConfig(input: {
   }
 
   return JSON.stringify({
+    permission: MANAGED_OPENCODE_PERMISSION_POLICY,
     plugin: [
       "opencode-chrome-devtools",
       openworkExtensionsPreviewPluginPath(),

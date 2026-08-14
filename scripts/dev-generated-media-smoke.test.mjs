@@ -120,6 +120,15 @@ assert.ok(
   "generated-media smoke launcher should wire the app to the local Matterhorn server",
 );
 assert.ok(
+  script.includes("matterhorn-generated-media-smoke-runtime.json") &&
+    script.includes("runtimeManifestPath") &&
+    script.includes("workspaceId: activeWorkspaceId") &&
+    script.includes("sessionUrl") &&
+    script.includes("runtime?.pid === process.pid") &&
+    script.includes("await unlink(runtimeManifestPath)"),
+  "generated-media smoke launcher should publish its live workspace URL and only remove its own runtime manifest",
+);
+assert.ok(
   script.includes('"node_modules", "vite", "bin", "vite.js"') &&
     script.includes("rootViteBin") &&
     script.includes("process.execPath"),

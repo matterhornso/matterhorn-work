@@ -194,6 +194,9 @@ const MemoryPanel = lazy(() => import("../../memory/memory-panel").then((module)
 const NotesPanel = lazy(() => import("../../notes/notes-page").then((module) => ({
   default: module.NotesPage,
 })));
+const WorkspaceMissionOverview = lazy(() => import("./workspace-mission-overview").then((module) => ({
+  default: module.WorkspaceMissionOverview,
+})));
 const STARTUP_SKELETON_ROWS = [
   { id: "intro", titleWidth: "42%", bodyWidth: "88%" },
   { id: "middle", titleWidth: "56%", bodyWidth: "88%" },
@@ -3025,6 +3028,25 @@ export function SessionPage(props: SessionPageProps) {
                               New note
                             </Button>
                           </div>
+
+                          {props.matterhornServerClient && props.runtimeWorkspaceId ? (
+                            <Suspense
+                              fallback={(
+                                <div className="border-t border-dls-border/40 pt-4 text-xs text-dls-secondary" role="status">
+                                  Loading project mission…
+                                </div>
+                              )}
+                            >
+                              <WorkspaceMissionOverview
+                                matterhornServerClient={props.matterhornServerClient}
+                                runtimeWorkspaceId={props.runtimeWorkspaceId}
+                                onOpenSession={(sessionId) =>
+                                  props.sidebar.onOpenSession(props.selectedWorkspaceId, sessionId)
+                                }
+                                onOpenHistory={openRunHistory}
+                              />
+                            </Suspense>
+                          ) : null}
 
                           <details className="group rounded-md bg-dls-canvas/28 px-3 py-2 text-xs text-dls-secondary">
                             <summary className="cursor-pointer list-none font-medium text-dls-text marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-border">

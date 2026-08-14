@@ -1,0 +1,28 @@
+{
+  "version": "matterhorn.upstream-compatibility.v1",
+  "reviewedAt": "2026-08-13",
+  "openwork": {
+    "repository": "https://github.com/different-ai/openwork",
+    "version": "v0.18.23",
+    "commit": "9e3c55368684912d9089a476d59917eb36d21118",
+    "integrationStrategy": "compatibility_port",
+    "adoptedContracts": [
+      "untimed_web_opencode_event_streams",
+      "one_way_managed_runtime_configuration",
+      "managed_engine_health_and_restart_tracking",
+      "current_opencode_session_message_response_types"
+    ],
+    "preservedMatterhornBoundaries": [
+      "hosted_account_and_workspace_isolation",
+      "crypto_desk_action_registry",
+      "wallet_review_and_audit_controls",
+      "matterhorn_public_beta_deployment_topology"
+    ]
+  },
+  "opencode": {
+    "repository": "https://github.com/anomalyco/opencode",
+    "version": "v1.18.18",
+    "commit": "31406ccc51b4bd2a4e1e086b2bcaa5f7f804f26d",
+    "sdkVersion": "1.18.18"
+  }
+}

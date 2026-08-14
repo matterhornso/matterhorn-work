@@ -48,6 +48,21 @@
       "development": "./src/desk-agents.ts",
       "default": "./src/desk-agents.ts"
     },
+    "./desk-actions": {
+      "types": "./src/desk-actions.ts",
+      "development": "./src/desk-actions.ts",
+      "default": "./src/desk-actions.ts"
+    },
+    "./crypto-action-registry": {
+      "types": "./src/crypto-action-registry.ts",
+      "development": "./src/crypto-action-registry.ts",
+      "default": "./src/crypto-action-registry.ts"
+    },
+    "./crypto-evidence": {
+      "types": "./src/crypto-evidence.ts",
+      "development": "./src/crypto-evidence.ts",
+      "default": "./src/crypto-evidence.ts"
+    },
     "./execution-mode": {
       "types": "./src/execution-mode.ts",
       "development": "./src/execution-mode.ts",
@@ -72,6 +87,11 @@
       "types": "./src/project-data-ledger.ts",
       "development": "./src/project-data-ledger.ts",
       "default": "./src/project-data-ledger.ts"
+    },
+    "./workspace-mission": {
+      "types": "./src/workspace-mission.ts",
+      "development": "./src/workspace-mission.ts",
+      "default": "./src/workspace-mission.ts"
     },
     "./wallet-safety-policy": {
       "types": "./src/wallet-safety-policy.ts",

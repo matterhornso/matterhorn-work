@@ -1481,7 +1481,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           path: ".opencode/package.json",
           data: encoder.encode(
             JSON.stringify(
-              { dependencies: { "@opencode-ai/plugin": "1.14.38" } },
+              { dependencies: { "@opencode-ai/plugin": "1.18.18" } },
               null,
               2,
             ),

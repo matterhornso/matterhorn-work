@@ -14,6 +14,13 @@ type RenderMetricsInput = {
   uptimeMs: number;
 };
 
+export type AgentToolMetric = {
+  tool: string;
+  access: "read" | "prepare" | "system";
+  outcome: "success" | "error" | "timeout";
+  durationMs: number;
+};
+
 function escapeLabel(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll("\n", "\\n").replaceAll('"', '\\"');
 }
@@ -41,6 +48,13 @@ export class OperationalMetrics {
   private requestDurationSecondsSum = 0;
   private requestDurationCount = 0;
   private rateLimitRejections = 0;
+  private readonly agentToolCounts = new Map<string, {
+    tool: string;
+    access: AgentToolMetric["access"];
+    outcome: AgentToolMetric["outcome"];
+    count: number;
+  }>();
+  private readonly agentToolDurations = new Map<string, { sumSeconds: number; count: number }>();
 
   record(input: RequestMetric): void {
     const normalizedMethod = input.method.toUpperCase().slice(0, 12) || "UNKNOWN";
@@ -72,6 +86,26 @@ export class OperationalMetrics {
     if (input.provider && input.status >= 500) {
       this.providerFailures.set(input.provider, (this.providerFailures.get(input.provider) ?? 0) + 1);
     }
+  }
+
+  recordAgentTool(input: AgentToolMetric): void {
+    const tool = input.tool.replaceAll(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 120) || "unknown";
+    const key = `${tool}\u0000${input.access}\u0000${input.outcome}`;
+    const count = this.agentToolCounts.get(key);
+    if (count) {
+      count.count += 1;
+    } else {
+      this.agentToolCounts.set(key, {
+        tool,
+        access: input.access,
+        outcome: input.outcome,
+        count: 1,
+      });
+    }
+    const duration = this.agentToolDurations.get(tool) ?? { sumSeconds: 0, count: 0 };
+    duration.sumSeconds += Math.max(0, input.durationMs / 1_000);
+    duration.count += 1;
+    this.agentToolDurations.set(tool, duration);
   }
 
   renderPrometheus(input: RenderMetricsInput): string {
@@ -115,6 +149,28 @@ export class OperationalMetrics {
     );
     for (const [provider, count] of Array.from(this.providerFailures.entries()).sort(([left], [right]) => left.localeCompare(right))) {
       lines.push(metricLine("matterhorn_provider_failures_total", { provider }, count));
+    }
+
+    lines.push(
+      "# HELP matterhorn_agent_tool_calls_total Bounded Matterhorn agent tool calls grouped by tool, access class, and terminal outcome.",
+      "# TYPE matterhorn_agent_tool_calls_total counter",
+    );
+    for (const metric of Array.from(this.agentToolCounts.values()).sort((left, right) =>
+      `${left.tool}:${left.access}:${left.outcome}`.localeCompare(`${right.tool}:${right.access}:${right.outcome}`),
+    )) {
+      lines.push(metricLine("matterhorn_agent_tool_calls_total", {
+        tool: metric.tool,
+        access: metric.access,
+        outcome: metric.outcome,
+      }, metric.count));
+    }
+    lines.push(
+      "# HELP matterhorn_agent_tool_duration_seconds Agent tool execution time grouped by bounded tool name.",
+      "# TYPE matterhorn_agent_tool_duration_seconds summary",
+    );
+    for (const [tool, duration] of Array.from(this.agentToolDurations.entries()).sort(([left], [right]) => left.localeCompare(right))) {
+      lines.push(metricLine("matterhorn_agent_tool_duration_seconds_sum", { tool }, duration.sumSeconds));
+      lines.push(metricLine("matterhorn_agent_tool_duration_seconds_count", { tool }, duration.count));
     }
 
     return `${lines.join("\n")}\n`;

@@ -290,6 +290,7 @@ import type {
   MatterhornProjectFeedbackKind,
   MatterhornProjectFeedbackRequest,
 } from "@matterhorn-work/types/project-data-ledger";
+import type { MatterhornWorkspaceMissionResponse } from "@matterhorn-work/types/workspace-mission";
 import type {
   MatterhornBackendCapabilitiesResponse,
   MatterhornBillingCapability,
@@ -391,6 +392,15 @@ import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from
 import { MatterhornNotesStore } from "./notes.js";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { buildProjectDataLedger, buildProjectDataLedgerExport, scrubProjectLedgerText } from "./project-data-ledger.js";
+import {
+  buildWorkspaceAttentionInbox,
+  coerceWorkspaceMissionUpdate,
+  deleteWorkspaceMission,
+  readWorkspaceMission,
+  summarizeMissionRuns,
+  workspaceMissionPath,
+  writeWorkspaceMission,
+} from "./workspace-mission.js";
 import {
   buildBackendModels,
   buildWorkspaceModelSelectionResponse,
@@ -4098,6 +4108,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   const modelPreferencePath = workspaceModelSelectionPath(workspace);
   const billingSubscriptionPath = matterhornBillingAccountPath(workspace.path);
   const dataPolicyPath = workspaceDataPolicyPath(workspace);
+  const missionPath = workspaceMissionPath(workspace);
   const dataPolicy = readWorkspaceDataPolicySync(workspace);
   const appendOnlyRetention = buildAppendOnlyRetentionPolicy(workspace.id);
   const notesIndexPath = notes.indexPath;
@@ -4115,6 +4126,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
     modelPreferencePath,
     billingSubscriptionPath,
     dataPolicyPath,
+    missionPath,
     outputsPath,
     imageOutputsPath,
     feedbackPath,
@@ -4189,6 +4201,26 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         path: dataPolicyPath,
         format: "json",
         containsUserContent: false,
+        containsSecrets: "never",
+        retention: "user_controlled",
+        exportable: true,
+        deletable: true,
+      }),
+      mission: dataStore({
+        id: "mission",
+        ...capability(
+          existsSync(missionPath) ? "working" : "preview",
+          "Project mission",
+          "The workspace objective and its non-secret coordination context are stored inside the workspace.",
+          {
+            route: `/workspace/${workspace.id}/mission`,
+            archiveRoute: `/workspace/${workspace.id}/data-archive`,
+          },
+        ),
+        scope: "workspace",
+        path: missionPath,
+        format: "json",
+        containsUserContent: true,
         containsSecrets: "never",
         retention: "user_controlled",
         exportable: true,
@@ -4438,6 +4470,7 @@ function buildDataControlStore(
   const dataPolicy = readWorkspaceDataPolicySync(workspace);
   const ledgerRoute = `/workspace/${encodeURIComponent(workspace.id)}/data-ledger`;
   const dataPolicyRoute = `/workspace/${encodeURIComponent(workspace.id)}/backend/data-policy`;
+  const missionRoute = `/workspace/${encodeURIComponent(workspace.id)}/mission`;
   const modelSelectionRoute = `/workspace/${encodeURIComponent(workspace.id)}/backend/model-selection`;
   const notesRoute = `/workspace/${encodeURIComponent(workspace.id)}/notes`;
   const workspaceMemoryRoute = `/workspace/${encodeURIComponent(workspace.id)}/memory`;
@@ -4533,6 +4566,47 @@ function buildDataControlStore(
           status: "working",
           method: "PATCH",
           href: dataPolicyRoute,
+          requirements: ["collaborator", "writable_server"],
+        }),
+      ],
+    });
+  } else if (storeId === "mission") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Mission export",
+      summary: "The current project mission can be read as JSON and is included in the complete workspace archive.",
+      actions: [
+        appRouteDataControlAction({
+          id: "mission.open-home",
+          label: "Open project mission",
+          description: "Opens Home where the project mission is managed.",
+          href: workspaceAppRoute,
+        }),
+        dataControlAction({
+          id: "mission.read",
+          label: "Export mission JSON",
+          description: "Returns the current mission and workspace metadata without credentials.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: missionRoute,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Delete project mission",
+      summary: "Collaborators can remove the mission while preserving append-only audit evidence of the deletion.",
+      actions: [
+        dataControlAction({
+          id: "mission.delete",
+          label: "Delete mission",
+          description: "Deletes the mission objective and coordination context from the workspace.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: missionRoute,
+          destructive: true,
           requirements: ["collaborator", "writable_server"],
         }),
       ],
@@ -5045,8 +5119,8 @@ function buildWorkspaceDataControls(
         description: appendOnlyRetention.summary,
         ...appendOnlyRetention,
       },
-      export: capability("working", "Export controls", "Notes, memory, outputs, feedback, and event ledgers report their available export paths."),
-      deletion: capability("preview", "Deletion controls", "Notes, memory, outputs, and feedback support scoped deletes; append-only logs remain retained for accountability."),
+      export: capability("working", "Export controls", "Mission, notes, memory, outputs, feedback, and event ledgers report their available export paths."),
+      deletion: capability("preview", "Deletion controls", "Mission, notes, memory, outputs, and feedback support scoped deletes; append-only logs remain retained for accountability."),
       limitations: [
         "Append-only audit, task event, and workflow run rows do not currently have a purge endpoint.",
         "Chat/session history remains controlled by the workspace engine store.",
@@ -6758,6 +6832,14 @@ function createRoutes(
     persistenceRoot: config.workspaces[0]?.path ?? process.cwd(),
     onEvent: recordWorkflowTaskEvent,
   });
+  const loadWorkflowRunsForRequest = async (ctx: RequestContext, workspaceId?: string) => {
+    const requestedWorkspaceId = ctx.matterhornWorkspace?.id ?? workspaceId;
+    if (requestedWorkspaceId) {
+      await workflowRuns.loadFromDisk(requestedWorkspaceId);
+      return;
+    }
+    await Promise.all(config.workspaces.map((workspace) => workflowRuns.loadFromDisk(workspace.id)));
+  };
 
   function outputDeletionDetail(relativePath: string): string {
     const parts = relativePath.split("/").filter(Boolean);
@@ -7369,6 +7451,7 @@ function createRoutes(
       payload,
       serverUrl: ctx.url.origin,
       clientToken: config.token,
+      onToolCall: (metric) => operationalMetrics.recordAgentTool(metric),
     });
     if (result.body === null) return new Response(null, { status: result.status });
     return jsonResponse(result.body, result.status);
@@ -8261,6 +8344,139 @@ function createRoutes(
       backendControlPlane: backendControlPlaneExportSnapshot(controlPlane),
       ...projectDataLedgerOptionsFromUrl(ctx.url),
     }));
+  });
+
+  const missionWorkspaceSummary = (workspace: WorkspaceInfo): MatterhornWorkspaceMissionResponse["workspace"] => ({
+    id: workspace.id,
+    name: workspace.name,
+    type: workspace.workspaceType,
+    preset: workspace.preset,
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/mission", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse({
+      success: true,
+      version: "matterhorn.workspace-mission.v1",
+      generatedAt: new Date().toISOString(),
+      workspace: missionWorkspaceSummary(workspace),
+      mission: await readWorkspaceMission(workspace),
+      writable: !config.readOnly && ctx.actor?.scope !== "viewer",
+    } satisfies MatterhornWorkspaceMissionResponse);
+  });
+
+  addRoute(routes, "PATCH", "/workspace/:id/mission", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    let update;
+    try {
+      update = coerceWorkspaceMissionUpdate(await readJsonBody(
+        ctx.request,
+        CONTROL_PLANE_JSON_BODY_MAX_BYTES,
+        "Workspace mission",
+      ));
+    } catch (error) {
+      throw new ApiError(
+        400,
+        "invalid_workspace_mission",
+        error instanceof Error ? error.message : "Workspace mission is invalid",
+      );
+    }
+
+    let mission;
+    try {
+      mission = await writeWorkspaceMission(
+        workspace,
+        update,
+        ctx.actor?.scope ?? ctx.actor?.type,
+      );
+    } catch (error) {
+      throw new ApiError(
+        400,
+        "invalid_workspace_mission",
+        error instanceof Error ? error.message : "Workspace mission is invalid",
+      );
+    }
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.mission.update",
+      target: mission.id,
+      summary: `Updated workspace mission (${mission.status})`,
+      timestamp: Date.now(),
+      metadata: {
+        status: mission.status,
+        deskCount: mission.deskIds.length,
+        successCriterionCount: mission.successCriteria.length,
+      },
+    });
+
+    return jsonResponse({
+      success: true,
+      version: "matterhorn.workspace-mission.v1",
+      generatedAt: new Date().toISOString(),
+      workspace: missionWorkspaceSummary(workspace),
+      mission,
+      writable: true,
+    } satisfies MatterhornWorkspaceMissionResponse);
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/mission", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const deleted = await deleteWorkspaceMission(workspace);
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.mission.delete",
+      target: "workspace-mission",
+      summary: deleted ? "Deleted workspace mission" : "Workspace mission was already absent",
+      timestamp: Date.now(),
+      metadata: { deleted },
+    });
+
+    return jsonResponse({
+      success: true,
+      version: "matterhorn.workspace-mission.v1",
+      generatedAt: new Date().toISOString(),
+      workspace: missionWorkspaceSummary(workspace),
+      mission: null,
+      writable: true,
+    } satisfies MatterhornWorkspaceMissionResponse);
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/mission/overview", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    await loadWorkflowRunsForRequest(ctx, workspace.id);
+    const [mission, ledger] = await Promise.all([
+      readWorkspaceMission(workspace),
+      buildProjectDataLedger({ workspace, limit: 60 }),
+    ]);
+    const runs = workflowRuns.listRuns({ workspaceId: workspace.id, limit: 50 });
+    return jsonResponse({
+      success: true,
+      version: "matterhorn.workspace-mission-overview.v1",
+      generatedAt: new Date().toISOString(),
+      workspace: missionWorkspaceSummary(workspace),
+      mission,
+      writable: !config.readOnly && ctx.actor?.scope !== "viewer",
+      attention: buildWorkspaceAttentionInbox({ runs, evidence: ledger.items, limit: 20 }),
+      runs: {
+        items: runs,
+        summary: summarizeMissionRuns(runs),
+      },
+      evidence: {
+        items: ledger.items.slice(0, 20),
+        summary: ledger.summary,
+        href: `/workspace/${encodeURIComponent(workspace.id)}/data-ledger`,
+      },
+    });
   });
 
   addRoute(routes, "GET", "/workspace/:id/wallet/safety-policy", "client", async (ctx) => {
@@ -10367,8 +10583,9 @@ function createRoutes(
     const workspaceVault = memoryVaultForWorkspace(memoryVault, workspace);
     const notesStore = new MatterhornNotesStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
     try {
-      const [configuration, notes, memoryRecords, memorySuggestions, chats, activity] = await Promise.all([
+      const [configuration, mission, notes, memoryRecords, memorySuggestions, chats, activity] = await Promise.all([
         exportWorkspace(workspace, { sensitiveMode: "exclude" }),
+        readWorkspaceMission(workspace),
         notesStore.exportAllNotes(),
         workspaceVault.listAllRecords({
           scope: "workspace",
@@ -10383,6 +10600,7 @@ function createRoutes(
       const archive = await buildMatterhornWorkspaceArchive({
         workspace,
         configuration,
+        mission,
         notes,
         memory: { records: memoryRecords, suggestions: memorySuggestions },
         chats,
@@ -11021,13 +11239,34 @@ function createRoutes(
     return publicRun as Omit<T, "hiddenAgentInstructions">;
   };
 
+  const assertWorkflowRunWorkspaceAccess = (
+    ctx: RequestContext,
+    run: Pick<MatterhornWorkflowRun, "workspaceId">,
+  ) => {
+    if (ctx.matterhornWorkspace && run.workspaceId !== ctx.matterhornWorkspace.id) {
+      throw new ApiError(404, "workflow_run_not_found", "Workflow run not found");
+    }
+  };
+
+  const workflowRunForRequest = (ctx: RequestContext, runId: string): MatterhornWorkflowRun => {
+    const run = workflowRuns.getRun(runId);
+    if (!run) throw new ApiError(404, "workflow_run_not_found", "Workflow run not found");
+    assertWorkflowRunWorkspaceAccess(ctx, run);
+    return run;
+  };
+
   addRoute(routes, "GET", "/api/workflows/runs", "client", async (ctx) => {
     const statusParam = ctx.url.searchParams.get("status");
     if (statusParam && !isValidWorkflowRunStatus(statusParam)) {
       throw new ApiError(400, "invalid_workflow_status", "status is invalid");
     }
+    const requestedWorkspaceId = ctx.url.searchParams.get("workspaceId") ?? undefined;
+    if (ctx.matterhornWorkspace && requestedWorkspaceId && requestedWorkspaceId !== ctx.matterhornWorkspace.id) {
+      throw new ApiError(404, "workspace_not_found", "Workspace not found");
+    }
+    await loadWorkflowRunsForRequest(ctx, requestedWorkspaceId);
     const filters: WorkflowRunFilters = {
-      workspaceId: ctx.url.searchParams.get("workspaceId") ?? undefined,
+      workspaceId: ctx.matterhornWorkspace?.id ?? requestedWorkspaceId,
       sessionId: ctx.url.searchParams.get("sessionId") ?? undefined,
       deskId: ctx.url.searchParams.get("deskId") ?? undefined,
       status: statusParam as MatterhornWorkflowRunStatus | undefined,
@@ -11038,24 +11277,21 @@ function createRoutes(
   });
 
   addRoute(routes, "GET", "/api/workflows/runs/:id", "client", async (ctx) => {
-    const run = workflowRuns.getRun(ctx.params.id);
-    if (!run) {
-      throw new ApiError(404, "workflow_run_not_found", "Workflow run not found");
-    }
+    await loadWorkflowRunsForRequest(ctx);
+    const run = workflowRunForRequest(ctx, ctx.params.id);
     return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });
 
   addRoute(routes, "GET", "/api/workflows/runs/:id/events", "client", async (ctx) => {
-    const run = workflowRuns.getRun(ctx.params.id);
-    if (!run) {
-      throw new ApiError(404, "workflow_run_not_found", "Workflow run not found");
-    }
+    await loadWorkflowRunsForRequest(ctx);
+    workflowRunForRequest(ctx, ctx.params.id);
     const events = workflowRuns.listEvents(ctx.params.id);
     return jsonResponse({ success: true, events });
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/stage", "client", async (ctx) => {
-    requireClientScope(ctx, "viewer");
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
     const body = await readJsonBody(ctx.request);
 
     const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
@@ -11066,6 +11302,10 @@ function createRoutes(
     if (!workspaceId) {
       throw new ApiError(400, "invalid_workspace_id", "workspaceId is required");
     }
+    if (ctx.matterhornWorkspace && workspaceId !== ctx.matterhornWorkspace.id) {
+      throw new ApiError(404, "workspace_not_found", "Workspace not found");
+    }
+    await loadWorkflowRunsForRequest(ctx, workspaceId);
     if (!sessionId) {
       throw new ApiError(400, "invalid_session_id", "sessionId is required");
     }
@@ -11109,13 +11349,19 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/start", "client", async (ctx) => {
-    requireClientScope(ctx, "viewer");
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    await loadWorkflowRunsForRequest(ctx);
+    workflowRunForRequest(ctx, ctx.params.id);
     const run = await workflowRunMutation(() => workflowRuns.startRun(ctx.params.id));
     return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/stage", "client", async (ctx) => {
-    requireClientScope(ctx, "viewer");
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    await loadWorkflowRunsForRequest(ctx);
+    workflowRunForRequest(ctx, ctx.params.id);
     const body = await readJsonBody(ctx.request);
     const stageId = typeof body.stageId === "string" ? body.stageId.trim() : "";
     if (!stageId) {
@@ -11129,14 +11375,20 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/tool-call", "client", async (ctx) => {
-    requireClientScope(ctx, "viewer");
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    await loadWorkflowRunsForRequest(ctx);
+    workflowRunForRequest(ctx, ctx.params.id);
     const body = await readJsonBody(ctx.request);
     const run = await workflowRunMutation(() => workflowRuns.recordToolCall(ctx.params.id, body.payload ?? body));
     return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/artifact", "client", async (ctx) => {
-    requireClientScope(ctx, "viewer");
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    await loadWorkflowRunsForRequest(ctx);
+    workflowRunForRequest(ctx, ctx.params.id);
     const body = await readJsonBody(ctx.request);
     const path = typeof body.path === "string" ? body.path.trim() : "";
     if (!path) {
@@ -11147,7 +11399,10 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/waiting", "client", async (ctx) => {
-    requireClientScope(ctx, "viewer");
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    await loadWorkflowRunsForRequest(ctx);
+    workflowRunForRequest(ctx, ctx.params.id);
     const body = await readJsonBody(ctx.request);
     const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined;
     const run = await workflowRunMutation(() => workflowRuns.recordWaitingForUser(ctx.params.id, reason));
@@ -11155,13 +11410,19 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/complete", "client", async (ctx) => {
-    requireClientScope(ctx, "viewer");
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    await loadWorkflowRunsForRequest(ctx);
+    workflowRunForRequest(ctx, ctx.params.id);
     const run = await workflowRunMutation(() => workflowRuns.completeRun(ctx.params.id));
     return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/fail", "client", async (ctx) => {
-    requireClientScope(ctx, "viewer");
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    await loadWorkflowRunsForRequest(ctx);
+    workflowRunForRequest(ctx, ctx.params.id);
     const body = await readJsonBody(ctx.request);
     const error = typeof body.error === "string" && body.error.trim() ? body.error.trim() : "Workflow failed";
     const run = await workflowRunMutation(() => workflowRuns.failRun(ctx.params.id, error));
@@ -11169,7 +11430,10 @@ function createRoutes(
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/cancel", "client", async (ctx) => {
-    requireClientScope(ctx, "viewer");
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    await loadWorkflowRunsForRequest(ctx);
+    workflowRunForRequest(ctx, ctx.params.id);
     const run = await workflowRunMutation(() => workflowRuns.cancelRun(ctx.params.id));
     return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });

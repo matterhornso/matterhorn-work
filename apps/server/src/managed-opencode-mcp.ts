@@ -1,3 +1,13 @@
+import {
+  getMatterhornCryptoTool,
+  listMatterhornCryptoTools,
+  type MatterhornCryptoToolDefinition,
+} from "@matterhorn-work/types/crypto-action-registry";
+import {
+  MATTERHORN_CRYPTO_EVIDENCE_VERSION,
+  type MatterhornCryptoEvidenceEnvelope,
+} from "@matterhorn-work/types/crypto-evidence";
+
 type JsonObject = Record<string, unknown>;
 
 type ManagedMcpTool = {
@@ -5,6 +15,7 @@ type ManagedMcpTool = {
   title: string;
   description: string;
   inputSchema: JsonObject;
+  timeoutMs?: number;
   request: (args: JsonObject) => { path: string; method?: "GET" | "POST"; body?: JsonObject };
 };
 
@@ -13,6 +24,13 @@ type JsonRpcRequest = {
   id?: unknown;
   method?: unknown;
   params?: unknown;
+};
+
+export type ManagedMcpToolCallMetric = {
+  tool: string;
+  access: "read" | "prepare" | "system";
+  outcome: "success" | "error" | "timeout";
+  durationMs: number;
 };
 
 const objectSchema = (properties: JsonObject, required: string[] = []): JsonObject => ({
@@ -42,12 +60,13 @@ function queryPath(path: string, args: JsonObject, keys: string[]): string {
   return encoded ? `${path}?${encoded}` : path;
 }
 
-const MANAGED_MCP_TOOLS: ManagedMcpTool[] = [
+const MANAGED_MCP_TRANSPORTS: ManagedMcpTool[] = [
   {
     name: "matterhorn_status",
     title: "Matterhorn status",
     description: "Read the local Matterhorn Desks engine status and capability summary.",
     inputSchema: objectSchema({}),
+    timeoutMs: 5_000,
     request: () => ({ path: "/status" }),
   },
   {
@@ -250,6 +269,24 @@ const MANAGED_MCP_TOOLS: ManagedMcpTool[] = [
   },
 ];
 
+function withCanonicalCryptoContract(tool: ManagedMcpTool): ManagedMcpTool {
+  const canonical = getMatterhornCryptoTool(tool.name);
+  if (!canonical) return tool;
+  return {
+    ...tool,
+    title: canonical.title,
+    description: canonical.description,
+    inputSchema: canonical.inputSchema,
+    timeoutMs: canonical.timeoutMs,
+  };
+}
+
+const MANAGED_MCP_TOOLS = MANAGED_MCP_TRANSPORTS.map(withCanonicalCryptoContract);
+
+export function managedOpencodeCryptoToolDefinitions(): readonly MatterhornCryptoToolDefinition[] {
+  return listMatterhornCryptoTools();
+}
+
 function jsonRpcError(id: unknown, code: number, message: string) {
   return { jsonrpc: "2.0", id: id ?? null, error: { code, message } };
 }
@@ -260,37 +297,160 @@ function argumentsObject(params: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : {};
 }
 
+function parseToolPayload(text: string): unknown {
+  if (!text.trim()) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { text };
+  }
+}
+
+function findEvidenceString(value: unknown, keys: readonly string[], depth = 0): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value) || depth > 2) return undefined;
+  const record = value as JsonObject;
+  for (const key of keys) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim().slice(0, 500);
+  }
+  for (const candidate of Object.values(record)) {
+    const nested = findEvidenceString(candidate, keys, depth + 1);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+function evidenceWarnings(value: unknown): readonly string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const warnings = (value as JsonObject).warnings;
+  if (!Array.isArray(warnings)) return [];
+  return warnings
+    .filter((warning) => typeof warning === "string" && warning.trim())
+    .slice(0, 20)
+    .map((warning) => String(warning).trim().slice(0, 1_000));
+}
+
+function buildCryptoEvidenceEnvelope(input: {
+  definition: NonNullable<ReturnType<typeof getMatterhornCryptoTool>>;
+  status: "success" | "error";
+  result: unknown;
+  startedAtMs: number;
+  completedAtMs: number;
+}): MatterhornCryptoEvidenceEnvelope {
+  const completedAt = new Date(input.completedAtMs).toISOString();
+  const upstreamSource = findEvidenceString(input.result, ["source", "provider", "venue"]);
+  const upstreamObservedAt = findEvidenceString(input.result, ["observedAt", "asOf", "updatedAt", "fetchedAt"]);
+  const freshness = findEvidenceString(input.result, ["freshness", "freshnessStatus", "dataStatus"]);
+  return {
+    version: MATTERHORN_CRYPTO_EVIDENCE_VERSION,
+    status: input.status,
+    tool: {
+      name: input.definition.name,
+      access: input.definition.access,
+      deskIds: input.definition.deskIds,
+      actionIds: input.definition.actionIds,
+    },
+    timing: {
+      startedAt: new Date(input.startedAtMs).toISOString(),
+      completedAt,
+      durationMs: Math.max(0, input.completedAtMs - input.startedAtMs),
+    },
+    observation: {
+      bridgeObservedAt: completedAt,
+      ...(upstreamSource ? { upstreamSource } : {}),
+      ...(upstreamObservedAt ? { upstreamObservedAt } : {}),
+      ...(freshness ? { freshness } : {}),
+      freshnessRequired: input.definition.requiresFreshness,
+    },
+    warnings: evidenceWarnings(input.result),
+    result: input.result,
+  };
+}
+
+function toolCallResult(input: {
+  tool: ManagedMcpTool;
+  text: string;
+  ok: boolean;
+  startedAtMs: number;
+  completedAtMs: number;
+}) {
+  const result = parseToolPayload(input.text);
+  const definition = getMatterhornCryptoTool(input.tool.name);
+  return {
+    content: [{
+      type: "text",
+      text: input.text || (input.ok ? "{}" : "Matterhorn backend returned an empty error"),
+    }],
+    ...(definition
+      ? {
+          structuredContent: buildCryptoEvidenceEnvelope({
+            definition,
+            status: input.ok ? "success" : "error",
+            result,
+            startedAtMs: input.startedAtMs,
+            completedAtMs: input.completedAtMs,
+          }),
+        }
+      : {}),
+    ...(!input.ok ? { isError: true } : {}),
+  };
+}
+
 async function callBackendTool(input: {
   tool: ManagedMcpTool;
   args: JsonObject;
   serverUrl: string;
   clientToken: string;
   fetchImpl: typeof fetch;
+  onToolCall?: (metric: ManagedMcpToolCallMetric) => void;
 }) {
+  const startedAtMs = Date.now();
+  const definition = getMatterhornCryptoTool(input.tool.name);
+  let outcome: ManagedMcpToolCallMetric["outcome"] = "error";
   const request = input.tool.request(input.args);
-  const response = await input.fetchImpl(`${input.serverUrl.replace(/\/+$/, "")}${request.path}`, {
-    method: request.method ?? "GET",
-    headers: {
-      Authorization: `Bearer ${input.clientToken}`,
-      ...(request.body ? { "Content-Type": "application/json" } : {}),
-    },
-    ...(request.body ? { body: JSON.stringify(request.body) } : {}),
-    signal: AbortSignal.timeout(30_000),
-  });
-  const text = await response.text();
-  if (!response.ok) {
-    return {
-      content: [{ type: "text", text: text || `Matterhorn backend returned HTTP ${response.status}` }],
-      isError: true,
-    };
+  try {
+    const response = await input.fetchImpl(`${input.serverUrl.replace(/\/+$/, "")}${request.path}`, {
+      method: request.method ?? "GET",
+      headers: {
+        Authorization: `Bearer ${input.clientToken}`,
+        ...(request.body ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(request.body ? { body: JSON.stringify(request.body) } : {}),
+      signal: AbortSignal.timeout(input.tool.timeoutMs ?? 30_000),
+    });
+    const text = await response.text();
+    outcome = response.ok ? "success" : "error";
+    return toolCallResult({
+      tool: input.tool,
+      text: text || (!response.ok ? `Matterhorn backend returned HTTP ${response.status}` : "{}"),
+      ok: response.ok,
+      startedAtMs,
+      completedAtMs: Date.now(),
+    });
+  } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      outcome = "timeout";
+    }
+    throw error;
+  } finally {
+    try {
+      input.onToolCall?.({
+        tool: input.tool.name,
+        access: definition?.access ?? "system",
+        outcome,
+        durationMs: Math.max(0, Date.now() - startedAtMs),
+      });
+    } catch {
+      // Metrics must never change the MCP result.
+    }
   }
-  return { content: [{ type: "text", text: text || "{}" }] };
 }
 
 async function mcpResult(message: JsonRpcRequest, options: {
   serverUrl: string;
   clientToken: string;
   fetchImpl: typeof fetch;
+  onToolCall?: (metric: ManagedMcpToolCallMetric) => void;
 }) {
   if (message.method === "initialize") {
     return {
@@ -302,7 +462,7 @@ async function mcpResult(message: JsonRpcRequest, options: {
   if (message.method === "ping") return {};
   if (message.method === "tools/list") {
     return {
-      tools: MANAGED_MCP_TOOLS.map(({ request: _request, ...tool }) => tool),
+      tools: MANAGED_MCP_TOOLS.map(({ request: _request, timeoutMs: _timeoutMs, ...tool }) => tool),
     };
   }
   if (message.method === "tools/call") {
@@ -322,6 +482,7 @@ export async function handleManagedOpencodeMcp(input: {
   serverUrl: string;
   clientToken: string;
   fetchImpl?: typeof fetch;
+  onToolCall?: (metric: ManagedMcpToolCallMetric) => void;
 }): Promise<{ status: number; body: unknown | null }> {
   const messages = Array.isArray(input.payload) ? input.payload : [input.payload];
   const responses = [];
@@ -341,6 +502,7 @@ export async function handleManagedOpencodeMcp(input: {
           serverUrl: input.serverUrl,
           clientToken: input.clientToken,
           fetchImpl: input.fetchImpl ?? fetch,
+          onToolCall: input.onToolCall,
         }),
       });
     } catch (error) {

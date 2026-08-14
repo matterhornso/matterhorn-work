@@ -103,6 +103,20 @@ describe("operational probes and metrics", () => {
   test("metrics require owner authentication and expose bounded labels only", async () => {
     const base = await boot();
     await fetch(`${base}/not-a-real-route`);
+    const toolResponse = await fetch(`${base}/mcp/opencode`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OWNER_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "metrics-tool",
+        method: "tools/call",
+        params: { name: "matterhorn_status", arguments: {} },
+      }),
+    });
+    expect(toolResponse.status).toBe(200);
 
     const denied = await fetch(`${base}/metrics`);
     expect(denied.status).toBe(401);
@@ -121,6 +135,11 @@ describe("operational probes and metrics", () => {
     expect(body).toContain("matterhorn_http_request_duration_seconds_bucket");
     expect(body).toContain("matterhorn_http_rate_limit_rejections_total");
     expect(body).toContain("matterhorn_provider_failures_total");
+    expect(body).toContain("matterhorn_agent_tool_calls_total");
+    expect(body).toContain('tool="matterhorn_status"');
+    expect(body).toContain('access="system"');
+    expect(body).toContain('outcome="success"');
+    expect(body).toContain("matterhorn_agent_tool_duration_seconds_sum");
     expect(body).not.toContain(OWNER_TOKEN);
     expect(body).not.toContain(HOST_TOKEN);
     expect(body).not.toContain("not-a-real-route");

@@ -52,7 +52,7 @@
     "@matterhorn-work/types": "workspace:*",
     "@msgpack/msgpack": "^3.1.2",
     "@mysten/sui": "^2.20.1",
-    "@opencode-ai/sdk": "^1.14.38",
+    "@opencode-ai/sdk": "1.18.18",
     "better-sqlite3": "^11.10.0",
     "hyperliquid": "^1.7.7",
     "jsonc-parser": "^3.2.1",

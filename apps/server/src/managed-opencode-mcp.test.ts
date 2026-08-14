@@ -5,7 +5,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { handleManagedOpencodeMcp, managedOpencodeMcpToolNames } from "./managed-opencode-mcp.js";
-import { buildManagedOpencodeRuntimeConfig } from "./managed-opencode-runtime-config.js";
+import type { ManagedMcpToolCallMetric } from "./managed-opencode-mcp.js";
+import {
+  buildManagedOpencodeRuntimeConfig,
+  MANAGED_OPENCODE_PERMISSION_POLICY,
+} from "./managed-opencode-runtime-config.js";
 import { ensureWorkspaceFiles } from "./workspace-init.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -24,6 +28,13 @@ describe("managed OpenCode Matterhorn MCP", () => {
       enabled: true,
     });
     expect(config.plugin).toContain("opencode-chrome-devtools");
+    expect(config.permission).toEqual(MANAGED_OPENCODE_PERMISSION_POLICY);
+    expect(config.permission["*"]).toBe("deny");
+    expect(config.permission["matterhorn-work_*"]).toBe("allow");
+    expect(config.permission.edit).toBe("ask");
+    for (const denied of ["bash", "task", "webfetch", "websearch", "external_directory"]) {
+      expect(config.permission[denied]).toBe("deny");
+    }
   });
 
   test("registers the server-managed ASI:Cloud catalog without embedding its API key", () => {
@@ -168,6 +179,7 @@ describe("managed OpenCode Matterhorn MCP", () => {
   test("forwards tool calls with the local client token", async () => {
     let observedUrl = "";
     let observedAuth = "";
+    const metrics: ManagedMcpToolCallMetric[] = [];
     const result = await handleManagedOpencodeMcp({
       payload: {
         jsonrpc: "2.0",
@@ -185,10 +197,79 @@ describe("managed OpenCode Matterhorn MCP", () => {
           headers: { "Content-Type": "application/json" },
         });
       }) as typeof fetch,
+      onToolCall: (metric) => metrics.push(metric),
     });
     expect(observedUrl).toBe("http://127.0.0.1:4130/api/hyperliquid/orderbook/BTC");
     expect(observedAuth).toBe("Bearer test-client-token");
     expect(result).toMatchObject({ status: 200 });
+    expect(metrics).toHaveLength(1);
+    expect(metrics[0]).toMatchObject({
+      tool: "matterhorn_hyperliquid_get_orderbook",
+      access: "read",
+      outcome: "success",
+    });
+    const body = result.body as {
+      result: {
+        structuredContent: {
+          version: string;
+          status: string;
+          tool: { name: string; access: string; deskIds: string[]; actionIds: string[] };
+          observation: { freshnessRequired: boolean };
+          result: unknown;
+        };
+      };
+    };
+    expect(body.result.structuredContent).toMatchObject({
+      version: "matterhorn.crypto.evidence.v1",
+      status: "success",
+      tool: {
+        name: "matterhorn_hyperliquid_get_orderbook",
+        access: "read",
+        deskIds: ["hyperliquid"],
+        actionIds: ["hyperliquid_orderbook_read"],
+      },
+      observation: { freshnessRequired: true },
+      result: { success: true, orderbook: { asset: "BTC" } },
+    });
+  });
+
+  test("records terminal failures and preserves structured error evidence", async () => {
+    const metrics: ManagedMcpToolCallMetric[] = [];
+    const failingFetch = Object.assign(
+      async () => new Response(JSON.stringify({
+        code: "compliance_unavailable",
+        warnings: ["Eligibility could not be verified."],
+      }), { status: 503 }),
+      { preconnect: fetch.preconnect },
+    );
+    const result = await handleManagedOpencodeMcp({
+      payload: {
+        jsonrpc: "2.0",
+        id: "error-evidence",
+        method: "tools/call",
+        params: { name: "matterhorn_polymarket_check_compliance", arguments: {} },
+      },
+      serverUrl: "http://127.0.0.1:4130",
+      clientToken: "test-client-token",
+      fetchImpl: failingFetch,
+      onToolCall: (metric) => metrics.push(metric),
+    });
+    expect(metrics).toHaveLength(1);
+    expect(metrics[0]).toMatchObject({
+      tool: "matterhorn_polymarket_check_compliance",
+      access: "read",
+      outcome: "error",
+    });
+    expect(result.body).toMatchObject({
+      result: {
+        isError: true,
+        structuredContent: {
+          version: "matterhorn.crypto.evidence.v1",
+          status: "error",
+          warnings: ["Eligibility could not be verified."],
+        },
+      },
+    });
   });
 
   test("acknowledges notifications without a response body", async () => {

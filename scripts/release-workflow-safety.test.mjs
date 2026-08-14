@@ -160,7 +160,8 @@ assert.ok(
 );
 for (const phrase of [
   "curl --proto '=https' --tlsv1.2",
-  "sha256sum -c -",
+  "ACTUAL_SHA256",
+  "OpenCode archive checksum verification failed",
   "opencode-release-checksums.json",
   "OPENCODE_DOWNLOAD_SHA256 is required",
 ]) {
@@ -169,6 +170,8 @@ for (const phrase of [
 const engineVersion = String(constants.opencodeVersion ?? "").replace(/^v/, "");
 assert.ok(engineChecksums[engineVersion], `checksums must cover the pinned engine version ${engineVersion}`);
 for (const asset of [
+  "opencode-darwin-arm64.zip",
+  "opencode-darwin-x64-baseline.zip",
   "opencode-linux-arm64.tar.gz",
   "opencode-linux-x64-baseline.tar.gz",
 ]) {

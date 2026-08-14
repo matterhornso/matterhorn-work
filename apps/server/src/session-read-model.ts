@@ -2,7 +2,7 @@ import { z } from "zod";
 import type {
   SessionGetResponse,
   SessionListResponse,
-  SessionMessagesResponse,
+  SessionMessagesResponse2 as SessionMessagesResponse,
   SessionStatusResponse,
   SessionTodoResponse,
 } from "@opencode-ai/sdk/v2/client";

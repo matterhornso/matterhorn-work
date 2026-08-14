@@ -212,6 +212,7 @@ export interface MatterhornWorkspaceDataMapResponse {
   stores: Record<
     | "chat"
     | "dataPolicy"
+    | "mission"
     | "notes"
     | "modelPreferences"
     | "billing"

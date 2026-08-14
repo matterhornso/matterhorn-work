@@ -61,6 +61,7 @@ describe("workspace data archive", () => {
     const result = await buildMatterhornWorkspaceArchive({
       workspace,
       configuration: { opencode: {}, openwork: {} },
+      mission: { objective: "Compare validator evidence", status: "active" },
       notes: [{ id: "note_1", title: "Research note" }],
       memory: {
         records: [{ id: "memory_1", title: "Remembered decision" }],
@@ -111,6 +112,13 @@ describe("workspace data archive", () => {
     );
     expect(archive.data.chats[0].messages[0].parts[0].text).toBe(
       "Full transcript",
+    );
+    expect(archive.data.mission).toEqual({
+      objective: "Compare validator evidence",
+      status: "active",
+    });
+    expect(archive.manifest.includes).toContain(
+      "the current project mission and coordination context",
     );
     expect(archive.data.files).toEqual([
       expect.objectContaining({

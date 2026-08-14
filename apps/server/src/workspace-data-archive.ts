@@ -34,6 +34,7 @@ export type MatterhornWorkspaceArchiveFile = {
 export type MatterhornWorkspaceArchiveInput = {
   workspace: WorkspaceInfo;
   configuration: unknown;
+  mission?: unknown;
   notes: unknown[];
   memory: {
     records: unknown[];
@@ -296,6 +297,7 @@ export async function buildMatterhornWorkspaceArchive(
   };
   const data = {
     configuration: input.configuration,
+    mission: input.mission ?? null,
     notes: input.notes,
     memory: input.memory,
     chats: input.chats,
@@ -316,6 +318,7 @@ export async function buildMatterhornWorkspaceArchive(
       counts,
       includes: [
         "sanitized workspace configuration",
+        "the current project mission and coordination context",
         "chat sessions with full message bodies and todos",
         "active note records",
         "confirmed memory records and the complete memory review inbox",
@@ -333,7 +336,7 @@ export async function buildMatterhornWorkspaceArchive(
           "Secrets and sensitive provider configuration are excluded.",
         activity: "Known secret-shaped activity text is redacted.",
         userContent:
-          "Chat, note, memory, and output content is exported as stored for the workspace owner.",
+          "Mission, chat, note, memory, and output content is exported as stored for the workspace owner.",
       },
       limits: {
         maxUncompressedBytes: limits.totalBytes,

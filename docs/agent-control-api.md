@@ -142,7 +142,7 @@ Returns a public health snapshot.
 {
   "ok": true,
   "version": "0.13.13-alpha.0",
-  "opencodeVersion": "1.14.38",
+  "opencodeVersion": "1.18.18",
   "uptimeMs": 12345
 }
 ```
