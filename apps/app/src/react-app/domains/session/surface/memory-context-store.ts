@@ -69,6 +69,24 @@ export function sanitizeMemoryContextRecords(records: unknown): MatterhornMemory
     .slice(0, 8);
 }
 
+function sanitizeMatterhornMemoryContext(
+  sessionId: string,
+  value: unknown,
+): MatterhornSessionMemoryContext | null {
+  if (!sessionId.trim() || !isRecord(value)) return null;
+  const records = sanitizeMemoryContextRecords(value.records);
+  if (!records.length) return null;
+  return {
+    id: typeof value.id === "string" && value.id.trim()
+      ? value.id.trim()
+      : `memory-context-${sessionId}`,
+    records,
+    updatedAt: typeof value.updatedAt === "string" && value.updatedAt.trim()
+      ? value.updatedAt.trim()
+      : new Date().toISOString(),
+  };
+}
+
 export function readStoredMatterhornMemoryContexts(
   storage: MemoryContextStorage | null = sessionMemoryStorage(),
 ): Record<string, MatterhornSessionMemoryContext | undefined> {
@@ -80,18 +98,8 @@ export function readStoredMatterhornMemoryContexts(
     if (!isRecord(parsed)) return {};
     const contexts: Record<string, MatterhornSessionMemoryContext> = {};
     for (const [sessionId, value] of Object.entries(parsed).slice(-MAX_STORED_MEMORY_CONTEXTS)) {
-      if (!sessionId.trim() || !isRecord(value)) continue;
-      const records = sanitizeMemoryContextRecords(value.records);
-      if (!records.length) continue;
-      contexts[sessionId] = {
-        id: typeof value.id === "string" && value.id.trim()
-          ? value.id.trim()
-          : `memory-context-${sessionId}`,
-        records,
-        updatedAt: typeof value.updatedAt === "string" && value.updatedAt.trim()
-          ? value.updatedAt.trim()
-          : new Date().toISOString(),
-      };
+      const context = sanitizeMatterhornMemoryContext(sessionId, value);
+      if (context) contexts[sessionId] = context;
     }
     return contexts;
   } catch {
@@ -99,14 +107,15 @@ export function readStoredMatterhornMemoryContexts(
   }
 }
 
-function persistMatterhornMemoryContexts(
+export function writeStoredMatterhornMemoryContexts(
   contexts: Record<string, MatterhornSessionMemoryContext | undefined>,
   storage: MemoryContextStorage | null = sessionMemoryStorage(),
 ): void {
   if (!storage) return;
   try {
     const entries = Object.entries(contexts)
-      .filter((entry): entry is [string, MatterhornSessionMemoryContext] => Boolean(entry[1]?.records.length))
+      .map(([sessionId, context]) => [sessionId, sanitizeMatterhornMemoryContext(sessionId, context)] as const)
+      .filter((entry): entry is readonly [string, MatterhornSessionMemoryContext] => Boolean(entry[1]))
       .slice(-MAX_STORED_MEMORY_CONTEXTS);
     if (!entries.length) {
       storage.removeItem(MEMORY_CONTEXT_STORAGE_KEY);
@@ -123,14 +132,17 @@ export const useMatterhornSessionMemoryContextStore = create<MatterhornSessionMe
   // is never promoted to durable browser storage. Closing the tab clears it.
   contexts: readStoredMatterhornMemoryContexts(),
   setContext: (sessionId, context) => set((state) => {
-    const next = { ...state.contexts, [sessionId]: context };
-    persistMatterhornMemoryContexts(next);
+    const next = { ...state.contexts };
+    const safeContext = sanitizeMatterhornMemoryContext(sessionId, context);
+    if (safeContext) next[sessionId] = safeContext;
+    else delete next[sessionId];
+    writeStoredMatterhornMemoryContexts(next);
     return { contexts: next };
   }),
   clearContext: (sessionId) => set((state) => {
     const next = { ...state.contexts };
     delete next[sessionId];
-    persistMatterhornMemoryContexts(next);
+    writeStoredMatterhornMemoryContexts(next);
     return { contexts: next };
   }),
 }));

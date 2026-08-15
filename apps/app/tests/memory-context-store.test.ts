@@ -4,6 +4,7 @@ import type { MatterhornMemoryRecord } from "@matterhorn-work/types";
 import {
   readStoredMatterhornMemoryContexts,
   useMatterhornSessionMemoryContextStore,
+  writeStoredMatterhornMemoryContexts,
 } from "../src/react-app/domains/session/surface/memory-context-store";
 
 class TestStorage {
@@ -72,5 +73,26 @@ describe("session Memory context persistence", () => {
     expect(useMatterhornSessionMemoryContextStore.getState().contexts.ses_live?.records).toHaveLength(1);
     useMatterhornSessionMemoryContextStore.getState().clearContext("ses_live");
     expect(useMatterhornSessionMemoryContextStore.getState().contexts.ses_live).toBeUndefined();
+  });
+
+  test("never writes blocked or secret-bearing records to tab storage", () => {
+    const storage = new TestStorage();
+    writeStoredMatterhornMemoryContexts({
+      ses_qa: {
+        id: "ctx_qa",
+        records: [
+          record,
+          { ...record, id: "mem_blocked", sensitivity: "forbidden_secret" },
+          { ...record, id: "mem_key", body: { privateKey: "0x0123456789abcdef" } },
+        ],
+        updatedAt: "2026-08-15T00:00:00.000Z",
+      },
+    }, storage);
+
+    const raw = storage.getItem("matterhorn.session-memory-context.v1") ?? "";
+    expect(raw).toContain("mem_qa");
+    expect(raw).not.toContain("mem_blocked");
+    expect(raw).not.toContain("mem_key");
+    expect(raw).not.toContain("privateKey");
   });
 });
