@@ -156,6 +156,29 @@ describe("session panel route state", () => {
     expect(openDeskBlock).toContain("setCurrentSidePanel(panel)");
   });
 
+  test("workflow desk navigation also leaves an existing chat", () => {
+    const source = readAppSource("domains/session/chat/session-page.tsx");
+    const workflowDeskStart = source.indexOf("const setCurrentWorkflowDesk");
+    const workflowDeskBlock = source.slice(
+      workflowDeskStart,
+      source.indexOf("\n\n  useEffect(", workflowDeskStart),
+    );
+
+    expect(workflowDeskBlock).toContain("pathname: desk");
+    expect(workflowDeskBlock).toContain("workspaceSessionRoute(props.selectedWorkspaceId)");
+  });
+
+  test("focused desk Back does not race a second panel navigation", () => {
+    const source = readAppSource("domains/session/chat/session-page.tsx");
+    const returnBlock = source.slice(
+      source.indexOf("const returnToProjectHome"),
+      source.indexOf("const goHome"),
+    );
+
+    expect(returnBlock).toContain("window.history.back()");
+    expect(returnBlock).not.toContain("setCurrentSidePanel(null);\n        window.history.back()");
+  });
+
   test("the authenticated shell stays pinned to every viewport edge", () => {
     const source = readAppSource("domains/session/chat/session-page.tsx");
 

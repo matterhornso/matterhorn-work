@@ -54,6 +54,7 @@ type MemoryPanelProps = {
   sessionId: string | null;
   workspaceId: string | null;
   onClose: () => void;
+  onUseInChat?: (records: MatterhornMemoryRecord[]) => void;
 };
 
 type CaptureDraft = {
@@ -537,15 +538,21 @@ export function MemoryPanel(props: MemoryPanelProps) {
 
   const dispatchMemoryContext = (recordsToUse: MatterhornMemoryRecord[]) => {
     if (!recordsToUse.length) return;
+    const context = {
+      id: `memory-panel-${Date.now().toString(36)}`,
+      records: recordsToUse,
+      updatedAt: new Date().toISOString(),
+    };
+    if (!props.sessionId && props.onUseInChat) {
+      props.onUseInChat(context.records);
+      return;
+    }
     window.dispatchEvent(new CustomEvent("matterhorn:memory-context-updated", {
-      detail: {
-        id: `memory-panel-${Date.now().toString(36)}`,
-        records: recordsToUse,
-        updatedAt: new Date().toISOString(),
-      },
+      detail: context,
     }));
     window.dispatchEvent(new CustomEvent("matterhorn:memory-chat-handoff", {
       detail: {
+        ...context,
         prompt: "Use the visible Matterhorn Memory context in this chat. Explain which memories matter, ask if anything should be forgotten, and do not use hidden memory.",
       },
     }));

@@ -43,6 +43,7 @@ import type {
   BittensorSubtensorSidecarHealth,
   MatterhornBackendCapabilitiesResponse,
   MatterhornCapabilityStatus,
+  MatterhornMemoryRecord,
   MatterhornWalletRuntime,
   MatterhornWalletRuntimeSupport,
 } from "@matterhorn-work/types";
@@ -76,6 +77,7 @@ import type { ProviderAuthModalProps } from "../../connections/provider-auth/pro
 import { RenameSessionModal } from "../modals/rename-session-modal";
 import { AppSidebar } from "../sidebar/app-sidebar";
 import { SessionSurface, type SessionSurfaceProps } from "../surface/session-surface";
+import { useMatterhornSessionMemoryContextStore } from "../surface/memory-context-store";
 import {
   SidebarInset,
   SidebarProvider,
@@ -1783,13 +1785,17 @@ export function SessionPage(props: SessionPageProps) {
     if (!transition) return;
     navigate(
       {
-        pathname: currentLocation.pathname,
+        // Workflow desks are workspace-level destinations. Leave an open chat
+        // before adding `desk=` so its session surface cannot cover the desk.
+        pathname: desk
+          ? workspaceSessionRoute(props.selectedWorkspaceId)
+          : currentLocation.pathname,
         search: transition.search,
         hash: currentLocation.hash,
       },
       { replace: transition.replace },
     );
-  }, [navigate, setSidePanelState, sidePanelScopeId]);
+  }, [navigate, props.selectedWorkspaceId, setSidePanelState, sidePanelScopeId]);
 
   useEffect(
     () => subscribeReviewedActionHandoff((handoff) => {
@@ -1876,8 +1882,9 @@ export function SessionPage(props: SessionPageProps) {
         ? window.history.state as Record<string, unknown>
         : {};
       if (state.matterhornFocusedDesk) {
-        focusedDeskHistoryRef.current = null;
-        setCurrentSidePanel(null);
+        // The history entry immediately behind this synthetic marker is the
+        // workspace route that opened the desk. Let popstate clear the panel;
+        // navigating first would race Back and reopen the desk URL.
         window.history.back();
         return;
       }
@@ -2212,6 +2219,40 @@ export function SessionPage(props: SessionPageProps) {
   const openMemoryRailPane = useCallback(() => {
     toggleCurrentSidePanel("memory");
   }, [toggleCurrentSidePanel]);
+  const startMemoryChatFromHome = useCallback((records: MatterhornMemoryRecord[]) => {
+    const startTask = props.sidebar.onCreateTaskWithPrompt;
+    if (!startTask) {
+      showToast({
+        title: "Could not start a Memory chat",
+        description: "Create a new chat, then attach this memory again.",
+        tone: "warning",
+      });
+      return;
+    }
+    const context = {
+      id: `memory-panel-${Date.now().toString(36)}`,
+      records,
+      updatedAt: new Date().toISOString(),
+    };
+    void (async () => {
+      const started = await startTask(props.selectedWorkspaceId, "Use the visible Matterhorn Memory context in this chat. Explain which memories matter, ask if anything should be forgotten, and do not use hidden memory.", {
+        title: "Memory task",
+        agent: agentIdForDesk("memory"),
+        sendImmediately: false,
+        onSessionCreated: (sessionId) => {
+          useMatterhornSessionMemoryContextStore.getState().setContext(sessionId, context);
+        },
+      });
+      if (started === false) {
+        showToast({
+          title: "Could not start a Memory chat",
+          description: "Your selected memory is still available. Try again from an open chat.",
+          tone: "warning",
+        });
+        return;
+      }
+    })();
+  }, [props.selectedWorkspaceId, props.sidebar, showToast]);
   const openNotesRailPane = useCallback(() => {
     if (!workspaceNotesAvailable) {
       showToast({
@@ -2298,6 +2339,7 @@ export function SessionPage(props: SessionPageProps) {
       sessionId={props.selectedSessionId}
       workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
       onClose={closeRightPane}
+      onUseInChat={props.selectedSessionId && props.surface ? undefined : startMemoryChatFromHome}
     />
   ) : visibleSidePanel === "notes" ? (
     <NotesPanel

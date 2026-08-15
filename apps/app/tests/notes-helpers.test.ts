@@ -8,7 +8,10 @@ import {
   noteToAttachment,
 } from "../src/react-app/domains/notes/notes-types";
 import type { MatterhornNote, NoteAttachment } from "../src/react-app/domains/notes/notes-types";
-import { sendNoteToMemory } from "../src/react-app/domains/notes/send-note-to-memory";
+import {
+  dispatchMemorySuggestionsChanged,
+  sendNoteToMemory,
+} from "../src/react-app/domains/notes/send-note-to-memory";
 
 function makeNote(overrides: Partial<MatterhornNote> = {}): MatterhornNote {
   const now = Date.now();
@@ -106,6 +109,18 @@ describe("Notes type helpers", () => {
 });
 
 describe("sendNoteToMemory", () => {
+  test("notifies the shell when note-backed Memory review changes", () => {
+    const target = new EventTarget();
+    let detail: { workspaceId?: string; source?: string } | null = null;
+    target.addEventListener("matterhorn:memory-suggestions-changed", (event) => {
+      detail = (event as CustomEvent<{ workspaceId?: string; source?: string }>).detail;
+    });
+
+    dispatchMemorySuggestionsChanged("ws_1", target);
+
+    expect(detail).toEqual({ workspaceId: "ws_1", source: "user_note" });
+  });
+
   test("returns error when client is missing", async () => {
     const note = makeNote();
     const result = await sendNoteToMemory(null, note);
